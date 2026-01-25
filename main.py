@@ -2197,6 +2197,115 @@ Your tasks:
     # Call the LLM of your choice
     response = call_llm(prompt, session=st.session_state)
     return response
+def extract_resume_only(llm_response: str) -> str:
+    """
+    Keeps only the rewritten resume part.
+    Removes job suggestions and extra text.
+    """
+    split_marker = "### 🎯 Suggested Job Titles"
+    return llm_response.split(split_marker)[0].strip()
+
+def parse_resume_sections(text: str) -> dict:
+    sections = {
+        "NAME": "",
+        "CONTACT": "",
+        "SUMMARY": "",
+        "EXPERIENCE": "",
+        "PROJECTS": "",
+        "EDUCATION": "",
+        "SKILLS": ""
+    }
+
+    current = None
+
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+
+        upper = line.upper()
+
+        if "NAME" in upper:
+            current = "NAME"
+            continue
+        elif "SUMMARY" in upper:
+            current = "SUMMARY"
+            continue
+        elif "EXPERIENCE" in upper:
+            current = "EXPERIENCE"
+            continue
+        elif "PROJECT" in upper:
+            current = "PROJECTS"
+            continue
+        elif "EDUCATION" in upper:
+            current = "EDUCATION"
+            continue
+        elif "SKILLS" in upper:
+            current = "SKILLS"
+            continue
+        elif any(x in upper for x in ["EMAIL", "PHONE", "LINKEDIN", "GITHUB", "LOCATION"]):
+            current = "CONTACT"
+
+        if current:
+            sections[current] += line + "\n"
+
+    return {k: v.strip() for k, v in sections.items() if v.strip()}
+from docx import Document
+from docx.shared import Pt
+from io import BytesIO
+
+def generate_standard_resume_docx(sections: dict) -> BytesIO:
+    doc = Document()
+
+    # Base font (ATS safe)
+    style = doc.styles['Normal']
+    style.font.name = 'Calibri'
+    style.font.size = Pt(11)
+
+    # NAME
+    name_para = doc.add_paragraph(sections.get("NAME", ""))
+    name_run = name_para.runs[0]
+    name_run.bold = True
+    name_run.font.size = Pt(16)
+
+    # CONTACT
+    doc.add_paragraph(sections.get("CONTACT", ""))
+
+    def add_section(title, content):
+        doc.add_paragraph("")
+        header = doc.add_paragraph(title.upper())
+        header.runs[0].bold = True
+        doc.add_paragraph("_" * 45)
+
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(("•", "-", "*")):
+                doc.add_paragraph(line.lstrip("•-* "), style="List Bullet")
+            else:
+                doc.add_paragraph(line)
+
+    if "SUMMARY" in sections:
+        add_section("Professional Summary", sections["SUMMARY"])
+
+    if "EXPERIENCE" in sections:
+        add_section("Experience", sections["EXPERIENCE"])
+
+    if "PROJECTS" in sections:
+        add_section("Projects", sections["PROJECTS"])
+
+    if "EDUCATION" in sections:
+        add_section("Education", sections["EDUCATION"])
+
+    if "SKILLS" in sections:
+        add_section("Skills", sections["SKILLS"])
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
 
 def rewrite_and_highlight(text, replacement_mapping, user_location):
     highlighted_text = text
@@ -3526,7 +3635,9 @@ with tab1:
         # ✅ Calculate total counts safely
         total_masc = sum(len(r.get("Detected Masculine Words", [])) for r in resume_data)
         total_fem = sum(len(r.get("Detected Feminine Words", [])) for r in resume_data)
-        avg_bias = round(np.mean([r.get("Bias Score (0 = Fair, 1 = Biased)", 0) for r in resume_data]), 2)
+        avg_bias = round(
+            np.mean([r.get("Bias Score (0 = Fair, 1 = Biased)", 0) for r in resume_data]), 2
+        )
         total_resumes = len(resume_data)
 
         st.markdown("### 📊 Summary Statistics")
@@ -3544,34 +3655,62 @@ with tab1:
         df = pd.DataFrame(resume_data)
 
         # ✅ Add calculated count columns safely
-        df["Masculine Words Count"] = df["Detected Masculine Words"].apply(lambda x: len(x) if isinstance(x, list) else 0)
-        df["Feminine Words Count"] = df["Detected Feminine Words"].apply(lambda x: len(x) if isinstance(x, list) else 0)
+        df["Masculine Words Count"] = df["Detected Masculine Words"].apply(
+            lambda x: len(x) if isinstance(x, list) else 0
+        )
+        df["Feminine Words Count"] = df["Detected Feminine Words"].apply(
+            lambda x: len(x) if isinstance(x, list) else 0
+        )
 
         overview_cols = [
-            "Resume Name", "Candidate Name", "ATS Match %", "Education Score",
-            "Experience Score", "Skills Score", "Language Score", "Keyword Score",
-            "Bias Score (0 = Fair, 1 = Biased)", "Masculine Words Count", "Feminine Words Count"
+            "Resume Name",
+            "Candidate Name",
+            "ATS Match %",
+            "Education Score",
+            "Experience Score",
+            "Skills Score",
+            "Language Score",
+            "Keyword Score",
+            "Bias Score (0 = Fair, 1 = Biased)",
+            "Masculine Words Count",
+            "Feminine Words Count",
         ]
 
         st.dataframe(df[overview_cols], use_container_width=True)
 
         st.markdown("### 📊 Visual Analysis")
         chart_tab1, chart_tab2 = st.tabs(["📉 Bias Score Chart", "⚖ Gender-Coded Words"])
+
         with chart_tab1:
             st.subheader("Bias Score Comparison Across Resumes")
-            st.bar_chart(df.set_index("Resume Name")[["Bias Score (0 = Fair, 1 = Biased)"]])
+            st.bar_chart(
+                df.set_index("Resume Name")[["Bias Score (0 = Fair, 1 = Biased)"]]
+            )
+
         with chart_tab2:
             st.subheader("Masculine vs Feminine Word Usage")
             fig, ax = plt.subplots(figsize=(10, 5))
             index = np.arange(len(df))
             bar_width = 0.35
-            ax.bar(index, df["Masculine Words Count"], bar_width, label="Masculine", color="#3498db")
-            ax.bar(index + bar_width, df["Feminine Words Count"], bar_width, label="Feminine", color="#e74c3c")
+            ax.bar(
+                index,
+                df["Masculine Words Count"],
+                bar_width,
+                label="Masculine",
+                color="#3498db",
+            )
+            ax.bar(
+                index + bar_width,
+                df["Feminine Words Count"],
+                bar_width,
+                label="Feminine",
+                color="#e74c3c",
+            )
             ax.set_xlabel("Resumes", fontsize=12)
             ax.set_ylabel("Word Count", fontsize=12)
             ax.set_title("Gender-Coded Word Usage per Resume", fontsize=14)
             ax.set_xticks(index + bar_width / 2)
-            ax.set_xticklabels(df["Resume Name"], rotation=45, ha='right')
+            ax.set_xticklabels(df["Resume Name"], rotation=45, ha="right")
             ax.legend()
             st.pyplot(fig)
 
@@ -3579,63 +3718,86 @@ with tab1:
         for resume in resume_data:
             candidate_name = resume.get("Candidate Name", "Not Found")
             resume_name = resume.get("Resume Name", "Unknown")
-            missing_keywords = resume.get("Missing Keywords", [])
-            missing_skills = resume.get("Missing Skills", [])
 
             with st.expander(f"📄 {resume_name} | {candidate_name}"):
                 st.markdown(f"### 📊 ATS Evaluation for: **{candidate_name}**")
+
                 score_col1, score_col2, score_col3 = st.columns(3)
                 with score_col1:
                     st.metric("📈 Overall Match", f"{resume.get('ATS Match %', 'N/A')}%")
                 with score_col2:
-                    st.metric("🏆 Formatted Score", resume.get("Formatted Score", "N/A"))
+                    st.metric(
+                        "🏆 Formatted Score", resume.get("Formatted Score", "N/A")
+                    )
                 with score_col3:
-                    st.metric("🧠 Language Quality", f"{resume.get('Language Score', 'N/A')} / {lang_weight}")
+                    st.metric(
+                        "🧠 Language Quality",
+                        f"{resume.get('Language Score', 'N/A')} / {lang_weight}",
+                    )
 
                 col_a, col_b, col_c, col_d = st.columns(4)
                 with col_a:
-                    st.metric("🎓 Education Score", f"{resume.get('Education Score', 'N/A')} / {edu_weight}")
+                    st.metric(
+                        "🎓 Education Score",
+                        f"{resume.get('Education Score', 'N/A')} / {edu_weight}",
+                    )
                 with col_b:
-                    st.metric("💼 Experience Score", f"{resume.get('Experience Score', 'N/A')} / {exp_weight}")
+                    st.metric(
+                        "💼 Experience Score",
+                        f"{resume.get('Experience Score', 'N/A')} / {exp_weight}",
+                    )
                 with col_c:
-                    st.metric("🛠 Skills Score", f"{resume.get('Skills Score', 'N/A')} / {skills_weight}")
+                    st.metric(
+                        "🛠 Skills Score",
+                        f"{resume.get('Skills Score', 'N/A')} / {skills_weight}",
+                    )
                 with col_d:
-                    st.metric("🔍 Keyword Score", f"{resume.get('Keyword Score', 'N/A')} / {keyword_weight}")
+                    st.metric(
+                        "🔍 Keyword Score",
+                        f"{resume.get('Keyword Score', 'N/A')} / {keyword_weight}",
+                    )
 
-                # Fit summary
                 st.markdown("### 📝 Fit Summary")
-                st.write(resume.get('Final Thoughts', 'N/A'))
+                st.write(resume.get("Final Thoughts", "N/A"))
 
-                # ATS Report
                 if resume.get("ATS Report"):
                     st.markdown("### 📋 ATS Evaluation Report")
                     st.markdown(resume["ATS Report"], unsafe_allow_html=True)
 
-                # ATS Chart
                 st.markdown("### 📊 ATS Score Breakdown Chart")
-                ats_df = pd.DataFrame({
-                    'Component': ['Education', 'Experience', 'Skills', 'Language', 'Keywords'],
-                    'Score': [
-                        resume.get("Education Score", 0),
-                        resume.get("Experience Score", 0),
-                        resume.get("Skills Score", 0),
-                        resume.get("Language Score", 0),
-                        resume.get("Keyword Score", 0)
-                    ]
-                })
-                ats_chart = alt.Chart(ats_df).mark_bar().encode(
-                    x=alt.X('Component', sort=None),
-                    y=alt.Y('Score', scale=alt.Scale(domain=[0, 50])),
-                    color='Component',
-                    tooltip=['Component', 'Score']
-                ).properties(
-                    title="ATS Evaluation Breakdown",
-                    width=600,
-                    height=300
+                ats_df = pd.DataFrame(
+                    {
+                        "Component": [
+                            "Education",
+                            "Experience",
+                            "Skills",
+                            "Language",
+                            "Keywords",
+                        ],
+                        "Score": [
+                            resume.get("Education Score", 0),
+                            resume.get("Experience Score", 0),
+                            resume.get("Skills Score", 0),
+                            resume.get("Language Score", 0),
+                            resume.get("Keyword Score", 0),
+                        ],
+                    }
                 )
+
+                ats_chart = (
+                    alt.Chart(ats_df)
+                    .mark_bar()
+                    .encode(
+                        x=alt.X("Component", sort=None),
+                        y=alt.Y("Score", scale=alt.Scale(domain=[0, 50])),
+                        color="Component",
+                        tooltip=["Component", "Score"],
+                    )
+                    .properties(title="ATS Evaluation Breakdown", width=600, height=300)
+                )
+
                 st.altair_chart(ats_chart, use_container_width=True)
 
-                # 🔷 Detailed ATS Analysis Cards
                 st.markdown("### 🔍 Detailed ATS Section Analyses")
                 for section_title, key in [
                     ("🏫 Education Analysis", "Education Analysis"),
@@ -3643,31 +3805,41 @@ with tab1:
                     ("🛠 Skills Analysis", "Skills Analysis"),
                     ("🗣 Language Quality Analysis", "Language Analysis"),
                     ("🔑 Keyword Analysis", "Keyword Analysis"),
-                    ("✅ Final Thoughts", "Final Thoughts")
+                    ("✅ Final Thoughts", "Final Thoughts"),
                 ]:
                     analysis_content = resume.get(key, "N/A")
+
                     if "**Score:**" in analysis_content:
                         parts = analysis_content.split("**Score:**")
                         rest = parts[1].split("**", 1)
                         score_text = rest[0].strip()
                         remaining = rest[1].strip() if len(rest) > 1 else ""
-                        formatted_score = f"<div style='background:#4c1d95;color:white;padding:8px;border-radius:6px;margin-bottom:5px;'><b>Score:</b> {score_text}</div>"
+                        formatted_score = (
+                            "<div style='background:#4c1d95;color:white;padding:8px;"
+                            "border-radius:6px;margin-bottom:5px;'><b>Score:</b> "
+                            f"{score_text}</div>"
+                        )
                         analysis_html = formatted_score + f"<p>{remaining}</p>"
                     else:
                         analysis_html = f"<p>{analysis_content}</p>"
 
-                    st.markdown(f"""
+                    st.markdown(
+                        f"""
 <div style="background:#5b3cc4; color:white; padding:10px; border-radius:6px;">
   <h3>{section_title}</h3>
 </div>
 <div style="background:#2d2d3a; color:white; padding:10px; border-radius:6px;">
 {analysis_html}
 </div>
-""", unsafe_allow_html=True)
+""",
+                        unsafe_allow_html=True,
+                    )
 
                 st.divider()
 
-                detail_tab1, detail_tab2 = st.tabs(["🔎 Bias Analysis", "✅ Rewritten Resume"])
+                detail_tab1, detail_tab2 = st.tabs(
+                    ["🔎 Bias Analysis", "✅ Rewritten Resume"]
+                )
 
                 with detail_tab1:
                     st.markdown("#### Bias-Highlighted Original Text")
@@ -3677,53 +3849,74 @@ with tab1:
                     bias_col1, bias_col2 = st.columns(2)
 
                     with bias_col1:
-                        st.metric("🔵 Masculine Words", len(resume["Detected Masculine Words"]))
+                        st.metric(
+                            "🔵 Masculine Words",
+                            len(resume["Detected Masculine Words"]),
+                        )
                         if resume["Detected Masculine Words"]:
-                            st.markdown("### 📚 Detected Masculine Words with Context:")
+                            st.markdown(
+                                "### 📚 Detected Masculine Words with Context:"
+                            )
                             for item in resume["Detected Masculine Words"]:
-                                word = item['word']
-                                sentence = item['sentence']
-                                st.write(f"🔵 **{word}**: {sentence}", unsafe_allow_html=True)
+                                word = item["word"]
+                                sentence = item["sentence"]
+                                st.write(
+                                    f"🔵 **{word}**: {sentence}",
+                                    unsafe_allow_html=True,
+                                )
                         else:
                             st.info("No masculine words detected.")
 
                     with bias_col2:
-                        st.metric("🔴 Feminine Words", len(resume["Detected Feminine Words"]))
+                        st.metric(
+                            "🔴 Feminine Words",
+                            len(resume["Detected Feminine Words"]),
+                        )
                         if resume["Detected Feminine Words"]:
-                            st.markdown("### 📚 Detected Feminine Words with Context:")
+                            st.markdown(
+                                "### 📚 Detected Feminine Words with Context:"
+                            )
                             for item in resume["Detected Feminine Words"]:
-                                word = item['word']
-                                sentence = item['sentence']
-                                st.write(f"🔴 **{word}**: {sentence}", unsafe_allow_html=True)
+                                word = item["word"]
+                                sentence = item["sentence"]
+                                st.write(
+                                    f"🔴 **{word}**: {sentence}",
+                                    unsafe_allow_html=True,
+                                )
                         else:
                             st.info("No feminine words detected.")
 
                 with detail_tab2:
                     st.markdown("#### ✨ Bias-Free Rewritten Resume")
                     st.write(resume["Rewritten Text"])
-                    docx_file = generate_docx(resume["Rewritten Text"])
+
+                    llm_output = resume["Rewritten Text"]
+                    resume_only = extract_resume_only(llm_output)
+                    sections = parse_resume_sections(resume_only)
+
+                    docx_file = generate_standard_resume_docx(sections)
+
                     st.download_button(
-                        label="📥 Download Bias-Free Resume (.docx)",
+                        label="📥 Download Professional Resume (.docx)",
                         data=docx_file,
-                        file_name=f"{resume['Resume Name'].split('.')[0]}_bias_free.docx",
+                        file_name=f"{resume['Resume Name'].split('.')[0]}_professional_resume.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True,
-                        key=f"download_docx_{resume['Resume Name']}"
                     )
-                    html_report = generate_resume_report_html(resume)
-                    
+
                     pdf_file = html_to_pdf_bytes(html_report)
                     st.download_button(
-                    label="📄 Download Full Analysis Report (.pdf)",
-                    data=pdf_file,
-                    file_name=f"{resume['Resume Name'].split('.')[0]}_report.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    key=f"download_pdf_{resume['Resume Name']}"
-                    )               
+                        label="📄 Download Full Analysis Report (.pdf)",
+                        data=pdf_file,
+                        file_name=f"{resume['Resume Name'].split('.')[0]}_report.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key=f"download_pdf_{resume['Resume Name']}",
+                    )
 
-    else:           
+    else:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
+
 
 from xhtml2pdf import pisa
 from io import BytesIO
