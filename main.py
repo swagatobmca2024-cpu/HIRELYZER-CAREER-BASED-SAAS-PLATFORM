@@ -2112,11 +2112,10 @@ replacement_mapping = {
     }
 }
 
-def rewrite_text_with_llm(text, replacement_mapping, user_location):
+def rewrite_text_with_llm(text, replacement_mapping, user_location, job_description=None):
     """
-    Uses LLM to rewrite a resume with bias-free language, while preserving
-    the original content length. Enhances grammar, structure, and clarity.
-    Ensures structured formatting and includes relevant links and job suggestions.
+    Uses LLM to rewrite a resume with bias-free language, tailored to the provided
+    job description while preserving structure and approximate section lengths.
     """
 
     # Create a clear mapping in bullet format
@@ -2124,77 +2123,57 @@ def rewrite_text_with_llm(text, replacement_mapping, user_location):
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
-    # Prompt for LLM
+    # Include job description context if provided
+    job_block = f"### 📌 Target Job Description:\n{job_description}\n\n" if job_description and job_description.strip() else ""
+
+    # Prompt for LLM - emphasize tailoring to job description and preserving lengths/sections
     prompt = f"""
 You are an expert resume editor and career advisor.
 
-Your tasks:
+Your primary goal: Rewrite the resume text below to be bias-free AND optimized for the provided job description.
+Be careful to preserve the original meaning, section structure, and approximate word counts per section
+(you may rephrase sentences but do not remove whole lines or drastically shorten sections).
 
-1. ✨ Rewrite the resume text below with these rules:
-   - Replace any biased or gender-coded language using the exact matches from the replacement mapping.
-   - Do NOT reduce the length of any section — preserve the original **number of words per section**.
-   - Improve grammar, tone, sentence clarity, and flow without shortening or removing any content.
-   - Do NOT change or remove names, tools, technologies, certifications, or project details.
+Important instructions:
+1. Replace biased or gender-coded language using the exact mapping below (match exact phrases only).
+2. Tailor wording, emphasis, and keyword usage to match the job description provided (if any).
+   - Prioritize matching required skills, tools, technologies, and role-specific keywords in the job description.
+   - Do NOT invent new facts (projects, dates, companies). Rephrase existing content to better align.
+3. Preserve names, tools, technologies, certifications, project titles, URLs, and numeric facts as-is.
+4. Maintain the original resume sections and approximate number of words per section.
+5. Use clear bullets (•) inside sections. Keep hyperlinks intact and fully shown.
+6. After the rewritten resume, provide:
+   - A short 3-line summary of the main edits (what was replaced/emphasized).
+   - A compact list of replacements actually applied (term → replacement).
+   - A short list (3–6) of job-description keywords that were emphasized or added.
 
-2. 🧾 Structure the resume using these sections **if present** in the original, keeping the original text size:
-   - 🏷️ **Name**
-   - 📞 **Contact Information**
-   - 📍 **Location**
-   - 📧 **Email**
-   - 🔗 **LinkedIn** → If missing, insert: 🔗 Please paste your LinkedIn URL here.
-   - 🌐 **Portfolio** → If missing, insert: 🌐 Please paste your GitHub or portfolio link here.
-   - ✍️ **Professional Summary**
-   - 💼 **Work Experience**
-   - 🧑‍💼 **Internships**
-   - 🛠️ **Skills**
-   - 🤝 **Soft Skills**
-   - 🎓 **Certifications**
-   - 🏫 **Education**
-   - 📂 **Projects**
-   - 🌟 **Interests**
-
-   - Use bullet points (•) inside each section for clarity.
-   - Maintain new lines after each points properly.
-   - Keep all hyperlinks intact and show them in full where applicable (e.g., LinkedIn, GitHub, project links).
-   - Do not invent or assume any information not present in the original.
-
-3. 📌 Strictly apply this **replacement mapping** (match exact phrases only — avoid altering keywords or terminology):
+Apply this replacement mapping exactly:
 {formatted_mapping}
 
-4. 💼 Suggest **5 relevant job titles** suited for this candidate based in **{user_location}**. For each:
-   - Provide a detailed  reason for relevance.
-   - Attach a direct LinkedIn job search URL.
-
----
-
+{job_block}
 ### 📄 Original Resume Text
 \"\"\"{text}\"\"\"
 
----
+### ✅ Bias-Free Rewritten Resume (Tailored to Job Description, Preserving Structure & Length)
 
-### ✅ Bias-Free Rewritten Resume (Fully Structured, Same Length)
+Please return only three clearly separated sections in your response:
 
----
+---BEGIN REWRITTEN RESUME---
+(Full rewritten resume here, with sections and bullets, preserving approximate section lengths)
+---END REWRITTEN RESUME---
 
-### 🎯 Suggested Job Titles with Reasoning and LinkedIn Search Links
+---BEGIN EDIT SUMMARY---
+(3-line summary)
+---END EDIT SUMMARY---
 
-1. **[Job Title 1]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%201&location={user_location})
-
-2. **[Job Title 2]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%202&location={user_location})
-
-3. **[Job Title 3]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%203&location={user_location})
-
-4. **[Job Title 4]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%204&location={user_location})
-
-5. **[Job Title 5]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%205&location={user_location})
+---BEGIN REPLACEMENTS AND KEYWORDS---
+Replacements applied:
+- term -> replacement
+Emphasized keywords from job description:
+- keyword1, keyword2, ...
+---END REPLACEMENTS AND KEYWORDS---
 """
 
-    # Call the LLM of your choice
     response = call_llm(prompt, session=st.session_state)
     return response
 
@@ -3701,10 +3680,167 @@ with tab1:
                 with detail_tab2:
                     st.markdown("#### ✨ Bias-Free Rewritten Resume")
                     st.write(resume["Rewritten Text"])
-                    docx_file = generate_docx(resume["Rewritten Text"])
+
+                    # Build a one-column ATS-friendly .docx template
+                    def generate_ats_docx(resume_dict):
+                        text = resume_dict.get("Rewritten Text", "")
+                        name = resume_dict.get("Candidate Name") or resume_dict.get("Resume Name", "").split(".")[0]
+                        email = ""
+                        phone = ""
+                        location = user_location or ""
+                        job_title_line = job_title or ""
+
+                        # Try to heuristically extract contact info from the rewritten text
+                        # (very lightweight - grabs first email/phone-looking tokens)
+                        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', text)
+                        phone_match = re.search(r'(\+?\d[\d\-\s]{6,}\d)', text)
+                        if email_match:
+                            email = email_match.group(0)
+                        if phone_match:
+                            phone = phone_match.group(0).strip()
+
+                        # Try to extract a Skills section (simple heuristic)
+                        skills = []
+                        skills_match = re.search(r'(?im)^skills[:\s-]*\n(.+?)(?:\n\n|\Z)', text)
+                        if skills_match:
+                            raw_skills = skills_match.group(1).strip()
+                            # split by commas or new lines or bullets
+                            parts = re.split(r'[,\n•\-•\u2022]+', raw_skills)
+                            skills = [p.strip() for p in parts if p.strip()]
+
+                        # Try to extract Experience block (basic)
+                        experience = []
+                        exp_match = re.search(r'(?im)^experience[:\s-]*\n(.+?)(?:\n\n|\Z)', text)
+                        if exp_match:
+                            exp_block = exp_match.group(1).strip()
+                            # split by double newlines into separate roles
+                            roles = [r.strip() for r in re.split(r'\n\s*\n', exp_block) if r.strip()]
+                            experience = roles
+
+                        # Education (basic)
+                        education = []
+                        edu_match = re.search(r'(?im)^education[:\s-]*\n(.+?)(?:\n\n|\Z)', text)
+                        if edu_match:
+                            edu_block = edu_match.group(1).strip()
+                            edus = [e.strip() for e in re.split(r'\n\s*\n', edu_block) if e.strip()]
+                            education = edus
+
+                        # Create docx
+                        doc = Document()
+                        # Set page margins to typical ATS-friendly sizes
+                        section = doc.sections[0]
+                        section.top_margin = Inches(0.6)
+                        section.bottom_margin = Inches(0.6)
+                        section.left_margin = Inches(0.7)
+                        section.right_margin = Inches(0.7)
+
+                        # Default font for Normal style
+                        style = doc.styles['Normal']
+                        try:
+                            style.font.name = 'Calibri'
+                            style.font.size = Pt(11)
+                        except Exception:
+                            pass
+
+                        # Header: Name
+                        p = doc.add_paragraph()
+                        run = p.add_run(name.strip())
+                        run.bold = True
+                        run.font.size = Pt(18)
+                        run.font.name = 'Calibri'
+
+                        # Sub header: job title / location / contact
+                        sub = doc.add_paragraph()
+                        sub_run = sub.add_run(job_title_line)
+                        sub_run.font.size = Pt(10)
+                        sub_run.font.color.rgb = RGBColor(0x44, 0x44, 0x44)
+                        sub.alignment = 0
+
+                        # Contact line
+                        contact_parts = [part for part in [email, phone, location] if part]
+                        if contact_parts:
+                            c = doc.add_paragraph()
+                            c_run = c.add_run(" | ".join(contact_parts))
+                            c_run.font.size = Pt(9)
+                            c_run.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
+                        doc.add_paragraph()  # small spacer
+
+                        # Professional Summary (first 3-6 lines of the rewritten text or "Profile" heading)
+                        summary = ""
+                        summary_match = re.search(r'(?im)^(summary|profile|professional summary)[:\s-]*\n(.+?)(?:\n\n|\Z)', text)
+                        if summary_match:
+                            summary = summary_match.group(2).strip()
+                        else:
+                            # fallback: first 3 sentences
+                            sents = re.split(r'(?<=[.!?])\s+', text.strip())
+                            summary = " ".join(sents[:3]).strip()
+
+                        doc.add_paragraph("Professional Summary", style='Normal').runs[0].bold = True
+                        sum_p = doc.add_paragraph(summary)
+                        sum_p.style = doc.styles['Normal']
+
+                        # Skills - bulleted
+                        if skills:
+                            doc.add_paragraph()
+                            doc.add_paragraph("Key Skills", style='Normal').runs[0].bold = True
+                            skills_para = doc.add_paragraph()
+                            for sk in skills:
+                                p = doc.add_paragraph(style='List Bullet')
+                                p.add_run(sk)
+
+                        # Experience - each role as bold heading + bullets
+                        if experience:
+                            doc.add_paragraph()
+                            doc.add_paragraph("Work Experience", style='Normal').runs[0].bold = True
+                            for role in experience:
+                                # Try to split first line into title @ company (heuristic)
+                                lines = [l for l in role.splitlines() if l.strip()]
+                                if lines:
+                                    title_line = lines[0]
+                                    p_title = doc.add_paragraph()
+                                    p_title.add_run(title_line).bold = True
+                                    # remaining lines as bullets
+                                    for detail in lines[1:]:
+                                        if detail.strip():
+                                            p_b = doc.add_paragraph(style='List Bullet')
+                                            p_b.add_run(detail.strip())
+                                else:
+                                    p = doc.add_paragraph(role)
+                                    p.style = doc.styles['Normal']
+
+                        # Education
+                        if education:
+                            doc.add_paragraph()
+                            doc.add_paragraph("Education", style='Normal').runs[0].bold = True
+                            for edu in education:
+                                p = doc.add_paragraph()
+                                p.add_run(edu)
+
+                        # If no structured sections were detected, add the full rewritten text under "Details"
+                        if not (skills or experience or education):
+                            doc.add_paragraph()
+                            doc.add_paragraph("Details", style='Normal').runs[0].bold = True
+                            # add full text preserving paragraphs
+                            for para in text.split('\n\n'):
+                                doc.add_paragraph(para.strip())
+
+                        # Footer with generation note
+                        doc.add_paragraph()
+                        footer = doc.add_paragraph()
+                        footer_run = footer.add_run("Generated by HIRELYZER • Bias-free rewrite included")
+                        footer_run.italic = True
+                        footer_run.font.size = Pt(8)
+                        buffer = BytesIO()
+                        doc.save(buffer)
+                        buffer.seek(0)
+                        return buffer
+
+                    docx_file = generate_ats_docx(resume)
+
                     st.download_button(
                         label="📥 Download Bias-Free Resume (.docx)",
-                        data=docx_file,
+                        data=docx_file.getvalue() if hasattr(docx_file, "getvalue") else docx_file,
                         file_name=f"{resume['Resume Name'].split('.')[0]}_bias_free.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True,
