@@ -6842,6 +6842,7 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
+
 FEATURED_COMPANIES = {
     "tech": [
         {
@@ -7851,7 +7852,9 @@ with tab3:
 
         if search_rapid_clicked:
             if rapid_job_role.strip() and rapid_location.strip():
-                # Call fetch_live_jobs with parameters
+
+             with st.spinner("⚡ Fetching live jobs from RapidAPI..."):
+            # Call fetch_live_jobs with parameters
                 results = fetch_live_jobs(
                     rapid_job_role,
                     rapid_location,
@@ -7860,17 +7863,23 @@ with tab3:
                     results=num_results
                 )
 
-                # Save search results if user is logged in
+        # Save search results if user is logged in
                 if hasattr(st.session_state, 'username') and st.session_state.username:
                     formatted_results = []
                     for job in results:
                         formatted_results.append({
                             "platform": "RapidAPI (Live)",
                             "apply_link": job.get("job_apply_link", "#")
-                        })
-                    save_job_search(st.session_state.username, rapid_job_role, rapid_location, formatted_results)
+                       })
+                    save_job_search(
+                st.session_state.username,
+                rapid_job_role,
+                rapid_location,
+                formatted_results
+                )
 
                 st.markdown("## 🎯 RapidAPI Job Results")
+
 
                 if results:
                     for job in results:
