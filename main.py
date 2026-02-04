@@ -5166,10 +5166,16 @@ def render_template_modern(session_state, profile_img_html=""):
         {"".join([f'''
         <div class="project-item">
             <div class="item-header">
-                <div class="item-title"><a href="{cert['link']}" target="_blank" style="color: #1f2937; text-decoration: none;">{cert['name']}</a></div>
+                <div class="item-title">
+                    <a href="{cert['link']}" target="_blank" style="color: #1f2937; text-decoration: none;">
+                        {cert['name']}
+                    </a>
+                </div>
                 <div class="item-duration">{cert.get('duration', '')}</div>
             </div>
-            <div class="item-description">{cert.get('description', '')}</div>
+            <div class="item-description">
+                {cert.get('description', '').replace(chr(10), '<br>')}
+            </div>
         </div>
         ''' for cert in session_state.certificate_links if cert.get('name')])}
     </div>
@@ -5178,6 +5184,7 @@ def render_template_modern(session_state, profile_img_html=""):
 </body>
 </html>
 """
+
     
     return html_content
 
