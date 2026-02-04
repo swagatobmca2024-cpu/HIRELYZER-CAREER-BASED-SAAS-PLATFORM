@@ -546,7 +546,8 @@ if not st.session_state.authenticated:
 # Replace static 15 with dynamic count
     resumes_uploaded = stats.get("total_candidates", 0)
 
-    domain_supported = stats.get("total_domains", 0)
+    active_domains = stats.get("unique_domains", 0)
+
 
     glassmorphism_counter_style = """
     <style>
@@ -655,8 +656,8 @@ if not st.session_state.authenticated:
             <div class="counter-label">Total Users</div>
         </div>
         <div class="counter-box">
-            <div class="counter-number">{domain_supported}</div>
-            <div class="counter-label">Domains Supported</div>
+            <div class="counter-number">{active_domains}</div>
+            <div class="counter-label">Active Domains</div>
         </div>
         <div class="counter-box">
             <div class="counter-number">{resumes_uploaded}</div>
