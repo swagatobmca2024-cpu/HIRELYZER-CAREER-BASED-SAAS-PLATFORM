@@ -2114,89 +2114,138 @@ replacement_mapping = {
 
 def rewrite_text_with_llm(text, replacement_mapping, user_location):
     """
-    Uses LLM to rewrite a resume with bias-free language, while preserving
-    the original content length. Enhances grammar, structure, and clarity.
-    Ensures structured formatting and includes relevant links and job suggestions.
+    Enhanced resume rewrite engine (backward compatible).
+    - Improves structure, clarity, and ATS readiness
+    - Fills missing sections using internal evidence
+    - Maintains bias-free language
+    - Preserves and ENFORCES suggested job titles output
     """
 
-    # Create a clear mapping in bullet format
+    # -----------------------------
+    # Format bias replacement rules
+    # -----------------------------
     formatted_mapping = "\n".join(
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
-    # Prompt for LLM
+    # -----------------------------
+    # MASTER PROMPT
+    # -----------------------------
     prompt = f"""
-You are an expert resume editor and career advisor.
+You are an ATS Resume Optimization Engine used by recruiters.
 
-Your tasks:
+You will receive:
+1. Original Resume Text
+2. Bias Replacement Rules
+3. Candidate Location
 
-1. ✨ Rewrite the resume text below with these rules:
-   - Replace any biased or gender-coded language using the exact matches from the replacement mapping.
-   - Do NOT reduce the length of any section — preserve the original **number of words per section**.
-   - Improve grammar, tone, sentence clarity, and flow without shortening or removing any content.
-   - Do NOT change or remove names, tools, technologies, certifications, or project details.
+Your goal is to REBUILD the resume to be recruiter-ready,
+ATS-optimized, and internally consistent — not just paraphrased.
 
-2. 🧾 Structure the resume using these sections **if present** in the original, keeping the original text size:
-   - 🏷️ **Name**
-   - 📞 **Contact Information**
-   - 📍 **Location**
-   - 📧 **Email**
-   - 🔗 **LinkedIn** → If missing, insert: 🔗 Please paste your LinkedIn URL here.
-   - 🌐 **Portfolio** → If missing, insert: 🌐 Please paste your GitHub or portfolio link here.
-   - ✍️ **Professional Summary**
-   - 💼 **Work Experience**
-   - 🧑‍💼 **Internships**
-   - 🛠️ **Skills**
-   - 🤝 **Soft Skills**
-   - 🎓 **Certifications**
-   - 🏫 **Education**
-   - 📂 **Projects**
-   - 🌟 **Interests**
+==============================
+🔒 CRITICAL RULES (STRICT)
+==============================
 
-   - Use bullet points (•) inside each section for clarity.
-   - Maintain new lines after each points properly.
-   - Keep all hyperlinks intact and show them in full where applicable (e.g., LinkedIn, GitHub, project links).
-   - Do not invent or assume any information not present in the original.
+- DO NOT invent companies, job titles, degrees, or years.
+- You MAY:
+  • Improve and expand bullet points
+  • CREATE missing sections if evidence exists elsewhere in the resume
+  • Move skills mentioned in projects/experience into the Skills section
+  • Infer tools/technologies ONLY if clearly implied
+- Use neutral, bias-free language (apply mapping exactly).
+- Maintain ATS-friendly formatting.
 
-3. 📌 Strictly apply this **replacement mapping** (match exact phrases only — avoid altering keywords or terminology):
+==============================
+📌 OPTIMIZATION RULES
+==============================
+
+1. Professional Summary must reflect the strongest role
+   inferred from the resume.
+2. Skills section MUST include:
+   - All tools, technologies, and methods mentioned anywhere in the resume
+   - Clean, ATS-friendly keyword list
+3. If any of these sections are missing, CREATE them:
+   - 🛠️ Skills
+   - 📂 Projects
+   - 🎓 Certifications (only if tools/skills imply them)
+   - 🤝 Soft Skills (professionally inferred)
+4. Projects MUST include:
+   - Action verbs
+   - Tech stack
+   - Outcome or contribution
+5. Experience bullets must follow:
+   Action Verb + Task + Tool + Impact
+
+==============================
+🧾 REQUIRED OUTPUT STRUCTURE
+==============================
+
+Return a COMPLETE resume with these sections (skip only if impossible):
+
+🏷️ Name  
+📞 Contact Information  
+📍 Location  
+📧 Email  
+🔗 LinkedIn  
+🌐 Portfolio / GitHub  
+
+✍️ Professional Summary  
+🛠️ Skills  
+💼 Work Experience  
+🧑‍💼 Internships  
+📂 Projects  
+🎓 Certifications  
+🏫 Education  
+🤝 Soft Skills  
+🌟 Interests  
+
+- Use bullet points (•)
+- Clean spacing
+- ATS-friendly formatting
+- NO explanations inside resume
+
+==============================
+🧠 APPLY BIAS REPLACEMENTS
+==============================
 {formatted_mapping}
 
-4. 💼 Suggest **5 relevant job titles** suited for this candidate based in **{user_location}**. For each:
-   - Provide a detailed  reason for relevance.
-   - Attach a direct LinkedIn job search URL.
-
----
-
-### 📄 Original Resume Text
+==============================
+📄 ORIGINAL RESUME
+==============================
 \"\"\"{text}\"\"\"
 
----
+==============================
+🎯 REQUIRED JOB TITLE SUGGESTIONS
+==============================
 
-### ✅ Bias-Free Rewritten Resume (Fully Structured, Same Length)
+After the resume, you MUST include a clearly separated section titled:
 
----
+### 🎯 Suggested Job Titles (Based on Resume)
 
-### 🎯 Suggested Job Titles with Reasoning and LinkedIn Search Links
+Provide EXACTLY **5 job titles** suitable for a candidate located in **{user_location}**.
 
-1. **[Job Title 1]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%201&location={user_location})
+For EACH job title:
+- Give a clear, specific reason for relevance
+- Provide a DIRECT LinkedIn job search URL
 
-2. **[Job Title 2]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%202&location={user_location})
+FORMAT STRICTLY AS:
 
-3. **[Job Title 3]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%203&location={user_location})
+1. **Job Title** — Reason  
+🔗 https://www.linkedin.com/jobs/search/?keywords=Job%20Title&location={user_location}
 
-4. **[Job Title 4]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%204&location={user_location})
-
-5. **[Job Title 5]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%205&location={user_location})
+==============================
+✅ OUTPUT
+==============================
+1. Optimized Resume Content
+2. Suggested Job Titles Section (MANDATORY)
 """
 
-    # Call the LLM of your choice
+    # -----------------------------
+    # Call LLM
+    # -----------------------------
     response = call_llm(prompt, session=st.session_state)
     return response
+
 
 def rewrite_and_highlight(text, replacement_mapping, user_location):
     highlighted_text = text
