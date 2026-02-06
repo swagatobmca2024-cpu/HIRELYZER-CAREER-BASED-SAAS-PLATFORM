@@ -46,18 +46,6 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings 
 from langchain_groq import ChatGroq  # optional if you're using it
 
-
-
-
-
-
-
-
-
-
-
-
-
 # Local project imports
 from llm_manager import call_llm, load_groq_api_keys
 from db_manager import (
@@ -548,7 +536,6 @@ if not st.session_state.authenticated:
 
     active_domains = stats.get("unique_domains", 0)
 
-
     glassmorphism_counter_style = """
     <style>
     @keyframes shimmer {
@@ -771,25 +758,27 @@ if not st.session_state.get("authenticated", False):
     }}
     .login-card h2 span {{ color: #00BFFF; }}
 
-    .glass-box {{
+    .auth-box {{
       background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.08) 0%,
-        rgba(30, 144, 255, 0.04) 50%,
-        rgba(0, 191, 255, 0.08) 100%);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      border: 1px solid rgba(0, 191, 255, 0.15);
-      border-radius: 16px;
-      padding: 20px;
-      margin: 16px 0;
+        rgba(0, 191, 255, 0.25) 0%,
+        rgba(30, 144, 255, 0.15) 50%,
+        rgba(0, 191, 255, 0.25) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 3px solid rgba(0, 191, 255, 0.6);
+      border-radius: 18px;
+      padding: 24px;
+      margin: 24px 0;
       box-shadow:
-        0 6px 24px rgba(0, 191, 255, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        0 0 30px rgba(0, 191, 255, 0.4),
+        0 8px 32px rgba(0, 191, 255, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -1px 8px rgba(0, 191, 255, 0.15);
       position: relative;
       overflow: hidden;
     }}
 
-    .glass-box::before {{
+    .auth-box::before {{
       content: '';
       position: absolute;
       top: 0;
@@ -799,24 +788,24 @@ if not st.session_state.get("authenticated", False):
       background: linear-gradient(
         90deg,
         transparent,
-        rgba(0, 191, 255, 0.15),
+        rgba(0, 191, 255, 0.3),
         transparent
       );
       animation: glassShimmer 4s infinite;
     }}
 
-    .glass-box > * {{
+    .auth-box > * {{
       position: relative;
       z-index: 2;
     }}
 
-    .glass-box h3 {{
+    .auth-box h3 {{
       color: #00BFFF;
-      text-shadow: 0 0 12px rgba(0, 191, 255, 0.4);
+      text-shadow: 0 0 15px rgba(0, 191, 255, 0.6);
       margin-top: 0;
     }}
 
-    .glass-box p {{
+    .auth-box p {{
       color: #c9d1d9;
       margin: 8px 0;
     }}
@@ -1134,16 +1123,14 @@ if not st.session_state.get("authenticated", False):
     }}
 
     .stTabs [role="tabpanel"] {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.06) 0%,
-        rgba(30, 144, 255, 0.03) 100%);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(0, 191, 255, 0.12);
-      border-radius: 12px;
-      padding: 20px;
+      background: transparent;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      border: none;
+      border-radius: 0;
+      padding: 12px 0;
       margin-top: 12px;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      box-shadow: none;
     }}
 
     .stCaption {{
@@ -1175,7 +1162,7 @@ if not st.session_state.get("authenticated", False):
         with login_tab:
             # Show login or forgot password flow based on reset_stage
             if st.session_state.reset_stage == "none":
-                st.markdown('<div class="glass-box">', unsafe_allow_html=True)
+                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Login to Your Account</h3>", unsafe_allow_html=True)
 
                 user = st.text_input("👤 Username or Email", key="login_user")
@@ -1213,7 +1200,7 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 1: Request Email
             # ============================================================
             elif st.session_state.reset_stage == "request_email":
-                st.markdown('<div class="glass-box">', unsafe_allow_html=True)
+                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your registered email to receive an OTP</p>", unsafe_allow_html=True)
 
@@ -1261,7 +1248,7 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 2: Verify OTP
             # ============================================================
             elif st.session_state.reset_stage == "verify_otp":
-                st.markdown('<div class="glass-box">', unsafe_allow_html=True)
+                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📩 Verify OTP</h3>", unsafe_allow_html=True)
                 st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.reset_email}</strong></p>", unsafe_allow_html=True)
 
@@ -1334,7 +1321,7 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 3: Reset Password
             # ============================================================
             elif st.session_state.reset_stage == "reset_password":
-                st.markdown('<div class="glass-box">', unsafe_allow_html=True)
+                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your new password</p>", unsafe_allow_html=True)
 
@@ -1385,7 +1372,7 @@ if not st.session_state.get("authenticated", False):
         with register_tab:
             # Check if OTP was sent and pending verification
             if 'pending_registration' in st.session_state:
-                st.markdown('<div class="glass-box">', unsafe_allow_html=True)
+                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📧 Verify Your Email</h3>", unsafe_allow_html=True)
                 st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.pending_registration['email']}</strong></p>", unsafe_allow_html=True)
 
@@ -1467,7 +1454,7 @@ if not st.session_state.get("authenticated", False):
                 st.markdown('</div>', unsafe_allow_html=True)
 
             else:
-                st.markdown('<div class="glass-box">', unsafe_allow_html=True)
+                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
 
                 # Email input with live validation
@@ -1596,6 +1583,7 @@ if not st.session_state.get("authenticated", False):
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.stop()
+
 
 # ------------------- AFTER LOGIN -------------------
 if st.session_state.get("authenticated"):
