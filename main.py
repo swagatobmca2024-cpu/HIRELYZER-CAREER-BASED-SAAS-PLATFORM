@@ -46,6 +46,18 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings 
 from langchain_groq import ChatGroq  # optional if you're using it
 
+
+
+
+
+
+
+
+
+
+
+
+
 # Local project imports
 from llm_manager import call_llm, load_groq_api_keys
 from db_manager import (
@@ -536,6 +548,7 @@ if not st.session_state.authenticated:
 
     active_domains = stats.get("unique_domains", 0)
 
+
     glassmorphism_counter_style = """
     <style>
     @keyframes shimmer {
@@ -664,6 +677,7 @@ if not st.session_state.get("authenticated", False):
     response = requests.get(image_url)
     img_base64 = b64encode(response.content).decode()
 
+    # ✅ Inject glassmorphism CSS with shimmer effects
     st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
@@ -678,6 +692,7 @@ if not st.session_state.get("authenticated", False):
         100% {{ transform: translateX(200%) skewX(-15deg); }}
     }}
 
+    /* ===== Card Shuffle Animation ===== */
     .animated-cards {{
       margin-top: 40px;
       display: flex;
@@ -704,6 +719,7 @@ if not st.session_state.get("authenticated", False):
     .card-center {{ --x-offset: 0px;  --rot: 0deg;  }}
     .card-right  {{ --x-offset: 80px;  --rot: 4deg;  }}
 
+    /* ===== Glassmorphism Login Card ===== */
     .login-card {{
       background: linear-gradient(135deg,
         rgba(0, 191, 255, 0.1) 0%,
@@ -758,58 +774,7 @@ if not st.session_state.get("authenticated", False):
     }}
     .login-card h2 span {{ color: #00BFFF; }}
 
-    .auth-box {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.25) 0%,
-        rgba(30, 144, 255, 0.15) 50%,
-        rgba(0, 191, 255, 0.25) 100%);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 3px solid rgba(0, 191, 255, 0.6);
-      border-radius: 18px;
-      padding: 24px;
-      margin: 24px 0;
-      box-shadow:
-        0 0 30px rgba(0, 191, 255, 0.4),
-        0 8px 32px rgba(0, 191, 255, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2),
-        inset 0 -1px 8px rgba(0, 191, 255, 0.15);
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .auth-box::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(0, 191, 255, 0.3),
-        transparent
-      );
-      animation: glassShimmer 4s infinite;
-    }}
-
-    .auth-box > * {{
-      position: relative;
-      z-index: 2;
-    }}
-
-    .auth-box h3 {{
-      color: #00BFFF;
-      text-shadow: 0 0 15px rgba(0, 191, 255, 0.6);
-      margin-top: 0;
-    }}
-
-    .auth-box p {{
-      color: #c9d1d9;
-      margin: 8px 0;
-    }}
-
+    /* ===== Enhanced Message Cards with Consistent Layout ===== */
     .slide-message {{
       position: relative;
       overflow: hidden;
@@ -928,6 +893,7 @@ if not st.session_state.get("authenticated", False):
       }}
     }}
 
+    /* ===== Improved Timer Display ===== */
     .timer-display {{
       background: linear-gradient(135deg,
         rgba(255, 215, 0, 0.18) 0%,
@@ -992,9 +958,10 @@ if not st.session_state.get("authenticated", False):
       text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
     }}
 
+    /* ===== Glassmorphism Buttons ===== */
     .stButton>button {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.2) 0%,
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.2) 0%, 
         rgba(30, 144, 255, 0.1) 100%);
       backdrop-filter: blur(15px);
       -webkit-backdrop-filter: blur(15px);
@@ -1004,14 +971,14 @@ if not st.session_state.get("authenticated", False):
       font-family: 'Orbitron', sans-serif;
       font-weight: bold;
       padding: 8px 20px;
-      box-shadow:
+      box-shadow: 
         0 4px 16px rgba(0, 191, 255, 0.1),
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
       transition: all 0.3s ease;
       position: relative;
       overflow: hidden;
     }}
-
+    
     .stButton>button::before {{
       content: '';
       position: absolute;
@@ -1027,25 +994,26 @@ if not st.session_state.get("authenticated", False):
       );
       transition: left 0.5s;
     }}
-
+    
     .stButton>button:hover {{
       transform: translateY(-2px);
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.3) 0%,
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.3) 0%, 
         rgba(30, 144, 255, 0.15) 100%);
       border: 1px solid rgba(0, 191, 255, 0.5);
-      box-shadow:
+      box-shadow: 
         0 8px 25px rgba(0, 191, 255, 0.2),
         inset 0 1px 0 rgba(255, 255, 255, 0.2);
     }}
-
+    
     .stButton>button:hover::before {{
       left: 100%;
     }}
 
+    /* ===== Glassmorphism Input Fields ===== */
     .stTextInput input {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.08) 0%,
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.08) 0%, 
         rgba(30, 144, 255, 0.04) 100%);
       backdrop-filter: blur(15px);
       -webkit-backdrop-filter: blur(15px);
@@ -1054,18 +1022,18 @@ if not st.session_state.get("authenticated", False):
       padding: 10px;
       color: #E0F7FF;
       font-family: 'Orbitron', sans-serif;
-      box-shadow:
+      box-shadow: 
         0 4px 16px rgba(0, 191, 255, 0.05),
         inset 0 1px 0 rgba(255, 255, 255, 0.05);
       transition: all 0.3s ease-in-out;
     }}
     .stTextInput input:focus {{
       outline: none !important;
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.12) 0%,
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.12) 0%, 
         rgba(30, 144, 255, 0.06) 100%);
       border: 1px solid rgba(0, 191, 255, 0.4);
-      box-shadow:
+      box-shadow: 
         0 8px 25px rgba(0, 191, 255, 0.15),
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
       transform: translateY(-1px);
@@ -1075,71 +1043,9 @@ if not st.session_state.get("authenticated", False):
       color: #00BFFF !important;
       text-shadow: 0 0 10px rgba(0, 191, 255, 0.3);
     }}
-
-    .stTabs [role="tablist"] {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.12) 0%,
-        rgba(30, 144, 255, 0.06) 100%);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      border: 1px solid rgba(0, 191, 255, 0.2);
-      border-radius: 14px;
-      padding: 6px;
-      gap: 8px;
-      box-shadow: 0 4px 16px rgba(0, 191, 255, 0.08);
-    }}
-
-    .stTabs [role="tab"] {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.1) 0%,
-        rgba(30, 144, 255, 0.05) 100%);
-      border: 1px solid rgba(0, 191, 255, 0.15);
-      border-radius: 10px;
-      color: #c9d1d9;
-      font-family: 'Orbitron', sans-serif;
-      font-weight: 600;
-      padding: 10px 20px;
-      transition: all 0.3s ease;
-      box-shadow: 0 2px 8px rgba(0, 191, 255, 0.05);
-    }}
-
-    .stTabs [role="tab"][aria-selected="true"] {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.25) 0%,
-        rgba(30, 144, 255, 0.15) 100%);
-      border: 1px solid rgba(0, 191, 255, 0.4);
-      color: #00BFFF;
-      text-shadow: 0 0 12px rgba(0, 191, 255, 0.3);
-      box-shadow: 0 4px 16px rgba(0, 191, 255, 0.15);
-    }}
-
-    .stTabs [role="tab"]:hover {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.15) 0%,
-        rgba(30, 144, 255, 0.08) 100%);
-      border: 1px solid rgba(0, 191, 255, 0.25);
-      box-shadow: 0 4px 12px rgba(0, 191, 255, 0.12);
-      transform: translateY(-1px);
-    }}
-
-    .stTabs [role="tabpanel"] {{
-      background: transparent;
-      backdrop-filter: none;
-      -webkit-backdrop-filter: none;
-      border: none;
-      border-radius: 0;
-      padding: 12px 0;
-      margin-top: 12px;
-      box-shadow: none;
-    }}
-
-    .stCaption {{
-      color: #8b949e !important;
-      font-family: 'Orbitron', sans-serif;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-    }}
     </style>
 
+    <!-- Animated Cards -->
     <div class="animated-cards">
         <img class="card-left" src="data:image/png;base64,{img_base64}" />
         <img class="card-center" src="data:image/png;base64,{img_base64}" />
@@ -1162,7 +1068,7 @@ if not st.session_state.get("authenticated", False):
         with login_tab:
             # Show login or forgot password flow based on reset_stage
             if st.session_state.reset_stage == "none":
-                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
+                # Normal Login UI
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Login to Your Account</h3>", unsafe_allow_html=True)
 
                 user = st.text_input("👤 Username or Email", key="login_user")
@@ -1194,13 +1100,10 @@ if not st.session_state.get("authenticated", False):
                     st.session_state.reset_stage = "request_email"
                     st.rerun()
 
-                st.markdown('</div>', unsafe_allow_html=True)
-
             # ============================================================
             # FORGOT PASSWORD FLOW - Stage 1: Request Email
             # ============================================================
             elif st.session_state.reset_stage == "request_email":
-                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your registered email to receive an OTP</p>", unsafe_allow_html=True)
 
@@ -1242,13 +1145,10 @@ if not st.session_state.get("authenticated", False):
                         st.session_state.reset_stage = "none"
                         st.rerun()
 
-                st.markdown('</div>', unsafe_allow_html=True)
-
             # ============================================================
             # FORGOT PASSWORD FLOW - Stage 2: Verify OTP
             # ============================================================
             elif st.session_state.reset_stage == "verify_otp":
-                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📩 Verify OTP</h3>", unsafe_allow_html=True)
                 st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.reset_email}</strong></p>", unsafe_allow_html=True)
 
@@ -1315,13 +1215,10 @@ if not st.session_state.get("authenticated", False):
                             st.session_state.reset_stage = "none"
                             st.rerun()
 
-                st.markdown('</div>', unsafe_allow_html=True)
-
             # ============================================================
             # FORGOT PASSWORD FLOW - Stage 3: Reset Password
             # ============================================================
             elif st.session_state.reset_stage == "reset_password":
-                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your new password</p>", unsafe_allow_html=True)
 
@@ -1366,13 +1263,10 @@ if not st.session_state.get("authenticated", False):
                     st.session_state.reset_stage = "none"
                     st.rerun()
 
-                st.markdown('</div>', unsafe_allow_html=True)
-
         # ---------------- REGISTER TAB ----------------
         with register_tab:
             # Check if OTP was sent and pending verification
             if 'pending_registration' in st.session_state:
-                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📧 Verify Your Email</h3>", unsafe_allow_html=True)
                 st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.pending_registration['email']}</strong></p>", unsafe_allow_html=True)
 
@@ -1451,10 +1345,8 @@ if not st.session_state.get("authenticated", False):
                             del st.session_state.pending_registration
                             st.rerun()
 
-                st.markdown('</div>', unsafe_allow_html=True)
-
             else:
-                st.markdown('<div class="auth-box">', unsafe_allow_html=True)
+                # Normal registration form
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
 
                 # Email input with live validation
@@ -1578,12 +1470,9 @@ if not st.session_state.get("authenticated", False):
                         notify("register", "warning", "⚠️ Please fill in all fields (email, username, and password).")
                         st.rerun()
 
-                st.markdown('</div>', unsafe_allow_html=True)
-
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.stop()
-
 
 # ------------------- AFTER LOGIN -------------------
 if st.session_state.get("authenticated"):
