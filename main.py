@@ -3778,57 +3778,78 @@ with tab1:
 from xhtml2pdf import pisa
 from io import BytesIO
 
+
 def html_to_pdf_bytes(html_string):
-    styled_html = f"""
+    pdf_buffer = BytesIO()
+
+    full_html = f"""
     <html>
     <head>
-        <meta charset="UTF-8">
         <style>
             @page {{
-                size: 400mm 297mm;  /* Original custom large page size */
-                margin-top: 10mm;
-                margin-bottom: 10mm;
-                margin-left: 10mm;
-                margin-right: 10mm;
+                size: A4;
+                margin: 20mm;
             }}
+
             body {{
-                font-size: 14pt;
-                font-family: "Segoe UI", "Helvetica", sans-serif;
+                font-family: Helvetica, Arial, sans-serif;
+                font-size: 11pt;
                 line-height: 1.5;
-                color: #000;
+                color: #000000;
             }}
-            h1, h2, h3 {{
-                color: #2f4f6f;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 15px;
-            }}
-            td {{
-                padding: 4px;
-                vertical-align: top;
-                border: 1px solid #ccc;
-            }}
-            .section-title {{
-                background-color: #e0e0e0;
-                font-weight: bold;
-                padding: 6px;
-                margin-top: 10px;
-            }}
-            .box {{
-                padding: 8px;
-                margin-top: 6px;
-                background-color: #f9f9f9;
-                border-left: 4px solid #999;  /* More elegant than full border */
-            }}
-            ul {{
-                margin: 0.5em 0;
-                padding-left: 1.5em;
-            }}
-            li {{
+
+            h1 {{
+                font-size: 20pt;
                 margin-bottom: 5px;
             }}
+
+            h2 {{
+                font-size: 14pt;
+                margin-top: 20px;
+                margin-bottom: 5px;
+                border-bottom: 1px solid #000;
+                padding-bottom: 3px;
+            }}
+
+            p {{
+                margin: 5px 0;
+            }}
+
+            .section {{
+                margin-bottom: 15px;
+            }}
+
+            .header {{
+                text-align: center;
+                margin-bottom: 20px;
+            }}
+
+            .contact {{
+                font-size: 10pt;
+            }}
+
+            .job-title {{
+                font-weight: bold;
+                font-size: 12pt;
+            }}
+
+            ul {{
+                margin: 5px 0 5px 15px;
+            }}
+
+            .entry-title {{
+                font-weight: bold;
+            }}
+
+            .entry-sub {{
+                font-style: italic;
+                font-size: 10pt;
+            }}
+
+            .right {{
+                float: right;
+            }}
+
         </style>
     </head>
     <body>
@@ -3837,947 +3858,207 @@ def html_to_pdf_bytes(html_string):
     </html>
     """
 
-    pdf_io = BytesIO()
-    pisa.CreatePDF(styled_html, dest=pdf_io)
-    pdf_io.seek(0)
-    return pdf_io
+    pisa.CreatePDF(full_html, dest=pdf_buffer)
+    pdf_buffer.seek(0)
+    return pdf_buffer
+
 
 def render_template_default(session_state, profile_img_html=""):
-    """Default professional template - keeps the exact same design as before"""
-    
-    # Enhanced SKILLS with professional, muted colors
-    skills_html = "".join(
-        f"""
-        <div style='display:inline-block; 
-                    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
-                    color: #334155; 
-                    padding: 10px 18px; 
-                    margin: 8px 8px 8px 0; 
-                    border-radius: 25px; 
-                    font-size: 14px; 
-                    font-weight: 600;
-                    box-shadow: 0 2px 8px rgba(148, 163, 184, 0.2);
-                    transition: all 0.3s ease;
-                    text-shadow: none;
-                    border: 1px solid rgba(148, 163, 184, 0.3);'>
-            {s.strip()}
-        </div>
-        """
-        for s in session_state['skills'].split(',')
-        if s.strip()
-    )
+    """Default professional ATS-friendly template (clean, semantic, machine-readable)"""
+    # Helper to safely convert newlines to list items
+    def bullets_from_text(text):
+        if not text:
+            return ""
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if not lines:
+            return ""
+        return "<ul>" + "".join(f"<li>{ln}</li>" for ln in lines) + "</ul>"
 
-    # Enhanced LANGUAGES with soft, professional design
-    languages_html = "".join(
-        f"""
-        <div style='display:inline-block; 
-                    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-                    color: #475569; 
-                    padding: 10px 18px; 
-                    margin: 8px 8px 8px 0; 
-                    border-radius: 25px; 
-                    font-size: 14px; 
-                    font-weight: 600;
-                    box-shadow: 0 2px 8px rgba(100, 116, 139, 0.15);
-                    transition: all 0.3s ease;
-                    text-shadow: none;
-                    border: 1px solid rgba(148, 163, 184, 0.3);'>
-            {lang.strip()}
-        </div>
-        """
-        for lang in session_state['languages'].split(',')
-        if lang.strip()
-    )
+    # Normalize simple comma lists for skills, languages, interests, softskills
+    def comma_list_html(s):
+        if not s:
+            return ""
+        items = [it.strip() for it in s.split(",") if it.strip()]
+        return ", ".join(items)
 
-    # Enhanced INTERESTS with subtle colors
-    interests_html = "".join(
-        f"""
-        <div style='display:inline-block; 
-                    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-                    color: #0f172a; 
-                    padding: 10px 18px; 
-                    margin: 8px 8px 8px 0; 
-                    border-radius: 25px; 
-                    font-size: 14px; 
-                    font-weight: 600;
-                    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.1);
-                    transition: all 0.3s ease;
-                    text-shadow: none;
-                    border: 1px solid rgba(186, 230, 253, 0.5);'>
-            {interest.strip()}
-        </div>
-        """
-        for interest in session_state['interests'].split(',')
-        if interest.strip()
-    )
+    skills_text = comma_list_html(session_state.get("skills", ""))
+    languages_text = comma_list_html(session_state.get("languages", ""))
+    interests_text = comma_list_html(session_state.get("interests", ""))
+    softskills_text = comma_list_html(session_state.get("Softskills", ""))
 
-    # Enhanced SOFT SKILLS with warm but professional styling
-    Softskills_html = "".join(
-        f"""
-        <div style='display:inline-block; 
-                    background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%);
-                    color: #451a03; 
-                    padding: 10px 20px; 
-                    margin: 8px 8px 8px 0; 
-                    border-radius: 25px; 
-                    font-size: 14px; 
-                    font-family: "Segoe UI", sans-serif; 
-                    font-weight: 600;
-                    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.1);
-                    transition: all 0.3s ease;
-                    border: 1px solid rgba(254, 215, 170, 0.6);'>
-            {skill.strip().title()}
-        </div>
-        """
-        for skill in session_state['Softskills'].split(',')
-        if skill.strip()
-    )
+    # Summary
+    summary_html = "<p>{}</p>".format(session_state.get("summary", "").replace("\n", "<br>")) if session_state.get("summary") else ""
 
-    # Enhanced EXPERIENCE with professional, subtle design
+    # Experience (ATS-friendly: Company (Dates) — Role; bullet list of achievements)
     experience_html = ""
-    for exp in session_state.experience_entries:
-        if exp["company"] or exp["title"]:
-            # Handle paragraphs and single line breaks
-            description_lines = [line.strip() for line in exp["description"].strip().split("\n\n")]
-            description_html = "".join(
-                f"<div style='margin-bottom: 10px; line-height: 1.6;'>{line.replace(chr(10), '<br>')}</div>"
-                for line in description_lines if line
-            )
-
-            experience_html += f"""
-            <div style='
-                margin-bottom: 24px;
-                padding: 20px;
-                border-radius: 12px;
-                background: linear-gradient(145deg, #fafafa 0%, #f4f4f5 100%);
-                box-shadow: 
-                    0 4px 12px rgba(0, 0, 0, 0.05),
-                    0 1px 3px rgba(0, 0, 0, 0.1);
-                font-family: "Inter", "Segoe UI", sans-serif;
-                color: #374151;
-                line-height: 1.6;
-                border: 1px solid rgba(229, 231, 235, 0.8);
-                position: relative;
-                overflow: hidden;
-            '>
-                <!-- Subtle accent bar -->
-                <div style='
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    height: 3px;
-                    background: linear-gradient(90deg, #6b7280, #9ca3af);
-                '></div>
-                
-                <!-- Header Card -->
-                <div style='
-                    background: rgba(255, 255, 255, 0.8);
-                    border-radius: 8px;
-                    padding: 14px 18px;
-                    margin-bottom: 12px;
-                    border: 1px solid rgba(229, 231, 235, 0.6);
-                '>
-                    <div style='
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        font-weight: 700;
-                        font-size: 18px;
-                        margin-bottom: 6px;
-                        color: #1f2937;
-                        width: 100%;
-                    '>
-                        <div style='display: flex; align-items: center;'>
-                            <div style='
-                                width: 6px; 
-                                height: 6px; 
-                                background: #6b7280;
-                                border-radius: 50%; 
-                                margin-right: 12px;
-                            '></div>
-                            <span>{exp['company']}</span>
-                        </div>
-                        <div style='
-                            display: inline-flex;
-                            align-items: center;
-                            gap: 6px;
-                            background: linear-gradient(135deg, #f9fafb, #f3f4f6);
-                            color: #374151;
-                            padding: 5px 14px;
-                            border-radius: 16px;
-                            font-size: 14px;
-                            font-weight: 600;
-                            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                            border: 1px solid rgba(209, 213, 219, 0.5);
-                        '>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                                <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/>
-                            </svg>
-                            <span>{exp['duration']}</span>
-                        </div>
-                    </div>
-
-                    <div style='
-                        display: flex;
-                        align-items: center;
-                        font-size: 16px;
-                        font-weight: 600;
-                        color: #4b5563;
-                    '>
-                        <div style='
-                            width: 4px; 
-                            height: 4px; 
-                            background: #6b7280;
-                            border-radius: 50%; 
-                            margin-right: 10px;
-                        '></div>
-                        <span>{exp['title']}</span>
-                    </div>
-                </div>
-
-                <!-- Description -->
-                <div style='
-                    font-size: 15px;
-                    font-weight: 500;
-                    color: #374151;
-                    line-height: 1.7;
-                    padding-left: 8px;
-                '>
-                    <div style='
-                        border-left: 2px solid #d1d5db;
-                        padding-left: 16px;
-                        margin-left: 8px;
-                    '>
-                        {description_html}
-                    </div>
-                </div>
-            </div>
-            """
-
-    # Convert experience to list if multiple lines
-    # Escape HTML and convert line breaks
-    summary_html = session_state['summary'].replace('\n', '<br>')
-
-    # Enhanced EDUCATION with professional styling
-    education_html = ""
-    for edu in session_state.education_entries:
-        if edu.get("institution") or edu.get("details"):
-            degree_text = ""
-            if edu.get("degree"):
-                degree_val = edu["degree"]
-                if isinstance(degree_val, list):
-                    degree_val = ", ".join(degree_val)
-                degree_text = f"""
-                <div style='
-                    display: flex; 
-                    align-items: center; 
-                    font-size: 15px; 
-                    color: #374151; 
-                    margin-bottom: 8px;
-                    font-weight: 600;
-                '>
-                    <div style='
-                        width: 4px; 
-                        height: 4px; 
-                        background: #6b7280;
-                        border-radius: 50%; 
-                        margin-right: 10px;
-                    '></div>
-                    <b>{degree_val}</b>
-                </div>
-                """
-
-            # Education Card
-            education_html += f"""
-            <div style='
-                margin-bottom: 26px;
-                padding: 22px 26px;
-                border-radius: 12px;
-                background: linear-gradient(145deg, #f9fafb 0%, #f3f4f6 100%);
-                box-shadow: 
-                    0 4px 12px rgba(0, 0, 0, 0.06),
-                    0 1px 3px rgba(0, 0, 0, 0.08);
-                font-family: "Inter", "Segoe UI", sans-serif;
-                color: #1f2937;
-                line-height: 1.6;
-                border: 1px solid #e5e7eb;
-                position: relative;
-                overflow: hidden;
-            '>
-                <!-- Subtle accent bar -->
-                <div style='
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    height: 3px;
-                    background: linear-gradient(90deg, #6b7280, #9ca3af);
-                '></div>
-
-                <div style='
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    font-size: 18px;
-                    font-weight: 700;
-                    margin-bottom: 12px;
-                    width: 100%;
-                    color: #111827;
-                '>
-                    <div style='display: flex; align-items: center;'>
-                        <div style='
-                            width: 6px; 
-                            height: 6px; 
-                            background: #6b7280;
-                            border-radius: 50%; 
-                            margin-right: 12px;
-                        '></div>
-                        <span>{edu.get('institution', '')}</span>
-                    </div>
-                    <div style='
-                        display: flex;
-                        align-items: center;
-                        gap: 6px;
-                        background: rgba(255, 255, 255, 0.7);
-                        color: #374151;
-                        padding: 6px 16px;
-                        border-radius: 16px;
-                        font-weight: 600;
-                        font-size: 14px;
-                        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                        border: 1px solid #d1d5db;
-                    '>
-                        <!-- Inline SVG Calendar Icon -->
-                        <svg xmlns="http://www.w3.org/2000/svg" 
-                            fill="none" viewBox="0 0 24 24" 
-                            stroke="currentColor" width="16" height="16">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 
-                                2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        {edu.get('year', '')}
-                    </div>
-                </div>
-                {degree_text}
-                <div style='
-                    font-size: 14px; 
-                    font-style: italic;
-                    color: #374151;
-                    line-height: 1.6;
-                    padding-left: 18px;
-                    border-left: 2px solid #9ca3af;
-                '>
-                    {edu.get('details', '')}
-                </div>
-            </div>
-            """
-
-    # Enhanced PROJECTS with professional card design
-    projects_html = ""
-    for proj in session_state.project_entries:
-        if proj.get("title") or proj.get("description"):
-            tech_val = proj.get("tech")
-            if isinstance(tech_val, list):
-                tech_val = ", ".join(tech_val)
-            tech_text = f"""
-            <div style='
-                display: flex; 
-                align-items: center; 
-                font-size: 14px; 
-                color: #374151; 
-                margin-bottom: 12px;
-                font-weight: 600;
-                background: rgba(255, 255, 255, 0.7);
-                padding: 8px 16px;
-                border-radius: 8px;
-                border: 1px solid rgba(229, 231, 235, 0.6);
-            '>
-                <div style='
-                    width: 4px; 
-                    height: 4px; 
-                    background: #6b7280;
-                    border-radius: 50%; 
-                    margin-right: 10px;
-                '></div>
-                <b>Technologies:</b>&nbsp;&nbsp;{tech_val if tech_val else ''}
-            </div>
-            """ if tech_val else ""
-
-            description_items = ""
-            if proj.get("description"):
-                description_lines = [line.strip() for line in proj["description"].splitlines() if line.strip()]
-                description_items = "".join(f"<li style='margin-bottom: 6px; line-height: 1.6;'>{line}</li>" for line in description_lines)
-
-            projects_html += f"""
-            <div style='
-                margin-bottom: 30px;
-                padding: 26px;
-                border-radius: 12px;
-                background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%);
-                box-shadow: 
-                    0 4px 12px rgba(100, 116, 139, 0.1),
-                    0 1px 3px rgba(0, 0, 0, 0.1);
-                font-family: "Inter", "Segoe UI", sans-serif;
-                color: #334155;
-                line-height: 1.7;
-                border: 1px solid rgba(203, 213, 225, 0.5);
-                position: relative;
-                overflow: hidden;
-            '>
-                <!-- Subtle accent bar -->
-                <div style='
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    height: 3px;
-                    background: linear-gradient(90deg, #64748b, #94a3b8);
-                '></div>
-
-                <div style='
-                    font-size: 19px;
-                    font-weight: 700;
-                    margin-bottom: 16px;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    color: #1e293b;
-                    width: 100%;
-                '>
-                    <div style='display: flex; align-items: center;'>
-                        <div style='
-                            width: 6px; 
-                            height: 6px; 
-                            background: #64748b;
-                            border-radius: 50%; 
-                            margin-right: 12px;
-                        '></div>
-                        <span>{proj.get('title', '')}</span>
-                    </div>
-                    <div style='
-                        display: flex;
-                        align-items: center;
-                        gap: 6px;
-                        background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
-                        color: #334155;
-                        padding: 8px 18px;
-                        border-radius: 16px;
-                        font-weight: 600;
-                        font-size: 14px;
-                        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                        border: 1px solid rgba(203, 213, 225, 0.6);
-                    '>
-                        <!-- Inline SVG Clock Icon -->
-                        <svg xmlns="http://www.w3.org/2000/svg" 
-                            fill="none" viewBox="0 0 24 24" 
-                            stroke="currentColor" width="16" height="16">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 
-                                   9 9 0 0118 0z" />
-                        </svg>
-                        {proj.get('duration', '')}
-                    </div>
-                </div>
-                {tech_text}
-                <div style='
-                    font-size: 15px; 
-                    color: #334155;
-                    background: rgba(255, 255, 255, 0.6);
-                    padding: 18px;
-                    border-radius: 8px;
-                    border: 1px solid rgba(229, 231, 235, 0.6);
-                '>
-                    <div style='
-                        font-weight: 600; 
-                        margin-bottom: 12px;
-                        color: #1e293b;
-                        display: flex;
-                        align-items: center;
-                    '>
-                        <div style='
-                            width: 4px; 
-                            height: 4px; 
-                            background: #64748b;
-                            border-radius: 50%; 
-                            margin-right: 10px;
-                        '></div>
-                        Description:
-                    </div>
-                    <ul style='
-                        margin-top: 8px; 
-                        padding-left: 24px; 
-                        color: #334155;
-                        list-style-type: none;
-                    '>
-                        {description_items}
-                    </ul>
-                </div>
-            </div>
-            """
-
-    # Enhanced PROJECT LINKS with professional styling
-    project_links_html = ""
-    if session_state.project_links:
-        project_links_html = """
-        <div style='margin-bottom: 20px;'>
-            <h4 class='section-title' style='
-                color: #374151;
-                font-size: 20px;
-                margin-bottom: 8px;
-                display: flex;
-                align-items: center;
-                padding-bottom: 4px;
-            '>
-                <div style='
-                    width: 6px; 
-                    height: 6px; 
-                    background: #6b7280;
-                    border-radius: 50%; 
-                    margin-right: 12px;
-                '></div>
-                Project Links
-            </h4>
+    for exp in session_state.get("experience_entries", []):
+        company = exp.get("company", "").strip()
+        duration = exp.get("duration", "").strip()
+        title = exp.get("title", "").strip()
+        description = exp.get("description", "").strip()
+        if not (company or title):
+            continue
+        header = "<strong>{company}</strong>".format(company=company) if company else ""
+        if duration:
+            header += " — <span style='white-space:nowrap'>{}</span>".format(duration)
+        if title:
+            header += "<div style='font-weight:600; margin-top:4px'>{}</div>".format(title)
+        bullets = bullets_from_text(description)
+        experience_html += f"""
+        <div class="experience-entry">
+            <div class="exp-header">{header}</div>
+            <div class="exp-bullets">{bullets}</div>
         </div>
-        """ + "".join(
-            f"""
-            <div style='
-                background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-                padding: 14px 20px;
-                border-radius: 8px;
-                margin-bottom: 12px;
-                border: 1px solid rgba(209, 213, 219, 0.6);
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-            '>
-                <div style='
-                    width: 4px; 
-                    height: 4px; 
-                    background: #6b7280;
-                    border-radius: 50%; 
-                    display: inline-block;
-                    margin-right: 12px;
-                    vertical-align: middle;
-                '></div>
-                <a href="{link}" style='
-                    color: #374151; 
-                    font-weight: 600; 
-                    text-decoration: none;
-                    font-size: 15px;
-                '>🔗 Project {i+1}</a>
-            </div>
-            """
-            for i, link in enumerate(session_state.project_links)
-        )
-
-    # Enhanced CERTIFICATES with professional design
-    certificate_links_html = ""
-    if session_state.certificate_links:
-        certificate_links_html = """
-        <h4 class='section-title' style='
-            color: #374151;
-            font-size: 20px;
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-        '>
-            <div style='
-                width: 6px; 
-                height: 6px; 
-                background: #6b7280;
-                border-radius: 50%; 
-                margin-right: 12px;
-            '></div>
-            Certificates
-        </h4>
         """
-        for cert in session_state.certificate_links:
-            if cert["name"] and cert["link"]:
-                description = cert.get('description', '').replace('\n', '<br>')
-                name = cert['name']
-                link = cert['link']
-                duration = cert.get('duration', '')
 
-                card_html = f"""
-                <div style='
-                    background: linear-gradient(145deg, #f9fafb 0%, #f3f4f6 100%);
-                    padding: 24px 28px;
-                    border-radius: 12px;
-                    margin-bottom: 26px;
-                    box-shadow: 
-                        0 4px 12px rgba(107, 114, 128, 0.08),
-                        0 1px 3px rgba(0, 0, 0, 0.08);
-                    font-family: "Inter", "Segoe UI", sans-serif;
-                    color: #374151;
-                    position: relative;
-                    line-height: 1.7;
-                    border: 1px solid rgba(209, 213, 219, 0.6);
-                    overflow: hidden;
-                '>
-                    <!-- Accent bar -->
-                    <div style='
-                        position: absolute;
-                        top: 0;
-                        left: 0;
-                        right: 0;
-                        height: 3px;
-                        background: linear-gradient(90deg, #6b7280, #9ca3af);
-                    '></div>
+    # Education
+    education_html = ""
+    for edu in session_state.get("education_entries", []):
+        institution = edu.get("institution", "").strip()
+        degree = edu.get("degree", "").strip()
+        year = edu.get("year", "").strip()
+        details = edu.get("details", "").strip()
+        if not (institution or degree):
+            continue
+        header = "<strong>{inst}</strong>".format(inst=institution) if institution else ""
+        if year:
+            header += " — <span style='white-space:nowrap'>{}</span>".format(year)
+        sub = f"<div style='font-weight:600; margin-top:4px'>{degree}</div>" if degree else ""
+        details_html = bullets_from_text(details)
+        education_html += f"""
+        <div class="education-entry">
+            <div class="edu-header">{header}</div>
+            {sub}
+            <div class="edu-details">{details_html}</div>
+        </div>
+        """
 
-                    <!-- Duration Badge -->
-                    <div style='
-                        position: absolute;
-                        top: 20px;
-                        right: 28px;
-                        font-size: 13px;
-                        font-weight: 600;
-                        color: #374151;
-                        background: linear-gradient(135deg, #ffffff, #f9fafb);
-                        padding: 8px 14px;
-                        border-radius: 16px;
-                        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-                        border: 1px solid rgba(209, 213, 219, 0.6);
-                        display: flex;
-                        align-items: center;
-                        gap: 6px;
-                    '>
-                        <!-- Inline SVG clock icon -->
-                        <svg xmlns="http://www.w3.org/2000/svg" 
-                            fill="none" viewBox="0 0 24 24" 
-                            stroke="currentColor" width="14" height="14">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                                d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z"/>
-                        </svg>
-                        {duration}
-                    </div>
+    # Projects
+    projects_html = ""
+    for proj in session_state.get("project_entries", []):
+        title = proj.get("title", "").strip()
+        duration = proj.get("duration", "").strip()
+        tech = proj.get("tech", "").strip()
+        description = proj.get("description", "").strip()
+        if not title:
+            continue
+        header = "<strong>{}</strong>".format(title)
+        if duration:
+            header += " — <span style='white-space:nowrap'>{}</span>".format(duration)
+        tech_html = f"<div style='font-style:italic; margin-top:6px'>Tech: {tech}</div>" if tech else ""
+        desc_bullets = bullets_from_text(description)
+        projects_html += f"""
+        <div class="project-entry">
+            <div class="proj-header">{header}</div>
+            {tech_html}
+            <div class="proj-desc">{desc_bullets}</div>
+        </div>
+        """
 
-                    <!-- Certificate Title -->
-                    <div style='
-                        font-size: 18px;
-                        font-weight: 700;
-                        color: #111827;
-                        margin-bottom: 12px;
-                        margin-right: 120px;
-                        display: flex;
-                        align-items: center;
-                    '>
-                        <div style='
-                            width: 6px; 
-                            height: 6px; 
-                            background: #6b7280;
-                            border-radius: 50%; 
-                            margin-right: 12px;
-                        '></div>
-                        <a href="{link}" target="_blank" style='
-                            color: #111827;
-                            text-decoration: none;
-                            transition: color 0.3s ease;
-                        '>{name}</a>
-                    </div>
+    # Project Links
+    project_links_html = ""
+    if session_state.get("project_links"):
+        links = "".join(f"<li><a href=\"{link}\" target=\"_blank\">{link}</a></li>" for link in session_state.get("project_links", []))
+        project_links_html = f"<div class='project-links'><strong>Project Links</strong><ul>{links}</ul></div>"
 
-                    <!-- Description -->
-                    <div style='
-                        font-size: 15px;
-                        color: #374151;
-                        background: rgba(255, 255, 255, 0.8);
-                        padding: 16px;
-                        border-radius: 8px;
-                        border: 1px solid rgba(209, 213, 219, 0.6);
-                        line-height: 1.6;
-                    '>
-                        <div style='
-                            display: flex;
-                            align-items: flex-start;
-                            margin-bottom: 8px;
-                        '>
-                            <div style='
-                                width: 4px; 
-                                height: 4px; 
-                                background: #6b7280;
-                                border-radius: 50%; 
-                                margin-right: 12px;
-                                margin-top: 8px;
-                                flex-shrink: 0;
-                            '></div>
-                            <div>{description}</div>
-                        </div>
-                    </div>
-                </div>
-                """
-                certificate_links_html += card_html
+    # Certificates
+    certificate_links_html = ""
+    if session_state.get("certificate_links"):
+        cert_items = []
+        for cert in session_state.get("certificate_links", []):
+            name = cert.get("name", "").strip()
+            link = cert.get("link", "").strip()
+            duration = cert.get("duration", "").strip()
+            if not name:
+                continue
+            dur = f" ({duration})" if duration else ""
+            if link:
+                cert_items.append(f"<li><a href='{link}' target='_blank'>{name}</a>{dur}</li>")
+            else:
+                cert_items.append(f"<li>{name}{dur}</li>")
+        if cert_items:
+            certificate_links_html = "<div class='certificates'><strong>Certificates</strong><ul>" + "".join(cert_items) + "</ul></div>"
 
-    # Main HTML content - exactly as before
-    html_content = f"""
-<!DOCTYPE html>
+    # Final ATS-friendly HTML (minimal CSS, semantic structure)
+    html_content = f"""<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{session_state['name']} - Professional Resume</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        * {{
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }}
-        
-        body {{
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            line-height: 1.6;
-            color: #1a202c;
-            background: #ffffff;
-            min-height: 100vh;
-        }}
-        
-        .resume-container {{
-            width: 100%;
-            min-height: 100vh;
-            background: #ffffff;
-        }}
-        
-        .resume-container::before {{
-            content: '';
-            display: block;
-            height: 4px;
-            background: linear-gradient(90deg, #6b7280, #9ca3af);
-        }}
-        
-        .header-section {{
-            background: #f8fafc;
-            padding: 40px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #e2e8f0;
-        }}
-        
-        .name-title {{
-            flex: 1;
-        }}
-        
-        .name-title h1 {{
-            font-size: 42px;
-            font-weight: 800;
-            color: #1a202c;
-            margin-bottom: 8px;
-        }}
-        
-        .name-title h2 {{
-            font-size: 24px;
-            font-weight: 600;
-            color: #4a5568;
-            margin: 0;
-        }}
-        
-        .profile-image {{
-            flex-shrink: 0;
-            margin-left: 40px;
-        }}
-        
-        .main-content {{
-            display: flex;
-            min-height: 800px;
-        }}
-        
-        .sidebar {{
-            width: 350px;
-            background: #f7fafc;
-            padding: 40px 30px;
-            border-right: 1px solid #e2e8f0;
-        }}
-        
-        .main-section {{
-            flex: 1;
-            padding: 40px;
-            background: #ffffff;
-        }}
-        
-        .contact-info {{
-            margin-bottom: 40px;
-        }}
-        
-        .contact-item {{
-            display: flex;
-            align-items: center;
-            margin-bottom: 12px;
-            padding: 8px 0;
-        }}
-        
-        .contact-icon {{
-            width: 20px;
-            height: 20px;
-            margin-right: 15px;
-            opacity: 0.8;
-        }}
-        
-        .contact-item span, .contact-item a {{
-            font-size: 14px;
-            color: #4a5568;
-            text-decoration: none;
-            font-weight: 500;
-        }}
-        
-        .contact-item a:hover {{
-            color: #6b7280;
-            transition: color 0.3s ease;
-        }}
-        
-        .section-title {{
-            font-size: 22px;
-            font-weight: 700;
-            color: #2d3748;
-            margin: 35px 0 15px 0;
-        }}
-        
-        .section-content {{
-            margin-bottom: 30px;
-        }}
-        
-        .summary-text {{
-            font-size: 16px;
-            line-height: 1.8;
-            color: #4a5568;
-            background: #f8fafc;
-            padding: 25px;
-            border-radius: 8px;
-            border-left: 3px solid #9ca3af;
-        }}
-        
-        @media (max-width: 768px) {{
-            .main-content {{
-                flex-direction: column;
-            }}
-            
-            .sidebar {{
-                width: 100%;
-            }}
-            
-            .header-section {{
-                flex-direction: column;
-                text-align: center;
-            }}
-            
-            .profile-image {{
-                margin: 20px 0 0 0;
-            }}
-            
-            .name-title h1 {{
-                font-size: 32px;
-            }}
-        }}
-        
-        @media (max-width: 480px) {{
-            .header-section, .sidebar, .main-section {{
-                padding: 20px;
-            }}
-        }}
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{session_state.get('name','')} - Resume</title>
+<style>
+    body {{
+        font-family: Arial, Helvetica, sans-serif;
+        color: #111;
+        line-height: 1.35;
+        margin: 24px;
+        font-size: 12pt;
+    }}
+    .container {{ max-width: 800px; margin: 0 auto; }}
+    header {{ margin-bottom: 18px; }}
+    header h1 {{ font-size: 20pt; margin: 0 0 4px 0; }}
+    header p {{ margin: 0; color: #333; }}
+    .contact {{ margin-top: 8px; font-size: 10.5pt; color:#222; }}
+    section {{ margin-top: 18px; }}
+    h2 {{ font-size: 12.5pt; margin: 0 0 8px 0; font-weight:700; color:#111; }}
+    .summary-text {{ background: transparent; padding: 0; margin: 0; }}
+    ul {{ margin: 6px 0 12px 18px; }}
+    .experience-entry, .education-entry, .project-entry {{ margin-bottom: 12px; }}
+    a {{ color: #0a66c2; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+    /* Keep layout simple and left-aligned for ATS */
+</style>
 </head>
 <body>
-    <div class="resume-container">
-        <div class="header-section">
-            <div class="name-title">
-                <h1>{session_state['name']}</h1>
-                <h2>{session_state['job_title']}</h2>
-            </div>
-            <div class="profile-image">
-                {profile_img_html}
-            </div>
+<div class="container">
+    <header>
+        <h1>{session_state.get('name','')}</h1>
+        <p style="font-weight:600">{session_state.get('job_title','')}</p>
+        <div class="contact" role="contentinfo">
+            {session_state.get('location','')} | {session_state.get('phone','')} | <a href="mailto:{session_state.get('email','')}">{session_state.get('email','')}</a> | <a href="{session_state.get('linkedin','')}" target="_blank">LinkedIn</a> {(" | " + session_state.get('portfolio','')) if session_state.get('portfolio') else ""}
         </div>
+    </header>
 
-        <div class="main-content">
-            <div class="sidebar">
-                <div class="contact-info">
-                    <div class="contact-item">
-                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
-                        </svg>
-                        <span>{session_state['location']}</span>
-                    </div>
-                    <div class="contact-item">
-                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path>
-                        </svg>
-                        <span>{session_state['phone']}</span>
-                    </div>
-                    <div class="contact-item">
-                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path>
-                            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path>
-                        </svg>
-                        <a href="mailto:{session_state['email']}">{session_state['email']}</a>
-                    </div>
-                    <div class="contact-item">
-                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                        </svg>
-                        <a href="{session_state['linkedin']}" target="_blank">LinkedIn</a>
-                    </div>
-                    <div class="contact-item">
-                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M4.083 9h1.946c.089-1.546.383-2.97.837-4.118A6.004 6.004 0 004.083 9zM10 2a8 8 0 100 16 8 8 0 000-16zm0 2c-.076 0-.232.032-.465.262-.238.234-.497.623-.737 1.182-.389.907-.673 2.142-.766 3.556h3.936c-.093-1.414-.377-2.649-.766-3.556-.24-.56-.5-.948-.737-1.182C10.232 4.032 10.076 4 10 4zm3.971 5c-.089-1.546-.383-2.97-.837-4.118A6.004 6.004 0 0115.917 9h-1.946zm-2.003 2H8.032c.093 1.414.377 2.649.766 3.556.24.56.5.948.737 1.182.233.23.389.262.465.262.076 0 .232-.032.465-.262.238-.234.498-.623.737-1.182.389-.907.673-2.142.766-3.556zm1.166 4.118c.454-1.147.748-2.572.837-4.118h1.946a6.004 6.004 0 01-2.783 4.118zm-6.268 0C6.412 13.97 6.118 12.546 6.03 11H4.083a6.004 6.004 0 002.783 4.118z" clip-rule="evenodd"></path>
-                        </svg>
-                        <a href="{session_state['portfolio']}" target="_blank">Portfolio</a>
-                    </div>
-                </div>
+    <section aria-labelledby="summary">
+        <h2 id="summary">Professional Summary</h2>
+        <div class="summary-text">{summary_html}</div>
+    </section>
 
-                <div class="section-content">
-                    <h3 class="section-title">Skills</h3>
-                    <div>{skills_html}</div>
-                </div>
+    <section aria-labelledby="skills">
+        <h2 id="skills">Core Competencies & Technical Skills</h2>
+        <p>{skills_text}</p>
+    </section>
 
-                <div class="section-content">
-                    <h3 class="section-title">Languages</h3>
-                    <div>{languages_html}</div>
-                </div>
+    <section aria-labelledby="experience">
+        <h2 id="experience">Work Experience</h2>
+        {experience_html}
+    </section>
 
-                <div class="section-content">
-                    <h3 class="section-title">Interests</h3>
-                    <div>{interests_html}</div>
-                </div>
+    <section aria-labelledby="education">
+        <h2 id="education">Education</h2>
+        {education_html}
+    </section>
 
-                <div class="section-content">
-                    <h3 class="section-title">Soft Skills</h3>
-                    <div>{Softskills_html}</div>
-                </div>
-            </div>
+    <section aria-labelledby="projects">
+        <h2 id="projects">Selected Projects</h2>
+        {projects_html}
+        {project_links_html}
+    </section>
 
-            <div class="main-section">
-                <div class="section-content">
-                    <h3 class="section-title">Professional Summary</h3>
-                    <div class="summary-text">{summary_html}</div>
-                </div>
+    <section aria-labelledby="certificates">
+        <h2 id="certificates">Certifications & Training</h2>
+        {certificate_links_html}
+    </section>
 
-                <div class="section-content">
-                    <h3 class="section-title">Work Experience</h3>
-                    {experience_html}
-                </div>
-
-                <div class="section-content">
-                    <h3 class="section-title">Education</h3>
-                    {education_html}
-                </div>
-
-                <div class="section-content">
-                    <h3 class="section-title">Projects</h3>
-                    {projects_html}
-                </div>
-
-                <div class="section-content">
-                    {project_links_html}
-                </div>
-
-                <div class="section-content">
-                    {certificate_links_html}
-                </div>
-            </div>
-        </div>
-    </div>
+    <section aria-labelledby="additional">
+        <h2 id="additional">Additional</h2>
+        <p><strong>Languages:</strong> {languages_text}</p>
+        <p><strong>Interests:</strong> {interests_text}</p>
+        <p><strong>Professional Traits:</strong> {softskills_text}</p>
+    </section>
+</div>
 </body>
-</html>
-"""
-    
-    return html_content
+</html>"""
 
 def render_template_modern(session_state, profile_img_html=""):
     """Modern minimal template with clean design, pill-style tags for enhanced visual appeal"""
