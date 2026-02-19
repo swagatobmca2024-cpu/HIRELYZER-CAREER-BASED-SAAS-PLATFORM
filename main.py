@@ -3729,68 +3729,85 @@ with tab1:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
 from xhtml2pdf import pisa
 from io import BytesIO
+import re as _re
 
-def html_to_pdf_bytes(html_string):
-    styled_html = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{
-                size: A4;
-                margin-top: 10mm;
-                margin-bottom: 10mm;
-                margin-left: 10mm;
-                margin-right: 10mm;
-            }}
-            body {{
-                font-size: 14pt;
-                font-family: "Segoe UI", "Helvetica", sans-serif;
-                line-height: 1.5;
-                color: #000;
-            }}
-            h1, h2, h3 {{
-                color: #2f4f6f;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 15px;
-            }}
-            td {{
-                padding: 4px;
-                vertical-align: top;
-                border: 1px solid #ccc;
-            }}
-            .section-title {{
-                background-color: #e0e0e0;
-                font-weight: bold;
-                padding: 6px;
-                margin-top: 10px;
-            }}
-            .box {{
-                padding: 8px;
-                margin-top: 6px;
-                background-color: #f9f9f9;
-                border-left: 4px solid #999;
-            }}
-            ul {{
-                margin: 0.5em 0;
-                padding-left: 1.5em;
-            }}
-            li {{
-                margin-bottom: 5px;
-            }}
-        </style>
-    </head>
-    <body>
-        {html_string}
-    </body>
-    </html>
+# ─────────────────────────────────────────────────────────────────────────────
+# PDF RENDERER
+# xhtml2pdf wraps content in its own <html><body> — so templates must return
+# ONLY the inner HTML fragment (no <html>/<head>/<body> tags).
+# Styles go into html_to_pdf_bytes wrapper which is the single source of truth
+# for page geometry and base typography.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def html_to_pdf_bytes(html_fragment, page_css=""):
     """
+    Renders an HTML fragment to A4 PDF via xhtml2pdf.
+    html_fragment: inner body HTML from any render_template_* function.
+    page_css: optional extra CSS string injected per template (colours etc.)
+    """
+    full_html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <style>
+    /* ── PAGE GEOMETRY ── */
+    @page {{
+      size: A4 portrait;        /* 210mm × 297mm */
+      margin-top:    14mm;
+      margin-bottom: 14mm;
+      margin-left:   13mm;
+      margin-right:  13mm;
+    }}
+
+    /* ── BASE TYPOGRAPHY ── */
+    body {{
+      font-family: Helvetica, Arial, sans-serif;
+      font-size:   9.5pt;
+      line-height: 1.45;
+      color:       #1a1a1a;
+      margin:      0;
+      padding:     0;
+    }}
+
+    /* ── LINKS ── */
+    a {{ color: inherit; text-decoration: none; }}
+
+    /* ── TABLES (used for multi-column layout) ── */
+    table  {{ border-collapse: collapse; width: 100%; }}
+    td, th {{ vertical-align: top; padding: 0; }}
+
+    /* ── LISTS ── */
+    ul {{ margin: 3pt 0 4pt 14pt; padding: 0; }}
+    li {{ margin-bottom: 2pt; line-height: 1.4; }}
+
+    /* ── PAGE BREAK UTILITIES ── */
+    .nb   {{ page-break-inside: avoid; }}   /* no-break block  */
+    .pb   {{ page-break-before: always; }}  /* force page break */
+
+    /* ── SECTION HEADINGS (shared baseline) ── */
+    .sh {{
+      font-size:      8pt;
+      font-weight:    bold;
+      text-transform: uppercase;
+      letter-spacing: 1pt;
+      margin-top:     9pt;
+      margin-bottom:  3pt;
+      padding-bottom: 2pt;
+    }}
+
+    /* ── HORIZONTAL RULE ── */
+    hr {{ border: none; border-top: 0.5pt solid #ccc; margin: 4pt 0; }}
+
+    {page_css}
+  </style>
+</head>
+<body>
+{html_fragment}
+</body>
+</html>"""
 
     pdf_io = BytesIO()
-    pisa.CreatePDF(styled_html, dest=pdf_io)
+    pisa.CreatePDF(full_html, dest=pdf_io)
     pdf_io.seek(0)
     return pdf_io
 
@@ -3799,1345 +3816,745 @@ def html_to_pdf_bytes(html_string):
 # SHARED HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Industry-standard A4 CSS with proper page-break logic.
-# All sections use .no-break to avoid splitting blocks across pages.
-# New column / sidebar layouts auto-flow to page 2 when content overflows.
-A4_PRINT_CSS = """
-    @page {
-        size: A4;
-        margin: 18mm 16mm 18mm 16mm;
-    }
-    @media print {
-        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .page-break  { page-break-before: always; break-before: page; }
-        .no-break    { page-break-inside: avoid; break-inside: avoid; }
-        .header-block{ page-break-after: avoid; break-after: avoid; }
-        .keep-with-next { page-break-after: avoid; break-after: avoid; }
-    }
-"""
+def _extract_img_src(profile_img_html):
+    """Pull base64 data-URI from the Streamlit-generated img tag."""
+    if not profile_img_html:
+        return ""
+    m = _re.search(r'src=["\']([^"\']+)["\']', profile_img_html)
+    return m.group(1) if m else ""
 
-def _skills_plain(csv, color="#1a3c5e", bg="#e8f0fa"):
-    items = [s.strip() for s in csv.split(',') if s.strip()]
-    return "".join(
-        f"<span style='display:inline-block;background:{bg};color:{color};"
-        f"padding:4px 12px;margin:3px 4px 3px 0;border-radius:3px;"
-        f"font-size:11px;font-weight:600;border:1px solid {color}33;'>{s}</span>"
-        for s in items
-    )
+def _profile_img_tag(src, size_mm=28, round_=True):
+    if not src:
+        return ""
+    style = (f"width:{size_mm}mm; height:{size_mm}mm; object-fit:cover; "
+             f"border:1.5pt solid #ddd; display:block;")
+    return f'<img src="{src}" style="{style}"/>'
 
 def _bullets(text):
-    """Convert newline-separated text to bullet HTML list items."""
+    """Convert newline text → <ul><li> for xhtml2pdf."""
     lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
     if not lines:
         return ""
-    items = "".join(f"<li style='margin-bottom:3px;line-height:1.5;'>{l}</li>" for l in lines)
-    return f"<ul style='margin:6px 0 0 16px;padding:0;'>{items}</ul>"
+    items = "".join(f"<li>{l}</li>" for l in lines)
+    return f"<ul>{items}</ul>"
 
-def _profile_img(profile_img_html, size=110, shape="circle"):
-    """Extract base64 image from HTML string and render a clean profile image."""
-    if not profile_img_html:
-        return ""
-    border_radius = "50%" if shape == "circle" else "6px"
-    import re
-    m = re.search(r'src="([^"]+)"', profile_img_html)
-    if not m:
-        return profile_img_html
-    src = m.group(1)
-    return (f"<img src='{src}' style='width:{size}px;height:{size}px;"
-            f"object-fit:cover;object-position:center top;"
-            f"border-radius:{border_radius};border:3px solid #fff;"
-            f"box-shadow:0 2px 8px rgba(0,0,0,0.18);display:block;' />")
+def _skills_spans(csv, color="#1a3c5e", bg="#e8f0fa", border="#c5d4e8"):
+    """Inline skill badges — xhtml2pdf supports display:inline-block."""
+    items = [s.strip() for s in csv.split(',') if s.strip()]
+    out = ""
+    for s in items:
+        out += (f'<span style="display:inline-block; background:{bg}; color:{color}; '
+                f'border:0.5pt solid {border}; padding:1pt 5pt; margin:1.5pt 2pt 1.5pt 0; '
+                f'font-size:7.5pt; font-weight:bold;">{s}</span>')
+    return out
 
-def _section_divider(color="#2c5282"):
-    return f"<div style='border-top:2px solid {color};margin:10px 0 8px 0;'></div>"
-
-def _contact_row(ss):
+def _contact_line(ss, sep=" | "):
     parts = []
-    if ss.get('location'): parts.append(f"📍 {ss['location']}")
-    if ss.get('phone'):    parts.append(f"📞 {ss['phone']}")
-    if ss.get('email'):    parts.append(f"✉ <a href='mailto:{ss['email']}' style='color:inherit;'>{ss['email']}</a>")
-    if ss.get('linkedin'): parts.append(f"<a href='{ss['linkedin']}' style='color:inherit;' target='_blank'>LinkedIn</a>")
-    if ss.get('portfolio'):parts.append(f"<a href='{ss['portfolio']}' style='color:inherit;' target='_blank'>Portfolio</a>")
-    return " &nbsp;|&nbsp; ".join(parts)
+    if ss.get('location'): parts.append(ss['location'])
+    if ss.get('phone'):    parts.append(ss['phone'])
+    if ss.get('email'):    parts.append(ss['email'])
+    if ss.get('linkedin'): parts.append(ss['linkedin'])
+    if ss.get('portfolio'):parts.append(ss['portfolio'])
+    return sep.join(parts)
+
+def _deg(edu):
+    d = edu.get('degree', '')
+    return ", ".join(d) if isinstance(d, list) else d
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 1 — Classic Professional (two-column, A4, ATS-safe)
-#   Industry upgrade: proper A4 dimensions, section-aware page-break avoidance,
-#   consistent typography scale, sidebar/main overflow handled by flexbox.
+# TEMPLATE 1 — Classic Professional
+# Two-column table layout: narrow left sidebar + wide main content
+# Colour: Navy (#1a3c5e). ATS-safe. Profile image top-right of header.
 # ─────────────────────────────────────────────────────────────────────────────
 def render_template_default(session_state, profile_img_html=""):
-    ss = session_state
-    accent = "#1a3c5e"
-    light  = "#eaf0f8"
+    ss   = session_state
+    acc  = "#1a3c5e"
+    lt   = "#eaf0f8"
+    src  = _extract_img_src(profile_img_html)
+    img  = _profile_img_tag(src, size_mm=26)
 
     def sh(label):
-        return (f"<div class='keep-with-next' style='font-size:12px;font-weight:800;color:{accent};"
-                f"letter-spacing:1.2px;text-transform:uppercase;margin:14px 0 4px 0;"
-                f"border-bottom:2px solid {accent};padding-bottom:3px;'>{label}</div>")
+        return (f'<div class="sh" style="color:{acc}; border-bottom:1.5pt solid {acc};">'
+                f'{label}</div>')
 
     # ── Experience ──
-    exp_html = ""
+    exp_rows = ""
     for exp in ss.experience_entries:
         if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description", ""))
-            exp_html += f"""
-            <div class='no-break' style='margin-bottom:13px;'>
-              <div style='display:flex;justify-content:space-between;align-items:baseline;'>
-                <span style='font-size:12.5px;font-weight:700;color:{accent};'>{exp.get('company','')}</span>
-                <span style='font-size:10.5px;color:#555;font-style:italic;white-space:nowrap;margin-left:6px;'>{exp.get('duration','')}</span>
-              </div>
-              <div style='font-size:11.5px;font-weight:600;color:#333;margin-bottom:3px;'>{exp.get('title','')}</div>
-              {desc}
-            </div>"""
-
-    # ── Education ──
-    edu_html = ""
-    for edu in ss.education_entries:
-        if edu.get("institution") or edu.get("degree"):
-            deg = edu.get('degree', '')
-            if isinstance(deg, list): deg = ", ".join(deg)
-            edu_html += f"""
-            <div class='no-break' style='margin-bottom:11px;'>
-              <div style='display:flex;justify-content:space-between;align-items:baseline;'>
-                <span style='font-size:12px;font-weight:700;color:{accent};'>{edu.get('institution','')}</span>
-                <span style='font-size:10.5px;color:#555;font-style:italic;'>{edu.get('year','')}</span>
-              </div>
-              <div style='font-size:11px;font-weight:600;color:#444;'>{deg}</div>
-              <div style='font-size:10.5px;color:#555;'>{edu.get('details','')}</div>
-            </div>"""
+            desc = _bullets(exp.get("description",""))
+            exp_rows += f"""
+<div class="nb" style="margin-bottom:7pt;">
+  <table><tr>
+    <td style="font-size:9.5pt; font-weight:bold; color:{acc};">{exp.get('company','')}</td>
+    <td style="text-align:right; font-size:8pt; color:#555; font-style:italic; white-space:nowrap; width:30%;">{exp.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8.5pt; font-weight:bold; color:#333; margin-bottom:2pt;">{exp.get('title','')}</div>
+  <div style="font-size:8.5pt; color:#444;">{desc}</div>
+</div>"""
 
     # ── Projects ──
-    proj_html = ""
+    proj_rows = ""
     for proj in ss.project_entries:
         if proj.get("title"):
-            desc = _bullets(proj.get("description", ""))
-            proj_html += f"""
-            <div class='no-break' style='margin-bottom:13px;'>
-              <div style='display:flex;justify-content:space-between;align-items:baseline;'>
-                <span style='font-size:12px;font-weight:700;color:{accent};'>{proj.get('title','')}</span>
-                <span style='font-size:10.5px;color:#555;font-style:italic;'>{proj.get('duration','')}</span>
-              </div>
-              <div style='font-size:10.5px;color:#666;margin-bottom:2px;'><strong>Stack:</strong> {proj.get('tech','')}</div>
-              {desc}
-            </div>"""
+            desc = _bullets(proj.get("description",""))
+            proj_rows += f"""
+<div class="nb" style="margin-bottom:7pt;">
+  <table><tr>
+    <td style="font-size:9pt; font-weight:bold; color:{acc};">{proj.get('title','')}</td>
+    <td style="text-align:right; font-size:8pt; color:#555; font-style:italic; white-space:nowrap; width:28%;">{proj.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8pt; color:#666; margin-bottom:2pt;"><b>Stack:</b> {proj.get('tech','')}</div>
+  <div style="font-size:8.5pt; color:#444;">{desc}</div>
+</div>"""
 
-    # ── Certificates ──
-    cert_html = ""
-    for cert in ss.certificate_links:
-        if cert.get("name"):
-            cert_html += f"""
-            <div class='no-break' style='margin-bottom:7px;font-size:11px;'>
-              <a href='{cert.get("link","#")}' target='_blank'
-                 style='color:{accent};font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>
-              <span style='color:#666;font-size:10.5px;'> — {cert.get('duration','')}</span>
-              <div style='color:#555;font-size:10.5px;'>{cert.get('description','')}</div>
-            </div>"""
-
-    img_html = _profile_img(profile_img_html, size=100)
-
-    return f"""<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>
-<title>{ss.get('name', '')} – Resume</title>
-<link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap' rel='stylesheet'>
-<style>
-  {A4_PRINT_CSS}
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:'Inter',Arial,sans-serif;font-size:11.5px;color:#222;background:#fff;
-        width:210mm;margin:0 auto;}}
-  /* The outer wrapper is NOT min-height:297mm — content determines pages naturally */
-  .page{{width:210mm;padding:16mm 14mm 14mm 16mm;background:#fff;}}
-  .layout{{display:flex;gap:18px;}}
-  /* Sidebar is fixed width; main grows. Both allow multi-page overflow. */
-  .sidebar{{width:62mm;flex-shrink:0;}}
-  .main{{flex:1;min-width:0;}}
-  a{{color:{accent};text-decoration:none;}}
-</style></head><body>
-<div class='page'>
-
-  <!-- HEADER: name, title, contact row — never breaks after itself -->
-  <div class='header-block' style='display:flex;justify-content:space-between;align-items:center;
-       padding-bottom:11px;border-bottom:3px solid {accent};margin-bottom:14px;'>
-    <div>
-      <div style='font-size:24px;font-weight:800;color:{accent};line-height:1.1;'>{ss.get('name', '')}</div>
-      <div style='font-size:13px;font-weight:600;color:#555;margin-top:4px;'>{ss.get('job_title', '')}</div>
-      <div style='font-size:10px;color:#666;margin-top:6px;line-height:1.7;'>{_contact_row(ss)}</div>
-    </div>
-    {"<div style='flex-shrink:0;margin-left:14px;'>"+img_html+"</div>" if img_html else ""}
-  </div>
-
-  <div class='layout'>
-    <!-- SIDEBAR: skills, languages, education, certs -->
-    <div class='sidebar'>
-      {sh("Skills")}
-      <div style='margin-top:5px;'>{_skills_plain(ss.get('skills',''), accent, light)}</div>
-
-      {sh("Soft Skills")}
-      <div style='margin-top:5px;'>{_skills_plain(ss.get('Softskills',''), '#4a5568', '#f0f4f8')}</div>
-
-      {sh("Languages")}
-      <div style='margin-top:5px;'>{_skills_plain(ss.get('languages',''), '#2d6a4f', '#d8f3dc')}</div>
-
-      {sh("Interests")}
-      <div style='margin-top:5px;font-size:11px;color:#555;line-height:1.7;'>
-        {", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}
-      </div>
-
-      {(sh("Education") + edu_html) if edu_html else ""}
-      {(sh("Certifications") + cert_html) if cert_html else ""}
-    </div>
-
-    <!-- MAIN: summary, experience, projects -->
-    <div class='main'>
-      {sh("Professional Summary")}
-      <div style='font-size:11px;color:#444;line-height:1.65;margin-top:5px;
-                  border-left:3px solid {accent};padding-left:9px;'>
-        {ss.get('summary','').replace(chr(10),'<br>')}
-      </div>
-
-      {(sh("Work Experience") + exp_html) if exp_html else ""}
-      {(sh("Projects") + proj_html) if proj_html else ""}
-    </div>
-  </div>
-</div>
-</body></html>"""
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 2 — Modern Minimal (single-column, A4, clean lines, ATS-ready)
-#   Industry upgrade: proper A4 width, tighter but readable type scale,
-#   every block has no-break, summary/skills before experience per ATS best practice.
-# ─────────────────────────────────────────────────────────────────────────────
-def render_template_modern(session_state, profile_img_html=""):
-    ss = session_state
-    accent = "#0f4c81"
-    rule = f"<hr style='border:none;border-top:1.5px solid {accent};margin:6px 0 9px 0;'>"
-
-    def sh(label):
-        return (f"<div class='keep-with-next' style='font-size:12px;font-weight:800;color:{accent};"
-                f"letter-spacing:1.4px;text-transform:uppercase;margin-top:16px;'>{label}</div>{rule}")
-
-    img_html = _profile_img(profile_img_html, size=96)
-
-    exp_html = ""
-    for exp in ss.experience_entries:
-        if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description", ""))
-            exp_html += f"""
-            <div class='no-break' style='margin-bottom:13px;'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12.5px;font-weight:700;color:#111;'>{exp.get('company','')}</span>
-                <span style='font-size:10.5px;color:#666;white-space:nowrap;margin-left:6px;'>{exp.get('duration','')}</span>
-              </div>
-              <div style='font-size:11.5px;font-weight:600;color:{accent};margin:2px 0 4px;'>{exp.get('title','')}</div>
-              {desc}
-            </div>"""
-
-    edu_html = ""
+    # ── Education (sidebar) ──
+    edu_rows = ""
     for edu in ss.education_entries:
         if edu.get("institution") or edu.get("degree"):
-            deg = edu.get('degree', '')
-            if isinstance(deg, list): deg = ", ".join(deg)
-            edu_html += f"""
-            <div class='no-break' style='margin-bottom:11px;'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12px;font-weight:700;color:#111;'>{edu.get('institution','')}</span>
-                <span style='font-size:10.5px;color:#666;'>{edu.get('year','')}</span>
-              </div>
-              <div style='font-size:11px;color:{accent};font-weight:600;'>{deg}</div>
-              <div style='font-size:10.5px;color:#555;'>{edu.get('details','')}</div>
-            </div>"""
+            edu_rows += f"""
+<div class="nb" style="margin-bottom:6pt;">
+  <div style="font-size:8.5pt; font-weight:bold; color:{acc};">{edu.get('institution','')}</div>
+  <div style="font-size:8pt; font-weight:bold; color:#333;">{_deg(edu)}</div>
+  <div style="font-size:7.5pt; color:#555; font-style:italic;">{edu.get('year','')}</div>
+  <div style="font-size:7.5pt; color:#555;">{edu.get('details','')}</div>
+</div>"""
 
-    proj_html = ""
-    for proj in ss.project_entries:
-        if proj.get("title"):
-            desc = _bullets(proj.get("description", ""))
-            proj_html += f"""
-            <div class='no-break' style='margin-bottom:13px;'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12px;font-weight:700;color:#111;'>{proj.get('title','')}</span>
-                <span style='font-size:10.5px;color:#666;'>{proj.get('duration','')}</span>
-              </div>
-              <div style='font-size:10.5px;color:#666;margin-bottom:3px;'>{proj.get('tech','')}</div>
-              {desc}
-            </div>"""
-
-    cert_html = ""
+    # ── Certs (sidebar) ──
+    cert_rows = ""
     for cert in ss.certificate_links:
         if cert.get("name"):
-            cert_html += f"""
-            <div class='no-break' style='margin-bottom:7px;'>
-              <a href='{cert.get("link","#")}' target='_blank'
-                 style='font-size:11.5px;font-weight:700;color:{accent};'>{cert.get('name','')}</a>
-              <span style='font-size:10.5px;color:#666;'> · {cert.get('duration','')}</span>
-              <div style='font-size:10.5px;color:#555;'>{cert.get('description','')}</div>
-            </div>"""
+            cert_rows += f"""
+<div class="nb" style="margin-bottom:5pt; font-size:8pt;">
+  <b style="color:{acc};">{cert.get('name','')}</b><br/>
+  <span style="color:#555;">{cert.get('duration','')} — {cert.get('description','')}</span>
+</div>"""
 
-    inline_skills = "".join(
-        f"<span style='margin-right:8px;font-size:11px;color:#333;'>▸ {s.strip()}</span>"
-        for s in ss.get('skills','').split(',') if s.strip()
-    )
-    inline_langs = ", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())
-    inline_interests = ", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())
-    inline_soft = ", ".join(s.strip() for s in ss.get('Softskills','').split(',') if s.strip())
+    summary_html = ss.get('summary','').replace('\n','<br/>')
 
-    return f"""<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>
-<title>{ss.get('name', '')} – Resume</title>
-<link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap' rel='stylesheet'>
-<style>
-  {A4_PRINT_CSS}
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:'Inter',Arial,sans-serif;font-size:11.5px;color:#222;background:#fff;
-        width:210mm;margin:0 auto;}}
-  .page{{width:210mm;padding:16mm 18mm 14mm 18mm;background:#fff;}}
-  a{{color:{accent};text-decoration:none;}}
-</style></head><body>
-<div class='page'>
+    sidebar_w = "57mm"
+    gap_w     = "4mm"
+    main_w    = "116mm"  # 210 - 13 - 13 - 57 - 4 = 123... adjust to fit
 
-  <!-- HEADER -->
-  <div class='header-block' style='display:flex;justify-content:space-between;align-items:flex-start;
-       border-bottom:3px solid {accent};padding-bottom:11px;margin-bottom:4px;'>
-    <div style='flex:1;'>
-      <div style='font-size:26px;font-weight:800;color:#111;letter-spacing:-0.5px;'>{ss.get('name','')}</div>
-      <div style='font-size:13px;font-weight:600;color:{accent};margin:4px 0 7px;'>{ss.get('job_title','')}</div>
-      <div style='font-size:10px;color:#555;line-height:1.8;'>{_contact_row(ss)}</div>
-    </div>
-    {"<div style='flex-shrink:0;margin-left:14px;'>"+img_html+"</div>" if img_html else ""}
-  </div>
+    return f"""
+<!-- HEADER -->
+<table style="margin-bottom:8pt; border-bottom:2pt solid {acc}; padding-bottom:6pt;">
+  <tr>
+    <td style="vertical-align:middle;">
+      <div style="font-size:20pt; font-weight:bold; color:{acc}; line-height:1.1;">{ss.get('name','')}</div>
+      <div style="font-size:11pt; color:#555; margin-top:2pt;">{ss.get('job_title','')}</div>
+      <div style="font-size:7.5pt; color:#666; margin-top:4pt;">{_contact_line(ss)}</div>
+    </td>
+    {"<td style='width:30mm; text-align:right; vertical-align:middle;'>"+img+"</td>" if img else ""}
+  </tr>
+</table>
 
-  {sh("Summary")}
-  <div style='font-size:11px;color:#444;line-height:1.65;'>{ss.get('summary','').replace(chr(10),'<br>')}</div>
+<!-- TWO-COLUMN BODY -->
+<table>
+  <tr>
+    <!-- LEFT SIDEBAR -->
+    <td style="width:{sidebar_w}; vertical-align:top; padding-right:5pt; border-right:0.5pt solid #ccc;">
 
-  {sh("Skills")}
-  <div style='margin-top:3px;'>{inline_skills}</div>
+      {sh("Skills")}
+      <div style="margin-top:3pt;">{_skills_spans(ss.get('skills',''), acc, lt, '#c0d0e4')}</div>
 
-  {sh("Experience")}
-  {exp_html}
+      {sh("Soft Skills")}
+      <div style="margin-top:3pt;">{_skills_spans(ss.get('Softskills',''), '#4a5568', '#f0f4f8', '#c8d0dc')}</div>
 
-  {sh("Education")}
-  {edu_html}
+      {sh("Languages")}
+      <div style="margin-top:3pt;">{_skills_spans(ss.get('languages',''), '#2d6a4f', '#d8f3dc', '#a8d5b5')}</div>
 
-  {(sh("Projects") + proj_html) if proj_html else ""}
-  {(sh("Certifications") + cert_html) if cert_html else ""}
+      {sh("Interests")}
+      <div style="margin-top:3pt; font-size:8pt; color:#444;">
+        {" • ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}
+      </div>
 
-  {sh("Languages & Interests")}
-  <div style='font-size:11px;color:#444;margin-top:3px;'>
-    <strong>Languages:</strong> {inline_langs} &nbsp;&nbsp;
-    <strong>Interests:</strong> {inline_interests} &nbsp;&nbsp;
-    <strong>Soft Skills:</strong> {inline_soft}
-  </div>
+      {(sh("Education") + edu_rows) if edu_rows else ""}
+      {(sh("Certifications") + cert_rows) if cert_rows else ""}
 
-</div>
-</body></html>"""
+    </td>
+
+    <!-- GAP -->
+    <td style="width:{gap_w};"></td>
+
+    <!-- MAIN CONTENT -->
+    <td style="vertical-align:top;">
+
+      {sh("Professional Summary")}
+      <div style="font-size:8.5pt; color:#444; line-height:1.5; margin-top:3pt;
+                  padding-left:5pt; border-left:2pt solid {acc};">
+        {summary_html}
+      </div>
+
+      {(sh("Work Experience") + exp_rows) if exp_rows else ""}
+      {(sh("Projects") + proj_rows) if proj_rows else ""}
+
+    </td>
+  </tr>
+</table>
+"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 3 — Elegant Sidebar (dark sidebar, A4, two-column)
-#   Industry upgrade: correct sidebar width ratio (1:2), proper white text
-#   contrast, ATS-clean main column, profile image in sidebar header.
+# TEMPLATE 2 — Modern Minimal
+# Single-column, clean horizontal rules, skills as inline text
+# Colour: Dark blue (#0f4c81).
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_modern(session_state, profile_img_html=""):
+    ss  = session_state
+    acc = "#0f4c81"
+    src = _extract_img_src(profile_img_html)
+    img = _profile_img_tag(src, size_mm=25)
+
+    def sh(label):
+        return (f'<div class="sh" style="color:{acc}; border-bottom:1pt solid {acc}; '
+                f'margin-top:10pt;">{label}</div>')
+
+    def exp_block(exp):
+        desc = _bullets(exp.get("description",""))
+        return f"""
+<div class="nb" style="margin-bottom:7pt;">
+  <table><tr>
+    <td style="font-size:9.5pt; font-weight:bold; color:#111;">{exp.get('company','')}</td>
+    <td style="text-align:right; width:32%; font-size:8pt; color:#666;">{exp.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8.5pt; font-weight:bold; color:{acc}; margin-bottom:2pt;">{exp.get('title','')}</div>
+  <div style="font-size:8.5pt;">{desc}</div>
+</div>"""
+
+    def edu_block(edu):
+        return f"""
+<div class="nb" style="margin-bottom:6pt;">
+  <table><tr>
+    <td style="font-size:9pt; font-weight:bold;">{edu.get('institution','')}</td>
+    <td style="text-align:right; width:28%; font-size:8pt; color:#666;">{edu.get('year','')}</td>
+  </tr></table>
+  <div style="font-size:8.5pt; color:{acc}; font-weight:bold;">{_deg(edu)}</div>
+  <div style="font-size:8pt; color:#555;">{edu.get('details','')}</div>
+</div>"""
+
+    def proj_block(proj):
+        desc = _bullets(proj.get("description",""))
+        return f"""
+<div class="nb" style="margin-bottom:7pt;">
+  <table><tr>
+    <td style="font-size:9pt; font-weight:bold;">{proj.get('title','')}</td>
+    <td style="text-align:right; width:28%; font-size:8pt; color:#666;">{proj.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8pt; color:#666;">{proj.get('tech','')}</div>
+  <div style="font-size:8.5pt;">{desc}</div>
+</div>"""
+
+    exp_html  = "".join(exp_block(e) for e in ss.experience_entries if e.get("company") or e.get("title"))
+    edu_html  = "".join(edu_block(e) for e in ss.education_entries  if e.get("institution") or e.get("degree"))
+    proj_html = "".join(proj_block(p) for p in ss.project_entries   if p.get("title"))
+    cert_html = ""
+    for c in ss.certificate_links:
+        if c.get("name"):
+            cert_html += f'<div class="nb" style="margin-bottom:5pt; font-size:8.5pt;"><b style="color:{acc};">{c.get("name","")}</b> &ndash; {c.get("duration","")} <span style="color:#555; font-size:8pt;">{c.get("description","")}</span></div>'
+
+    skills_inline = " &nbsp;&bull;&nbsp; ".join(s.strip() for s in ss.get('skills','').split(',') if s.strip())
+    soft_inline   = " &nbsp;&bull;&nbsp; ".join(s.strip() for s in ss.get('Softskills','').split(',') if s.strip())
+    langs_inline  = ", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())
+    int_inline    = ", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())
+    summary_html  = ss.get('summary','').replace('\n','<br/>')
+
+    return f"""
+<!-- HEADER -->
+<table style="border-bottom:2pt solid {acc}; padding-bottom:6pt; margin-bottom:4pt;">
+  <tr>
+    <td style="vertical-align:middle;">
+      <div style="font-size:22pt; font-weight:bold; color:#111; line-height:1.1;">{ss.get('name','')}</div>
+      <div style="font-size:11pt; color:{acc}; font-weight:bold; margin-top:2pt;">{ss.get('job_title','')}</div>
+      <div style="font-size:7.5pt; color:#555; margin-top:5pt;">{_contact_line(ss)}</div>
+    </td>
+    {"<td style='width:30mm; text-align:right; vertical-align:middle;'>"+img+"</td>" if img else ""}
+  </tr>
+</table>
+
+{sh("Summary")}
+<div style="font-size:8.5pt; color:#444; line-height:1.5; margin-top:3pt;">{summary_html}</div>
+
+{sh("Skills")}
+<div style="font-size:8.5pt; margin-top:3pt;">{skills_inline}</div>
+<div style="font-size:8pt; color:#555; margin-top:2pt;"><i>Soft Skills:</i> {soft_inline}</div>
+
+{sh("Experience")}
+{exp_html}
+
+{sh("Education")}
+{edu_html}
+
+{(sh("Projects") + proj_html) if proj_html else ""}
+{(sh("Certifications") + cert_html) if cert_html else ""}
+
+{sh("Languages &amp; Interests")}
+<div style="font-size:8.5pt; margin-top:3pt; color:#444;">
+  <b>Languages:</b> {langs_inline} &nbsp; <b>Interests:</b> {int_inline}
+</div>
+"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 3 — Elegant Sidebar (dark left panel)
+# Two-column table. Left: dark bg with white text. Right: white main content.
+# Colour: Slate (#1e293b) sidebar, Sky (#0369a1) accent.
 # ─────────────────────────────────────────────────────────────────────────────
 def render_template_sidebar(session_state, profile_img_html=""):
-    ss = session_state
-    sidebar_bg  = "#1e293b"
-    sidebar_txt = "#e2e8f0"
-    accent      = "#38bdf8"
-    main_accent = "#0f4c81"
+    ss       = session_state
+    sb_bg    = "#1e293b"
+    sb_txt   = "#e2e8f0"
+    acc      = "#38bdf8"
+    main_acc = "#0369a1"
+    src      = _extract_img_src(profile_img_html)
+    img      = _profile_img_tag(src, size_mm=28)
 
-    def sbar_sh(label):
-        return (f"<div class='keep-with-next' style='font-size:10.5px;font-weight:800;color:{accent};"
-                f"letter-spacing:1.4px;text-transform:uppercase;margin-top:16px;margin-bottom:4px;"
-                f"border-bottom:1px solid {accent}55;padding-bottom:3px;'>{label}</div>")
+    def sb_sh(label):
+        return (f'<div style="font-size:7pt; font-weight:bold; text-transform:uppercase; '
+                f'letter-spacing:1pt; color:{acc}; border-bottom:0.5pt solid {acc}55; '
+                f'padding-bottom:2pt; margin-top:9pt; margin-bottom:3pt;">{label}</div>')
 
     def main_sh(label):
-        return (f"<div class='keep-with-next' style='font-size:12px;font-weight:800;color:{main_accent};"
-                f"letter-spacing:1.2px;text-transform:uppercase;"
-                f"border-bottom:2px solid {main_accent};padding-bottom:3px;margin:14px 0 7px;'>{label}</div>")
+        return (f'<div class="sh" style="color:{main_acc}; border-bottom:1.5pt solid {main_acc};">'
+                f'{label}</div>')
 
-    def sb_skill(csv, badge_bg="#ffffff22", badge_color="#fff"):
+    def sb_skills(csv):
         return "".join(
-            f"<span style='display:inline-block;background:{badge_bg};color:{badge_color};"
-            f"padding:3px 9px;margin:2px 3px 2px 0;border-radius:10px;"
-            f"font-size:10px;font-weight:600;border:1px solid {accent}44;'>{s.strip()}</span>"
+            f'<div style="font-size:8pt; color:{sb_txt}; padding:1pt 0;">&#8250; {s.strip()}</div>'
             for s in csv.split(',') if s.strip()
         )
 
-    img_html = _profile_img(profile_img_html, size=108)
-
     exp_html = ""
     for exp in ss.experience_entries:
         if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description", ""))
+            desc = _bullets(exp.get("description",""))
             exp_html += f"""
-            <div class='no-break' style='margin-bottom:14px;padding-left:9px;
-                 border-left:3px solid {main_accent};'>
-              <div style='display:flex;justify-content:space-between;align-items:baseline;'>
-                <span style='font-size:12.5px;font-weight:700;color:#111;'>{exp.get('company','')}</span>
-                <span style='font-size:10px;color:#666;font-style:italic;white-space:nowrap;margin-left:6px;'>{exp.get('duration','')}</span>
-              </div>
-              <div style='font-size:11.5px;font-weight:600;color:{main_accent};margin:2px 0 3px;'>{exp.get('title','')}</div>
-              {desc}
-            </div>"""
+<div class="nb" style="margin-bottom:7pt; padding-left:5pt; border-left:2pt solid {main_acc};">
+  <table><tr>
+    <td style="font-size:9.5pt; font-weight:bold;">{exp.get('company','')}</td>
+    <td style="text-align:right; width:32%; font-size:8pt; color:#666; font-style:italic;">{exp.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8.5pt; font-weight:bold; color:{main_acc}; margin-bottom:2pt;">{exp.get('title','')}</div>
+  <div style="font-size:8.5pt;">{desc}</div>
+</div>"""
 
     edu_html = ""
     for edu in ss.education_entries:
         if edu.get("institution") or edu.get("degree"):
-            deg = edu.get('degree', '')
-            if isinstance(deg, list): deg = ", ".join(deg)
             edu_html += f"""
-            <div class='no-break' style='margin-bottom:11px;'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12px;font-weight:700;color:#111;'>{edu.get('institution','')}</span>
-                <span style='font-size:10px;color:#666;'>{edu.get('year','')}</span>
-              </div>
-              <div style='font-size:11px;font-weight:600;color:{main_accent};'>{deg}</div>
-              <div style='font-size:10.5px;color:#555;'>{edu.get('details','')}</div>
-            </div>"""
+<div class="nb" style="margin-bottom:6pt;">
+  <table><tr>
+    <td style="font-size:9pt; font-weight:bold;">{edu.get('institution','')}</td>
+    <td style="text-align:right; width:28%; font-size:8pt; color:#666;">{edu.get('year','')}</td>
+  </tr></table>
+  <div style="font-size:8.5pt; color:{main_acc}; font-weight:bold;">{_deg(edu)}</div>
+  <div style="font-size:8pt; color:#555;">{edu.get('details','')}</div>
+</div>"""
 
     proj_html = ""
     for proj in ss.project_entries:
         if proj.get("title"):
-            desc = _bullets(proj.get("description", ""))
+            desc = _bullets(proj.get("description",""))
             proj_html += f"""
-            <div class='no-break' style='margin-bottom:13px;'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12px;font-weight:700;color:#111;'>{proj.get('title','')}</span>
-                <span style='font-size:10px;color:#666;'>{proj.get('duration','')}</span>
-              </div>
-              <div style='font-size:10px;color:#666;margin-bottom:2px;'>{proj.get('tech','')}</div>
-              {desc}
-            </div>"""
+<div class="nb" style="margin-bottom:7pt;">
+  <table><tr>
+    <td style="font-size:9pt; font-weight:bold;">{proj.get('title','')}</td>
+    <td style="text-align:right; width:28%; font-size:8pt; color:#666;">{proj.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8pt; color:#555;">{proj.get('tech','')}</div>
+  <div style="font-size:8.5pt;">{desc}</div>
+</div>"""
 
-    cert_sidebar = ""
-    for cert in ss.certificate_links:
-        if cert.get("name"):
-            cert_sidebar += f"""
-            <div class='no-break' style='margin-bottom:7px;'>
-              <a href='{cert.get("link","#")}' target='_blank'
-                 style='font-size:10.5px;font-weight:700;color:{accent};'>{cert.get('name','')}</a>
-              <div style='font-size:9.5px;color:{sidebar_txt}aa;'>{cert.get('duration','')}</div>
-            </div>"""
+    cert_sb = ""
+    for c in ss.certificate_links:
+        if c.get("name"):
+            cert_sb += f'<div class="nb" style="font-size:8pt; color:{sb_txt}; margin-bottom:5pt;"><b>{c.get("name","")}</b><br/><span style="color:{acc}; font-size:7.5pt;">{c.get("duration","")}</span></div>'
 
-    return f"""<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>
-<title>{ss.get('name', '')} – Resume</title>
-<link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap' rel='stylesheet'>
-<style>
-  {A4_PRINT_CSS}
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:'Inter',Arial,sans-serif;font-size:11.5px;color:#222;background:#fff;
-        width:210mm;margin:0 auto;}}
-  /* Two-column layout via flex. min-height is not set so pages overflow naturally. */
-  .page{{width:210mm;display:flex;background:#fff;}}
-  .sidebar{{width:66mm;background:{sidebar_bg};color:{sidebar_txt};
-            padding:14mm 11mm 14mm 13mm;flex-shrink:0;}}
-  .main{{flex:1;padding:14mm 13mm 14mm 13mm;background:#fff;}}
-  a{{text-decoration:none;}}
-</style></head><body>
-<div class='page'>
+    summary_html = ss.get('summary','').replace('\n','<br/>')
 
-  <!-- SIDEBAR -->
-  <div class='sidebar'>
-    {"<div style='display:flex;justify-content:center;margin-bottom:14px;'>"+img_html+"</div>" if img_html else ""}
-    <div style='font-size:18px;font-weight:800;color:#fff;line-height:1.15;text-align:center;'>
-      {ss.get('name','')}
-    </div>
-    <div style='font-size:10.5px;font-weight:600;color:{accent};margin:4px 0 11px;text-align:center;'>
-      {ss.get('job_title','')}
-    </div>
+    return f"""
+<!-- FULL-WIDTH TWO-COLUMN TABLE: sidebar | main -->
+<table style="height:260mm;">
+  <tr>
+    <!-- SIDEBAR -->
+    <td style="width:62mm; background-color:{sb_bg}; color:{sb_txt}; padding:10pt 8pt; vertical-align:top;">
 
-    {sbar_sh("Contact")}
-    <div style='font-size:10px;line-height:1.9;'>
-      {"📍 "+ss.get('location','')+"<br>" if ss.get('location') else ""}
-      {"📞 "+ss.get('phone','')+"<br>" if ss.get('phone') else ""}
-      {"✉ <a href='mailto:"+ss.get('email','')+"' style='color:"+accent+";'>"+ss.get('email','')+"</a><br>" if ss.get('email') else ""}
-      {"<a href='"+ss.get('linkedin','')+"' style='color:"+accent+";' target='_blank'>LinkedIn</a><br>" if ss.get('linkedin') else ""}
-      {"<a href='"+ss.get('portfolio','')+"' style='color:"+accent+";' target='_blank'>Portfolio</a>" if ss.get('portfolio') else ""}
-    </div>
+      {"<div style='text-align:center; margin-bottom:8pt;'>"+img+"</div>" if img else ""}
 
-    {sbar_sh("Skills")}
-    {sb_skill(ss.get('skills',''))}
+      <div style="font-size:14pt; font-weight:bold; color:#fff; line-height:1.15; text-align:center;">{ss.get('name','')}</div>
+      <div style="font-size:8.5pt; color:{acc}; text-align:center; margin-top:3pt; margin-bottom:8pt;">{ss.get('job_title','')}</div>
 
-    {sbar_sh("Soft Skills")}
-    {sb_skill(ss.get('Softskills',''), '#38bdf822', '#e2e8f0')}
+      {sb_sh("Contact")}
+      <div style="font-size:7.5pt; color:{sb_txt}; line-height:1.8;">
+        {"<div>"+ss.get('location','')+"</div>" if ss.get('location') else ""}
+        {"<div>"+ss.get('phone','')+"</div>" if ss.get('phone') else ""}
+        {"<div>"+ss.get('email','')+"</div>" if ss.get('email') else ""}
+        {"<div>"+ss.get('linkedin','')+"</div>" if ss.get('linkedin') else ""}
+      </div>
 
-    {sbar_sh("Languages")}
-    <div style='font-size:10px;color:{sidebar_txt};line-height:1.9;'>
-      {" &bull; ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())}
-    </div>
+      {sb_sh("Skills")}
+      {sb_skills(ss.get('skills',''))}
 
-    {sbar_sh("Interests")}
-    <div style='font-size:10px;color:{sidebar_txt};line-height:1.9;'>
-      {" &bull; ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}
-    </div>
+      {sb_sh("Soft Skills")}
+      {sb_skills(ss.get('Softskills',''))}
 
-    {(sbar_sh("Certifications") + cert_sidebar) if cert_sidebar else ""}
-  </div>
+      {sb_sh("Languages")}
+      <div style="font-size:8pt; color:{sb_txt};">
+        {" • ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())}
+      </div>
 
-  <!-- MAIN -->
-  <div class='main'>
-    {main_sh("Professional Summary")}
-    <div style='font-size:11px;color:#444;line-height:1.65;'>
-      {ss.get('summary','').replace(chr(10),'<br>')}
-    </div>
+      {sb_sh("Interests")}
+      <div style="font-size:8pt; color:{sb_txt};">
+        {" • ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}
+      </div>
 
-    {main_sh("Work Experience")}
-    {exp_html}
+      {(sb_sh("Certifications") + cert_sb) if cert_sb else ""}
 
-    {main_sh("Education")}
-    {edu_html}
+    </td>
 
-    {(main_sh("Projects") + proj_html) if proj_html else ""}
-  </div>
-</div>
-</body></html>"""
+    <!-- MAIN -->
+    <td style="vertical-align:top; padding-left:10pt;">
+
+      {main_sh("Professional Summary")}
+      <div style="font-size:8.5pt; color:#444; margin-top:3pt; line-height:1.5;">{summary_html}</div>
+
+      {main_sh("Work Experience")}
+      {exp_html}
+
+      {main_sh("Education")}
+      {edu_html}
+
+      {(main_sh("Projects") + proj_html) if proj_html else ""}
+
+    </td>
+  </tr>
+</table>
+"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 4 — Executive (single-column, serif, conservative, A4)
+# TEMPLATE 4 — Executive (single-column, serif, conservative)
+# Colour: Burgundy (#7b2d2d). Skills in two-column table.
 # ─────────────────────────────────────────────────────────────────────────────
 def render_template_executive(session_state, profile_img_html=""):
-    ss = session_state
-    accent = "#7b2d2d"
+    ss  = session_state
+    acc = "#7b2d2d"
+    src = _extract_img_src(profile_img_html)
+    img = _profile_img_tag(src, size_mm=26)
 
     def sh(label):
-        return (f"<div class='keep-with-next' style='font-size:11.5px;font-weight:800;color:{accent};"
-                f"text-transform:uppercase;letter-spacing:2px;"
-                f"border-bottom:2px solid {accent};padding-bottom:2px;margin:14px 0 7px;'>{label}</div>")
-
-    img_html = _profile_img(profile_img_html, size=100, shape="square")
+        return (f'<div class="sh" style="color:{acc}; border-bottom:1pt solid {acc}; '
+                f'font-family:Georgia,serif; letter-spacing:1.5pt;">{label}</div>')
 
     exp_html = ""
     for exp in ss.experience_entries:
         if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description", ""))
+            desc = _bullets(exp.get("description",""))
             exp_html += f"""
-            <div class='no-break' style='margin-bottom:13px;'>
-              <div style='display:flex;justify-content:space-between;align-items:baseline;'>
-                <span style='font-size:12.5px;font-weight:700;'>{exp.get('company','')}</span>
-                <span style='font-size:10.5px;color:#555;font-style:italic;'>{exp.get('duration','')}</span>
-              </div>
-              <div style='font-size:11.5px;color:{accent};font-weight:600;font-style:italic;margin-bottom:3px;'>
-                {exp.get('title','')}
-              </div>
-              {desc}
-            </div>"""
+<div class="nb" style="margin-bottom:7pt;">
+  <table><tr>
+    <td style="font-size:10pt; font-weight:bold; font-family:Georgia,serif;">{exp.get('company','')}</td>
+    <td style="text-align:right; width:30%; font-size:8pt; color:#666; font-style:italic;">{exp.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8.5pt; color:{acc}; font-style:italic; font-weight:bold; margin-bottom:2pt;">{exp.get('title','')}</div>
+  <div style="font-size:8.5pt;">{desc}</div>
+</div>"""
 
     edu_html = ""
     for edu in ss.education_entries:
         if edu.get("institution") or edu.get("degree"):
-            deg = edu.get('degree', '')
-            if isinstance(deg, list): deg = ", ".join(deg)
             edu_html += f"""
-            <div class='no-break' style='margin-bottom:9px;'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12px;font-weight:700;'>{edu.get('institution','')}</span>
-                <span style='font-size:10.5px;color:#555;'>{edu.get('year','')}</span>
-              </div>
-              <div style='font-size:11px;color:{accent};font-style:italic;'>{deg}</div>
-              <div style='font-size:10.5px;color:#555;'>{edu.get('details','')}</div>
-            </div>"""
+<div class="nb" style="margin-bottom:6pt;">
+  <table><tr>
+    <td style="font-size:9.5pt; font-weight:bold; font-family:Georgia,serif;">{edu.get('institution','')}</td>
+    <td style="text-align:right; width:28%; font-size:8pt; color:#666;">{edu.get('year','')}</td>
+  </tr></table>
+  <div style="font-size:8.5pt; color:{acc}; font-style:italic;">{_deg(edu)}</div>
+  <div style="font-size:8pt; color:#555;">{edu.get('details','')}</div>
+</div>"""
 
     proj_html = ""
     for proj in ss.project_entries:
         if proj.get("title"):
-            desc = _bullets(proj.get("description", ""))
+            desc = _bullets(proj.get("description",""))
             proj_html += f"""
-            <div class='no-break' style='margin-bottom:11px;'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12px;font-weight:700;'>{proj.get('title','')}</span>
-                <span style='font-size:10.5px;color:#555;'>{proj.get('duration','')}</span>
-              </div>
-              <div style='font-size:10.5px;color:#666;margin-bottom:2px;font-style:italic;'>{proj.get('tech','')}</div>
-              {desc}
-            </div>"""
+<div class="nb" style="margin-bottom:7pt;">
+  <table><tr>
+    <td style="font-size:9pt; font-weight:bold; font-family:Georgia,serif;">{proj.get('title','')}</td>
+    <td style="text-align:right; width:28%; font-size:8pt; color:#666; font-style:italic;">{proj.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8pt; color:#666; font-style:italic;">{proj.get('tech','')}</div>
+  <div style="font-size:8.5pt;">{desc}</div>
+</div>"""
 
-    all_skills = [s.strip() for s in ss.get('skills','').split(',') if s.strip()]
-    softskills  = [s.strip() for s in ss.get('Softskills','').split(',') if s.strip()]
-    combined = all_skills + softskills
+    # Two-column skills table
+    all_sk = [s.strip() for s in ss.get('skills','').split(',') if s.strip()]
+    soft   = [s.strip() for s in ss.get('Softskills','').split(',') if s.strip()]
+    combined = all_sk + soft
     mid = (len(combined)+1)//2
-    col1_s = combined[:mid]; col2_s = combined[mid:]
-    def li_col(lst):
-        return "".join(f"<div style='font-size:10.5px;padding:2px 0;'>• {s}</div>" for s in lst)
-    skills_cols = f"""<div style='display:flex;gap:28px;margin-top:4px;'>
-      <div style='flex:1;'>{li_col(col1_s)}</div>
-      <div style='flex:1;'>{li_col(col2_s)}</div>
-    </div>"""
+    col1, col2 = combined[:mid], combined[mid:]
+    def li_td(lst):
+        return "".join(f'<div style="font-size:8.5pt; padding:1.5pt 0;">&#8226; {s}</div>' for s in lst)
+    skills_table = f"""
+<table style="margin-top:3pt;"><tr>
+  <td style="width:50%; vertical-align:top;">{li_td(col1)}</td>
+  <td style="width:50%; vertical-align:top;">{li_td(col2)}</td>
+</tr></table>"""
 
     cert_html = ""
-    for cert in ss.certificate_links:
-        if cert.get("name"):
-            cert_html += f"""<div class='no-break' style='margin-bottom:5px;font-size:11px;'>
-              <a href='{cert.get("link","#")}' style='color:{accent};font-weight:600;'>{cert.get('name','')}</a>
-              — {cert.get('duration','')}
-              <span style='color:#555;font-size:10.5px;'> | {cert.get('description','')}</span>
-            </div>"""
+    for c in ss.certificate_links:
+        if c.get("name"):
+            cert_html += f'<div class="nb" style="font-size:8.5pt; margin-bottom:5pt;"><b style="color:{acc};">{c.get("name","")}</b> &ndash; {c.get("duration","")} &mdash; <span style="color:#555;">{c.get("description","")}</span></div>'
 
-    return f"""<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>
-<title>{ss.get('name', '')} – Resume</title>
-<link href='https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;700&display=swap' rel='stylesheet'>
-<style>
-  {A4_PRINT_CSS}
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:'Merriweather',Georgia,serif;font-size:11.5px;color:#1a1a1a;background:#fff;
-        width:210mm;margin:0 auto;}}
-  .page{{width:210mm;padding:16mm 18mm 14mm 18mm;}}
-  a{{color:{accent};text-decoration:none;}}
-</style></head><body><div class='page'>
+    langs   = ", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())
+    ints    = ", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())
+    summary = ss.get('summary','').replace('\n','<br/>')
 
-  <div class='header-block' style='display:flex;align-items:flex-start;gap:18px;
-       border-bottom:1px solid #ccc;padding-bottom:13px;margin-bottom:7px;'>
-    {"<div style='flex-shrink:0;'>"+img_html+"</div>" if img_html else ""}
-    <div style='flex:1;'>
-      <div style='font-size:26px;font-weight:700;color:#1a1a1a;font-family:Merriweather,serif;line-height:1.1;'>
-        {ss.get('name','')}
-      </div>
-      <div style='font-size:13px;color:{accent};font-style:italic;margin:4px 0 7px;'>{ss.get('job_title','')}</div>
-      <div style='font-size:10px;color:#555;font-family:Inter,sans-serif;line-height:1.8;'>{_contact_row(ss)}</div>
-    </div>
-  </div>
+    return f"""
+<!-- HEADER -->
+<table style="border-bottom:2pt solid {acc}; padding-bottom:8pt; margin-bottom:6pt;">
+  <tr>
+    <td style="vertical-align:middle;">
+      <div style="font-size:22pt; font-weight:bold; color:#1a1a1a; font-family:Georgia,serif; line-height:1.1;">{ss.get('name','')}</div>
+      <div style="font-size:11pt; color:{acc}; font-style:italic; margin-top:3pt;">{ss.get('job_title','')}</div>
+      <div style="font-size:7.5pt; color:#555; margin-top:5pt;">{_contact_line(ss)}</div>
+    </td>
+    {"<td style='width:32mm; text-align:right; vertical-align:middle;'>"+img+"</td>" if img else ""}
+  </tr>
+</table>
 
-  {sh("Summary")}
-  <div style='font-size:11px;line-height:1.7;color:#333;'>{ss.get('summary','').replace(chr(10),'<br>')}</div>
+{sh("Summary")}
+<div style="font-size:8.5pt; line-height:1.55; color:#333; margin-top:3pt;">{summary}</div>
 
-  {sh("Experience")}
-  {exp_html}
+{sh("Experience")}
+{exp_html}
 
-  {sh("Education")}
-  {edu_html}
+{sh("Education")}
+{edu_html}
 
-  {sh("Skills & Competencies")}
-  {skills_cols}
+{sh("Skills &amp; Competencies")}
+{skills_table}
 
-  {(sh("Projects") + proj_html) if proj_html else ""}
-  {(sh("Certifications") + cert_html) if cert_html else ""}
+{(sh("Projects") + proj_html) if proj_html else ""}
+{(sh("Certifications") + cert_html) if cert_html else ""}
 
-  <div style='margin-top:11px;font-size:9.5px;color:#aaa;text-align:center;border-top:1px solid #eee;padding-top:5px;'>
-    Languages: {", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())}
-    &nbsp;|&nbsp;
-    Interests: {", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}
-  </div>
-
-</div></body></html>"""
+<div style="margin-top:8pt; padding-top:4pt; border-top:0.5pt solid #ccc; font-size:8pt; color:#666;">
+  <b>Languages:</b> {langs} &nbsp;&nbsp; <b>Interests:</b> {ints}
+</div>
+"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 5 — Creative (single-column, bold top bar, coloured accents)
+# TEMPLATE 5 — Creative (single-column, bold shaded header band)
+# Colour: Forest green (#15803d). Header has shaded background via table cell.
 # ─────────────────────────────────────────────────────────────────────────────
 def render_template_creative(session_state, profile_img_html=""):
-    ss = session_state
-    accent = "#16a34a"
-    dark   = "#14532d"
+    ss   = session_state
+    acc  = "#15803d"
+    dark = "#14532d"
+    lt   = "#dcfce7"
+    src  = _extract_img_src(profile_img_html)
+    img  = _profile_img_tag(src, size_mm=27)
 
     def sh(label):
-        return (f"<div class='keep-with-next' style='display:flex;align-items:center;gap:8px;margin:16px 0 7px;'>"
-                f"<div style='width:4px;height:17px;background:{accent};border-radius:2px;flex-shrink:0;'></div>"
-                f"<span style='font-size:12.5px;font-weight:800;color:{dark};letter-spacing:0.8px;"
-                f"text-transform:uppercase;'>{label}</span>"
-                f"<div style='flex:1;border-top:1px solid #d1fae5;'></div></div>")
-
-    img_html = _profile_img(profile_img_html, size=106)
+        return (f'<table style="margin-top:10pt; margin-bottom:4pt; width:100%;"><tr>'
+                f'<td style="width:4pt; background-color:{acc};"> </td>'
+                f'<td style="padding-left:5pt; font-size:8pt; font-weight:bold; '
+                f'text-transform:uppercase; letter-spacing:1pt; color:{dark};">{label}</td>'
+                f'<td style="border-bottom:0.5pt solid #d1fae5;"> </td>'
+                f'</tr></table>')
 
     exp_html = ""
     for exp in ss.experience_entries:
         if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description", ""))
+            desc = _bullets(exp.get("description",""))
             exp_html += f"""
-            <div class='no-break' style='margin-bottom:13px;padding:9px 11px;
-                 background:#f0fdf4;border-radius:6px;border-left:4px solid {accent};'>
-              <div style='display:flex;justify-content:space-between;align-items:baseline;'>
-                <span style='font-size:12.5px;font-weight:700;color:{dark};'>{exp.get('company','')}</span>
-                <span style='font-size:10px;color:#555;background:#dcfce7;padding:2px 7px;border-radius:10px;
-                      white-space:nowrap;margin-left:6px;'>{exp.get('duration','')}</span>
-              </div>
-              <div style='font-size:11.5px;color:{accent};font-weight:600;margin:3px 0 2px;'>{exp.get('title','')}</div>
-              {desc}
-            </div>"""
+<div class="nb" style="margin-bottom:7pt; padding:5pt 6pt; background-color:{lt}; border-left:3pt solid {acc};">
+  <table><tr>
+    <td style="font-size:9.5pt; font-weight:bold; color:{dark};">{exp.get('company','')}</td>
+    <td style="text-align:right; width:32%; font-size:8pt; color:#555;">{exp.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8.5pt; font-weight:bold; color:{acc}; margin-bottom:2pt;">{exp.get('title','')}</div>
+  <div style="font-size:8.5pt;">{desc}</div>
+</div>"""
 
     edu_html = ""
     for edu in ss.education_entries:
         if edu.get("institution") or edu.get("degree"):
-            deg = edu.get('degree', '')
-            if isinstance(deg, list): deg = ", ".join(deg)
             edu_html += f"""
-            <div class='no-break' style='margin-bottom:9px;display:flex;gap:11px;align-items:flex-start;'>
-              <div style='width:7px;height:7px;background:{accent};border-radius:50%;flex-shrink:0;margin-top:5px;'></div>
-              <div>
-                <div style='font-size:12px;font-weight:700;'>{edu.get('institution','')}</div>
-                <div style='font-size:11px;color:{accent};font-weight:600;'>{deg} — {edu.get('year','')}</div>
-                <div style='font-size:10.5px;color:#555;'>{edu.get('details','')}</div>
-              </div>
-            </div>"""
+<div class="nb" style="margin-bottom:6pt;">
+  <table><tr>
+    <td style="font-size:9pt; font-weight:bold; color:{dark};">&#8226; {edu.get('institution','')}</td>
+    <td style="text-align:right; width:28%; font-size:8pt; color:#555;">{edu.get('year','')}</td>
+  </tr></table>
+  <div style="font-size:8.5pt; color:{acc}; font-weight:bold; padding-left:8pt;">{_deg(edu)}</div>
+  <div style="font-size:8pt; color:#555; padding-left:8pt;">{edu.get('details','')}</div>
+</div>"""
 
     proj_html = ""
     for proj in ss.project_entries:
         if proj.get("title"):
-            desc = _bullets(proj.get("description", ""))
+            desc = _bullets(proj.get("description",""))
             proj_html += f"""
-            <div class='no-break' style='margin-bottom:11px;padding:9px 11px;
-                 background:#f0fdf4;border-radius:6px;'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12px;font-weight:700;color:{dark};'>{proj.get('title','')}</span>
-                <span style='font-size:10px;color:#555;'>{proj.get('duration','')}</span>
-              </div>
-              <div style='font-size:10px;color:{accent};margin-bottom:2px;'>{proj.get('tech','')}</div>
-              {desc}
-            </div>"""
+<div class="nb" style="margin-bottom:7pt; padding:5pt 6pt; background-color:{lt};">
+  <table><tr>
+    <td style="font-size:9pt; font-weight:bold; color:{dark};">{proj.get('title','')}</td>
+    <td style="text-align:right; width:28%; font-size:8pt; color:#555;">{proj.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8pt; color:{acc}; margin-bottom:2pt;">{proj.get('tech','')}</div>
+  <div style="font-size:8.5pt;">{desc}</div>
+</div>"""
 
     cert_html = ""
-    for cert in ss.certificate_links:
-        if cert.get("name"):
-            cert_html += f"""
-            <div class='no-break' style='margin-bottom:6px;font-size:11px;'>
-              <a href='{cert.get("link","#")}' style='color:{dark};font-weight:700;'>{cert.get('name','')}</a>
-              <span style='color:#555;'> · {cert.get('duration','')}</span>
-            </div>"""
+    for c in ss.certificate_links:
+        if c.get("name"):
+            cert_html += f'<div class="nb" style="font-size:8.5pt; margin-bottom:5pt;"><b style="color:{dark};">{c.get("name","")}</b> &middot; <span style="color:#555;">{c.get("duration","")}</span></div>'
 
-    return f"""<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>
-<title>{ss.get('name', '')} – Resume</title>
-<link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap' rel='stylesheet'>
-<style>
-  {A4_PRINT_CSS}
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:'Inter',Arial,sans-serif;font-size:11.5px;color:#1a1a1a;background:#fff;
-        width:210mm;margin:0 auto;}}
-  .page{{width:210mm;padding:0;}}
-  .top-bar{{background:{dark};color:#fff;padding:14mm 17mm 11mm;}}
-  .body-pad{{padding:9mm 17mm 13mm;}}
-  a{{color:{accent};text-decoration:none;}}
-</style></head><body><div class='page'>
+    langs   = ", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())
+    ints    = ", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())
+    summary = ss.get('summary','').replace('\n','<br/>')
 
-  <div class='top-bar header-block'>
-    <div style='display:flex;align-items:center;gap:18px;'>
-      {"<div>"+img_html+"</div>" if img_html else ""}
-      <div style='flex:1;'>
-        <div style='font-size:26px;font-weight:800;color:#fff;'>{ss.get('name','')}</div>
-        <div style='font-size:13px;font-weight:600;color:{accent};margin:3px 0 7px;'>{ss.get('job_title','')}</div>
-        <div style='font-size:10px;color:#d1fae5;line-height:1.8;'>{_contact_row(ss)}</div>
-      </div>
-    </div>
-    <div style='margin-top:11px;font-size:11px;color:#e5e7eb;line-height:1.6;
-                border-top:1px solid {accent}66;padding-top:9px;'>
-      {ss.get('summary','').replace(chr(10),'<br>')}
-    </div>
-  </div>
+    return f"""
+<!-- HEADER BAND (shaded table cell) -->
+<table style="margin-bottom:8pt;">
+  <tr>
+    <td style="background-color:{dark}; color:#fff; padding:10pt 12pt; vertical-align:middle;">
+      <div style="font-size:22pt; font-weight:bold; color:#fff; line-height:1.1;">{ss.get('name','')}</div>
+      <div style="font-size:11pt; color:{lt}; margin-top:3pt;">{ss.get('job_title','')}</div>
+      <div style="font-size:7.5pt; color:#bbf7d0; margin-top:5pt;">{_contact_line(ss)}</div>
+      <div style="font-size:8.5pt; color:#d1fae5; margin-top:7pt; line-height:1.5;">{summary}</div>
+    </td>
+    {"<td style='width:32mm; background-color:"+dark+"; padding:10pt 6pt; text-align:center; vertical-align:middle;'>"+img+"</td>" if img else ""}
+  </tr>
+</table>
 
-  <div class='body-pad'>
-    {sh("Skills")}
-    <div>{_skills_plain(ss.get('skills',''), dark, '#dcfce7')}</div>
-    <div style='margin-top:4px;'>{_skills_plain(ss.get('Softskills',''), '#374151', '#f3f4f6')}</div>
+{sh("Skills")}
+<div style="margin-top:3pt;">{_skills_spans(ss.get('skills',''), dark, lt, '#86efac')}</div>
+<div style="margin-top:3pt;">{_skills_spans(ss.get('Softskills',''), '#374151', '#f3f4f6', '#d1d5db')}</div>
 
-    {sh("Experience")}
-    {exp_html}
+{sh("Experience")}
+{exp_html}
 
-    {sh("Education")}
-    {edu_html}
+{sh("Education")}
+{edu_html}
 
-    {(sh("Projects") + proj_html) if proj_html else ""}
-    {(sh("Certifications") + cert_html) if cert_html else ""}
+{(sh("Projects") + proj_html) if proj_html else ""}
+{(sh("Certifications") + cert_html) if cert_html else ""}
 
-    {sh("Languages & Interests")}
-    <div style='font-size:11px;color:#444;'>
-      <strong>Languages:</strong> {", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())}
-      &nbsp;·&nbsp;
-      <strong>Interests:</strong> {", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}
-    </div>
-  </div>
-</div></body></html>"""
+{sh("Languages &amp; Interests")}
+<div style="font-size:8.5pt; margin-top:3pt;">
+  <b>Languages:</b> {langs} &nbsp;&nbsp; <b>Interests:</b> {ints}
+</div>
+"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 6 — Tech / Developer (single-column, dark header, monospace accents)
+# TEMPLATE 6 — Tech / Developer (single-column, dark shaded header)
+# Colour: Deep purple (#4c1d95). Monospace job title. Skill tags as bordered spans.
 # ─────────────────────────────────────────────────────────────────────────────
 def render_template_tech(session_state, profile_img_html=""):
-    ss = session_state
-    accent = "#7c3aed"
-    dark   = "#1e1b4b"
-    bg2    = "#f5f3ff"
+    ss  = session_state
+    acc = "#6d28d9"
+    dark= "#1e1b4b"
+    lt  = "#ede9fe"
+    src = _extract_img_src(profile_img_html)
+    img = _profile_img_tag(src, size_mm=26)
 
     def sh(label):
-        return (f"<div class='keep-with-next' style='font-size:11.5px;font-weight:800;color:{accent};"
-                f"letter-spacing:1.5px;text-transform:uppercase;border-left:4px solid {accent};"
-                f"padding-left:7px;margin:14px 0 7px;'>{label}</div>")
+        return (f'<div class="sh" style="color:{acc}; border-left:3pt solid {acc}; '
+                f'padding-left:5pt; border-bottom:0.5pt solid {lt}; margin-top:10pt;">{label}</div>')
 
-    img_html = _profile_img(profile_img_html, size=100)
+    def exp_block(exp):
+        desc = _bullets(exp.get("description",""))
+        return f"""
+<div class="nb" style="margin-bottom:7pt; padding:5pt 7pt; background-color:{lt};">
+  <table><tr>
+    <td style="font-size:9.5pt; font-weight:bold; color:{dark};">{exp.get('company','')}</td>
+    <td style="text-align:right; width:32%; font-size:8pt; color:#555; font-family:Courier,monospace;">{exp.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8.5pt; font-weight:bold; color:{acc}; font-family:Courier,monospace; margin-bottom:2pt;">&gt; {exp.get('title','')}</div>
+  <div style="font-size:8.5pt;">{desc}</div>
+</div>"""
 
-    exp_html = ""
-    for exp in ss.experience_entries:
-        if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description", ""))
-            exp_html += f"""
-            <div class='no-break' style='margin-bottom:13px;padding:9px 13px;background:{bg2};border-radius:4px;'>
-              <div style='display:flex;justify-content:space-between;align-items:baseline;'>
-                <span style='font-size:12.5px;font-weight:700;color:{dark};'>{exp.get('company','')}</span>
-                <code style='font-size:10px;color:#6b7280;background:#e5e7eb;padding:2px 5px;border-radius:3px;'>
-                  {exp.get('duration','')}</code>
-              </div>
-              <div style='font-size:11.5px;color:{accent};font-weight:600;font-family:monospace;margin:3px 0 3px;'>
-                &gt; {exp.get('title','')}</div>
-              {desc}
-            </div>"""
+    def edu_block(edu):
+        return f"""
+<div class="nb" style="margin-bottom:6pt;">
+  <table><tr>
+    <td style="font-size:9pt; font-weight:bold; color:{dark};">{edu.get('institution','')}</td>
+    <td style="text-align:right; width:28%; font-size:8pt; color:#555; font-family:Courier,monospace;">{edu.get('year','')}</td>
+  </tr></table>
+  <div style="font-size:8.5pt; color:{acc};">{_deg(edu)}</div>
+  <div style="font-size:8pt; color:#555;">{edu.get('details','')}</div>
+</div>"""
 
-    edu_html = ""
-    for edu in ss.education_entries:
-        if edu.get("institution") or edu.get("degree"):
-            deg = edu.get('degree', '')
-            if isinstance(deg, list): deg = ", ".join(deg)
-            edu_html += f"""
-            <div class='no-break' style='margin-bottom:9px;'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12px;font-weight:700;color:{dark};'>{edu.get('institution','')}</span>
-                <code style='font-size:10px;color:#6b7280;'>{edu.get('year','')}</code>
-              </div>
-              <div style='font-size:11px;color:{accent};'>{deg}</div>
-              <div style='font-size:10.5px;color:#555;'>{edu.get('details','')}</div>
-            </div>"""
+    def proj_block(proj):
+        desc = _bullets(proj.get("description",""))
+        return f"""
+<div class="nb" style="margin-bottom:7pt; padding:5pt 7pt; background-color:{lt}; border-top:2pt solid {acc};">
+  <table><tr>
+    <td style="font-size:9pt; font-weight:bold; color:{dark}; font-family:Courier,monospace;">{proj.get('title','')}</td>
+    <td style="text-align:right; width:28%; font-size:8pt; color:#555; font-family:Courier,monospace;">{proj.get('duration','')}</td>
+  </tr></table>
+  <div style="font-size:8pt; color:#6b7280; font-family:Courier,monospace; margin-bottom:2pt;">stack: {proj.get('tech','')}</div>
+  <div style="font-size:8.5pt;">{desc}</div>
+</div>"""
 
-    proj_html = ""
-    for proj in ss.project_entries:
-        if proj.get("title"):
-            desc = _bullets(proj.get("description", ""))
-            proj_html += f"""
-            <div class='no-break' style='margin-bottom:13px;padding:9px 13px;
-                 background:{bg2};border-radius:4px;border-top:3px solid {accent};'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12px;font-weight:700;color:{dark};font-family:monospace;'>{proj.get('title','')}</span>
-                <code style='font-size:9.5px;color:#6b7280;'>{proj.get('duration','')}</code>
-              </div>
-              <div style='font-size:10px;color:#6b7280;font-family:monospace;margin:2px 0 3px;'>
-                stack: {proj.get('tech','')}</div>
-              {desc}
-            </div>"""
-
+    exp_html  = "".join(exp_block(e) for e in ss.experience_entries if e.get("company") or e.get("title"))
+    edu_html  = "".join(edu_block(e) for e in ss.education_entries  if e.get("institution") or e.get("degree"))
+    proj_html = "".join(proj_block(p) for p in ss.project_entries   if p.get("title"))
     cert_html = ""
-    for cert in ss.certificate_links:
-        if cert.get("name"):
-            cert_html += f"""<div class='no-break' style='margin-bottom:5px;font-size:11px;'>
-              <a href='{cert.get("link","#")}' style='color:{accent};font-weight:600;font-family:monospace;'>
-                {cert.get('name','')}</a>
-              <span style='color:#666;'> — {cert.get('duration','')}</span>
-            </div>"""
+    for c in ss.certificate_links:
+        if c.get("name"):
+            cert_html += f'<div class="nb" style="font-size:8.5pt; margin-bottom:5pt; font-family:Courier,monospace;"><b style="color:{acc};">{c.get("name","")}</b> &ndash; {c.get("duration","")}</div>'
 
-    skill_tags = "".join(
-        f"<code style='display:inline-block;background:{bg2};color:{dark};padding:3px 9px;"
-        f"margin:3px 3px 3px 0;border-radius:3px;font-size:10px;border:1px solid {accent}33;'>{s.strip()}</code>"
-        for s in ss.get('skills','').split(',') if s.strip()
-    )
+    skill_tags = _skills_spans(ss.get('skills',''), dark, lt, f'{acc}55')
+    soft_tags  = _skills_spans(ss.get('Softskills',''), '#374151', '#f3f4f6', '#9ca3af')
+    langs      = ", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())
+    ints       = ", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())
+    summary    = ss.get('summary','').replace('\n','<br/>')
 
-    return f"""<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>
-<title>{ss.get('name', '')} – Resume</title>
-<link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap' rel='stylesheet'>
-<style>
-  {A4_PRINT_CSS}
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:'Inter',Arial,sans-serif;font-size:11.5px;color:#222;background:#fff;
-        width:210mm;margin:0 auto;}}
-  .page{{width:210mm;padding:0;}}
-  .top{{background:{dark};color:#fff;padding:13mm 17mm 11mm;}}
-  .body-pad{{padding:9mm 17mm 13mm;}}
-  a{{color:{accent};text-decoration:none;}}
-  code{{font-family:'Courier New',monospace;}}
-</style></head><body><div class='page'>
+    return f"""
+<!-- DARK HEADER BAND -->
+<table style="margin-bottom:8pt;">
+  <tr>
+    <td style="background-color:{dark}; color:#fff; padding:10pt 12pt; vertical-align:middle;">
+      <div style="font-size:20pt; font-weight:bold; color:#fff; font-family:Courier,monospace; line-height:1.1;">{ss.get('name','')}</div>
+      <div style="font-size:10pt; color:#a78bfa; font-family:Courier,monospace; margin-top:3pt;">&lt;{ss.get('job_title','')}/&gt;</div>
+      <div style="font-size:7.5pt; color:#c4b5fd; margin-top:5pt;">{_contact_line(ss)}</div>
+    </td>
+    {"<td style='width:32mm; background-color:"+dark+"; padding:10pt 6pt; text-align:center; vertical-align:middle;'>"+img+"</td>" if img else ""}
+  </tr>
+</table>
 
-  <div class='top header-block'>
-    <div style='display:flex;align-items:center;gap:18px;'>
-      {"<div>"+img_html+"</div>" if img_html else ""}
-      <div>
-        <div style='font-size:25px;font-weight:800;color:#fff;font-family:monospace;'>{ss.get('name','')}</div>
-        <div style='font-size:13px;color:#a78bfa;font-family:monospace;margin:4px 0 7px;'>
-          &lt;{ss.get('job_title','')}/&gt;</div>
-        <div style='font-size:10px;color:#c4b5fd;line-height:1.8;'>{_contact_row(ss)}</div>
-      </div>
-    </div>
-  </div>
+{sh("About")}
+<div style="font-size:8.5pt; color:#374151; line-height:1.5; margin-top:3pt;">{summary}</div>
 
-  <div class='body-pad'>
-    {sh("About")}
-    <div style='font-size:11px;color:#374151;line-height:1.65;'>{ss.get('summary','').replace(chr(10),'<br>')}</div>
+{sh("Tech Stack")}
+<div style="margin-top:3pt;">{skill_tags}</div>
+<div style="margin-top:3pt;">{soft_tags}</div>
 
-    {sh("Tech Stack")}
-    <div style='margin-top:3px;'>{skill_tags}</div>
-    <div style='margin-top:5px;'>{_skills_plain(ss.get('Softskills',''), '#374151', '#f3f4f6')}</div>
+{sh("Experience")}
+{exp_html}
 
-    {sh("Experience")}
-    {exp_html}
+{sh("Projects")}
+{proj_html}
 
-    {sh("Projects")}
-    {proj_html}
+{sh("Education")}
+{edu_html}
 
-    {sh("Education")}
-    {edu_html}
+{(sh("Certifications") + cert_html) if cert_html else ""}
 
-    {(sh("Certifications") + cert_html) if cert_html else ""}
-
-    <div style='margin-top:11px;font-size:10px;color:#6b7280;border-top:1px solid #e5e7eb;padding-top:7px;'>
-      <strong>Languages:</strong> {", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())}
-      &nbsp;·&nbsp;
-      <strong>Interests:</strong> {", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}
-    </div>
-  </div>
-</div></body></html>"""
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# NEW SINGLE-COLUMN TEMPLATES (7, 8, 9) — with profile image support
-# ═════════════════════════════════════════════════════════════════════════════
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 7 — Corporate Clean (single-column, navy + gold, profile image top-right)
-#   Industry standard for finance, consulting, law, banking.
-#   Conservative serif header + clean sans-serif body. ATS-safe.
-# ─────────────────────────────────────────────────────────────────────────────
-def render_template_corporate(session_state, profile_img_html=""):
-    ss = session_state
-    navy   = "#1a2744"
-    gold   = "#b8962e"
-    light  = "#f7f5ef"
-
-    def sh(label):
-        return (f"<div class='keep-with-next' style='display:flex;align-items:center;gap:10px;"
-                f"margin:15px 0 7px;'>"
-                f"<span style='font-size:11.5px;font-weight:800;color:{navy};letter-spacing:1.8px;"
-                f"text-transform:uppercase;font-family:Georgia,serif;'>{label}</span>"
-                f"<div style='flex:1;border-bottom:1.5px solid {gold};'></div>"
-                f"</div>")
-
-    img_html = _profile_img(profile_img_html, size=100, shape="square")
-
-    exp_html = ""
-    for exp in ss.experience_entries:
-        if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description", ""))
-            exp_html += f"""
-            <div class='no-break' style='margin-bottom:14px;'>
-              <div style='display:flex;justify-content:space-between;align-items:baseline;'>
-                <span style='font-size:12.5px;font-weight:700;color:{navy};font-family:Georgia,serif;'>
-                  {exp.get('company','')}</span>
-                <span style='font-size:10px;color:#666;font-style:italic;white-space:nowrap;margin-left:6px;'>
-                  {exp.get('duration','')}</span>
-              </div>
-              <div style='font-size:11.5px;color:{gold};font-weight:600;margin:3px 0 4px;'>
-                {exp.get('title','')}</div>
-              <div style='font-size:11px;color:#333;'>{desc}</div>
-            </div>"""
-
-    edu_html = ""
-    for edu in ss.education_entries:
-        if edu.get("institution") or edu.get("degree"):
-            deg = edu.get('degree', '')
-            if isinstance(deg, list): deg = ", ".join(deg)
-            edu_html += f"""
-            <div class='no-break' style='margin-bottom:10px;'>
-              <div style='display:flex;justify-content:space-between;align-items:baseline;'>
-                <span style='font-size:12px;font-weight:700;color:{navy};font-family:Georgia,serif;'>
-                  {edu.get('institution','')}</span>
-                <span style='font-size:10px;color:#666;'>{edu.get('year','')}</span>
-              </div>
-              <div style='font-size:11px;color:{gold};font-weight:600;'>{deg}</div>
-              <div style='font-size:10.5px;color:#555;'>{edu.get('details','')}</div>
-            </div>"""
-
-    proj_html = ""
-    for proj in ss.project_entries:
-        if proj.get("title"):
-            desc = _bullets(proj.get("description", ""))
-            proj_html += f"""
-            <div class='no-break' style='margin-bottom:11px;'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12px;font-weight:700;color:{navy};'>{proj.get('title','')}</span>
-                <span style='font-size:10px;color:#666;'>{proj.get('duration','')}</span>
-              </div>
-              <div style='font-size:10.5px;color:#666;margin-bottom:2px;font-style:italic;'>{proj.get('tech','')}</div>
-              <div style='font-size:11px;color:#333;'>{desc}</div>
-            </div>"""
-
-    cert_html = ""
-    for cert in ss.certificate_links:
-        if cert.get("name"):
-            cert_html += f"""<div class='no-break' style='margin-bottom:6px;font-size:11px;'>
-              <a href='{cert.get("link","#")}' style='color:{navy};font-weight:700;'>{cert.get('name','')}</a>
-              <span style='color:#777;'> · {cert.get('duration','')}</span>
-              <div style='color:#555;font-size:10.5px;'>{cert.get('description','')}</div>
-            </div>"""
-
-    all_sk = [s.strip() for s in ss.get('skills','').split(',') if s.strip()]
-    soft_sk = [s.strip() for s in ss.get('Softskills','').split(',') if s.strip()]
-    half = (len(all_sk)+1)//2
-    def skill_col(lst):
-        return "".join(
-            f"<div style='font-size:10.5px;padding:2px 0;color:#333;'>"
-            f"<span style='color:{gold};margin-right:5px;'>◆</span>{s}</div>"
-            for s in lst
-        )
-    skills_grid = f"""
-      <div style='display:flex;gap:24px;margin-top:5px;'>
-        <div style='flex:1;'>{skill_col(all_sk[:half])}</div>
-        <div style='flex:1;'>{skill_col(all_sk[half:])}</div>
-      </div>
-      <div style='margin-top:7px;font-size:10.5px;color:#555;'>
-        <strong>Soft Skills:</strong> {", ".join(soft_sk)}
-      </div>"""
-
-    return f"""<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>
-<title>{ss.get('name', '')} – Resume</title>
-<link href='https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap' rel='stylesheet'>
-<style>
-  {A4_PRINT_CSS}
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:'Inter',Arial,sans-serif;font-size:11.5px;color:#1a1a1a;background:#fff;
-        width:210mm;margin:0 auto;}}
-  .page{{width:210mm;padding:0;}}
-  /* Elegant gold-stripe top header */
-  .top-stripe{{background:{navy};height:6px;width:100%;}}
-  .gold-stripe{{background:{gold};height:3px;width:100%;}}
-  .header{{padding:13mm 18mm 11mm;background:{light};border-bottom:1px solid #ddd;}}
-  .body{{padding:10mm 18mm 13mm;}}
-  a{{color:{navy};text-decoration:none;}}
-</style></head><body><div class='page'>
-
-  <div class='top-stripe'></div>
-  <div class='gold-stripe'></div>
-
-  <!-- HEADER with photo -->
-  <div class='header header-block'>
-    <div style='display:flex;justify-content:space-between;align-items:flex-start;'>
-      <div style='flex:1;'>
-        <div style='font-size:28px;font-weight:700;color:{navy};font-family:"Playfair Display",Georgia,serif;
-                    letter-spacing:-0.5px;line-height:1.1;'>
-          {ss.get('name', '')}
-        </div>
-        <div style='font-size:14px;color:{gold};font-weight:600;margin:5px 0 9px;letter-spacing:0.5px;'>
-          {ss.get('job_title', '')}
-        </div>
-        <div style='font-size:10px;color:#555;line-height:1.9;'>{_contact_row(ss)}</div>
-      </div>
-      {"<div style='flex-shrink:0;margin-left:16px;border:2px solid "+gold+";padding:2px;'>"+img_html+"</div>" if img_html else ""}
-    </div>
-  </div>
-
-  <div class='body'>
-    {sh("Professional Profile")}
-    <div style='font-size:11px;line-height:1.7;color:#333;border-left:3px solid {gold};padding-left:10px;'>
-      {ss.get('summary', '').replace(chr(10),'<br>')}
-    </div>
-
-    {sh("Core Competencies")}
-    {skills_grid}
-
-    {sh("Professional Experience")}
-    {exp_html}
-
-    {sh("Education")}
-    {edu_html}
-
-    {(sh("Key Projects") + proj_html) if proj_html else ""}
-    {(sh("Certifications & Awards") + cert_html) if cert_html else ""}
-
-    <div style='margin-top:12px;padding-top:6px;border-top:1px solid #ddd;
-                font-size:9.5px;color:#888;display:flex;justify-content:space-between;'>
-      <span><strong>Languages:</strong> {", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())}</span>
-      <span><strong>Interests:</strong> {", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}</span>
-    </div>
-  </div>
-
-  <div class='gold-stripe'></div>
-  <div class='top-stripe'></div>
-</div></body></html>"""
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 8 — Minimalist Mono (single-column, pure white, typographic hierarchy)
-#   Clean, ultra-modern. Popular in design, UX, product, and startups.
-#   Profile image is integrated as a left-aligned circle beside name.
-# ─────────────────────────────────────────────────────────────────────────────
-def render_template_minimalist(session_state, profile_img_html=""):
-    ss = session_state
-    ink   = "#111111"
-    mid   = "#555555"
-    line  = "#e0e0e0"
-    hi    = "#2563eb"  # subtle blue for links and titles only
-
-    def sh(label):
-        return (f"<div class='keep-with-next' style='font-size:10px;font-weight:700;color:{mid};"
-                f"letter-spacing:2.5px;text-transform:uppercase;margin:16px 0 5px;'>{label}</div>"
-                f"<div style='border-top:1px solid {line};margin-bottom:8px;'></div>")
-
-    img_html = _profile_img(profile_img_html, size=88)
-
-    exp_html = ""
-    for exp in ss.experience_entries:
-        if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description", ""))
-            exp_html += f"""
-            <div class='no-break' style='margin-bottom:13px;display:grid;grid-template-columns:1fr auto;gap:4px;'>
-              <div>
-                <div style='font-size:12.5px;font-weight:700;color:{ink};'>{exp.get('company','')}</div>
-                <div style='font-size:11.5px;color:{hi};font-weight:500;margin:2px 0 4px;'>{exp.get('title','')}</div>
-                <div style='font-size:11px;color:#444;'>{desc}</div>
-              </div>
-              <div style='font-size:10px;color:{mid};text-align:right;white-space:nowrap;padding-top:2px;'>
-                {exp.get('duration','')}
-              </div>
-            </div>"""
-
-    edu_html = ""
-    for edu in ss.education_entries:
-        if edu.get("institution") or edu.get("degree"):
-            deg = edu.get('degree', '')
-            if isinstance(deg, list): deg = ", ".join(deg)
-            edu_html += f"""
-            <div class='no-break' style='margin-bottom:10px;display:grid;grid-template-columns:1fr auto;gap:4px;'>
-              <div>
-                <div style='font-size:12px;font-weight:700;color:{ink};'>{edu.get('institution','')}</div>
-                <div style='font-size:11px;color:{hi};font-weight:500;'>{deg}</div>
-                <div style='font-size:10.5px;color:{mid};'>{edu.get('details','')}</div>
-              </div>
-              <div style='font-size:10px;color:{mid};text-align:right;white-space:nowrap;padding-top:2px;'>
-                {edu.get('year','')}
-              </div>
-            </div>"""
-
-    proj_html = ""
-    for proj in ss.project_entries:
-        if proj.get("title"):
-            desc = _bullets(proj.get("description", ""))
-            proj_html += f"""
-            <div class='no-break' style='margin-bottom:12px;'>
-              <div style='display:flex;justify-content:space-between;align-items:baseline;'>
-                <span style='font-size:12px;font-weight:700;color:{ink};'>{proj.get('title','')}</span>
-                <span style='font-size:10px;color:{mid};white-space:nowrap;margin-left:6px;'>{proj.get('duration','')}</span>
-              </div>
-              <div style='font-size:10px;color:{mid};margin-bottom:3px;font-style:italic;'>{proj.get('tech','')}</div>
-              <div style='font-size:11px;color:#444;'>{desc}</div>
-            </div>"""
-
-    cert_html = ""
-    for cert in ss.certificate_links:
-        if cert.get("name"):
-            cert_html += f"""<div class='no-break' style='margin-bottom:5px;font-size:11px;'>
-              <a href='{cert.get("link","#")}' style='color:{hi};font-weight:600;'>{cert.get('name','')}</a>
-              <span style='color:{mid};'> — {cert.get('duration','')}</span>
-            </div>"""
-
-    # Skills as comma list in a clean row
-    sk_items = [s.strip() for s in ss.get('skills','').split(',') if s.strip()]
-    soft_items = [s.strip() for s in ss.get('Softskills','').split(',') if s.strip()]
-    skills_line = " · ".join(sk_items)
-    soft_line = " · ".join(soft_items)
-
-    return f"""<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>
-<title>{ss.get('name', '')} – Resume</title>
-<link href='https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap' rel='stylesheet'>
-<style>
-  {A4_PRINT_CSS}
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:'DM Sans','Inter',Helvetica,sans-serif;font-size:11.5px;color:{ink};background:#fff;
-        width:210mm;margin:0 auto;}}
-  .page{{width:210mm;padding:15mm 18mm 14mm 18mm;background:#fff;}}
-  a{{color:{hi};text-decoration:none;}}
-</style></head><body>
-<div class='page'>
-
-  <!-- HEADER: photo left, name+contact right -->
-  <div class='header-block' style='display:flex;align-items:center;gap:16px;
-       padding-bottom:12px;border-bottom:2px solid {ink};margin-bottom:4px;'>
-    {"<div style='flex-shrink:0;'>"+img_html+"</div>" if img_html else ""}
-    <div style='flex:1;'>
-      <div style='font-size:28px;font-weight:700;color:{ink};letter-spacing:-1px;line-height:1.1;'>
-        {ss.get('name', '')}
-      </div>
-      <div style='font-size:13px;color:{mid};font-weight:500;margin:4px 0 7px;letter-spacing:0.2px;'>
-        {ss.get('job_title', '')}
-      </div>
-      <div style='font-size:10px;color:{mid};line-height:1.9;'>{_contact_row(ss)}</div>
-    </div>
-  </div>
-
-  {sh("Profile")}
-  <div style='font-size:11px;color:#333;line-height:1.7;'>{ss.get('summary','').replace(chr(10),'<br>')}</div>
-
-  {sh("Skills")}
-  <div style='font-size:11px;color:{ink};line-height:1.8;'>
-    {skills_line}
-  </div>
-  {"<div style='font-size:10.5px;color:"+mid+";margin-top:4px;'>Soft: "+soft_line+"</div>" if soft_line else ""}
-
-  {sh("Experience")}
-  {exp_html}
-
-  {sh("Education")}
-  {edu_html}
-
-  {(sh("Projects") + proj_html) if proj_html else ""}
-  {(sh("Certifications") + cert_html) if cert_html else ""}
-
-  <div style='margin-top:13px;padding-top:6px;border-top:1px solid {line};
-              font-size:9.5px;color:{mid};'>
-    <strong>Languages:</strong> {", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())}
-    &nbsp;&nbsp;·&nbsp;&nbsp;
-    <strong>Interests:</strong> {", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}
-  </div>
-
+<div style="margin-top:8pt; padding-top:4pt; border-top:0.5pt solid #ddd; font-size:8pt; color:#666; font-family:Courier,monospace;">
+  languages: [{langs}] &nbsp; interests: [{ints}]
 </div>
-</body></html>"""
+"""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 9 — Warm Profile (single-column, terracotta/warm palette, circle photo)
-#   Modern HR-friendly template. Great for marketing, HR, communications,
-#   non-profits, education. Warm, approachable, professional.
-# ─────────────────────────────────────────────────────────────────────────────
-def render_template_warm(session_state, profile_img_html=""):
-    ss = session_state
-    terra  = "#b5451b"
-    cream  = "#fdf8f3"
-    warm   = "#7c3d12"
-    sand   = "#e8d5c0"
-    olive  = "#5c5a2e"
-
-    def sh(label):
-        return (f"<div class='keep-with-next' style='display:flex;align-items:center;gap:9px;"
-                f"margin:15px 0 7px;'>"
-                f"<span style='font-size:11.5px;font-weight:800;color:{warm};"
-                f"letter-spacing:1.2px;text-transform:uppercase;'>{label}</span>"
-                f"<div style='flex:1;height:2px;background:linear-gradient(to right,{terra},{sand});'></div>"
-                f"</div>")
-
-    img_html = _profile_img(profile_img_html, size=110)
-
-    exp_html = ""
-    for exp in ss.experience_entries:
-        if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description", ""))
-            exp_html += f"""
-            <div class='no-break' style='margin-bottom:14px;padding:9px 12px;
-                 background:{cream};border-radius:6px;border-left:4px solid {terra};'>
-              <div style='display:flex;justify-content:space-between;align-items:baseline;'>
-                <span style='font-size:12.5px;font-weight:700;color:{warm};'>{exp.get('company','')}</span>
-                <span style='font-size:10px;color:#888;background:{sand};padding:2px 8px;
-                      border-radius:10px;white-space:nowrap;margin-left:6px;'>{exp.get('duration','')}</span>
-              </div>
-              <div style='font-size:11.5px;color:{terra};font-weight:600;margin:3px 0 3px;'>{exp.get('title','')}</div>
-              <div style='font-size:11px;color:#444;'>{desc}</div>
-            </div>"""
-
-    edu_html = ""
-    for edu in ss.education_entries:
-        if edu.get("institution") or edu.get("degree"):
-            deg = edu.get('degree', '')
-            if isinstance(deg, list): deg = ", ".join(deg)
-            edu_html += f"""
-            <div class='no-break' style='margin-bottom:10px;display:flex;gap:10px;'>
-              <div style='width:6px;height:6px;background:{terra};border-radius:50%;flex-shrink:0;margin-top:6px;'></div>
-              <div>
-                <div style='font-size:12px;font-weight:700;color:{warm};'>{edu.get('institution','')}</div>
-                <div style='font-size:11px;color:{terra};font-weight:600;'>{deg} — {edu.get('year','')}</div>
-                <div style='font-size:10.5px;color:#666;'>{edu.get('details','')}</div>
-              </div>
-            </div>"""
-
-    proj_html = ""
-    for proj in ss.project_entries:
-        if proj.get("title"):
-            desc = _bullets(proj.get("description", ""))
-            proj_html += f"""
-            <div class='no-break' style='margin-bottom:12px;padding:9px 12px;
-                 background:{cream};border-radius:6px;'>
-              <div style='display:flex;justify-content:space-between;'>
-                <span style='font-size:12px;font-weight:700;color:{warm};'>{proj.get('title','')}</span>
-                <span style='font-size:10px;color:#888;'>{proj.get('duration','')}</span>
-              </div>
-              <div style='font-size:10px;color:{terra};margin-bottom:2px;font-style:italic;'>{proj.get('tech','')}</div>
-              <div style='font-size:11px;color:#444;'>{desc}</div>
-            </div>"""
-
-    cert_html = ""
-    for cert in ss.certificate_links:
-        if cert.get("name"):
-            cert_html += f"""<div class='no-break' style='margin-bottom:6px;font-size:11px;'>
-              <a href='{cert.get("link","#")}' style='color:{warm};font-weight:700;'>{cert.get('name','')}</a>
-              <span style='color:#888;'> · {cert.get('duration','')}</span>
-              <div style='color:#666;font-size:10.5px;'>{cert.get('description','')}</div>
-            </div>"""
-
-    skills_tags = "".join(
-        f"<span style='display:inline-block;background:{sand};color:{warm};padding:4px 11px;"
-        f"margin:3px 3px 3px 0;border-radius:14px;font-size:10.5px;font-weight:600;'>{s.strip()}</span>"
-        for s in ss.get('skills','').split(',') if s.strip()
-    )
-    soft_tags = "".join(
-        f"<span style='display:inline-block;background:#f0ebe3;color:{olive};padding:3px 10px;"
-        f"margin:3px 3px 3px 0;border-radius:14px;font-size:10px;font-weight:500;'>{s.strip()}</span>"
-        for s in ss.get('Softskills','').split(',') if s.strip()
-    )
-
-    return f"""<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>
-<title>{ss.get('name', '')} – Resume</title>
-<link href='https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap' rel='stylesheet'>
-<style>
-  {A4_PRINT_CSS}
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:'Inter',Arial,sans-serif;font-size:11.5px;color:#2d2a26;background:#fff;
-        width:210mm;margin:0 auto;}}
-  .page{{width:210mm;padding:0;}}
-  /* Warm header band */
-  .header-band{{background:{warm};padding:14mm 18mm 12mm;}}
-  .body{{padding:10mm 18mm 13mm;}}
-  a{{color:{terra};text-decoration:none;}}
-</style></head><body><div class='page'>
-
-  <!-- HEADER: full-width warm band -->
-  <div class='header-band header-block'>
-    <div style='display:flex;align-items:center;gap:18px;'>
-      {"<div style='flex-shrink:0;border:3px solid "+sand+";border-radius:50%;'>"+img_html+"</div>" if img_html else ""}
-      <div style='flex:1;'>
-        <div style='font-size:27px;font-weight:700;color:#fff;font-family:Lora,Georgia,serif;line-height:1.1;'>
-          {ss.get('name', '')}
-        </div>
-        <div style='font-size:13px;color:{sand};font-weight:600;margin:4px 0 8px;'>
-          {ss.get('job_title', '')}
-        </div>
-        <div style='font-size:10px;color:#e8d5c0;line-height:1.9;'>{_contact_row(ss)}</div>
-      </div>
-    </div>
-    <!-- summary inside header for visual warmth -->
-    <div style='margin-top:12px;font-size:11px;color:#f5ede4;line-height:1.65;
-                border-top:1px solid {sand}66;padding-top:9px;'>
-      {ss.get('summary', '').replace(chr(10),'<br>')}
-    </div>
-  </div>
-
-  <div class='body'>
-    {sh("Skills")}
-    <div>{skills_tags}</div>
-    <div style='margin-top:4px;'>{soft_tags}</div>
-
-    {sh("Experience")}
-    {exp_html}
-
-    {sh("Education")}
-    {edu_html}
-
-    {(sh("Projects") + proj_html) if proj_html else ""}
-    {(sh("Certifications") + cert_html) if cert_html else ""}
-
-    {sh("Languages & Interests")}
-    <div style='font-size:11px;color:#555;'>
-      <strong style='color:{warm};'>Languages:</strong>
-      {", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())}
-      &nbsp;&nbsp;·&nbsp;&nbsp;
-      <strong style='color:{warm};'>Interests:</strong>
-      {", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}
-    </div>
-  </div>
-</div></body></html>"""
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# COVER LETTER GENERATOR (unchanged from original)
-# ─────────────────────────────────────────────────────────────────────────────
 def generate_cover_letter_from_resume_builder():
     import streamlit as st
     from datetime import datetime
     import re
-    from llm_manager import call_llm
+    from llm_manager import call_llm  # Ensure you import this
 
     name = st.session_state.get("name", "")
     job_title = st.session_state.get("job_title", "")
@@ -5146,12 +4563,15 @@ def generate_cover_letter_from_resume_builder():
     location = st.session_state.get("location", "")
     today_date = datetime.today().strftime("%B %d, %Y")
 
+    # ✅ Input boxes for contact info
     company = st.text_input("🏢 Target Company", placeholder="e.g., Google")
     linkedin = st.text_input("🔗 LinkedIn URL", placeholder="e.g., https://linkedin.com/in/username")
     email = st.text_input("📧 Email", placeholder="e.g., you@example.com")
     mobile = st.text_input("📞 Mobile Number", placeholder="e.g., +91 9876543210")
 
+    # ✅ Button to prevent relooping
     if st.button("✉️ Generate Cover Letter"):
+        # ✅ Validate input before generating
         if not all([name, job_title, summary, skills, company, linkedin, email, mobile]):
             st.warning("⚠️ Please fill in all fields including LinkedIn, email, and mobile.")
             return
@@ -5159,7 +4579,7 @@ def generate_cover_letter_from_resume_builder():
         prompt = f"""
 You are a professional cover letter writer.
 
-Write a formal and compelling cover letter using the information below.
+Write a formal and compelling cover letter using the information below. 
 Format it as a real letter with:
 1. Date
 2. Recipient heading
@@ -5167,7 +4587,7 @@ Format it as a real letter with:
 4. Three short paragraphs
 5. Professional closing
 
-Ensure you **only include the company name once** in the header or salutation,
+Ensure you **only include the company name once** in the header or salutation, 
 and avoid repeating it redundantly in the body.
 
 ### Heading Info:
@@ -5182,17 +4602,21 @@ Hiring Manager, {company}, {location}
 - Location: {location}
 
 ### Instructions:
-- Do not use HTML tags.
+- Do not use HTML tags. 
 - Return plain text only.
 """
 
+        # ✅ Call LLM
         cover_letter = call_llm(prompt, session=st.session_state).strip()
+
+        # ✅ Store plain text
         st.session_state["cover_letter"] = cover_letter
 
+        # ✅ Build HTML wrapper for preview (safe)
         cover_letter_html = f"""
-        <div style="font-family: Georgia, serif; font-size: 13pt; line-height: 1.6;
-                    color: #000; background: #fff; padding: 25px;
-                    border-radius: 8px; box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
+        <div style="font-family: Georgia, serif; font-size: 13pt; line-height: 1.6; 
+                    color: #000; background: #fff; padding: 25px; 
+                    border-radius: 8px; box-shadow: 0px 2px 6px rgba(0,0,0,0.1); 
                     max-width: 800px; margin: auto;">
             <div style="text-align:center; margin-bottom:15px;">
                 <div style="font-size:18pt; font-weight:bold; color:#003366;">{name}</div>
@@ -5210,18 +4634,18 @@ Hiring Manager, {company}, {location}
         """
 
         st.session_state["cover_letter_html"] = cover_letter_html
+
+        # ✅ Show nicely in Streamlit
         st.markdown(cover_letter_html, unsafe_allow_html=True)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# STREAMLIT UI — Tab 2 (Resume Builder)
-# ─────────────────────────────────────────────────────────────────────────────
+# Import necessary modules first
 import streamlit as st
 
+# Tab setup (assuming this is within a tab2 context)
 with tab2:
     st.session_state.active_tab = "Resume Builder"
 
-    # ── Title ──
+    # ---------- Title with Blue Glassmorphism + Shine ----------
     st.markdown("""
     <style>
     .glass-title {
@@ -5262,6 +4686,7 @@ with tab2:
         top: 100%;
     }
     </style>
+
     <div class="glass-title">
         <h2>🧾 Advanced Resume Builder</h2>
     </div>
@@ -5269,16 +4694,19 @@ with tab2:
 
     st.markdown("<hr style='border-top: 2px solid rgba(0,200,255,0.4);'>", unsafe_allow_html=True)
 
-    # ── Global Styles ──
+    # ---------- Global Styles (Glassmorphism + Glow + Shine) ----------
     st.markdown("""
         <style>
-        .uploadedFile {
+        /* File uploader */
+        .uploadedFile { 
             background: rgba(10, 20, 40, 0.6) !important;
             border: 1px solid rgba(0,200,255,0.5) !important;
             border-radius: 14px !important;
             color: #cce6ff !important;
             box-shadow: 0 0 12px rgba(0,200,255,0.3) !important;
         }
+
+        /* Sidebar expander style */
         .streamlit-expanderHeader {
             background: rgba(10, 20, 40, 0.45);
             border-radius: 12px;
@@ -5298,6 +4726,8 @@ with tab2:
             padding: 8px;
             color: #e6f7ff;
         }
+
+        /* Selectbox */
         div[data-baseweb="select"] {
             background: rgba(10, 20, 40, 0.35);
             border: 1px solid rgba(0, 200, 255, 0.6);
@@ -5306,6 +4736,8 @@ with tab2:
             backdrop-filter: blur(14px);
             box-shadow: 0 0 10px rgba(0,200,255,0.3);
         }
+
+        /* Buttons with Shine Effect */
         div.stButton > button {
             position: relative;
             background: rgba(10, 20, 40, 0.35);
@@ -5354,39 +4786,17 @@ with tab2:
         </style>
     """, unsafe_allow_html=True)
 
-    # ── Template Selection (9 total) ──
-    st.markdown("### 🎨 Choose Resume Template (9 Industry Templates)")
-
-    _TEMPLATE_GROUPS = {
-        "── Two-Column ──────────────────": None,
-        "Classic Professional":  "Two-column | Navy sidebar | ATS-ready",
-        "Elegant Sidebar":       "Two-column | Dark sidebar | Modern",
-        "── Single-Column (Classic) ─────": None,
-        "Modern Minimal":        "Single-col | Clean lines | Ultra-readable",
-        "Executive":             "Single-col | Serif | Conservative",
-        "Creative":              "Single-col | Green accent | Bold top bar",
-        "Tech / Developer":      "Single-col | Dark header | Monospace",
-        "── Single-Column + Photo ────────": None,
-        "Corporate Clean":       "Single-col | Navy/Gold | Finance & Law",
-        "Minimalist Mono":       "Single-col | Ultra-clean | Design & Product",
-        "Warm Profile":          "Single-col | Terracotta | HR & Marketing",
-    }
-
-    _SELECTABLE = [k for k, v in _TEMPLATE_GROUPS.items() if v is not None]
-
+    # 🎨 Template Selection
+    st.markdown("### 🎨 Choose Resume Template (6 Industry Templates)")
     selected_template = st.selectbox(
         "🎨 Choose Resume Template",
-        _SELECTABLE,
-        format_func=lambda k: f"{k}  —  {_TEMPLATE_GROUPS[k]}",
+        ["Classic Professional", "Modern Minimal", "Elegant Sidebar",
+         "Executive", "Creative", "Tech / Developer"],
         key="template_selector"
     )
 
-    # ── Profile Photo Upload ──
-    st.markdown("### 📸 Profile Photo")
-    st.info("Upload a clear, front-facing photo (square preferred). Supported by all 9 templates.")
-    uploaded_image = st.file_uploader(
-        "Upload Profile Image", type=["png", "jpg", "jpeg"], key="profile_img_upload"
-    )
+    # 📸 Upload profile photo
+    uploaded_image = st.file_uploader("Upload a Profile Image", type=["png", "jpg", "jpeg"], key="profile_img_upload")
     profile_img_html = ""
 
     if uploaded_image:
@@ -5408,27 +4818,31 @@ with tab2:
                         0 0 0 3px #4da6ff,
                         0 8px 25px rgba(77, 166, 255, 0.3),
                         0 4px 15px rgba(0, 0, 0, 0.15);
-                " />
+                    transition: transform 0.3s ease-in-out;
+                "
+                onmouseover="this.style.transform='scale(1.07)'"
+                onmouseout="this.style.transform='scale(1)'"
+             />
         </div>
         """
         st.markdown(profile_img_html, unsafe_allow_html=True)
     else:
-        st.caption("📸 No photo uploaded — resume will be generated without a photo.")
+        st.info("📸 Please upload a clear, front-facing profile photo (square or vertical preferred).")
 
-    # ── Session State Defaults ──
-    fields = ["name", "email", "phone", "linkedin", "location", "portfolio",
-              "summary", "skills", "languages", "interests", "Softskills", "job_title"]
+    # ---------------- Session State Defaults ----------------
+    fields = ["name", "email", "phone", "linkedin", "location", "portfolio", "summary",
+              "skills", "languages", "interests", "Softskills", "job_title"]
     for f in fields:
         st.session_state.setdefault(f, "")
 
-    st.session_state.setdefault("experience_entries",  [{"title": "", "company": "", "duration": "", "description": ""}])
-    st.session_state.setdefault("education_entries",   [{"degree": "", "institution": "", "year": "", "details": ""}])
-    st.session_state.setdefault("project_entries",     [{"title": "", "tech": "", "duration": "", "description": ""}])
-    st.session_state.setdefault("project_links",       [])
-    st.session_state.setdefault("certificate_links",   [{"name": "", "link": "", "duration": "", "description": ""}])
-    st.session_state.setdefault("form_key_counter",    0)
+    st.session_state.setdefault("experience_entries", [{"title": "", "company": "", "duration": "", "description": ""}])
+    st.session_state.setdefault("education_entries", [{"degree": "", "institution": "", "year": "", "details": ""}])
+    st.session_state.setdefault("project_entries", [{"title": "", "tech": "", "duration": "", "description": ""}])
+    st.session_state.setdefault("project_links", [])
+    st.session_state.setdefault("certificate_links", [{"name": "", "link": "", "duration": "", "description": ""}])
+    st.session_state.setdefault("form_key_counter", 0)
 
-    # ── Sidebar: Add/Delete Sections ──
+    # ---------------- Sidebar (ONLY in Tab 2) ----------------
     with st.sidebar:
         st.markdown("### ✨ Manage Resume Sections")
 
@@ -5439,6 +4853,7 @@ with tab2:
         st.session_state.edit_mode = mode
         st.markdown("---")
 
+        # 💼 Experience
         with st.expander("💼 Experience"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Experience", key="exp_btn"):
                 if mode == "Add":
@@ -5448,6 +4863,7 @@ with tab2:
                 elif mode == "Delete" and len(st.session_state.experience_entries) > 1:
                     st.session_state.experience_entries.pop()
 
+        # 🎓 Education
         with st.expander("🎓 Education"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Education", key="edu_btn"):
                 if mode == "Add":
@@ -5457,6 +4873,7 @@ with tab2:
                 elif mode == "Delete" and len(st.session_state.education_entries) > 1:
                     st.session_state.education_entries.pop()
 
+        # 🛠 Projects
         with st.expander("🛠 Projects"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Project", key="proj_btn"):
                 if mode == "Add":
@@ -5466,6 +4883,7 @@ with tab2:
                 elif mode == "Delete" and len(st.session_state.project_entries) > 1:
                     st.session_state.project_entries.pop()
 
+        # 📜 Certificates
         with st.expander("📜 Certificates"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Certificate", key="cert_btn"):
                 if mode == "Add":
@@ -5475,70 +4893,66 @@ with tab2:
                 elif mode == "Delete" and len(st.session_state.certificate_links) > 1:
                     st.session_state.certificate_links.pop()
 
-    # ── Resume Form ──
+    # ---------------- Resume Form ----------------
     fk = st.session_state["form_key_counter"]
     with st.form(f"resume_form_{fk}", clear_on_submit=False):
         st.markdown("### 👤 <u>Personal Information</u>", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
-            st.session_state.name     = st.text_input("👤 Full Name",     value=st.session_state.name,     key=f"name_input_{fk}")
-            st.session_state.phone    = st.text_input("📞 Phone Number",  value=st.session_state.phone,    key=f"phone_input_{fk}")
-            st.session_state.location = st.text_input("📍 Location",      value=st.session_state.location, key=f"loc_input_{fk}")
+            st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, key=f"name_input_{fk}")
+            st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, key=f"phone_input_{fk}")
+            st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, key=f"loc_input_{fk}")
         with col2:
-            st.session_state.email     = st.text_input("📧 Email",        value=st.session_state.email,     key=f"email_input_{fk}")
-            st.session_state.linkedin  = st.text_input("🔗 LinkedIn",     value=st.session_state.linkedin,  key=f"ln_input_{fk}")
-            st.session_state.portfolio = st.text_input("🌐 Portfolio",    value=st.session_state.portfolio, key=f"port_input_{fk}")
-            st.session_state.job_title = st.text_input("💼 Job Title",    value=st.session_state.job_title, key=f"job_input_{fk}")
+            st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, key=f"email_input_{fk}")
+            st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, key=f"ln_input_{fk}")
+            st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, key=f"port_input_{fk}")
+            st.session_state.job_title = st.text_input("💼 Job Title", value=st.session_state.job_title, key=f"job_input_{fk}")
 
         st.markdown("### 📝 <u>Professional Summary</u>", unsafe_allow_html=True)
         st.session_state.summary = st.text_area("Summary", value=st.session_state.summary, key=f"summary_input_{fk}")
 
         st.markdown("### 💼 <u>Skills, Languages, Interests & Soft Skills</u>", unsafe_allow_html=True)
-        st.session_state.skills     = st.text_area("Skills (comma-separated)",     value=st.session_state.skills,     key=f"skills_input_{fk}")
-        st.session_state.languages  = st.text_area("Languages (comma-separated)",  value=st.session_state.languages,  key=f"lang_input_{fk}")
-        st.session_state.interests  = st.text_area("Interests (comma-separated)",  value=st.session_state.interests,  key=f"int_input_{fk}")
+        st.session_state.skills = st.text_area("Skills (comma-separated)", value=st.session_state.skills, key=f"skills_input_{fk}")
+        st.session_state.languages = st.text_area("Languages (comma-separated)", value=st.session_state.languages, key=f"lang_input_{fk}")
+        st.session_state.interests = st.text_area("Interests (comma-separated)", value=st.session_state.interests, key=f"int_input_{fk}")
         st.session_state.Softskills = st.text_area("Softskills (comma-separated)", value=st.session_state.Softskills, key=f"soft_input_{fk}")
 
         st.markdown("### 🧱 <u>Work Experience</u>", unsafe_allow_html=True)
         for idx, exp in enumerate(st.session_state.experience_entries):
             with st.expander(f"Experience #{idx+1}", expanded=True):
-                exp["title"]       = st.text_input("Job Title",    value=exp.get("title",""),       key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["company"]     = st.text_input("Company",      value=exp.get("company",""),     key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["duration"]    = st.text_input("Duration",     value=exp.get("duration",""),    key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["description"] = st.text_area("Description",   value=exp.get("description",""), key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                exp["company"] = st.text_input("Company", value=exp.get("company", ""), key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                exp["description"] = st.text_area("Description", value=exp.get("description", ""), key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
 
         st.markdown("### 🎓 <u>Education</u>", unsafe_allow_html=True)
         for idx, edu in enumerate(st.session_state.education_entries):
             with st.expander(f"Education #{idx+1}", expanded=True):
-                edu["degree"]      = st.text_input("Degree",      value=edu.get("degree",""),      key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["institution"] = st.text_input("Institution", value=edu.get("institution",""), key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["year"]        = st.text_input("Year",        value=edu.get("year",""),        key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["details"]     = st.text_area("Details",      value=edu.get("details",""),     key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                edu["degree"] = st.text_input("Degree", value=edu.get("degree", ""), key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                edu["year"] = st.text_input("Year", value=edu.get("year", ""), key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                edu["details"] = st.text_area("Details", value=edu.get("details", ""), key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
 
         st.markdown("### 🛠 <u>Projects</u>", unsafe_allow_html=True)
         for idx, proj in enumerate(st.session_state.project_entries):
             with st.expander(f"Project #{idx+1}", expanded=True):
-                proj["title"]       = st.text_input("Project Title", value=proj.get("title",""),       key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["tech"]        = st.text_input("Tech Stack",    value=proj.get("tech",""),        key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["duration"]    = st.text_input("Duration",      value=proj.get("duration",""),    key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["description"] = st.text_area("Description",    value=proj.get("description",""), key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                proj["description"] = st.text_area("Description", value=proj.get("description", ""), key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
 
         st.markdown("### 🔗 Project Links")
-        project_links_input = st.text_area(
-            "Enter one project link per line:",
-            value="\n".join(st.session_state.project_links),
-            key=f"proj_links_input_{fk}"
-        )
+        project_links_input = st.text_area("Enter one project link per line:", value="\n".join(st.session_state.project_links), key=f"proj_links_input_{fk}")
         if project_links_input:
             st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
 
         st.markdown("### 🧾 <u>Certificates</u>", unsafe_allow_html=True)
         for idx, cert in enumerate(st.session_state.certificate_links):
             with st.expander(f"Certificate #{idx+1}", expanded=True):
-                cert["name"]        = st.text_input("Certificate Name", value=cert.get("name",""),        key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["link"]        = st.text_input("Certificate Link", value=cert.get("link",""),        key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["duration"]    = st.text_input("Duration",         value=cert.get("duration",""),    key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["description"] = st.text_area("Description",       value=cert.get("description",""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""), key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
 
         btn_col1, btn_col2 = st.columns([1, 1])
         with btn_col1:
@@ -5550,31 +4964,45 @@ with tab2:
             st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
 
         if clear_clicked:
+            # Reset only resume-related keys — do NOT clear() or rerun() as that
+            # wipes tab context and navigates back to the main/home page.
+            # Instead, reset values in-place and bump the form key counter so
+            # all widgets re-render empty on this same run, no page jump.
             _new_counter = st.session_state.get("form_key_counter", 0) + 1
             resume_fields = ["name", "email", "phone", "linkedin", "location",
                              "portfolio", "summary", "skills", "languages",
                              "interests", "Softskills", "job_title"]
             for _f in resume_fields:
                 st.session_state[_f] = ""
-            st.session_state["experience_entries"]  = [{"title": "", "company": "", "duration": "", "description": ""}]
-            st.session_state["education_entries"]   = [{"degree": "", "institution": "", "year": "", "details": ""}]
-            st.session_state["project_entries"]     = [{"title": "", "tech": "", "duration": "", "description": ""}]
-            st.session_state["project_links"]       = []
-            st.session_state["certificate_links"]   = [{"name": "", "link": "", "duration": "", "description": ""}]
+            st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
+            st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
+            st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
+            st.session_state["project_links"] = []
+            st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
             for _key in ["generated_html", "ai_output", "cover_letter",
                          "cover_letter_html", "encoded_profile_image"]:
                 st.session_state.pop(_key, None)
             st.session_state["form_key_counter"] = _new_counter
 
-    # ── Visual Preview ──
     st.markdown("""
     <style>
-        .heading-large { font-size: 36px; font-weight: bold; color: #336699; }
-        .subheading-large { font-size: 30px; font-weight: bold; color: #336699; }
-        .tab-section { margin-top: 20px; }
+        .heading-large {
+            font-size: 36px;
+            font-weight: bold;
+            color: #336699;
+        }
+        .subheading-large {
+            font-size: 30px;
+            font-weight: bold;
+            color: #336699;
+        }
+        .tab-section {
+            margin-top: 20px;
+        }
     </style>
     """, unsafe_allow_html=True)
 
+    # --- Visual Resume Preview Section (only shown after form is submitted) ---
     if "generated_html" in st.session_state:
         st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
         st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
@@ -5607,8 +5035,8 @@ with tab2:
                 st.markdown(f"<div style='margin-left:10px;'>• {interest}</div>", unsafe_allow_html=True)
 
             st.markdown("<h4 style='color:#336699;'>Softskills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for ss_item in [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {ss_item}</div>", unsafe_allow_html=True)
+            for ss in [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]:
+                st.markdown(f"<div style='margin-left:10px;'>• {ss}</div>", unsafe_allow_html=True)
 
         with right:
             st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
@@ -5642,19 +5070,419 @@ with tab2:
                     </div>
                     """, unsafe_allow_html=True)
 
-            import re as _re
-            projects_blocks = []
-            certificates_list = ""
+            st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
             for proj in st.session_state.project_entries:
                 if proj.get("title"):
-                    projects_blocks.append(
-                        f"{proj.get('title','')}\nTech Stack: {proj.get('tech','')}"
-                        f"\nDuration: {proj.get('duration','')}\n{proj.get('description','')}"
-                    )
-            for cert_item in st.session_state.certificate_links:
-                if cert_item.get("name"):
-                    certificates_list += f"{cert_item['name']} ({cert_item.get('duration','')})\n"
+                    st.markdown(f"""
+                    <div style='margin-bottom:15px; padding:10px;'>
+                        <strong style='font-size:16px;'>{proj['title']}</strong><br>
+                        <span style='font-size:14px;'>🛠️ <strong>Tech Stack:</strong> {proj['tech']}</span><br>
+                        <span style='font-size:14px;'>⏳ <strong>Duration:</strong> {proj['duration']}</span><br>
+                        <span style='font-size:17px;'>📝 <strong>Description:</strong> {proj['description']}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
 
+            if st.session_state.project_links:
+                st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+                for i, link in enumerate(st.session_state.project_links):
+                    st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
+
+            if st.session_state.certificate_links:
+                st.markdown("<h4 style='color:#336699;'>Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+                for cert in st.session_state.certificate_links:
+                    if cert["name"] and cert["link"]:
+                        st.markdown(f"""
+                        <div style='display:flex; justify-content:space-between;'>
+                            <a href="{cert['link']}" target="_blank"><b>📄 {cert['name']}</b></a>
+                            <span style='color:gray;'>{cert['duration']}</span>
+                        </div>
+                        <div style='margin-bottom:10px; font-size:14px;'>{cert['description']}</div>
+                        """, unsafe_allow_html=True)
+
+import re
+
+with tab2:
+    st.markdown("## ✨ <span style='color:#336699;'>Enhanced AI Resume Preview</span>", unsafe_allow_html=True)
+    st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
+
+    col1, spacer, col2 = st.columns([1, 0.2, 1])
+
+    with col1:
+        if st.button("🔁 Clear Preview"):
+            st.session_state.pop("ai_output", None)
+
+    with col2:
+        if st.button("🚀 Generate AI Resume Preview"):
+            # Normalize and ensure at least 2 experience entries
+            experience_entries = st.session_state.get('experience_entries', [])
+            normalized_experience_entries = []
+            for entry in experience_entries:
+                if isinstance(entry, dict):
+                    title = entry.get("title", "")
+                    desc = entry.get("description", "")
+                    formatted = f"{title}\n{desc}".strip()
+                else:
+                    formatted = entry.strip()
+                normalized_experience_entries.append(formatted)
+            while len(normalized_experience_entries) < 2:
+                normalized_experience_entries.append("Placeholder Experience")
+
+            # Normalize and ensure at least 2 project entries
+            project_entries = st.session_state.get('project_entries', [])
+            normalized_project_entries = []
+            for entry in project_entries:
+                if isinstance(entry, dict):
+                    title = entry.get("title", "")
+                    desc = entry.get("description", "")
+                    formatted = f"{title}\n{desc}".strip()
+                else:
+                    formatted = entry.strip()
+                normalized_project_entries.append(formatted)
+            while len(normalized_project_entries) < 2:
+                normalized_project_entries.append("Placeholder Project")
+
+            enhance_prompt = f"""
+            You are a professional and unbiased Resume Optimization Specialist with deep knowledge of ATS systems,
+            industry hiring standards, and professional resume writing conventions. Your goal is to enhance the
+            provided resume data for the role:
+            "{st.session_state['job_title']}" — ensuring strong ATS alignment, linguistic precision, and
+            real-world industry relevance.
+
+            ROLE-SPECIFIC INSTRUCTION:
+            - Tailor every section strictly toward the competencies, technical skills, and outcomes expected
+              for "{st.session_state['job_title']}".
+            - Infer the most essential 6–10 role-defining skills, tools, and responsibilities using industry standards.
+            - Prioritize factual accuracy, clarity, and hiring relevance over creative or generic rewriting.
+
+            LANGUAGE & TONE GUIDELINES:
+            - Maintain neutral, inclusive, and strictly professional tone.
+            - Avoid biased, informal, exaggerated, or marketing-style terms (e.g., “rockstar,” “guru,” “ninja”).
+            - Use concise, quantifiable, outcome-focused language.
+            - Do NOT repeat the same verbs, verb roots, phrases, or semantic actions across different sections.
+            - Focus on measurable impact, scope, and responsibility.
+            - Avoid subjective adjectives like "excellent" or "great" — prefer evidence-based outcomes.
+
+            ABSOLUTE PRONOUN & VOICE RESTRICTIONS (NON-NEGOTIABLE):
+            - NEVER use first-person language under any circumstance (I, me, my, we, our).
+            - NEVER use gendered pronouns or possessives
+              (he, she, him, her, his, hers, himself, herself).
+            - NEVER refer to the AI, system, assistant, or writer in the output.
+            - ALL content must be written in third-person, candidate-focused, resume-standard language.
+            - Prefer implicit subject sentences or neutral nouns such as
+              “the candidate”, “the professional”, or role-based references.
+
+            CRITICAL PROFESSIONAL WRITING CONSTRAINT (VERY IMPORTANT):
+            - Treat each resume section as a completely isolated linguistic document.
+            - Once a verb, phrase, or action concept appears in one section, it is forbidden in all other sections,
+              even if reworded, paraphrased, or changed in tense.
+            - Each section (Summary, Experience, Projects, Skills, SoftSkills, Interests) MUST use a distinct
+              vocabulary set and unique action intent.
+            - Any repetition across sections is a strict quality failure.
+
+            GLOBAL ACTION & VERB ISOLATION PROTOCOL (MANDATORY EXECUTION STEP):
+
+            Before generating any resume content, you MUST internally perform the following steps:
+
+            STEP 1 — SECTION VOCABULARY PLANNING (INTERNAL, DO NOT OUTPUT):
+            - Create a private, internal list of verbs and action concepts for EACH section:
+              • Summary_Verb_Set
+              • Experience_Verb_Set
+              • Projects_Verb_Set
+              • Interests_Action_Set
+            - Each list MUST contain only verbs or action concepts unique to that section.
+            - NO verb, verb root, synonym, or semantic action may appear in more than one list.
+
+            STEP 2 — VOCABULARY LOCKING:
+            - Once a verb or action concept is assigned to a section, it becomes permanently locked.
+            - Locked verbs or actions are FORBIDDEN in all other sections, even if paraphrased.
+
+            STEP 3 — ENFORCED GENERATION:
+            - While writing each section, use ONLY the verbs and action concepts from its locked set.
+            - If a conflict is detected, you MUST rewrite the conflicting section completely
+              before producing final output.
+
+            FAILURE CONDITION:
+            - Any repeated verb, verb root, synonym, or semantic action across sections
+              is considered a critical failure and must be corrected before output.
+
+            FORMATTING REQUIREMENTS (FOLLOW EXACTLY):
+            Each section must start with its label followed by a colon and then the formatted content.
+
+            SECTION ENHANCEMENT RULES:
+
+            SECTION-SPECIFIC LANGUAGE ENFORCEMENT:
+
+            - SUMMARY:
+              Use third-person PRESENT tense ONLY.
+              Every bullet MUST begin with a third-person singular verb
+              (e.g., specializes, positions, focuses, leverages).
+              Do NOT use base verb forms (e.g., specialize, bring, focus).
+              Do NOT use past or future tense.
+              Use high-level professional positioning and strategic identity language only.
+              Do NOT include implementation, execution, or tooling verbs.
+
+            - EXPERIENCE:
+              Use PAST tense ONLY.
+              Use ownership, accountability, delivery, and responsibility-oriented language
+              (e.g., led, governed, executed, resolved, delivered).
+              Emphasize outcomes, scope, and measurable impact.
+              Do NOT reuse verbs, phrases, or semantic actions from the Summary.
+
+            - PROJECTS:
+              Use PAST tense ONLY.
+              Use deep technical, engineering, and system-design language
+              (e.g., architected, engineered, integrated, optimized, validated).
+              Projects MUST reflect industry-standard, real-world complexity.
+              Avoid basic CRUD apps, toy projects, or academic-only descriptions.
+              Emphasize architecture, constraints, scalability, performance, or security.
+              Do NOT reuse verbs, phrases, or action ideas from Summary or Experience.
+
+            - SKILLS & SOFTSKILLS:
+              Nouns only.
+              List-only format.
+              Do NOT include descriptive or explanatory sentences.
+
+            - INTERESTS:
+              Use professional learning, exploration, contribution, or domain-engagement language.
+              Avoid overlap with Skills or Projects.
+
+            1. SUMMARY:
+               Write 3–4 bullet points defining the candidate’s current professional identity,
+               specialization, and measurable strengths for "{st.session_state['job_title']}". 
+
+            2. EXPERIENCE:
+               Present entries as (A., B., C.) containing:
+               - Company Name (Duration)
+               - Role title
+               - 3–4 bullets focused on achievements, ownership, and measurable impact
+               - Include tools, metrics, scale, and outcomes where applicable
+
+            3. PROJECTS:
+               Present as (A., B., C.) with:
+               - Project Title
+               - Tech Stack: (only relevant, production-grade technologies)
+               - Duration: (timeframe)
+               - Description:
+                 - System or feature engineered
+                 - Technical decisions or architectural approach
+                 - Performance, scalability, or security improvement with metrics
+                 - Complexity handled or constraints solved
+                 - Final measurable outcome or professional learning
+
+            4. SKILLS:
+               List 6–8 current, job-relevant technical skills only.
+
+            5. SOFTSKILLS:
+               List 6–8 professional traits related to collaboration, ownership,
+               adaptability, communication, and analytical thinking.
+
+            6. LANGUAGES:
+               Include spoken or written languages only.
+
+            7. INTERESTS:
+               Include 3–6 professional or domain-aligned interests.
+
+            8. CERTIFICATES:
+               Include 3–6 verified, industry-recognized certifications with provider and duration.
+
+            DOMAIN-SPECIFIC FOCUS:
+            - Technical Roles → Frameworks, programming languages, CI/CD, cloud platforms, scalability, security.
+            - Security Roles → Threat modeling, SIEM tools, incident response, compliance frameworks.
+            - Data Roles → Python, SQL, analytics, machine learning, visualization, statistics.
+            - Management Roles → Leadership, KPIs, process optimization, strategic execution.
+
+            OUTPUT FORMAT (STRICTLY FOLLOW THIS STRUCTURE):
+
+            Summary:
+            • [Third-person present tense, strategic positioning, measurable impact]
+            • [Distinct professional strength with role alignment]
+            • [Unique competency with quantified outcome]
+
+            Experience:
+            A. [Company Name] ([Duration])
+               • [Role Title]
+               • [Achievement with metrics]
+               • [Ownership or delivery responsibility]
+               • [Process or performance improvement]
+
+            B. [Company Name] ([Duration])
+               • [Role Title]
+               • [Achievement with measurable outcome]
+               • [Contribution or responsibility]
+
+            Projects:
+            A. [Project Title]
+               • Tech Stack: [Relevant technologies only]
+               • Duration: [Start – End]
+               • Description:
+                 - [System or feature engineered]
+                 - [Technical decisions and implementation]
+                 - [Measured improvement or result]
+                 - [Complexity handled or innovation]
+
+            B. [Project Title]
+               • Tech Stack: [Relevant technologies only]
+               • Duration: [Start – End]
+               • Description:
+                 - [Technical scope]
+                 - [Challenges solved]
+                 - [Quantified results]
+                 - [Skills demonstrated]
+
+            Skills:
+            [Skill 1], [Skill 2], [Skill 3], [Skill 4], [Skill 5], [Skill 6], [Skill 7], [Skill 8]
+
+            SoftSkills:
+            [Soft Skill 1], [Soft Skill 2], [Soft Skill 3], [Soft Skill 4], [Soft Skill 5], [Soft Skill 6]
+
+            Languages:
+            [Language 1], [Language 2], [Language 3]
+
+            Interests:
+            [Interest 1], [Interest 2], [Interest 3], [Interest 4]
+
+            Certificates:
+            [Certificate Name] – [Provider] ([Duration/Level])
+            [Certificate Name] – [Provider] ([Duration/Level])
+            [Certificate Name] – [Provider] ([Duration/Level])
+
+            ENHANCEMENT SOURCE DATA:
+            Enhance the following inputs while maintaining factual accuracy
+            and logical alignment with "{st.session_state['job_title']}":
+
+            Summary:
+            {st.session_state['summary']}
+
+            Experience:
+            {normalized_experience_entries}
+
+            Projects:
+            {normalized_project_entries}
+
+            Skills:
+            {st.session_state['skills']}
+
+            SoftSkills:
+            {st.session_state['Softskills']}
+
+            Languages:
+            {st.session_state['languages']}
+
+            Interests:
+            {st.session_state['interests']}
+
+            Certificates:
+            {[cert['name'] for cert in st.session_state['certificate_links'] if cert['name']]}
+
+            FINAL QUALITY & DE-DUPLICATION CHECK (MANDATORY):
+            - Ensure verb tense consistency per section.
+            - Ensure zero verb, phrase, or semantic repetition across sections.
+            - If any conflict exists, rewrite the later section entirely before output.
+
+            IMPORTANT:
+            - Do NOT fabricate companies, experience, or certifications.
+            - Maintain professional, ATS-optimized language.
+            - Output ONLY the formatted resume content without explanations.
+            """
+
+
+
+
+
+            with st.spinner("🧠 Thinking..."):
+                ai_output = call_llm(enhance_prompt, session=st.session_state)
+                st.session_state["ai_output"] = ai_output
+
+    # ------------------------- PARSE + RENDER -------------------------
+    if "ai_output" in st.session_state:
+        ai_output = st.session_state["ai_output"]
+
+        def extract_section(label, output, default=""):
+            match = re.search(rf"{label}:\s*(.*?)(?=\n\w+:|\Z)", output, re.DOTALL)
+            return match.group(1).strip() if match else default
+
+        summary_enhanced = extract_section("Summary", ai_output, st.session_state['summary'])
+        experience_raw = extract_section("Experience", ai_output)
+        experience_blocks = re.split(r"\n(?=[A-Z]\. )", experience_raw.strip())
+        projects_raw = extract_section("Projects", ai_output)
+        projects_blocks = re.split(r"\n(?=[A-Z]\. )", projects_raw.strip())
+        skills_list = extract_section("Skills", ai_output, st.session_state['skills'])
+        softskills_list = extract_section("SoftSkills", ai_output, st.session_state['Softskills'])
+        languages_list = extract_section("Languages", ai_output, st.session_state['languages'])
+        interests_list = extract_section("Interests", ai_output, st.session_state['interests'])
+        certificates_list = extract_section("Certificates", ai_output)
+
+        # ------------------------- UI RENDER -------------------------
+        left, right = st.columns([1, 2])
+
+        with left:
+            st.markdown(f"""
+                <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
+                <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
+                <p style='font-size:14px;'>
+                📍 {st.session_state['location']}<br>
+                📞 {st.session_state['phone']}<br>
+                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
+                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
+                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
+                </p>
+            """, unsafe_allow_html=True)
+
+            def render_bullet_section(title, items):
+                st.markdown(f"<h4 style='color:#336699;'>{title}</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+                for item in [i.strip() for i in items.split(",") if i.strip()]:
+                    st.markdown(f"<div style='margin-left:10px;'>• {item}</div>", unsafe_allow_html=True)
+
+            render_bullet_section("Skills", skills_list)
+            render_bullet_section("Languages", languages_list)
+            render_bullet_section("Interests", interests_list)
+            render_bullet_section("Soft Skills", softskills_list)
+
+        with right:
+            formatted_summary = summary_enhanced.replace('\n• ', '<br>• ').replace('\n', '<br>')
+            st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            st.markdown(f"<p style='font-size:17px;'>{formatted_summary}</p>", unsafe_allow_html=True)
+
+            # Experience
+            if experience_blocks:
+                st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+                experience_titles = [entry.get("title", "").strip().upper() for entry in st.session_state.experience_entries]
+                for idx, exp_block in enumerate(experience_blocks):
+                    lines = exp_block.strip().split("\n")
+                    if not lines:
+                        continue
+                    heading = lines[0]
+                    description_lines = lines[1:]
+                    match = re.match(r"[A-Z]\.\s*(.+?)\s*\((.*?)\)", heading)
+                    company, duration = (match.group(1).strip(), match.group(2).strip()) if match else (heading, "")
+                    role = experience_titles[idx] if idx < len(experience_titles) else ""
+                    formatted_exp = "<br>".join(description_lines)
+
+                    st.markdown(f"""
+                    <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
+                        <div style='display:flex; justify-content:space-between;'>
+                            <b>🏢 {company.upper()}</b><span style='color:gray;'>📆 {duration}</span>
+                        </div>
+                        <div style='font-size:14px;'>💼 <i>{role}</i></div>
+                        <div style='font-size:17px;'>📝 {formatted_exp}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # Education
+            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for edu in st.session_state.education_entries:
+                st.markdown(f"""
+                <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px;'>
+                    <div style='display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;'>
+                        <span>🏫 {edu['institution']}</span>
+                        <span style='color: gray;'>📅 {edu['year']}</span>
+                    </div>
+                    <div style='font-size: 14px;'>🎓 <i>{edu['degree']}</i></div>
+                    <div style='font-size: 14px;'>📄 {edu['details']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Projects
             if projects_blocks:
                 st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
                 for idx, proj_block in enumerate(projects_blocks):
@@ -5668,6 +5496,7 @@ with tab2:
                             description = description.replace(keyword, "")
                     formatted_proj = description.strip().replace('\n• ', '<br>• ').replace('\n', '<br>')
                     label = chr(65 + idx)
+
                     st.markdown(f"""
                     <div style='margin-bottom:15px; padding: 10px;'>
                         <strong style='font-size:16px;'>📌 <span style='color:#444;'>{label}. </span>{title}</strong><br>
@@ -5678,19 +5507,21 @@ with tab2:
                     </div>
                     """, unsafe_allow_html=True)
 
+            # Certificates
             if certificates_list:
                 st.markdown("<h4 style='color:#336699;'>📜 Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                certs = _re.split(r"\n|(?<=\))(?=\s*[A-Z])|(?<=[a-z]\))(?= [A-Z])", certificates_list)
-                for cert_line in [c.strip() for c in certs if c.strip()]:
-                    st.markdown(f"<div style='margin-left:10px;'>• {cert_line}</div>", unsafe_allow_html=True)
+                certs = re.split(r"\n|(?<=\))(?=\s*[A-Z])|(?<=[a-z]\))(?= [A-Z])", certificates_list)
+                for cert in [c.strip() for c in certs if c.strip()]:
+                    st.markdown(f"<div style='margin-left:10px;'>• {cert}</div>", unsafe_allow_html=True)
 
             if st.session_state.project_links:
                 st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
                 for i, link in enumerate(st.session_state.project_links):
                     st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
 
-    # ── Generate HTML on submit ──
+    # Generate HTML content based on selected template — only on submit, stored in session_state
     if submitted:
+        # Determine which template to use
         _template_map = {
             "Classic Professional": render_template_default,
             "Modern Minimal":       render_template_modern,
@@ -5698,82 +5529,142 @@ with tab2:
             "Executive":            render_template_executive,
             "Creative":             render_template_creative,
             "Tech / Developer":     render_template_tech,
-            "Corporate Clean":      render_template_corporate,
-            "Minimalist Mono":      render_template_minimalist,
-            "Warm Profile":         render_template_warm,
         }
         _fn = _template_map.get(selected_template, render_template_default)
-        html_content = _fn(st.session_state, profile_img_html)
-        st.session_state["generated_html"] = html_content
+        # Templates now return an HTML fragment (body content only).
+        # html_to_pdf_bytes wraps it with <html><head><style>@page A4</style><body>
+        html_fragment = _fn(st.session_state, profile_img_html)
 
+        # Build a standalone full HTML document for the .html download (browser-viewable)
+        html_content = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{st.session_state.get('name','')} – Resume</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  body{{font-family:Inter,Helvetica,Arial,sans-serif;font-size:9.5pt;color:#1a1a1a;
+        margin:0;padding:20px;background:#f0f0f0;}}
+  .resume-wrap{{max-width:210mm;margin:0 auto;background:#fff;padding:14mm 13mm;
+                box-shadow:0 2px 12px rgba(0,0,0,.15);}}
+  table{{border-collapse:collapse;width:100%;}} td{{vertical-align:top;padding:0;}}
+  ul{{margin:3pt 0 4pt 14pt;padding:0;}} li{{margin-bottom:2pt;line-height:1.4;}}
+  a{{color:inherit;text-decoration:none;}}
+  .sh{{font-size:8pt;font-weight:bold;text-transform:uppercase;letter-spacing:1pt;
+       margin-top:9pt;margin-bottom:3pt;padding-bottom:2pt;}}
+  .nb{{page-break-inside:avoid;}}
+  @media print{{
+    body{{background:#fff;padding:0;}}
+    .resume-wrap{{box-shadow:none;padding:14mm 13mm;}}
+    @page{{size:A4;margin:14mm 13mm;}}
+  }}
+</style></head><body>
+<div class="resume-wrap">
+{html_fragment}
+</div></body></html>"""
+
+        # Store both for download and PDF rendering
+        st.session_state["generated_html"]     = html_content    # full doc for .html download
+        st.session_state["generated_fragment"]  = html_fragment   # fragment for PDF
 
 with tab2:
-    # ── Download Section ──
+    # ==========================
+    # 📥 Resume Download Header
+    # ==========================
     if "generated_html" in st.session_state:
-        st.markdown("""
-        <div style='text-align: center; margin-top: 20px; margin-bottom: 30px;'>
-            <h2 style='color: #2f4f6f; font-family: Arial, sans-serif; font-size: 24px;'>
-                📥 Download Your Resume
-            </h2>
-            <p style="color:#555; font-size:14px;">Choose your preferred format below</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style='text-align: center; margin-top: 20px; margin-bottom: 30px;'>
+                <h2 style='color: #2f4f6f; font-family: Arial, sans-serif; font-size: 24px;'>
+                    📥 Download Your Resume
+                </h2>
+                <p style="color:#555; font-size:14px;">
+                    Choose your preferred format below
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
         col1, = st.columns(1)
+
+        # HTML Resume Download Button
         with col1:
             html_bytes = st.session_state["generated_html"].encode("utf-8")
             html_file = BytesIO(html_bytes)
+            
             st.download_button(
-                label="⬇️ Download as Template (.html)",
+                label="⬇️ Download as Template",
                 data=html_file,
                 file_name=f"{st.session_state['name'].replace(' ', '_')}_Resume.html",
                 mime="text/html",
                 key="download_resume_html"
             )
 
-        pdf_resume_bytes = html_to_pdf_bytes(st.session_state["generated_html"])
-
+        # PDF Resume Download Button
+        pdf_resume_bytes = html_to_pdf_bytes(st.session_state.get("generated_fragment", st.session_state["generated_html"]))
+        
+        # ✅ Extra Help Note
         st.markdown("""
-        ✅ After downloading your HTML resume, you can
+        ✅ After downloading your HTML resume, you can 
         <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
         convert it to PDF using Sejda's free online tool</a>.
         """, unsafe_allow_html=True)
 
+        # ==========================
+        # 📩 Cover Letter Expander
+        # ==========================
         with st.expander("📩 Generate Cover Letter from This Resume"):
             generate_cover_letter_from_resume_builder()
 
+        # ==========================
+        # ✉️ Generated Cover Letter Downloads (NO PREVIEW HERE)
+        # ==========================
         if "cover_letter" in st.session_state:
-            st.markdown("""
-            <div style="margin-top: 30px; margin-bottom: 20px;">
-                <h3 style="color: #003366;">✉️ Generated Cover Letter</h3>
-                <p style="color:#555; font-size:14px;">Download your cover letter in multiple formats.</p>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                """
+                <div style="margin-top: 30px; margin-bottom: 20px;">
+                    <h3 style="color: #003366;">✉️ Generated Cover Letter</h3>
+                    <p style="color:#555; font-size:14px;">
+                        You can download your generated cover letter in multiple formats.
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
+            # ✅ Use already-rendered HTML from session (don't show again)
             styled_cover_letter = st.session_state.get("cover_letter_html", "")
+
+            # ✅ Generate PDF from styled HTML
             pdf_file = html_to_pdf_bytes(styled_cover_letter)
 
+            # ✅ DOCX Generator (preserves line breaks)
             def create_docx_from_text(text, filename="cover_letter.docx"):
                 from docx import Document
                 bio = BytesIO()
                 doc = Document()
                 doc.add_heading("Cover Letter", 0)
+
                 for line in text.split("\n"):
                     if line.strip():
                         doc.add_paragraph(line)
                     else:
-                        doc.add_paragraph("")
+                        doc.add_paragraph("")  # preserve empty lines
+
                 doc.save(bio)
                 bio.seek(0)
                 return bio
 
+            # ==========================
+            # 📥 Cover Letter Download Buttons
+            # ==========================
             st.markdown("""
             <div style="margin-top: 25px; margin-bottom: 15px;">
                 <strong>⬇️ Download Your Cover Letter:</strong>
             </div>
             """, unsafe_allow_html=True)
 
-            col1, col2 = st.columns(2)
+            col1,col2 = st.columns(2)
             with col1:
                 st.download_button(
                     label="📥 Download Cover Letter (.docx)",
@@ -5782,6 +5673,7 @@ with tab2:
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     key="download_coverletter_docx"
                 )
+            
             with col2:
                 st.download_button(
                     label="📥 Download Cover Letter (Template)",
@@ -5791,8 +5683,9 @@ with tab2:
                     key="download_coverletter_html"
                 )
 
+            # ✅ Helper note
             st.markdown("""
-            ✅ If the HTML cover letter doesn't display properly, you can
+            ✅ If the HTML cover letter doesn't display properly, you can 
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
