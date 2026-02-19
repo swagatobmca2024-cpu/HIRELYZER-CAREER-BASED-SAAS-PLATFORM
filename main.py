@@ -1,11 +1,5 @@
-# ============================================================
-# ⚙️  Production Environment — must be set BEFORE any import
-# ============================================================
 import os
-os.environ["STREAMLIT_WATCHDOG"] = "false"          # suppress file-watcher noise
-os.environ["TOKENIZERS_PARALLELISM"] = "false"      # prevent HuggingFace fork warnings
-os.environ["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"  # disable telemetry
-
+os.environ["STREAMLIT_WATCHDOG"] = "false"
 import json
 import random
 import string
@@ -101,331 +95,6 @@ from user_login import (
 # ============================================================
 os.makedirs(".streamlit_storage", exist_ok=True)
 DB_PATH = os.path.join(".streamlit_storage", "resume_data.db")
-
-# ============================================================
-# 🚀 PAGE CONFIG — Must be the FIRST Streamlit call
-# ============================================================
-st.set_page_config(
-    page_title="HIRELYZER — AI Resume Analyzer",
-    page_icon="💼",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-# ============================================================
-# 🎨 GLOBAL CSS — Injected ONCE here, never repeated per-tab.
-#    Inlining all styles prevents the flicker caused by CSS
-#    being re-injected on every Streamlit rerun / tab switch.
-# ============================================================
-_GLOBAL_CSS = """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&display=swap');
-
-/* ── Base ──────────────────────────────────────────────── */
-html, body, [class*="css"] {
-    font-family: 'Orbitron', sans-serif;
-    background-color: #0b0c10;
-    color: #c5c6c7;
-    scroll-behavior: smooth;
-}
-body, .main { background-color: #0d1117; color: white; }
-
-/* ── Scrollbar ─────────────────────────────────────────── */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: #1f2833; }
-::-webkit-scrollbar-thumb { background: #00ffff; border-radius: 4px; }
-
-/* ── Tabs — no-flicker fix ─────────────────────────────── */
-/* Prevent the white flash when switching tabs */
-[data-testid="stAppViewContainer"],
-[data-testid="stMain"],
-.stTabs [data-baseweb="tab-panel"] {
-    background-color: #0d1117 !important;
-}
-/* Tab bar styling */
-.stTabs [data-baseweb="tab-list"] {
-    background-color: rgba(10,20,40,0.6) !important;
-    border-radius: 12px;
-    padding: 4px;
-    gap: 4px;
-}
-.stTabs [data-baseweb="tab"] {
-    background-color: transparent !important;
-    border-radius: 8px;
-    color: #8b949e !important;
-    border: 1px solid transparent !important;
-    transition: all 0.2s ease !important;
-}
-.stTabs [aria-selected="true"] {
-    background-color: rgba(0,191,255,0.15) !important;
-    color: #00BFFF !important;
-    border: 1px solid rgba(0,191,255,0.3) !important;
-}
-/* Suppress the default tab underline flash */
-.stTabs [data-baseweb="tab-highlight"] { display: none !important; }
-
-/* ── Notifications ─────────────────────────────────────── */
-div.stAlert {
-    border-radius: 12px;
-    padding: 10px 14px;
-    animation: fadein 0.3s, fadeout 0.3s 2.7s;
-    text-align: center;
-}
-@keyframes fadein { from {opacity:0;} to {opacity:1;} }
-@keyframes fadeout { from {opacity:1;} to {opacity:0;} }
-
-/* ── Cards ─────────────────────────────────────────────── */
-.login-card {
-    background: linear-gradient(135deg,
-        rgba(0,191,255,0.1) 0%,
-        rgba(30,144,255,0.05) 50%,
-        rgba(0,191,255,0.1) 100%);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(0,191,255,0.2);
-    border-radius: 20px;
-    padding: 25px;
-    box-shadow: 0 8px 32px rgba(0,191,255,0.1), inset 0 1px 0 rgba(255,255,255,0.1);
-    font-family: 'Orbitron', sans-serif;
-    color: white;
-    margin-top: 20px;
-    position: relative;
-    overflow: hidden;
-}
-.feature-card {
-    background: radial-gradient(circle at top left, #1f2937, #111827);
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0 0 20px rgba(0,255,255,0.1);
-    text-align: center;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    color: #fff;
-    margin-bottom: 20px;
-}
-.feature-card:hover { transform: translateY(-10px); box-shadow: 0 0 30px rgba(0,255,255,0.4); }
-.feature-card h3 { color: #00BFFF; }
-.feature-card p  { color: #c9d1d9; }
-
-/* ── Inputs ─────────────────────────────────────────────── */
-.stTextInput > div > input,
-.stTextArea > div > textarea {
-    background: rgba(10,20,40,0.35);
-    border: 1px solid rgba(0,200,255,0.6);
-    border-radius: 14px;
-    color: #e6f7ff;
-    padding: 10px;
-    backdrop-filter: blur(16px);
-    box-shadow: 0 0 12px rgba(0,200,255,0.3), inset 0 0 15px rgba(0,200,255,0.05);
-    transition: all 0.3s ease-in-out;
-}
-.stTextInput > div > input:hover { border:1px solid #00BFFF; box-shadow:0 0 8px rgba(0,191,255,0.2); }
-.stTextInput > label { color: #c9d1d9; }
-
-/* ── Buttons ─────────────────────────────────────────────── */
-.stButton > button {
-    position: relative; overflow: hidden;
-    background: rgba(10,20,40,0.35);
-    border: 1px solid rgba(0,200,255,0.6);
-    color: #e6f7ff;
-    border-radius: 14px; padding: 10px 20px;
-    font-size: 16px; font-weight: 500; text-transform: uppercase;
-    backdrop-filter: blur(16px);
-    box-shadow: 0 0 12px rgba(0,200,255,0.35), inset 0 0 20px rgba(0,200,255,0.05);
-    transition: all 0.3s ease-in-out;
-}
-.stButton > button:hover { box-shadow: 0 0 20px rgba(0,200,255,0.6); transform: scale(1.02); }
-
-/* ── Metrics ─────────────────────────────────────────────── */
-.stMetric {
-    background-color: rgba(10,20,40,0.35);
-    border: 1px solid rgba(0,200,255,0.6);
-    border-radius: 14px; padding: 15px;
-    box-shadow: 0 0 12px rgba(0,200,255,0.35), inset 0 0 20px rgba(0,200,255,0.05);
-    text-align: center;
-}
-
-/* ── File Uploader ───────────────────────────────────────── */
-.stFileUploader > div > div {
-    border: 1px solid rgba(0,200,255,0.5);
-    border-radius: 14px;
-    background: rgba(10,20,40,0.35);
-    backdrop-filter: blur(14px);
-    color: #cce6ff;
-    box-shadow: 0 0 12px rgba(0,200,255,0.3);
-}
-
-/* ── Chat Messages ───────────────────────────────────────── */
-.stChatMessage {
-    font-size: 18px;
-    background: rgba(10,20,40,0.35);
-    border: 1px solid rgba(0,200,255,0.5);
-    border-radius: 14px; padding: 14px;
-    color: #e6f7ff;
-    text-shadow: 0 0 6px rgba(0,200,255,0.7);
-    box-shadow: 0 0 12px rgba(0,200,255,0.3), inset 0 0 15px rgba(0,200,255,0.05);
-}
-
-/* ── Banner ──────────────────────────────────────────────── */
-.banner-container {
-    width: 100%; height: 80px;
-    background: linear-gradient(90deg, #000428, #004e92);
-    border-bottom: 2px solid cyan;
-    overflow: hidden; display: flex;
-    align-items: center; justify-content: flex-start;
-    margin-bottom: 20px; border-radius: 12px;
-    backdrop-filter: blur(14px);
-}
-.pulse-bar {
-    position: absolute; display: flex; align-items: center;
-    font-size: 22px; font-weight: bold; color: #00ffff;
-    white-space: nowrap;
-    animation: glideIn 12s linear infinite;
-    text-shadow: 0 0 10px #00ffff;
-}
-.pulse-bar .bar {
-    width:10px; height:30px; margin-right:10px;
-    background:#00ffff; box-shadow:0 0 8px cyan;
-    animation: pulse 1s ease-in-out infinite;
-}
-@keyframes glideIn {
-    0%   { left:-50%; opacity:0; }
-    10%  { opacity:1; }
-    90%  { opacity:1; }
-    100% { left:110%; opacity:0; }
-}
-@keyframes pulse {
-    0%,100% { height:20px; background-color:#00ffff; }
-    50%      { height:40px; background-color:#ff00ff; }
-}
-
-/* ── Header ──────────────────────────────────────────────── */
-.header {
-    font-size: 28px; font-weight: bold;
-    text-align: center; text-transform: uppercase;
-    letter-spacing: 2px; padding: 20px 30px;
-    color: #00ffff; text-shadow: 0px 0px 10px #00ffff;
-    position: relative; overflow: hidden;
-    border-radius: 14px;
-    background: rgba(10,20,40,0.35);
-    backdrop-filter: blur(14px);
-    border: 1px solid rgba(0,200,255,0.5);
-    box-shadow: 0 0 12px rgba(0,200,255,0.25);
-}
-
-/* ── Shimmer utility ─────────────────────────────────────── */
-@keyframes shimmer {
-    0%   { background-position: -200% 0; }
-    100% { background-position:  200% 0; }
-}
-@keyframes glassShimmer {
-    0%   { transform: translateX(-100%) skewX(-15deg); }
-    100% { transform: translateX(200%)  skewX(-15deg); }
-}
-@keyframes float {
-    0%,100% { transform: translateY(0px); }
-    50%      { transform: translateY(-5px); }
-}
-@keyframes slideInLeft {
-    0%   { transform: translateX(-120%); opacity:0; }
-    100% { transform: translateX(0);     opacity:1; }
-}
-
-/* ── Glassmorphism slide messages ───────────────────────── */
-.slide-message {
-    position: relative; overflow: hidden;
-    margin: 16px 0; padding: 14px 20px;
-    border-radius: 14px; font-weight: 600;
-    font-size: 0.95em; display: flex;
-    align-items: center; justify-content: flex-start;
-    gap: 12px;
-    animation: slideIn 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards;
-    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1);
-    width: 100%; max-width: 100%; box-sizing: border-box;
-    line-height: 1.5; font-family: 'Orbitron', sans-serif;
-}
-
-/* ── Counter grid ────────────────────────────────────────── */
-.counter-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 250px);
-    column-gap: 40px; row-gap: 25px;
-    justify-content: center;
-    padding: 30px 10px; max-width: 600px; margin: 0 auto;
-}
-.counter-box {
-    background: linear-gradient(135deg,
-        rgba(0,191,255,0.1) 0%, rgba(30,144,255,0.05) 50%, rgba(0,191,255,0.1) 100%);
-    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-    border: 1px solid rgba(0,191,255,0.2); border-radius: 16px;
-    width: 100%; height: 120px;
-    display: flex; flex-direction: column;
-    justify-content: center; align-items: center;
-    transition: all 0.3s ease;
-    animation: float 3s ease-in-out infinite;
-}
-.counter-box:hover {
-    transform: translateY(-8px) scale(1.02);
-    border: 1px solid rgba(0,191,255,0.4);
-    box-shadow: 0 20px 40px rgba(0,191,255,0.1), inset 0 1px 0 rgba(255,255,255,0.1);
-}
-.counter-box:nth-child(1) { animation-delay: 0s; }
-.counter-box:nth-child(2) { animation-delay: 0.5s; }
-.counter-box:nth-child(3) { animation-delay: 1s; }
-.counter-box:nth-child(4) { animation-delay: 1.5s; }
-.counter-number {
-    font-size: 2.2em; font-weight: bold; color: #00BFFF;
-    margin: 0; text-shadow: 0 0 20px rgba(0,191,255,0.5);
-}
-.counter-label { margin-top: 8px; font-size: 1em; color: #c9d1d9; }
-
-/* ── Animated cards ──────────────────────────────────────── */
-.animated-cards {
-    margin-top: 40px; display: flex;
-    justify-content: center; position: relative; height: 260px;
-}
-.animated-cards img {
-    position: absolute; width: 220px;
-    animation: splitCards 2.5s ease-in-out infinite alternate;
-    z-index: 1;
-    filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
-}
-.animated-cards img:nth-child(1) { animation-delay:0s;   z-index:3; }
-.animated-cards img:nth-child(2) { animation-delay:0.3s; z-index:2; }
-.animated-cards img:nth-child(3) { animation-delay:0.6s; z-index:1; }
-@keyframes splitCards {
-    0%   { transform: scale(1) translateX(0) rotate(0deg); opacity:1; }
-    100% { transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity:1; }
-}
-.card-left   { --x-offset:-80px; --rot:-4deg; }
-.card-center { --x-offset:0px;   --rot:0deg;  }
-.card-right  { --x-offset:80px;  --rot:4deg;  }
-
-/* ── Mobile ──────────────────────────────────────────────── */
-@media (max-width: 768px) {
-    .pulse-bar { font-size: 16px; }
-    .header    { font-size: 20px; }
-    .counter-grid { grid-template-columns: repeat(2,140px); column-gap:16px; }
-}
-</style>
-"""
-st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
-
-# ============================================================
-# 🖼️  Cached image fetcher — prevents network call on EVERY
-#     rerun (the #1 cause of tab-switch flicker).
-# ============================================================
-@st.cache_data(show_spinner=False, ttl=86400)  # cache 24 h
-def _fetch_image_b64(url: str) -> str:
-    """Download remote image once; return base64 string."""
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        return b64encode(resp.content).decode()
-    except Exception:
-        return ""   # fail silently — image simply won't show
-
-
 
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
@@ -723,7 +392,84 @@ if "last_validated_username" not in st.session_state:
 if "last_validated_password" not in st.session_state:
     st.session_state.last_validated_password = ""
 
-# NOTE: All CSS previously here has been consolidated into _GLOBAL_CSS above.
+# ------------------- CSS Styling -------------------
+st.markdown("""
+<style>
+body, .main {
+    background-color: #0d1117;
+    color: white;
+}
+
+/* Smooth fade animation for notifications */
+div.stAlert {
+    border-radius: 12px;
+    padding: 10px 14px;
+    animation: fadein 0.3s, fadeout 0.3s 2.7s;
+    text-align: center;
+}
+@keyframes fadein { from {opacity: 0;} to {opacity: 1;} }
+@keyframes fadeout { from {opacity: 1;} to {opacity: 0;} }
+
+.login-card {
+    background: #161b22;
+    padding: 30px;
+    border-radius: 20px;
+    box-shadow: 0 0 25px rgba(0,0,0,0.3);
+    transition: all 0.4s ease;
+}
+.login-card:hover {
+    transform: translateY(-6px) scale(1.01);
+    box-shadow: 0 0 45px rgba(0,255,255,0.25);
+}
+.stTextInput > div > input {
+    background-color: #0d1117;
+    color: white;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 0.6em;
+}
+.stTextInput > div > input:hover {
+    border: 1px solid #00BFFF;
+    box-shadow: 0 0 8px rgba(0,191,255,0.2);
+}
+.stTextInput > label {
+    color: #c9d1d9;
+}
+.stButton > button {
+    background-color: #238636;
+    color: white;
+    border-radius: 10px;
+    padding: 0.6em 1.5em;
+    border: none;
+    font-weight: bold;
+}
+.stButton > button:hover {
+    background-color: #2ea043;
+    box-shadow: 0 0 10px rgba(46,160,67,0.4);
+    transform: scale(1.02);
+}
+.feature-card {
+    background: radial-gradient(circle at top left, #1f2937, #111827);
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 0 20px rgba(0,255,255,0.1);
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    color: #fff;
+    margin-bottom: 20px;
+}
+.feature-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 0 30px rgba(0,255,255,0.4);
+}
+.feature-card h3 {
+    color: #00BFFF;
+}
+.feature-card p {
+    color: #c9d1d9;
+}
+</style>
+""", unsafe_allow_html=True)
 # 🔹 VIDEO BACKGROUND & GLOW TEXT
 
 # ------------------- BEFORE LOGIN -------------------
@@ -752,30 +498,157 @@ if not st.session_state.authenticated:
             </div>
             """, unsafe_allow_html=True)
 
-    # -------- Animated Cards (cached — no network hit on rerun) --------
+    # -------- Animated Cards --------
     image_url = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"
-    img_base64 = _fetch_image_b64(image_url)
+    response = requests.get(image_url)
+    img_base64 = b64encode(response.content).decode()
 
-    # All CSS already injected once via _GLOBAL_CSS — no inline styles needed here.
     st.markdown(f"""
+    <style>
+    .animated-cards {{
+      margin-top: 30px;
+      display: flex;
+      justify-content: center;
+      position: relative;
+      height: 300px;
+    }}
+    .animated-cards img {{
+      position: absolute;
+      width: 240px;
+      animation: splitCards 2.5s ease-in-out infinite alternate;
+      z-index: 1;
+    }}
+    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
+    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
+    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
+    @keyframes splitCards {{
+      0% {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
+      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
+    }}
+    .card-left {{ --x-offset: -80px; --rot: -5deg; }}
+    .card-center {{ --x-offset: 0px; --rot: 0deg; }}
+    .card-right {{ --x-offset: 80px; --rot: 5deg; }}
+    </style>
     <div class="animated-cards">
-        <img class="card-left"   src="data:image/png;base64,{img_base64}" />
+        <img class="card-left" src="data:image/png;base64,{img_base64}" />
         <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right"  src="data:image/png;base64,{img_base64}" />
+        <img class="card-right" src="data:image/png;base64,{img_base64}" />
     </div>
     """, unsafe_allow_html=True)
 
-    # -------- Counter Section --------
+    # -------- Counter Section (Updated Layout & Style with glassmorphism and shimmer) --------
 
     # Fetch counters
     total_users = get_total_registered_users()
     active_logins = get_logins_today()
     stats = get_database_stats()
 
+# Replace static 15 with dynamic count
     resumes_uploaded = stats.get("total_candidates", 0)
+
     active_domains = stats.get("unique_domains", 0)
 
-    # Counter CSS already in _GLOBAL_CSS — emit only the data markup.
+
+    glassmorphism_counter_style = """
+    <style>
+    @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+    }
+    
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-5px); }
+    }
+
+    .counter-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 250px);
+        column-gap: 40px;
+        row-gap: 25px;
+        justify-content: center;
+        padding: 30px 10px;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .counter-box {
+        background: linear-gradient(135deg, 
+            rgba(0, 191, 255, 0.1) 0%, 
+            rgba(30, 144, 255, 0.05) 50%, 
+            rgba(0, 191, 255, 0.1) 100%);
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
+        border: 1px solid rgba(0, 191, 255, 0.2);
+        border-radius: 16px;
+        width: 100%;
+        height: 120px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        position: relative;
+        overflow: hidden;
+        transition: all 0.3s ease;
+        animation: float 3s ease-in-out infinite;
+    }
+
+    .counter-box::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(0, 191, 255, 0.3),
+            transparent
+        );
+        animation: shimmer 2s infinite;
+    }
+
+    .counter-box:hover {
+        transform: translateY(-8px) scale(1.02);
+        background: linear-gradient(135deg, 
+            rgba(0, 191, 255, 0.15) 0%, 
+            rgba(30, 144, 255, 0.08) 50%, 
+            rgba(0, 191, 255, 0.15) 100%);
+        border: 1px solid rgba(0, 191, 255, 0.4);
+        box-shadow: 
+            0 20px 40px rgba(0, 191, 255, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .counter-box:nth-child(1) { animation-delay: 0s; }
+    .counter-box:nth-child(2) { animation-delay: 0.5s; }
+    .counter-box:nth-child(3) { animation-delay: 1s; }
+    .counter-box:nth-child(4) { animation-delay: 1.5s; }
+
+    .counter-number {
+        font-size: 2.2em;
+        font-weight: bold;
+        color: #00BFFF;
+        margin: 0;
+        position: relative;
+        z-index: 2;
+        text-shadow: 0 0 20px rgba(0, 191, 255, 0.5);
+    }
+
+    .counter-label {
+        margin-top: 8px;
+        font-size: 1em;
+        color: #c9d1d9;
+        position: relative;
+        z-index: 2;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+    </style>
+    """
+
+    st.markdown(glassmorphism_counter_style, unsafe_allow_html=True)
+
     st.markdown(f"""
     <div class="counter-grid">
         <div class="counter-box">
@@ -797,16 +670,386 @@ if not st.session_state.authenticated:
     </div>
     """, unsafe_allow_html=True)
 
-    # ✅ Futuristic silhouette (cached — no network call on rerun)
-    image_url_silhouette = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png"
-    img_base64_silhouette = _fetch_image_b64(image_url_silhouette)
+if not st.session_state.get("authenticated", False):
 
-    # All styles already in _GLOBAL_CSS — only emit the HTML markup.
+    # ✅ Futuristic silhouette
+    image_url = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png"
+    response = requests.get(image_url)
+    img_base64 = b64encode(response.content).decode()
+
+    # ✅ Inject glassmorphism CSS with shimmer effects
     st.markdown(f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
+
+    @keyframes shimmer {{
+        0% {{ background-position: -200% 0; }}
+        100% {{ background-position: 200% 0; }}
+    }}
+
+    @keyframes glassShimmer {{
+        0% {{ transform: translateX(-100%) skewX(-15deg); }}
+        100% {{ transform: translateX(200%) skewX(-15deg); }}
+    }}
+
+    /* ===== Card Shuffle Animation ===== */
+    .animated-cards {{
+      margin-top: 40px;
+      display: flex;
+      justify-content: center;
+      position: relative;
+      height: 260px;
+    }}
+    .animated-cards img {{
+      position: absolute;
+      width: 220px;
+      animation: splitCards 2.5s ease-in-out infinite alternate;
+      z-index: 1;
+      filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
+    }}
+    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
+    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
+    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
+
+    @keyframes splitCards {{
+      0%   {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
+      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
+    }}
+    .card-left   {{ --x-offset: -80px; --rot: -4deg; }}
+    .card-center {{ --x-offset: 0px;  --rot: 0deg;  }}
+    .card-right  {{ --x-offset: 80px;  --rot: 4deg;  }}
+
+    /* ===== Glassmorphism Login Card ===== */
+    .login-card {{
+      background: linear-gradient(135deg,
+        rgba(0, 191, 255, 0.1) 0%,
+        rgba(30, 144, 255, 0.05) 50%,
+        rgba(0, 191, 255, 0.1) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 191, 255, 0.2);
+      border-radius: 20px;
+      padding: 25px;
+      box-shadow:
+        0 8px 32px rgba(0, 191, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      font-family: 'Orbitron', sans-serif;
+      color: white;
+      margin-top: 20px;
+      opacity: 0;
+      transform: translateX(-120%);
+      animation: slideInLeft 1.2s ease-out forwards;
+      position: relative;
+      overflow: hidden;
+    }}
+
+    .login-card::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(0, 191, 255, 0.2),
+        transparent
+      );
+      animation: glassShimmer 3s infinite;
+    }}
+
+    @keyframes slideInLeft {{
+      0%   {{ transform: translateX(-120%); opacity: 0; }}
+      100% {{ transform: translateX(0); opacity: 1; }}
+    }}
+
+    .login-card h2 {{
+      text-align: center;
+      font-size: 1.6rem;
+      text-shadow: 0 0 15px rgba(0, 191, 255, 0.5);
+      margin-bottom: 15px;
+      position: relative;
+      z-index: 2;
+    }}
+    .login-card h2 span {{ color: #00BFFF; }}
+
+    /* ===== Enhanced Message Cards with Consistent Layout ===== */
+    .slide-message {{
+      position: relative;
+      overflow: hidden;
+      margin: 16px 0;
+      padding: 14px 20px;
+      border-radius: 14px;
+      font-weight: 600;
+      font-size: 0.95em;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 12px;
+      animation: slideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      line-height: 1.5;
+      font-family: 'Orbitron', sans-serif;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      min-height: 50px;
+    }}
+
+    .slide-message:hover {{
+      transform: translateY(-3px) scale(1.01);
+      box-shadow:
+        0 8px 30px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }}
+
+    .slide-message::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.1),
+        transparent
+      );
+      transition: left 0.5s;
+    }}
+
+    .slide-message:hover::before {{
+      left: 100%;
+    }}
+
+    .slide-message svg {{
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      filter: drop-shadow(0 0 6px currentColor);
+      z-index: 2;
+    }}
+
+    .slide-message-text {{
+      flex: 1;
+      z-index: 2;
+      position: relative;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      white-space: normal;
+    }}
+
+    .success-msg {{
+      background: linear-gradient(135deg,
+        rgba(0, 255, 127, 0.20) 0%,
+        rgba(0, 255, 127, 0.08) 100%);
+      border: 2px solid rgba(0, 255, 127, 0.4);
+      color: #00FF7F;
+      text-shadow: 0 0 12px rgba(0, 255, 127, 0.4);
+    }}
+
+    .error-msg {{
+      background: linear-gradient(135deg,
+        rgba(255, 99, 71, 0.20) 0%,
+        rgba(255, 99, 71, 0.08) 100%);
+      border: 2px solid rgba(255, 99, 71, 0.4);
+      color: #FF6347;
+      text-shadow: 0 0 12px rgba(255, 99, 71, 0.4);
+    }}
+
+    .info-msg {{
+      background: linear-gradient(135deg,
+        rgba(30, 144, 255, 0.20) 0%,
+        rgba(30, 144, 255, 0.08) 100%);
+      border: 2px solid rgba(30, 144, 255, 0.4);
+      color: #1E90FF;
+      text-shadow: 0 0 12px rgba(30, 144, 255, 0.4);
+    }}
+
+    .warn-msg {{
+      background: linear-gradient(135deg,
+        rgba(255, 215, 0, 0.20) 0%,
+        rgba(255, 215, 0, 0.08) 100%);
+      border: 2px solid rgba(255, 215, 0, 0.4);
+      color: #FFD700;
+      text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
+    }}
+
+    @keyframes slideIn {{
+      0%   {{
+        transform: translateX(-50px);
+        opacity: 0;
+      }}
+      100% {{
+        transform: translateX(0);
+        opacity: 1;
+      }}
+    }}
+
+    /* ===== Improved Timer Display ===== */
+    .timer-display {{
+      background: linear-gradient(135deg,
+        rgba(255, 215, 0, 0.18) 0%,
+        rgba(255, 165, 0, 0.08) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border: 2px solid rgba(255, 215, 0, 0.4);
+      border-radius: 14px;
+      padding: 16px 24px;
+      margin: 20px 0;
+      text-align: center;
+      box-shadow:
+        0 4px 20px rgba(255, 215, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }}
+
+    .timer-display::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 215, 0, 0.2),
+        transparent
+      );
+      animation: glassShimmer 3s infinite;
+    }}
+
+    .timer-display:hover {{
+      box-shadow:
+        0 8px 30px rgba(255, 215, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      transform: translateY(-3px);
+    }}
+
+    .timer-text {{
+      color: #FFD700;
+      font-size: 1.15em;
+      font-weight: bold;
+      font-family: 'Orbitron', sans-serif;
+      text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
+      position: relative;
+      z-index: 2;
+    }}
+
+    .timer-expired {{
+      background: linear-gradient(135deg,
+        rgba(255, 99, 71, 0.18) 0%,
+        rgba(255, 99, 71, 0.08) 100%);
+      border: 2px solid rgba(255, 99, 71, 0.4);
+    }}
+
+    .timer-expired .timer-text {{
+      color: #FF6347;
+      text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
+    }}
+
+    /* ===== Glassmorphism Buttons ===== */
+    .stButton>button {{
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.2) 0%, 
+        rgba(30, 144, 255, 0.1) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      color: white;
+      border: 1px solid rgba(0, 191, 255, 0.3);
+      border-radius: 12px;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: bold;
+      padding: 8px 20px;
+      box-shadow: 
+        0 4px 16px rgba(0, 191, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }}
+    
+    .stButton>button::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent
+      );
+      transition: left 0.5s;
+    }}
+    
+    .stButton>button:hover {{
+      transform: translateY(-2px);
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.3) 0%, 
+        rgba(30, 144, 255, 0.15) 100%);
+      border: 1px solid rgba(0, 191, 255, 0.5);
+      box-shadow: 
+        0 8px 25px rgba(0, 191, 255, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }}
+    
+    .stButton>button:hover::before {{
+      left: 100%;
+    }}
+
+    /* ===== Glassmorphism Input Fields ===== */
+    .stTextInput input {{
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.08) 0%, 
+        rgba(30, 144, 255, 0.04) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border: 1px solid rgba(0, 191, 255, 0.2);
+      border-radius: 10px;
+      padding: 10px;
+      color: #E0F7FF;
+      font-family: 'Orbitron', sans-serif;
+      box-shadow: 
+        0 4px 16px rgba(0, 191, 255, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transition: all 0.3s ease-in-out;
+    }}
+    .stTextInput input:focus {{
+      outline: none !important;
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.12) 0%, 
+        rgba(30, 144, 255, 0.06) 100%);
+      border: 1px solid rgba(0, 191, 255, 0.4);
+      box-shadow: 
+        0 8px 25px rgba(0, 191, 255, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transform: translateY(-1px);
+    }}
+    .stTextInput label {{
+      font-family: 'Orbitron', sans-serif;
+      color: #00BFFF !important;
+      text-shadow: 0 0 10px rgba(0, 191, 255, 0.3);
+    }}
+    </style>
+
+    <!-- Animated Cards -->
     <div class="animated-cards">
-        <img class="card-left"   src="data:image/png;base64,{img_base64_silhouette}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64_silhouette}" />
-        <img class="card-right"  src="data:image/png;base64,{img_base64_silhouette}" />
+        <img class="card-left" src="data:image/png;base64,{img_base64}" />
+        <img class="card-center" src="data:image/png;base64,{img_base64}" />
+        <img class="card-right" src="data:image/png;base64,{img_base64}" />
     </div>
     """, unsafe_allow_html=True)
 
@@ -844,6 +1087,7 @@ if not st.session_state.authenticated:
                         log_user_action(st.session_state.username, "login")
 
                         notify("login", "success", "✅ Login successful!")
+                        time.sleep(3.0)
                         st.rerun()
                     else:
                         notify("login", "error", "❌ Invalid credentials. Please try again.")
@@ -884,6 +1128,7 @@ if not st.session_state.authenticated:
                                     st.session_state.reset_stage = "verify_otp"
 
                                     notify("login", "success", "✅ OTP sent successfully to your email!")
+                                    time.sleep(0.5)
                                     st.rerun()
                                 else:
                                     notify("login", "error", "❌ Failed to send OTP. Please try again.")
@@ -1133,7 +1378,9 @@ if not st.session_state.authenticated:
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_email = new_email
-                        # Validation message stays until next keystroke triggers rerun
+                        # Auto-hide after 3 seconds by clearing after delay
+                        time.sleep(3)
+                        email_validation_placeholder.empty()
                 elif not new_email:
                     email_validation_placeholder.empty()
                     st.session_state.last_validated_email = ""
@@ -1160,7 +1407,8 @@ if not st.session_state.authenticated:
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_username = new_user
-                        # Stays visible until next keystroke
+                        time.sleep(3)
+                        username_validation_placeholder.empty()
                 elif not new_user:
                     username_validation_placeholder.empty()
                     st.session_state.last_validated_username = ""
@@ -1188,7 +1436,8 @@ if not st.session_state.authenticated:
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_password = new_pass
-                        # Stays visible until next keystroke
+                        time.sleep(3)
+                        password_validation_placeholder.empty()
                 elif not new_pass:
                     password_validation_placeholder.empty()
                     st.session_state.last_validated_password = ""
@@ -1212,6 +1461,7 @@ if not st.session_state.authenticated:
                             success, message = add_user(new_user.strip(), new_pass.strip(), new_email.strip())
                             if success:
                                 notify("register", "success", message)
+                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("register", "error", message)
@@ -1272,7 +1522,7 @@ if st.session_state.get("authenticated"):
         save_user_api_key(st.session_state.username, None)
         st.sidebar.success("✅ Cleared saved Groq API key. Now using shared admin key.")
 
-if st.session_state.get("authenticated") and st.session_state.get("username") == "admin":
+if st.session_state.username == "admin":
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown("<h2 style='color:#00BFFF;'>📊 Admin Dashboard</h2>", unsafe_allow_html=True)
 
@@ -1321,7 +1571,7 @@ tab_labels = [
 ]
 
 # Add Admin tab only for admin user
-if st.session_state.get("authenticated") and st.session_state.get("username") == "admin":
+if st.session_state.username == "admin":
     tab_labels.append("📁 Admin DB View")
 
 # Create tabs dynamically
@@ -1333,9 +1583,251 @@ tab1, tab2, tab3, tab4 = tabs[:4]
 # Handle optional admin tab
 tab5 = tabs[4] if len(tabs) > 4 else None
 with tab1:
-    # All styling already injected once via _GLOBAL_CSS — no per-tab CSS injection.
-    # Injecting CSS inside a tab block causes a visible flash on every tab switch.
     st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
+    html, body, [class*="css"] {
+        font-family: 'Orbitron', sans-serif;
+        background-color: #0b0c10;
+        color: #c5c6c7;
+        scroll-behavior: smooth;
+    }
+
+    /* ---------- SCROLLBAR ---------- */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #1f2833; }
+    ::-webkit-scrollbar-thumb { background: #00ffff; border-radius: 4px; }
+
+    /* ---------- BANNER ---------- */
+    .banner-container {
+        width: 100%;
+        height: 80px;
+        background: linear-gradient(90deg, #000428, #004e92);
+        border-bottom: 2px solid cyan;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        position: relative;
+        margin-bottom: 20px;
+        border-radius: 12px;
+        backdrop-filter: blur(14px);
+    }
+    .pulse-bar {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        font-size: 22px;
+        font-weight: bold;
+        color: #00ffff;
+        white-space: nowrap;
+        animation: glideIn 12s linear infinite;
+        text-shadow: 0 0 10px #00ffff;
+    }
+    .pulse-bar .bar {
+        width: 10px;
+        height: 30px;
+        margin-right: 10px;
+        background: #00ffff;
+        box-shadow: 0 0 8px cyan;
+        animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes glideIn {
+        0% { left: -50%; opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { left: 110%; opacity: 0; }
+    }
+    @keyframes pulse {
+        0%, 100% { height: 20px; background-color: #00ffff; }
+        50% { height: 40px; background-color: #ff00ff; }
+    }
+
+    /* ---------- HEADER ---------- */
+    .header {
+        font-size: 28px;
+        font-weight: bold;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        padding: 20px 30px;  /* ✅ More spacing inside the bar */
+        color: #00ffff;
+        text-shadow: 0px 0px 10px #00ffff;
+        position: relative;
+        overflow: hidden;
+        border-radius: 14px;
+        background: rgba(10,20,40,0.35);
+        backdrop-filter: blur(14px);
+        border: 1px solid rgba(0,200,255,0.5);
+        box-shadow: 0 0 12px rgba(0,200,255,0.25);
+    }
+    .header::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(
+            120deg,
+            rgba(255,255,255,0.18) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%
+        );
+        transform: rotate(25deg);
+        transition: all 0.6s;
+    }
+    .header:hover::before { left: 100%; top: 100%; }
+
+    /* ---------- SHIMMER (COMMON) ---------- */
+    .shimmer::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(
+            120deg,
+            rgba(255,255,255,0.15) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%
+        );
+        transform: rotate(25deg);
+        transition: all 0.6s;
+    }
+    .shimmer:hover::before { left: 100%; top: 100%; }
+
+    /* ---------- FILE UPLOADER ---------- */
+    .stFileUploader > div > div {
+        border: 1px solid rgba(0,200,255,0.5);
+        border-radius: 14px;
+        background: rgba(10,20,40,0.35);
+        backdrop-filter: blur(14px);
+        color: #cce6ff;
+        box-shadow: 0 0 12px rgba(0,200,255,0.3);
+        position: relative;
+        overflow: hidden;
+    }
+    .stFileUploader > div > div::before {
+        content: "";
+        position: absolute; top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: linear-gradient(120deg,
+            rgba(255,255,255,0.15) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%);
+        transform: rotate(25deg);
+        transition: all 0.6s;
+    }
+    .stFileUploader > div > div:hover::before { left: 100%; top: 100%; }
+
+    /* ---------- BUTTONS ---------- */
+    .stButton > button {
+        position: relative;
+        overflow: hidden;
+        background: rgba(10,20,40,0.35);
+        border: 1px solid rgba(0,200,255,0.6);
+        color: #e6f7ff;
+        border-radius: 14px;
+        padding: 10px 20px;
+        font-size: 16px;
+        font-weight: 500;
+        text-transform: uppercase;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 0 12px rgba(0,200,255,0.35),
+                    inset 0 0 20px rgba(0,200,255,0.05);
+        transition: all 0.3s ease-in-out;
+    }
+    .stButton > button::before {
+        content: "";
+        position: absolute; top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: linear-gradient(120deg,
+            rgba(255,255,255,0.15) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%);
+        transform: rotate(25deg);
+        transition: all 0.6s;
+    }
+    .stButton > button:hover::before { left: 100%; top: 100%; }
+
+    /* ---------- INPUTS ---------- */
+    .stTextInput > div > input,
+    .stTextArea > div > textarea {
+        position: relative;
+        overflow: hidden;
+        background: rgba(10,20,40,0.35);
+        border: 1px solid rgba(0,200,255,0.6);
+        border-radius: 14px;
+        color: #e6f7ff;
+        padding: 10px;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 0 12px rgba(0,200,255,0.3),
+                    inset 0 0 15px rgba(0,200,255,0.05);
+        transition: all 0.3s ease-in-out;
+    }
+
+    /* ---------- CHAT MESSAGES ---------- */
+    .stChatMessage {
+        position: relative;
+        overflow: hidden;
+        font-size: 18px;
+        background: rgba(10,20,40,0.35);
+        border: 1px solid rgba(0,200,255,0.5);
+        border-radius: 14px;
+        padding: 14px;
+        color: #e6f7ff;
+        text-shadow: 0 0 6px rgba(0,200,255,0.7);
+        box-shadow: 0 0 12px rgba(0,200,255,0.3),
+                    inset 0 0 15px rgba(0,200,255,0.05);
+    }
+    .stChatMessage::before {
+        content: "";
+        position: absolute; top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: linear-gradient(120deg,
+            rgba(255,255,255,0.15) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%);
+        transform: rotate(25deg);
+        transition: all 0.6s;
+    }
+    .stChatMessage:hover::before { left: 100%; top: 100%; }
+
+    /* ---------- METRICS ---------- */
+    .stMetric {
+        position: relative;
+        overflow: hidden;
+        background-color: rgba(10,20,40,0.35);
+        border: 1px solid rgba(0,200,255,0.6);
+        border-radius: 14px;
+        padding: 15px;
+        box-shadow: 0 0 12px rgba(0,200,255,0.35),
+                    inset 0 0 20px rgba(0,200,255,0.05);
+        text-align: center;
+    }
+    .stMetric::before {
+        content: "";
+        position: absolute; top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: linear-gradient(120deg,
+            rgba(255,255,255,0.15) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%);
+        transform: rotate(25deg);
+        transition: all 0.6s;
+    }
+    .stMetric:hover::before { left: 100%; top: 100%; }
+
+    /* ---------- MOBILE ---------- */
+    @media (max-width: 768px) {
+        .pulse-bar { font-size: 16px; }
+        .header { font-size: 20px; }
+    }
+    </style>
+
     <!-- Banner -->
     <div class="banner-container">
         <div class="pulse-bar">
@@ -1348,10 +1840,9 @@ with tab1:
     <div class="header">💼 HIRELYZER - AI BASED ETHICAL RESUME ANALYZER</div>
     """, unsafe_allow_html=True)
 
-# ── Module-level init (runs ONCE on cold start, cached thereafter) ────────────
+# Load environment variables
 load_dotenv()
 
-# ── Module-level init (runs ONCE on cold start, cached thereafter) ────────────
 # Detect Device
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 torch.backends.cudnn.benchmark = True
@@ -1621,93 +2112,140 @@ replacement_mapping = {
         "open-minded": "inclusive"
     }
 }
+
 def rewrite_text_with_llm(text, replacement_mapping, user_location):
     """
-    Uses LLM to rewrite a resume with bias-free language, while preserving
-    the original content length. Enhances grammar, structure, and clarity.
-    Ensures structured formatting and includes relevant links and job suggestions.
+    Enhanced resume rewrite engine (backward compatible).
+    - Improves structure, clarity, and ATS readiness
+    - Fills missing sections using internal evidence
+    - Maintains bias-free language
+    - Preserves and ENFORCES suggested job titles output
     """
 
-    # Create a clear mapping in bullet format
+    # -----------------------------
+    # Format bias replacement rules
+    # -----------------------------
     formatted_mapping = "\n".join(
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
-    # Prompt for LLM
+    # -----------------------------
+    # MASTER PROMPT
+    # -----------------------------
     prompt = f"""
-You are an expert resume editor and career advisor.
+You are an ATS Resume Optimization Engine used by recruiters.
 
-Your tasks:
+You will receive:
+1. Original Resume Text
+2. Bias Replacement Rules
+3. Candidate Location
 
-1. ✨ Rewrite the resume text below with these rules:
-   - Replace any biased or gender-coded language using the exact matches from the replacement mapping.
-   - Do NOT reduce the length of any section — preserve the original **number of words per section**.
-   - Improve grammar, tone, sentence clarity, and flow without shortening or removing any content.
-   - Do NOT change or remove names, tools, technologies, certifications, or project details.
+Your goal is to REBUILD the resume to be recruiter-ready,
+ATS-optimized, and internally consistent — not just paraphrased.
 
-2. 🧾 Structure the resume using these sections **if present** in the original, keeping the original text size:
-   - 🏷️ **Name**
-   - 📞 **Contact Information**
-   - 📍 **Location**
-   - 📧 **Email**
-   - 🔗 **LinkedIn** → If missing, insert: 🔗 Please paste your LinkedIn URL here.
-   - 🌐 **Portfolio** → If missing, insert: 🌐 Please paste your GitHub or portfolio link here.
-   - ✍️ **Professional Summary**
-   - 💼 **Work Experience**
-   - 🧑‍💼 **Internships**
-   - 🛠️ **Skills**
-   - 🤝 **Soft Skills**
-   - 🎓 **Certifications**
-   - 🏫 **Education**
-   - 📂 **Projects**
-   - 🌟 **Interests**
+==============================
+🔒 CRITICAL RULES (STRICT)
+==============================
 
-   - Use bullet points (•) inside each section for clarity.
-   - Maintain new lines after each points properly.
-   - Keep all hyperlinks intact and show them in full where applicable (e.g., LinkedIn, GitHub, project links).
-   - Do not invent or assume any information not present in the original.
+- DO NOT invent companies, job titles, degrees, or years.
+- You MAY:
+  • Improve and expand bullet points
+  • CREATE missing sections if evidence exists elsewhere in the resume
+  • Move skills mentioned in projects/experience into the Skills section
+  • Infer tools/technologies ONLY if clearly implied
+- Use neutral, bias-free language (apply mapping exactly).
+- Maintain ATS-friendly formatting.
 
-3. 📌 Strictly apply this **replacement mapping** (match exact phrases only — avoid altering keywords or terminology):
+==============================
+📌 OPTIMIZATION RULES
+==============================
+
+1. Professional Summary must reflect the strongest role
+   inferred from the resume.
+2. Skills section MUST include:
+   - All tools, technologies, and methods mentioned anywhere in the resume
+   - Clean, ATS-friendly keyword list
+3. If any of these sections are missing, CREATE them:
+   - 🛠️ Skills
+   - 📂 Projects
+   - 🎓 Certifications (only if tools/skills imply them)
+   - 🤝 Soft Skills (professionally inferred)
+4. Projects MUST include:
+   - Action verbs
+   - Tech stack
+   - Outcome or contribution
+5. Experience bullets must follow:
+   Action Verb + Task + Tool + Impact
+
+==============================
+🧾 REQUIRED OUTPUT STRUCTURE
+==============================
+
+Return a COMPLETE resume with these sections (skip only if impossible):
+
+🏷️ Name  
+📞 Contact Information  
+📍 Location  
+📧 Email  
+🔗 LinkedIn  
+🌐 Portfolio / GitHub  
+
+✍️ Professional Summary  
+🛠️ Skills  
+💼 Work Experience  
+🧑‍💼 Internships  
+📂 Projects  
+🎓 Certifications  
+🏫 Education  
+🤝 Soft Skills  
+🌟 Interests  
+
+- Use bullet points (•)
+- Clean spacing
+- ATS-friendly formatting
+- NO explanations inside resume
+
+==============================
+🧠 APPLY BIAS REPLACEMENTS
+==============================
 {formatted_mapping}
 
-4. 💼 Suggest **5 relevant job titles** suited for this candidate based in **{user_location}**. For each:
-   - Provide a detailed  reason for relevance.
-   - Attach a direct LinkedIn job search URL.
-
----
-
-### 📄 Original Resume Text
+==============================
+📄 ORIGINAL RESUME
+==============================
 \"\"\"{text}\"\"\"
 
----
+==============================
+🎯 REQUIRED JOB TITLE SUGGESTIONS
+==============================
 
-### ✅ Bias-Free Rewritten Resume (Fully Structured, Same Length)
+After the resume, you MUST include a clearly separated section titled:
 
----
+### 🎯 Suggested Job Titles (Based on Resume)
 
-### 🎯 Suggested Job Titles with Reasoning and LinkedIn Search Links
+Provide EXACTLY **5 job titles** suitable for a candidate located in **{user_location}**.
 
-1. **[Job Title 1]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%201&location={user_location})
+For EACH job title:
+- Give a clear, specific reason for relevance
+- Provide a DIRECT LinkedIn job search URL
 
-2. **[Job Title 2]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%202&location={user_location})
+FORMAT STRICTLY AS:
 
-3. **[Job Title 3]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%203&location={user_location})
+1. **Job Title** — Reason  
+🔗 https://www.linkedin.com/jobs/search/?keywords=Job%20Title&location={user_location}
 
-4. **[Job Title 4]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%204&location={user_location})
-
-5. **[Job Title 5]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%205&location={user_location})
+==============================
+✅ OUTPUT
+==============================
+1. Optimized Resume Content
+2. Suggested Job Titles Section (MANDATORY)
 """
 
-    # Call the LLM of your choice
+    # -----------------------------
+    # Call LLM
+    # -----------------------------
     response = call_llm(prompt, session=st.session_state)
     return response
-
-
 
 
 def rewrite_and_highlight(text, replacement_mapping, user_location):
@@ -3236,6 +3774,7 @@ with tab1:
 
     else:           
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
+
 from xhtml2pdf import pisa
 from io import BytesIO
 
@@ -5512,7 +6051,6 @@ with tab2:
     st.session_state.setdefault("project_entries", [{"title": "", "tech": "", "duration": "", "description": ""}])
     st.session_state.setdefault("project_links", [])
     st.session_state.setdefault("certificate_links", [{"name": "", "link": "", "duration": "", "description": ""}])
-    st.session_state.setdefault("form_key_counter", 0)
 
     # ---------------- Sidebar (ONLY in Tab 2) ----------------
     with st.sidebar:
@@ -5566,211 +6104,185 @@ with tab2:
                     st.session_state.certificate_links.pop()
 
     # ---------------- Resume Form ----------------
-    fk = st.session_state["form_key_counter"]
-    with st.form(f"resume_form_{fk}", clear_on_submit=False):
+    with st.form("resume_form", clear_on_submit=False):
         st.markdown("### 👤 <u>Personal Information</u>", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
-            st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, key=f"name_input_{fk}")
-            st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, key=f"phone_input_{fk}")
-            st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, key=f"loc_input_{fk}")
+            st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, key="name_input")
+            st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, key="phone_input")
+            st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, key="loc_input")
         with col2:
-            st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, key=f"email_input_{fk}")
-            st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, key=f"ln_input_{fk}")
-            st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, key=f"port_input_{fk}")
-            st.session_state.job_title = st.text_input("💼 Job Title", value=st.session_state.job_title, key=f"job_input_{fk}")
+            st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, key="email_input")
+            st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, key="ln_input")
+            st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, key="port_input")
+            st.session_state.job_title = st.text_input("💼 Job Title", value=st.session_state.job_title, key="job_input")
 
         st.markdown("### 📝 <u>Professional Summary</u>", unsafe_allow_html=True)
-        st.session_state.summary = st.text_area("Summary", value=st.session_state.summary, key=f"summary_input_{fk}")
+        st.session_state.summary = st.text_area("Summary", value=st.session_state.summary, key="summary_input")
 
         st.markdown("### 💼 <u>Skills, Languages, Interests & Soft Skills</u>", unsafe_allow_html=True)
-        st.session_state.skills = st.text_area("Skills (comma-separated)", value=st.session_state.skills, key=f"skills_input_{fk}")
-        st.session_state.languages = st.text_area("Languages (comma-separated)", value=st.session_state.languages, key=f"lang_input_{fk}")
-        st.session_state.interests = st.text_area("Interests (comma-separated)", value=st.session_state.interests, key=f"int_input_{fk}")
-        st.session_state.Softskills = st.text_area("Softskills (comma-separated)", value=st.session_state.Softskills, key=f"soft_input_{fk}")
+        st.session_state.skills = st.text_area("Skills (comma-separated)", value=st.session_state.skills, key="skills_input")
+        st.session_state.languages = st.text_area("Languages (comma-separated)", value=st.session_state.languages, key="lang_input")
+        st.session_state.interests = st.text_area("Interests (comma-separated)", value=st.session_state.interests, key="int_input")
+        st.session_state.Softskills = st.text_area("Softskills (comma-separated)", value=st.session_state.Softskills, key="soft_input")
 
         st.markdown("### 🧱 <u>Work Experience</u>", unsafe_allow_html=True)
         for idx, exp in enumerate(st.session_state.experience_entries):
             with st.expander(f"Experience #{idx+1}", expanded=True):
-                exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["company"] = st.text_input("Company", value=exp.get("company", ""), key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["description"] = st.text_area("Description", value=exp.get("description", ""), key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), key=f"title_{idx}_{len(st.session_state.experience_entries)}")
+                exp["company"] = st.text_input("Company", value=exp.get("company", ""), key=f"company_{idx}_{len(st.session_state.experience_entries)}")
+                exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), key=f"duration_{idx}_{len(st.session_state.experience_entries)}")
+                exp["description"] = st.text_area("Description", value=exp.get("description", ""), key=f"description_{idx}_{len(st.session_state.experience_entries)}")
 
         st.markdown("### 🎓 <u>Education</u>", unsafe_allow_html=True)
         for idx, edu in enumerate(st.session_state.education_entries):
             with st.expander(f"Education #{idx+1}", expanded=True):
-                edu["degree"] = st.text_input("Degree", value=edu.get("degree", ""), key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["year"] = st.text_input("Year", value=edu.get("year", ""), key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["details"] = st.text_area("Details", value=edu.get("details", ""), key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                edu["degree"] = st.text_input("Degree", value=edu.get("degree", ""), key=f"degree_{idx}_{len(st.session_state.education_entries)}")
+                edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), key=f"institution_{idx}_{len(st.session_state.education_entries)}")
+                edu["year"] = st.text_input("Year", value=edu.get("year", ""), key=f"edu_year_{idx}_{len(st.session_state.education_entries)}")
+                edu["details"] = st.text_area("Details", value=edu.get("details", ""), key=f"edu_details_{idx}_{len(st.session_state.education_entries)}")
 
         st.markdown("### 🛠 <u>Projects</u>", unsafe_allow_html=True)
         for idx, proj in enumerate(st.session_state.project_entries):
             with st.expander(f"Project #{idx+1}", expanded=True):
-                proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["description"] = st.text_area("Description", value=proj.get("description", ""), key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), key=f"proj_title_{idx}_{len(st.session_state.project_entries)}")
+                proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}")
+                proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}")
+                proj["description"] = st.text_area("Description", value=proj.get("description", ""), key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}")
 
         st.markdown("### 🔗 Project Links")
-        project_links_input = st.text_area("Enter one project link per line:", value="\n".join(st.session_state.project_links), key=f"proj_links_input_{fk}")
+        project_links_input = st.text_area("Enter one project link per line:", value="\n".join(st.session_state.project_links), key="proj_links_input")
         if project_links_input:
             st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
 
         st.markdown("### 🧾 <u>Certificates</u>", unsafe_allow_html=True)
         for idx, cert in enumerate(st.session_state.certificate_links):
             with st.expander(f"Certificate #{idx+1}", expanded=True):
-                cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""), key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}")
+                cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""), key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}")
+                cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}")
+                cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}")
 
-        btn_col1, btn_col2 = st.columns([1, 1])
-        with btn_col1:
-            submitted = st.form_submit_button("📑 Generate Resume", use_container_width=True)
-        with btn_col2:
-            clear_clicked = st.form_submit_button("🗑️ Clear Form", use_container_width=True)
+        submitted = st.form_submit_button("📑 Generate Resume")
 
         if submitted:
             st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
 
-        if clear_clicked:
-            # Clear all data fields
-            fields_to_clear = ["name", "email", "phone", "linkedin", "location", "portfolio",
-                               "summary", "skills", "languages", "interests", "Softskills", "job_title",
-                               "generated_html", "ai_output", "cover_letter", "cover_letter_html",
-                               "encoded_profile_image"]
-            for f in fields_to_clear:
-                st.session_state[f] = ""
-            st.session_state.pop("generated_html", None)
-            st.session_state.pop("ai_output", None)
-            st.session_state.pop("cover_letter", None)
-            st.session_state.pop("cover_letter_html", None)
-            st.session_state.pop("encoded_profile_image", None)
-            st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
-            st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
-            st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
-            st.session_state["project_links"] = []
-            st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
-            # Increment form key counter to force Streamlit to recreate all widgets fresh
-            st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
-            st.rerun()
-
-    st.markdown("""
-    <style>
-        .heading-large {
-            font-size: 36px;
-            font-weight: bold;
-            color: #336699;
-        }
-        .subheading-large {
-            font-size: 30px;
-            font-weight: bold;
-            color: #336699;
-        }
-        .tab-section {
-            margin-top: 20px;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # --- Visual Resume Preview Section (outside form to prevent flickering) ---
-    st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
-    st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
-
-    left, right = st.columns([1, 2])
-
-    with left:
-        st.markdown(f"""
-            <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
-            <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
-
-            <p style='font-size:14px;'>
-            📍 {st.session_state['location']}<br>
-            📞 {st.session_state['phone']}<br>
-            📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
-            🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
-            🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
-            </p>
+        st.markdown("""
+        <style>
+            .heading-large {
+                font-size: 36px;
+                font-weight: bold;
+                color: #336699;
+            }
+            .subheading-large {
+                font-size: 30px;
+                font-weight: bold;
+                color: #336699;
+            }
+            .tab-section {
+                margin-top: 20px;
+            }
+        </style>
         """, unsafe_allow_html=True)
 
-        st.markdown("<h4 style='color:#336699;'>Skills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-        for skill in [s.strip() for s in st.session_state["skills"].split(",") if s.strip()]:
-            st.markdown(f"<div style='margin-left:10px;'>• {skill}</div>", unsafe_allow_html=True)
+        # --- Visual Resume Preview Section ---
+        st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
+        st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
 
-        st.markdown("<h4 style='color:#336699;'>Languages</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-        for lang in [l.strip() for l in st.session_state["languages"].split(",") if l.strip()]:
-            st.markdown(f"<div style='margin-left:10px;'>• {lang}</div>", unsafe_allow_html=True)
+        left, right = st.columns([1, 2])
 
-        st.markdown("<h4 style='color:#336699;'>Interests</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-        for interest in [i.strip() for i in st.session_state["interests"].split(",") if i.strip()]:
-            st.markdown(f"<div style='margin-left:10px;'>• {interest}</div>", unsafe_allow_html=True)
-
-        st.markdown("<h4 style='color:#336699;'>Softskills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-        for Softskills in [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]:
-            st.markdown(f"<div style='margin-left:10px;'>• {Softskills}</div>", unsafe_allow_html=True)
-
-    with right:
-        st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-        summary_text = st.session_state['summary'].replace('\n', '<br>')
-        st.markdown(f"<p style='font-size:17px;'>{summary_text}</p>", unsafe_allow_html=True)
-
-        st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-        for exp in st.session_state.experience_entries:
-            if exp["company"] or exp["title"]:
-                st.markdown(f"""
-                <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
-                    <div style='display:flex; justify-content:space-between;'>
-                        <b>🏢 {exp['company']}</b><span style='color:gray;'>📆  {exp['duration']}</span>
-                    </div>
-                    <div style='font-size:14px;'>💼 <i>{exp['title']}</i></div>
-                    <div style='font-size:17px;'>📝 {exp['description']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-        st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-        for edu in st.session_state.education_entries:
-            if edu["institution"] or edu["degree"]:
-                st.markdown(f"""
-                <div style='margin-bottom: 15px; padding: 10px 15px;color: white; border-radius: 8px;'>
-                    <div style='display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;'>
-                        <span>🏫 {edu['institution']}</span>
-                        <span style='color: gray;'>📅 {edu['year']}</span>
-                    </div>
-                    <div style='font-size: 14px; margin-top: 5px;'>🎓 <i>{edu['degree']}</i></div>
-                    <div style='font-size: 14px;'>📄 {edu['details']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-        st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-        for proj in st.session_state.project_entries:
+        with left:
             st.markdown(f"""
-            <div style='margin-bottom:15px; padding: 10px;'>
-            <strong style='font-size:16px;'>{proj['title']}</strong><br>
-            <span style='font-size:14px; word-wrap:break-word; overflow-wrap:break-word; white-space:normal;'>
-               🛠️ <strong>Tech Stack:</strong> {proj['tech']}
-            </span><br>
+                <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
+                <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
+
+                <p style='font-size:14px;'>
+                📍 {st.session_state['location']}<br>
+                📞 {st.session_state['phone']}<br>
+                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
+                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
+                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
+                </p>
+            """, unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>Skills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for skill in [s.strip() for s in st.session_state["skills"].split(",") if s.strip()]:
+                st.markdown(f"<div style='margin-left:10px;'>• {skill}</div>", unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>Languages</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for lang in [l.strip() for l in st.session_state["languages"].split(",") if l.strip()]:
+               st.markdown(f"<div style='margin-left:10px;'>• {lang}</div>", unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>Interests</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for interest in [i.strip() for i in st.session_state["interests"].split(",") if i.strip()]:
+               st.markdown(f"<div style='margin-left:10px;'>• {interest}</div>", unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>Softskills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for Softskills  in [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]:
+               st.markdown(f"<div style='margin-left:10px;'>• {Softskills}</div>", unsafe_allow_html=True)   
+
+        with right:
+            st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            summary_text = st.session_state['summary'].replace('\n', '<br>')
+            st.markdown(f"<p style='font-size:17px;'>{summary_text}</p>", unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for exp in st.session_state.experience_entries:
+                if exp["company"] or exp["title"]:
+                    st.markdown(f"""
+                    <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
+                        <div style='display:flex; justify-content:space-between;'>
+                            <b>🏢 {exp['company']}</b><span style='color:gray;'>📆  {exp['duration']}</span>
+                        </div>
+                        <div style='font-size:14px;'>💼 <i>{exp['title']}</i></div>
+                        <div style='font-size:17px;'>📝 {exp['description']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for edu in st.session_state.education_entries:
+                if edu["institution"] or edu["degree"]:
+                    st.markdown(f"""
+                    <div style='margin-bottom: 15px; padding: 10px 15px;color: white; border-radius: 8px;'>
+                        <div style='display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;'>
+                            <span>🏫 {edu['institution']}</span>
+                            <span style='color: gray;'>📅 {edu['year']}</span>
+                        </div>
+                        <div style='font-size: 14px; margin-top: 5px;'>🎓 <i>{edu['degree']}</i></div>
+                        <div style='font-size: 14px;'>📄 {edu['details']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for proj in st.session_state.project_entries:
+                st.markdown(f"""
+                <div style='margin-bottom:15px; padding: 10px;'>
+                <strong style='font-size:16px;'>{proj['title']}</strong><br>
+                <span style='font-size:14px; word-wrap:break-word; overflow-wrap:break-word; white-space:normal;'>
+                   🛠️ <strong>Tech Stack:</strong> {proj['tech']}
+             </span><br>
             <span style='font-size:14px;'>⏳ <strong>Duration:</strong> {proj['duration']}</span><br>
             <span style='font-size:17px;'>📝 <strong>Description:</strong> {proj['description']}</span>
             </div>
             """, unsafe_allow_html=True)
 
-        if st.session_state.project_links:
-            st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for i, link in enumerate(st.session_state.project_links):
-                st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
+            if st.session_state.project_links:
+                st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+                for i, link in enumerate(st.session_state.project_links):
+                    st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
 
-        if st.session_state.certificate_links:
-            st.markdown("<h4 style='color:#336699;'>Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for cert in st.session_state.certificate_links:
-                if cert["name"] and cert["link"]:
-                    st.markdown(f"""
-                    <div style='display:flex; justify-content:space-between;'>
-                        <a href="{cert['link']}" target="_blank"><b>📄 {cert['name']}</b></a><span style='color:gray;'>{cert['duration']}</span>
-                    </div>
-                    <div style='margin-bottom:10px; font-size:14px;'>{cert['description']}</div>
-                    """, unsafe_allow_html=True)
+            if st.session_state.certificate_links:
+                st.markdown("<h4 style='color:#336699;'>Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+                
+                for cert in st.session_state.certificate_links:
+                    if cert["name"] and cert["link"]:
+                        st.markdown(f"""
+                        <div style='display:flex; justify-content:space-between;'>
+                            <a href="{cert['link']}" target="_blank"><b>📄 {cert['name']}</b></a><span style='color:gray;'>{cert['duration']}</span>
+                        </div>
+                        <div style='margin-bottom:10px; font-size:14px;'>{cert['description']}</div>
+                        """, unsafe_allow_html=True)
 
 import re
 
@@ -6331,7 +6843,6 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
-
 
 FEATURED_COMPANIES = {
     "tech": [
