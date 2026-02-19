@@ -10773,96 +10773,102 @@ Generate exactly {num_questions} questions now:
                 current_phase = "Resume-Based" if current_index <= num_resume_qs else "Generic Interview"
 
                 # ── ANTI-CHEAT JS via st.components.v1.html ──
-                # This is the ONLY reliable way to run JS in Streamlit.
-                # It runs inside an iframe but uses window.parent to reach the top frame.
+                # KEY FIX: Store all handler functions ON window.parent itself so they
+                # survive iframe destruction on Streamlit rerenders.
+                # On every render: remove old handlers (by ref) then re-add fresh ones.
+                # This guarantees listeners are always alive regardless of how many rerenders occur.
                 _stc.html("""
                 <script>
                 (function() {
-                    // Run in parent (top Streamlit page), not this sandboxed iframe
-                    var top = window.parent;
-                    if (!top || top._acInstalled) return;
-                    top._acInstalled = true;
+                    var P = window.parent;
+                    if (!P) return;
 
-                    function showBanner(msg) {
+                    // ── Helper: show floating banner in parent page ──
+                    P._acShowBanner = function(msg) {
                         var id = '__ac_banner__';
-                        if (top.document.getElementById(id)) return;
-                        var d = top.document.createElement('div');
+                        if (P.document.getElementById(id)) return;
+                        var d = P.document.createElement('div');
                         d.id = id;
-                        d.style.cssText = 'position:fixed;top:18px;left:50%;transform:translateX(-50%);' +
-                            'background:rgba(200,0,0,0.93);color:#fff;padding:13px 30px;' +
-                            'border-radius:9px;font-size:15px;font-weight:700;z-index:2147483647;' +
-                            'box-shadow:0 4px 24px rgba(0,0,0,0.5);pointer-events:none;' +
-                            'font-family:sans-serif;letter-spacing:0.3px;';
+                        d.style.cssText = [
+                            'position:fixed','top:18px','left:50%','transform:translateX(-50%)',
+                            'background:rgba(190,0,0,0.95)','color:#fff','padding:14px 32px',
+                            'border-radius:10px','font-size:15px','font-weight:700',
+                            'z-index:2147483647','box-shadow:0 4px 28px rgba(0,0,0,0.55)',
+                            'pointer-events:none','font-family:sans-serif','letter-spacing:0.3px'
+                        ].join(';');
                         d.innerText = msg;
-                        top.document.body.appendChild(d);
+                        P.document.body.appendChild(d);
                         setTimeout(function() {
                             d.style.transition = 'opacity 0.4s';
                             d.style.opacity = '0';
                             setTimeout(function() { if (d.parentNode) d.parentNode.removeChild(d); }, 450);
                         }, 2800);
-                    }
+                    };
 
-                    function triggerViolation(reason) {
-                        // Remove all listeners first to prevent double-fire
-                        top.document.removeEventListener('visibilitychange', onVisChange, true);
-                        top.removeEventListener('blur', onWinBlur, true);
-                        top.document.removeEventListener('copy', onClipboard, true);
-                        top.document.removeEventListener('cut', onClipboard, true);
-                        top.document.removeEventListener('paste', onClipboard, true);
-                        top.document.removeEventListener('keydown', onKeyDown, true);
-                        top._acInstalled = false;
-                        // Navigate to flag the violation
-                        var url = new URL(top.location.href);
+                    // ── Violation: navigate to flag it for Streamlit ──
+                    P._acTrigger = function(reason) {
+                        P._acRemoveAll();
+                        var url = new URL(P.location.href);
                         url.searchParams.set('cheat', '1');
                         url.searchParams.set('reason', reason);
-                        top.location.href = url.toString();
-                    }
+                        P.location.href = url.toString();
+                    };
 
-                    // ── Tab / visibility switch ──
-                    function onVisChange() {
-                        if (top.document.hidden) {
-                            triggerViolation('Tab switching detected — you navigated away during the interview.');
+                    // ── Define handlers stored ON parent so removeEventListener works by ref ──
+                    P._acOnVisChange = function() {
+                        if (P.document.hidden) {
+                            P._acTrigger('Tab switching detected — you navigated away during the interview.');
                         }
-                    }
+                    };
 
-                    // ── Window blur (alt-tab, another app) ──
-                    function onWinBlur() {
+                    P._acOnWinBlur = function() {
                         setTimeout(function() {
-                            if (top.document.hidden) {
-                                triggerViolation('Window switching detected — you left the interview window.');
+                            if (P.document.hidden) {
+                                P._acTrigger('Window switching detected — you switched to another application.');
                             }
                         }, 250);
-                    }
+                    };
 
-                    // ── Block copy/cut/paste ──
-                    function onClipboard(e) {
+                    P._acOnClipboard = function(e) {
                         var tag = e.target ? e.target.tagName : '';
-                        if (tag === 'TEXTAREA' || tag === 'INPUT') {
+                        // Block on textareas AND on the document level (catches right-click paste too)
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        if (tag === 'TEXTAREA' || tag === 'INPUT' || !tag) {
+                            P._acShowBanner('🚫 Copy / Paste is NOT allowed during the interview!');
+                        }
+                    };
+
+                    P._acOnKeyDown = function(e) {
+                        var tag = e.target ? e.target.tagName : '';
+                        var k = e.key ? e.key.toLowerCase() : '';
+                        if ((e.ctrlKey || e.metaKey) && (k === 'c' || k === 'v' || k === 'x')) {
                             e.preventDefault();
                             e.stopImmediatePropagation();
-                            showBanner('🚫 Copy / Paste is NOT allowed during the interview!');
-                        }
-                    }
-
-                    // ── Block Ctrl+C / Ctrl+V / Ctrl+X on answer fields ──
-                    function onKeyDown(e) {
-                        var tag = e.target ? e.target.tagName : '';
-                        if (tag === 'TEXTAREA' || tag === 'INPUT') {
-                            var k = e.key ? e.key.toLowerCase() : '';
-                            if ((e.ctrlKey || e.metaKey) && (k === 'c' || k === 'v' || k === 'x')) {
-                                e.preventDefault();
-                                e.stopImmediatePropagation();
-                                showBanner('🚫 Copy / Paste is NOT allowed during the interview!');
+                            if (tag === 'TEXTAREA' || tag === 'INPUT') {
+                                P._acShowBanner('🚫 Copy / Paste is NOT allowed during the interview!');
                             }
                         }
-                    }
+                    };
 
-                    top.document.addEventListener('visibilitychange', onVisChange, true);
-                    top.addEventListener('blur', onWinBlur, true);
-                    top.document.addEventListener('copy', onClipboard, true);
-                    top.document.addEventListener('cut', onClipboard, true);
-                    top.document.addEventListener('paste', onClipboard, true);
-                    top.document.addEventListener('keydown', onKeyDown, true);
+                    // ── Remove old listeners (safe even if never added) ──
+                    P._acRemoveAll = function() {
+                        P.document.removeEventListener('visibilitychange', P._acOnVisChange, true);
+                        P.removeEventListener('blur', P._acOnWinBlur, true);
+                        P.document.removeEventListener('copy',  P._acOnClipboard, true);
+                        P.document.removeEventListener('cut',   P._acOnClipboard, true);
+                        P.document.removeEventListener('paste', P._acOnClipboard, true);
+                        P.document.removeEventListener('keydown', P._acOnKeyDown, true);
+                    };
+
+                    // ── Always remove then re-add to stay fresh after every rerender ──
+                    P._acRemoveAll();
+                    P.document.addEventListener('visibilitychange', P._acOnVisChange, true);
+                    P.addEventListener('blur', P._acOnWinBlur, true);
+                    P.document.addEventListener('copy',  P._acOnClipboard, true);
+                    P.document.addEventListener('cut',   P._acOnClipboard, true);
+                    P.document.addEventListener('paste', P._acOnClipboard, true);
+                    P.document.addEventListener('keydown', P._acOnKeyDown, true);
                 })();
                 </script>
                 """, height=0)
