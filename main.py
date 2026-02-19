@@ -3729,826 +3729,1990 @@ with tab1:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
 from xhtml2pdf import pisa
 from io import BytesIO
-import re as _re
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PDF RENDERER
-# xhtml2pdf wraps content in its own <html><body> — so templates must return
-# ONLY the inner HTML fragment (no <html>/<head>/<body> tags).
-# Styles go into html_to_pdf_bytes wrapper which is the single source of truth
-# for page geometry and base typography.
-# ─────────────────────────────────────────────────────────────────────────────
-
-def html_to_pdf_bytes(html_fragment, page_css=""):
+def html_to_pdf_bytes(html_string):
+    styled_html = f"""
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 400mm 297mm;  /* Original custom large page size */
+                margin-top: 10mm;
+                margin-bottom: 10mm;
+                margin-left: 10mm;
+                margin-right: 10mm;
+            }}
+            body {{
+                font-size: 14pt;
+                font-family: "Segoe UI", "Helvetica", sans-serif;
+                line-height: 1.5;
+                color: #000;
+            }}
+            h1, h2, h3 {{
+                color: #2f4f6f;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 15px;
+            }}
+            td {{
+                padding: 4px;
+                vertical-align: top;
+                border: 1px solid #ccc;
+            }}
+            .section-title {{
+                background-color: #e0e0e0;
+                font-weight: bold;
+                padding: 6px;
+                margin-top: 10px;
+            }}
+            .box {{
+                padding: 8px;
+                margin-top: 6px;
+                background-color: #f9f9f9;
+                border-left: 4px solid #999;  /* More elegant than full border */
+            }}
+            ul {{
+                margin: 0.5em 0;
+                padding-left: 1.5em;
+            }}
+            li {{
+                margin-bottom: 5px;
+            }}
+        </style>
+    </head>
+    <body>
+        {html_string}
+    </body>
+    </html>
     """
-    Renders an HTML fragment to A4 PDF via xhtml2pdf.
-    html_fragment: inner body HTML from any render_template_* function.
-    page_css: optional extra CSS string injected per template (colours etc.)
-    """
-    full_html = f"""<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8"/>
-  <style>
-    /* ── PAGE GEOMETRY ── */
-    @page {{
-      size: A4 portrait;        /* 210mm × 297mm */
-      margin-top:    14mm;
-      margin-bottom: 14mm;
-      margin-left:   13mm;
-      margin-right:  13mm;
-    }}
-
-    /* ── BASE TYPOGRAPHY ── */
-    body {{
-      font-family: Helvetica, Arial, sans-serif;
-      font-size:   9.5pt;
-      line-height: 1.45;
-      color:       #1a1a1a;
-      margin:      0;
-      padding:     0;
-    }}
-
-    /* ── LINKS ── */
-    a {{ color: inherit; text-decoration: none; }}
-
-    /* ── TABLES (used for multi-column layout) ── */
-    table  {{ border-collapse: collapse; width: 100%; }}
-    td, th {{ vertical-align: top; padding: 0; }}
-
-    /* ── LISTS ── */
-    ul {{ margin: 3pt 0 4pt 14pt; padding: 0; }}
-    li {{ margin-bottom: 2pt; line-height: 1.4; }}
-
-    /* ── PAGE BREAK UTILITIES ── */
-    .nb   {{ page-break-inside: avoid; }}   /* no-break block  */
-    .pb   {{ page-break-before: always; }}  /* force page break */
-
-    /* ── SECTION HEADINGS (shared baseline) ── */
-    .sh {{
-      font-size:      8pt;
-      font-weight:    bold;
-      text-transform: uppercase;
-      letter-spacing: 1pt;
-      margin-top:     9pt;
-      margin-bottom:  3pt;
-      padding-bottom: 2pt;
-    }}
-
-    /* ── HORIZONTAL RULE ── */
-    hr {{ border: none; border-top: 0.5pt solid #ccc; margin: 4pt 0; }}
-
-    {page_css}
-  </style>
-</head>
-<body>
-{html_fragment}
-</body>
-</html>"""
 
     pdf_io = BytesIO()
-    pisa.CreatePDF(full_html, dest=pdf_io)
+    pisa.CreatePDF(styled_html, dest=pdf_io)
     pdf_io.seek(0)
     return pdf_io
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SHARED HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _extract_img_src(profile_img_html):
-    """Pull base64 data-URI from the Streamlit-generated img tag."""
-    if not profile_img_html:
-        return ""
-    m = _re.search(r'src=["\']([^"\']+)["\']', profile_img_html)
-    return m.group(1) if m else ""
-
-def _profile_img_tag(src, size_mm=28, round_=True):
-    if not src:
-        return ""
-    style = (f"width:{size_mm}mm; height:{size_mm}mm; object-fit:cover; "
-             f"border:1.5pt solid #ddd; display:block;")
-    return f'<img src="{src}" style="{style}"/>'
-
-def _bullets(text):
-    """Convert newline text → <ul><li> for xhtml2pdf."""
-    lines = [l.strip() for l in text.strip().split('\n') if l.strip()]
-    if not lines:
-        return ""
-    items = "".join(f"<li>{l}</li>" for l in lines)
-    return f"<ul>{items}</ul>"
-
-def _skills_spans(csv, color="#1a3c5e", bg="#e8f0fa", border="#c5d4e8"):
-    """Inline skill badges — xhtml2pdf supports display:inline-block."""
-    items = [s.strip() for s in csv.split(',') if s.strip()]
-    out = ""
-    for s in items:
-        out += (f'<span style="display:inline-block; background:{bg}; color:{color}; '
-                f'border:0.5pt solid {border}; padding:1pt 5pt; margin:1.5pt 2pt 1.5pt 0; '
-                f'font-size:7.5pt; font-weight:bold;">{s}</span>')
-    return out
-
-def _contact_line(ss, sep=" | "):
-    parts = []
-    if ss.get('location'): parts.append(ss['location'])
-    if ss.get('phone'):    parts.append(ss['phone'])
-    if ss.get('email'):    parts.append(ss['email'])
-    if ss.get('linkedin'): parts.append(ss['linkedin'])
-    if ss.get('portfolio'):parts.append(ss['portfolio'])
-    return sep.join(parts)
-
-def _deg(edu):
-    d = edu.get('degree', '')
-    return ", ".join(d) if isinstance(d, list) else d
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 1 — Classic Professional
-# Two-column table layout: narrow left sidebar + wide main content
-# Colour: Navy (#1a3c5e). ATS-safe. Profile image top-right of header.
-# ─────────────────────────────────────────────────────────────────────────────
 def render_template_default(session_state, profile_img_html=""):
-    ss   = session_state
-    acc  = "#1a3c5e"
-    lt   = "#eaf0f8"
-    src  = _extract_img_src(profile_img_html)
-    img  = _profile_img_tag(src, size_mm=26)
+    """Default professional template - keeps the exact same design as before"""
+    
+    # Enhanced SKILLS with professional, muted colors
+    skills_html = "".join(
+        f"""
+        <div style='display:inline-block; 
+                    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+                    color: #334155; 
+                    padding: 10px 18px; 
+                    margin: 8px 8px 8px 0; 
+                    border-radius: 25px; 
+                    font-size: 14px; 
+                    font-weight: 600;
+                    box-shadow: 0 2px 8px rgba(148, 163, 184, 0.2);
+                    transition: all 0.3s ease;
+                    text-shadow: none;
+                    border: 1px solid rgba(148, 163, 184, 0.3);'>
+            {s.strip()}
+        </div>
+        """
+        for s in session_state['skills'].split(',')
+        if s.strip()
+    )
 
-    def sh(label):
-        return (f'<div class="sh" style="color:{acc}; border-bottom:1.5pt solid {acc};">'
-                f'{label}</div>')
+    # Enhanced LANGUAGES with soft, professional design
+    languages_html = "".join(
+        f"""
+        <div style='display:inline-block; 
+                    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+                    color: #475569; 
+                    padding: 10px 18px; 
+                    margin: 8px 8px 8px 0; 
+                    border-radius: 25px; 
+                    font-size: 14px; 
+                    font-weight: 600;
+                    box-shadow: 0 2px 8px rgba(100, 116, 139, 0.15);
+                    transition: all 0.3s ease;
+                    text-shadow: none;
+                    border: 1px solid rgba(148, 163, 184, 0.3);'>
+            {lang.strip()}
+        </div>
+        """
+        for lang in session_state['languages'].split(',')
+        if lang.strip()
+    )
 
-    # ── Experience ──
-    exp_rows = ""
-    for exp in ss.experience_entries:
-        if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description",""))
-            exp_rows += f"""
-<div class="nb" style="margin-bottom:7pt;">
-  <table><tr>
-    <td style="font-size:9.5pt; font-weight:bold; color:{acc};">{exp.get('company','')}</td>
-    <td style="text-align:right; font-size:8pt; color:#555; font-style:italic; white-space:nowrap; width:30%;">{exp.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8.5pt; font-weight:bold; color:#333; margin-bottom:2pt;">{exp.get('title','')}</div>
-  <div style="font-size:8.5pt; color:#444;">{desc}</div>
-</div>"""
+    # Enhanced INTERESTS with subtle colors
+    interests_html = "".join(
+        f"""
+        <div style='display:inline-block; 
+                    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+                    color: #0f172a; 
+                    padding: 10px 18px; 
+                    margin: 8px 8px 8px 0; 
+                    border-radius: 25px; 
+                    font-size: 14px; 
+                    font-weight: 600;
+                    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.1);
+                    transition: all 0.3s ease;
+                    text-shadow: none;
+                    border: 1px solid rgba(186, 230, 253, 0.5);'>
+            {interest.strip()}
+        </div>
+        """
+        for interest in session_state['interests'].split(',')
+        if interest.strip()
+    )
 
-    # ── Projects ──
-    proj_rows = ""
-    for proj in ss.project_entries:
-        if proj.get("title"):
-            desc = _bullets(proj.get("description",""))
-            proj_rows += f"""
-<div class="nb" style="margin-bottom:7pt;">
-  <table><tr>
-    <td style="font-size:9pt; font-weight:bold; color:{acc};">{proj.get('title','')}</td>
-    <td style="text-align:right; font-size:8pt; color:#555; font-style:italic; white-space:nowrap; width:28%;">{proj.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8pt; color:#666; margin-bottom:2pt;"><b>Stack:</b> {proj.get('tech','')}</div>
-  <div style="font-size:8.5pt; color:#444;">{desc}</div>
-</div>"""
+    # Enhanced SOFT SKILLS with warm but professional styling
+    Softskills_html = "".join(
+        f"""
+        <div style='display:inline-block; 
+                    background: linear-gradient(135deg, #fefce8 0%, #fef3c7 100%);
+                    color: #451a03; 
+                    padding: 10px 20px; 
+                    margin: 8px 8px 8px 0; 
+                    border-radius: 25px; 
+                    font-size: 14px; 
+                    font-family: "Segoe UI", sans-serif; 
+                    font-weight: 600;
+                    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.1);
+                    transition: all 0.3s ease;
+                    border: 1px solid rgba(254, 215, 170, 0.6);'>
+            {skill.strip().title()}
+        </div>
+        """
+        for skill in session_state['Softskills'].split(',')
+        if skill.strip()
+    )
 
-    # ── Education (sidebar) ──
-    edu_rows = ""
-    for edu in ss.education_entries:
-        if edu.get("institution") or edu.get("degree"):
-            edu_rows += f"""
-<div class="nb" style="margin-bottom:6pt;">
-  <div style="font-size:8.5pt; font-weight:bold; color:{acc};">{edu.get('institution','')}</div>
-  <div style="font-size:8pt; font-weight:bold; color:#333;">{_deg(edu)}</div>
-  <div style="font-size:7.5pt; color:#555; font-style:italic;">{edu.get('year','')}</div>
-  <div style="font-size:7.5pt; color:#555;">{edu.get('details','')}</div>
-</div>"""
+    # Enhanced EXPERIENCE with professional, subtle design
+    experience_html = ""
+    for exp in session_state.experience_entries:
+        if exp["company"] or exp["title"]:
+            # Handle paragraphs and single line breaks
+            description_lines = [line.strip() for line in exp["description"].strip().split("\n\n")]
+            description_html = "".join(
+                f"<div style='margin-bottom: 10px; line-height: 1.6;'>{line.replace(chr(10), '<br>')}</div>"
+                for line in description_lines if line
+            )
 
-    # ── Certs (sidebar) ──
-    cert_rows = ""
-    for cert in ss.certificate_links:
-        if cert.get("name"):
-            cert_rows += f"""
-<div class="nb" style="margin-bottom:5pt; font-size:8pt;">
-  <b style="color:{acc};">{cert.get('name','')}</b><br/>
-  <span style="color:#555;">{cert.get('duration','')} — {cert.get('description','')}</span>
-</div>"""
+            experience_html += f"""
+            <div style='
+                margin-bottom: 24px;
+                padding: 20px;
+                border-radius: 12px;
+                background: linear-gradient(145deg, #fafafa 0%, #f4f4f5 100%);
+                box-shadow: 
+                    0 4px 12px rgba(0, 0, 0, 0.05),
+                    0 1px 3px rgba(0, 0, 0, 0.1);
+                font-family: "Inter", "Segoe UI", sans-serif;
+                color: #374151;
+                line-height: 1.6;
+                border: 1px solid rgba(229, 231, 235, 0.8);
+                position: relative;
+                overflow: hidden;
+            '>
+                <!-- Subtle accent bar -->
+                <div style='
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    height: 3px;
+                    background: linear-gradient(90deg, #6b7280, #9ca3af);
+                '></div>
+                
+                <!-- Header Card -->
+                <div style='
+                    background: rgba(255, 255, 255, 0.8);
+                    border-radius: 8px;
+                    padding: 14px 18px;
+                    margin-bottom: 12px;
+                    border: 1px solid rgba(229, 231, 235, 0.6);
+                '>
+                    <div style='
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        font-weight: 700;
+                        font-size: 18px;
+                        margin-bottom: 6px;
+                        color: #1f2937;
+                        width: 100%;
+                    '>
+                        <div style='display: flex; align-items: center;'>
+                            <div style='
+                                width: 6px; 
+                                height: 6px; 
+                                background: #6b7280;
+                                border-radius: 50%; 
+                                margin-right: 12px;
+                            '></div>
+                            <span>{exp['company']}</span>
+                        </div>
+                        <div style='
+                            display: inline-flex;
+                            align-items: center;
+                            gap: 6px;
+                            background: linear-gradient(135deg, #f9fafb, #f3f4f6);
+                            color: #374151;
+                            padding: 5px 14px;
+                            border-radius: 16px;
+                            font-size: 14px;
+                            font-weight: 600;
+                            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                            border: 1px solid rgba(209, 213, 219, 0.5);
+                        '>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/>
+                            </svg>
+                            <span>{exp['duration']}</span>
+                        </div>
+                    </div>
 
-    summary_html = ss.get('summary','').replace('\n','<br/>')
+                    <div style='
+                        display: flex;
+                        align-items: center;
+                        font-size: 16px;
+                        font-weight: 600;
+                        color: #4b5563;
+                    '>
+                        <div style='
+                            width: 4px; 
+                            height: 4px; 
+                            background: #6b7280;
+                            border-radius: 50%; 
+                            margin-right: 10px;
+                        '></div>
+                        <span>{exp['title']}</span>
+                    </div>
+                </div>
 
-    sidebar_w = "57mm"
-    gap_w     = "4mm"
-    main_w    = "116mm"  # 210 - 13 - 13 - 57 - 4 = 123... adjust to fit
+                <!-- Description -->
+                <div style='
+                    font-size: 15px;
+                    font-weight: 500;
+                    color: #374151;
+                    line-height: 1.7;
+                    padding-left: 8px;
+                '>
+                    <div style='
+                        border-left: 2px solid #d1d5db;
+                        padding-left: 16px;
+                        margin-left: 8px;
+                    '>
+                        {description_html}
+                    </div>
+                </div>
+            </div>
+            """
 
-    return f"""
-<!-- HEADER -->
-<table style="margin-bottom:8pt; border-bottom:2pt solid {acc}; padding-bottom:6pt;">
-  <tr>
-    <td style="vertical-align:middle;">
-      <div style="font-size:20pt; font-weight:bold; color:{acc}; line-height:1.1;">{ss.get('name','')}</div>
-      <div style="font-size:11pt; color:#555; margin-top:2pt;">{ss.get('job_title','')}</div>
-      <div style="font-size:7.5pt; color:#666; margin-top:4pt;">{_contact_line(ss)}</div>
-    </td>
-    {"<td style='width:30mm; text-align:right; vertical-align:middle;'>"+img+"</td>" if img else ""}
-  </tr>
-</table>
+    # Convert experience to list if multiple lines
+    # Escape HTML and convert line breaks
+    summary_html = session_state['summary'].replace('\n', '<br>')
 
-<!-- TWO-COLUMN BODY -->
-<table>
-  <tr>
-    <!-- LEFT SIDEBAR -->
-    <td style="width:{sidebar_w}; vertical-align:top; padding-right:5pt; border-right:0.5pt solid #ccc;">
+    # Enhanced EDUCATION with professional styling
+    education_html = ""
+    for edu in session_state.education_entries:
+        if edu.get("institution") or edu.get("details"):
+            degree_text = ""
+            if edu.get("degree"):
+                degree_val = edu["degree"]
+                if isinstance(degree_val, list):
+                    degree_val = ", ".join(degree_val)
+                degree_text = f"""
+                <div style='
+                    display: flex; 
+                    align-items: center; 
+                    font-size: 15px; 
+                    color: #374151; 
+                    margin-bottom: 8px;
+                    font-weight: 600;
+                '>
+                    <div style='
+                        width: 4px; 
+                        height: 4px; 
+                        background: #6b7280;
+                        border-radius: 50%; 
+                        margin-right: 10px;
+                    '></div>
+                    <b>{degree_val}</b>
+                </div>
+                """
 
-      {sh("Skills")}
-      <div style="margin-top:3pt;">{_skills_spans(ss.get('skills',''), acc, lt, '#c0d0e4')}</div>
+            # Education Card
+            education_html += f"""
+            <div style='
+                margin-bottom: 26px;
+                padding: 22px 26px;
+                border-radius: 12px;
+                background: linear-gradient(145deg, #f9fafb 0%, #f3f4f6 100%);
+                box-shadow: 
+                    0 4px 12px rgba(0, 0, 0, 0.06),
+                    0 1px 3px rgba(0, 0, 0, 0.08);
+                font-family: "Inter", "Segoe UI", sans-serif;
+                color: #1f2937;
+                line-height: 1.6;
+                border: 1px solid #e5e7eb;
+                position: relative;
+                overflow: hidden;
+            '>
+                <!-- Subtle accent bar -->
+                <div style='
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    height: 3px;
+                    background: linear-gradient(90deg, #6b7280, #9ca3af);
+                '></div>
 
-      {sh("Soft Skills")}
-      <div style="margin-top:3pt;">{_skills_spans(ss.get('Softskills',''), '#4a5568', '#f0f4f8', '#c8d0dc')}</div>
+                <div style='
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    font-size: 18px;
+                    font-weight: 700;
+                    margin-bottom: 12px;
+                    width: 100%;
+                    color: #111827;
+                '>
+                    <div style='display: flex; align-items: center;'>
+                        <div style='
+                            width: 6px; 
+                            height: 6px; 
+                            background: #6b7280;
+                            border-radius: 50%; 
+                            margin-right: 12px;
+                        '></div>
+                        <span>{edu.get('institution', '')}</span>
+                    </div>
+                    <div style='
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                        background: rgba(255, 255, 255, 0.7);
+                        color: #374151;
+                        padding: 6px 16px;
+                        border-radius: 16px;
+                        font-weight: 600;
+                        font-size: 14px;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                        border: 1px solid #d1d5db;
+                    '>
+                        <!-- Inline SVG Calendar Icon -->
+                        <svg xmlns="http://www.w3.org/2000/svg" 
+                            fill="none" viewBox="0 0 24 24" 
+                            stroke="currentColor" width="16" height="16">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 
+                                2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {edu.get('year', '')}
+                    </div>
+                </div>
+                {degree_text}
+                <div style='
+                    font-size: 14px; 
+                    font-style: italic;
+                    color: #374151;
+                    line-height: 1.6;
+                    padding-left: 18px;
+                    border-left: 2px solid #9ca3af;
+                '>
+                    {edu.get('details', '')}
+                </div>
+            </div>
+            """
 
-      {sh("Languages")}
-      <div style="margin-top:3pt;">{_skills_spans(ss.get('languages',''), '#2d6a4f', '#d8f3dc', '#a8d5b5')}</div>
+    # Enhanced PROJECTS with professional card design
+    projects_html = ""
+    for proj in session_state.project_entries:
+        if proj.get("title") or proj.get("description"):
+            tech_val = proj.get("tech")
+            if isinstance(tech_val, list):
+                tech_val = ", ".join(tech_val)
+            tech_text = f"""
+            <div style='
+                display: flex; 
+                align-items: center; 
+                font-size: 14px; 
+                color: #374151; 
+                margin-bottom: 12px;
+                font-weight: 600;
+                background: rgba(255, 255, 255, 0.7);
+                padding: 8px 16px;
+                border-radius: 8px;
+                border: 1px solid rgba(229, 231, 235, 0.6);
+            '>
+                <div style='
+                    width: 4px; 
+                    height: 4px; 
+                    background: #6b7280;
+                    border-radius: 50%; 
+                    margin-right: 10px;
+                '></div>
+                <b>Technologies:</b>&nbsp;&nbsp;{tech_val if tech_val else ''}
+            </div>
+            """ if tech_val else ""
 
-      {sh("Interests")}
-      <div style="margin-top:3pt; font-size:8pt; color:#444;">
-        {" • ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}
-      </div>
+            description_items = ""
+            if proj.get("description"):
+                description_lines = [line.strip() for line in proj["description"].splitlines() if line.strip()]
+                description_items = "".join(f"<li style='margin-bottom: 6px; line-height: 1.6;'>{line}</li>" for line in description_lines)
 
-      {(sh("Education") + edu_rows) if edu_rows else ""}
-      {(sh("Certifications") + cert_rows) if cert_rows else ""}
+            projects_html += f"""
+            <div style='
+                margin-bottom: 30px;
+                padding: 26px;
+                border-radius: 12px;
+                background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%);
+                box-shadow: 
+                    0 4px 12px rgba(100, 116, 139, 0.1),
+                    0 1px 3px rgba(0, 0, 0, 0.1);
+                font-family: "Inter", "Segoe UI", sans-serif;
+                color: #334155;
+                line-height: 1.7;
+                border: 1px solid rgba(203, 213, 225, 0.5);
+                position: relative;
+                overflow: hidden;
+            '>
+                <!-- Subtle accent bar -->
+                <div style='
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    height: 3px;
+                    background: linear-gradient(90deg, #64748b, #94a3b8);
+                '></div>
 
-    </td>
+                <div style='
+                    font-size: 19px;
+                    font-weight: 700;
+                    margin-bottom: 16px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    color: #1e293b;
+                    width: 100%;
+                '>
+                    <div style='display: flex; align-items: center;'>
+                        <div style='
+                            width: 6px; 
+                            height: 6px; 
+                            background: #64748b;
+                            border-radius: 50%; 
+                            margin-right: 12px;
+                        '></div>
+                        <span>{proj.get('title', '')}</span>
+                    </div>
+                    <div style='
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                        background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+                        color: #334155;
+                        padding: 8px 18px;
+                        border-radius: 16px;
+                        font-weight: 600;
+                        font-size: 14px;
+                        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                        border: 1px solid rgba(203, 213, 225, 0.6);
+                    '>
+                        <!-- Inline SVG Clock Icon -->
+                        <svg xmlns="http://www.w3.org/2000/svg" 
+                            fill="none" viewBox="0 0 24 24" 
+                            stroke="currentColor" width="16" height="16">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 
+                                   9 9 0 0118 0z" />
+                        </svg>
+                        {proj.get('duration', '')}
+                    </div>
+                </div>
+                {tech_text}
+                <div style='
+                    font-size: 15px; 
+                    color: #334155;
+                    background: rgba(255, 255, 255, 0.6);
+                    padding: 18px;
+                    border-radius: 8px;
+                    border: 1px solid rgba(229, 231, 235, 0.6);
+                '>
+                    <div style='
+                        font-weight: 600; 
+                        margin-bottom: 12px;
+                        color: #1e293b;
+                        display: flex;
+                        align-items: center;
+                    '>
+                        <div style='
+                            width: 4px; 
+                            height: 4px; 
+                            background: #64748b;
+                            border-radius: 50%; 
+                            margin-right: 10px;
+                        '></div>
+                        Description:
+                    </div>
+                    <ul style='
+                        margin-top: 8px; 
+                        padding-left: 24px; 
+                        color: #334155;
+                        list-style-type: none;
+                    '>
+                        {description_items}
+                    </ul>
+                </div>
+            </div>
+            """
 
-    <!-- GAP -->
-    <td style="width:{gap_w};"></td>
-
-    <!-- MAIN CONTENT -->
-    <td style="vertical-align:top;">
-
-      {sh("Professional Summary")}
-      <div style="font-size:8.5pt; color:#444; line-height:1.5; margin-top:3pt;
-                  padding-left:5pt; border-left:2pt solid {acc};">
-        {summary_html}
-      </div>
-
-      {(sh("Work Experience") + exp_rows) if exp_rows else ""}
-      {(sh("Projects") + proj_rows) if proj_rows else ""}
-
-    </td>
-  </tr>
-</table>
-"""
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 2 — Modern Minimal
-# Single-column, clean horizontal rules, skills as inline text
-# Colour: Dark blue (#0f4c81).
-# ─────────────────────────────────────────────────────────────────────────────
-def render_template_modern(session_state, profile_img_html=""):
-    ss  = session_state
-    acc = "#0f4c81"
-    src = _extract_img_src(profile_img_html)
-    img = _profile_img_tag(src, size_mm=25)
-
-    def sh(label):
-        return (f'<div class="sh" style="color:{acc}; border-bottom:1pt solid {acc}; '
-                f'margin-top:10pt;">{label}</div>')
-
-    def exp_block(exp):
-        desc = _bullets(exp.get("description",""))
-        return f"""
-<div class="nb" style="margin-bottom:7pt;">
-  <table><tr>
-    <td style="font-size:9.5pt; font-weight:bold; color:#111;">{exp.get('company','')}</td>
-    <td style="text-align:right; width:32%; font-size:8pt; color:#666;">{exp.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8.5pt; font-weight:bold; color:{acc}; margin-bottom:2pt;">{exp.get('title','')}</div>
-  <div style="font-size:8.5pt;">{desc}</div>
-</div>"""
-
-    def edu_block(edu):
-        return f"""
-<div class="nb" style="margin-bottom:6pt;">
-  <table><tr>
-    <td style="font-size:9pt; font-weight:bold;">{edu.get('institution','')}</td>
-    <td style="text-align:right; width:28%; font-size:8pt; color:#666;">{edu.get('year','')}</td>
-  </tr></table>
-  <div style="font-size:8.5pt; color:{acc}; font-weight:bold;">{_deg(edu)}</div>
-  <div style="font-size:8pt; color:#555;">{edu.get('details','')}</div>
-</div>"""
-
-    def proj_block(proj):
-        desc = _bullets(proj.get("description",""))
-        return f"""
-<div class="nb" style="margin-bottom:7pt;">
-  <table><tr>
-    <td style="font-size:9pt; font-weight:bold;">{proj.get('title','')}</td>
-    <td style="text-align:right; width:28%; font-size:8pt; color:#666;">{proj.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8pt; color:#666;">{proj.get('tech','')}</div>
-  <div style="font-size:8.5pt;">{desc}</div>
-</div>"""
-
-    exp_html  = "".join(exp_block(e) for e in ss.experience_entries if e.get("company") or e.get("title"))
-    edu_html  = "".join(edu_block(e) for e in ss.education_entries  if e.get("institution") or e.get("degree"))
-    proj_html = "".join(proj_block(p) for p in ss.project_entries   if p.get("title"))
-    cert_html = ""
-    for c in ss.certificate_links:
-        if c.get("name"):
-            cert_html += f'<div class="nb" style="margin-bottom:5pt; font-size:8.5pt;"><b style="color:{acc};">{c.get("name","")}</b> &ndash; {c.get("duration","")} <span style="color:#555; font-size:8pt;">{c.get("description","")}</span></div>'
-
-    skills_inline = " &nbsp;&bull;&nbsp; ".join(s.strip() for s in ss.get('skills','').split(',') if s.strip())
-    soft_inline   = " &nbsp;&bull;&nbsp; ".join(s.strip() for s in ss.get('Softskills','').split(',') if s.strip())
-    langs_inline  = ", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())
-    int_inline    = ", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())
-    summary_html  = ss.get('summary','').replace('\n','<br/>')
-
-    return f"""
-<!-- HEADER -->
-<table style="border-bottom:2pt solid {acc}; padding-bottom:6pt; margin-bottom:4pt;">
-  <tr>
-    <td style="vertical-align:middle;">
-      <div style="font-size:22pt; font-weight:bold; color:#111; line-height:1.1;">{ss.get('name','')}</div>
-      <div style="font-size:11pt; color:{acc}; font-weight:bold; margin-top:2pt;">{ss.get('job_title','')}</div>
-      <div style="font-size:7.5pt; color:#555; margin-top:5pt;">{_contact_line(ss)}</div>
-    </td>
-    {"<td style='width:30mm; text-align:right; vertical-align:middle;'>"+img+"</td>" if img else ""}
-  </tr>
-</table>
-
-{sh("Summary")}
-<div style="font-size:8.5pt; color:#444; line-height:1.5; margin-top:3pt;">{summary_html}</div>
-
-{sh("Skills")}
-<div style="font-size:8.5pt; margin-top:3pt;">{skills_inline}</div>
-<div style="font-size:8pt; color:#555; margin-top:2pt;"><i>Soft Skills:</i> {soft_inline}</div>
-
-{sh("Experience")}
-{exp_html}
-
-{sh("Education")}
-{edu_html}
-
-{(sh("Projects") + proj_html) if proj_html else ""}
-{(sh("Certifications") + cert_html) if cert_html else ""}
-
-{sh("Languages &amp; Interests")}
-<div style="font-size:8.5pt; margin-top:3pt; color:#444;">
-  <b>Languages:</b> {langs_inline} &nbsp; <b>Interests:</b> {int_inline}
-</div>
-"""
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 3 — Elegant Sidebar (dark left panel)
-# Two-column table. Left: dark bg with white text. Right: white main content.
-# Colour: Slate (#1e293b) sidebar, Sky (#0369a1) accent.
-# ─────────────────────────────────────────────────────────────────────────────
-def render_template_sidebar(session_state, profile_img_html=""):
-    ss       = session_state
-    sb_bg    = "#1e293b"
-    sb_txt   = "#e2e8f0"
-    acc      = "#38bdf8"
-    main_acc = "#0369a1"
-    src      = _extract_img_src(profile_img_html)
-    img      = _profile_img_tag(src, size_mm=28)
-
-    def sb_sh(label):
-        return (f'<div style="font-size:7pt; font-weight:bold; text-transform:uppercase; '
-                f'letter-spacing:1pt; color:{acc}; border-bottom:0.5pt solid {acc}55; '
-                f'padding-bottom:2pt; margin-top:9pt; margin-bottom:3pt;">{label}</div>')
-
-    def main_sh(label):
-        return (f'<div class="sh" style="color:{main_acc}; border-bottom:1.5pt solid {main_acc};">'
-                f'{label}</div>')
-
-    def sb_skills(csv):
-        return "".join(
-            f'<div style="font-size:8pt; color:{sb_txt}; padding:1pt 0;">&#8250; {s.strip()}</div>'
-            for s in csv.split(',') if s.strip()
+    # Enhanced PROJECT LINKS with professional styling
+    project_links_html = ""
+    if session_state.project_links:
+        project_links_html = """
+        <div style='margin-bottom: 20px;'>
+            <h4 class='section-title' style='
+                color: #374151;
+                font-size: 20px;
+                margin-bottom: 8px;
+                display: flex;
+                align-items: center;
+                padding-bottom: 4px;
+            '>
+                <div style='
+                    width: 6px; 
+                    height: 6px; 
+                    background: #6b7280;
+                    border-radius: 50%; 
+                    margin-right: 12px;
+                '></div>
+                Project Links
+            </h4>
+        </div>
+        """ + "".join(
+            f"""
+            <div style='
+                background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+                padding: 14px 20px;
+                border-radius: 8px;
+                margin-bottom: 12px;
+                border: 1px solid rgba(209, 213, 219, 0.6);
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            '>
+                <div style='
+                    width: 4px; 
+                    height: 4px; 
+                    background: #6b7280;
+                    border-radius: 50%; 
+                    display: inline-block;
+                    margin-right: 12px;
+                    vertical-align: middle;
+                '></div>
+                <a href="{link}" style='
+                    color: #374151; 
+                    font-weight: 600; 
+                    text-decoration: none;
+                    font-size: 15px;
+                '>🔗 Project {i+1}</a>
+            </div>
+            """
+            for i, link in enumerate(session_state.project_links)
         )
 
-    exp_html = ""
-    for exp in ss.experience_entries:
-        if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description",""))
-            exp_html += f"""
-<div class="nb" style="margin-bottom:7pt; padding-left:5pt; border-left:2pt solid {main_acc};">
-  <table><tr>
-    <td style="font-size:9.5pt; font-weight:bold;">{exp.get('company','')}</td>
-    <td style="text-align:right; width:32%; font-size:8pt; color:#666; font-style:italic;">{exp.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8.5pt; font-weight:bold; color:{main_acc}; margin-bottom:2pt;">{exp.get('title','')}</div>
-  <div style="font-size:8.5pt;">{desc}</div>
-</div>"""
+    # Enhanced CERTIFICATES with professional design
+    certificate_links_html = ""
+    if session_state.certificate_links:
+        certificate_links_html = """
+        <h4 class='section-title' style='
+            color: #374151;
+            font-size: 20px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+        '>
+            <div style='
+                width: 6px; 
+                height: 6px; 
+                background: #6b7280;
+                border-radius: 50%; 
+                margin-right: 12px;
+            '></div>
+            Certificates
+        </h4>
+        """
+        for cert in session_state.certificate_links:
+            if cert["name"] and cert["link"]:
+                description = cert.get('description', '').replace('\n', '<br>')
+                name = cert['name']
+                link = cert['link']
+                duration = cert.get('duration', '')
 
-    edu_html = ""
-    for edu in ss.education_entries:
-        if edu.get("institution") or edu.get("degree"):
-            edu_html += f"""
-<div class="nb" style="margin-bottom:6pt;">
-  <table><tr>
-    <td style="font-size:9pt; font-weight:bold;">{edu.get('institution','')}</td>
-    <td style="text-align:right; width:28%; font-size:8pt; color:#666;">{edu.get('year','')}</td>
-  </tr></table>
-  <div style="font-size:8.5pt; color:{main_acc}; font-weight:bold;">{_deg(edu)}</div>
-  <div style="font-size:8pt; color:#555;">{edu.get('details','')}</div>
-</div>"""
+                card_html = f"""
+                <div style='
+                    background: linear-gradient(145deg, #f9fafb 0%, #f3f4f6 100%);
+                    padding: 24px 28px;
+                    border-radius: 12px;
+                    margin-bottom: 26px;
+                    box-shadow: 
+                        0 4px 12px rgba(107, 114, 128, 0.08),
+                        0 1px 3px rgba(0, 0, 0, 0.08);
+                    font-family: "Inter", "Segoe UI", sans-serif;
+                    color: #374151;
+                    position: relative;
+                    line-height: 1.7;
+                    border: 1px solid rgba(209, 213, 219, 0.6);
+                    overflow: hidden;
+                '>
+                    <!-- Accent bar -->
+                    <div style='
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        height: 3px;
+                        background: linear-gradient(90deg, #6b7280, #9ca3af);
+                    '></div>
 
-    proj_html = ""
-    for proj in ss.project_entries:
-        if proj.get("title"):
-            desc = _bullets(proj.get("description",""))
-            proj_html += f"""
-<div class="nb" style="margin-bottom:7pt;">
-  <table><tr>
-    <td style="font-size:9pt; font-weight:bold;">{proj.get('title','')}</td>
-    <td style="text-align:right; width:28%; font-size:8pt; color:#666;">{proj.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8pt; color:#555;">{proj.get('tech','')}</div>
-  <div style="font-size:8.5pt;">{desc}</div>
-</div>"""
+                    <!-- Duration Badge -->
+                    <div style='
+                        position: absolute;
+                        top: 20px;
+                        right: 28px;
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: #374151;
+                        background: linear-gradient(135deg, #ffffff, #f9fafb);
+                        padding: 8px 14px;
+                        border-radius: 16px;
+                        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+                        border: 1px solid rgba(209, 213, 219, 0.6);
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                    '>
+                        <!-- Inline SVG clock icon -->
+                        <svg xmlns="http://www.w3.org/2000/svg" 
+                            fill="none" viewBox="0 0 24 24" 
+                            stroke="currentColor" width="14" height="14">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z"/>
+                        </svg>
+                        {duration}
+                    </div>
 
-    cert_sb = ""
-    for c in ss.certificate_links:
-        if c.get("name"):
-            cert_sb += f'<div class="nb" style="font-size:8pt; color:{sb_txt}; margin-bottom:5pt;"><b>{c.get("name","")}</b><br/><span style="color:{acc}; font-size:7.5pt;">{c.get("duration","")}</span></div>'
+                    <!-- Certificate Title -->
+                    <div style='
+                        font-size: 18px;
+                        font-weight: 700;
+                        color: #111827;
+                        margin-bottom: 12px;
+                        margin-right: 120px;
+                        display: flex;
+                        align-items: center;
+                    '>
+                        <div style='
+                            width: 6px; 
+                            height: 6px; 
+                            background: #6b7280;
+                            border-radius: 50%; 
+                            margin-right: 12px;
+                        '></div>
+                        <a href="{link}" target="_blank" style='
+                            color: #111827;
+                            text-decoration: none;
+                            transition: color 0.3s ease;
+                        '>{name}</a>
+                    </div>
 
-    summary_html = ss.get('summary','').replace('\n','<br/>')
+                    <!-- Description -->
+                    <div style='
+                        font-size: 15px;
+                        color: #374151;
+                        background: rgba(255, 255, 255, 0.8);
+                        padding: 16px;
+                        border-radius: 8px;
+                        border: 1px solid rgba(209, 213, 219, 0.6);
+                        line-height: 1.6;
+                    '>
+                        <div style='
+                            display: flex;
+                            align-items: flex-start;
+                            margin-bottom: 8px;
+                        '>
+                            <div style='
+                                width: 4px; 
+                                height: 4px; 
+                                background: #6b7280;
+                                border-radius: 50%; 
+                                margin-right: 12px;
+                                margin-top: 8px;
+                                flex-shrink: 0;
+                            '></div>
+                            <div>{description}</div>
+                        </div>
+                    </div>
+                </div>
+                """
+                certificate_links_html += card_html
 
-    return f"""
-<!-- FULL-WIDTH TWO-COLUMN TABLE: sidebar | main -->
-<table style="height:260mm;">
-  <tr>
-    <!-- SIDEBAR -->
-    <td style="width:62mm; background-color:{sb_bg}; color:{sb_txt}; padding:10pt 8pt; vertical-align:top;">
+    # Main HTML content - exactly as before
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{session_state['name']} - Professional Resume</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {{
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }}
+        
+        body {{
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            color: #1a202c;
+            background: #ffffff;
+            min-height: 100vh;
+        }}
+        
+        .resume-container {{
+            width: 100%;
+            min-height: 100vh;
+            background: #ffffff;
+        }}
+        
+        .resume-container::before {{
+            content: '';
+            display: block;
+            height: 4px;
+            background: linear-gradient(90deg, #6b7280, #9ca3af);
+        }}
+        
+        .header-section {{
+            background: #f8fafc;
+            padding: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e2e8f0;
+        }}
+        
+        .name-title {{
+            flex: 1;
+        }}
+        
+        .name-title h1 {{
+            font-size: 42px;
+            font-weight: 800;
+            color: #1a202c;
+            margin-bottom: 8px;
+        }}
+        
+        .name-title h2 {{
+            font-size: 24px;
+            font-weight: 600;
+            color: #4a5568;
+            margin: 0;
+        }}
+        
+        .profile-image {{
+            flex-shrink: 0;
+            margin-left: 40px;
+        }}
+        
+        .main-content {{
+            display: flex;
+            min-height: 800px;
+        }}
+        
+        .sidebar {{
+            width: 350px;
+            background: #f7fafc;
+            padding: 40px 30px;
+            border-right: 1px solid #e2e8f0;
+        }}
+        
+        .main-section {{
+            flex: 1;
+            padding: 40px;
+            background: #ffffff;
+        }}
+        
+        .contact-info {{
+            margin-bottom: 40px;
+        }}
+        
+        .contact-item {{
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 8px 0;
+        }}
+        
+        .contact-icon {{
+            width: 20px;
+            height: 20px;
+            margin-right: 15px;
+            opacity: 0.8;
+        }}
+        
+        .contact-item span, .contact-item a {{
+            font-size: 14px;
+            color: #4a5568;
+            text-decoration: none;
+            font-weight: 500;
+        }}
+        
+        .contact-item a:hover {{
+            color: #6b7280;
+            transition: color 0.3s ease;
+        }}
+        
+        .section-title {{
+            font-size: 22px;
+            font-weight: 700;
+            color: #2d3748;
+            margin: 35px 0 15px 0;
+        }}
+        
+        .section-content {{
+            margin-bottom: 30px;
+        }}
+        
+        .summary-text {{
+            font-size: 16px;
+            line-height: 1.8;
+            color: #4a5568;
+            background: #f8fafc;
+            padding: 25px;
+            border-radius: 8px;
+            border-left: 3px solid #9ca3af;
+        }}
+        
+        @media (max-width: 768px) {{
+            .main-content {{
+                flex-direction: column;
+            }}
+            
+            .sidebar {{
+                width: 100%;
+            }}
+            
+            .header-section {{
+                flex-direction: column;
+                text-align: center;
+            }}
+            
+            .profile-image {{
+                margin: 20px 0 0 0;
+            }}
+            
+            .name-title h1 {{
+                font-size: 32px;
+            }}
+        }}
+        
+        @media (max-width: 480px) {{
+            .header-section, .sidebar, .main-section {{
+                padding: 20px;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="resume-container">
+        <div class="header-section">
+            <div class="name-title">
+                <h1>{session_state['name']}</h1>
+                <h2>{session_state['job_title']}</h2>
+            </div>
+            <div class="profile-image">
+                {profile_img_html}
+            </div>
+        </div>
 
-      {"<div style='text-align:center; margin-bottom:8pt;'>"+img+"</div>" if img else ""}
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="contact-info">
+                    <div class="contact-item">
+                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
+                        </svg>
+                        <span>{session_state['location']}</span>
+                    </div>
+                    <div class="contact-item">
+                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path>
+                        </svg>
+                        <span>{session_state['phone']}</span>
+                    </div>
+                    <div class="contact-item">
+                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path>
+                            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path>
+                        </svg>
+                        <a href="mailto:{session_state['email']}">{session_state['email']}</a>
+                    </div>
+                    <div class="contact-item">
+                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                        </svg>
+                        <a href="{session_state['linkedin']}" target="_blank">LinkedIn</a>
+                    </div>
+                    <div class="contact-item">
+                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M4.083 9h1.946c.089-1.546.383-2.97.837-4.118A6.004 6.004 0 004.083 9zM10 2a8 8 0 100 16 8 8 0 000-16zm0 2c-.076 0-.232.032-.465.262-.238.234-.497.623-.737 1.182-.389.907-.673 2.142-.766 3.556h3.936c-.093-1.414-.377-2.649-.766-3.556-.24-.56-.5-.948-.737-1.182C10.232 4.032 10.076 4 10 4zm3.971 5c-.089-1.546-.383-2.97-.837-4.118A6.004 6.004 0 0115.917 9h-1.946zm-2.003 2H8.032c.093 1.414.377 2.649.766 3.556.24.56.5.948.737 1.182.233.23.389.262.465.262.076 0 .232-.032.465-.262.238-.234.498-.623.737-1.182.389-.907.673-2.142.766-3.556zm1.166 4.118c.454-1.147.748-2.572.837-4.118h1.946a6.004 6.004 0 01-2.783 4.118zm-6.268 0C6.412 13.97 6.118 12.546 6.03 11H4.083a6.004 6.004 0 002.783 4.118z" clip-rule="evenodd"></path>
+                        </svg>
+                        <a href="{session_state['portfolio']}" target="_blank">Portfolio</a>
+                    </div>
+                </div>
 
-      <div style="font-size:14pt; font-weight:bold; color:#fff; line-height:1.15; text-align:center;">{ss.get('name','')}</div>
-      <div style="font-size:8.5pt; color:{acc}; text-align:center; margin-top:3pt; margin-bottom:8pt;">{ss.get('job_title','')}</div>
+                <div class="section-content">
+                    <h3 class="section-title">Skills</h3>
+                    <div>{skills_html}</div>
+                </div>
 
-      {sb_sh("Contact")}
-      <div style="font-size:7.5pt; color:{sb_txt}; line-height:1.8;">
-        {"<div>"+ss.get('location','')+"</div>" if ss.get('location') else ""}
-        {"<div>"+ss.get('phone','')+"</div>" if ss.get('phone') else ""}
-        {"<div>"+ss.get('email','')+"</div>" if ss.get('email') else ""}
-        {"<div>"+ss.get('linkedin','')+"</div>" if ss.get('linkedin') else ""}
-      </div>
+                <div class="section-content">
+                    <h3 class="section-title">Languages</h3>
+                    <div>{languages_html}</div>
+                </div>
 
-      {sb_sh("Skills")}
-      {sb_skills(ss.get('skills',''))}
+                <div class="section-content">
+                    <h3 class="section-title">Interests</h3>
+                    <div>{interests_html}</div>
+                </div>
 
-      {sb_sh("Soft Skills")}
-      {sb_skills(ss.get('Softskills',''))}
+                <div class="section-content">
+                    <h3 class="section-title">Soft Skills</h3>
+                    <div>{Softskills_html}</div>
+                </div>
+            </div>
 
-      {sb_sh("Languages")}
-      <div style="font-size:8pt; color:{sb_txt};">
-        {" • ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())}
-      </div>
+            <div class="main-section">
+                <div class="section-content">
+                    <h3 class="section-title">Professional Summary</h3>
+                    <div class="summary-text">{summary_html}</div>
+                </div>
 
-      {sb_sh("Interests")}
-      <div style="font-size:8pt; color:{sb_txt};">
-        {" • ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())}
-      </div>
+                <div class="section-content">
+                    <h3 class="section-title">Work Experience</h3>
+                    {experience_html}
+                </div>
 
-      {(sb_sh("Certifications") + cert_sb) if cert_sb else ""}
+                <div class="section-content">
+                    <h3 class="section-title">Education</h3>
+                    {education_html}
+                </div>
 
-    </td>
+                <div class="section-content">
+                    <h3 class="section-title">Projects</h3>
+                    {projects_html}
+                </div>
 
-    <!-- MAIN -->
-    <td style="vertical-align:top; padding-left:10pt;">
+                <div class="section-content">
+                    {project_links_html}
+                </div>
 
-      {main_sh("Professional Summary")}
-      <div style="font-size:8.5pt; color:#444; margin-top:3pt; line-height:1.5;">{summary_html}</div>
+                <div class="section-content">
+                    {certificate_links_html}
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+"""
+    
+    return html_content
 
-      {main_sh("Work Experience")}
-      {exp_html}
+def render_template_modern(session_state, profile_img_html=""):
+    """Modern minimal template with clean design, pill-style tags for enhanced visual appeal"""
+    
+    # Process lists into pill tags instead of plain lists
+    skills_list = [s.strip() for s in session_state['skills'].split(',') if s.strip()]
+    languages_list = [l.strip() for l in session_state['languages'].split(',') if l.strip()]
+    interests_list = [i.strip() for i in session_state['interests'].split(',') if i.strip()]
+    softskills_list = [s.strip() for s in session_state['Softskills'].split(',') if s.strip()]
+    
+    # Create unified pill-style tags for all sections
+    skills_pills = "".join([
+        f"""<span style="
+            display: inline-block;
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+            color: #0c4a6e;
+            padding: 8px 16px;
+            margin: 4px 6px 4px 0;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            box-shadow: 0 2px 4px rgba(8, 145, 178, 0.1);
+            border: 1px solid rgba(14, 165, 233, 0.2);
+        ">{skill}</span>""" for skill in skills_list
+    ])
+    
+    # Create unified pill-style tags for languages
+    languages_pills = "".join([
+        f"""<span style="
+            display: inline-block;
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+            color: #0c4a6e;
+            padding: 8px 16px;
+            margin: 4px 6px 4px 0;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            box-shadow: 0 2px 4px rgba(8, 145, 178, 0.1);
+            border: 1px solid rgba(14, 165, 233, 0.2);
+        ">{lang}</span>""" for lang in languages_list
+    ])
+    
+    # Create unified pill-style tags for interests
+    interests_pills = "".join([
+        f"""<span style="
+            display: inline-block;
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+            color: #0c4a6e;
+            padding: 8px 16px;
+            margin: 4px 6px 4px 0;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            box-shadow: 0 2px 4px rgba(8, 145, 178, 0.1);
+            border: 1px solid rgba(14, 165, 233, 0.2);
+        ">{interest}</span>""" for interest in interests_list
+    ])
+    
+    # Create unified pill-style tags for soft skills
+    softskills_pills = "".join([
+        f"""<span style="
+            display: inline-block;
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+            color: #0c4a6e;
+            padding: 8px 16px;
+            margin: 4px 6px 4px 0;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            box-shadow: 0 2px 4px rgba(8, 145, 178, 0.1);
+            border: 1px solid rgba(14, 165, 233, 0.2);
+        ">{skill}</span>""" for skill in softskills_list
+    ])
+    
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{session_state['name']} - Modern Resume</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #374151;
+            background: #ffffff;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }}
+        
+        .header {{
+            text-align: center;
+            margin-bottom: 50px;
+            padding: 40px 0;
+            position: relative;
+        }}
+        
+        .header::after {{
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 3px;
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
+            border-radius: 2px;
+        }}
+        
+        .profile-image-container {{
+            margin-bottom: 25px;
+        }}
+        
+        .profile-image-container img {{
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            object-fit: cover;
+            object-position: center;
+            border: 4px solid #3b82f6;
+            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3), 0 0 0 8px rgba(59, 130, 246, 0.1);
+            display: block;
+            margin: 0 auto;
+        }}
+        
+        .header h1 {{
+            font-size: 2.75rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 12px;
+            letter-spacing: -0.025em;
+        }}
+        
+        .header h2 {{
+            font-size: 1.35rem;
+            font-weight: 500;
+            color: #6b7280;
+            margin-bottom: 25px;
+        }}
+        
+        .contact-info {{
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 25px;
+            font-size: 0.95rem;
+            color: #4b5563;
+        }}
+        
+        .contact-info a {{
+            color: #3b82f6;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s ease;
+        }}
+        
+        .contact-info a:hover {{
+            color: #1d4ed8;
+        }}
+        
+        .section {{
+            margin-bottom: 40px;
+        }}
+        
+        .section h3 {{
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 20px;
+            position: relative;
+            padding-bottom: 10px;
+            text-align: center;
+        }}
+        
+        .section h3::after {{
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 50px;
+            height: 2px;
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
+            border-radius: 1px;
+        }}
+        
+        .project-links {{
+            text-align: center;
+        }}
+        
+        .summary {{
+            font-size: 1.1rem;
+            line-height: 1.8;
+            color: #4b5563;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            padding: 30px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            position: relative;
+        }}
+        
+        .summary::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
+            border-radius: 12px 12px 0 0;
+        }}
+        
+        .experience-item, .education-item, .project-item {{
+            margin-bottom: 30px;
+            padding: 25px;
+            background: linear-gradient(135deg, #fafbfc 0%, #f4f6f8 100%);
+            border-radius: 12px;
+            border: 1px solid #e5e7eb;
+            position: relative;
+        }}
+        
+        .experience-item::before, .education-item::before, .project-item::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #6b7280, #9ca3af);
+            border-radius: 12px 12px 0 0;
+        }}
+        
+        .item-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }}
+        
+        .item-title {{
+            font-weight: 700;
+            color: #1f2937;
+            font-size: 1.2rem;
+        }}
+        
+        .item-duration {{
+            color: #6b7280;
+            font-size: 0.95rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #f9fafb, #f3f4f6);
+            padding: 6px 14px;
+            border-radius: 16px;
+            border: 1px solid #d1d5db;
+        }}
+        
+        .item-subtitle {{
+            color: #3b82f6;
+            font-size: 1.05rem;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }}
+        
+        .item-description {{
+            color: #4b5563;
+            line-height: 1.7;
+            font-size: 1rem;
+        }}
+        
+        .pills-container {{
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 10px;
+        }}
+        
+        .links a {{
+            display: inline-block;
+            color: #3b82f6;
+            text-decoration: none;
+            margin-right: 20px;
+            margin-bottom: 8px;
+            font-weight: 500;
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            border-radius: 8px;
+            border: 1px solid #bfdbfe;
+            transition: all 0.2s ease;
+        }}
+        
+        .links a:hover {{
+            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+            transform: translateY(-1px);
+        }}
+        
+        @media (max-width: 768px) {{
+            body {{
+                padding: 20px 15px;
+            }}
+            
+            .contact-info {{
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+            }}
+            
+            .item-header {{
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }}
+            
+            .header h1 {{
+                font-size: 2.2rem;
+            }}
+            
+            .experience-item, .education-item, .project-item {{
+                padding: 20px;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="profile-image-container">
+            {profile_img_html}
+        </div>
+        <h1>{session_state['name']}</h1>
+        <h2>{session_state['job_title']}</h2>
+        <div class="contact-info">
+            <span>📍 {session_state['location']}</span>
+            <span>📞 {session_state['phone']}</span>
+            <a href="mailto:{session_state['email']}">✉️ {session_state['email']}</a>
+            <a href="{session_state['linkedin']}" target="_blank">🔗 LinkedIn</a>
+            <a href="{session_state['portfolio']}" target="_blank">🌐 Portfolio</a>
+        </div>
+    </div>
 
-      {main_sh("Education")}
-      {edu_html}
+    <div class="section">
+        <h3>Professional Summary</h3>
+        <div class="summary">{session_state['summary'].replace(chr(10), '<br>')}</div>
+    </div>
 
-      {(main_sh("Projects") + proj_html) if proj_html else ""}
+    <div class="section">
+        <h3>Work Experience</h3>
+        {"".join([f'''
+        <div class="experience-item">
+            <div class="item-header">
+                <div class="item-title">{exp.get('title', '')}</div>
+                <div class="item-duration">{exp.get('duration', '')}</div>
+            </div>
+            <div class="item-subtitle">{exp.get('company', '')}</div>
+            <div class="item-description">{exp.get('description', '').replace(chr(10), '<br>')}</div>
+        </div>
+        ''' for exp in session_state.experience_entries if exp.get('company') or exp.get('title')])}
+    </div>
 
-    </td>
-  </tr>
-</table>
+    <div class="section">
+        <h3>Education</h3>
+        {"".join([f'''
+        <div class="education-item">
+            <div class="item-header">
+                <div class="item-title">{edu.get('degree', '')}</div>
+                <div class="item-duration">{edu.get('year', '')}</div>
+            </div>
+            <div class="item-subtitle">{edu.get('institution', '')}</div>
+            <div class="item-description">{edu.get('details', '')}</div>
+        </div>
+        ''' for edu in session_state.education_entries if edu.get('institution') or edu.get('degree')])}
+    </div>
+
+    <div class="section">
+        <h3>Projects</h3>
+        {"".join([f'''
+        <div class="project-item">
+            <div class="item-header">
+                <div class="item-title">{proj.get('title', '')}</div>
+                <div class="item-duration">{proj.get('duration', '')}</div>
+            </div>
+            <div class="item-subtitle">Technologies: {proj.get('tech', '')}</div>
+            <div class="item-description">{proj.get('description', '').replace(chr(10), '<br>')}</div>
+        </div>
+        ''' for proj in session_state.project_entries if proj.get('title')])}
+    </div>
+
+    <div class="section">
+        <h3>Technical Skills</h3>
+        <div class="pills-container">
+            {skills_pills}
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Languages</h3>
+        <div class="pills-container">
+            {languages_pills}
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Professional Interests</h3>
+        <div class="pills-container">
+            {interests_pills}
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>Core Competencies</h3>
+        <div class="pills-container">
+            {softskills_pills}
+        </div>
+    </div>
+
+    {f'''
+    <div class="section">
+        <h3>Project Links</h3>
+        <div class="links project-links">
+            {"".join([f'<a href="{link}" target="_blank">🔗 Project {i+1}</a>' for i, link in enumerate(session_state.project_links)])}
+        </div>
+    </div>
+    ''' if session_state.project_links else ''}
+
+    {f'''
+    <div class="section">
+        <h3>Professional Certifications</h3>
+        {"".join([f'''
+        <div class="project-item">
+            <div class="item-header">
+                <div class="item-title">
+                    <a href="{cert['link']}" target="_blank" style="color: #1f2937; text-decoration: none;">
+                        {cert['name']}
+                    </a>
+                </div>
+                <div class="item-duration">{cert.get('duration', '')}</div>
+            </div>
+            <div class="item-description">
+                {cert.get('description', '').replace(chr(10), '<br>')}
+            </div>
+        </div>
+        ''' for cert in session_state.certificate_links if cert.get('name')])}
+    </div>
+    ''' if any(cert.get('name') for cert in session_state.certificate_links) else ''}
+
+</body>
+</html>
 """
 
+    
+    return html_content
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 4 — Executive (single-column, serif, conservative)
-# Colour: Burgundy (#7b2d2d). Skills in two-column table.
-# ─────────────────────────────────────────────────────────────────────────────
-def render_template_executive(session_state, profile_img_html=""):
-    ss  = session_state
-    acc = "#7b2d2d"
-    src = _extract_img_src(profile_img_html)
-    img = _profile_img_tag(src, size_mm=26)
-
-    def sh(label):
-        return (f'<div class="sh" style="color:{acc}; border-bottom:1pt solid {acc}; '
-                f'font-family:Georgia,serif; letter-spacing:1.5pt;">{label}</div>')
-
-    exp_html = ""
-    for exp in ss.experience_entries:
-        if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description",""))
-            exp_html += f"""
-<div class="nb" style="margin-bottom:7pt;">
-  <table><tr>
-    <td style="font-size:10pt; font-weight:bold; font-family:Georgia,serif;">{exp.get('company','')}</td>
-    <td style="text-align:right; width:30%; font-size:8pt; color:#666; font-style:italic;">{exp.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8.5pt; color:{acc}; font-style:italic; font-weight:bold; margin-bottom:2pt;">{exp.get('title','')}</div>
-  <div style="font-size:8.5pt;">{desc}</div>
-</div>"""
-
-    edu_html = ""
-    for edu in ss.education_entries:
-        if edu.get("institution") or edu.get("degree"):
-            edu_html += f"""
-<div class="nb" style="margin-bottom:6pt;">
-  <table><tr>
-    <td style="font-size:9.5pt; font-weight:bold; font-family:Georgia,serif;">{edu.get('institution','')}</td>
-    <td style="text-align:right; width:28%; font-size:8pt; color:#666;">{edu.get('year','')}</td>
-  </tr></table>
-  <div style="font-size:8.5pt; color:{acc}; font-style:italic;">{_deg(edu)}</div>
-  <div style="font-size:8pt; color:#555;">{edu.get('details','')}</div>
-</div>"""
-
-    proj_html = ""
-    for proj in ss.project_entries:
-        if proj.get("title"):
-            desc = _bullets(proj.get("description",""))
-            proj_html += f"""
-<div class="nb" style="margin-bottom:7pt;">
-  <table><tr>
-    <td style="font-size:9pt; font-weight:bold; font-family:Georgia,serif;">{proj.get('title','')}</td>
-    <td style="text-align:right; width:28%; font-size:8pt; color:#666; font-style:italic;">{proj.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8pt; color:#666; font-style:italic;">{proj.get('tech','')}</div>
-  <div style="font-size:8.5pt;">{desc}</div>
-</div>"""
-
-    # Two-column skills table
-    all_sk = [s.strip() for s in ss.get('skills','').split(',') if s.strip()]
-    soft   = [s.strip() for s in ss.get('Softskills','').split(',') if s.strip()]
-    combined = all_sk + soft
-    mid = (len(combined)+1)//2
-    col1, col2 = combined[:mid], combined[mid:]
-    def li_td(lst):
-        return "".join(f'<div style="font-size:8.5pt; padding:1.5pt 0;">&#8226; {s}</div>' for s in lst)
-    skills_table = f"""
-<table style="margin-top:3pt;"><tr>
-  <td style="width:50%; vertical-align:top;">{li_td(col1)}</td>
-  <td style="width:50%; vertical-align:top;">{li_td(col2)}</td>
-</tr></table>"""
-
-    cert_html = ""
-    for c in ss.certificate_links:
-        if c.get("name"):
-            cert_html += f'<div class="nb" style="font-size:8.5pt; margin-bottom:5pt;"><b style="color:{acc};">{c.get("name","")}</b> &ndash; {c.get("duration","")} &mdash; <span style="color:#555;">{c.get("description","")}</span></div>'
-
-    langs   = ", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())
-    ints    = ", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())
-    summary = ss.get('summary','').replace('\n','<br/>')
-
-    return f"""
-<!-- HEADER -->
-<table style="border-bottom:2pt solid {acc}; padding-bottom:8pt; margin-bottom:6pt;">
-  <tr>
-    <td style="vertical-align:middle;">
-      <div style="font-size:22pt; font-weight:bold; color:#1a1a1a; font-family:Georgia,serif; line-height:1.1;">{ss.get('name','')}</div>
-      <div style="font-size:11pt; color:{acc}; font-style:italic; margin-top:3pt;">{ss.get('job_title','')}</div>
-      <div style="font-size:7.5pt; color:#555; margin-top:5pt;">{_contact_line(ss)}</div>
-    </td>
-    {"<td style='width:32mm; text-align:right; vertical-align:middle;'>"+img+"</td>" if img else ""}
-  </tr>
-</table>
-
-{sh("Summary")}
-<div style="font-size:8.5pt; line-height:1.55; color:#333; margin-top:3pt;">{summary}</div>
-
-{sh("Experience")}
-{exp_html}
-
-{sh("Education")}
-{edu_html}
-
-{sh("Skills &amp; Competencies")}
-{skills_table}
-
-{(sh("Projects") + proj_html) if proj_html else ""}
-{(sh("Certifications") + cert_html) if cert_html else ""}
-
-<div style="margin-top:8pt; padding-top:4pt; border-top:0.5pt solid #ccc; font-size:8pt; color:#666;">
-  <b>Languages:</b> {langs} &nbsp;&nbsp; <b>Interests:</b> {ints}
-</div>
+def render_template_sidebar(session_state, profile_img_html=""):
+    """Enhanced elegant sidebar template with improved styling, pill tags, and better visual hierarchy"""
+    
+    # Process lists for pill-style tags
+    skills_list = [s.strip() for s in session_state['skills'].split(',') if s.strip()]
+    languages_list = [l.strip() for l in session_state['languages'].split(',') if l.strip()]
+    interests_list = [i.strip() for i in session_state['interests'].split(',') if i.strip()]
+    softskills_list = [s.strip() for s in session_state['Softskills'].split(',') if s.strip()]
+    
+    # Create pill-style tags for sidebar sections
+    skills_pills = "".join([
+        f"""<div style="
+            display: inline-block;
+            background: rgba(56, 189, 248, 0.15);
+            color: #e0f2fe;
+            padding: 8px 16px;
+            margin: 5px 8px 5px 0;
+            border-radius: 18px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            box-shadow: 0 2px 4px rgba(56, 189, 248, 0.1);
+        ">{skill}</div>""" for skill in skills_list
+    ])
+    
+    languages_pills = "".join([
+        f"""<div style="
+            display: inline-block;
+            background: rgba(34, 197, 94, 0.15);
+            color: #dcfce7;
+            padding: 8px 16px;
+            margin: 5px 8px 5px 0;
+            border-radius: 18px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            box-shadow: 0 2px 4px rgba(34, 197, 94, 0.1);
+        ">{lang}</div>""" for lang in languages_list
+    ])
+    
+    interests_pills = "".join([
+        f"""<div style="
+            display: inline-block;
+            background: rgba(245, 158, 11, 0.15);
+            color: #fef3c7;
+            padding: 8px 16px;
+            margin: 5px 8px 5px 0;
+            border-radius: 18px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            box-shadow: 0 2px 4px rgba(245, 158, 11, 0.1);
+        ">{interest}</div>""" for interest in interests_list
+    ])
+    
+    softskills_pills = "".join([
+        f"""<div style="
+            display: inline-block;
+            background: rgba(168, 85, 247, 0.15);
+            color: #f3e8ff;
+            padding: 8px 16px;
+            margin: 5px 8px 5px 0;
+            border-radius: 18px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            box-shadow: 0 2px 4px rgba(168, 85, 247, 0.1);
+        ">{skill}</div>""" for skill in softskills_list
+    ])
+    
+    # Enhanced profile image styling
+    enhanced_profile_img = ""
+    if profile_img_html:
+        # Extract the img tag and enhance it
+        import re
+        img_match = re.search(r'<img[^>]*>', profile_img_html)
+        if img_match:
+            enhanced_profile_img = img_match.group(0).replace(
+                'style="',
+                'style="width: 160px; height: 160px; border-radius: 50%; object-fit: cover; object-position: center; border: 4px solid #38bdf8; box-shadow: 0 8px 32px rgba(56, 189, 248, 0.3), 0 0 0 8px rgba(56, 189, 248, 0.1); margin-bottom: 20px; '
+            )
+    
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{session_state['name']} - Elegant Resume</title>
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8fafc;
+        }}
+        
+        .resume-container {{
+            width: 100%;
+            display: flex;
+            min-height: 100vh;
+            background: white;
+            box-shadow: 0 0 30px rgba(0,0,0,0.1);
+        }}
+        
+        .sidebar {{
+            width: 350px;
+            background: linear-gradient(180deg, #1e293b 0%, #334155 100%);
+            color: white;
+            padding: 40px 30px;
+            position: relative;
+        }}
+        
+        .sidebar::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, #38bdf8, #06b6d4);
+        }}
+        
+        .main-content {{
+            flex: 1;
+            padding: 40px 50px;
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        }}
+        
+        .profile-section {{
+            text-align: center;
+            margin-bottom: 45px;
+            position: relative;
+        }}
+        
+        .profile-section::after {{
+            content: '';
+            position: absolute;
+            bottom: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 3px;
+            background: linear-gradient(90deg, #38bdf8, #06b6d4);
+            border-radius: 2px;
+        }}
+        
+        .profile-section h1 {{
+            font-size: 1.95rem;
+            margin-bottom: 12px;
+            color: #f8fafc;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+        }}
+        
+        .profile-section h2 {{
+            font-size: 1.1rem;
+            color: #cbd5e1;
+            margin-bottom: 25px;
+            font-weight: 500;
+        }}
+        
+        .contact-section {{
+            margin-bottom: 40px;
+        }}
+        
+        .contact-item {{
+            display: flex;
+            align-items: center;
+            margin-bottom: 18px;
+            padding: 12px;
+            background: rgba(56, 189, 248, 0.1);
+            border-radius: 10px;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            transition: all 0.3s ease;
+        }}
+        
+        .contact-item:hover {{
+            background: rgba(56, 189, 248, 0.15);
+            transform: translateX(5px);
+        }}
+        
+        .contact-icon {{
+            margin-right: 15px;
+            font-size: 1.1rem;
+            color: #38bdf8;
+            width: 20px;
+            text-align: center;
+        }}
+        
+        .contact-item span, .contact-item a {{
+            color: #e2e8f0;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            max-width: 100%;
+            display: inline-block;
+        }}
+        
+        .contact-item a:hover {{
+            color: #38bdf8;
+            transition: color 0.3s ease;
+        }}
+        
+        .sidebar-section {{
+            margin-bottom: 40px;
+        }}
+        
+        .sidebar-section h3 {{
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: #38bdf8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 700;
+            position: relative;
+            padding-bottom: 10px;
+        }}
+        
+        .sidebar-section h3::after {{
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 40px;
+            height: 2px;
+            background: linear-gradient(90deg, #38bdf8, #06b6d4);
+            border-radius: 1px;
+        }}
+        
+        .main-section {{
+            margin-bottom: 40px;
+        }}
+        
+        .main-section h3 {{
+            font-size: 1.65rem;
+            color: #1e293b;
+            margin-bottom: 25px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 700;
+            position: relative;
+            padding-bottom: 15px;
+        }}
+        
+        .main-section h3::after {{
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 60px;
+            height: 3px;
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
+            border-radius: 2px;
+        }}
+        
+        .summary {{
+            font-size: 1.1rem;
+            line-height: 1.8;
+            color: #4b5563;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            padding: 30px;
+            border-radius: 15px;
+            border: 1px solid #bae6fd;
+            position: relative;
+            box-shadow: 0 4px 6px rgba(59, 130, 246, 0.05);
+        }}
+        
+        .summary::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
+            border-radius: 15px 15px 0 0;
+        }}
+        
+        .content-item {{
+            margin-bottom: 30px;
+            padding: 30px;
+            background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+            border-radius: 15px;
+            border: 1px solid #e5e7eb;
+            position: relative;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }}
+        
+        .content-item::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #6b7280, #9ca3af);
+            border-radius: 15px 15px 0 0;
+        }}
+        
+        .content-item:last-child {{
+            margin-bottom: 0;
+        }}
+        
+        .item-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }}
+        
+        .item-title {{
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #1e293b;
+        }}
+        
+        .item-duration {{
+            color: #6b7280;
+            font-size: 0.95rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 1px solid #cbd5e1;
+        }}
+        
+        .item-company {{
+            color: #3b82f6;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }}
+        
+        .item-description {{
+            color: #4b5563;
+            line-height: 1.7;
+            font-size: 1rem;
+        }}
+        
+        .project-tech {{
+            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+            color: #1e40af;
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            margin-bottom: 15px;
+            display: inline-block;
+            font-weight: 600;
+            border: 1px solid #93c5fd;
+        }}
+        
+        @media (max-width: 768px) {{
+            .resume-container {{
+                flex-direction: column;
+            }}
+            
+            .sidebar {{
+                width: 100%;
+            }}
+            
+            .item-header {{
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }}
+            
+            .main-content {{
+                padding: 30px 25px;
+            }}
+            
+            .sidebar {{
+                padding: 30px 25px;
+            }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="resume-container">
+        <div class="sidebar">
+            <div class="profile-section">
+                {enhanced_profile_img}
+                <h1>{session_state['name']}</h1>
+                <h2>{session_state['job_title']}</h2>
+            </div>
+            
+            <div class="contact-section">
+                <div class="contact-item">
+                    <div class="contact-icon">📍</div>
+                    <span>{session_state['location']}</span>
+                </div>
+                <div class="contact-item">
+                    <div class="contact-icon">📞</div>
+                    <span>{session_state['phone']}</span>
+                </div>
+                <div class="contact-item">
+                    <div class="contact-icon">✉️</div>
+                    <a href="mailto:{session_state['email']}">{session_state['email']}</a>
+                </div>
+                <div class="contact-item">
+                    <div class="contact-icon">🔗</div>
+                    <a href="{session_state['linkedin']}" target="_blank">LinkedIn Profile</a>
+                </div>
+                <div class="contact-item">
+                    <div class="contact-icon">🌐</div>
+                    <a href="{session_state['portfolio']}" target="_blank">Portfolio Website</a>
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>Technical Skills</h3>
+                <div>{skills_pills}</div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>Languages</h3>
+                <div>{languages_pills}</div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>Interests</h3>
+                <div>{interests_pills}</div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3>Core Competencies</h3>
+                <div>{softskills_pills}</div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="main-section">
+                <h3>Professional Summary</h3>
+                <div class="summary">{session_state['summary'].replace(chr(10), '<br>')}</div>
+            </div>
+            
+            <div class="main-section">
+                <h3>Professional Experience</h3>
+                {"".join([f'''
+                <div class="content-item">
+                    <div class="item-header">
+                        <div class="item-title">{exp.get('title', '')}</div>
+                        <div class="item-duration">{exp.get('duration', '')}</div>
+                    </div>
+                    <div class="item-company">{exp.get('company', '')}</div>
+                    <div class="item-description">{exp.get('description', '').replace(chr(10), '<br>')}</div>
+                </div>
+                ''' for exp in session_state.experience_entries if exp.get('company') or exp.get('title')])}
+            </div>
+            
+            <div class="main-section">
+                <h3>Education & Qualifications</h3>
+                {"".join([f'''
+                <div class="content-item">
+                    <div class="item-header">
+                        <div class="item-title">{edu.get('degree', '')}</div>
+                        <div class="item-duration">{edu.get('year', '')}</div>
+                    </div>
+                    <div class="item-company">{edu.get('institution', '')}</div>
+                    <div class="item-description">{edu.get('details', '')}</div>
+                </div>
+                ''' for edu in session_state.education_entries if edu.get('institution') or edu.get('degree')])}
+            </div>
+            
+            <div class="main-section">
+                <h3>Key Projects</h3>
+                {"".join([f'''
+                <div class="content-item">
+                    <div class="item-header">
+                        <div class="item-title">{proj.get('title', '')}</div>
+                        <div class="item-duration">{proj.get('duration', '')}</div>
+                    </div>
+                    <div class="project-tech">Technologies: {proj.get('tech', '')}</div>
+                    <div class="item-description">{proj.get('description', '').replace(chr(10), '<br>')}</div>
+                </div>
+                ''' for proj in session_state.project_entries if proj.get('title')])}
+            </div>
+            
+            {f'''
+            <div class="main-section">
+                <h3>Project Portfolio</h3>
+                {"".join([f'''<div class="content-item" style="padding: 20px;"><a href="{link}" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 600; font-size: 1.1rem;">🔗 Project Repository {i+1}</a></div>''' for i, link in enumerate(session_state.project_links)])}
+            </div>
+            ''' if session_state.project_links else ''}
+            
+            {f'''
+            <div class="main-section">
+                <h3>Professional Certifications</h3>
+                {"".join([f'''
+                <div class="content-item">
+                    <div class="item-header">
+                        <div class="item-title">
+                            <a href="{cert['link']}" target="_blank" style="color: #1e293b; text-decoration: none;">
+                                {cert['name']}
+                            </a>
+                        </div>
+                        <div class="item-duration">{cert.get('duration', '')}</div>
+                    </div>
+                    <div class="item-description">
+                        {cert.get('description', '').replace(chr(10), '<br>')}
+                    </div>
+                </div>
+                ''' for cert in session_state.certificate_links if cert.get('name')])}
+            </div>
+            ''' if any(cert.get('name') for cert in session_state.certificate_links) else ''}
+        </div>
+    </div>
+</body>
+</html>
 """
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 5 — Creative (single-column, bold shaded header band)
-# Colour: Forest green (#15803d). Header has shaded background via table cell.
-# ─────────────────────────────────────────────────────────────────────────────
-def render_template_creative(session_state, profile_img_html=""):
-    ss   = session_state
-    acc  = "#15803d"
-    dark = "#14532d"
-    lt   = "#dcfce7"
-    src  = _extract_img_src(profile_img_html)
-    img  = _profile_img_tag(src, size_mm=27)
-
-    def sh(label):
-        return (f'<table style="margin-top:10pt; margin-bottom:4pt; width:100%;"><tr>'
-                f'<td style="width:4pt; background-color:{acc};"> </td>'
-                f'<td style="padding-left:5pt; font-size:8pt; font-weight:bold; '
-                f'text-transform:uppercase; letter-spacing:1pt; color:{dark};">{label}</td>'
-                f'<td style="border-bottom:0.5pt solid #d1fae5;"> </td>'
-                f'</tr></table>')
-
-    exp_html = ""
-    for exp in ss.experience_entries:
-        if exp.get("company") or exp.get("title"):
-            desc = _bullets(exp.get("description",""))
-            exp_html += f"""
-<div class="nb" style="margin-bottom:7pt; padding:5pt 6pt; background-color:{lt}; border-left:3pt solid {acc};">
-  <table><tr>
-    <td style="font-size:9.5pt; font-weight:bold; color:{dark};">{exp.get('company','')}</td>
-    <td style="text-align:right; width:32%; font-size:8pt; color:#555;">{exp.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8.5pt; font-weight:bold; color:{acc}; margin-bottom:2pt;">{exp.get('title','')}</div>
-  <div style="font-size:8.5pt;">{desc}</div>
-</div>"""
-
-    edu_html = ""
-    for edu in ss.education_entries:
-        if edu.get("institution") or edu.get("degree"):
-            edu_html += f"""
-<div class="nb" style="margin-bottom:6pt;">
-  <table><tr>
-    <td style="font-size:9pt; font-weight:bold; color:{dark};">&#8226; {edu.get('institution','')}</td>
-    <td style="text-align:right; width:28%; font-size:8pt; color:#555;">{edu.get('year','')}</td>
-  </tr></table>
-  <div style="font-size:8.5pt; color:{acc}; font-weight:bold; padding-left:8pt;">{_deg(edu)}</div>
-  <div style="font-size:8pt; color:#555; padding-left:8pt;">{edu.get('details','')}</div>
-</div>"""
-
-    proj_html = ""
-    for proj in ss.project_entries:
-        if proj.get("title"):
-            desc = _bullets(proj.get("description",""))
-            proj_html += f"""
-<div class="nb" style="margin-bottom:7pt; padding:5pt 6pt; background-color:{lt};">
-  <table><tr>
-    <td style="font-size:9pt; font-weight:bold; color:{dark};">{proj.get('title','')}</td>
-    <td style="text-align:right; width:28%; font-size:8pt; color:#555;">{proj.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8pt; color:{acc}; margin-bottom:2pt;">{proj.get('tech','')}</div>
-  <div style="font-size:8.5pt;">{desc}</div>
-</div>"""
-
-    cert_html = ""
-    for c in ss.certificate_links:
-        if c.get("name"):
-            cert_html += f'<div class="nb" style="font-size:8.5pt; margin-bottom:5pt;"><b style="color:{dark};">{c.get("name","")}</b> &middot; <span style="color:#555;">{c.get("duration","")}</span></div>'
-
-    langs   = ", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())
-    ints    = ", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())
-    summary = ss.get('summary','').replace('\n','<br/>')
-
-    return f"""
-<!-- HEADER BAND (shaded table cell) -->
-<table style="margin-bottom:8pt;">
-  <tr>
-    <td style="background-color:{dark}; color:#fff; padding:10pt 12pt; vertical-align:middle;">
-      <div style="font-size:22pt; font-weight:bold; color:#fff; line-height:1.1;">{ss.get('name','')}</div>
-      <div style="font-size:11pt; color:{lt}; margin-top:3pt;">{ss.get('job_title','')}</div>
-      <div style="font-size:7.5pt; color:#bbf7d0; margin-top:5pt;">{_contact_line(ss)}</div>
-      <div style="font-size:8.5pt; color:#d1fae5; margin-top:7pt; line-height:1.5;">{summary}</div>
-    </td>
-    {"<td style='width:32mm; background-color:"+dark+"; padding:10pt 6pt; text-align:center; vertical-align:middle;'>"+img+"</td>" if img else ""}
-  </tr>
-</table>
-
-{sh("Skills")}
-<div style="margin-top:3pt;">{_skills_spans(ss.get('skills',''), dark, lt, '#86efac')}</div>
-<div style="margin-top:3pt;">{_skills_spans(ss.get('Softskills',''), '#374151', '#f3f4f6', '#d1d5db')}</div>
-
-{sh("Experience")}
-{exp_html}
-
-{sh("Education")}
-{edu_html}
-
-{(sh("Projects") + proj_html) if proj_html else ""}
-{(sh("Certifications") + cert_html) if cert_html else ""}
-
-{sh("Languages &amp; Interests")}
-<div style="font-size:8.5pt; margin-top:3pt;">
-  <b>Languages:</b> {langs} &nbsp;&nbsp; <b>Interests:</b> {ints}
-</div>
-"""
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 6 — Tech / Developer (single-column, dark shaded header)
-# Colour: Deep purple (#4c1d95). Monospace job title. Skill tags as bordered spans.
-# ─────────────────────────────────────────────────────────────────────────────
-def render_template_tech(session_state, profile_img_html=""):
-    ss  = session_state
-    acc = "#6d28d9"
-    dark= "#1e1b4b"
-    lt  = "#ede9fe"
-    src = _extract_img_src(profile_img_html)
-    img = _profile_img_tag(src, size_mm=26)
-
-    def sh(label):
-        return (f'<div class="sh" style="color:{acc}; border-left:3pt solid {acc}; '
-                f'padding-left:5pt; border-bottom:0.5pt solid {lt}; margin-top:10pt;">{label}</div>')
-
-    def exp_block(exp):
-        desc = _bullets(exp.get("description",""))
-        return f"""
-<div class="nb" style="margin-bottom:7pt; padding:5pt 7pt; background-color:{lt};">
-  <table><tr>
-    <td style="font-size:9.5pt; font-weight:bold; color:{dark};">{exp.get('company','')}</td>
-    <td style="text-align:right; width:32%; font-size:8pt; color:#555; font-family:Courier,monospace;">{exp.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8.5pt; font-weight:bold; color:{acc}; font-family:Courier,monospace; margin-bottom:2pt;">&gt; {exp.get('title','')}</div>
-  <div style="font-size:8.5pt;">{desc}</div>
-</div>"""
-
-    def edu_block(edu):
-        return f"""
-<div class="nb" style="margin-bottom:6pt;">
-  <table><tr>
-    <td style="font-size:9pt; font-weight:bold; color:{dark};">{edu.get('institution','')}</td>
-    <td style="text-align:right; width:28%; font-size:8pt; color:#555; font-family:Courier,monospace;">{edu.get('year','')}</td>
-  </tr></table>
-  <div style="font-size:8.5pt; color:{acc};">{_deg(edu)}</div>
-  <div style="font-size:8pt; color:#555;">{edu.get('details','')}</div>
-</div>"""
-
-    def proj_block(proj):
-        desc = _bullets(proj.get("description",""))
-        return f"""
-<div class="nb" style="margin-bottom:7pt; padding:5pt 7pt; background-color:{lt}; border-top:2pt solid {acc};">
-  <table><tr>
-    <td style="font-size:9pt; font-weight:bold; color:{dark}; font-family:Courier,monospace;">{proj.get('title','')}</td>
-    <td style="text-align:right; width:28%; font-size:8pt; color:#555; font-family:Courier,monospace;">{proj.get('duration','')}</td>
-  </tr></table>
-  <div style="font-size:8pt; color:#6b7280; font-family:Courier,monospace; margin-bottom:2pt;">stack: {proj.get('tech','')}</div>
-  <div style="font-size:8.5pt;">{desc}</div>
-</div>"""
-
-    exp_html  = "".join(exp_block(e) for e in ss.experience_entries if e.get("company") or e.get("title"))
-    edu_html  = "".join(edu_block(e) for e in ss.education_entries  if e.get("institution") or e.get("degree"))
-    proj_html = "".join(proj_block(p) for p in ss.project_entries   if p.get("title"))
-    cert_html = ""
-    for c in ss.certificate_links:
-        if c.get("name"):
-            cert_html += f'<div class="nb" style="font-size:8.5pt; margin-bottom:5pt; font-family:Courier,monospace;"><b style="color:{acc};">{c.get("name","")}</b> &ndash; {c.get("duration","")}</div>'
-
-    skill_tags = _skills_spans(ss.get('skills',''), dark, lt, f'{acc}55')
-    soft_tags  = _skills_spans(ss.get('Softskills',''), '#374151', '#f3f4f6', '#9ca3af')
-    langs      = ", ".join(s.strip() for s in ss.get('languages','').split(',') if s.strip())
-    ints       = ", ".join(s.strip() for s in ss.get('interests','').split(',') if s.strip())
-    summary    = ss.get('summary','').replace('\n','<br/>')
-
-    return f"""
-<!-- DARK HEADER BAND -->
-<table style="margin-bottom:8pt;">
-  <tr>
-    <td style="background-color:{dark}; color:#fff; padding:10pt 12pt; vertical-align:middle;">
-      <div style="font-size:20pt; font-weight:bold; color:#fff; font-family:Courier,monospace; line-height:1.1;">{ss.get('name','')}</div>
-      <div style="font-size:10pt; color:#a78bfa; font-family:Courier,monospace; margin-top:3pt;">&lt;{ss.get('job_title','')}/&gt;</div>
-      <div style="font-size:7.5pt; color:#c4b5fd; margin-top:5pt;">{_contact_line(ss)}</div>
-    </td>
-    {"<td style='width:32mm; background-color:"+dark+"; padding:10pt 6pt; text-align:center; vertical-align:middle;'>"+img+"</td>" if img else ""}
-  </tr>
-</table>
-
-{sh("About")}
-<div style="font-size:8.5pt; color:#374151; line-height:1.5; margin-top:3pt;">{summary}</div>
-
-{sh("Tech Stack")}
-<div style="margin-top:3pt;">{skill_tags}</div>
-<div style="margin-top:3pt;">{soft_tags}</div>
-
-{sh("Experience")}
-{exp_html}
-
-{sh("Projects")}
-{proj_html}
-
-{sh("Education")}
-{edu_html}
-
-{(sh("Certifications") + cert_html) if cert_html else ""}
-
-<div style="margin-top:8pt; padding-top:4pt; border-top:0.5pt solid #ddd; font-size:8pt; color:#666; font-family:Courier,monospace;">
-  languages: [{langs}] &nbsp; interests: [{ints}]
-</div>
-"""
-
+    
+    return html_content
 
 def generate_cover_letter_from_resume_builder():
     import streamlit as st
@@ -4787,11 +5951,10 @@ with tab2:
     """, unsafe_allow_html=True)
 
     # 🎨 Template Selection
-    st.markdown("### 🎨 Choose Resume Template (6 Industry Templates)")
+    st.markdown("### 🎨 Choose Resume Template")
     selected_template = st.selectbox(
         "🎨 Choose Resume Template",
-        ["Classic Professional", "Modern Minimal", "Elegant Sidebar",
-         "Executive", "Creative", "Tech / Developer"],
+        ["Default (Professional)", "Modern Minimal", "Elegant Sidebar"],
         key="template_selector"
     )
 
@@ -5522,49 +6685,18 @@ with tab2:
     # Generate HTML content based on selected template — only on submit, stored in session_state
     if submitted:
         # Determine which template to use
-        _template_map = {
-            "Classic Professional": render_template_default,
-            "Modern Minimal":       render_template_modern,
-            "Elegant Sidebar":      render_template_sidebar,
-            "Executive":            render_template_executive,
-            "Creative":             render_template_creative,
-            "Tech / Developer":     render_template_tech,
-        }
-        _fn = _template_map.get(selected_template, render_template_default)
-        # Templates now return an HTML fragment (body content only).
-        # html_to_pdf_bytes wraps it with <html><head><style>@page A4</style><body>
-        html_fragment = _fn(st.session_state, profile_img_html)
+        if selected_template == "Default (Professional)":
+            html_content = render_template_default(st.session_state, profile_img_html)
+        elif selected_template == "Modern Minimal":
+            html_content = render_template_modern(st.session_state, profile_img_html)
+        elif selected_template == "Elegant Sidebar":
+            html_content = render_template_sidebar(st.session_state, profile_img_html)
+        else:
+            # Fallback to default
+            html_content = render_template_default(st.session_state, profile_img_html)
 
-        # Build a standalone full HTML document for the .html download (browser-viewable)
-        html_content = f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>{st.session_state.get('name','')} – Resume</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
-<style>
-  body{{font-family:Inter,Helvetica,Arial,sans-serif;font-size:9.5pt;color:#1a1a1a;
-        margin:0;padding:20px;background:#f0f0f0;}}
-  .resume-wrap{{max-width:210mm;margin:0 auto;background:#fff;padding:14mm 13mm;
-                box-shadow:0 2px 12px rgba(0,0,0,.15);}}
-  table{{border-collapse:collapse;width:100%;}} td{{vertical-align:top;padding:0;}}
-  ul{{margin:3pt 0 4pt 14pt;padding:0;}} li{{margin-bottom:2pt;line-height:1.4;}}
-  a{{color:inherit;text-decoration:none;}}
-  .sh{{font-size:8pt;font-weight:bold;text-transform:uppercase;letter-spacing:1pt;
-       margin-top:9pt;margin-bottom:3pt;padding-bottom:2pt;}}
-  .nb{{page-break-inside:avoid;}}
-  @media print{{
-    body{{background:#fff;padding:0;}}
-    .resume-wrap{{box-shadow:none;padding:14mm 13mm;}}
-    @page{{size:A4;margin:14mm 13mm;}}
-  }}
-</style></head><body>
-<div class="resume-wrap">
-{html_fragment}
-</div></body></html>"""
-
-        # Store both for download and PDF rendering
-        st.session_state["generated_html"]     = html_content    # full doc for .html download
-        st.session_state["generated_fragment"]  = html_fragment   # fragment for PDF
+        # Store the generated content
+        st.session_state["generated_html"] = html_content
 
 with tab2:
     # ==========================
@@ -5601,7 +6733,7 @@ with tab2:
             )
 
         # PDF Resume Download Button
-        pdf_resume_bytes = html_to_pdf_bytes(st.session_state.get("generated_fragment", st.session_state["generated_html"]))
+        pdf_resume_bytes = html_to_pdf_bytes(st.session_state["generated_html"])
         
         # ✅ Extra Help Note
         st.markdown("""
