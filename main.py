@@ -9168,122 +9168,6 @@ def show_resume_scanning_animation():
 
 
 with tab4:
-    # ── PERMANENT ANTI-CHEAT SCRIPT ──────────────────────────────────────────
-    # Injected ONCE via st.markdown at tab load — no iframe, no flicker.
-    # Active immediately after login/refresh/any state. Survives all rerenders
-    # because the parent-window listeners are stored by reference on window itself.
-    # Copy/paste is blocked permanently. Tab-switch triggers interview termination.
-    st.markdown("""
-    <script>
-    (function _acInit() {
-        // Idempotency guard — skip if already initialised this page session
-        if (window.__acReady) return;
-        window.__acReady = true;
-
-        // ── Banner ────────────────────────────────────────────────────────────
-        function showBanner(msg) {
-            var id = '__ac_banner__';
-            var existing = document.getElementById(id);
-            if (existing) {
-                // Reset fade so repeated attempts always show the message
-                existing.style.transition = 'none';
-                existing.style.opacity   = '1';
-                existing.innerText = msg;
-                clearTimeout(existing.__acTimer);
-                existing.__acTimer = setTimeout(function() {
-                    existing.style.transition = 'opacity 0.4s';
-                    existing.style.opacity    = '0';
-                    setTimeout(function() {
-                        if (existing.parentNode) existing.parentNode.removeChild(existing);
-                    }, 450);
-                }, 2800);
-                return;
-            }
-            var d = document.createElement('div');
-            d.id = id;
-            d.style.cssText = [
-                'position:fixed','top:18px','left:50%','transform:translateX(-50%)',
-                'background:rgba(190,0,0,0.95)','color:#fff','padding:14px 32px',
-                'border-radius:10px','font-size:15px','font-weight:700',
-                'z-index:2147483647','box-shadow:0 4px 28px rgba(0,0,0,0.55)',
-                'pointer-events:none','font-family:sans-serif','letter-spacing:0.3px'
-            ].join(';');
-            d.innerText = msg;
-            document.body.appendChild(d);
-            d.__acTimer = setTimeout(function() {
-                d.style.transition = 'opacity 0.4s';
-                d.style.opacity    = '0';
-                setTimeout(function() { if (d.parentNode) d.parentNode.removeChild(d); }, 450);
-            }, 2800);
-        }
-
-        // ── Tab-switch violation: navigate to flag it for Streamlit ──────────
-        function triggerViolation(reason) {
-            removeAll();
-            var url = new URL(window.location.href);
-            url.searchParams.set('cheat', '1');
-            url.searchParams.set('reason', reason);
-            window.location.href = url.toString();
-        }
-
-        // ── Handlers ─────────────────────────────────────────────────────────
-        function onVisChange() {
-            if (document.hidden) {
-                triggerViolation('Tab switching detected — you navigated away during the interview.');
-            }
-        }
-
-        function onWinBlur() {
-            setTimeout(function() {
-                if (document.hidden) {
-                    triggerViolation('Window switching detected — you switched to another application.');
-                }
-            }, 250);
-        }
-
-        // Block ALL copy / cut / paste — no tag check, no exceptions
-        function onClipboard(e) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            showBanner('🚫 Copy / Paste is NOT allowed during the interview!');
-        }
-
-        // Block Ctrl/Cmd + C / V / X keyboard shortcuts everywhere
-        function onKeyDown(e) {
-            var k = e.key ? e.key.toLowerCase() : '';
-            if ((e.ctrlKey || e.metaKey) && (k === 'c' || k === 'v' || k === 'x')) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                showBanner('🚫 Copy / Paste is NOT allowed during the interview!');
-            }
-        }
-
-        // ── Register / clean up ───────────────────────────────────────────────
-        function removeAll() {
-            document.removeEventListener('visibilitychange', onVisChange, true);
-            window.removeEventListener('blur', onWinBlur, true);
-            document.removeEventListener('copy',    onClipboard, true);
-            document.removeEventListener('cut',     onClipboard, true);
-            document.removeEventListener('paste',   onClipboard, true);
-            document.removeEventListener('keydown', onKeyDown,   true);
-        }
-
-        // Always clean then re-add (safe to call multiple times)
-        removeAll();
-        document.addEventListener('visibilitychange', onVisChange, true);
-        window.addEventListener('blur', onWinBlur, true);
-        document.addEventListener('copy',    onClipboard, true);
-        document.addEventListener('cut',     onClipboard, true);
-        document.addEventListener('paste',   onClipboard, true);
-        document.addEventListener('keydown', onKeyDown,   true);
-
-        // Expose removeAll so Streamlit can call it on interview end if needed
-        window.__acRemoveAll = removeAll;
-    })();
-    </script>
-    """, unsafe_allow_html=True)
-    # ── END PERMANENT ANTI-CHEAT SCRIPT ─────────────────────────────────────
-
     # Inject CSS styles (keeping existing styles)
     st.markdown("""
         <style>
@@ -10642,52 +10526,6 @@ Generate exactly {num_questions} questions now:
         # Create database table if not exists
         create_interview_database()
 
-        # ── ANTI-CHEAT: Handle violation signal from JS (via query param) ──
-        import streamlit.components.v1 as _stc
-        if 'anti_cheat_violated' not in st.session_state:
-            st.session_state.anti_cheat_violated = False
-        if 'anti_cheat_reason' not in st.session_state:
-            st.session_state.anti_cheat_reason = ""
-
-        _qp = st.query_params
-        if _qp.get("cheat") == "1" and st.session_state.get("dynamic_interview_started", False):
-            st.session_state.anti_cheat_violated = True
-            st.session_state.anti_cheat_reason = _qp.get("reason", "Policy violation detected")
-            st.session_state.dynamic_interview_started = False
-            st.session_state.dynamic_interview_completed = False
-            st.session_state.dynamic_interview_questions = []
-            st.session_state.dynamic_interview_answers = []
-            st.session_state.dynamic_interview_scores = []
-            st.session_state.dynamic_interview_feedbacks = []
-            st.session_state.dynamic_answer_submitted = False
-            st.session_state.current_interview_question_text = ""
-            st.session_state.question_timer_start = None
-            st.query_params.clear()
-            st.rerun()
-
-        if st.session_state.anti_cheat_violated:
-            st.markdown(f"""
-            <div style="background:linear-gradient(135deg,rgba(255,50,50,0.15),rgba(180,0,0,0.10));
-                        border:2px solid rgba(255,80,80,0.6);border-radius:16px;
-                        padding:40px 32px;text-align:center;margin:30px 0;
-                        box-shadow:0 0 40px rgba(255,0,0,0.15);">
-                <div style="font-size:64px;margin-bottom:16px;">🚫</div>
-                <h2 style="color:#ff4444;font-size:28px;margin-bottom:12px;">Interview Terminated</h2>
-                <p style="color:#ffaaaa;font-size:18px;margin-bottom:8px;"><strong>Anti-Cheat Violation Detected</strong></p>
-                <p style="color:#ffcccc;font-size:15px;margin-bottom:24px;">
-                    {st.session_state.anti_cheat_reason}
-                </p>
-                <p style="color:#aaaaaa;font-size:13px;">
-                    Tab switching and copy-pasting answers are strictly prohibited during the interview.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button("🔄 Restart Interview"):
-                st.session_state.anti_cheat_violated = False
-                st.session_state.anti_cheat_reason = ""
-                st.rerun()
-            st.stop()
-
         # Initialize resume state
         if 'resume_file' not in st.session_state:
             st.session_state.resume_file = None
@@ -10913,9 +10751,6 @@ Generate exactly {num_questions} questions now:
                 num_resume_qs = len(st.session_state.resume_based_questions)
                 current_phase = "Resume-Based" if current_index <= num_resume_qs else "Generic Interview"
 
-                # ── ANTI-CHEAT: Now handled by permanent script at top of tab4 ──
-                # (No iframe needed — no flicker. Script is always active from login/refresh.)
-
                 # Display progress with correct counts in glassmorphism box
                 st.markdown(f"""
                 <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.08) 0%, rgba(0, 195, 255, 0.04) 100%);
@@ -10928,9 +10763,6 @@ Generate exactly {num_questions} questions now:
                             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);">
                     <p style="color: #ffffff; font-size: 16px; margin: 0; font-weight: 500;">
                         📊 Progress: Answered {questions_answered}/{st.session_state.original_num_questions} questions | Phase: {current_phase}
-                    </p>
-                    <p style="color: rgba(255,200,0,0.85); font-size: 12px; margin: 6px 0 0 0;">
-                        🛡️ Anti-Cheat Active — Tab switching & copy/paste are blocked. Violations terminate the interview.
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
