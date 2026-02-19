@@ -10529,6 +10529,66 @@ Generate exactly {num_questions} questions now:
         # Create database table if not exists
         create_interview_database()
 
+        # ─────────────────────────────────────────────────────
+        # ANTI-CHEAT: Check if a violation was flagged via query param
+        # ─────────────────────────────────────────────────────
+        if 'anti_cheat_violated' not in st.session_state:
+            st.session_state.anti_cheat_violated = False
+        if 'anti_cheat_reason' not in st.session_state:
+            st.session_state.anti_cheat_reason = ""
+
+        # Read query param set by JS on violation
+        qp = st.query_params
+        if qp.get("cheat") == "1" and not st.session_state.anti_cheat_violated:
+            st.session_state.anti_cheat_violated = True
+            st.session_state.anti_cheat_reason = qp.get("reason", "Policy violation")
+            # Terminate interview
+            st.session_state.dynamic_interview_started = False
+            st.session_state.dynamic_interview_completed = False
+            st.session_state.dynamic_interview_questions = []
+            st.session_state.dynamic_interview_answers = []
+            st.session_state.dynamic_interview_scores = []
+            st.session_state.dynamic_interview_feedbacks = []
+            st.session_state.dynamic_answer_submitted = False
+            st.session_state.current_interview_question_text = ""
+            st.session_state.question_timer_start = None
+            # Clear the query param to avoid loops
+            st.query_params.clear()
+
+        # Show terminated screen if violated
+        if st.session_state.anti_cheat_violated:
+            st.markdown("""
+            <div style="
+                background: linear-gradient(135deg, rgba(255, 50, 50, 0.15) 0%, rgba(180, 0, 0, 0.10) 100%);
+                border: 2px solid rgba(255, 80, 80, 0.6);
+                border-radius: 16px;
+                padding: 40px 32px;
+                text-align: center;
+                margin: 30px 0;
+                box-shadow: 0 0 40px rgba(255, 0, 0, 0.15);
+            ">
+                <div style="font-size: 64px; margin-bottom: 16px;">🚫</div>
+                <h2 style="color: #ff4444; font-size: 28px; margin-bottom: 12px;">Interview Terminated</h2>
+                <p style="color: #ffaaaa; font-size: 18px; margin-bottom: 8px;">
+                    <strong>Anti-Cheat Violation Detected</strong>
+                </p>
+                <p style="color: #ffcccc; font-size: 15px; margin-bottom: 24px;">
+                    Your interview was closed because a policy violation was detected:<br/>
+                    <em style="color: #ff8888;">""" + st.session_state.anti_cheat_reason + """</em>
+                </p>
+                <p style="color: #aaaaaa; font-size: 13px;">
+                    Tab switching, window switching, and copy-paste are strictly prohibited during the interview.<br/>
+                    Please restart and complete the interview without switching tabs or copying answers.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if st.button("🔄 Restart Interview"):
+                st.session_state.anti_cheat_violated = False
+                st.session_state.anti_cheat_reason = ""
+                st.rerun()
+            st.stop()
+
         # Initialize resume state
         if 'resume_file' not in st.session_state:
             st.session_state.resume_file = None
@@ -10754,6 +10814,112 @@ Generate exactly {num_questions} questions now:
                 num_resume_qs = len(st.session_state.resume_based_questions)
                 current_phase = "Resume-Based" if current_index <= num_resume_qs else "Generic Interview"
 
+                # ─────────────────────────────────────────────────────
+                # ANTI-CHEAT JAVASCRIPT INJECTION
+                # Detects: tab switching, window blur, copy/cut/paste in answer box
+                # Communicates violation back to Streamlit via URL query param
+                # No page flickering: JS only acts on actual violations
+                # ─────────────────────────────────────────────────────
+                st.markdown("""
+                <script>
+                (function() {
+                    // Prevent multiple injections
+                    if (window._antiCheatActive) return;
+                    window._antiCheatActive = true;
+
+                    function triggerViolation(reason) {
+                        // Remove listeners to avoid duplicate triggers
+                        document.removeEventListener('visibilitychange', handleVisibility);
+                        window.removeEventListener('blur', handleBlur);
+                        // Set query param and reload so Streamlit picks it up
+                        var url = new URL(window.location.href);
+                        url.searchParams.set('cheat', '1');
+                        url.searchParams.set('reason', reason);
+                        window.location.href = url.toString();
+                    }
+
+                    // ── Tab / window switch detection ──
+                    function handleVisibility() {
+                        if (document.hidden) {
+                            triggerViolation('Tab switching detected - you switched to another tab or minimized the window');
+                        }
+                    }
+
+                    function handleBlur() {
+                        // Small delay to ignore Streamlit internal focus shifts
+                        setTimeout(function() {
+                            if (document.hidden) {
+                                triggerViolation('Window focus lost - you switched to another application');
+                            }
+                        }, 300);
+                    }
+
+                    document.addEventListener('visibilitychange', handleVisibility);
+                    window.addEventListener('blur', handleBlur);
+
+                    // ── Block copy/cut/paste on answer textareas ──
+                    function blockClipboard(e) {
+                        var target = e.target;
+                        if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Show a brief inline warning without flickering
+                            var warnId = 'anticheat-warn';
+                            var existing = document.getElementById(warnId);
+                            if (!existing) {
+                                var warn = document.createElement('div');
+                                warn.id = warnId;
+                                warn.style.cssText = [
+                                    'position:fixed',
+                                    'top:20px',
+                                    'left:50%',
+                                    'transform:translateX(-50%)',
+                                    'background:rgba(200,0,0,0.92)',
+                                    'color:#fff',
+                                    'padding:12px 28px',
+                                    'border-radius:8px',
+                                    'font-size:15px',
+                                    'font-weight:600',
+                                    'z-index:99999',
+                                    'box-shadow:0 4px 20px rgba(0,0,0,0.4)',
+                                    'pointer-events:none',
+                                    'transition:opacity 0.3s'
+                                ].join(';');
+                                warn.innerText = '🚫 Copy/Paste is not allowed during the interview!';
+                                document.body.appendChild(warn);
+                                setTimeout(function() {
+                                    warn.style.opacity = '0';
+                                    setTimeout(function() {
+                                        if (warn.parentNode) warn.parentNode.removeChild(warn);
+                                    }, 350);
+                                }, 2500);
+                            }
+                            return false;
+                        }
+                    }
+
+                    document.addEventListener('copy', blockClipboard, true);
+                    document.addEventListener('cut', blockClipboard, true);
+                    document.addEventListener('paste', blockClipboard, true);
+
+                    // Also block Ctrl+C / Ctrl+V / Ctrl+X keyboard shortcuts on textareas
+                    document.addEventListener('keydown', function(e) {
+                        var target = e.target;
+                        if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) {
+                            if ((e.ctrlKey || e.metaKey) && ['c','v','x','a'].includes(e.key.toLowerCase())) {
+                                if (e.key.toLowerCase() !== 'a') { // Allow select-all
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    blockClipboard(e);
+                                }
+                            }
+                        }
+                    }, true);
+
+                })();
+                </script>
+                """, unsafe_allow_html=True)
+
                 # Display progress with correct counts in glassmorphism box
                 st.markdown(f"""
                 <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.08) 0%, rgba(0, 195, 255, 0.04) 100%);
@@ -10766,6 +10932,9 @@ Generate exactly {num_questions} questions now:
                             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);">
                     <p style="color: #ffffff; font-size: 16px; margin: 0; font-weight: 500;">
                         📊 Progress: Answered {questions_answered}/{st.session_state.original_num_questions} questions | Phase: {current_phase}
+                    </p>
+                    <p style="color: rgba(255,180,0,0.85); font-size: 12px; margin: 6px 0 0 0;">
+                        🛡️ Anti-Cheat Active: Tab switching and copy/paste are monitored. Violations will terminate your interview.
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
