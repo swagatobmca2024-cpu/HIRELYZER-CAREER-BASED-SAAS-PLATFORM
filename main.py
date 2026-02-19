@@ -3728,7 +3728,6 @@ with tab1:
     else:           
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
 
-
 from xhtml2pdf import pisa
 from io import BytesIO
 
@@ -6117,126 +6116,143 @@ with tab2:
                 cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}")
                 cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}")
 
-        submitted = st.form_submit_button("📑 Generate Resume")
+        btn_col1, btn_col2 = st.columns([1, 1])
+        with btn_col1:
+            submitted = st.form_submit_button("📑 Generate Resume", use_container_width=True)
+        with btn_col2:
+            clear_clicked = st.form_submit_button("🗑️ Clear Form", use_container_width=True)
 
         if submitted:
             st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
 
-        st.markdown("""
-        <style>
-            .heading-large {
-                font-size: 36px;
-                font-weight: bold;
-                color: #336699;
-            }
-            .subheading-large {
-                font-size: 30px;
-                font-weight: bold;
-                color: #336699;
-            }
-            .tab-section {
-                margin-top: 20px;
-            }
-        </style>
+        if clear_clicked:
+            fields_to_clear = ["name", "email", "phone", "linkedin", "location", "portfolio",
+                               "summary", "skills", "languages", "interests", "Softskills", "job_title",
+                               "generated_html", "ai_output", "cover_letter", "cover_letter_html",
+                               "encoded_profile_image"]
+            for f in fields_to_clear:
+                st.session_state.pop(f, None)
+            st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
+            st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
+            st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
+            st.session_state["project_links"] = []
+            st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
+            st.rerun()
+
+    st.markdown("""
+    <style>
+        .heading-large {
+            font-size: 36px;
+            font-weight: bold;
+            color: #336699;
+        }
+        .subheading-large {
+            font-size: 30px;
+            font-weight: bold;
+            color: #336699;
+        }
+        .tab-section {
+            margin-top: 20px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # --- Visual Resume Preview Section (outside form to prevent flickering) ---
+    st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
+    st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
+
+    left, right = st.columns([1, 2])
+
+    with left:
+        st.markdown(f"""
+            <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
+            <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
+
+            <p style='font-size:14px;'>
+            📍 {st.session_state['location']}<br>
+            📞 {st.session_state['phone']}<br>
+            📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
+            🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
+            🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
+            </p>
         """, unsafe_allow_html=True)
 
-        # --- Visual Resume Preview Section ---
-        st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
-        st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color:#336699;'>Skills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+        for skill in [s.strip() for s in st.session_state["skills"].split(",") if s.strip()]:
+            st.markdown(f"<div style='margin-left:10px;'>• {skill}</div>", unsafe_allow_html=True)
 
-        left, right = st.columns([1, 2])
+        st.markdown("<h4 style='color:#336699;'>Languages</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+        for lang in [l.strip() for l in st.session_state["languages"].split(",") if l.strip()]:
+            st.markdown(f"<div style='margin-left:10px;'>• {lang}</div>", unsafe_allow_html=True)
 
-        with left:
-            st.markdown(f"""
-                <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
-                <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
+        st.markdown("<h4 style='color:#336699;'>Interests</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+        for interest in [i.strip() for i in st.session_state["interests"].split(",") if i.strip()]:
+            st.markdown(f"<div style='margin-left:10px;'>• {interest}</div>", unsafe_allow_html=True)
 
-                <p style='font-size:14px;'>
-                📍 {st.session_state['location']}<br>
-                📞 {st.session_state['phone']}<br>
-                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
-                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
-                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
-                </p>
-            """, unsafe_allow_html=True)
+        st.markdown("<h4 style='color:#336699;'>Softskills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+        for Softskills in [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]:
+            st.markdown(f"<div style='margin-left:10px;'>• {Softskills}</div>", unsafe_allow_html=True)
 
-            st.markdown("<h4 style='color:#336699;'>Skills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for skill in [s.strip() for s in st.session_state["skills"].split(",") if s.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {skill}</div>", unsafe_allow_html=True)
+    with right:
+        st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+        summary_text = st.session_state['summary'].replace('\n', '<br>')
+        st.markdown(f"<p style='font-size:17px;'>{summary_text}</p>", unsafe_allow_html=True)
 
-            st.markdown("<h4 style='color:#336699;'>Languages</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for lang in [l.strip() for l in st.session_state["languages"].split(",") if l.strip()]:
-               st.markdown(f"<div style='margin-left:10px;'>• {lang}</div>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Interests</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for interest in [i.strip() for i in st.session_state["interests"].split(",") if i.strip()]:
-               st.markdown(f"<div style='margin-left:10px;'>• {interest}</div>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Softskills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for Softskills  in [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]:
-               st.markdown(f"<div style='margin-left:10px;'>• {Softskills}</div>", unsafe_allow_html=True)   
-
-        with right:
-            st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            summary_text = st.session_state['summary'].replace('\n', '<br>')
-            st.markdown(f"<p style='font-size:17px;'>{summary_text}</p>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for exp in st.session_state.experience_entries:
-                if exp["company"] or exp["title"]:
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
-                        <div style='display:flex; justify-content:space-between;'>
-                            <b>🏢 {exp['company']}</b><span style='color:gray;'>📆  {exp['duration']}</span>
-                        </div>
-                        <div style='font-size:14px;'>💼 <i>{exp['title']}</i></div>
-                        <div style='font-size:17px;'>📝 {exp['description']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for edu in st.session_state.education_entries:
-                if edu["institution"] or edu["degree"]:
-                    st.markdown(f"""
-                    <div style='margin-bottom: 15px; padding: 10px 15px;color: white; border-radius: 8px;'>
-                        <div style='display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;'>
-                            <span>🏫 {edu['institution']}</span>
-                            <span style='color: gray;'>📅 {edu['year']}</span>
-                        </div>
-                        <div style='font-size: 14px; margin-top: 5px;'>🎓 <i>{edu['degree']}</i></div>
-                        <div style='font-size: 14px;'>📄 {edu['details']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for proj in st.session_state.project_entries:
+        st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+        for exp in st.session_state.experience_entries:
+            if exp["company"] or exp["title"]:
                 st.markdown(f"""
-                <div style='margin-bottom:15px; padding: 10px;'>
-                <strong style='font-size:16px;'>{proj['title']}</strong><br>
-                <span style='font-size:14px; word-wrap:break-word; overflow-wrap:break-word; white-space:normal;'>
-                   🛠️ <strong>Tech Stack:</strong> {proj['tech']}
-             </span><br>
+                <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
+                    <div style='display:flex; justify-content:space-between;'>
+                        <b>🏢 {exp['company']}</b><span style='color:gray;'>📆  {exp['duration']}</span>
+                    </div>
+                    <div style='font-size:14px;'>💼 <i>{exp['title']}</i></div>
+                    <div style='font-size:17px;'>📝 {exp['description']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+        for edu in st.session_state.education_entries:
+            if edu["institution"] or edu["degree"]:
+                st.markdown(f"""
+                <div style='margin-bottom: 15px; padding: 10px 15px;color: white; border-radius: 8px;'>
+                    <div style='display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;'>
+                        <span>🏫 {edu['institution']}</span>
+                        <span style='color: gray;'>📅 {edu['year']}</span>
+                    </div>
+                    <div style='font-size: 14px; margin-top: 5px;'>🎓 <i>{edu['degree']}</i></div>
+                    <div style='font-size: 14px;'>📄 {edu['details']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+        for proj in st.session_state.project_entries:
+            st.markdown(f"""
+            <div style='margin-bottom:15px; padding: 10px;'>
+            <strong style='font-size:16px;'>{proj['title']}</strong><br>
+            <span style='font-size:14px; word-wrap:break-word; overflow-wrap:break-word; white-space:normal;'>
+               🛠️ <strong>Tech Stack:</strong> {proj['tech']}
+            </span><br>
             <span style='font-size:14px;'>⏳ <strong>Duration:</strong> {proj['duration']}</span><br>
             <span style='font-size:17px;'>📝 <strong>Description:</strong> {proj['description']}</span>
             </div>
             """, unsafe_allow_html=True)
 
-            if st.session_state.project_links:
-                st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for i, link in enumerate(st.session_state.project_links):
-                    st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
+        if st.session_state.project_links:
+            st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for i, link in enumerate(st.session_state.project_links):
+                st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
 
-            if st.session_state.certificate_links:
-                st.markdown("<h4 style='color:#336699;'>Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                
-                for cert in st.session_state.certificate_links:
-                    if cert["name"] and cert["link"]:
-                        st.markdown(f"""
-                        <div style='display:flex; justify-content:space-between;'>
-                            <a href="{cert['link']}" target="_blank"><b>📄 {cert['name']}</b></a><span style='color:gray;'>{cert['duration']}</span>
-                        </div>
-                        <div style='margin-bottom:10px; font-size:14px;'>{cert['description']}</div>
-                        """, unsafe_allow_html=True)
+        if st.session_state.certificate_links:
+            st.markdown("<h4 style='color:#336699;'>Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for cert in st.session_state.certificate_links:
+                if cert["name"] and cert["link"]:
+                    st.markdown(f"""
+                    <div style='display:flex; justify-content:space-between;'>
+                        <a href="{cert['link']}" target="_blank"><b>📄 {cert['name']}</b></a><span style='color:gray;'>{cert['duration']}</span>
+                    </div>
+                    <div style='margin-bottom:10px; font-size:14px;'>{cert['description']}</div>
+                    """, unsafe_allow_html=True)
 
 import re
 
