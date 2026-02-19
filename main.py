@@ -6127,12 +6127,25 @@ with tab2:
             st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
 
         if clear_clicked:
-            # Wipe ALL session state so no stale data causes flickering on tab switches
+            # Reset only resume-related keys — do NOT clear() or rerun() as that
+            # wipes tab context and navigates back to the main/home page.
+            # Instead, reset values in-place and bump the form key counter so
+            # all widgets re-render empty on this same run, no page jump.
             _new_counter = st.session_state.get("form_key_counter", 0) + 1
-            st.session_state.clear()
+            resume_fields = ["name", "email", "phone", "linkedin", "location",
+                             "portfolio", "summary", "skills", "languages",
+                             "interests", "Softskills", "job_title"]
+            for _f in resume_fields:
+                st.session_state[_f] = ""
+            st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
+            st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
+            st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
+            st.session_state["project_links"] = []
+            st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
+            for _key in ["generated_html", "ai_output", "cover_letter",
+                         "cover_letter_html", "encoded_profile_image"]:
+                st.session_state.pop(_key, None)
             st.session_state["form_key_counter"] = _new_counter
-            st.cache_data.clear()
-            st.rerun()
 
     st.markdown("""
     <style>
