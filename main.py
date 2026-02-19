@@ -9143,6 +9143,122 @@ def show_resume_scanning_animation():
 
 
 with tab4:
+    # ── PERMANENT ANTI-CHEAT SCRIPT ──────────────────────────────────────────
+    # Injected ONCE via st.markdown at tab load — no iframe, no flicker.
+    # Active immediately after login/refresh/any state. Survives all rerenders
+    # because the parent-window listeners are stored by reference on window itself.
+    # Copy/paste is blocked permanently. Tab-switch triggers interview termination.
+    st.markdown("""
+    <script>
+    (function _acInit() {
+        // Idempotency guard — skip if already initialised this page session
+        if (window.__acReady) return;
+        window.__acReady = true;
+
+        // ── Banner ────────────────────────────────────────────────────────────
+        function showBanner(msg) {
+            var id = '__ac_banner__';
+            var existing = document.getElementById(id);
+            if (existing) {
+                // Reset fade so repeated attempts always show the message
+                existing.style.transition = 'none';
+                existing.style.opacity   = '1';
+                existing.innerText = msg;
+                clearTimeout(existing.__acTimer);
+                existing.__acTimer = setTimeout(function() {
+                    existing.style.transition = 'opacity 0.4s';
+                    existing.style.opacity    = '0';
+                    setTimeout(function() {
+                        if (existing.parentNode) existing.parentNode.removeChild(existing);
+                    }, 450);
+                }, 2800);
+                return;
+            }
+            var d = document.createElement('div');
+            d.id = id;
+            d.style.cssText = [
+                'position:fixed','top:18px','left:50%','transform:translateX(-50%)',
+                'background:rgba(190,0,0,0.95)','color:#fff','padding:14px 32px',
+                'border-radius:10px','font-size:15px','font-weight:700',
+                'z-index:2147483647','box-shadow:0 4px 28px rgba(0,0,0,0.55)',
+                'pointer-events:none','font-family:sans-serif','letter-spacing:0.3px'
+            ].join(';');
+            d.innerText = msg;
+            document.body.appendChild(d);
+            d.__acTimer = setTimeout(function() {
+                d.style.transition = 'opacity 0.4s';
+                d.style.opacity    = '0';
+                setTimeout(function() { if (d.parentNode) d.parentNode.removeChild(d); }, 450);
+            }, 2800);
+        }
+
+        // ── Tab-switch violation: navigate to flag it for Streamlit ──────────
+        function triggerViolation(reason) {
+            removeAll();
+            var url = new URL(window.location.href);
+            url.searchParams.set('cheat', '1');
+            url.searchParams.set('reason', reason);
+            window.location.href = url.toString();
+        }
+
+        // ── Handlers ─────────────────────────────────────────────────────────
+        function onVisChange() {
+            if (document.hidden) {
+                triggerViolation('Tab switching detected — you navigated away during the interview.');
+            }
+        }
+
+        function onWinBlur() {
+            setTimeout(function() {
+                if (document.hidden) {
+                    triggerViolation('Window switching detected — you switched to another application.');
+                }
+            }, 250);
+        }
+
+        // Block ALL copy / cut / paste — no tag check, no exceptions
+        function onClipboard(e) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            showBanner('🚫 Copy / Paste is NOT allowed during the interview!');
+        }
+
+        // Block Ctrl/Cmd + C / V / X keyboard shortcuts everywhere
+        function onKeyDown(e) {
+            var k = e.key ? e.key.toLowerCase() : '';
+            if ((e.ctrlKey || e.metaKey) && (k === 'c' || k === 'v' || k === 'x')) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                showBanner('🚫 Copy / Paste is NOT allowed during the interview!');
+            }
+        }
+
+        // ── Register / clean up ───────────────────────────────────────────────
+        function removeAll() {
+            document.removeEventListener('visibilitychange', onVisChange, true);
+            window.removeEventListener('blur', onWinBlur, true);
+            document.removeEventListener('copy',    onClipboard, true);
+            document.removeEventListener('cut',     onClipboard, true);
+            document.removeEventListener('paste',   onClipboard, true);
+            document.removeEventListener('keydown', onKeyDown,   true);
+        }
+
+        // Always clean then re-add (safe to call multiple times)
+        removeAll();
+        document.addEventListener('visibilitychange', onVisChange, true);
+        window.addEventListener('blur', onWinBlur, true);
+        document.addEventListener('copy',    onClipboard, true);
+        document.addEventListener('cut',     onClipboard, true);
+        document.addEventListener('paste',   onClipboard, true);
+        document.addEventListener('keydown', onKeyDown,   true);
+
+        // Expose removeAll so Streamlit can call it on interview end if needed
+        window.__acRemoveAll = removeAll;
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+    # ── END PERMANENT ANTI-CHEAT SCRIPT ─────────────────────────────────────
+
     # Inject CSS styles (keeping existing styles)
     st.markdown("""
         <style>
@@ -10772,106 +10888,8 @@ Generate exactly {num_questions} questions now:
                 num_resume_qs = len(st.session_state.resume_based_questions)
                 current_phase = "Resume-Based" if current_index <= num_resume_qs else "Generic Interview"
 
-                # ── ANTI-CHEAT JS via st.components.v1.html ──
-                # KEY FIX: Store all handler functions ON window.parent itself so they
-                # survive iframe destruction on Streamlit rerenders.
-                # On every render: remove old handlers (by ref) then re-add fresh ones.
-                # This guarantees listeners are always alive regardless of how many rerenders occur.
-                _stc.html("""
-                <script>
-                (function() {
-                    var P = window.parent;
-                    if (!P) return;
-
-                    // ── Helper: show floating banner in parent page ──
-                    P._acShowBanner = function(msg) {
-                        var id = '__ac_banner__';
-                        if (P.document.getElementById(id)) return;
-                        var d = P.document.createElement('div');
-                        d.id = id;
-                        d.style.cssText = [
-                            'position:fixed','top:18px','left:50%','transform:translateX(-50%)',
-                            'background:rgba(190,0,0,0.95)','color:#fff','padding:14px 32px',
-                            'border-radius:10px','font-size:15px','font-weight:700',
-                            'z-index:2147483647','box-shadow:0 4px 28px rgba(0,0,0,0.55)',
-                            'pointer-events:none','font-family:sans-serif','letter-spacing:0.3px'
-                        ].join(';');
-                        d.innerText = msg;
-                        P.document.body.appendChild(d);
-                        setTimeout(function() {
-                            d.style.transition = 'opacity 0.4s';
-                            d.style.opacity = '0';
-                            setTimeout(function() { if (d.parentNode) d.parentNode.removeChild(d); }, 450);
-                        }, 2800);
-                    };
-
-                    // ── Violation: navigate to flag it for Streamlit ──
-                    P._acTrigger = function(reason) {
-                        P._acRemoveAll();
-                        var url = new URL(P.location.href);
-                        url.searchParams.set('cheat', '1');
-                        url.searchParams.set('reason', reason);
-                        P.location.href = url.toString();
-                    };
-
-                    // ── Define handlers stored ON parent so removeEventListener works by ref ──
-                    P._acOnVisChange = function() {
-                        if (P.document.hidden) {
-                            P._acTrigger('Tab switching detected — you navigated away during the interview.');
-                        }
-                    };
-
-                    P._acOnWinBlur = function() {
-                        setTimeout(function() {
-                            if (P.document.hidden) {
-                                P._acTrigger('Window switching detected — you switched to another application.');
-                            }
-                        }, 250);
-                    };
-
-                    P._acOnClipboard = function(e) {
-                        var tag = e.target ? e.target.tagName : '';
-                        // Block on textareas AND on the document level (catches right-click paste too)
-                        e.preventDefault();
-                        e.stopImmediatePropagation();
-                        if (tag === 'TEXTAREA' || tag === 'INPUT' || !tag) {
-                            P._acShowBanner('🚫 Copy / Paste is NOT allowed during the interview!');
-                        }
-                    };
-
-                    P._acOnKeyDown = function(e) {
-                        var tag = e.target ? e.target.tagName : '';
-                        var k = e.key ? e.key.toLowerCase() : '';
-                        if ((e.ctrlKey || e.metaKey) && (k === 'c' || k === 'v' || k === 'x')) {
-                            e.preventDefault();
-                            e.stopImmediatePropagation();
-                            if (tag === 'TEXTAREA' || tag === 'INPUT') {
-                                P._acShowBanner('🚫 Copy / Paste is NOT allowed during the interview!');
-                            }
-                        }
-                    };
-
-                    // ── Remove old listeners (safe even if never added) ──
-                    P._acRemoveAll = function() {
-                        P.document.removeEventListener('visibilitychange', P._acOnVisChange, true);
-                        P.removeEventListener('blur', P._acOnWinBlur, true);
-                        P.document.removeEventListener('copy',  P._acOnClipboard, true);
-                        P.document.removeEventListener('cut',   P._acOnClipboard, true);
-                        P.document.removeEventListener('paste', P._acOnClipboard, true);
-                        P.document.removeEventListener('keydown', P._acOnKeyDown, true);
-                    };
-
-                    // ── Always remove then re-add to stay fresh after every rerender ──
-                    P._acRemoveAll();
-                    P.document.addEventListener('visibilitychange', P._acOnVisChange, true);
-                    P.addEventListener('blur', P._acOnWinBlur, true);
-                    P.document.addEventListener('copy',  P._acOnClipboard, true);
-                    P.document.addEventListener('cut',   P._acOnClipboard, true);
-                    P.document.addEventListener('paste', P._acOnClipboard, true);
-                    P.document.addEventListener('keydown', P._acOnKeyDown, true);
-                })();
-                </script>
-                """, height=0)
+                # ── ANTI-CHEAT: Now handled by permanent script at top of tab4 ──
+                # (No iframe needed — no flicker. Script is always active from login/refresh.)
 
                 # Display progress with correct counts in glassmorphism box
                 st.markdown(f"""
