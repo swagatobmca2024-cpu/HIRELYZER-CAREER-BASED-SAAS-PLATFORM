@@ -1,5 +1,11 @@
+# ============================================================
+# ⚙️  Production Environment — must be set BEFORE any import
+# ============================================================
 import os
-os.environ["STREAMLIT_WATCHDOG"] = "false"
+os.environ["STREAMLIT_WATCHDOG"] = "false"          # suppress file-watcher noise
+os.environ["TOKENIZERS_PARALLELISM"] = "false"      # prevent HuggingFace fork warnings
+os.environ["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"  # disable telemetry
+
 import json
 import random
 import string
@@ -95,6 +101,331 @@ from user_login import (
 # ============================================================
 os.makedirs(".streamlit_storage", exist_ok=True)
 DB_PATH = os.path.join(".streamlit_storage", "resume_data.db")
+
+# ============================================================
+# 🚀 PAGE CONFIG — Must be the FIRST Streamlit call
+# ============================================================
+st.set_page_config(
+    page_title="HIRELYZER — AI Resume Analyzer",
+    page_icon="💼",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ============================================================
+# 🎨 GLOBAL CSS — Injected ONCE here, never repeated per-tab.
+#    Inlining all styles prevents the flicker caused by CSS
+#    being re-injected on every Streamlit rerun / tab switch.
+# ============================================================
+_GLOBAL_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&display=swap');
+
+/* ── Base ──────────────────────────────────────────────── */
+html, body, [class*="css"] {
+    font-family: 'Orbitron', sans-serif;
+    background-color: #0b0c10;
+    color: #c5c6c7;
+    scroll-behavior: smooth;
+}
+body, .main { background-color: #0d1117; color: white; }
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #1f2833; }
+::-webkit-scrollbar-thumb { background: #00ffff; border-radius: 4px; }
+
+/* ── Tabs — no-flicker fix ─────────────────────────────── */
+/* Prevent the white flash when switching tabs */
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+.stTabs [data-baseweb="tab-panel"] {
+    background-color: #0d1117 !important;
+}
+/* Tab bar styling */
+.stTabs [data-baseweb="tab-list"] {
+    background-color: rgba(10,20,40,0.6) !important;
+    border-radius: 12px;
+    padding: 4px;
+    gap: 4px;
+}
+.stTabs [data-baseweb="tab"] {
+    background-color: transparent !important;
+    border-radius: 8px;
+    color: #8b949e !important;
+    border: 1px solid transparent !important;
+    transition: all 0.2s ease !important;
+}
+.stTabs [aria-selected="true"] {
+    background-color: rgba(0,191,255,0.15) !important;
+    color: #00BFFF !important;
+    border: 1px solid rgba(0,191,255,0.3) !important;
+}
+/* Suppress the default tab underline flash */
+.stTabs [data-baseweb="tab-highlight"] { display: none !important; }
+
+/* ── Notifications ─────────────────────────────────────── */
+div.stAlert {
+    border-radius: 12px;
+    padding: 10px 14px;
+    animation: fadein 0.3s, fadeout 0.3s 2.7s;
+    text-align: center;
+}
+@keyframes fadein { from {opacity:0;} to {opacity:1;} }
+@keyframes fadeout { from {opacity:1;} to {opacity:0;} }
+
+/* ── Cards ─────────────────────────────────────────────── */
+.login-card {
+    background: linear-gradient(135deg,
+        rgba(0,191,255,0.1) 0%,
+        rgba(30,144,255,0.05) 50%,
+        rgba(0,191,255,0.1) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(0,191,255,0.2);
+    border-radius: 20px;
+    padding: 25px;
+    box-shadow: 0 8px 32px rgba(0,191,255,0.1), inset 0 1px 0 rgba(255,255,255,0.1);
+    font-family: 'Orbitron', sans-serif;
+    color: white;
+    margin-top: 20px;
+    position: relative;
+    overflow: hidden;
+}
+.feature-card {
+    background: radial-gradient(circle at top left, #1f2937, #111827);
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 0 20px rgba(0,255,255,0.1);
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    color: #fff;
+    margin-bottom: 20px;
+}
+.feature-card:hover { transform: translateY(-10px); box-shadow: 0 0 30px rgba(0,255,255,0.4); }
+.feature-card h3 { color: #00BFFF; }
+.feature-card p  { color: #c9d1d9; }
+
+/* ── Inputs ─────────────────────────────────────────────── */
+.stTextInput > div > input,
+.stTextArea > div > textarea {
+    background: rgba(10,20,40,0.35);
+    border: 1px solid rgba(0,200,255,0.6);
+    border-radius: 14px;
+    color: #e6f7ff;
+    padding: 10px;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 0 12px rgba(0,200,255,0.3), inset 0 0 15px rgba(0,200,255,0.05);
+    transition: all 0.3s ease-in-out;
+}
+.stTextInput > div > input:hover { border:1px solid #00BFFF; box-shadow:0 0 8px rgba(0,191,255,0.2); }
+.stTextInput > label { color: #c9d1d9; }
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.stButton > button {
+    position: relative; overflow: hidden;
+    background: rgba(10,20,40,0.35);
+    border: 1px solid rgba(0,200,255,0.6);
+    color: #e6f7ff;
+    border-radius: 14px; padding: 10px 20px;
+    font-size: 16px; font-weight: 500; text-transform: uppercase;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 0 12px rgba(0,200,255,0.35), inset 0 0 20px rgba(0,200,255,0.05);
+    transition: all 0.3s ease-in-out;
+}
+.stButton > button:hover { box-shadow: 0 0 20px rgba(0,200,255,0.6); transform: scale(1.02); }
+
+/* ── Metrics ─────────────────────────────────────────────── */
+.stMetric {
+    background-color: rgba(10,20,40,0.35);
+    border: 1px solid rgba(0,200,255,0.6);
+    border-radius: 14px; padding: 15px;
+    box-shadow: 0 0 12px rgba(0,200,255,0.35), inset 0 0 20px rgba(0,200,255,0.05);
+    text-align: center;
+}
+
+/* ── File Uploader ───────────────────────────────────────── */
+.stFileUploader > div > div {
+    border: 1px solid rgba(0,200,255,0.5);
+    border-radius: 14px;
+    background: rgba(10,20,40,0.35);
+    backdrop-filter: blur(14px);
+    color: #cce6ff;
+    box-shadow: 0 0 12px rgba(0,200,255,0.3);
+}
+
+/* ── Chat Messages ───────────────────────────────────────── */
+.stChatMessage {
+    font-size: 18px;
+    background: rgba(10,20,40,0.35);
+    border: 1px solid rgba(0,200,255,0.5);
+    border-radius: 14px; padding: 14px;
+    color: #e6f7ff;
+    text-shadow: 0 0 6px rgba(0,200,255,0.7);
+    box-shadow: 0 0 12px rgba(0,200,255,0.3), inset 0 0 15px rgba(0,200,255,0.05);
+}
+
+/* ── Banner ──────────────────────────────────────────────── */
+.banner-container {
+    width: 100%; height: 80px;
+    background: linear-gradient(90deg, #000428, #004e92);
+    border-bottom: 2px solid cyan;
+    overflow: hidden; display: flex;
+    align-items: center; justify-content: flex-start;
+    margin-bottom: 20px; border-radius: 12px;
+    backdrop-filter: blur(14px);
+}
+.pulse-bar {
+    position: absolute; display: flex; align-items: center;
+    font-size: 22px; font-weight: bold; color: #00ffff;
+    white-space: nowrap;
+    animation: glideIn 12s linear infinite;
+    text-shadow: 0 0 10px #00ffff;
+}
+.pulse-bar .bar {
+    width:10px; height:30px; margin-right:10px;
+    background:#00ffff; box-shadow:0 0 8px cyan;
+    animation: pulse 1s ease-in-out infinite;
+}
+@keyframes glideIn {
+    0%   { left:-50%; opacity:0; }
+    10%  { opacity:1; }
+    90%  { opacity:1; }
+    100% { left:110%; opacity:0; }
+}
+@keyframes pulse {
+    0%,100% { height:20px; background-color:#00ffff; }
+    50%      { height:40px; background-color:#ff00ff; }
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.header {
+    font-size: 28px; font-weight: bold;
+    text-align: center; text-transform: uppercase;
+    letter-spacing: 2px; padding: 20px 30px;
+    color: #00ffff; text-shadow: 0px 0px 10px #00ffff;
+    position: relative; overflow: hidden;
+    border-radius: 14px;
+    background: rgba(10,20,40,0.35);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(0,200,255,0.5);
+    box-shadow: 0 0 12px rgba(0,200,255,0.25);
+}
+
+/* ── Shimmer utility ─────────────────────────────────────── */
+@keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+}
+@keyframes glassShimmer {
+    0%   { transform: translateX(-100%) skewX(-15deg); }
+    100% { transform: translateX(200%)  skewX(-15deg); }
+}
+@keyframes float {
+    0%,100% { transform: translateY(0px); }
+    50%      { transform: translateY(-5px); }
+}
+@keyframes slideInLeft {
+    0%   { transform: translateX(-120%); opacity:0; }
+    100% { transform: translateX(0);     opacity:1; }
+}
+
+/* ── Glassmorphism slide messages ───────────────────────── */
+.slide-message {
+    position: relative; overflow: hidden;
+    margin: 16px 0; padding: 14px 20px;
+    border-radius: 14px; font-weight: 600;
+    font-size: 0.95em; display: flex;
+    align-items: center; justify-content: flex-start;
+    gap: 12px;
+    animation: slideIn 0.6s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1);
+    width: 100%; max-width: 100%; box-sizing: border-box;
+    line-height: 1.5; font-family: 'Orbitron', sans-serif;
+}
+
+/* ── Counter grid ────────────────────────────────────────── */
+.counter-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 250px);
+    column-gap: 40px; row-gap: 25px;
+    justify-content: center;
+    padding: 30px 10px; max-width: 600px; margin: 0 auto;
+}
+.counter-box {
+    background: linear-gradient(135deg,
+        rgba(0,191,255,0.1) 0%, rgba(30,144,255,0.05) 50%, rgba(0,191,255,0.1) 100%);
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    border: 1px solid rgba(0,191,255,0.2); border-radius: 16px;
+    width: 100%; height: 120px;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    transition: all 0.3s ease;
+    animation: float 3s ease-in-out infinite;
+}
+.counter-box:hover {
+    transform: translateY(-8px) scale(1.02);
+    border: 1px solid rgba(0,191,255,0.4);
+    box-shadow: 0 20px 40px rgba(0,191,255,0.1), inset 0 1px 0 rgba(255,255,255,0.1);
+}
+.counter-box:nth-child(1) { animation-delay: 0s; }
+.counter-box:nth-child(2) { animation-delay: 0.5s; }
+.counter-box:nth-child(3) { animation-delay: 1s; }
+.counter-box:nth-child(4) { animation-delay: 1.5s; }
+.counter-number {
+    font-size: 2.2em; font-weight: bold; color: #00BFFF;
+    margin: 0; text-shadow: 0 0 20px rgba(0,191,255,0.5);
+}
+.counter-label { margin-top: 8px; font-size: 1em; color: #c9d1d9; }
+
+/* ── Animated cards ──────────────────────────────────────── */
+.animated-cards {
+    margin-top: 40px; display: flex;
+    justify-content: center; position: relative; height: 260px;
+}
+.animated-cards img {
+    position: absolute; width: 220px;
+    animation: splitCards 2.5s ease-in-out infinite alternate;
+    z-index: 1;
+    filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
+}
+.animated-cards img:nth-child(1) { animation-delay:0s;   z-index:3; }
+.animated-cards img:nth-child(2) { animation-delay:0.3s; z-index:2; }
+.animated-cards img:nth-child(3) { animation-delay:0.6s; z-index:1; }
+@keyframes splitCards {
+    0%   { transform: scale(1) translateX(0) rotate(0deg); opacity:1; }
+    100% { transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity:1; }
+}
+.card-left   { --x-offset:-80px; --rot:-4deg; }
+.card-center { --x-offset:0px;   --rot:0deg;  }
+.card-right  { --x-offset:80px;  --rot:4deg;  }
+
+/* ── Mobile ──────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .pulse-bar { font-size: 16px; }
+    .header    { font-size: 20px; }
+    .counter-grid { grid-template-columns: repeat(2,140px); column-gap:16px; }
+}
+</style>
+"""
+st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
+
+# ============================================================
+# 🖼️  Cached image fetcher — prevents network call on EVERY
+#     rerun (the #1 cause of tab-switch flicker).
+# ============================================================
+@st.cache_data(show_spinner=False, ttl=86400)  # cache 24 h
+def _fetch_image_b64(url: str) -> str:
+    """Download remote image once; return base64 string."""
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return b64encode(resp.content).decode()
+    except Exception:
+        return ""   # fail silently — image simply won't show
+
+
 
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
@@ -392,84 +723,7 @@ if "last_validated_username" not in st.session_state:
 if "last_validated_password" not in st.session_state:
     st.session_state.last_validated_password = ""
 
-# ------------------- CSS Styling -------------------
-st.markdown("""
-<style>
-body, .main {
-    background-color: #0d1117;
-    color: white;
-}
-
-/* Smooth fade animation for notifications */
-div.stAlert {
-    border-radius: 12px;
-    padding: 10px 14px;
-    animation: fadein 0.3s, fadeout 0.3s 2.7s;
-    text-align: center;
-}
-@keyframes fadein { from {opacity: 0;} to {opacity: 1;} }
-@keyframes fadeout { from {opacity: 1;} to {opacity: 0;} }
-
-.login-card {
-    background: #161b22;
-    padding: 30px;
-    border-radius: 20px;
-    box-shadow: 0 0 25px rgba(0,0,0,0.3);
-    transition: all 0.4s ease;
-}
-.login-card:hover {
-    transform: translateY(-6px) scale(1.01);
-    box-shadow: 0 0 45px rgba(0,255,255,0.25);
-}
-.stTextInput > div > input {
-    background-color: #0d1117;
-    color: white;
-    border: 1px solid #30363d;
-    border-radius: 10px;
-    padding: 0.6em;
-}
-.stTextInput > div > input:hover {
-    border: 1px solid #00BFFF;
-    box-shadow: 0 0 8px rgba(0,191,255,0.2);
-}
-.stTextInput > label {
-    color: #c9d1d9;
-}
-.stButton > button {
-    background-color: #238636;
-    color: white;
-    border-radius: 10px;
-    padding: 0.6em 1.5em;
-    border: none;
-    font-weight: bold;
-}
-.stButton > button:hover {
-    background-color: #2ea043;
-    box-shadow: 0 0 10px rgba(46,160,67,0.4);
-    transform: scale(1.02);
-}
-.feature-card {
-    background: radial-gradient(circle at top left, #1f2937, #111827);
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0 0 20px rgba(0,255,255,0.1);
-    text-align: center;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    color: #fff;
-    margin-bottom: 20px;
-}
-.feature-card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 0 30px rgba(0,255,255,0.4);
-}
-.feature-card h3 {
-    color: #00BFFF;
-}
-.feature-card p {
-    color: #c9d1d9;
-}
-</style>
-""", unsafe_allow_html=True)
+# NOTE: All CSS previously here has been consolidated into _GLOBAL_CSS above.
 # 🔹 VIDEO BACKGROUND & GLOW TEXT
 
 # ------------------- BEFORE LOGIN -------------------
@@ -498,157 +752,30 @@ if not st.session_state.authenticated:
             </div>
             """, unsafe_allow_html=True)
 
-    # -------- Animated Cards --------
+    # -------- Animated Cards (cached — no network hit on rerun) --------
     image_url = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
+    img_base64 = _fetch_image_b64(image_url)
 
+    # All CSS already injected once via _GLOBAL_CSS — no inline styles needed here.
     st.markdown(f"""
-    <style>
-    .animated-cards {{
-      margin-top: 30px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 300px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 240px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-    @keyframes splitCards {{
-      0% {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left {{ --x-offset: -80px; --rot: -5deg; }}
-    .card-center {{ --x-offset: 0px; --rot: 0deg; }}
-    .card-right {{ --x-offset: 80px; --rot: 5deg; }}
-    </style>
     <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
+        <img class="card-left"   src="data:image/png;base64,{img_base64}" />
         <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
+        <img class="card-right"  src="data:image/png;base64,{img_base64}" />
     </div>
     """, unsafe_allow_html=True)
 
-    # -------- Counter Section (Updated Layout & Style with glassmorphism and shimmer) --------
+    # -------- Counter Section --------
 
     # Fetch counters
     total_users = get_total_registered_users()
     active_logins = get_logins_today()
     stats = get_database_stats()
 
-# Replace static 15 with dynamic count
     resumes_uploaded = stats.get("total_candidates", 0)
-
     active_domains = stats.get("unique_domains", 0)
 
-
-    glassmorphism_counter_style = """
-    <style>
-    @keyframes shimmer {
-        0% { background-position: -200% 0; }
-        100% { background-position: 200% 0; }
-    }
-    
-    @keyframes float {
-        0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-5px); }
-    }
-
-    .counter-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 250px);
-        column-gap: 40px;
-        row-gap: 25px;
-        justify-content: center;
-        padding: 30px 10px;
-        max-width: 600px;
-        margin: 0 auto;
-    }
-
-    .counter-box {
-        background: linear-gradient(135deg, 
-            rgba(0, 191, 255, 0.1) 0%, 
-            rgba(30, 144, 255, 0.05) 50%, 
-            rgba(0, 191, 255, 0.1) 100%);
-        backdrop-filter: blur(15px);
-        -webkit-backdrop-filter: blur(15px);
-        border: 1px solid rgba(0, 191, 255, 0.2);
-        border-radius: 16px;
-        width: 100%;
-        height: 120px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        position: relative;
-        overflow: hidden;
-        transition: all 0.3s ease;
-        animation: float 3s ease-in-out infinite;
-    }
-
-    .counter-box::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(0, 191, 255, 0.3),
-            transparent
-        );
-        animation: shimmer 2s infinite;
-    }
-
-    .counter-box:hover {
-        transform: translateY(-8px) scale(1.02);
-        background: linear-gradient(135deg, 
-            rgba(0, 191, 255, 0.15) 0%, 
-            rgba(30, 144, 255, 0.08) 50%, 
-            rgba(0, 191, 255, 0.15) 100%);
-        border: 1px solid rgba(0, 191, 255, 0.4);
-        box-shadow: 
-            0 20px 40px rgba(0, 191, 255, 0.1),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    }
-
-    .counter-box:nth-child(1) { animation-delay: 0s; }
-    .counter-box:nth-child(2) { animation-delay: 0.5s; }
-    .counter-box:nth-child(3) { animation-delay: 1s; }
-    .counter-box:nth-child(4) { animation-delay: 1.5s; }
-
-    .counter-number {
-        font-size: 2.2em;
-        font-weight: bold;
-        color: #00BFFF;
-        margin: 0;
-        position: relative;
-        z-index: 2;
-        text-shadow: 0 0 20px rgba(0, 191, 255, 0.5);
-    }
-
-    .counter-label {
-        margin-top: 8px;
-        font-size: 1em;
-        color: #c9d1d9;
-        position: relative;
-        z-index: 2;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    }
-    </style>
-    """
-
-    st.markdown(glassmorphism_counter_style, unsafe_allow_html=True)
-
+    # Counter CSS already in _GLOBAL_CSS — emit only the data markup.
     st.markdown(f"""
     <div class="counter-grid">
         <div class="counter-box">
@@ -670,386 +797,16 @@ if not st.session_state.authenticated:
     </div>
     """, unsafe_allow_html=True)
 
-if not st.session_state.get("authenticated", False):
+    # ✅ Futuristic silhouette (cached — no network call on rerun)
+    image_url_silhouette = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png"
+    img_base64_silhouette = _fetch_image_b64(image_url_silhouette)
 
-    # ✅ Futuristic silhouette
-    image_url = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
-
-    # ✅ Inject glassmorphism CSS with shimmer effects
+    # All styles already in _GLOBAL_CSS — only emit the HTML markup.
     st.markdown(f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
-
-    @keyframes shimmer {{
-        0% {{ background-position: -200% 0; }}
-        100% {{ background-position: 200% 0; }}
-    }}
-
-    @keyframes glassShimmer {{
-        0% {{ transform: translateX(-100%) skewX(-15deg); }}
-        100% {{ transform: translateX(200%) skewX(-15deg); }}
-    }}
-
-    /* ===== Card Shuffle Animation ===== */
-    .animated-cards {{
-      margin-top: 40px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 260px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 220px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-      filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-
-    @keyframes splitCards {{
-      0%   {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left   {{ --x-offset: -80px; --rot: -4deg; }}
-    .card-center {{ --x-offset: 0px;  --rot: 0deg;  }}
-    .card-right  {{ --x-offset: 80px;  --rot: 4deg;  }}
-
-    /* ===== Glassmorphism Login Card ===== */
-    .login-card {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.1) 0%,
-        rgba(30, 144, 255, 0.05) 50%,
-        rgba(0, 191, 255, 0.1) 100%);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(0, 191, 255, 0.2);
-      border-radius: 20px;
-      padding: 25px;
-      box-shadow:
-        0 8px 32px rgba(0, 191, 255, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      font-family: 'Orbitron', sans-serif;
-      color: white;
-      margin-top: 20px;
-      opacity: 0;
-      transform: translateX(-120%);
-      animation: slideInLeft 1.2s ease-out forwards;
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .login-card::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(0, 191, 255, 0.2),
-        transparent
-      );
-      animation: glassShimmer 3s infinite;
-    }}
-
-    @keyframes slideInLeft {{
-      0%   {{ transform: translateX(-120%); opacity: 0; }}
-      100% {{ transform: translateX(0); opacity: 1; }}
-    }}
-
-    .login-card h2 {{
-      text-align: center;
-      font-size: 1.6rem;
-      text-shadow: 0 0 15px rgba(0, 191, 255, 0.5);
-      margin-bottom: 15px;
-      position: relative;
-      z-index: 2;
-    }}
-    .login-card h2 span {{ color: #00BFFF; }}
-
-    /* ===== Enhanced Message Cards with Consistent Layout ===== */
-    .slide-message {{
-      position: relative;
-      overflow: hidden;
-      margin: 16px 0;
-      padding: 14px 20px;
-      border-radius: 14px;
-      font-weight: 600;
-      font-size: 0.95em;
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 12px;
-      animation: slideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      box-shadow:
-        0 4px 20px rgba(0, 0, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      line-height: 1.5;
-      font-family: 'Orbitron', sans-serif;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      min-height: 50px;
-    }}
-
-    .slide-message:hover {{
-      transform: translateY(-3px) scale(1.01);
-      box-shadow:
-        0 8px 30px rgba(0, 0, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    }}
-
-    .slide-message::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.1),
-        transparent
-      );
-      transition: left 0.5s;
-    }}
-
-    .slide-message:hover::before {{
-      left: 100%;
-    }}
-
-    .slide-message svg {{
-      width: 22px;
-      height: 22px;
-      flex-shrink: 0;
-      filter: drop-shadow(0 0 6px currentColor);
-      z-index: 2;
-    }}
-
-    .slide-message-text {{
-      flex: 1;
-      z-index: 2;
-      position: relative;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-      white-space: normal;
-    }}
-
-    .success-msg {{
-      background: linear-gradient(135deg,
-        rgba(0, 255, 127, 0.20) 0%,
-        rgba(0, 255, 127, 0.08) 100%);
-      border: 2px solid rgba(0, 255, 127, 0.4);
-      color: #00FF7F;
-      text-shadow: 0 0 12px rgba(0, 255, 127, 0.4);
-    }}
-
-    .error-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.20) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-      color: #FF6347;
-      text-shadow: 0 0 12px rgba(255, 99, 71, 0.4);
-    }}
-
-    .info-msg {{
-      background: linear-gradient(135deg,
-        rgba(30, 144, 255, 0.20) 0%,
-        rgba(30, 144, 255, 0.08) 100%);
-      border: 2px solid rgba(30, 144, 255, 0.4);
-      color: #1E90FF;
-      text-shadow: 0 0 12px rgba(30, 144, 255, 0.4);
-    }}
-
-    .warn-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.20) 0%,
-        rgba(255, 215, 0, 0.08) 100%);
-      border: 2px solid rgba(255, 215, 0, 0.4);
-      color: #FFD700;
-      text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
-    }}
-
-    @keyframes slideIn {{
-      0%   {{
-        transform: translateX(-50px);
-        opacity: 0;
-      }}
-      100% {{
-        transform: translateX(0);
-        opacity: 1;
-      }}
-    }}
-
-    /* ===== Improved Timer Display ===== */
-    .timer-display {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.18) 0%,
-        rgba(255, 165, 0, 0.08) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      border: 2px solid rgba(255, 215, 0, 0.4);
-      border-radius: 14px;
-      padding: 16px 24px;
-      margin: 20px 0;
-      text-align: center;
-      box-shadow:
-        0 4px 20px rgba(255, 215, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .timer-display::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 215, 0, 0.2),
-        transparent
-      );
-      animation: glassShimmer 3s infinite;
-    }}
-
-    .timer-display:hover {{
-      box-shadow:
-        0 8px 30px rgba(255, 215, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-      transform: translateY(-3px);
-    }}
-
-    .timer-text {{
-      color: #FFD700;
-      font-size: 1.15em;
-      font-weight: bold;
-      font-family: 'Orbitron', sans-serif;
-      text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
-      position: relative;
-      z-index: 2;
-    }}
-
-    .timer-expired {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.18) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-    }}
-
-    .timer-expired .timer-text {{
-      color: #FF6347;
-      text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
-    }}
-
-    /* ===== Glassmorphism Buttons ===== */
-    .stButton>button {{
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.2) 0%, 
-        rgba(30, 144, 255, 0.1) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      color: white;
-      border: 1px solid rgba(0, 191, 255, 0.3);
-      border-radius: 12px;
-      font-family: 'Orbitron', sans-serif;
-      font-weight: bold;
-      padding: 8px 20px;
-      box-shadow: 
-        0 4px 16px rgba(0, 191, 255, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }}
-    
-    .stButton>button::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.2),
-        transparent
-      );
-      transition: left 0.5s;
-    }}
-    
-    .stButton>button:hover {{
-      transform: translateY(-2px);
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.3) 0%, 
-        rgba(30, 144, 255, 0.15) 100%);
-      border: 1px solid rgba(0, 191, 255, 0.5);
-      box-shadow: 
-        0 8px 25px rgba(0, 191, 255, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    }}
-    
-    .stButton>button:hover::before {{
-      left: 100%;
-    }}
-
-    /* ===== Glassmorphism Input Fields ===== */
-    .stTextInput input {{
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.08) 0%, 
-        rgba(30, 144, 255, 0.04) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      border: 1px solid rgba(0, 191, 255, 0.2);
-      border-radius: 10px;
-      padding: 10px;
-      color: #E0F7FF;
-      font-family: 'Orbitron', sans-serif;
-      box-shadow: 
-        0 4px 16px rgba(0, 191, 255, 0.05),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-      transition: all 0.3s ease-in-out;
-    }}
-    .stTextInput input:focus {{
-      outline: none !important;
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.12) 0%, 
-        rgba(30, 144, 255, 0.06) 100%);
-      border: 1px solid rgba(0, 191, 255, 0.4);
-      box-shadow: 
-        0 8px 25px rgba(0, 191, 255, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transform: translateY(-1px);
-    }}
-    .stTextInput label {{
-      font-family: 'Orbitron', sans-serif;
-      color: #00BFFF !important;
-      text-shadow: 0 0 10px rgba(0, 191, 255, 0.3);
-    }}
-    </style>
-
-    <!-- Animated Cards -->
     <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
+        <img class="card-left"   src="data:image/png;base64,{img_base64_silhouette}" />
+        <img class="card-center" src="data:image/png;base64,{img_base64_silhouette}" />
+        <img class="card-right"  src="data:image/png;base64,{img_base64_silhouette}" />
     </div>
     """, unsafe_allow_html=True)
 
@@ -1087,7 +844,6 @@ if not st.session_state.get("authenticated", False):
                         log_user_action(st.session_state.username, "login")
 
                         notify("login", "success", "✅ Login successful!")
-                        time.sleep(3.0)
                         st.rerun()
                     else:
                         notify("login", "error", "❌ Invalid credentials. Please try again.")
@@ -1128,7 +884,6 @@ if not st.session_state.get("authenticated", False):
                                     st.session_state.reset_stage = "verify_otp"
 
                                     notify("login", "success", "✅ OTP sent successfully to your email!")
-                                    time.sleep(0.5)
                                     st.rerun()
                                 else:
                                     notify("login", "error", "❌ Failed to send OTP. Please try again.")
@@ -1378,9 +1133,7 @@ if not st.session_state.get("authenticated", False):
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_email = new_email
-                        # Auto-hide after 3 seconds by clearing after delay
-                        time.sleep(3)
-                        email_validation_placeholder.empty()
+                        # Validation message stays until next keystroke triggers rerun
                 elif not new_email:
                     email_validation_placeholder.empty()
                     st.session_state.last_validated_email = ""
@@ -1407,8 +1160,7 @@ if not st.session_state.get("authenticated", False):
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_username = new_user
-                        time.sleep(3)
-                        username_validation_placeholder.empty()
+                        # Stays visible until next keystroke
                 elif not new_user:
                     username_validation_placeholder.empty()
                     st.session_state.last_validated_username = ""
@@ -1436,8 +1188,7 @@ if not st.session_state.get("authenticated", False):
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_password = new_pass
-                        time.sleep(3)
-                        password_validation_placeholder.empty()
+                        # Stays visible until next keystroke
                 elif not new_pass:
                     password_validation_placeholder.empty()
                     st.session_state.last_validated_password = ""
@@ -1461,7 +1212,6 @@ if not st.session_state.get("authenticated", False):
                             success, message = add_user(new_user.strip(), new_pass.strip(), new_email.strip())
                             if success:
                                 notify("register", "success", message)
-                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("register", "error", message)
@@ -1522,7 +1272,7 @@ if st.session_state.get("authenticated"):
         save_user_api_key(st.session_state.username, None)
         st.sidebar.success("✅ Cleared saved Groq API key. Now using shared admin key.")
 
-if st.session_state.username == "admin":
+if st.session_state.get("authenticated") and st.session_state.get("username") == "admin":
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown("<h2 style='color:#00BFFF;'>📊 Admin Dashboard</h2>", unsafe_allow_html=True)
 
@@ -1571,7 +1321,7 @@ tab_labels = [
 ]
 
 # Add Admin tab only for admin user
-if st.session_state.username == "admin":
+if st.session_state.get("authenticated") and st.session_state.get("username") == "admin":
     tab_labels.append("📁 Admin DB View")
 
 # Create tabs dynamically
@@ -1583,251 +1333,9 @@ tab1, tab2, tab3, tab4 = tabs[:4]
 # Handle optional admin tab
 tab5 = tabs[4] if len(tabs) > 4 else None
 with tab1:
+    # All styling already injected once via _GLOBAL_CSS — no per-tab CSS injection.
+    # Injecting CSS inside a tab block causes a visible flash on every tab switch.
     st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Orbitron', sans-serif;
-        background-color: #0b0c10;
-        color: #c5c6c7;
-        scroll-behavior: smooth;
-    }
-
-    /* ---------- SCROLLBAR ---------- */
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #1f2833; }
-    ::-webkit-scrollbar-thumb { background: #00ffff; border-radius: 4px; }
-
-    /* ---------- BANNER ---------- */
-    .banner-container {
-        width: 100%;
-        height: 80px;
-        background: linear-gradient(90deg, #000428, #004e92);
-        border-bottom: 2px solid cyan;
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        position: relative;
-        margin-bottom: 20px;
-        border-radius: 12px;
-        backdrop-filter: blur(14px);
-    }
-    .pulse-bar {
-        position: absolute;
-        display: flex;
-        align-items: center;
-        font-size: 22px;
-        font-weight: bold;
-        color: #00ffff;
-        white-space: nowrap;
-        animation: glideIn 12s linear infinite;
-        text-shadow: 0 0 10px #00ffff;
-    }
-    .pulse-bar .bar {
-        width: 10px;
-        height: 30px;
-        margin-right: 10px;
-        background: #00ffff;
-        box-shadow: 0 0 8px cyan;
-        animation: pulse 1s ease-in-out infinite;
-    }
-    @keyframes glideIn {
-        0% { left: -50%; opacity: 0; }
-        10% { opacity: 1; }
-        90% { opacity: 1; }
-        100% { left: 110%; opacity: 0; }
-    }
-    @keyframes pulse {
-        0%, 100% { height: 20px; background-color: #00ffff; }
-        50% { height: 40px; background-color: #ff00ff; }
-    }
-
-    /* ---------- HEADER ---------- */
-    .header {
-        font-size: 28px;
-        font-weight: bold;
-        text-align: center;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        padding: 20px 30px;  /* ✅ More spacing inside the bar */
-        color: #00ffff;
-        text-shadow: 0px 0px 10px #00ffff;
-        position: relative;
-        overflow: hidden;
-        border-radius: 14px;
-        background: rgba(10,20,40,0.35);
-        backdrop-filter: blur(14px);
-        border: 1px solid rgba(0,200,255,0.5);
-        box-shadow: 0 0 12px rgba(0,200,255,0.25);
-    }
-    .header::before {
-        content: "";
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: linear-gradient(
-            120deg,
-            rgba(255,255,255,0.18) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%
-        );
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .header:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- SHIMMER (COMMON) ---------- */
-    .shimmer::before {
-        content: "";
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: linear-gradient(
-            120deg,
-            rgba(255,255,255,0.15) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%
-        );
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .shimmer:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- FILE UPLOADER ---------- */
-    .stFileUploader > div > div {
-        border: 1px solid rgba(0,200,255,0.5);
-        border-radius: 14px;
-        background: rgba(10,20,40,0.35);
-        backdrop-filter: blur(14px);
-        color: #cce6ff;
-        box-shadow: 0 0 12px rgba(0,200,255,0.3);
-        position: relative;
-        overflow: hidden;
-    }
-    .stFileUploader > div > div::before {
-        content: "";
-        position: absolute; top: -50%; left: -50%;
-        width: 200%; height: 200%;
-        background: linear-gradient(120deg,
-            rgba(255,255,255,0.15) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%);
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .stFileUploader > div > div:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- BUTTONS ---------- */
-    .stButton > button {
-        position: relative;
-        overflow: hidden;
-        background: rgba(10,20,40,0.35);
-        border: 1px solid rgba(0,200,255,0.6);
-        color: #e6f7ff;
-        border-radius: 14px;
-        padding: 10px 20px;
-        font-size: 16px;
-        font-weight: 500;
-        text-transform: uppercase;
-        backdrop-filter: blur(16px);
-        box-shadow: 0 0 12px rgba(0,200,255,0.35),
-                    inset 0 0 20px rgba(0,200,255,0.05);
-        transition: all 0.3s ease-in-out;
-    }
-    .stButton > button::before {
-        content: "";
-        position: absolute; top: -50%; left: -50%;
-        width: 200%; height: 200%;
-        background: linear-gradient(120deg,
-            rgba(255,255,255,0.15) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%);
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .stButton > button:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- INPUTS ---------- */
-    .stTextInput > div > input,
-    .stTextArea > div > textarea {
-        position: relative;
-        overflow: hidden;
-        background: rgba(10,20,40,0.35);
-        border: 1px solid rgba(0,200,255,0.6);
-        border-radius: 14px;
-        color: #e6f7ff;
-        padding: 10px;
-        backdrop-filter: blur(16px);
-        box-shadow: 0 0 12px rgba(0,200,255,0.3),
-                    inset 0 0 15px rgba(0,200,255,0.05);
-        transition: all 0.3s ease-in-out;
-    }
-
-    /* ---------- CHAT MESSAGES ---------- */
-    .stChatMessage {
-        position: relative;
-        overflow: hidden;
-        font-size: 18px;
-        background: rgba(10,20,40,0.35);
-        border: 1px solid rgba(0,200,255,0.5);
-        border-radius: 14px;
-        padding: 14px;
-        color: #e6f7ff;
-        text-shadow: 0 0 6px rgba(0,200,255,0.7);
-        box-shadow: 0 0 12px rgba(0,200,255,0.3),
-                    inset 0 0 15px rgba(0,200,255,0.05);
-    }
-    .stChatMessage::before {
-        content: "";
-        position: absolute; top: -50%; left: -50%;
-        width: 200%; height: 200%;
-        background: linear-gradient(120deg,
-            rgba(255,255,255,0.15) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%);
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .stChatMessage:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- METRICS ---------- */
-    .stMetric {
-        position: relative;
-        overflow: hidden;
-        background-color: rgba(10,20,40,0.35);
-        border: 1px solid rgba(0,200,255,0.6);
-        border-radius: 14px;
-        padding: 15px;
-        box-shadow: 0 0 12px rgba(0,200,255,0.35),
-                    inset 0 0 20px rgba(0,200,255,0.05);
-        text-align: center;
-    }
-    .stMetric::before {
-        content: "";
-        position: absolute; top: -50%; left: -50%;
-        width: 200%; height: 200%;
-        background: linear-gradient(120deg,
-            rgba(255,255,255,0.15) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%);
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .stMetric:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- MOBILE ---------- */
-    @media (max-width: 768px) {
-        .pulse-bar { font-size: 16px; }
-        .header { font-size: 20px; }
-    }
-    </style>
-
     <!-- Banner -->
     <div class="banner-container">
         <div class="pulse-bar">
@@ -1840,9 +1348,10 @@ with tab1:
     <div class="header">💼 HIRELYZER - AI BASED ETHICAL RESUME ANALYZER</div>
     """, unsafe_allow_html=True)
 
-# Load environment variables
+# ── Module-level init (runs ONCE on cold start, cached thereafter) ────────────
 load_dotenv()
 
+# ── Module-level init (runs ONCE on cold start, cached thereafter) ────────────
 # Detect Device
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 torch.backends.cudnn.benchmark = True
@@ -10529,66 +10038,6 @@ Generate exactly {num_questions} questions now:
         # Create database table if not exists
         create_interview_database()
 
-        # ─────────────────────────────────────────────────────
-        # ANTI-CHEAT: Check if a violation was flagged via query param
-        # ─────────────────────────────────────────────────────
-        if 'anti_cheat_violated' not in st.session_state:
-            st.session_state.anti_cheat_violated = False
-        if 'anti_cheat_reason' not in st.session_state:
-            st.session_state.anti_cheat_reason = ""
-
-        # Read query param set by JS on violation
-        qp = st.query_params
-        if qp.get("cheat") == "1" and not st.session_state.anti_cheat_violated:
-            st.session_state.anti_cheat_violated = True
-            st.session_state.anti_cheat_reason = qp.get("reason", "Policy violation")
-            # Terminate interview
-            st.session_state.dynamic_interview_started = False
-            st.session_state.dynamic_interview_completed = False
-            st.session_state.dynamic_interview_questions = []
-            st.session_state.dynamic_interview_answers = []
-            st.session_state.dynamic_interview_scores = []
-            st.session_state.dynamic_interview_feedbacks = []
-            st.session_state.dynamic_answer_submitted = False
-            st.session_state.current_interview_question_text = ""
-            st.session_state.question_timer_start = None
-            # Clear the query param to avoid loops
-            st.query_params.clear()
-
-        # Show terminated screen if violated
-        if st.session_state.anti_cheat_violated:
-            st.markdown("""
-            <div style="
-                background: linear-gradient(135deg, rgba(255, 50, 50, 0.15) 0%, rgba(180, 0, 0, 0.10) 100%);
-                border: 2px solid rgba(255, 80, 80, 0.6);
-                border-radius: 16px;
-                padding: 40px 32px;
-                text-align: center;
-                margin: 30px 0;
-                box-shadow: 0 0 40px rgba(255, 0, 0, 0.15);
-            ">
-                <div style="font-size: 64px; margin-bottom: 16px;">🚫</div>
-                <h2 style="color: #ff4444; font-size: 28px; margin-bottom: 12px;">Interview Terminated</h2>
-                <p style="color: #ffaaaa; font-size: 18px; margin-bottom: 8px;">
-                    <strong>Anti-Cheat Violation Detected</strong>
-                </p>
-                <p style="color: #ffcccc; font-size: 15px; margin-bottom: 24px;">
-                    Your interview was closed because a policy violation was detected:<br/>
-                    <em style="color: #ff8888;">""" + st.session_state.anti_cheat_reason + """</em>
-                </p>
-                <p style="color: #aaaaaa; font-size: 13px;">
-                    Tab switching, window switching, and copy-paste are strictly prohibited during the interview.<br/>
-                    Please restart and complete the interview without switching tabs or copying answers.
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            if st.button("🔄 Restart Interview"):
-                st.session_state.anti_cheat_violated = False
-                st.session_state.anti_cheat_reason = ""
-                st.rerun()
-            st.stop()
-
         # Initialize resume state
         if 'resume_file' not in st.session_state:
             st.session_state.resume_file = None
@@ -10814,112 +10263,6 @@ Generate exactly {num_questions} questions now:
                 num_resume_qs = len(st.session_state.resume_based_questions)
                 current_phase = "Resume-Based" if current_index <= num_resume_qs else "Generic Interview"
 
-                # ─────────────────────────────────────────────────────
-                # ANTI-CHEAT JAVASCRIPT INJECTION
-                # Detects: tab switching, window blur, copy/cut/paste in answer box
-                # Communicates violation back to Streamlit via URL query param
-                # No page flickering: JS only acts on actual violations
-                # ─────────────────────────────────────────────────────
-                st.markdown("""
-                <script>
-                (function() {
-                    // Prevent multiple injections
-                    if (window._antiCheatActive) return;
-                    window._antiCheatActive = true;
-
-                    function triggerViolation(reason) {
-                        // Remove listeners to avoid duplicate triggers
-                        document.removeEventListener('visibilitychange', handleVisibility);
-                        window.removeEventListener('blur', handleBlur);
-                        // Set query param and reload so Streamlit picks it up
-                        var url = new URL(window.location.href);
-                        url.searchParams.set('cheat', '1');
-                        url.searchParams.set('reason', reason);
-                        window.location.href = url.toString();
-                    }
-
-                    // ── Tab / window switch detection ──
-                    function handleVisibility() {
-                        if (document.hidden) {
-                            triggerViolation('Tab switching detected - you switched to another tab or minimized the window');
-                        }
-                    }
-
-                    function handleBlur() {
-                        // Small delay to ignore Streamlit internal focus shifts
-                        setTimeout(function() {
-                            if (document.hidden) {
-                                triggerViolation('Window focus lost - you switched to another application');
-                            }
-                        }, 300);
-                    }
-
-                    document.addEventListener('visibilitychange', handleVisibility);
-                    window.addEventListener('blur', handleBlur);
-
-                    // ── Block copy/cut/paste on answer textareas ──
-                    function blockClipboard(e) {
-                        var target = e.target;
-                        if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            // Show a brief inline warning without flickering
-                            var warnId = 'anticheat-warn';
-                            var existing = document.getElementById(warnId);
-                            if (!existing) {
-                                var warn = document.createElement('div');
-                                warn.id = warnId;
-                                warn.style.cssText = [
-                                    'position:fixed',
-                                    'top:20px',
-                                    'left:50%',
-                                    'transform:translateX(-50%)',
-                                    'background:rgba(200,0,0,0.92)',
-                                    'color:#fff',
-                                    'padding:12px 28px',
-                                    'border-radius:8px',
-                                    'font-size:15px',
-                                    'font-weight:600',
-                                    'z-index:99999',
-                                    'box-shadow:0 4px 20px rgba(0,0,0,0.4)',
-                                    'pointer-events:none',
-                                    'transition:opacity 0.3s'
-                                ].join(';');
-                                warn.innerText = '🚫 Copy/Paste is not allowed during the interview!';
-                                document.body.appendChild(warn);
-                                setTimeout(function() {
-                                    warn.style.opacity = '0';
-                                    setTimeout(function() {
-                                        if (warn.parentNode) warn.parentNode.removeChild(warn);
-                                    }, 350);
-                                }, 2500);
-                            }
-                            return false;
-                        }
-                    }
-
-                    document.addEventListener('copy', blockClipboard, true);
-                    document.addEventListener('cut', blockClipboard, true);
-                    document.addEventListener('paste', blockClipboard, true);
-
-                    // Also block Ctrl+C / Ctrl+V / Ctrl+X keyboard shortcuts on textareas
-                    document.addEventListener('keydown', function(e) {
-                        var target = e.target;
-                        if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT')) {
-                            if ((e.ctrlKey || e.metaKey) && ['c','v','x','a'].includes(e.key.toLowerCase())) {
-                                if (e.key.toLowerCase() !== 'a') { // Allow select-all
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    blockClipboard(e);
-                                }
-                            }
-                        }
-                    }, true);
-
-                })();
-                </script>
-                """, unsafe_allow_html=True)
-
                 # Display progress with correct counts in glassmorphism box
                 st.markdown(f"""
                 <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.08) 0%, rgba(0, 195, 255, 0.04) 100%);
@@ -10932,9 +10275,6 @@ Generate exactly {num_questions} questions now:
                             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);">
                     <p style="color: #ffffff; font-size: 16px; margin: 0; font-weight: 500;">
                         📊 Progress: Answered {questions_answered}/{st.session_state.original_num_questions} questions | Phase: {current_phase}
-                    </p>
-                    <p style="color: rgba(255,180,0,0.85); font-size: 12px; margin: 6px 0 0 0;">
-                        🛡️ Anti-Cheat Active: Tab switching and copy/paste are monitored. Violations will terminate your interview.
                     </p>
                 </div>
                 """, unsafe_allow_html=True)
