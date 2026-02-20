@@ -5791,12 +5791,17 @@ def render_template_classic(session_state, profile_img_html=""):
             for s in items_str.split(',') if s.strip()
         )
 
-    # Fix image: strip inline style overrides, apply clean fixed box
+    # Fix image: extract just the <img> tag, strip all styles, apply clean circle styles
     def _fix_img(html, size=88):
         if not html:
             return ""
-        html = _re.sub(r"style=['\"][^'\"]*['\"]", "", html)
-        return html.replace("<img ", f"<img style='width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;object-position:center;display:block;margin:0 auto 10px;border:2px solid #1e3a5f;' ")
+        img_match = _re.search(r'<img[^>]*>', html)
+        if not img_match:
+            return ""
+        img_tag = img_match.group(0)
+        img_tag = _re.sub(r"style=['\"][^'\"]*['\"]", "", img_tag)
+        img_tag = img_tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;object-position:center;display:block;margin:0 auto 10px;border:2px solid #1e3a5f;' ")
+        return img_tag
 
     experience_html = ""
     for exp in session_state.experience_entries:
@@ -5937,15 +5942,20 @@ def render_template_executive(session_state, profile_img_html=""):
             for s in items_str.split(',') if s.strip()
         )
 
-    # Fix image properly: strip existing styles, apply contained fixed-size circle
+    # Fix image properly: extract just <img> tag, strip existing styles, apply contained fixed-size circle
     def _fix_img(html, size=96):
         if not html:
             return ""
-        html = _re.sub(r"style=['\"][^'\"]*['\"]", "", html)
-        return html.replace(
+        img_match = _re.search(r'<img[^>]*>', html)
+        if not img_match:
+            return ""
+        img_tag = img_match.group(0)
+        img_tag = _re.sub(r"style=['\"][^'\"]*['\"]", "", img_tag)
+        img_tag = img_tag.replace(
             "<img ",
-            f"<img style='width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;object-position:center;border:3px solid #fff;flex-shrink:0;' "
+            f"<img style='width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;object-position:center;border:3px solid #fff;display:block;' "
         )
+        return img_tag
 
     exp_html = ""
     for exp in session_state.experience_entries:
@@ -6054,15 +6064,17 @@ def render_template_executive(session_state, profile_img_html=""):
 </head>
 <body>
   <!-- Header Band -->
-  <div style='background:linear-gradient(135deg,#1e1b4b 0%,#3730a3 100%);color:white;padding:36px 50px;display:flex;justify-content:space-between;align-items:center;gap:20px;'>
-    <div style='flex:1;min-width:0;'>
-      <h1 style='font-size:34px;font-weight:800;letter-spacing:-0.5px;'>{session_state.get('name','')}</h1>
-      <div style='font-size:17px;color:#c7d2fe;margin-top:6px;font-weight:600;'>{job_title_val}</div>
-      <div style='font-size:13px;color:#a5b4fc;margin-top:10px;flex-wrap:wrap;'>{contact_html}</div>
-    </div>
-    <div style='flex-shrink:0;width:96px;height:96px;border-radius:50%;overflow:hidden;border:3px solid rgba(255,255,255,0.6);'>
-      {fixed_img}
-    </div>
+  <div style='background:linear-gradient(135deg,#1e1b4b 0%,#3730a3 100%);color:white;padding:36px 50px;'>
+    <table role='presentation' style='width:100%;border-collapse:collapse;'>
+    <tr>
+      <td style='vertical-align:middle;'>
+        <h1 style='font-size:34px;font-weight:800;letter-spacing:-0.5px;'>{session_state.get('name','')}</h1>
+        <div style='font-size:17px;color:#c7d2fe;margin-top:6px;font-weight:600;'>{job_title_val}</div>
+        <div style='font-size:13px;color:#a5b4fc;margin-top:10px;'>{contact_html}</div>
+      </td>
+      {'<td style="vertical-align:middle;text-align:right;width:110px;">' + fixed_img + '</td>' if fixed_img else ''}
+    </tr>
+    </table>
   </div>
   <!-- Body -->
   <div style='padding:36px 50px;'>
@@ -6097,11 +6109,16 @@ def render_template_timeline(session_state, profile_img_html=""):
     def _fix_img(html, size=95):
         if not html:
             return ""
-        html = _re.sub(r"style=['\"][^'\"]*['\"]", "", html)
-        return html.replace(
+        img_match = _re.search(r'<img[^>]*>', html)
+        if not img_match:
+            return ""
+        img_tag = img_match.group(0)
+        img_tag = _re.sub(r"style=['\"][^'\"]*['\"]", "", img_tag)
+        img_tag = img_tag.replace(
             "<img ",
             f"<img style='width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;object-position:center;border:4px solid #0d9488;display:block;' "
         )
+        return img_tag
 
     def timeline_item(title, subtitle, date, body, accent="#0d9488", proj_link=""):
         link_html = f"<div style='margin-top:5px;'><a href='{proj_link}' target='_blank' style='color:{accent};font-size:13px;font-weight:600;'>&#128279; View Project / GitHub</a></div>" if proj_link else ""
@@ -6192,15 +6209,17 @@ def render_template_timeline(session_state, profile_img_html=""):
 </head>
 <body>
   <div style='background:#0d9488;height:6px;'></div>
-  <div style='padding:36px 50px 24px;display:flex;justify-content:space-between;align-items:center;gap:20px;border-bottom:1px solid #e2e8f0;'>
-    <div style='flex:1;min-width:0;'>
-      <h1 style='font-size:36px;font-weight:800;color:#134e4a;letter-spacing:-1px;'>{session_state.get('name','')}</h1>
-      <div style='font-size:17px;color:#0d9488;font-weight:700;margin-top:4px;'>{job_title_val}</div>
-      <div style='font-size:13px;color:#64748b;margin-top:8px;'>{contact_line}</div>
-    </div>
-    <div style='flex-shrink:0;width:95px;height:95px;border-radius:50%;overflow:hidden;border:4px solid #0d9488;'>
-      {fixed_img}
-    </div>
+  <div style='padding:36px 50px 24px;border-bottom:1px solid #e2e8f0;'>
+    <table role='presentation' style='width:100%;border-collapse:collapse;'>
+    <tr>
+      <td style='vertical-align:middle;'>
+        <h1 style='font-size:36px;font-weight:800;color:#134e4a;letter-spacing:-1px;'>{session_state.get('name','')}</h1>
+        <div style='font-size:17px;color:#0d9488;font-weight:700;margin-top:4px;'>{job_title_val}</div>
+        <div style='font-size:13px;color:#64748b;margin-top:8px;'>{contact_line}</div>
+      </td>
+      {'<td style="vertical-align:middle;text-align:right;width:110px;">' + fixed_img + '</td>' if fixed_img else ''}
+    </tr>
+    </table>
   </div>
   <div style='padding:30px 50px;'>
     {sec("About Me", summary_html) if summary_html else ''}
@@ -6225,8 +6244,13 @@ def render_template_corporate(session_state, profile_img_html=""):
     def _fix_img(html, size=108):
         if not html:
             return ""
-        html = _re.sub(r"style=['\"][^\'\"]*['\"]", "", html)
-        return html.replace("<img ", f"<img style='width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;object-position:center;border:3px solid #93c5fd;display:block;margin:0 auto;' ")
+        img_match = _re.search(r'<img[^>]*>', html)
+        if not img_match:
+            return ""
+        img_tag = img_match.group(0)
+        img_tag = _re.sub(r"style=['\"][^\'\"]*['\"]", "", img_tag)
+        img_tag = img_tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;object-position:center;border:3px solid #93c5fd;display:block;margin:0 auto;' ")
+        return img_tag
 
     def badge(item, bg="#1d4ed8", color="#fff"):
         return (f"<span style='display:inline-block;background:{bg};color:{color};border-radius:4px;"
@@ -6334,9 +6358,10 @@ def render_template_corporate(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<div style='display:flex;min-height:100vh;'>
-  <div style='width:300px;background:linear-gradient(180deg,#1e3a8a,#1d4ed8);color:white;padding:36px 24px;flex-shrink:0;'>
-    <div style='width:108px;height:108px;border-radius:50%;overflow:hidden;border:3px solid #93c5fd;margin:0 auto 14px;'>{fixed_img}</div>
+<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<tr>
+  <td style='width:300px;background:linear-gradient(180deg,#1e3a8a,#1d4ed8);color:white;padding:36px 24px;vertical-align:top;'>
+    {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
     <h1 style='font-size:21px;font-weight:800;color:#fff;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
     <div style='font-size:13px;color:#93c5fd;text-align:center;margin-bottom:24px;font-weight:600;'>{job_title_val}</div>
     {side_sec("Contact", contact_html)}
@@ -6346,14 +6371,15 @@ def render_template_corporate(session_state, profile_img_html=""):
     {side_sec("Interests", badges(session_state.get('interests',''),'rgba(255,255,255,0.1)','#fce7f3')) if session_state.get('interests') else ''}
     {side_sec("Certifications", cert_sidebar) if cert_sidebar else ''}
     {side_sec("Project Links", all_links_html) if all_links_html else ''}
-  </div>
-  <div style='flex:1;padding:40px 44px;background:#fff;'>
+  </td>
+  <td style='padding:40px 44px;background:#fff;vertical-align:top;'>
     {main_sec("Professional Summary", summary_html) if summary_html else ''}
     {main_sec("Work Experience", exp_html) if exp_html else ''}
     {main_sec("Education", edu_html) if edu_html else ''}
     {main_sec("Projects", proj_html) if proj_html else ''}
-  </div>
-</div>
+  </td>
+</tr>
+</table>
 </body></html>"""
 
 
@@ -6364,8 +6390,13 @@ def render_template_creative_green(session_state, profile_img_html=""):
     def _fix_img(html, size=100):
         if not html:
             return ""
-        html = _re.sub(r"style=['\"][^\'\"]*['\"]", "", html)
-        return html.replace("<img ", f"<img style='width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;object-position:center;border:4px solid #059669;display:block;margin:0 auto;' ")
+        img_match = _re.search(r'<img[^>]*>', html)
+        if not img_match:
+            return ""
+        img_tag = img_match.group(0)
+        img_tag = _re.sub(r"style=['\"][^\'\"]*['\"]", "", img_tag)
+        img_tag = img_tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;object-position:center;border:4px solid #059669;display:block;margin:0 auto;' ")
+        return img_tag
 
     def pill(s, bg="#d1fae5", color="#065f46"):
         return (f"<span style='display:inline-block;background:{bg};color:{color};border-radius:20px;"
@@ -6472,9 +6503,10 @@ def render_template_creative_green(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#f0fdf4; }}</style>
 </head>
 <body>
-<div style='display:flex;min-height:100vh;'>
-  <div style='width:280px;background:#fff;border-right:2px solid #a7f3d0;padding:32px 22px;flex-shrink:0;'>
-    <div style='width:100px;height:100px;border-radius:50%;overflow:hidden;border:4px solid #059669;margin:0 auto 14px;'>{fixed_img}</div>
+<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<tr>
+  <td style='width:280px;background:#fff;border-right:2px solid #a7f3d0;padding:32px 22px;vertical-align:top;'>
+    {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
     <h1 style='font-size:20px;font-weight:800;color:#064e3b;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
     <div style='font-size:13px;color:#059669;text-align:center;font-weight:700;margin-bottom:22px;'>{job_title_val}</div>
     {side_sec("Contact", contact_html)}
@@ -6484,14 +6516,15 @@ def render_template_creative_green(session_state, profile_img_html=""):
     {side_sec("Interests", pills(session_state.get('interests',''),'#fce7f3','#9d174d')) if session_state.get('interests') else ''}
     {side_sec("Certifications", cert_html) if cert_html else ''}
     {side_sec("Project Links", all_links_html) if all_links_html else ''}
-  </div>
-  <div style='flex:1;padding:36px 40px;background:#f0fdf4;'>
+  </td>
+  <td style='padding:36px 40px;background:#f0fdf4;vertical-align:top;'>
     {main_sec("About Me", summary_html) if summary_html else ''}
     {main_sec("Experience", exp_html) if exp_html else ''}
     {main_sec("Education", edu_html) if edu_html else ''}
     {main_sec("Projects", proj_html) if proj_html else ''}
-  </div>
-</div>
+  </td>
+</tr>
+</table>
 </body></html>"""
 
 
@@ -6502,8 +6535,13 @@ def render_template_terracotta(session_state, profile_img_html=""):
     def _fix_img(html, size=105):
         if not html:
             return ""
-        html = _re.sub(r"style=['\"][^\'\"]*['\"]", "", html)
-        return html.replace("<img ", f"<img style='width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;object-position:center;border:3px solid #fde68a;display:block;margin:0 auto;' ")
+        img_match = _re.search(r'<img[^>]*>', html)
+        if not img_match:
+            return ""
+        img_tag = img_match.group(0)
+        img_tag = _re.sub(r"style=['\"][^\'\"]*['\"]", "", img_tag)
+        img_tag = img_tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;border-radius:50%;object-fit:cover;object-position:center;border:3px solid #fde68a;display:block;margin:0 auto;' ")
+        return img_tag
 
     def chip(s, bg="#fef3c7", color="#78350f"):
         return (f"<span style='display:inline-block;background:{bg};color:{color};border-radius:3px;"
@@ -6607,9 +6645,10 @@ def render_template_terracotta(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fafaf9; }}</style>
 </head>
 <body>
-<div style='display:flex;min-height:100vh;'>
-  <div style='width:290px;background:linear-gradient(180deg,#7c2d12,#b45309);color:white;padding:34px 22px;flex-shrink:0;'>
-    <div style='width:105px;height:105px;border-radius:50%;overflow:hidden;border:3px solid #fde68a;margin:0 auto 14px;'>{fixed_img}</div>
+<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<tr>
+  <td style='width:290px;background:linear-gradient(180deg,#7c2d12,#b45309);color:white;padding:34px 22px;vertical-align:top;'>
+    {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
     <h1 style='font-size:20px;font-weight:800;color:#fff;text-align:center;margin-bottom:4px;letter-spacing:-0.3px;'>{session_state.get('name','')}</h1>
     <div style='font-size:13px;color:#fde68a;text-align:center;font-weight:700;margin-bottom:24px;'>{job_title_val}</div>
     {side_sec("Contact", contact_html)}
@@ -6619,14 +6658,15 @@ def render_template_terracotta(session_state, profile_img_html=""):
     {side_sec("Interests", chips(session_state.get('interests',''),'rgba(255,255,255,0.1)','#fce7f3')) if session_state.get('interests') else ''}
     {side_sec("Certifications", cert_html) if cert_html else ''}
     {side_sec("Project Links", all_links_html) if all_links_html else ''}
-  </div>
-  <div style='flex:1;padding:38px 42px;background:#fafaf9;'>
+  </td>
+  <td style='padding:38px 42px;background:#fafaf9;vertical-align:top;'>
     {main_sec("Professional Summary", summary_html) if summary_html else ''}
     {main_sec("Work Experience", exp_html) if exp_html else ''}
     {main_sec("Education", edu_html) if edu_html else ''}
     {main_sec("Projects", proj_html) if proj_html else ''}
-  </div>
-</div>
+  </td>
+</tr>
+</table>
 </body></html>"""
 
 
