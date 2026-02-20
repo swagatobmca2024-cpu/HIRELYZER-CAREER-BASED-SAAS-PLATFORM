@@ -5884,12 +5884,21 @@ def render_template_classic(session_state, profile_img_html=""):
             {content}
         </div>"""
 
-    # Contact line with portfolio & github
+    # Contact line with portfolio & github — hyperlinked where applicable
+    def _contact_link(key, val):
+        if key == 'email':
+            return f"<a href='mailto:{val}' style='color:#1e3a5f;text-decoration:none;'>{val}</a>"
+        elif key in ('linkedin', 'portfolio', 'github'):
+            href = val if val.startswith('http') else f"https://{val}"
+            return f"<a href='{href}' target='_blank' style='color:#1e3a5f;text-decoration:none;'>{val}</a>"
+        else:
+            return val
+
     contact_parts = []
     for key in ['email','phone','location','linkedin','portfolio','github']:
         val = session_state.get(key,'')
         if val:
-            contact_parts.append(val)
+            contact_parts.append(_contact_link(key, val))
     contact_line = " &nbsp;|&nbsp; ".join(contact_parts)
 
     summary_html = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#374151', line_height='1.8')
@@ -6042,15 +6051,23 @@ def render_template_executive(session_state, profile_img_html=""):
     SVG_PORTFOLIO = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>'
 
     contact_items = [
-        (session_state.get('email',''), SVG_EMAIL),
-        (session_state.get('phone',''), SVG_PHONE),
-        (session_state.get('location',''), SVG_LOCATION),
-        (session_state.get('linkedin',''), SVG_LINKEDIN),
-        (session_state.get('portfolio',''), SVG_PORTFOLIO),
-        (session_state.get('github',''), SVG_GITHUB),
+        (session_state.get('email',''), SVG_EMAIL, 'email'),
+        (session_state.get('phone',''), SVG_PHONE, 'phone'),
+        (session_state.get('location',''), SVG_LOCATION, 'location'),
+        (session_state.get('linkedin',''), SVG_LINKEDIN, 'linkedin'),
+        (session_state.get('portfolio',''), SVG_PORTFOLIO, 'portfolio'),
+        (session_state.get('github',''), SVG_GITHUB, 'github'),
     ]
+    def _exec_contact_item(val, icon, key):
+        if key == 'email':
+            return f"<span>{icon}<a href='mailto:{val}' style='color:#a5b4fc;text-decoration:none;'>{val}</a></span>"
+        elif key == 'phone' or key == 'location':
+            return f"<span>{icon}{val}</span>"
+        else:
+            href = val if val.startswith('http') else f"https://{val}"
+            return f"<span>{icon}<a href='{href}' target='_blank' style='color:#a5b4fc;text-decoration:none;'>{val}</a></span>"
     contact_html = " &nbsp; ".join(
-        f"<span>{icon}{val}</span>" for val, icon in contact_items if val
+        _exec_contact_item(val, icon, key) for val, icon, key in contact_items if val
     )
 
     summary_html = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#374151', line_height='1.8')
@@ -6198,7 +6215,13 @@ def render_template_timeline(session_state, profile_img_html=""):
     for key in ['email','phone','location','linkedin','portfolio','github']:
         val = session_state.get(key,'')
         if val:
-            contact_parts.append(val)
+            if key == 'email':
+                contact_parts.append(f"<a href='mailto:{val}' style='color:#64748b;text-decoration:none;'>{val}</a>")
+            elif key in ('linkedin', 'portfolio', 'github'):
+                href = val if val.startswith('http') else f"https://{val}"
+                contact_parts.append(f"<a href='{href}' target='_blank' style='color:#64748b;text-decoration:none;'>{val}</a>")
+            else:
+                contact_parts.append(val)
     contact_line = " · ".join(contact_parts)
     summary_html = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#374151', line_height='1.8')
 
@@ -6336,7 +6359,14 @@ def render_template_corporate(session_state, profile_img_html=""):
     for key in ['email','phone','location','linkedin','portfolio','github']:
         val = session_state.get(key,'')
         if val:
-            contact_html += f"<div style='margin-bottom:8px;font-size:12px;color:#bfdbfe;display:flex;align-items:center;gap:5px;'><span style='flex-shrink:0;'>{SVG_ICONS[key]}</span><span style='word-break:break-all;'>{val}</span></div>"
+            if key == 'email':
+                val_html = f"<a href='mailto:{val}' style='color:#bfdbfe;text-decoration:none;word-break:break-all;'>{val}</a>"
+            elif key in ('linkedin', 'portfolio', 'github'):
+                href = val if val.startswith('http') else f"https://{val}"
+                val_html = f"<a href='{href}' target='_blank' style='color:#bfdbfe;text-decoration:none;word-break:break-all;'>{val}</a>"
+            else:
+                val_html = f"<span style='word-break:break-all;'>{val}</span>"
+            contact_html += f"<div style='margin-bottom:8px;font-size:12px;color:#bfdbfe;display:flex;align-items:center;gap:5px;'><span style='flex-shrink:0;'>{SVG_ICONS[key]}</span>{val_html}</div>"
 
     summary_html = _fmt_desc(session_state.get('summary',''), font_size='13px', color='#374151', line_height='1.8')
     fixed_img = _fix_img(profile_img_html)
@@ -6465,7 +6495,14 @@ def render_template_creative_green(session_state, profile_img_html=""):
     for key in ['email','phone','location','linkedin','portfolio','github']:
         val = session_state.get(key,'')
         if val:
-            contact_html += f"<div style='display:flex;align-items:center;margin-bottom:8px;font-size:13px;color:#374151;gap:6px;'><span style='flex-shrink:0;color:#059669;'>{SVG_ICONS[key]}</span><span style='word-break:break-all;'>{val}</span></div>"
+            if key == 'email':
+                val_html = f"<a href='mailto:{val}' style='color:#059669;text-decoration:none;word-break:break-all;'>{val}</a>"
+            elif key in ('linkedin', 'portfolio', 'github'):
+                href = val if val.startswith('http') else f"https://{val}"
+                val_html = f"<a href='{href}' target='_blank' style='color:#059669;text-decoration:none;word-break:break-all;'>{val}</a>"
+            else:
+                val_html = f"<span style='word-break:break-all;'>{val}</span>"
+            contact_html += f"<div style='display:flex;align-items:center;margin-bottom:8px;font-size:13px;color:#374151;gap:6px;'><span style='flex-shrink:0;color:#059669;'>{SVG_ICONS[key]}</span>{val_html}</div>"
 
     cert_html = ""
     for cert in session_state.certificate_links:
@@ -6610,7 +6647,14 @@ def render_template_terracotta(session_state, profile_img_html=""):
     for key in ['email','phone','location','linkedin','portfolio','github']:
         val = session_state.get(key,'')
         if val:
-            contact_html += f"<div style='margin-bottom:9px;font-size:12px;color:#e7e5e4;display:flex;align-items:center;gap:5px;'><span style='flex-shrink:0;'>{SVG_ICONS[key]}</span><span style='word-break:break-all;'>{val}</span></div>"
+            if key == 'email':
+                val_html = f"<a href='mailto:{val}' style='color:#fde68a;text-decoration:none;word-break:break-all;'>{val}</a>"
+            elif key in ('linkedin', 'portfolio', 'github'):
+                href = val if val.startswith('http') else f"https://{val}"
+                val_html = f"<a href='{href}' target='_blank' style='color:#fde68a;text-decoration:none;word-break:break-all;'>{val}</a>"
+            else:
+                val_html = f"<span style='word-break:break-all;'>{val}</span>"
+            contact_html += f"<div style='margin-bottom:9px;font-size:12px;color:#e7e5e4;display:flex;align-items:center;gap:5px;'><span style='flex-shrink:0;'>{SVG_ICONS[key]}</span>{val_html}</div>"
 
     cert_html = ""
     for cert in session_state.certificate_links:
