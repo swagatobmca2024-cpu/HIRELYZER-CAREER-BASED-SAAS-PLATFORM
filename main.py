@@ -3794,6 +3794,97 @@ def html_to_pdf_bytes(html_string):
     pdf_io.seek(0)
     return pdf_io
 
+def _fmt_desc(text, font_size="14px", color="#374151", line_height="1.75"):
+    """
+    ATS-friendly, readable description formatter shared by all 9 templates.
+
+    Rules:
+    - Lines starting with  - / • / * / · / > become proper <li> bullet items
+      wrapped in a <ul> block (consecutive bullets are grouped).
+    - Blank lines produce paragraph breaks (<p> spacing).
+    - Non-bullet, non-blank lines become plain <p> paragraphs.
+    - Never outputs raw <br> soup — every line gets a proper container.
+    """
+    if not text or not text.strip():
+        return ""
+
+    BULLET_PREFIXES = ("-", "•", "*", "·", ">", "–", "—")
+
+    def is_bullet(line):
+        stripped = line.strip()
+        for p in BULLET_PREFIXES:
+            if stripped.startswith(p):
+                return stripped[len(p):].strip()
+        return None
+
+    lines = text.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+
+    base_style = (
+        f"font-size:{font_size};"
+        f"color:{color};"
+        f"line-height:{line_height};"
+        f"margin:0 0 6px 0;"
+        f"padding:0;"
+    )
+    p_style   = f"style='{base_style}'"
+    ul_style  = f"style='margin:0 0 8px 0;padding-left:20px;list-style-type:disc;'"
+    li_style  = (
+        f"style='"
+        f"font-size:{font_size};"
+        f"color:{color};"
+        f"line-height:{line_height};"
+        f"margin-bottom:4px;"
+        f"'"
+    )
+
+    segments   = []   # list of ('p', text) | ('bullets', [text, ...]) | ('blank',)
+    bullet_buf = []
+
+    def flush_bullets():
+        if bullet_buf:
+            segments.append(('bullets', list(bullet_buf)))
+            bullet_buf.clear()
+
+    for raw in lines:
+        line = raw.rstrip()
+        if not line.strip():
+            flush_bullets()
+            segments.append(('blank',))
+            continue
+        b = is_bullet(line)
+        if b is not None:
+            bullet_buf.append(b)
+        else:
+            flush_bullets()
+            segments.append(('p', line.strip()))
+
+    flush_bullets()
+
+    # Collapse consecutive blanks
+    out_segs = []
+    prev_blank = False
+    for seg in segments:
+        if seg[0] == 'blank':
+            if not prev_blank and out_segs:
+                out_segs.append(seg)
+            prev_blank = True
+        else:
+            prev_blank = False
+            out_segs.append(seg)
+
+    html_parts = []
+    for seg in out_segs:
+        if seg[0] == 'blank':
+            html_parts.append(f"<div style='height:6px;'></div>")
+        elif seg[0] == 'p':
+            html_parts.append(f"<p {p_style}>{seg[1]}</p>")
+        elif seg[0] == 'bullets':
+            items = "".join(f"<li {li_style}>{item}</li>" for item in seg[1])
+            html_parts.append(f"<ul {ul_style}>{items}</ul>")
+
+    return "".join(html_parts)
+
+
 def render_template_default(session_state, profile_img_html=""):
     """Default professional template - keeps the exact same design as before"""
     
@@ -3889,12 +3980,8 @@ def render_template_default(session_state, profile_img_html=""):
     experience_html = ""
     for exp in session_state.experience_entries:
         if exp["company"] or exp["title"]:
-            # Handle paragraphs and single line breaks
-            description_lines = [line.strip() for line in exp["description"].strip().split("\n\n")]
-            description_html = "".join(
-                f"<div style='margin-bottom: 10px; line-height: 1.6;'>{line.replace(chr(10), '<br>')}</div>"
-                for line in description_lines if line
-            )
+            # Handle paragraphs and single line breaks using ATS-friendly formatter
+            description_html = _fmt_desc(exp["description"], font_size="15px", color="#374151", line_height="1.75")
 
             experience_html += f"""
             <div style='
@@ -4009,7 +4096,7 @@ def render_template_default(session_state, profile_img_html=""):
 
     # Convert experience to list if multiple lines
     # Escape HTML and convert line breaks
-    summary_html = session_state['summary'].replace('\n', '<br>')
+    summary_html = _fmt_desc(session_state['summary'], font_size="15px", color="#374151", line_height="1.8")
 
     # Enhanced EDUCATION with professional styling
     education_html = ""
@@ -4156,10 +4243,7 @@ def render_template_default(session_state, profile_img_html=""):
             </div>
             """ if tech_val else ""
 
-            description_items = ""
-            if proj.get("description"):
-                description_lines = [line.strip() for line in proj["description"].splitlines() if line.strip()]
-                description_items = "".join(f"<li style='margin-bottom: 6px; line-height: 1.6;'>{line}</li>" for line in description_lines)
+            description_items = _fmt_desc(proj.get("description",""), font_size="15px", color="#334155", line_height="1.75") if proj.get("description") else ""
 
             projects_html += f"""
             <div style='
@@ -4239,31 +4323,9 @@ def render_template_default(session_state, profile_img_html=""):
                     padding: 18px;
                     border-radius: 8px;
                     border: 1px solid rgba(229, 231, 235, 0.6);
+                    line-height: 1.75;
                 '>
-                    <div style='
-                        font-weight: 600; 
-                        margin-bottom: 12px;
-                        color: #1e293b;
-                        display: flex;
-                        align-items: center;
-                    '>
-                        <div style='
-                            width: 4px; 
-                            height: 4px; 
-                            background: #64748b;
-                            border-radius: 50%; 
-                            margin-right: 10px;
-                        '></div>
-                        Description:
-                    </div>
-                    <ul style='
-                        margin-top: 8px; 
-                        padding-left: 24px; 
-                        color: #334155;
-                        list-style-type: none;
-                    '>
-                        {description_items}
-                    </ul>
+                    {description_items}
                 </div>
             </div>
             """
@@ -4315,7 +4377,7 @@ def render_template_default(session_state, profile_img_html=""):
                     font-weight: 600; 
                     text-decoration: none;
                     font-size: 15px;
-                '>🔗 Project {i+1}</a>
+                '><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Project {i+1}</a>
             </div>
             """
             for i, link in enumerate(session_state.project_links)
@@ -4344,7 +4406,7 @@ def render_template_default(session_state, profile_img_html=""):
         """
         for cert in session_state.certificate_links:
             if cert["name"] and cert["link"]:
-                description = cert.get('description', '').replace('\n', '<br>')
+                description = _fmt_desc(cert.get('description', ''), font_size="15px", color="#374151", line_height="1.75")
                 name = cert['name']
                 link = cert['link']
                 duration = cert.get('duration', '')
@@ -5070,17 +5132,17 @@ def render_template_modern(session_state, profile_img_html=""):
         <h1>{session_state['name']}</h1>
         <h2>{session_state['job_title']}</h2>
         <div class="contact-info">
-            <span>📍 {session_state['location']}</span>
-            <span>📞 {session_state['phone']}</span>
-            <a href="mailto:{session_state['email']}">✉️ {session_state['email']}</a>
-            <a href="{session_state['linkedin']}" target="_blank">🔗 LinkedIn</a>
-            <a href="{session_state['portfolio']}" target="_blank">🌐 Portfolio</a>
+            <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>{session_state['location']}</span>
+            <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>{session_state['phone']}</span>
+            <a href="mailto:{session_state['email']}"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>{session_state['email']}</a>
+            <a href="{session_state['linkedin']}" target="_blank"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>LinkedIn</a>
+            <a href="{session_state['portfolio']}" target="_blank"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Portfolio</a>
         </div>
     </div>
 
     <div class="section">
         <h3>Professional Summary</h3>
-        <div class="summary">{session_state['summary'].replace(chr(10), '<br>')}</div>
+        <div class="summary">{_fmt_desc(session_state['summary'], font_size='15px', color='#4b5563', line_height='1.8')}</div>
     </div>
 
     <div class="section">
@@ -5092,7 +5154,7 @@ def render_template_modern(session_state, profile_img_html=""):
                 <div class="item-duration">{exp.get('duration', '')}</div>
             </div>
             <div class="item-subtitle">{exp.get('company', '')}</div>
-            <div class="item-description">{exp.get('description', '').replace(chr(10), '<br>')}</div>
+            <div class="item-description">{_fmt_desc(exp.get('description', ''), font_size='14px', color='#4b5563', line_height='1.75')}</div>
         </div>
         ''' for exp in session_state.experience_entries if exp.get('company') or exp.get('title')])}
     </div>
@@ -5120,7 +5182,7 @@ def render_template_modern(session_state, profile_img_html=""):
                 <div class="item-duration">{proj.get('duration', '')}</div>
             </div>
             <div class="item-subtitle">Technologies: {proj.get('tech', '')}</div>
-            <div class="item-description">{proj.get('description', '').replace(chr(10), '<br>')}</div>
+            <div class="item-description">{_fmt_desc(proj.get('description', ''), font_size='14px', color='#4b5563', line_height='1.75')}</div>
         </div>
         ''' for proj in session_state.project_entries if proj.get('title')])}
     </div>
@@ -5157,7 +5219,7 @@ def render_template_modern(session_state, profile_img_html=""):
     <div class="section">
         <h3>Project Links</h3>
         <div class="links project-links">
-            {"".join([f'<a href="{link}" target="_blank">🔗 Project {i+1}</a>' for i, link in enumerate(session_state.project_links)])}
+            {"".join([f'<a href="{link}" target="_blank"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Project {i+1}</a>' for i, link in enumerate(session_state.project_links)])}
         </div>
     </div>
     ''' if session_state.project_links else ''}
@@ -5176,7 +5238,7 @@ def render_template_modern(session_state, profile_img_html=""):
                 <div class="item-duration">{cert.get('duration', '')}</div>
             </div>
             <div class="item-description">
-                {cert.get('description', '').replace(chr(10), '<br>')}
+                {_fmt_desc(cert.get('description',''), font_size='14px', color='#4b5563', line_height='1.75')}
             </div>
         </div>
         ''' for cert in session_state.certificate_links if cert.get('name')])}
@@ -5588,23 +5650,23 @@ def render_template_sidebar(session_state, profile_img_html=""):
             
             <div class="contact-section">
                 <div class="contact-item">
-                    <div class="contact-icon">📍</div>
+                    <div class="contact-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
                     <span>{session_state['location']}</span>
                 </div>
                 <div class="contact-item">
-                    <div class="contact-icon">📞</div>
+                    <div class="contact-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
                     <span>{session_state['phone']}</span>
                 </div>
                 <div class="contact-item">
-                    <div class="contact-icon">✉️</div>
+                    <div class="contact-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
                     <a href="mailto:{session_state['email']}">{session_state['email']}</a>
                 </div>
                 <div class="contact-item">
-                    <div class="contact-icon">🔗</div>
+                    <div class="contact-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg></div>
                     <a href="{session_state['linkedin']}" target="_blank">LinkedIn Profile</a>
                 </div>
                 <div class="contact-item">
-                    <div class="contact-icon">🌐</div>
+                    <div class="contact-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
                     <a href="{session_state['portfolio']}" target="_blank">Portfolio Website</a>
                 </div>
             </div>
@@ -5633,7 +5695,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
         <div class="main-content">
             <div class="main-section">
                 <h3>Professional Summary</h3>
-                <div class="summary">{session_state['summary'].replace(chr(10), '<br>')}</div>
+                <div class="summary">{_fmt_desc(session_state['summary'], font_size='15px', color='#4b5563', line_height='1.8')}</div>
             </div>
             
             <div class="main-section">
@@ -5645,7 +5707,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
                         <div class="item-duration">{exp.get('duration', '')}</div>
                     </div>
                     <div class="item-company">{exp.get('company', '')}</div>
-                    <div class="item-description">{exp.get('description', '').replace(chr(10), '<br>')}</div>
+                    <div class="item-description">{_fmt_desc(exp.get('description',''), font_size='14px', color='#4b5563', line_height='1.75')}</div>
                 </div>
                 ''' for exp in session_state.experience_entries if exp.get('company') or exp.get('title')])}
             </div>
@@ -5673,7 +5735,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
                         <div class="item-duration">{proj.get('duration', '')}</div>
                     </div>
                     <div class="project-tech">Technologies: {proj.get('tech', '')}</div>
-                    <div class="item-description">{proj.get('description', '').replace(chr(10), '<br>')}</div>
+                    <div class="item-description">{_fmt_desc(proj.get('description',''), font_size='14px', color='#4b5563', line_height='1.75')}</div>
                 </div>
                 ''' for proj in session_state.project_entries if proj.get('title')])}
             </div>
@@ -5681,7 +5743,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
             {f'''
             <div class="main-section">
                 <h3>Project Portfolio</h3>
-                {"".join([f'''<div class="content-item" style="padding: 20px;"><a href="{link}" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 600; font-size: 1.1rem;">🔗 Project Repository {i+1}</a></div>''' for i, link in enumerate(session_state.project_links)])}
+                {"".join([f'''<div class="content-item" style="padding: 20px;"><a href="{link}" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 600; font-size: 1.1rem;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Project Repository {i+1}</a></div>''' for i, link in enumerate(session_state.project_links)])}
             </div>
             ''' if session_state.project_links else ''}
             
@@ -5699,7 +5761,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
                         <div class="item-duration">{cert.get('duration', '')}</div>
                     </div>
                     <div class="item-description">
-                        {cert.get('description', '').replace(chr(10), '<br>')}
+                        {_fmt_desc(cert.get('description',''), font_size='14px', color='#4b5563', line_height='1.75')}
                     </div>
                 </div>
                 ''' for cert in session_state.certificate_links if cert.get('name')])}
@@ -5731,7 +5793,7 @@ def render_template_classic(session_state, profile_img_html=""):
     experience_html = ""
     for exp in session_state.experience_entries:
         if exp.get("company") or exp.get("title"):
-            desc = exp.get("description", "").replace('\n', '<br>')
+            desc = _fmt_desc(exp.get('description',''), font_size='14px', color='#374151', line_height='1.75')
             experience_html += f"""
             <div style='margin-bottom:18px;'>
                 <div style='display:flex;justify-content:space-between;align-items:baseline;'>
@@ -5761,7 +5823,7 @@ def render_template_classic(session_state, profile_img_html=""):
     projects_html = ""
     for proj in session_state.project_entries:
         if proj.get("title"):
-            desc = proj.get("description","").replace('\n','<br>')
+            desc = _fmt_desc(proj.get('description',''), font_size='14px', color='#374151', line_height='1.75')
             projects_html += f"""
             <div style='margin-bottom:16px;'>
                 <div style='display:flex;justify-content:space-between;'>
@@ -5775,7 +5837,7 @@ def render_template_classic(session_state, profile_img_html=""):
     cert_html = ""
     for cert in session_state.certificate_links:
         if cert.get("name"):
-            desc = cert.get("description","").replace('\n','<br>')
+            desc = _fmt_desc(cert.get('description',''), font_size='13px', color='#444', line_height='1.7')
             cert_html += f"""
             <div style='margin-bottom:12px;'>
                 <div style='display:flex;justify-content:space-between;'>
@@ -5799,7 +5861,7 @@ def render_template_classic(session_state, profile_img_html=""):
         session_state.get('github','')
     ]))
 
-    summary_html = session_state.get('summary','').replace('\n','<br>')
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#374151', line_height='1.8')
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
@@ -5819,7 +5881,7 @@ def render_template_classic(session_state, profile_img_html=""):
   </div>
   <hr style='border:none;border-top:3px solid #1e3a5f;margin:16px 0 24px 0;'>
 
-  {section("Professional Summary", f"<p style='font-size:14px;color:#333;line-height:1.8;'>{summary_html}</p>") if summary_html else ''}
+  {section("Professional Summary", summary_html) if summary_html else ''}
   {section("Work Experience", experience_html) if experience_html else ''}
   {section("Education", education_html) if education_html else ''}
   {section("Technical Skills", pills(session_state.get('skills',''))) if session_state.get('skills') else ''}
@@ -5877,7 +5939,7 @@ def render_template_executive(session_state, profile_img_html=""):
     proj_html = ""
     for proj in session_state.project_entries:
         if proj.get("title"):
-            desc = proj.get("description","").replace('\n','<br>')
+            desc = _fmt_desc(proj.get('description',''), font_size='14px', color='#374151', line_height='1.75')
             proj_html += f"""
             <div style='margin-bottom:14px;padding-left:16px;border-left:3px solid #3730a3;'>
                 <div style='display:flex;justify-content:space-between;'>
@@ -5906,18 +5968,25 @@ def render_template_executive(session_state, profile_img_html=""):
             {body}
         </div>"""
 
+    # SVG icons for contact
+    SVG_EMAIL = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>'
+    SVG_PHONE = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'
+    SVG_LOCATION = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>'
+    SVG_LINKEDIN = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>'
+    SVG_GITHUB = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>'
+
     contact_items = [
-        (session_state.get('email',''), '✉'),
-        (session_state.get('phone',''), '📞'),
-        (session_state.get('location',''), '📍'),
-        (session_state.get('linkedin',''), '🔗'),
-        (session_state.get('github',''), '🐙'),
+        (session_state.get('email',''), SVG_EMAIL),
+        (session_state.get('phone',''), SVG_PHONE),
+        (session_state.get('location',''), SVG_LOCATION),
+        (session_state.get('linkedin',''), SVG_LINKEDIN),
+        (session_state.get('github',''), SVG_GITHUB),
     ]
     contact_html = " &nbsp; ".join(
-        f"<span>{icon} {val}</span>" for val, icon in contact_items if val
+        f"<span>{icon}{val}</span>" for val, icon in contact_items if val
     )
 
-    summary_html = session_state.get('summary','').replace('\n','<br>')
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#374151', line_height='1.8')
     img_html = ""
     if profile_img_html:
         img_html = profile_img_html.replace('style="','style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:3px solid #fff;margin-left:30px;')
@@ -5939,7 +6008,7 @@ def render_template_executive(session_state, profile_img_html=""):
   </div>
   <!-- Body -->
   <div style='padding:36px 50px;'>
-    {sec("Summary", f"<p style='font-size:14px;line-height:1.8;color:#333;'>{summary_html}</p>") if summary_html else ''}
+    {sec("Summary", summary_html) if summary_html else ''}
     {sec("Experience", exp_html) if exp_html else ''}
     {sec("Education", edu_html) if edu_html else ''}
     {sec("Skills", tag_row(session_state.get('skills',''))) if session_state.get('skills') else ''}
@@ -5985,7 +6054,7 @@ def render_template_timeline(session_state, profile_img_html=""):
     exp_items = "".join(
         timeline_item(
             e.get('company',''), e.get('title',''), e.get('duration',''),
-            e.get('description','').replace('\n','<br>'), "#0d9488"
+            _fmt_desc(e.get('description',''), font_size='14px', color='#374151', line_height='1.75'), "#0d9488"
         )
         for e in session_state.experience_entries if e.get('company') or e.get('title')
     )
@@ -6002,7 +6071,7 @@ def render_template_timeline(session_state, profile_img_html=""):
     proj_items = "".join(
         timeline_item(
             p.get('title',''), f"Stack: {p.get('tech','')}", p.get('duration',''),
-            p.get('description','').replace('\n','<br>'), "#f59e0b"
+            _fmt_desc(p.get('description',''), font_size='14px', color='#374151', line_height='1.75'), "#f59e0b"
         )
         for p in session_state.project_entries if p.get('title')
     )
@@ -6027,7 +6096,7 @@ def render_template_timeline(session_state, profile_img_html=""):
 
     contact_parts = filter(None,[session_state.get(k,'') for k in ['email','phone','location','linkedin','github']])
     contact_line = " · ".join(contact_parts)
-    summary_html = session_state.get('summary','').replace('\n','<br>')
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#374151', line_height='1.8')
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
@@ -6046,7 +6115,7 @@ def render_template_timeline(session_state, profile_img_html=""):
     {img_html}
   </div>
   <div style='padding:30px 50px;'>
-    {sec("About Me", f"<p style='font-size:14px;line-height:1.8;color:#374151;'>{summary_html}</p>") if summary_html else ''}
+    {sec("About Me", summary_html) if summary_html else ''}
     {sec("Experience", exp_items) if exp_items else ''}
     {sec("Education", edu_items, "#6366f1") if edu_items else ''}
     {sec("Projects", proj_items, "#f59e0b") if proj_items else ''}
@@ -6075,7 +6144,7 @@ def render_template_corporate(session_state, profile_img_html=""):
     exp_html = ""
     for exp in session_state.experience_entries:
         if exp.get('company') or exp.get('title'):
-            desc = exp.get('description','').replace('\n','<br>')
+            desc = _fmt_desc(exp.get('description',''), font_size='14px', color='#374151', line_height='1.75')
             exp_html += f"""
             <div style='margin-bottom:20px;'>
                 <div style='display:flex;justify-content:space-between;align-items:baseline;'>
@@ -6103,7 +6172,7 @@ def render_template_corporate(session_state, profile_img_html=""):
     proj_html = ""
     for proj in session_state.project_entries:
         if proj.get('title'):
-            desc = proj.get('description','').replace('\n','<br>')
+            desc = _fmt_desc(proj.get('description',''), font_size='14px', color='#374151', line_height='1.75')
             proj_html += f"""
             <div style='margin-bottom:14px;padding:12px;background:#eff6ff;border-radius:6px;border-left:3px solid #1d4ed8;'>
                 <div style='display:flex;justify-content:space-between;'>
@@ -6123,13 +6192,19 @@ def render_template_corporate(session_state, profile_img_html=""):
                 <div style='font-size:11px;color:#bfdbfe;'>{cert.get('duration','')}</div>
             </div>"""
 
+    _SVG_EMAIL_W = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>'
+    _SVG_PHONE_W = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'
+    _SVG_LOC_W   = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>'
+    _SVG_LI_W    = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>'
+    _SVG_GH_W    = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>'
+
     contact_html = ""
-    for icon, key in [('✉','email'),('📞','phone'),('📍','location'),('🔗','linkedin'),('🐙','github')]:
+    for svg_icon, key in [(_SVG_EMAIL_W,'email'),(_SVG_PHONE_W,'phone'),(_SVG_LOC_W,'location'),(_SVG_LI_W,'linkedin'),(_SVG_GH_W,'github')]:
         val = session_state.get(key,'')
         if val:
-            contact_html += f"<div style='margin-bottom:8px;font-size:13px;color:#bfdbfe;'><span style='margin-right:6px;'>{icon}</span>{val}</div>"
+            contact_html += f"<div style='margin-bottom:8px;font-size:13px;color:#bfdbfe;'>{svg_icon}{val}</div>"
 
-    summary_html = session_state.get('summary','').replace('\n','<br>')
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#374151', line_height='1.8')
     img_html = profile_img_html.replace('style="','style="width:110px;height:110px;border-radius:50%;object-fit:cover;border:3px solid #93c5fd;display:block;margin:0 auto 16px;') if profile_img_html else ''
 
     def main_sec(title, body):
@@ -6163,7 +6238,7 @@ def render_template_corporate(session_state, profile_img_html=""):
   </div>
   <!-- Main -->
   <div style='flex:1;padding:40px 44px;background:#fff;'>
-    {main_sec("Professional Summary", f"<p style='font-size:14px;color:#374151;line-height:1.8;'>{summary_html}</p>") if summary_html else ''}
+    {main_sec("Professional Summary", summary_html) if summary_html else ''}
     {main_sec("Work Experience", exp_html) if exp_html else ''}
     {main_sec("Education", edu_html) if edu_html else ''}
     {main_sec("Projects", proj_html) if proj_html else ''}
@@ -6188,7 +6263,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
     exp_html = ""
     for exp in session_state.experience_entries:
         if exp.get('company') or exp.get('title'):
-            desc = exp.get('description','').replace('\n','<br>')
+            desc = _fmt_desc(exp.get('description',''), font_size='14px', color='#374151', line_height='1.75')
             exp_html += f"""
             <div style='margin-bottom:18px;padding:14px;border-radius:8px;background:#f0fdf4;border-left:4px solid #059669;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
@@ -6217,7 +6292,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
     proj_html = ""
     for proj in session_state.project_entries:
         if proj.get('title'):
-            desc = proj.get('description','').replace('\n','<br>')
+            desc = _fmt_desc(proj.get('description',''), font_size='14px', color='#374151', line_height='1.75')
             proj_html += f"""
             <div style='margin-bottom:14px;padding:12px;background:#fff;border:1px solid #a7f3d0;border-radius:8px;'>
                 <div style='display:flex;justify-content:space-between;'>
@@ -6229,19 +6304,27 @@ def render_template_creative_green(session_state, profile_img_html=""):
             </div>"""
 
     contact_html = ""
-    for icon, key in [('✉','email'),('📞','phone'),('📍','location'),('🔗','linkedin'),('🐙','github')]:
+    _svg_e = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>'
+    _svg_p = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'
+    _svg_l = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>'
+    _svg_li= '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>'
+    _svg_g = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>'
+    for svg_icon, key in [(_svg_e,'email'),(_svg_p,'phone'),(_svg_l,'location'),(_svg_li,'linkedin'),(_svg_g,'github')]:
         val = session_state.get(key,'')
         if val:
-            contact_html += f"<div style='display:flex;align-items:center;margin-bottom:8px;font-size:13px;color:#374151;'><span style='width:22px;'>{icon}</span>{val}</div>"
+            contact_html += f"<div style='display:flex;align-items:center;margin-bottom:8px;font-size:13px;color:#374151;'><span style='width:22px;'>{svg_icon}</span>{val}</div>"
 
     cert_html = ""
     for cert in session_state.certificate_links:
         if cert.get('name'):
-            cert_html += f"<div style='margin-bottom:8px;'><a href='{cert.get('link','#')}' style='color:#059669;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a><span style='font-size:12px;color:#6b7280;'> · {cert.get('duration','')}</span></div>"
+            cert_html += (f"<div style='margin-bottom:8px;'>"
+                          f"<a href='{cert.get('link','#')}' style='color:#059669;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
+                          f"<span style='font-size:12px;color:#6b7280;'> · {cert.get('duration','')}</span>"
+                          f"</div>")
 
     img_html = profile_img_html.replace('style="','style="width:100px;height:100px;border-radius:50%;object-fit:cover;border:4px solid #059669;display:block;margin:0 auto 16px;') if profile_img_html else ''
 
-    summary_html = session_state.get('summary','').replace('\n','<br>')
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#374151', line_height='1.8')
 
     def side_sec(title, body):
         return f"""<div style='margin-bottom:22px;'>
@@ -6274,7 +6357,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
   </div>
   <!-- Main -->
   <div style='flex:1;padding:36px 40px;background:#f0fdf4;'>
-    {main_sec("About Me", f"<p style='font-size:14px;color:#374151;line-height:1.8;'>{summary_html}</p>") if summary_html else ''}
+    {main_sec("About Me", summary_html) if summary_html else ''}
     {main_sec("Experience", exp_html) if exp_html else ''}
     {main_sec("Education", edu_html) if edu_html else ''}
     {main_sec("Projects", proj_html) if proj_html else ''}
@@ -6299,7 +6382,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
     exp_html = ""
     for exp in session_state.experience_entries:
         if exp.get('company') or exp.get('title'):
-            desc = exp.get('description','').replace('\n','<br>')
+            desc = _fmt_desc(exp.get('description',''), font_size='14px', color='#374151', line_height='1.75')
             exp_html += f"""
             <div style='margin-bottom:18px;border-left:3px solid #d97706;padding-left:14px;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
@@ -6328,7 +6411,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
     proj_html = ""
     for proj in session_state.project_entries:
         if proj.get('title'):
-            desc = proj.get('description','').replace('\n','<br>')
+            desc = _fmt_desc(proj.get('description',''), font_size='14px', color='#374151', line_height='1.75')
             proj_html += f"""
             <div style='margin-bottom:14px;padding:12px;background:#fafaf9;border-radius:6px;border:1px solid #d6d3d1;'>
                 <div style='display:flex;justify-content:space-between;'>
@@ -6340,10 +6423,15 @@ def render_template_terracotta(session_state, profile_img_html=""):
             </div>"""
 
     contact_html = ""
-    for icon, key in [('✉','email'),('📞','phone'),('📍','location'),('🔗','linkedin'),('🐙','github')]:
+    _tsvg_e = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>'
+    _tsvg_p = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>'
+    _tsvg_l = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>'
+    _tsvg_li= '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>'
+    _tsvg_g = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>'
+    for svg_icon, key in [(_tsvg_e,'email'),(_tsvg_p,'phone'),(_tsvg_l,'location'),(_tsvg_li,'linkedin'),(_tsvg_g,'github')]:
         val = session_state.get(key,'')
         if val:
-            contact_html += f"<div style='margin-bottom:9px;font-size:13px;color:#e7e5e4;'><span style='margin-right:6px;'>{icon}</span>{val}</div>"
+            contact_html += f"<div style='margin-bottom:9px;font-size:13px;color:#e7e5e4;'>{svg_icon}{val}</div>"
 
     cert_html = ""
     for cert in session_state.certificate_links:
@@ -6352,7 +6440,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
 
     img_html = profile_img_html.replace('style="','style="width:105px;height:105px;border-radius:50%;object-fit:cover;border:3px solid #fde68a;display:block;margin:0 auto 16px;') if profile_img_html else ''
 
-    summary_html = session_state.get('summary','').replace('\n','<br>')
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#374151', line_height='1.8')
 
     def side_sec(title, body):
         return f"""<div style='margin-bottom:22px;'>
@@ -6385,7 +6473,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
   </div>
   <!-- Main -->
   <div style='flex:1;padding:38px 42px;background:#fafaf9;'>
-    {main_sec("Professional Summary", f"<p style='font-size:14px;color:#44403c;line-height:1.8;'>{summary_html}</p>") if summary_html else ''}
+    {main_sec("Professional Summary", summary_html) if summary_html else ''}
     {main_sec("Work Experience", exp_html) if exp_html else ''}
     {main_sec("Education", edu_html) if edu_html else ''}
     {main_sec("Projects", proj_html) if proj_html else ''}
