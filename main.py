@@ -4519,278 +4519,97 @@ def render_template_default(session_state, profile_img_html=""):
                 """
                 certificate_links_html += card_html
 
-    # Main HTML content - exactly as before
-    html_content = f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{session_state['name']} - Professional Resume</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        * {{
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }}
-        
-        body {{
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            line-height: 1.6;
-            color: #1a202c;
-            background: #ffffff;
-            min-height: 100vh;
-        }}
-        
-        .resume-container {{
-            width: 100%;
-            min-height: 100vh;
-            background: #ffffff;
-        }}
-        
-        .resume-container::before {{
-            content: '';
-            display: block;
-            height: 4px;
-            background: linear-gradient(90deg, #6b7280, #9ca3af);
-        }}
-        
-        .header-section {{
-            background: #f8fafc;
-            padding: 40px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #e2e8f0;
-        }}
-        
-        .name-title {{
-            flex: 1;
-        }}
-        
-        .name-title h1 {{
-            font-size: 42px;
-            font-weight: 800;
-            color: #1a202c;
-            margin-bottom: 8px;
-        }}
-        
-        .name-title h2 {{
-            font-size: 24px;
-            font-weight: 600;
-            color: #4a5568;
-            margin: 0;
-        }}
-        
-        .profile-image {{
-            flex-shrink: 0;
-            margin-left: 40px;
-        }}
-        
-        .main-content {{
-            display: flex;
-            min-height: 800px;
-        }}
-        
-        .sidebar {{
-            width: 350px;
-            background: #f7fafc;
-            padding: 40px 30px;
-            border-right: 1px solid #e2e8f0;
-        }}
-        
-        .main-section {{
-            flex: 1;
-            padding: 40px;
-            background: #ffffff;
-        }}
-        
-        .contact-info {{
-            margin-bottom: 40px;
-        }}
-        
-        .contact-item {{
-            display: flex;
-            align-items: center;
-            margin-bottom: 12px;
-            padding: 8px 0;
-        }}
-        
-        .contact-icon {{
-            width: 20px;
-            height: 20px;
-            margin-right: 15px;
-            opacity: 0.8;
-        }}
-        
-        .contact-item span, .contact-item a {{
-            font-size: 14px;
-            color: #4a5568;
-            text-decoration: none;
-            font-weight: 500;
-        }}
-        
-        .contact-item a:hover {{
-            color: #6b7280;
-            transition: color 0.3s ease;
-        }}
-        
-        .section-title {{
-            font-size: 22px;
-            font-weight: 700;
-            color: #2d3748;
-            margin: 35px 0 15px 0;
-        }}
-        
-        .section-content {{
-            margin-bottom: 30px;
-        }}
-        
-        .summary-text {{
-            font-size: 16px;
-            line-height: 1.8;
-            color: #4a5568;
-            background: #f8fafc;
-            padding: 25px;
-            border-radius: 8px;
-            border-left: 3px solid #9ca3af;
-        }}
-        
-        @media (max-width: 768px) {{
-            .main-content {{
-                flex-direction: column;
-            }}
-            
-            .sidebar {{
-                width: 100%;
-            }}
-            
-            .header-section {{
-                flex-direction: column;
-                text-align: center;
-            }}
-            
-            .profile-image {{
-                margin: 20px 0 0 0;
-            }}
-            
-            .name-title h1 {{
-                font-size: 32px;
-            }}
-        }}
-        
-        @media (max-width: 480px) {{
-            .header-section, .sidebar, .main-section {{
-                padding: 20px;
-            }}
-        }}
-    </style>
+    # ── SVG icons for contact ──────────────────────────────────────────
+    SVG_DEFAULT = {
+        'email':    '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+        'phone':    '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+        'location': '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+        'linkedin': '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>',
+        'portfolio': '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+    }
+
+    def _badge_default(item, bg="#e2e8f0", color="#334155"):
+        return (f"<span style='display:inline-block;background:{bg};color:{color};border-radius:4px;"
+                f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{item.strip()}</span>")
+
+    def _badges_default(items_str, bg="#e2e8f0", color="#334155"):
+        return "".join(_badge_default(s, bg, color) for s in items_str.split(',') if s.strip())
+
+    contact_html_default = ""
+    for _key, _label in [('location', session_state.get('location','')),
+                         ('phone',    session_state.get('phone','')),
+                         ('email',    session_state.get('email','')),
+                         ('linkedin', session_state.get('linkedin','')),
+                         ('portfolio',session_state.get('portfolio',''))]:
+        val = _label
+        if not val:
+            continue
+        if _key == 'email':
+            val_html = f"<a href='mailto:{val}' style='color:#475569;text-decoration:none;word-break:break-all;'>{val}</a>"
+        elif _key in ('linkedin', 'portfolio'):
+            href = val if val.startswith('http') else f"https://{val}"
+            val_html = f"<a href='{href}' target='_blank' style='color:#475569;text-decoration:none;word-break:break-all;'>{val}</a>"
+        else:
+            val_html = f"<span style='word-break:break-all;'>{val}</span>"
+        contact_html_default += (
+            f"<div style='margin-bottom:8px;font-size:12px;color:#475569;"
+            f"display:flex;align-items:center;gap:5px;'>"
+            f"<span style='flex-shrink:0;'>{SVG_DEFAULT.get(_key,'')}</span>{val_html}</div>"
+        )
+
+    def _main_sec_default(title, body):
+        return (f"<div style='margin-bottom:26px;'>"
+                f"<h3 style='font-size:13px;letter-spacing:2px;text-transform:uppercase;font-weight:700;"
+                f"color:#374151;border-bottom:2px solid #9ca3af;padding-bottom:5px;margin-bottom:14px;'>{title}</h3>"
+                f"{body}</div>")
+
+    def _side_sec_default(title, body):
+        return (f"<div style='margin-bottom:24px;'>"
+                f"<h3 style='font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#64748b;font-weight:700;"
+                f"border-bottom:1px solid #cbd5e1;padding-bottom:5px;margin-bottom:12px;'>{title}</h3>"
+                f"{body}</div>")
+
+    # Fix profile image to standard circle size
+    import re as _re_default
+    fixed_img_default = ""
+    if profile_img_html:
+        _img_m = _re_default.search(r'<img[^>]*>', profile_img_html)
+        if _img_m:
+            _img_tag = _img_m.group(0)
+            _img_tag = _re_default.sub(r"style=['\"][^'\"]*['\"]", "", _img_tag)
+            _img_tag = _img_tag.replace("<img ", "<img style='width:108px;height:108px;border-radius:50%;object-fit:cover;object-position:center;border:3px solid #cbd5e1;display:block;margin:0 auto;' ")
+            fixed_img_default = _img_tag
+
+    html_content = f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>{session_state.get('name','')} - Professional Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-    <div class="resume-container">
-        <div class="header-section">
-            <div class="name-title">
-                <h1>{session_state['name']}</h1>
-                <h2>{session_state['job_title']}</h2>
-            </div>
-            <div class="profile-image">
-                {profile_img_html}
-            </div>
-        </div>
+<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<tr>
+  <td style='width:300px;background:linear-gradient(180deg,#374151,#4b5563);color:white;padding:36px 24px;vertical-align:top;'>
+    {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img_default + '</div>' if fixed_img_default else ''}
+    <h1 style='font-size:21px;font-weight:800;color:#fff;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
+    <div style='font-size:13px;color:#d1d5db;text-align:center;margin-bottom:24px;font-weight:600;'>{session_state.get('job_title','')}</div>
+    {_side_sec_default("Contact", contact_html_default)}
+    {_side_sec_default("Skills", _badges_default(session_state.get('skills',''),'rgba(255,255,255,0.15)','#f1f5f9')) if session_state.get('skills') else ''}
+    {_side_sec_default("Soft Skills", _badges_default(session_state.get('Softskills',''),'rgba(255,255,255,0.1)','#e2e8f0')) if session_state.get('Softskills') else ''}
+    {_side_sec_default("Languages", _badges_default(session_state.get('languages',''),'rgba(255,255,255,0.1)','#fef9c3')) if session_state.get('languages') else ''}
+    {_side_sec_default("Interests", _badges_default(session_state.get('interests',''),'rgba(255,255,255,0.1)','#fce7f3')) if session_state.get('interests') else ''}
+    {_side_sec_default("Certifications", certificate_links_html) if any(c.get('name') for c in session_state.certificate_links) else ''}
+    {_side_sec_default("Project Links", project_links_html) if session_state.project_links else ''}
+  </td>
+  <td style='padding:40px 44px;background:#fff;vertical-align:top;'>
+    {_main_sec_default("Professional Summary", summary_html) if summary_html else ''}
+    {_main_sec_default("Work Experience", experience_html) if experience_html else ''}
+    {_main_sec_default("Education", education_html) if education_html else ''}
+    {_main_sec_default("Projects", projects_html) if projects_html else ''}
+  </td>
+</tr>
+</table>
+</body></html>"""
 
-        <div class="main-content">
-            <div class="sidebar">
-                <div class="contact-info">
-                    <div class="contact-item">
-                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path>
-                        </svg>
-                        <span>{session_state['location']}</span>
-                    </div>
-                    <div class="contact-item">
-                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path>
-                        </svg>
-                        <span>{session_state['phone']}</span>
-                    </div>
-                    <div class="contact-item">
-                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"></path>
-                            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"></path>
-                        </svg>
-                        <a href="mailto:{session_state['email']}">{session_state['email']}</a>
-                    </div>
-                    <div class="contact-item">
-                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
-                        </svg>
-                        <a href="{session_state['linkedin']}" target="_blank">LinkedIn</a>
-                    </div>
-                    <div class="contact-item">
-                        <svg class="contact-icon" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M4.083 9h1.946c.089-1.546.383-2.97.837-4.118A6.004 6.004 0 004.083 9zM10 2a8 8 0 100 16 8 8 0 000-16zm0 2c-.076 0-.232.032-.465.262-.238.234-.497.623-.737 1.182-.389.907-.673 2.142-.766 3.556h3.936c-.093-1.414-.377-2.649-.766-3.556-.24-.56-.5-.948-.737-1.182C10.232 4.032 10.076 4 10 4zm3.971 5c-.089-1.546-.383-2.97-.837-4.118A6.004 6.004 0 0115.917 9h-1.946zm-2.003 2H8.032c.093 1.414.377 2.649.766 3.556.24.56.5.948.737 1.182.233.23.389.262.465.262.076 0 .232-.032.465-.262.238-.234.498-.623.737-1.182.389-.907.673-2.142.766-3.556zm1.166 4.118c.454-1.147.748-2.572.837-4.118h1.946a6.004 6.004 0 01-2.783 4.118zm-6.268 0C6.412 13.97 6.118 12.546 6.03 11H4.083a6.004 6.004 0 002.783 4.118z" clip-rule="evenodd"></path>
-                        </svg>
-                        <a href="{session_state['portfolio']}" target="_blank">Portfolio</a>
-                    </div>
-                </div>
-
-                <div class="section-content">
-                    <h3 class="section-title">Skills</h3>
-                    <div>{skills_html}</div>
-                </div>
-
-                <div class="section-content">
-                    <h3 class="section-title">Languages</h3>
-                    <div>{languages_html}</div>
-                </div>
-
-                <div class="section-content">
-                    <h3 class="section-title">Interests</h3>
-                    <div>{interests_html}</div>
-                </div>
-
-                <div class="section-content">
-                    <h3 class="section-title">Soft Skills</h3>
-                    <div>{Softskills_html}</div>
-                </div>
-            </div>
-
-            <div class="main-section">
-                <div class="section-content">
-                    <h3 class="section-title">Professional Summary</h3>
-                    <div class="summary-text">{summary_html}</div>
-                </div>
-
-                <div class="section-content">
-                    <h3 class="section-title">Work Experience</h3>
-                    {experience_html}
-                </div>
-
-                <div class="section-content">
-                    <h3 class="section-title">Education</h3>
-                    {education_html}
-                </div>
-
-                <div class="section-content">
-                    <h3 class="section-title">Projects</h3>
-                    {projects_html}
-                </div>
-
-                <div class="section-content">
-                    {project_links_html}
-                </div>
-
-                <div class="section-content">
-                    {certificate_links_html}
-                </div>
-            </div>
-        </div>
-    </div>
-</body>
-</html>
-"""
-    
     return html_content
 
 def render_template_modern(session_state, profile_img_html=""):
@@ -5322,459 +5141,163 @@ def render_template_sidebar(session_state, profile_img_html=""):
         ">{skill}</div>""" for skill in softskills_list
     ])
     
-    # Enhanced profile image styling
-    enhanced_profile_img = ""
+    # Fix profile image to standard circle size
+    import re as _re_sb
+    fixed_img_sb = ""
     if profile_img_html:
-        # Extract the img tag and enhance it
-        import re
-        img_match = re.search(r'<img[^>]*>', profile_img_html)
-        if img_match:
-            enhanced_profile_img = img_match.group(0).replace(
-                'style="',
-                'style="width: 160px; height: 160px; border-radius: 50%; object-fit: cover; object-position: center; border: 4px solid #38bdf8; box-shadow: 0 8px 32px rgba(56, 189, 248, 0.3), 0 0 0 8px rgba(56, 189, 248, 0.1); margin-bottom: 20px; '
+        _img_m = _re_sb.search(r'<img[^>]*>', profile_img_html)
+        if _img_m:
+            _img_tag = _img_m.group(0)
+            _img_tag = _re_sb.sub(r"style=['\"][^'\"]*['\"]", "", _img_tag)
+            _img_tag = _img_tag.replace("<img ", "<img style='width:108px;height:108px;border-radius:50%;object-fit:cover;object-position:center;border:3px solid #38bdf8;display:block;margin:0 auto;' ")
+            fixed_img_sb = _img_tag
+
+    SVG_SB = {
+        'email':    '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+        'phone':    '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+        'location': '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+        'linkedin': '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>',
+        'portfolio': '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+    }
+
+    contact_html_sb = ""
+    for _key in ['email', 'phone', 'location', 'linkedin', 'portfolio']:
+        val = session_state.get(_key, '')
+        if not val:
+            continue
+        if _key == 'email':
+            val_html = f"<a href='mailto:{val}' style='color:#bae6fd;text-decoration:none;word-break:break-all;'>{val}</a>"
+        elif _key in ('linkedin', 'portfolio'):
+            href = val if val.startswith('http') else f"https://{val}"
+            val_html = f"<a href='{href}' target='_blank' style='color:#bae6fd;text-decoration:none;word-break:break-all;'>{val}</a>"
+        else:
+            val_html = f"<span style='word-break:break-all;'>{val}</span>"
+        contact_html_sb += (
+            f"<div style='margin-bottom:8px;font-size:12px;color:#bae6fd;"
+            f"display:flex;align-items:center;gap:5px;'>"
+            f"<span style='flex-shrink:0;'>{SVG_SB.get(_key,'')}</span>{val_html}</div>"
+        )
+
+    def _badge_sb(item, bg="rgba(56,189,248,0.2)", color="#e0f2fe"):
+        return (f"<span style='display:inline-block;background:{bg};color:{color};border-radius:4px;"
+                f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{item.strip()}</span>")
+
+    def _badges_sb(items_str, bg="rgba(56,189,248,0.2)", color="#e0f2fe"):
+        return "".join(_badge_sb(s, bg, color) for s in items_str.split(',') if s.strip())
+
+    def _main_sec_sb(title, body):
+        return (f"<div style='margin-bottom:26px;'>"
+                f"<h3 style='font-size:13px;letter-spacing:2px;text-transform:uppercase;font-weight:700;"
+                f"color:#0c4a6e;border-bottom:2px solid #38bdf8;padding-bottom:5px;margin-bottom:14px;'>{title}</h3>"
+                f"{body}</div>")
+
+    def _side_sec_sb(title, body):
+        return (f"<div style='margin-bottom:24px;'>"
+                f"<h3 style='font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#38bdf8;font-weight:700;"
+                f"border-bottom:1px solid rgba(56,189,248,0.3);padding-bottom:5px;margin-bottom:12px;'>{title}</h3>"
+                f"{body}</div>")
+
+    # Build cert sidebar and project links for left column
+    cert_sb_html = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_sb_html += (
+                f"<div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);border-radius:6px;'>"
+                f"<a href='{cert.get('link','#')}' style='color:#bae6fd;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<div style='font-size:11px;color:#e0f2fe;'>{cert.get('duration','')}</div></div>"
             )
-    
-    html_content = f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{session_state['name']} - Elegant Resume</title>
-    <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-        
-        body {{
-            font-family: 'Inter', 'Segoe UI', sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: #f8fafc;
-        }}
-        
-        .resume-container {{
-            width: 100%;
-            display: flex;
-            min-height: 100vh;
-            background: white;
-            box-shadow: 0 0 30px rgba(0,0,0,0.1);
-        }}
-        
-        .sidebar {{
-            width: 350px;
-            background: linear-gradient(180deg, #1e293b 0%, #334155 100%);
-            color: white;
-            padding: 40px 30px;
-            position: relative;
-        }}
-        
-        .sidebar::before {{
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 4px;
-            height: 100%;
-            background: linear-gradient(180deg, #38bdf8, #06b6d4);
-        }}
-        
-        .main-content {{
-            flex: 1;
-            padding: 40px 50px;
-            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-        }}
-        
-        .profile-section {{
-            text-align: center;
-            margin-bottom: 45px;
-            position: relative;
-        }}
-        
-        .profile-section::after {{
-            content: '';
-            position: absolute;
-            bottom: -20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 60px;
-            height: 3px;
-            background: linear-gradient(90deg, #38bdf8, #06b6d4);
-            border-radius: 2px;
-        }}
-        
-        .profile-section h1 {{
-            font-size: 1.95rem;
-            margin-bottom: 12px;
-            color: #f8fafc;
-            font-weight: 700;
-            letter-spacing: -0.025em;
-        }}
-        
-        .profile-section h2 {{
-            font-size: 1.1rem;
-            color: #cbd5e1;
-            margin-bottom: 25px;
-            font-weight: 500;
-        }}
-        
-        .contact-section {{
-            margin-bottom: 40px;
-        }}
-        
-        .contact-item {{
-            display: flex;
-            align-items: center;
-            margin-bottom: 18px;
-            padding: 12px;
-            background: rgba(56, 189, 248, 0.1);
-            border-radius: 10px;
-            border: 1px solid rgba(56, 189, 248, 0.2);
-            transition: all 0.3s ease;
-        }}
-        
-        .contact-item:hover {{
-            background: rgba(56, 189, 248, 0.15);
-            transform: translateX(5px);
-        }}
-        
-        .contact-icon {{
-            margin-right: 15px;
-            font-size: 1.1rem;
-            color: #38bdf8;
-            width: 20px;
-            text-align: center;
-        }}
-        
-        .contact-item span, .contact-item a {{
-            color: #e2e8f0;
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.9rem;
-            word-break: break-word;
-            overflow-wrap: anywhere;
-            max-width: 100%;
-            display: inline-block;
-        }}
-        
-        .contact-item a:hover {{
-            color: #38bdf8;
-            transition: color 0.3s ease;
-        }}
-        
-        .sidebar-section {{
-            margin-bottom: 40px;
-        }}
-        
-        .sidebar-section h3 {{
-            font-size: 1.2rem;
-            margin-bottom: 20px;
-            color: #38bdf8;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: 700;
-            position: relative;
-            padding-bottom: 10px;
-        }}
-        
-        .sidebar-section h3::after {{
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 40px;
-            height: 2px;
-            background: linear-gradient(90deg, #38bdf8, #06b6d4);
-            border-radius: 1px;
-        }}
-        
-        .main-section {{
-            margin-bottom: 40px;
-        }}
-        
-        .main-section h3 {{
-            font-size: 1.65rem;
-            color: #1e293b;
-            margin-bottom: 25px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 700;
-            position: relative;
-            padding-bottom: 15px;
-        }}
-        
-        .main-section h3::after {{
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 60px;
-            height: 3px;
-            background: linear-gradient(90deg, #3b82f6, #06b6d4);
-            border-radius: 2px;
-        }}
-        
-        .summary {{
-            font-size: 1.1rem;
-            line-height: 1.8;
-            color: #4b5563;
-            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-            padding: 30px;
-            border-radius: 15px;
-            border: 1px solid #bae6fd;
-            position: relative;
-            box-shadow: 0 4px 6px rgba(59, 130, 246, 0.05);
-        }}
-        
-        .summary::before {{
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #3b82f6, #06b6d4);
-            border-radius: 15px 15px 0 0;
-        }}
-        
-        .content-item {{
-            margin-bottom: 30px;
-            padding: 30px;
-            background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
-            border-radius: 15px;
-            border: 1px solid #e5e7eb;
-            position: relative;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }}
-        
-        .content-item::before {{
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #6b7280, #9ca3af);
-            border-radius: 15px 15px 0 0;
-        }}
-        
-        .content-item:last-child {{
-            margin-bottom: 0;
-        }}
-        
-        .item-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 12px;
-            flex-wrap: wrap;
-            gap: 15px;
-        }}
-        
-        .item-title {{
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #1e293b;
-        }}
-        
-        .item-duration {{
-            color: #6b7280;
-            font-size: 0.95rem;
-            font-weight: 600;
-            background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
-            padding: 8px 16px;
-            border-radius: 20px;
-            border: 1px solid #cbd5e1;
-        }}
-        
-        .item-company {{
-            color: #3b82f6;
-            font-size: 1.1rem;
-            margin-bottom: 15px;
-            font-weight: 700;
-        }}
-        
-        .item-description {{
-            color: #4b5563;
-            line-height: 1.7;
-            font-size: 1rem;
-        }}
-        
-        .project-tech {{
-            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-            color: #1e40af;
-            padding: 10px 18px;
-            border-radius: 10px;
-            font-size: 0.9rem;
-            margin-bottom: 15px;
-            display: inline-block;
-            font-weight: 600;
-            border: 1px solid #93c5fd;
-        }}
-        
-        @media (max-width: 768px) {{
-            .resume-container {{
-                flex-direction: column;
-            }}
-            
-            .sidebar {{
-                width: 100%;
-            }}
-            
-            .item-header {{
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 8px;
-            }}
-            
-            .main-content {{
-                padding: 30px 25px;
-            }}
-            
-            .sidebar {{
-                padding: 30px 25px;
-            }}
-        }}
-    </style>
+
+    proj_links_sb = ""
+    if session_state.project_links:
+        proj_links_sb = "".join(
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#bae6fd;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
+            for i, lnk in enumerate(session_state.project_links)
+        )
+
+    # Build main-column content using same card style as Corporate Blue
+    exp_sb = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description', ''), font_size='13px', color='#374151', line_height='1.75')
+            exp_sb += (
+                f"<div style='margin-bottom:20px;border-left:3px solid #38bdf8;padding-left:14px;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;'>"
+                f"<strong style='font-size:15px;color:#0c4a6e;'>{exp.get('company','')}</strong>"
+                f"<span style='font-size:12px;color:#64748b;background:#f0f9ff;padding:2px 8px;border-radius:8px;'>{exp.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#0284c7;font-weight:700;margin-bottom:5px;'>{exp.get('title','')}</div>"
+                f"<div style='font-size:13px;color:#374151;line-height:1.7;'>{desc}</div></div>"
+                f"<div style='border-bottom:1px dashed #bae6fd;margin-bottom:12px;'></div>"
+            )
+
+    edu_sb = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution'):
+            degree_val = edu.get('degree', '')
+            if isinstance(degree_val, list):
+                degree_val = ", ".join(degree_val)
+            edu_sb += (
+                f"<div style='margin-bottom:14px;border-left:3px solid #38bdf8;padding-left:12px;'>"
+                f"<strong style='font-size:14px;color:#0c4a6e;'>{edu.get('institution','')}</strong>"
+                f"<span style='float:right;font-size:12px;color:#64748b;'>{edu.get('year','')}</span>"
+                f"<div style='clear:both;font-size:13px;color:#0284c7;font-style:italic;font-weight:600;'>{degree_val}</div>"
+                f"<div style='font-size:12px;color:#6b7280;'>{edu.get('details','')}</div></div>"
+            )
+
+    proj_sb = ""
+    proj_links_all = getattr(session_state, 'project_links', []) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description', ''), font_size='13px', color='#374151', line_height='1.75')
+            proj_link_html = ""
+            if idx < len(proj_links_all) and proj_links_all[idx]:
+                proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links_all[idx]}' target='_blank' style='color:#0284c7;font-size:12px;font-weight:600;'>&#128279; View Project / GitHub</a></div>"
+            proj_sb += (
+                f"<div style='margin-bottom:14px;padding:12px 14px;background:#f0f9ff;border-radius:6px;border-left:3px solid #38bdf8;'>"
+                f"<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:14px;color:#0c4a6e;'>{proj.get('title','')}</strong>"
+                f"<span style='font-size:12px;color:#64748b;'>{proj.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:12px;color:#0284c7;font-weight:600;margin-bottom:4px;'>{proj.get('tech','')}</div>"
+                f"<div style='font-size:13px;color:#374151;'>{desc}</div>"
+                f"{proj_link_html}</div>"
+            )
+
+    summary_sb = _fmt_desc(session_state.get('summary', ''), font_size='13px', color='#374151', line_height='1.8')
+    job_title_sb = session_state.get('job_title', '') or session_state.get('title', '')
+
+    html_content = f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-    <div class="resume-container">
-        <div class="sidebar">
-            <div class="profile-section">
-                {enhanced_profile_img}
-                <h1>{session_state['name']}</h1>
-                <h2>{session_state['job_title']}</h2>
-            </div>
-            
-            <div class="contact-section">
-                <div class="contact-item">
-                    <div class="contact-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
-                    <span>{session_state['location']}</span>
-                </div>
-                <div class="contact-item">
-                    <div class="contact-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
-                    <span>{session_state['phone']}</span>
-                </div>
-                <div class="contact-item">
-                    <div class="contact-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
-                    <a href="mailto:{session_state['email']}">{session_state['email']}</a>
-                </div>
-                <div class="contact-item">
-                    <div class="contact-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg></div>
-                    <a href="{session_state['linkedin']}" target="_blank">LinkedIn Profile</a>
-                </div>
-                <div class="contact-item">
-                    <div class="contact-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
-                    <a href="{session_state['portfolio']}" target="_blank">Portfolio Website</a>
-                </div>
-            </div>
-            
-            <div class="sidebar-section">
-                <h3>Technical Skills</h3>
-                <div>{skills_pills}</div>
-            </div>
-            
-            <div class="sidebar-section">
-                <h3>Languages</h3>
-                <div>{languages_pills}</div>
-            </div>
-            
-            <div class="sidebar-section">
-                <h3>Interests</h3>
-                <div>{interests_pills}</div>
-            </div>
-            
-            <div class="sidebar-section">
-                <h3>Core Competencies</h3>
-                <div>{softskills_pills}</div>
-            </div>
-        </div>
-        
-        <div class="main-content">
-            <div class="main-section">
-                <h3>Professional Summary</h3>
-                <div class="summary">{_fmt_desc(session_state['summary'], font_size='15px', color='#4b5563', line_height='1.8')}</div>
-            </div>
-            
-            <div class="main-section">
-                <h3>Professional Experience</h3>
-                {"".join([f'''
-                <div class="content-item">
-                    <div class="item-header">
-                        <div class="item-title">{exp.get('title', '')}</div>
-                        <div class="item-duration">{exp.get('duration', '')}</div>
-                    </div>
-                    <div class="item-company">{exp.get('company', '')}</div>
-                    <div class="item-description">{_fmt_desc(exp.get('description',''), font_size='14px', color='#4b5563', line_height='1.75')}</div>
-                </div>
-                ''' for exp in session_state.experience_entries if exp.get('company') or exp.get('title')])}
-            </div>
-            
-            <div class="main-section">
-                <h3>Education & Qualifications</h3>
-                {"".join([f'''
-                <div class="content-item">
-                    <div class="item-header">
-                        <div class="item-title">{edu.get('degree', '')}</div>
-                        <div class="item-duration">{edu.get('year', '')}</div>
-                    </div>
-                    <div class="item-company">{edu.get('institution', '')}</div>
-                    <div class="item-description">{edu.get('details', '')}</div>
-                </div>
-                ''' for edu in session_state.education_entries if edu.get('institution') or edu.get('degree')])}
-            </div>
-            
-            <div class="main-section">
-                <h3>Key Projects</h3>
-                {"".join([f'''
-                <div class="content-item">
-                    <div class="item-header">
-                        <div class="item-title">{proj.get('title', '')}</div>
-                        <div class="item-duration">{proj.get('duration', '')}</div>
-                    </div>
-                    <div class="project-tech">Technologies: {proj.get('tech', '')}</div>
-                    <div class="item-description">{_fmt_desc(proj.get('description',''), font_size='14px', color='#4b5563', line_height='1.75')}</div>
-                </div>
-                ''' for proj in session_state.project_entries if proj.get('title')])}
-            </div>
-            
-            {f'''
-            <div class="main-section">
-                <h3>Project Portfolio</h3>
-                {"".join([f'''<div class="content-item" style="padding: 20px;"><a href="{link}" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 600; font-size: 1.1rem;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Project Repository {i+1}</a></div>''' for i, link in enumerate(session_state.project_links)])}
-            </div>
-            ''' if session_state.project_links else ''}
-            
-            {f'''
-            <div class="main-section">
-                <h3>Professional Certifications</h3>
-                {"".join([f'''
-                <div class="content-item">
-                    <div class="item-header">
-                        <div class="item-title">
-                            <a href="{cert['link']}" target="_blank" style="color: #1e293b; text-decoration: none;">
-                                {cert['name']}
-                            </a>
-                        </div>
-                        <div class="item-duration">{cert.get('duration', '')}</div>
-                    </div>
-                    <div class="item-description">
-                        {_fmt_desc(cert.get('description',''), font_size='14px', color='#4b5563', line_height='1.75')}
-                    </div>
-                </div>
-                ''' for cert in session_state.certificate_links if cert.get('name')])}
-            </div>
-            ''' if any(cert.get('name') for cert in session_state.certificate_links) else ''}
-        </div>
-    </div>
-</body>
-</html>
-"""
+<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<tr>
+  <td style='width:300px;background:linear-gradient(180deg,#1e293b,#334155);color:white;padding:36px 24px;vertical-align:top;'>
+    {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img_sb + '</div>' if fixed_img_sb else ''}
+    <h1 style='font-size:21px;font-weight:800;color:#fff;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
+    <div style='font-size:13px;color:#38bdf8;text-align:center;margin-bottom:24px;font-weight:600;'>{job_title_sb}</div>
+    {_side_sec_sb("Contact", contact_html_sb)}
+    {_side_sec_sb("Skills", _badges_sb(session_state.get('skills',''),'rgba(56,189,248,0.2)','#e0f2fe')) if session_state.get('skills') else ''}
+    {_side_sec_sb("Soft Skills", _badges_sb(session_state.get('Softskills',''),'rgba(255,255,255,0.1)','#ddd6fe')) if session_state.get('Softskills') else ''}
+    {_side_sec_sb("Languages", _badges_sb(session_state.get('languages',''),'rgba(255,255,255,0.1)','#fef3c7')) if session_state.get('languages') else ''}
+    {_side_sec_sb("Interests", _badges_sb(session_state.get('interests',''),'rgba(255,255,255,0.1)','#fce7f3')) if session_state.get('interests') else ''}
+    {_side_sec_sb("Certifications", cert_sb_html) if cert_sb_html else ''}
+    {_side_sec_sb("Project Links", proj_links_sb) if proj_links_sb else ''}
+  </td>
+  <td style='padding:40px 44px;background:#fff;vertical-align:top;'>
+    {_main_sec_sb("Professional Summary", summary_sb) if summary_sb else ''}
+    {_main_sec_sb("Work Experience", exp_sb) if exp_sb else ''}
+    {_main_sec_sb("Education", edu_sb) if edu_sb else ''}
+    {_main_sec_sb("Projects", proj_sb) if proj_sb else ''}
+  </td>
+</tr>
+</table>
+</body></html>"""
 
-    
     return html_content
+
 
 
 # ─────────────────────────────────────────────────────────────
