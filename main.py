@@ -4528,33 +4528,29 @@ def render_template_default(session_state, profile_img_html=""):
         'portfolio': '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
     }
 
-    def _badge_default(item, bg="#e2e8f0", color="#334155"):
+    def _badge_default(item, bg="rgba(255,255,255,0.2)", color="#ffffff"):
         return (f"<span style='display:inline-block;background:{bg};color:{color};border-radius:4px;"
-                f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{item.strip()}</span>")
+                f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;border:1px solid rgba(255,255,255,0.3);'>{item.strip()}</span>")
 
-    def _badges_default(items_str, bg="#e2e8f0", color="#334155"):
+    def _badges_default(items_str, bg="rgba(255,255,255,0.2)", color="#ffffff"):
         return "".join(_badge_default(s, bg, color) for s in items_str.split(',') if s.strip())
 
     contact_html_default = ""
-    for _key, _label in [('location', session_state.get('location','')),
-                         ('phone',    session_state.get('phone','')),
-                         ('email',    session_state.get('email','')),
-                         ('linkedin', session_state.get('linkedin','')),
-                         ('portfolio',session_state.get('portfolio',''))]:
-        val = _label
+    for _key in ['location', 'phone', 'email', 'linkedin', 'portfolio']:
+        val = session_state.get(_key, '')
         if not val:
             continue
         if _key == 'email':
-            val_html = f"<a href='mailto:{val}' style='color:#475569;text-decoration:none;word-break:break-all;'>{val}</a>"
+            val_html = f"<a href='mailto:{val}' style='color:#ffffff;text-decoration:none;word-break:break-all;font-weight:500;'>{val}</a>"
         elif _key in ('linkedin', 'portfolio'):
             href = val if val.startswith('http') else f"https://{val}"
-            val_html = f"<a href='{href}' target='_blank' style='color:#475569;text-decoration:none;word-break:break-all;'>{val}</a>"
+            val_html = f"<a href='{href}' target='_blank' style='color:#ffffff;text-decoration:none;word-break:break-all;font-weight:500;'>{val}</a>"
         else:
-            val_html = f"<span style='word-break:break-all;'>{val}</span>"
+            val_html = f"<span style='color:#ffffff;word-break:break-all;'>{val}</span>"
         contact_html_default += (
-            f"<div style='margin-bottom:8px;font-size:12px;color:#475569;"
-            f"display:flex;align-items:center;gap:5px;'>"
-            f"<span style='flex-shrink:0;'>{SVG_DEFAULT.get(_key,'')}</span>{val_html}</div>"
+            f"<div style='margin-bottom:9px;font-size:13px;color:#ffffff;"
+            f"display:flex;align-items:center;gap:8px;'>"
+            f"<span style='flex-shrink:0;opacity:0.9;'>{SVG_DEFAULT.get(_key,'')}</span>{val_html}</div>"
         )
 
     def _main_sec_default(title, body):
@@ -4565,8 +4561,8 @@ def render_template_default(session_state, profile_img_html=""):
 
     def _side_sec_default(title, body):
         return (f"<div style='margin-bottom:24px;'>"
-                f"<h3 style='font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#64748b;font-weight:700;"
-                f"border-bottom:1px solid #cbd5e1;padding-bottom:5px;margin-bottom:12px;'>{title}</h3>"
+                f"<h3 style='font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;"
+                f"font-weight:800;border-bottom:1px solid rgba(255,255,255,0.35);padding-bottom:6px;margin-bottom:12px;'>{title}</h3>"
                 f"{body}</div>")
 
     # Fix profile image to standard circle size
@@ -4577,8 +4573,25 @@ def render_template_default(session_state, profile_img_html=""):
         if _img_m:
             _img_tag = _img_m.group(0)
             _img_tag = _re_default.sub(r"style=['\"][^'\"]*['\"]", "", _img_tag)
-            _img_tag = _img_tag.replace("<img ", "<img style='width:108px;height:108px;border-radius:50%;object-fit:cover;object-position:center;border:3px solid #cbd5e1;display:block;margin:0 auto;' ")
+            _img_tag = _img_tag.replace("<img ", "<img style='width:108px;height:108px;border-radius:50%;object-fit:cover;object-position:center;border:3px solid rgba(255,255,255,0.5);display:block;margin:0 auto;' ")
             fixed_img_default = _img_tag
+
+    # Cert sidebar (white text on dark bg)
+    cert_default_html = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_default_html += (
+                f"<div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);border-radius:6px;border:1px solid rgba(255,255,255,0.2);'>"
+                f"<a href='{cert.get('link','#')}' style='color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<div style='font-size:11px;color:rgba(255,255,255,0.8);'>{cert.get('duration','')}</div></div>"
+            )
+
+    proj_links_default_html = ""
+    if session_state.project_links:
+        proj_links_default_html = "".join(
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#ffffff;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
+            for i, lnk in enumerate(session_state.project_links)
+        )
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
@@ -4588,17 +4601,17 @@ def render_template_default(session_state, profile_img_html=""):
 <body>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
-  <td style='width:300px;background:linear-gradient(180deg,#374151,#4b5563);color:white;padding:36px 24px;vertical-align:top;'>
+  <td style='width:300px;background:linear-gradient(180deg,#374151,#4b5563);color:#ffffff;padding:36px 24px;vertical-align:top;'>
     {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img_default + '</div>' if fixed_img_default else ''}
-    <h1 style='font-size:21px;font-weight:800;color:#fff;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
-    <div style='font-size:13px;color:#d1d5db;text-align:center;margin-bottom:24px;font-weight:600;'>{session_state.get('job_title','')}</div>
+    <h1 style='font-size:21px;font-weight:800;color:#ffffff;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
+    <div style='font-size:13px;color:#e5e7eb;text-align:center;margin-bottom:24px;font-weight:600;letter-spacing:1px;text-transform:uppercase;'>{session_state.get('job_title','')}</div>
     {_side_sec_default("Contact", contact_html_default)}
-    {_side_sec_default("Skills", _badges_default(session_state.get('skills',''),'rgba(255,255,255,0.15)','#f1f5f9')) if session_state.get('skills') else ''}
-    {_side_sec_default("Soft Skills", _badges_default(session_state.get('Softskills',''),'rgba(255,255,255,0.1)','#e2e8f0')) if session_state.get('Softskills') else ''}
-    {_side_sec_default("Languages", _badges_default(session_state.get('languages',''),'rgba(255,255,255,0.1)','#fef9c3')) if session_state.get('languages') else ''}
-    {_side_sec_default("Interests", _badges_default(session_state.get('interests',''),'rgba(255,255,255,0.1)','#fce7f3')) if session_state.get('interests') else ''}
-    {_side_sec_default("Certifications", certificate_links_html) if any(c.get('name') for c in session_state.certificate_links) else ''}
-    {_side_sec_default("Project Links", project_links_html) if session_state.project_links else ''}
+    {_side_sec_default("Skills", _badges_default(session_state.get('skills',''),'rgba(255,255,255,0.18)','#ffffff')) if session_state.get('skills') else ''}
+    {_side_sec_default("Soft Skills", _badges_default(session_state.get('Softskills',''),'rgba(255,255,255,0.12)','#f1f5f9')) if session_state.get('Softskills') else ''}
+    {_side_sec_default("Languages", _badges_default(session_state.get('languages',''),'rgba(255,255,255,0.12)','#fef9c3')) if session_state.get('languages') else ''}
+    {_side_sec_default("Interests", _badges_default(session_state.get('interests',''),'rgba(255,255,255,0.12)','#fce7f3')) if session_state.get('interests') else ''}
+    {_side_sec_default("Certifications", cert_default_html) if cert_default_html else ''}
+    {_side_sec_default("Project Links", proj_links_default_html) if proj_links_default_html else ''}
   </td>
   <td style='padding:40px 44px;background:#fff;vertical-align:top;'>
     {_main_sec_default("Professional Summary", summary_html) if summary_html else ''}
@@ -5161,28 +5174,28 @@ def render_template_sidebar(session_state, profile_img_html=""):
     }
 
     contact_html_sb = ""
-    for _key in ['email', 'phone', 'location', 'linkedin', 'portfolio']:
+    for _key in ['location', 'phone', 'email', 'linkedin', 'portfolio']:
         val = session_state.get(_key, '')
         if not val:
             continue
         if _key == 'email':
-            val_html = f"<a href='mailto:{val}' style='color:#bae6fd;text-decoration:none;word-break:break-all;'>{val}</a>"
+            val_html = f"<a href='mailto:{val}' style='color:#ffffff;text-decoration:none;word-break:break-all;font-weight:500;'>{val}</a>"
         elif _key in ('linkedin', 'portfolio'):
             href = val if val.startswith('http') else f"https://{val}"
-            val_html = f"<a href='{href}' target='_blank' style='color:#bae6fd;text-decoration:none;word-break:break-all;'>{val}</a>"
+            val_html = f"<a href='{href}' target='_blank' style='color:#ffffff;text-decoration:none;word-break:break-all;font-weight:500;'>{val}</a>"
         else:
-            val_html = f"<span style='word-break:break-all;'>{val}</span>"
+            val_html = f"<span style='color:#ffffff;word-break:break-all;'>{val}</span>"
         contact_html_sb += (
-            f"<div style='margin-bottom:8px;font-size:12px;color:#bae6fd;"
-            f"display:flex;align-items:center;gap:5px;'>"
-            f"<span style='flex-shrink:0;'>{SVG_SB.get(_key,'')}</span>{val_html}</div>"
+            f"<div style='margin-bottom:9px;font-size:13px;color:#ffffff;"
+            f"display:flex;align-items:center;gap:8px;'>"
+            f"<span style='flex-shrink:0;opacity:0.9;'>{SVG_SB.get(_key,'')}</span>{val_html}</div>"
         )
 
-    def _badge_sb(item, bg="rgba(56,189,248,0.2)", color="#e0f2fe"):
+    def _badge_sb(item, bg="rgba(56,189,248,0.25)", color="#ffffff"):
         return (f"<span style='display:inline-block;background:{bg};color:{color};border-radius:4px;"
-                f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{item.strip()}</span>")
+                f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;border:1px solid rgba(56,189,248,0.4);'>{item.strip()}</span>")
 
-    def _badges_sb(items_str, bg="rgba(56,189,248,0.2)", color="#e0f2fe"):
+    def _badges_sb(items_str, bg="rgba(56,189,248,0.25)", color="#ffffff"):
         return "".join(_badge_sb(s, bg, color) for s in items_str.split(',') if s.strip())
 
     def _main_sec_sb(title, body):
@@ -5193,28 +5206,26 @@ def render_template_sidebar(session_state, profile_img_html=""):
 
     def _side_sec_sb(title, body):
         return (f"<div style='margin-bottom:24px;'>"
-                f"<h3 style='font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#38bdf8;font-weight:700;"
-                f"border-bottom:1px solid rgba(56,189,248,0.3);padding-bottom:5px;margin-bottom:12px;'>{title}</h3>"
+                f"<h3 style='font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;"
+                f"font-weight:800;border-bottom:1px solid rgba(56,189,248,0.4);padding-bottom:6px;margin-bottom:12px;'>{title}</h3>"
                 f"{body}</div>")
 
-    # Build cert sidebar and project links for left column
     cert_sb_html = ""
     for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_sb_html += (
-                f"<div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);border-radius:6px;'>"
-                f"<a href='{cert.get('link','#')}' style='color:#bae6fd;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
-                f"<div style='font-size:11px;color:#e0f2fe;'>{cert.get('duration','')}</div></div>"
+                f"<div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);border-radius:6px;border:1px solid rgba(56,189,248,0.3);'>"
+                f"<a href='{cert.get('link','#')}' style='color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<div style='font-size:11px;color:rgba(255,255,255,0.8);'>{cert.get('duration','')}</div></div>"
             )
 
     proj_links_sb = ""
     if session_state.project_links:
         proj_links_sb = "".join(
-            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#bae6fd;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#ffffff;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
             for i, lnk in enumerate(session_state.project_links)
         )
 
-    # Build main-column content using same card style as Corporate Blue
     exp_sb = ""
     for exp in session_state.experience_entries:
         if exp.get('company') or exp.get('title'):
@@ -5245,13 +5256,13 @@ def render_template_sidebar(session_state, profile_img_html=""):
             )
 
     proj_sb = ""
-    proj_links_all = getattr(session_state, 'project_links', []) or []
+    proj_links_all_sb = getattr(session_state, 'project_links', []) or []
     for idx, proj in enumerate(session_state.project_entries):
         if proj.get('title'):
             desc = _fmt_desc(proj.get('description', ''), font_size='13px', color='#374151', line_height='1.75')
             proj_link_html = ""
-            if idx < len(proj_links_all) and proj_links_all[idx]:
-                proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links_all[idx]}' target='_blank' style='color:#0284c7;font-size:12px;font-weight:600;'>&#128279; View Project / GitHub</a></div>"
+            if idx < len(proj_links_all_sb) and proj_links_all_sb[idx]:
+                proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links_all_sb[idx]}' target='_blank' style='color:#0284c7;font-size:12px;font-weight:600;'>&#128279; View Project / GitHub</a></div>"
             proj_sb += (
                 f"<div style='margin-bottom:14px;padding:12px 14px;background:#f0f9ff;border-radius:6px;border-left:3px solid #38bdf8;'>"
                 f"<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>"
@@ -5276,13 +5287,13 @@ def render_template_sidebar(session_state, profile_img_html=""):
 <tr>
   <td style='width:300px;background:linear-gradient(180deg,#1e293b,#334155);color:white;padding:36px 24px;vertical-align:top;'>
     {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img_sb + '</div>' if fixed_img_sb else ''}
-    <h1 style='font-size:21px;font-weight:800;color:#fff;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
-    <div style='font-size:13px;color:#38bdf8;text-align:center;margin-bottom:24px;font-weight:600;'>{job_title_sb}</div>
+    <h1 style='font-size:21px;font-weight:800;color:#ffffff;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
+    <div style='font-size:13px;color:#38bdf8;text-align:center;margin-bottom:24px;font-weight:600;letter-spacing:1px;text-transform:uppercase;'>{job_title_sb}</div>
     {_side_sec_sb("Contact", contact_html_sb)}
-    {_side_sec_sb("Skills", _badges_sb(session_state.get('skills',''),'rgba(56,189,248,0.2)','#e0f2fe')) if session_state.get('skills') else ''}
-    {_side_sec_sb("Soft Skills", _badges_sb(session_state.get('Softskills',''),'rgba(255,255,255,0.1)','#ddd6fe')) if session_state.get('Softskills') else ''}
-    {_side_sec_sb("Languages", _badges_sb(session_state.get('languages',''),'rgba(255,255,255,0.1)','#fef3c7')) if session_state.get('languages') else ''}
-    {_side_sec_sb("Interests", _badges_sb(session_state.get('interests',''),'rgba(255,255,255,0.1)','#fce7f3')) if session_state.get('interests') else ''}
+    {_side_sec_sb("Skills", _badges_sb(session_state.get('skills',''),'rgba(56,189,248,0.25)','#ffffff')) if session_state.get('skills') else ''}
+    {_side_sec_sb("Soft Skills", _badges_sb(session_state.get('Softskills',''),'rgba(255,255,255,0.12)','#ffffff')) if session_state.get('Softskills') else ''}
+    {_side_sec_sb("Languages", _badges_sb(session_state.get('languages',''),'rgba(255,255,255,0.12)','#ffffff')) if session_state.get('languages') else ''}
+    {_side_sec_sb("Interests", _badges_sb(session_state.get('interests',''),'rgba(255,255,255,0.12)','#ffffff')) if session_state.get('interests') else ''}
     {_side_sec_sb("Certifications", cert_sb_html) if cert_sb_html else ''}
     {_side_sec_sb("Project Links", proj_links_sb) if proj_links_sb else ''}
   </td>
@@ -5297,7 +5308,6 @@ def render_template_sidebar(session_state, profile_img_html=""):
 </body></html>"""
 
     return html_content
-
 
 
 # ─────────────────────────────────────────────────────────────
