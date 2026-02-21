@@ -4607,9 +4607,9 @@ def render_template_default(session_state, profile_img_html=""):
     <div style='font-size:13px;color:#e5e7eb;text-align:center;margin-bottom:24px;font-weight:600;letter-spacing:1px;text-transform:uppercase;'>{session_state.get('job_title','')}</div>
     {_side_sec_default("Contact", contact_html_default)}
     {_side_sec_default("Skills", _badges_default(session_state.get('skills',''),'rgba(255,255,255,0.18)','#ffffff')) if session_state.get('skills') else ''}
-    {_side_sec_default("Soft Skills", _badges_default(session_state.get('Softskills',''),'rgba(255,255,255,0.12)','#f1f5f9')) if session_state.get('Softskills') else ''}
-    {_side_sec_default("Languages", _badges_default(session_state.get('languages',''),'rgba(255,255,255,0.12)','#fef9c3')) if session_state.get('languages') else ''}
-    {_side_sec_default("Interests", _badges_default(session_state.get('interests',''),'rgba(255,255,255,0.12)','#fce7f3')) if session_state.get('interests') else ''}
+    {_side_sec_default("Soft Skills", _badges_default(session_state.get('Softskills',''),'rgba(255,255,255,0.18)','#ffffff')) if session_state.get('Softskills') else ''}
+    {_side_sec_default("Languages", _badges_default(session_state.get('languages',''),'rgba(255,255,255,0.18)','#ffffff')) if session_state.get('languages') else ''}
+    {_side_sec_default("Interests", _badges_default(session_state.get('interests',''),'rgba(255,255,255,0.18)','#ffffff')) if session_state.get('interests') else ''}
     {_side_sec_default("Certifications", cert_default_html) if cert_default_html else ''}
     {_side_sec_default("Project Links", proj_links_default_html) if proj_links_default_html else ''}
   </td>
@@ -4626,462 +4626,190 @@ def render_template_default(session_state, profile_img_html=""):
     return html_content
 
 def render_template_modern(session_state, profile_img_html=""):
-    """Modern minimal template with clean design, pill-style tags for enhanced visual appeal"""
-    
-    # Process lists into pill tags instead of plain lists
-    skills_list = [s.strip() for s in session_state['skills'].split(',') if s.strip()]
-    languages_list = [l.strip() for l in session_state['languages'].split(',') if l.strip()]
-    interests_list = [i.strip() for i in session_state['interests'].split(',') if i.strip()]
-    softskills_list = [s.strip() for s in session_state['Softskills'].split(',') if s.strip()]
-    
-    # Create unified pill-style tags for all sections
-    skills_pills = "".join([
-        f"""<span style="
-            display: inline-block;
-            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
-            color: #0c4a6e;
-            padding: 8px 16px;
-            margin: 4px 6px 4px 0;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            box-shadow: 0 2px 4px rgba(8, 145, 178, 0.1);
-            border: 1px solid rgba(14, 165, 233, 0.2);
-        ">{skill}</span>""" for skill in skills_list
-    ])
-    
-    # Create unified pill-style tags for languages
-    languages_pills = "".join([
-        f"""<span style="
-            display: inline-block;
-            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
-            color: #0c4a6e;
-            padding: 8px 16px;
-            margin: 4px 6px 4px 0;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            box-shadow: 0 2px 4px rgba(8, 145, 178, 0.1);
-            border: 1px solid rgba(14, 165, 233, 0.2);
-        ">{lang}</span>""" for lang in languages_list
-    ])
-    
-    # Create unified pill-style tags for interests
-    interests_pills = "".join([
-        f"""<span style="
-            display: inline-block;
-            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
-            color: #0c4a6e;
-            padding: 8px 16px;
-            margin: 4px 6px 4px 0;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            box-shadow: 0 2px 4px rgba(8, 145, 178, 0.1);
-            border: 1px solid rgba(14, 165, 233, 0.2);
-        ">{interest}</span>""" for interest in interests_list
-    ])
-    
-    # Create unified pill-style tags for soft skills
-    softskills_pills = "".join([
-        f"""<span style="
-            display: inline-block;
-            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
-            color: #0c4a6e;
-            padding: 8px 16px;
-            margin: 4px 6px 4px 0;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            box-shadow: 0 2px 4px rgba(8, 145, 178, 0.1);
-            border: 1px solid rgba(14, 165, 233, 0.2);
-        ">{skill}</span>""" for skill in softskills_list
-    ])
-    
-    html_content = f"""
-<!DOCTYPE html>
+    """Modern Minimal template - ATS-friendly single-column layout with clean inline styles"""
+    import re as _re_mod
+
+    # Fix profile image: extract <img> only, apply clean inline styles
+    fixed_img_mod = ""
+    if profile_img_html:
+        _img_m = _re_mod.search(r'<img[^>]*>', profile_img_html)
+        if _img_m:
+            _img_tag = _img_m.group(0)
+            _img_tag = _re_mod.sub(r"style=['\"][^'\"]*['\"]", "", _img_tag)
+            _img_tag = _img_tag.replace(
+                "<img ",
+                "<img style='width:100px;height:100px;border-radius:50%;object-fit:cover;"
+                "object-position:center;border:3px solid #2563eb;display:block;margin:0 auto 12px;' "
+            )
+            fixed_img_mod = _img_tag
+
+    # Helper: build a comma-separated tag list (ATS-safe plain spans)
+    def _tag_list(items_str, bg="#eff6ff", color="#1e3a8a", border="#bfdbfe"):
+        return "".join(
+            f"<span style='display:inline-block;background:{bg};color:{color};"
+            f"border:1px solid {border};border-radius:4px;padding:4px 12px;"
+            f"margin:3px 4px 3px 0;font-size:13px;font-weight:600;'>{s.strip()}</span>"
+            for s in items_str.split(',') if s.strip()
+        )
+
+    # Section header helper (left-aligned, underlined — ATS parses left-to-right)
+    def _section(title, body):
+        return (
+            f"<div style='margin-bottom:28px;'>"
+            f"<h3 style='font-size:15px;font-weight:700;color:#1e3a8a;text-transform:uppercase;"
+            f"letter-spacing:1.5px;border-bottom:2px solid #2563eb;padding-bottom:5px;"
+            f"margin-bottom:14px;text-align:left;'>{title}</h3>"
+            f"{body}</div>"
+        )
+
+    # Contact line
+    contact_parts = []
+    for key, label in [('location', ''), ('phone', ''), ('email', ''), ('linkedin', 'LinkedIn'), ('portfolio', 'Portfolio')]:
+        val = session_state.get(key, '')
+        if not val:
+            continue
+        if key == 'email':
+            contact_parts.append(f"<a href='mailto:{val}' style='color:#1e3a8a;text-decoration:none;font-weight:500;'>{val}</a>")
+        elif key in ('linkedin', 'portfolio'):
+            href = val if val.startswith('http') else f"https://{val}"
+            contact_parts.append(f"<a href='{href}' target='_blank' style='color:#1e3a8a;text-decoration:none;font-weight:500;'>{label}: {val}</a>")
+        else:
+            contact_parts.append(f"<span style='color:#1f2937;'>{val}</span>")
+    contact_html = " &nbsp;|&nbsp; ".join(contact_parts)
+
+    # Work Experience
+    exp_html = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description', ''), font_size='14px', color='#1f2937', line_height='1.75')
+            exp_html += (
+                f"<div style='margin-bottom:20px;padding:16px 18px;border-left:3px solid #2563eb;"
+                f"background:#f8faff;border-radius:0 8px 8px 0;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:4px;'>"
+                f"<strong style='font-size:15px;color:#1e3a8a;'>{exp.get('title','')}</strong>"
+                f"<span style='font-size:13px;color:#374151;background:#e0e7ff;padding:2px 10px;"
+                f"border-radius:6px;font-weight:600;border:1px solid #c7d2fe;'>{exp.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:14px;color:#374151;font-weight:600;margin-bottom:8px;'>{exp.get('company','')}</div>"
+                f"<div style='font-size:14px;color:#1f2937;line-height:1.7;'>{desc}</div>"
+                f"</div>"
+            )
+
+    # Education
+    edu_html = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution') or edu.get('degree'):
+            degree_val = edu.get('degree', '')
+            if isinstance(degree_val, list):
+                degree_val = ", ".join(degree_val)
+            edu_html += (
+                f"<div style='margin-bottom:16px;padding:14px 16px;border-left:3px solid #2563eb;"
+                f"background:#f8faff;border-radius:0 8px 8px 0;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:4px;'>"
+                f"<strong style='font-size:15px;color:#1e3a8a;'>{edu.get('institution','')}</strong>"
+                f"<span style='font-size:13px;color:#374151;background:#e0e7ff;padding:2px 10px;"
+                f"border-radius:6px;font-weight:600;border:1px solid #c7d2fe;'>{edu.get('year','')}</span>"
+                f"</div>"
+                f"<div style='font-size:14px;color:#374151;font-weight:600;margin-bottom:4px;'>{degree_val}</div>"
+                f"<div style='font-size:13px;color:#374151;'>{edu.get('details','')}</div>"
+                f"</div>"
+            )
+
+    # Projects
+    proj_html = ""
+    proj_links_all = getattr(session_state, 'project_links', []) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description', ''), font_size='14px', color='#1f2937', line_height='1.75')
+            proj_link_html = ""
+            if idx < len(proj_links_all) and proj_links_all[idx]:
+                proj_link_html = (
+                    f"<div style='margin-top:6px;'>"
+                    f"<a href='{proj_links_all[idx]}' target='_blank' style='color:#2563eb;"
+                    f"font-size:13px;font-weight:600;'>View Project / GitHub</a></div>"
+                )
+            proj_html += (
+                f"<div style='margin-bottom:18px;padding:14px 16px;border-left:3px solid #2563eb;"
+                f"background:#f8faff;border-radius:0 8px 8px 0;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:4px;'>"
+                f"<strong style='font-size:15px;color:#1e3a8a;'>{proj.get('title','')}</strong>"
+                f"<span style='font-size:13px;color:#374151;background:#e0e7ff;padding:2px 10px;"
+                f"border-radius:6px;font-weight:600;border:1px solid #c7d2fe;'>{proj.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#374151;font-weight:600;margin-bottom:6px;'>Tech Stack: {proj.get('tech','')}</div>"
+                f"<div style='font-size:14px;color:#1f2937;'>{desc}</div>"
+                f"{proj_link_html}</div>"
+            )
+
+    # Certifications
+    cert_html = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_desc = _fmt_desc(cert.get('description', ''), font_size='13px', color='#1f2937', line_height='1.7')
+            cert_html += (
+                f"<div style='margin-bottom:14px;padding:12px 14px;border-left:3px solid #2563eb;"
+                f"background:#f8faff;border-radius:0 8px 8px 0;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:4px;'>"
+                f"<a href='{cert.get('link','#')}' target='_blank' style='font-size:14px;font-weight:700;"
+                f"color:#1e3a8a;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<span style='font-size:12px;color:#374151;background:#e0e7ff;padding:2px 8px;"
+                f"border-radius:6px;font-weight:600;border:1px solid #c7d2fe;'>{cert.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#1f2937;'>{cert_desc}</div>"
+                f"</div>"
+            )
+
+    # Summary
+    summary_mod = _fmt_desc(session_state.get('summary', ''), font_size='14px', color='#1f2937', line_height='1.8')
+
+    # Skills and tags
+    skills_str = session_state.get('skills', '')
+    softskills_str = session_state.get('Softskills', '')
+    languages_str = session_state.get('languages', '')
+    interests_str = session_state.get('interests', '')
+
+    # Project links section
+    proj_links_section = ""
+    if proj_links_all:
+        links_body = "".join(
+            f"<div style='margin-bottom:6px;'>"
+            f"<a href='{lnk}' target='_blank' style='color:#2563eb;font-size:14px;font-weight:600;'>Project {i+1}: {lnk}</a>"
+            f"</div>"
+            for i, lnk in enumerate(proj_links_all) if lnk
+        )
+        proj_links_section = _section("Project Links", links_body) if links_body else ""
+
+    html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{session_state['name']} - Modern Resume</title>
-    <style>
-        * {{
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }}
-        
-        body {{
-            font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #374151;
-            background: #ffffff;
-            max-width: 900px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }}
-        
-        .header {{
-            text-align: center;
-            margin-bottom: 50px;
-            padding: 40px 0;
-            position: relative;
-        }}
-        
-        .header::after {{
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80px;
-            height: 3px;
-            background: linear-gradient(90deg, #3b82f6, #06b6d4);
-            border-radius: 2px;
-        }}
-        
-        .profile-image-container {{
-            margin-bottom: 25px;
-        }}
-        
-        .profile-image-container img {{
-            width: 160px;
-            height: 160px;
-            border-radius: 50%;
-            object-fit: cover;
-            object-position: center;
-            border: 4px solid #3b82f6;
-            box-shadow: 0 8px 32px rgba(59, 130, 246, 0.3), 0 0 0 8px rgba(59, 130, 246, 0.1);
-            display: block;
-            margin: 0 auto;
-        }}
-        
-        .header h1 {{
-            font-size: 2.75rem;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 12px;
-            letter-spacing: -0.025em;
-        }}
-        
-        .header h2 {{
-            font-size: 1.35rem;
-            font-weight: 500;
-            color: #6b7280;
-            margin-bottom: 25px;
-        }}
-        
-        .contact-info {{
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 25px;
-            font-size: 0.95rem;
-            color: #4b5563;
-        }}
-        
-        .contact-info a {{
-            color: #3b82f6;
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.2s ease;
-        }}
-        
-        .contact-info a:hover {{
-            color: #1d4ed8;
-        }}
-        
-        .section {{
-            margin-bottom: 40px;
-        }}
-        
-        .section h3 {{
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 20px;
-            position: relative;
-            padding-bottom: 10px;
-            text-align: center;
-        }}
-        
-        .section h3::after {{
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 50px;
-            height: 2px;
-            background: linear-gradient(90deg, #3b82f6, #06b6d4);
-            border-radius: 1px;
-        }}
-        
-        .project-links {{
-            text-align: center;
-        }}
-        
-        .summary {{
-            font-size: 1.1rem;
-            line-height: 1.8;
-            color: #4b5563;
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-            padding: 30px;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            position: relative;
-        }}
-        
-        .summary::before {{
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, #3b82f6, #06b6d4);
-            border-radius: 12px 12px 0 0;
-        }}
-        
-        .experience-item, .education-item, .project-item {{
-            margin-bottom: 30px;
-            padding: 25px;
-            background: linear-gradient(135deg, #fafbfc 0%, #f4f6f8 100%);
-            border-radius: 12px;
-            border: 1px solid #e5e7eb;
-            position: relative;
-        }}
-        
-        .experience-item::before, .education-item::before, .project-item::before {{
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #6b7280, #9ca3af);
-            border-radius: 12px 12px 0 0;
-        }}
-        
-        .item-header {{
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 8px;
-            flex-wrap: wrap;
-            gap: 10px;
-        }}
-        
-        .item-title {{
-            font-weight: 700;
-            color: #1f2937;
-            font-size: 1.2rem;
-        }}
-        
-        .item-duration {{
-            color: #6b7280;
-            font-size: 0.95rem;
-            font-weight: 600;
-            background: linear-gradient(135deg, #f9fafb, #f3f4f6);
-            padding: 6px 14px;
-            border-radius: 16px;
-            border: 1px solid #d1d5db;
-        }}
-        
-        .item-subtitle {{
-            color: #3b82f6;
-            font-size: 1.05rem;
-            margin-bottom: 12px;
-            font-weight: 600;
-        }}
-        
-        .item-description {{
-            color: #4b5563;
-            line-height: 1.7;
-            font-size: 1rem;
-        }}
-        
-        .pills-container {{
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 8px;
-            margin-top: 10px;
-        }}
-        
-        .links a {{
-            display: inline-block;
-            color: #3b82f6;
-            text-decoration: none;
-            margin-right: 20px;
-            margin-bottom: 8px;
-            font-weight: 500;
-            padding: 8px 16px;
-            background: linear-gradient(135deg, #eff6ff, #dbeafe);
-            border-radius: 8px;
-            border: 1px solid #bfdbfe;
-            transition: all 0.2s ease;
-        }}
-        
-        .links a:hover {{
-            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-            transform: translateY(-1px);
-        }}
-        
-        @media (max-width: 768px) {{
-            body {{
-                padding: 20px 15px;
-            }}
-            
-            .contact-info {{
-                flex-direction: column;
-                align-items: center;
-                gap: 8px;
-            }}
-            
-            .item-header {{
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 8px;
-            }}
-            
-            .header h1 {{
-                font-size: 2.2rem;
-            }}
-            
-            .experience-item, .education-item, .project-item {{
-                padding: 20px;
-            }}
-        }}
-    </style>
+<meta charset="UTF-8">
+<title>{session_state.get('name', '')} - Resume</title>
 </head>
-<body>
-    <div class="header">
-        <div class="profile-image-container">
-            {profile_img_html}
-        </div>
-        <h1>{session_state['name']}</h1>
-        <h2>{session_state['job_title']}</h2>
-        <div class="contact-info">
-            <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>{session_state['location']}</span>
-            <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>{session_state['phone']}</span>
-            <a href="mailto:{session_state['email']}"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>{session_state['email']}</a>
-            <a href="{session_state['linkedin']}" target="_blank"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>LinkedIn</a>
-            <a href="{session_state['portfolio']}" target="_blank"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Portfolio</a>
-        </div>
-    </div>
+<body style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;line-height:1.6;color:#1f2937;background:#ffffff;max-width:860px;margin:0 auto;padding:36px 32px;">
 
-    <div class="section">
-        <h3>Professional Summary</h3>
-        <div class="summary">{_fmt_desc(session_state['summary'], font_size='15px', color='#4b5563', line_height='1.8')}</div>
-    </div>
+  <!-- HEADER -->
+  <div style="text-align:center;margin-bottom:30px;padding-bottom:20px;border-bottom:3px solid #2563eb;">
+    {fixed_img_mod if fixed_img_mod else ''}
+    <h1 style="font-size:28px;font-weight:800;color:#1e3a8a;margin-bottom:6px;">{session_state.get('name', '')}</h1>
+    <div style="font-size:16px;color:#374151;font-weight:600;margin-bottom:12px;">{session_state.get('job_title', '')}</div>
+    <div style="font-size:13px;color:#374151;line-height:2;">{contact_html}</div>
+  </div>
 
-    <div class="section">
-        <h3>Work Experience</h3>
-        {"".join([f'''
-        <div class="experience-item">
-            <div class="item-header">
-                <div class="item-title">{exp.get('title', '')}</div>
-                <div class="item-duration">{exp.get('duration', '')}</div>
-            </div>
-            <div class="item-subtitle">{exp.get('company', '')}</div>
-            <div class="item-description">{_fmt_desc(exp.get('description', ''), font_size='14px', color='#4b5563', line_height='1.75')}</div>
-        </div>
-        ''' for exp in session_state.experience_entries if exp.get('company') or exp.get('title')])}
-    </div>
-
-    <div class="section">
-        <h3>Education</h3>
-        {"".join([f'''
-        <div class="education-item">
-            <div class="item-header">
-                <div class="item-title">{edu.get('degree', '')}</div>
-                <div class="item-duration">{edu.get('year', '')}</div>
-            </div>
-            <div class="item-subtitle">{edu.get('institution', '')}</div>
-            <div class="item-description">{edu.get('details', '')}</div>
-        </div>
-        ''' for edu in session_state.education_entries if edu.get('institution') or edu.get('degree')])}
-    </div>
-
-    <div class="section">
-        <h3>Projects</h3>
-        {"".join([f'''
-        <div class="project-item">
-            <div class="item-header">
-                <div class="item-title">{proj.get('title', '')}</div>
-                <div class="item-duration">{proj.get('duration', '')}</div>
-            </div>
-            <div class="item-subtitle">Technologies: {proj.get('tech', '')}</div>
-            <div class="item-description">{_fmt_desc(proj.get('description', ''), font_size='14px', color='#4b5563', line_height='1.75')}</div>
-        </div>
-        ''' for proj in session_state.project_entries if proj.get('title')])}
-    </div>
-
-    <div class="section">
-        <h3>Technical Skills</h3>
-        <div class="pills-container">
-            {skills_pills}
-        </div>
-    </div>
-
-    <div class="section">
-        <h3>Languages</h3>
-        <div class="pills-container">
-            {languages_pills}
-        </div>
-    </div>
-
-    <div class="section">
-        <h3>Professional Interests</h3>
-        <div class="pills-container">
-            {interests_pills}
-        </div>
-    </div>
-
-    <div class="section">
-        <h3>Core Competencies</h3>
-        <div class="pills-container">
-            {softskills_pills}
-        </div>
-    </div>
-
-    {f'''
-    <div class="section">
-        <h3>Project Links</h3>
-        <div class="links project-links">
-            {"".join([f'<a href="{link}" target="_blank"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Project {i+1}</a>' for i, link in enumerate(session_state.project_links)])}
-        </div>
-    </div>
-    ''' if session_state.project_links else ''}
-
-    {f'''
-    <div class="section">
-        <h3>Professional Certifications</h3>
-        {"".join([f'''
-        <div class="project-item">
-            <div class="item-header">
-                <div class="item-title">
-                    <a href="{cert['link']}" target="_blank" style="color: #1f2937; text-decoration: none;">
-                        {cert['name']}
-                    </a>
-                </div>
-                <div class="item-duration">{cert.get('duration', '')}</div>
-            </div>
-            <div class="item-description">
-                {_fmt_desc(cert.get('description',''), font_size='14px', color='#4b5563', line_height='1.75')}
-            </div>
-        </div>
-        ''' for cert in session_state.certificate_links if cert.get('name')])}
-    </div>
-    ''' if any(cert.get('name') for cert in session_state.certificate_links) else ''}
+  <!-- BODY -->
+  {_section("Professional Summary", f"<div style='font-size:14px;color:#1f2937;line-height:1.8;padding:14px 16px;background:#f8faff;border-radius:8px;border:1px solid #e0e7ff;'>{summary_mod}</div>") if summary_mod else ''}
+  {_section("Work Experience", exp_html) if exp_html else ''}
+  {_section("Education", edu_html) if edu_html else ''}
+  {_section("Projects", proj_html) if proj_html else ''}
+  {_section("Technical Skills", f"<div style='padding:8px 0;'>{_tag_list(skills_str)}</div>") if skills_str.strip() else ''}
+  {_section("Core Competencies", f"<div style='padding:8px 0;'>{_tag_list(softskills_str, '#fef3c7', '#92400e', '#fde68a')}</div>") if softskills_str.strip() else ''}
+  {_section("Languages", f"<div style='padding:8px 0;'>{_tag_list(languages_str, '#f0fdf4', '#14532d', '#bbf7d0')}</div>") if languages_str.strip() else ''}
+  {_section("Interests", f"<div style='padding:8px 0;'>{_tag_list(interests_str, '#fdf4ff', '#581c87', '#e9d5ff')}</div>") if interests_str.strip() else ''}
+  {_section("Professional Certifications", cert_html) if cert_html else ''}
+  {proj_links_section}
 
 </body>
-</html>
-"""
+</html>"""
 
-    
     return html_content
 
 def render_template_sidebar(session_state, profile_img_html=""):
@@ -5097,14 +4825,14 @@ def render_template_sidebar(session_state, profile_img_html=""):
     skills_pills = "".join([
         f"""<div style="
             display: inline-block;
-            background: rgba(56, 189, 248, 0.15);
-            color: #e0f2fe;
+            background: rgba(56, 189, 248, 0.25);
+            color: #ffffff;
             padding: 8px 16px;
             margin: 5px 8px 5px 0;
             border-radius: 18px;
             font-size: 0.85rem;
             font-weight: 600;
-            border: 1px solid rgba(56, 189, 248, 0.3);
+            border: 1px solid rgba(56, 189, 248, 0.5);
             box-shadow: 0 2px 4px rgba(56, 189, 248, 0.1);
         ">{skill}</div>""" for skill in skills_list
     ])
@@ -5112,14 +4840,14 @@ def render_template_sidebar(session_state, profile_img_html=""):
     languages_pills = "".join([
         f"""<div style="
             display: inline-block;
-            background: rgba(34, 197, 94, 0.15);
-            color: #dcfce7;
+            background: rgba(34, 197, 94, 0.25);
+            color: #ffffff;
             padding: 8px 16px;
             margin: 5px 8px 5px 0;
             border-radius: 18px;
             font-size: 0.85rem;
             font-weight: 600;
-            border: 1px solid rgba(34, 197, 94, 0.3);
+            border: 1px solid rgba(34, 197, 94, 0.5);
             box-shadow: 0 2px 4px rgba(34, 197, 94, 0.1);
         ">{lang}</div>""" for lang in languages_list
     ])
@@ -5127,14 +4855,14 @@ def render_template_sidebar(session_state, profile_img_html=""):
     interests_pills = "".join([
         f"""<div style="
             display: inline-block;
-            background: rgba(245, 158, 11, 0.15);
-            color: #fef3c7;
+            background: rgba(245, 158, 11, 0.25);
+            color: #ffffff;
             padding: 8px 16px;
             margin: 5px 8px 5px 0;
             border-radius: 18px;
             font-size: 0.85rem;
             font-weight: 600;
-            border: 1px solid rgba(245, 158, 11, 0.3);
+            border: 1px solid rgba(245, 158, 11, 0.5);
             box-shadow: 0 2px 4px rgba(245, 158, 11, 0.1);
         ">{interest}</div>""" for interest in interests_list
     ])
@@ -5142,14 +4870,14 @@ def render_template_sidebar(session_state, profile_img_html=""):
     softskills_pills = "".join([
         f"""<div style="
             display: inline-block;
-            background: rgba(168, 85, 247, 0.15);
-            color: #f3e8ff;
+            background: rgba(168, 85, 247, 0.25);
+            color: #ffffff;
             padding: 8px 16px;
             margin: 5px 8px 5px 0;
             border-radius: 18px;
             font-size: 0.85rem;
             font-weight: 600;
-            border: 1px solid rgba(168, 85, 247, 0.3);
+            border: 1px solid rgba(168, 85, 247, 0.5);
             box-shadow: 0 2px 4px rgba(168, 85, 247, 0.1);
         ">{skill}</div>""" for skill in softskills_list
     ])
@@ -5308,6 +5036,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
 </body></html>"""
 
     return html_content
+    
 
 
 # ─────────────────────────────────────────────────────────────
