@@ -8891,7 +8891,7 @@ Provide detailed, flowing feedback that covers:
 
 Write feedback as natural, flowing paragraphs (not bullet points). Make it detailed, specific to their answer, and constructive.
 
-{"STEP 5 - FOLLOW-UP QUESTION: Generate ONE probing follow-up question that digs deeper based on their answer." if difficulty == "Hard" else ""}
+{"STEP 5 - FOLLOW-UP QUESTION (Hard difficulty only): Based on the candidate's answer, generate ONE high-quality follow-up question that a senior engineer or tech lead would ask in a real interview. The follow-up must: (a) probe a gap, assumption, or shallow explanation in their answer; (b) push into system design, edge cases, trade-offs, or failure scenarios they did not address; (c) be specific to what they actually said — not generic. Examples of good follow-ups: 'You mentioned using Redis for caching — how would you handle cache invalidation at scale?', 'What happens to your proposed design if the third-party API you rely on goes down?', 'How would your approach change if the dataset grew 100x?'" if difficulty == "Hard" else ""}
 
 OUTPUT FORMAT (strict JSON):
 {{
@@ -9357,7 +9357,9 @@ JSON:
 # ======================================================
 def generate_resume_based_questions(resume_context, role, domain, difficulty, num_questions=3):
     """
-    Generate interview questions strictly based on resume context
+    Generate interview questions strictly based on resume context.
+    Each question is uniquely tied to a specific project, skill, experience, or technology
+    from the candidate's profile — no generic or hybrid questions.
     """
 
     skills = resume_context.get("skills", [])
@@ -9365,31 +9367,36 @@ def generate_resume_based_questions(resume_context, role, domain, difficulty, nu
     experience = resume_context.get("experience", [])
     technologies = resume_context.get("technologies", [])
 
-    prompt = f"""
-You are a technical interviewer.
+    difficulty_guidance = {
+        "Easy": "Ask the candidate to explain or describe something from their resume at a foundational level.",
+        "Medium": "Ask the candidate to reason through a scenario or decision they faced in their listed projects/experience.",
+        "Hard": "Probe deeply: ask about design trade-offs, architectural decisions, edge cases, or scalability challenges within their specific listed projects or experience."
+    }
 
-Generate EXACTLY {num_questions} interview questions based ONLY on the candidate's resume.
+    prompt = f"""You are a senior technical interviewer conducting a real interview.
 
-RESUME CONTEXT:
-- Skills: {', '.join(skills[:4])}
-- Projects: {', '.join(projects[:2])}
-- Experience: {', '.join(experience[:2])}
-- Technologies: {', '.join(technologies[:4])}
+CANDIDATE PROFILE:
+- Skills demonstrated: {', '.join(skills[:5]) if skills else 'Not specified'}
+- Projects: {'; '.join(projects[:3]) if projects else 'Not specified'}
+- Experience: {'; '.join(experience[:3]) if experience else 'Not specified'}
+- Technologies used: {', '.join(technologies[:5]) if technologies else 'Not specified'}
 
 Target Role: {role}
 Domain: {domain}
 Difficulty: {difficulty}
+Difficulty Approach: {difficulty_guidance.get(difficulty, difficulty_guidance['Medium'])}
 
-RULES:
-- Every question MUST reference resume content
-- Ask like a real interviewer
-- Difficulty:
-  - Easy: explanation & fundamentals
-  - Medium: scenarios & decisions
-  - Hard: deep technical trade-offs or design
-- Output ONLY questions
-- One question per line
-- No numbering, no prefixes
+TASK:
+Generate EXACTLY {num_questions} interview questions. Each question must:
+1. Be DIRECTLY tied to a SPECIFIC item in the candidate's profile above (a named project, a listed technology, a stated experience, or a demonstrated skill)
+2. Reference the actual content — do NOT write generic questions
+3. Be DISTINCT from each other — do not repeat the same angle or concept
+4. Sound natural, like a real interviewer speaking
+
+BAD EXAMPLE (generic): "Tell me about a challenging project."
+GOOD EXAMPLE (profile-specific): "In your [Project Name], you used [Tech] — what was the most difficult architectural decision you had to make and why?"
+
+Output ONLY the questions, one per line, no numbering or prefixes.
 
 Generate now:
 """
@@ -10381,41 +10388,49 @@ with tab4:
             ]
         return base_questions[:count]
 
-    # UPDATED: AI-Generated Questions using LLM with DIFFICULTY SUPPORT
-    def generate_interview_questions_with_llm(domain, role, interview_type, num_questions, difficulty="Medium"):
+    # UPDATED: AI-Generated Questions using LLM with DIFFICULTY SUPPORT + Profile Awareness
+    def generate_interview_questions_with_llm(domain, role, interview_type, num_questions, difficulty="Medium", resume_context=None, already_asked=None):
         """
-        Generate interview questions using LLM based on domain, role, type, and difficulty.
-
-        FIXED: Now difficulty is passed into LLM prompt and affects question complexity
+        Generate interview questions using LLM based on domain, role, type, difficulty, and candidate profile.
+        Uses resume context to personalize and avoids repeating question types already covered.
         """
         # Define difficulty-specific instructions
         difficulty_instructions = {
             "Easy": "Generate BASIC and INTRODUCTORY level questions. Focus on fundamental concepts, definitions, and simple scenarios. Questions should be suitable for entry-level candidates or those new to the field.",
             "Medium": "Generate SCENARIO-BASED and MODERATELY TECHNICAL questions. Include situational questions that require practical thinking and intermediate technical knowledge. Suitable for candidates with some experience.",
-            "Hard": "Generate DEEP TECHNICAL, SYSTEM DESIGN, and COMPLEX PROBLEM-SOLVING questions. Include architecture decisions, trade-offs, scalability concerns, and advanced concepts. Suitable for senior-level candidates."
+            "Hard": "Generate DEEP TECHNICAL, SYSTEM DESIGN, and COMPLEX PROBLEM-SOLVING questions. Include architecture decisions, trade-offs, scalability concerns, failure scenarios, and advanced concepts. Suitable for senior-level candidates."
         }
 
-        prompt = f"""You are an expert interviewer.
+        # Build resume context hint if available
+        profile_hint = ""
+        if resume_context:
+            skills = resume_context.get("skills", [])
+            technologies = resume_context.get("technologies", [])
+            if skills or technologies:
+                profile_hint = f"\nCANDIDATE PROFILE CONTEXT (use to personalize questions):\n- Skills: {', '.join(skills[:4])}\n- Technologies: {', '.join(technologies[:4])}\n"
+
+        # Build exclusion list to avoid repetition
+        exclusion_hint = ""
+        if already_asked:
+            exclusion_hint = f"\nALREADY ASKED (do NOT repeat these topics or angles):\n" + "\n".join(f"- {q}" for q in already_asked[:5]) + "\n"
+
+        prompt = f"""You are an expert {interview_type} interviewer.
 
 Generate EXACTLY {num_questions} unique {interview_type} interview questions
 for the role of {role} in {domain}.
 
 DIFFICULTY LEVEL: {difficulty}
 {difficulty_instructions.get(difficulty, difficulty_instructions["Medium"])}
-
+{profile_hint}{exclusion_hint}
 CRITICAL REQUIREMENTS:
-- Generate EXACTLY {num_questions} questions - no more, no less
-- Keep each question concise (1-2 sentences max)
-- Avoid duplicates
-- Match the difficulty level specified above
+- Generate EXACTLY {num_questions} questions — no more, no less
+- Each question must be DISTINCT in angle, topic, and phrasing
+- Questions must feel natural and conversational, like a real interviewer asking
+- Match the difficulty level strictly
+- For Hard: include system design, trade-offs, failure handling, and scalability angles
 - Output ONLY the questions, one per line
 - DO NOT add numbering, bullet points, or any prefixes
 - DO NOT add any introductory text or explanations
-
-Output format example:
-What is your experience with cloud technologies?
-How would you handle a system outage?
-Describe your approach to code reviews.
 
 Generate exactly {num_questions} questions now:
 """
@@ -10819,52 +10834,59 @@ Generate exactly {num_questions} questions now:
         if 'resume_questions_answered' not in st.session_state:
             st.session_state.resume_questions_answered = 0
 
-        # RESUME UPLOAD SECTION (MANDATORY)
-        st.markdown("---")
-        st.markdown("<h3 style='color: #00c3ff;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
+        # RESUME UPLOAD SECTION (MANDATORY) — hidden once interview starts
+        interview_active = st.session_state.get('dynamic_interview_started', False) and not st.session_state.get('dynamic_interview_completed', False)
+        interview_done = st.session_state.get('dynamic_interview_completed', False)
 
-        if st.session_state.resume_file is None:
-            uploaded_resume = st.file_uploader(
-                "Upload your resume (PDF format)",
-                type=['pdf'],
-                key="resume_uploader"
-            )
+        if not interview_active and not interview_done:
+            st.markdown("---")
+            st.markdown("<h3 style='color: #00c3ff;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
 
-            if uploaded_resume:
-                with st.spinner("Processing your resume..."):
-                    # Extract text from PDF
-                    resume_text = extract_resume_text_from_pdf(uploaded_resume)
+            if st.session_state.resume_file is None:
+                uploaded_resume = st.file_uploader(
+                    "Upload your resume (PDF format)",
+                    type=['pdf'],
+                    key="resume_uploader"
+                )
 
-                    if resume_text and len(resume_text.strip()) > 50:
-                        # Analyze resume
-                        with st.spinner("Analyzing your resume with AI..."):
-                            resume_context = analyze_resume_with_llm(resume_text)
+                if uploaded_resume:
+                    with st.spinner("Processing your resume..."):
+                        # Extract text from PDF
+                        resume_text = extract_resume_text_from_pdf(uploaded_resume)
 
-                        # Store in session
-                        st.session_state.resume_file = uploaded_resume.name
-                        st.session_state.resume_context = resume_context
-                        st.session_state.interview_phase = "resume"
-                        st.session_state.resume_questions_answered = 0
+                        if resume_text and len(resume_text.strip()) > 50:
+                            # Analyze resume
+                            with st.spinner("Analyzing your resume with AI..."):
+                                resume_context = analyze_resume_with_llm(resume_text)
 
-                        st.success("✅ Resume uploaded and analyzed successfully!")
-                        
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("Could not extract text from resume. Please ensure it's a valid PDF.")
-        else:
-            st.success(f"✅ Resume loaded: {st.session_state.resume_file}")
-            
+                            # Store in session
+                            st.session_state.resume_file = uploaded_resume.name
+                            st.session_state.resume_context = resume_context
+                            st.session_state.interview_phase = "resume"
+                            st.session_state.resume_questions_answered = 0
 
-            if st.button("🔄 Upload Different Resume"):
-                st.session_state.resume_file = None
-                st.session_state.resume_context = None
-                st.session_state.dynamic_interview_started = False
-                st.session_state.dynamic_interview_completed = False
-                st.rerun()
+                            st.success("✅ Resume uploaded and analyzed successfully!")
+                            
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("Could not extract text from resume. Please ensure it's a valid PDF.")
+            else:
+                st.success(f"✅ Resume loaded: {st.session_state.resume_file}")
 
-        # Only show domain/role selection if resume is uploaded
-        if st.session_state.resume_file is not None:
+                if st.button("🔄 Upload Different Resume"):
+                    st.session_state.resume_file = None
+                    st.session_state.resume_context = None
+                    st.session_state.dynamic_interview_started = False
+                    st.session_state.dynamic_interview_completed = False
+                    st.rerun()
+
+        elif interview_active or interview_done:
+            # Resume is implicitly loaded; show minimal indicator only if needed
+            pass
+
+        # Only show domain/role selection if resume is uploaded AND interview not yet started
+        if st.session_state.resume_file is not None and not interview_active and not interview_done:
             st.markdown("---")
             st.markdown("<h3 style='color: #00c3ff;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
 
@@ -10891,6 +10913,10 @@ Generate exactly {num_questions} questions now:
                     selected_role = None
 
             st.markdown('</div>', unsafe_allow_html=True)
+        elif interview_active or interview_done:
+            # Retrieve domain/role from session state (set when interview started)
+            selected_domain = st.session_state.get('interview_domain', None)
+            selected_role = st.session_state.get('interview_role', None)
         else:
             selected_domain = None
             selected_role = None
@@ -10915,7 +10941,10 @@ Generate exactly {num_questions} questions now:
                 st.session_state.dynamic_answer_submitted = False
             if 'current_interview_question_text' not in st.session_state:
                 st.session_state.current_interview_question_text = ""
-            if 'interview_domain' not in st.session_state or st.session_state.interview_domain != selected_domain:
+            if 'interview_domain' not in st.session_state:
+                st.session_state.interview_domain = selected_domain
+                st.session_state.interview_role = selected_role
+            elif st.session_state.interview_domain != selected_domain and not interview_active:
                 st.session_state.interview_domain = selected_domain
                 st.session_state.interview_role = selected_role
                 st.session_state.dynamic_interview_started = False
@@ -10980,13 +11009,15 @@ Generate exactly {num_questions} questions now:
                         generic_qs = []
                         remaining_questions = num_questions - len(resume_based_qs)
                         if remaining_questions > 0:
-                            with st.spinner("Creating generic interview questions..."):
+                            with st.spinner("Creating interview questions..."):
                                 generic_qs = generate_interview_questions_with_llm(
                                     selected_domain,
                                     selected_role,
                                     interview_type,
                                     remaining_questions,
-                                    interview_difficulty
+                                    interview_difficulty,
+                                    resume_context=st.session_state.resume_context,
+                                    already_asked=resume_based_qs
                                 )
 
                         # Combine all questions: resume-based first, then generic
@@ -11485,115 +11516,149 @@ Generate exactly {num_questions} questions now:
         else:
             st.info("Please select both a career domain and target role to start the interview practice.")
 
-    # =========================================================
-    # Section 5: 📊 My Progress Dashboard
-    # =========================================================
+    # ─────────────────────────────────────────────────────────────
+    # Section 5: My Progress Dashboard
+    # ─────────────────────────────────────────────────────────────
     elif page == "📊 My Progress":
+        # ── helpers ──────────────────────────────────────────────
 
-        # ── helpers ──────────────────────────────────────────
-
-        def fetch_user_interview_results(username: str):
-            """Fetch all interview_results rows for the given username."""
+        def fetch_user_interview_results(username: str) -> list[dict]:
+            """
+            Fetch all interview results for the given user from SQLite.
+            Returns a list of row dicts, or [] on any error / no data.
+            """
             import sqlite3
             try:
-                conn = sqlite3.connect('resume_data.db')
+                conn = sqlite3.connect("resume_data.db")
+                conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT username, role, domain, avg_score, total_questions,
                            completed_on, feedback_summary
-                    FROM interview_results
-                    WHERE username = ?
-                    ORDER BY completed_on ASC
-                """, (username,))
-                rows = cursor.fetchall()
+                    FROM   interview_results
+                    WHERE  username = ?
+                    ORDER  BY completed_on ASC
+                    """,
+                    (username,),
+                )
+                rows = [dict(r) for r in cursor.fetchall()]
                 conn.close()
-                columns = ["username", "role", "domain", "avg_score",
-                           "total_questions", "completed_on", "feedback_summary"]
-                import pandas as pd
-                if rows:
-                    return pd.DataFrame(rows, columns=columns)
-                return pd.DataFrame(columns=columns)
-            except Exception as exc:
-                st.error(f"Database error while fetching progress: {exc}")
-                import pandas as pd
-                return pd.DataFrame()
+                return rows
+            except Exception:
+                return []
 
-        def calculate_progress_metrics(df):
-            """Derive summary metrics from the results DataFrame."""
-            if df.empty:
-                return None
-            metrics = {
-                "overall_avg":      round(float(df["avg_score"].mean()), 2),
-                "total_interviews": int(len(df)),
-                "best_score":       round(float(df["avg_score"].max()), 2),
-                "worst_score":      round(float(df["avg_score"].min()), 2),
-                "domain_stats":     (
-                    df.groupby("domain")["avg_score"]
-                    .agg(avg_score="mean", attempts="count")
-                    .round(2)
-                    .reset_index()
-                ),
-                "role_stats": (
-                    df.groupby("role")["avg_score"]
-                    .agg(avg_score="mean", attempts="count")
-                    .round(2)
-                    .reset_index()
-                ),
-                "time_series": df[["completed_on", "avg_score", "role", "domain"]].copy(),
+        def calculate_progress_metrics(results: list[dict]) -> dict:
+            """
+            Derive all dashboard metrics from raw result rows.
+            Returns a dict with keys used by render_progress_dashboard.
+            """
+            import statistics
+
+            if not results:
+                return {}
+
+            scores      = [r["avg_score"] for r in results if r["avg_score"] is not None]
+            total       = len(results)
+            overall_avg = round(statistics.mean(scores), 2) if scores else 0.0
+            best_score  = round(max(scores), 2)            if scores else 0.0
+
+            # Domain aggregation
+            domain_map: dict[str, list[float]] = {}
+            for r in results:
+                d = r.get("domain") or "Unknown"
+                domain_map.setdefault(d, []).append(r["avg_score"] or 0.0)
+
+            domain_stats = [
+                {
+                    "Domain":        d,
+                    "Avg Score":     round(statistics.mean(v), 2),
+                    "Attempts":      len(v),
+                    "Best Score":    round(max(v), 2),
+                }
+                for d, v in domain_map.items()
+            ]
+
+            # Role aggregation
+            role_map: dict[str, list[float]] = {}
+            for r in results:
+                role = r.get("role") or "Unknown"
+                role_map.setdefault(role, []).append(r["avg_score"] or 0.0)
+
+            role_stats = [
+                {
+                    "Role":      role,
+                    "Avg Score": round(statistics.mean(v), 2),
+                    "Attempts":  len(v),
+                }
+                for role, v in role_map.items()
+            ]
+
+            # Time series — parse date from completed_on string
+            from datetime import datetime
+            time_series = []
+            for r in results:
+                try:
+                    dt = datetime.strptime(r["completed_on"][:10], "%Y-%m-%d")
+                    time_series.append({"date": dt, "score": r["avg_score"] or 0.0, "role": r.get("role", "")})
+                except Exception:
+                    pass
+            time_series.sort(key=lambda x: x["date"])
+
+            return {
+                "total":          total,
+                "overall_avg":    overall_avg,
+                "best_score":     best_score,
+                "domain_stats":   domain_stats,
+                "role_stats":     role_stats,
+                "time_series":    time_series,
+                "raw":            results,
             }
-            return metrics
 
-        def _dark_chart_layout(title: str, xaxis_title: str = "", yaxis_title: str = ""):
-            """Shared Plotly layout for dark theme."""
-            return dict(
-                title=dict(text=title, x=0.5, font=dict(color="#00c3ff", size=16)),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(color="white"),
-                xaxis=dict(
-                    title=xaxis_title,
-                    gridcolor="rgba(255,255,255,0.1)",
-                    color="white",
-                ),
-                yaxis=dict(
-                    title=yaxis_title,
-                    gridcolor="rgba(255,255,255,0.1)",
-                    color="white",
-                ),
-                height=400,
-                margin=dict(l=40, r=40, t=60, b=60),
-            )
-
-        def render_progress_dashboard(username: str):
-            """Main entry-point: renders the full My Progress dashboard."""
+        def render_progress_dashboard(username: str) -> None:
+            """
+            Render the full My Progress page for the given user.
+            """
             import pandas as pd
             import plotly.graph_objects as go
 
+            # ── brand colours (consistent with existing theme) ───
+            ACCENT   = "#00c3ff"
+            BG_CARD  = "rgba(0, 195, 255, 0.07)"
+            BORDER   = "rgba(0, 195, 255, 0.25)"
+            TEXT     = "#ffffff"
+            GRID     = "rgba(255,255,255,0.15)"
+
+            # ── page title ───────────────────────────────────────
             st.markdown(
-                "<h2 style='color:#00c3ff; text-align:center;'>📊 My Interview Progress</h2>",
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                "<p style='text-align:center; color:#aaa; margin-bottom:30px;'>"
-                "Track your performance, identify trends, and keep improving.</p>",
+                f"""
+                <div style="background:linear-gradient(135deg,#0a0e27,#1a1f3a,#2d3561);
+                            border:1px solid {BORDER};border-radius:16px;
+                            padding:24px;text-align:center;margin-bottom:28px;
+                            box-shadow:0 8px 32px rgba(0,195,255,0.12);">
+                    <h2 style="color:{TEXT};margin:0;font-size:28px;font-weight:700;">
+                        📊 My Interview Progress
+                    </h2>
+                    <p style="color:{ACCENT};margin:8px 0 0;font-size:15px;">
+                        Performance analytics for <strong>{username}</strong>
+                    </p>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
 
-            # ── fetch data ────────────────────────────────────
-            df = fetch_user_interview_results(username)
+            # ── fetch + compute ───────────────────────────────────
+            results = fetch_user_interview_results(username)
 
-            if df.empty:
+            if not results:
                 st.markdown(
-                    """
-                    <div style="
-                        background: linear-gradient(135deg,#0f1419,#1a2332);
-                        border: 2px solid #00c3ff44;
-                        border-radius:16px; padding:40px; text-align:center; margin:30px 0;">
-                        <div style='font-size:60px; margin-bottom:16px;'>🎯</div>
-                        <h3 style='color:#00c3ff; margin-bottom:10px;'>No Interview History Found</h3>
-                        <p style='color:#aaa; font-size:16px;'>
-                            Start an AI Interview to track your progress here.<br>
-                            Head over to <strong>AI Interview Coach 🤖</strong> to begin!
+                    f"""
+                    <div style="background:{BG_CARD};border:1px solid {BORDER};
+                                border-radius:14px;padding:40px;text-align:center;margin-top:20px;">
+                        <div style="font-size:52px;margin-bottom:16px;">🎯</div>
+                        <h3 style="color:{ACCENT};margin:0 0 10px;">No Interview History Found</h3>
+                        <p style="color:rgba(255,255,255,0.75);font-size:15px;margin:0;">
+                            Complete an <strong>AI Interview</strong> to start tracking your progress here.
                         </p>
                     </div>
                     """,
@@ -11601,341 +11666,283 @@ Generate exactly {num_questions} questions now:
                 )
                 return
 
-            metrics = calculate_progress_metrics(df)
-            if metrics is None:
-                st.warning("Could not calculate metrics. Please try again.")
-                return
+            metrics = calculate_progress_metrics(results)
 
-            # ── A. Overall Performance Card ───────────────────
-            st.markdown("---")
+            # ── A) OVERALL PERFORMANCE CARDS ─────────────────────
             st.markdown(
-                "<h3 style='color:#00c3ff;'>🏆 Overall Performance</h3>",
+                f"<h3 style='color:{ACCENT};margin:20px 0 12px;'>🏅 Overall Performance</h3>",
                 unsafe_allow_html=True,
             )
 
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("📈 Overall Avg Score",
-                          f"{metrics['overall_avg']:.1f} / 10",
-                          delta=None)
-            with col2:
-                st.metric("🎤 Total Interviews",
-                          metrics["total_interviews"])
-            with col3:
-                st.metric("🥇 Best Score",
-                          f"{metrics['best_score']:.1f} / 10")
-            with col4:
-                # Score band label
-                avg = metrics["overall_avg"]
-                if avg >= 8:
-                    band = "🏆 Expert"
-                elif avg >= 6:
-                    band = "🌟 Proficient"
-                elif avg >= 4:
-                    band = "📚 Developing"
-                else:
-                    band = "💪 Beginner"
-                st.metric("🎖️ Skill Band", band)
+            def score_color(s: float) -> str:
+                if s >= 8:   return "#00e676"
+                if s >= 6:   return "#ffd740"
+                if s >= 4:   return "#ff9100"
+                return "#ff5252"
 
-            # Progress bar for overall avg
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric(
+                    label="📋 Total Interviews",
+                    value=metrics["total"],
+                )
+            with col2:
+                st.metric(
+                    label="📈 Overall Avg Score",
+                    value=f"{metrics['overall_avg']:.1f} / 10",
+                )
+            with col3:
+                st.metric(
+                    label="🏆 Best Score",
+                    value=f"{metrics['best_score']:.1f} / 10",
+                )
+
+            # Score band indicator
+            band_label = (
+                "Interview Ready 🏆" if metrics["overall_avg"] >= 8.5 else
+                "Excellent 🌟"       if metrics["overall_avg"] >= 7.0 else
+                "Good 👍"            if metrics["overall_avg"] >= 5.0 else
+                "Keep Practicing 💪"
+            )
             st.markdown(
                 f"""
-                <div style="margin:20px 0 30px 0;">
-                    <div style="display:flex; justify-content:space-between; color:#aaa; font-size:13px; margin-bottom:6px;">
-                        <span>0</span><span>Overall Score Progress</span><span>10</span>
-                    </div>
-                    <div style="background:#1a2332; border-radius:8px; height:14px; overflow:hidden; border:1px solid #00c3ff33;">
-                        <div style="
-                            width:{metrics['overall_avg']*10}%;
-                            height:100%;
-                            background:linear-gradient(90deg,#00c3ff,#0066cc);
-                            border-radius:8px;
-                            transition:width 1s ease;">
-                        </div>
-                    </div>
+                <div style="background:{BG_CARD};border:1px solid {BORDER};
+                            border-radius:12px;padding:14px 20px;margin:16px 0;
+                            display:flex;align-items:center;gap:12px;">
+                    <span style="font-size:15px;color:rgba(255,255,255,0.7);">Current Band:</span>
+                    <span style="font-size:16px;font-weight:600;
+                                 color:{score_color(metrics['overall_avg'])};">{band_label}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            # ── B. Domain-wise Performance ────────────────────
             st.markdown("---")
+
+            # ── B) DOMAIN-WISE PERFORMANCE ────────────────────────
             st.markdown(
-                "<h3 style='color:#00c3ff;'>🗂️ Domain-wise Performance</h3>",
+                f"<h3 style='color:{ACCENT};margin:0 0 12px;'>🗂️ Domain-Wise Performance</h3>",
                 unsafe_allow_html=True,
             )
 
-            domain_df = metrics["domain_stats"].rename(
-                columns={"avg_score": "Avg Score", "attempts": "Attempts"}
-            )
-            domain_df["Avg Score"] = domain_df["Avg Score"].round(2)
+            domain_df = pd.DataFrame(metrics["domain_stats"])
 
-            col_left, col_right = st.columns([1, 1.6])
+            col_left, col_right = st.columns([1, 1])
 
             with col_left:
-                st.markdown("**Domain Breakdown**")
+                st.markdown(
+                    f"<p style='color:rgba(255,255,255,0.7);font-size:14px;margin-bottom:8px;'>Summary Table</p>",
+                    unsafe_allow_html=True,
+                )
+                styled_df = domain_df.sort_values("Avg Score", ascending=False).reset_index(drop=True)
                 st.dataframe(
-                    domain_df.style
-                    .background_gradient(subset=["Avg Score"], cmap="Blues")
-                    .format({"Avg Score": "{:.2f}"}),
+                    styled_df,
                     use_container_width=True,
                     hide_index=True,
+                    column_config={
+                        "Avg Score":  st.column_config.ProgressColumn("Avg Score", min_value=0, max_value=10, format="%.1f"),
+                        "Best Score": st.column_config.NumberColumn("Best Score", format="%.1f"),
+                        "Attempts":   st.column_config.NumberColumn("Attempts"),
+                    },
                 )
 
             with col_right:
-                bar_fig = go.Figure(go.Bar(
-                    x=domain_df["domain"],
-                    y=domain_df["Avg Score"],
-                    text=domain_df["Avg Score"].apply(lambda v: f"{v:.1f}"),
-                    textposition="outside",
-                    marker=dict(
-                        color=domain_df["Avg Score"],
-                        colorscale=[[0, "#003d66"], [0.5, "#0077aa"], [1, "#00c3ff"]],
-                        showscale=False,
-                        line=dict(color="#00c3ff55", width=1),
-                    ),
-                ))
-                bar_fig.update_layout(
-                    **_dark_chart_layout(
-                        "Domain vs Avg Score",
-                        xaxis_title="Domain",
-                        yaxis_title="Avg Score",
+                fig_domain = go.Figure()
+                sorted_domain = sorted(metrics["domain_stats"], key=lambda x: x["Avg Score"], reverse=True)
+                fig_domain.add_trace(
+                    go.Bar(
+                        x=[d["Domain"] for d in sorted_domain],
+                        y=[d["Avg Score"] for d in sorted_domain],
+                        marker=dict(
+                            color=[d["Avg Score"] for d in sorted_domain],
+                            colorscale=[[0, "#1a3a5c"], [0.5, "#0066cc"], [1, ACCENT]],
+                            showscale=False,
+                            line=dict(color=ACCENT, width=1),
+                        ),
+                        text=[f"{d['Avg Score']:.1f}" for d in sorted_domain],
+                        textposition="outside",
+                        textfont=dict(color=TEXT, size=12),
+                        hovertemplate="<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>",
                     )
                 )
-                bar_fig.update_yaxes(range=[0, 11])
-                st.plotly_chart(bar_fig, use_container_width=True)
-
-            # Role breakdown (collapsible)
-            with st.expander("📋 Role-wise Breakdown", expanded=False):
-                role_df = metrics["role_stats"].rename(
-                    columns={"avg_score": "Avg Score", "attempts": "Attempts"}
+                fig_domain.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color=TEXT),
+                    margin=dict(l=10, r=10, t=30, b=60),
+                    xaxis=dict(
+                        tickfont=dict(color=TEXT, size=11),
+                        gridcolor=GRID,
+                        tickangle=-20,
+                    ),
+                    yaxis=dict(
+                        range=[0, 11],
+                        tickfont=dict(color=TEXT),
+                        gridcolor=GRID,
+                        title=dict(text="Avg Score", font=dict(color=ACCENT)),
+                    ),
+                    height=300,
                 )
-                st.dataframe(
-                    role_df.style.background_gradient(subset=["Avg Score"], cmap="Blues")
-                    .format({"Avg Score": "{:.2f}"}),
-                    use_container_width=True,
-                    hide_index=True,
-                )
+                st.plotly_chart(fig_domain, use_container_width=True)
 
-            # ── C. Progress Over Time ─────────────────────────
             st.markdown("---")
+
+            # ── C) PROGRESS OVER TIME ─────────────────────────────
             st.markdown(
-                "<h3 style='color:#00c3ff;'>📅 Progress Over Time</h3>",
+                f"<h3 style='color:{ACCENT};margin:0 0 12px;'>📈 Progress Over Time</h3>",
                 unsafe_allow_html=True,
             )
 
-            ts = metrics["time_series"].copy()
-            try:
-                ts["completed_on"] = pd.to_datetime(ts["completed_on"])
-                ts = ts.sort_values("completed_on")
-                ts["Interview #"] = range(1, len(ts) + 1)
+            ts = metrics["time_series"]
+            if ts:
+                dates  = [t["date"].strftime("%Y-%m-%d") for t in ts]
+                scores = [t["score"] for t in ts]
+                roles  = [t["role"] for t in ts]
 
-                line_fig = go.Figure()
+                # Compute rolling 3-interview average for trend line
+                trend = []
+                for i in range(len(scores)):
+                    window = scores[max(0, i - 2): i + 1]
+                    trend.append(round(sum(window) / len(window), 2))
 
-                # Shaded area under curve
-                line_fig.add_trace(go.Scatter(
-                    x=ts["Interview #"],
-                    y=ts["avg_score"],
-                    mode="lines+markers",
-                    name="Score",
-                    line=dict(color="#00c3ff", width=2.5),
-                    marker=dict(size=8, color="#00c3ff",
-                                line=dict(color="white", width=1.5)),
-                    fill="tozeroy",
-                    fillcolor="rgba(0,195,255,0.08)",
-                    customdata=ts[["completed_on", "role", "domain"]].values,
-                    hovertemplate=(
-                        "<b>Interview #%{x}</b><br>"
-                        "Score: %{y:.1f}/10<br>"
-                        "Date: %{customdata[0]|%Y-%m-%d}<br>"
-                        "Role: %{customdata[1]}<br>"
-                        "Domain: %{customdata[2]}<extra></extra>"
+                fig_time = go.Figure()
+
+                # Shaded area under score line
+                fig_time.add_trace(
+                    go.Scatter(
+                        x=dates, y=scores,
+                        fill="tozeroy",
+                        fillcolor="rgba(0,195,255,0.07)",
+                        line=dict(color=ACCENT, width=2.5),
+                        mode="lines+markers",
+                        marker=dict(size=8, color=ACCENT, line=dict(color="#ffffff", width=1.5)),
+                        name="Score",
+                        hovertemplate="<b>%{x}</b><br>Score: %{y:.1f}/10<br>Role: " +
+                                      "<br>".join(f"{r}" for r in roles) + "<extra></extra>",
+                        customdata=roles,
+                        hovertemplate="<b>%{x}</b><br>Score: %{y:.1f}/10<br>Role: %{customdata}<extra></extra>",
+                    )
+                )
+
+                # Rolling average trend
+                if len(scores) >= 3:
+                    fig_time.add_trace(
+                        go.Scatter(
+                            x=dates, y=trend,
+                            line=dict(color="#ffd740", width=1.5, dash="dot"),
+                            mode="lines",
+                            name="3-Interview Trend",
+                            hovertemplate="Trend: %{y:.1f}/10<extra></extra>",
+                        )
+                    )
+
+                # Benchmark line at 7.0
+                fig_time.add_hline(
+                    y=7.0,
+                    line=dict(color="rgba(0,230,118,0.45)", width=1.5, dash="dash"),
+                    annotation_text="Target (7.0)",
+                    annotation_font=dict(color="rgba(0,230,118,0.85)", size=11),
+                )
+
+                fig_time.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color=TEXT),
+                    margin=dict(l=10, r=10, t=20, b=40),
+                    xaxis=dict(
+                        tickfont=dict(color=TEXT, size=11),
+                        gridcolor=GRID,
+                        tickangle=-20,
                     ),
-                ))
-
-                # Rolling avg (if ≥3 interviews)
-                if len(ts) >= 3:
-                    ts["rolling_avg"] = ts["avg_score"].rolling(3, min_periods=1).mean()
-                    line_fig.add_trace(go.Scatter(
-                        x=ts["Interview #"],
-                        y=ts["rolling_avg"],
-                        mode="lines",
-                        name="3-Interview Avg",
-                        line=dict(color="#ff9800", width=1.5, dash="dot"),
-                    ))
-
-                line_fig.update_layout(
-                    **_dark_chart_layout(
-                        "Score Trend Across Interviews",
-                        xaxis_title="Interview Number",
-                        yaxis_title="Avg Score (out of 10)",
+                    yaxis=dict(
+                        range=[0, 11],
+                        tickfont=dict(color=TEXT),
+                        gridcolor=GRID,
+                        title=dict(text="Score / 10", font=dict(color=ACCENT)),
                     ),
                     legend=dict(
-                        font=dict(color="white"),
-                        bgcolor="rgba(0,0,0,0.3)",
+                        font=dict(color=TEXT, size=11),
+                        bgcolor="rgba(0,0,0,0)",
+                        orientation="h",
+                        yanchor="bottom", y=1.02,
                     ),
+                    height=340,
                 )
-                line_fig.update_yaxes(range=[0, 11])
-                line_fig.update_xaxes(dtick=1)
-                st.plotly_chart(line_fig, use_container_width=True)
+                st.plotly_chart(fig_time, use_container_width=True)
+            else:
+                st.info("Not enough time-series data to render the progress chart.")
 
-            except Exception as exc:
-                st.warning(f"Could not render time-series chart: {exc}")
-
-            # ── D. Score Distribution Histogram ───────────────
             st.markdown("---")
-            st.markdown(
-                "<h3 style='color:#00c3ff;'>📊 Score Distribution</h3>",
-                unsafe_allow_html=True,
-            )
 
-            col_h1, col_h2 = st.columns(2)
+            # ── D) ROLE BREAKDOWN ──────────────────────────────────
+            if len(metrics["role_stats"]) > 1:
+                st.markdown(
+                    f"<h3 style='color:{ACCENT};margin:0 0 12px;'>🎯 Performance by Role</h3>",
+                    unsafe_allow_html=True,
+                )
+                role_df = pd.DataFrame(metrics["role_stats"]).sort_values("Avg Score", ascending=True)
 
-            with col_h1:
-                hist_fig = go.Figure(go.Histogram(
-                    x=df["avg_score"],
-                    nbinsx=10,
-                    marker=dict(
-                        color="#00c3ff",
-                        opacity=0.75,
-                        line=dict(color="#003d66", width=1),
-                    ),
-                ))
-                hist_fig.update_layout(
-                    **_dark_chart_layout(
-                        "Score Distribution",
-                        xaxis_title="Score (0–10)",
-                        yaxis_title="Count",
+                fig_role = go.Figure(
+                    go.Bar(
+                        x=role_df["Avg Score"],
+                        y=role_df["Role"],
+                        orientation="h",
+                        marker=dict(
+                            color=role_df["Avg Score"],
+                            colorscale=[[0, "#1a3a5c"], [0.5, "#0066cc"], [1, ACCENT]],
+                            showscale=False,
+                            line=dict(color=ACCENT, width=0.8),
+                        ),
+                        text=[f"{s:.1f}" for s in role_df["Avg Score"]],
+                        textposition="outside",
+                        textfont=dict(color=TEXT, size=11),
+                        hovertemplate="<b>%{y}</b><br>Avg Score: %{x:.1f}/10<extra></extra>",
                     )
                 )
-                st.plotly_chart(hist_fig, use_container_width=True)
-
-            with col_h2:
-                # Interview attempts per domain as pie
-                pie_fig = go.Figure(go.Pie(
-                    labels=metrics["domain_stats"]["domain"],
-                    values=metrics["domain_stats"]["attempts"],
-                    hole=0.45,
-                    marker=dict(
-                        colors=["#00c3ff", "#0099cc", "#006699",
-                                "#003d66", "#00e5ff", "#80d8ff"],
-                        line=dict(color="#0a0e27", width=2),
-                    ),
-                    textfont=dict(color="white"),
-                ))
-                pie_fig.update_layout(
-                    title=dict(
-                        text="Attempts by Domain",
-                        x=0.5,
-                        font=dict(color="#00c3ff", size=16),
-                    ),
+                fig_role.update_layout(
                     paper_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color="white"),
-                    height=400,
-                    legend=dict(font=dict(color="white")),
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color=TEXT),
+                    margin=dict(l=10, r=40, t=10, b=20),
+                    xaxis=dict(
+                        range=[0, 11],
+                        tickfont=dict(color=TEXT),
+                        gridcolor=GRID,
+                        title=dict(text="Avg Score", font=dict(color=ACCENT)),
+                    ),
+                    yaxis=dict(tickfont=dict(color=TEXT, size=11), gridcolor=GRID),
+                    height=max(200, len(role_df) * 45),
                 )
-                st.plotly_chart(pie_fig, use_container_width=True)
+                st.plotly_chart(fig_role, use_container_width=True)
+                st.markdown("---")
 
-            # ── E. Skill Trend Radar (if scores columns exist) ─
-            skill_cols = {"knowledge", "communication", "relevance"}
-            if skill_cols.issubset(df.columns):
-                try:
-                    avg_k = float(df["knowledge"].mean())
-                    avg_c = float(df["communication"].mean())
-                    avg_r = float(df["relevance"].mean())
-
-                    st.markdown("---")
-                    st.markdown(
-                        "<h3 style='color:#00c3ff;'>🕸️ Skill Radar</h3>",
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown(
-                        '<div class="radar-container">',
-                        unsafe_allow_html=True,
-                    )
-
-                    radar_fig = go.Figure()
-                    radar_fig.add_trace(go.Scatterpolar(
-                        r=[avg_k, avg_c, avg_r, avg_k],
-                        theta=["Knowledge", "Communication", "Confidence", "Knowledge"],
-                        fill="toself",
-                        name="Avg Skills",
-                        line=dict(color="#00c3ff", width=2),
-                        fillcolor="rgba(0,195,255,0.2)",
-                    ))
-                    radar_fig.update_layout(
-                        polar=dict(
-                            radialaxis=dict(
-                                visible=True, range=[0, 10],
-                                tickfont=dict(color="white", size=10),
-                                gridcolor="rgba(255,255,255,0.2)",
-                            ),
-                            angularaxis=dict(
-                                tickfont=dict(color="white", size=12),
-                                gridcolor="rgba(255,255,255,0.2)",
-                            ),
-                            bgcolor="rgba(0,0,0,0)",
-                        ),
-                        showlegend=False,
-                        title=dict(
-                            text="Average Skill Performance",
-                            x=0.5,
-                            font=dict(color="#00c3ff", size=16),
-                        ),
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        font=dict(color="white"),
-                        height=420,
-                    )
-                    st.plotly_chart(radar_fig, use_container_width=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
-                except Exception:
-                    pass  # skip radar gracefully if data unavailable
-
-            # ── F. Recent Interview History Table ─────────────
-            st.markdown("---")
+            # ── E) RECENT HISTORY TABLE ───────────────────────────
             st.markdown(
-                "<h3 style='color:#00c3ff;'>📋 Recent Interview History</h3>",
+                f"<h3 style='color:{ACCENT};margin:0 0 12px;'>🗒️ Interview History</h3>",
                 unsafe_allow_html=True,
             )
-
-            display_df = df[["completed_on", "role", "domain",
-                             "avg_score", "total_questions",
-                             "feedback_summary"]].copy()
-            display_df = display_df.sort_values(
-                "completed_on", ascending=False
-            ).reset_index(drop=True)
-            display_df.columns = [
-                "Date", "Role", "Domain",
-                "Avg Score", "Questions", "Feedback Summary"
-            ]
-            display_df["Avg Score"] = display_df["Avg Score"].round(2)
-
+            history_df = pd.DataFrame(
+                [
+                    {
+                        "Date":       r["completed_on"][:10] if r.get("completed_on") else "—",
+                        "Role":       r.get("role", "—"),
+                        "Domain":     r.get("domain", "—"),
+                        "Score":      round(r.get("avg_score") or 0, 1),
+                        "Questions":  r.get("total_questions", "—"),
+                    }
+                    for r in reversed(results)   # most recent first
+                ]
+            )
             st.dataframe(
-                display_df.style.background_gradient(
-                    subset=["Avg Score"], cmap="Blues"
-                ).format({"Avg Score": "{:.2f}"}),
+                history_df,
                 use_container_width=True,
                 hide_index=True,
+                column_config={
+                    "Score": st.column_config.ProgressColumn("Score", min_value=0, max_value=10, format="%.1f"),
+                },
             )
 
-            # ── G. Improvement Tips ───────────────────────────
-            if metrics["overall_avg"] < 5:
-                tip = ("💡 **Tip:** Your average score is below 5. Focus on "
-                       "structuring answers using the STAR method and revisit "
-                       "the Interview Videos section for preparation strategies.")
-            elif metrics["overall_avg"] < 7.5:
-                tip = ("💡 **Tip:** Good progress! To push beyond 7.5, work on "
-                       "adding deeper technical examples and demonstrating "
-                       "ownership in your answers.")
-            else:
-                tip = ("🏆 **Outstanding!** You're consistently scoring above 7.5. "
-                       "Keep challenging yourself with Hard difficulty interviews "
-                       "to maintain your edge.")
-
-            st.info(tip)
-
-        # ── render ────────────────────────────────────────────
+        # ── render ────────────────────────────────────────────────
         username = st.session_state.get("username", "Guest")
         render_progress_dashboard(username)
 if tab5:
