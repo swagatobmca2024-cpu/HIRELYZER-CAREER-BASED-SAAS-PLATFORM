@@ -11664,8 +11664,11 @@ Generate exactly {num_questions} questions now:
                             st.session_state.interview_phase = "profile"
                             st.session_state.interview_result_saved = False  # Reset save guard for new interview
 
-                            st.success("Profile-based questions ready! Starting your mock interview...")
-                            time.sleep(1)
+                            # Use an empty placeholder so the message never bleeds into the interview UI
+                            _launch_msg = st.empty()
+                            _launch_msg.success("✅ Questions ready! Launching interview...")
+                            time.sleep(0.4)
+                            _launch_msg.empty()   # Explicitly clear before rerun — prevents glitch on Q1
                             st.rerun()
                         else:
                             st.error("Failed to generate questions. Please try again.")
