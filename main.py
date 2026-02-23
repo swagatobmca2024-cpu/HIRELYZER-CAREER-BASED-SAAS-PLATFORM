@@ -8891,7 +8891,15 @@ Provide detailed, flowing feedback that covers:
 
 Write feedback as natural, flowing paragraphs (not bullet points). Make it detailed, specific to their answer, and constructive.
 
-{"STEP 5 - FOLLOW-UP QUESTION (Hard difficulty only): Based on the candidate's answer, generate ONE high-quality follow-up question that a senior engineer or tech lead would ask in a real interview. The follow-up must: (a) probe a gap, assumption, or shallow explanation in their answer; (b) push into system design, edge cases, trade-offs, or failure scenarios they did not address; (c) be specific to what they actually said — not generic. Examples of good follow-ups: 'You mentioned using Redis for caching — how would you handle cache invalidation at scale?', 'What happens to your proposed design if the third-party API you rely on goes down?', 'How would your approach change if the dataset grew 100x?'" if difficulty == "Hard" else ""}
+{"""STEP 5 - FOLLOW-UP QUESTION (Hard Mode):
+Generate ONE rigorous, senior-level follow-up question grounded in the candidate's answer.
+The follow-up MUST do one of the following:
+  - Challenge a specific trade-off or design decision they mentioned (e.g., "You chose X — how does that behave under high concurrency or at 10× scale?")
+  - Probe for edge cases or failure modes they glossed over (e.g., "What happens if the external service is unavailable?")
+  - Push from implementation to architecture (e.g., "How would you extend this to support multi-tenancy?")
+  - Demand quantitative depth (e.g., "What O(n) complexity does your approach have, and how would you reduce it?")
+  - Test operational maturity (e.g., "How would you monitor, alert, and roll back this in production?")
+Avoid generic questions like "Can you elaborate?" or "Tell me more." The question must be specific to what they actually said.""" if difficulty == "Hard" else ""}
 
 OUTPUT FORMAT (strict JSON):
 {{
@@ -8901,7 +8909,7 @@ OUTPUT FORMAT (strict JSON):
   "knowledge": <number 1-10>,
   "communication": <number 1-10>,
   "relevance": <number 1-10>,
-  "feedback": "Detailed, comprehensive feedback in 2-4 flowing paragraphs. Be specific about what the candidate did well, what they missed, and how they can improve. Reference actual content from their answer. Make it constructive, actionable, and personalized."{',\n  "followup": "One probing follow-up question"' if difficulty == "Hard" else ''}
+  "feedback": "Detailed, comprehensive feedback in 2-4 flowing paragraphs. Be specific about what the candidate did well, what they missed, and how they can improve. Reference actual content from their answer. Make it constructive, actionable, and personalized."{',\n  "followup": "One specific, senior-level follow-up question that challenges a trade-off, probes an edge case, or escalates to system design — anchored directly to what the candidate said"' if difficulty == "Hard" else ''}
 }}
 
 IMPORTANT RULES:
@@ -9220,7 +9228,623 @@ import json
 import json
 import time
 import re
+import sqlite3
+import pandas as pd
 import streamlit as st
+
+# ======================================================
+# MY PROGRESS — DATA ACCESS & METRICS
+# ======================================================
+
+def fetch_user_interview_results(username: str) -> list:
+    """
+    Fetch all interview results for a given username from SQLite.
+    Returns a list of dicts, or an empty list if none found / on error.
+    """
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT username, role, domain, avg_score, total_questions, completed_on, feedback_summary
+            FROM interview_results
+            WHERE username = ?
+            ORDER BY completed_on ASC
+        """, (username,))
+        rows = cursor.fetchall()
+        conn.close()
+
+        columns = ["username", "role", "domain", "avg_score", "total_questions", "completed_on", "feedback_summary"]
+        return [dict(zip(columns, row)) for row in rows]
+    except Exception:
+        return []
+
+
+def calculate_progress_metrics(results: list) -> dict:
+    """
+    Compute summary metrics from interview result dicts.
+    All scores are rounded to 1 decimal place for consistency everywhere.
+    """
+    if not results:
+        return {
+            "total_interviews": 0,
+            "overall_avg": 0.0,
+            "best_score": 0.0,
+            "worst_score": 0.0,
+            "domain_stats": {},
+            "role_stats": {},
+            "timeline": [],
+        }
+
+    scores = [r["avg_score"] for r in results if r["avg_score"] is not None]
+    # Round to 1dp everywhere — prevents "8.39 vs 8.4" inconsistency across widgets
+    overall_avg = round(sum(scores) / len(scores), 1) if scores else 0.0
+    best_score  = round(max(scores), 1) if scores else 0.0
+    worst_score = round(min(scores), 1) if scores else 0.0
+
+    # Domain-wise aggregation
+    domain_map = {}
+    for r in results:
+        d = r.get("domain") or "Unknown"
+        domain_map.setdefault(d, {"scores": [], "attempts": 0})
+        if r["avg_score"] is not None:
+            domain_map[d]["scores"].append(r["avg_score"])
+        domain_map[d]["attempts"] += 1
+
+    domain_stats = {
+        d: {
+            "avg_score": round(sum(v["scores"]) / len(v["scores"]), 1) if v["scores"] else 0.0,
+            "attempts":  v["attempts"],
+        }
+        for d, v in domain_map.items()
+    }
+
+    # Role-wise aggregation
+    role_map = {}
+    for r in results:
+        rl = r.get("role") or "Unknown"
+        role_map.setdefault(rl, {"scores": [], "attempts": 0})
+        if r["avg_score"] is not None:
+            role_map[rl]["scores"].append(r["avg_score"])
+        role_map[rl]["attempts"] += 1
+
+    role_stats = {
+        rl: {
+            "avg_score": round(sum(v["scores"]) / len(v["scores"]), 1) if v["scores"] else 0.0,
+            "attempts":  v["attempts"],
+        }
+        for rl, v in role_map.items()
+    }
+
+    # Timeline — session-indexed so same-day dupes are always distinct points
+    timeline = []
+    for idx, r in enumerate(results):
+        if r["avg_score"] is not None and r.get("completed_on"):
+            completed_str = str(r["completed_on"])
+            date_str = completed_str.split(" ")[0]
+            label = f"#{idx + 1} · {date_str}"
+            timeline.append({
+                "index": idx,
+                "date":  date_str,
+                "label": label,
+                "score": round(r["avg_score"], 1),
+                "role":  r.get("role", ""),
+            })
+
+    return {
+        "total_interviews": len(results),
+        "overall_avg":  overall_avg,
+        "best_score":   best_score,
+        "worst_score":  worst_score,
+        "domain_stats": domain_stats,
+        "role_stats":   role_stats,
+        "timeline":     timeline,
+    }
+
+
+def _score_color(score: float) -> str:
+    """Return a hex colour that grades from red → amber → green based on 0-10 score."""
+    if score >= 8.0:
+        return "#00e676"   # vivid green
+    elif score >= 6.5:
+        return "#00c3ff"   # brand cyan
+    elif score >= 5.0:
+        return "#ffd740"   # amber
+    else:
+        return "#ff5252"   # red
+
+
+def _score_badge(score: float) -> str:
+    """Return emoji badge for a score."""
+    if score >= 8.5:   return "🏆"
+    elif score >= 7.0: return "🌟"
+    elif score >= 5.0: return "👍"
+    else:              return "💪"
+
+
+def render_progress_dashboard(username: str):
+    """
+    Fully redesigned My Progress dashboard — rich, visually consistent,
+    dark-theme cards + charts aligned with the app's #00c3ff palette.
+    All scores displayed at 1 d.p. everywhere for consistency.
+    """
+
+    # ── Inject dashboard-specific CSS ─────────────────────────────────────────
+    st.markdown("""
+    <style>
+    .prog-header {
+        background: linear-gradient(135deg, #060b1e 0%, #0d1635 40%, #162152 70%, #1e2f6e 100%);
+        border: 1px solid rgba(0,195,255,0.35);
+        border-radius: 20px;
+        padding: 28px 24px 22px 24px;
+        text-align: center;
+        margin-bottom: 30px;
+        box-shadow: 0 8px 40px rgba(0,195,255,0.14), inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    .prog-header h1 {
+        margin: 0 0 6px 0;
+        font-size: 28px;
+        font-weight: 700;
+        color: #ffffff;
+        letter-spacing: -0.5px;
+    }
+    .prog-header p {
+        margin: 0;
+        color: rgba(255,255,255,0.55);
+        font-size: 14px;
+    }
+
+    /* KPI tiles */
+    .kpi-row { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .kpi-tile {
+        flex: 1;
+        min-width: 160px;
+        background: linear-gradient(135deg, #0d1635 0%, #162050 100%);
+        border: 1px solid rgba(0,195,255,0.25);
+        border-radius: 16px;
+        padding: 20px 18px 18px 18px;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+        transition: transform 0.2s ease;
+    }
+    .kpi-tile:hover { transform: translateY(-3px); }
+    .kpi-icon  { font-size: 26px; margin-bottom: 6px; }
+    .kpi-label { font-size: 11px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+    .kpi-value { font-size: 30px; font-weight: 700; color: #00c3ff; line-height: 1; }
+    .kpi-sub   { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 4px; }
+
+    /* Section headings */
+    .prog-section {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 30px 0 14px 0;
+    }
+    .prog-section-icon { font-size: 20px; }
+    .prog-section-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #00c3ff;
+        letter-spacing: -0.3px;
+    }
+
+    /* Chart card wrapper */
+    .chart-card {
+        background: linear-gradient(135deg, #0a0f26 0%, #111932 100%);
+        border: 1px solid rgba(0,195,255,0.18);
+        border-radius: 16px;
+        padding: 6px 6px 0 6px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+    }
+
+    /* Session row cards */
+    .session-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: linear-gradient(135deg, #0d1635 0%, #162050 100%);
+        border: 1px solid rgba(0,195,255,0.15);
+        border-radius: 12px;
+        padding: 14px 18px;
+        margin-bottom: 10px;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .session-card:hover { border-color: rgba(0,195,255,0.45); transform: translateX(3px); }
+    .session-num  { font-size: 13px; color: rgba(255,255,255,0.4); min-width: 36px; }
+    .session-role { font-size: 14px; font-weight: 600; color: #ffffff; flex: 1; padding: 0 12px; }
+    .session-meta { font-size: 12px; color: rgba(255,255,255,0.45); min-width: 90px; text-align: right; }
+    .session-score { font-size: 18px; font-weight: 700; min-width: 68px; text-align: right; }
+
+    /* Progress bar for score */
+    .score-bar-wrap { height: 6px; background: rgba(255,255,255,0.08); border-radius: 4px; margin-top: 3px; overflow: hidden; }
+    .score-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Header ─────────────────────────────────────────────────────────────────
+    st.markdown("""
+        <div class="prog-header">
+            <h1>📊 My Interview Progress</h1>
+            <p>Track your scores, growth, and performance trends across every mock interview session</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    create_interview_database()
+    results = fetch_user_interview_results(username)
+    metrics = calculate_progress_metrics(results)
+
+    # ── Empty State ────────────────────────────────────────────────────────────
+    if metrics["total_interviews"] == 0:
+        st.markdown("""
+            <div style="text-align:center; padding:64px 24px;
+                        background:linear-gradient(135deg,rgba(0,195,255,0.04),rgba(0,195,255,0.09));
+                        border:1.5px dashed rgba(0,195,255,0.25); border-radius:20px; margin-top:16px;">
+                <div style="font-size:60px; margin-bottom:18px;">🎯</div>
+                <h3 style="color:#00c3ff; margin:0 0 10px 0; font-size:20px;">No Interview History Yet</h3>
+                <p style="color:rgba(255,255,255,0.55); font-size:14px; max-width:380px; margin:0 auto; line-height:1.6;">
+                    Complete an AI Interview session to start seeing your scores,
+                    trends, and domain performance tracked here automatically.
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+        return
+
+    overall      = metrics["overall_avg"]
+    best         = metrics["best_score"]
+    worst        = metrics["worst_score"]
+    total        = metrics["total_interviews"]
+    badge        = _score_badge(overall)
+    score_col    = _score_color(overall)
+
+    # ── KPI Row ────────────────────────────────────────────────────────────────
+    st.markdown("""<div class="prog-section">
+        <span class="prog-section-icon">🏅</span>
+        <span class="prog-section-title">Overall Performance</span></div>""",
+        unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="kpi-row">
+        <div class="kpi-tile">
+            <div class="kpi-icon">🎯</div>
+            <div class="kpi-label">Overall Average</div>
+            <div class="kpi-value" style="color:{score_col}">{overall:.1f}</div>
+            <div class="kpi-sub">out of 10</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-icon">📋</div>
+            <div class="kpi-label">Interviews Taken</div>
+            <div class="kpi-value">{total}</div>
+            <div class="kpi-sub">sessions</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-icon">🏆</div>
+            <div class="kpi-label">Best Score</div>
+            <div class="kpi-value" style="color:#00e676">{best:.1f}</div>
+            <div class="kpi-sub">out of 10</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-icon">📉</div>
+            <div class="kpi-label">Lowest Score</div>
+            <div class="kpi-value" style="color:{_score_color(worst)}">{worst:.1f}</div>
+            <div class="kpi-sub">out of 10</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-icon">{badge}</div>
+            <div class="kpi-label">Current Badge</div>
+            <div class="kpi-value" style="font-size:16px; color:#ffffff; padding-top:4px;">
+                {"Interview Ready" if overall >= 8.5 else "Excellent" if overall >= 7.0 else "Good" if overall >= 5.0 else "Keep Practicing"}
+            </div>
+            <div class="kpi-sub">performance tier</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Score Trend + Domain Charts side-by-side ───────────────────────────────
+    timeline = metrics["timeline"]
+
+    col_left, col_right = st.columns([3, 2], gap="medium")
+
+    # LEFT: Score over time line chart
+    with col_left:
+        st.markdown("""<div class="prog-section">
+            <span class="prog-section-icon">📈</span>
+            <span class="prog-section-title">Score Trend</span></div>""",
+            unsafe_allow_html=True)
+
+        if timeline:
+            labels = [t["label"] for t in timeline]
+            scores = [t["score"] for t in timeline]
+            roles  = [t["role"]  for t in timeline]
+            dates  = [t["date"]  for t in timeline]
+
+            line_fig = go.Figure()
+
+            # Gradient fill area
+            line_fig.add_trace(go.Scatter(
+                x=labels, y=scores,
+                mode="lines+markers",
+                line=dict(color="#00c3ff", width=3, shape="spline"),
+                marker=dict(
+                    color=[_score_color(s) for s in scores],
+                    size=11,
+                    line=dict(color="#0a0f26", width=2),
+                    symbol="circle",
+                ),
+                fill="tozeroy",
+                fillcolor="rgba(0,195,255,0.07)",
+                customdata=list(zip(roles, dates, scores)),
+                hovertemplate=(
+                    "<b>%{customdata[0]}</b><br>"
+                    "Score: <b>%{customdata[2]:.1f}/10</b><br>"
+                    "Date: %{customdata[1]}<extra></extra>"
+                ),
+                name="Score",
+            ))
+
+            # Score labels on markers
+            line_fig.add_trace(go.Scatter(
+                x=labels, y=scores,
+                mode="text",
+                text=[f"<b>{s:.1f}</b>" for s in scores],
+                textposition="top center",
+                textfont=dict(color="#ffffff", size=11),
+                hoverinfo="skip",
+                showlegend=False,
+            ))
+
+            # Average dotted line
+            line_fig.add_hline(
+                y=overall,
+                line_dash="dot",
+                line_color="rgba(255,215,0,0.55)",
+                annotation_text=f"Avg {overall:.1f}",
+                annotation_position="top right",
+                annotation_font=dict(color="rgba(255,215,0,0.9)", size=11),
+            )
+
+            line_fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#ffffff"),
+                height=320,
+                margin=dict(t=20, b=90, l=44, r=20),
+                showlegend=False,
+                xaxis=dict(
+                    type="category",
+                    tickfont=dict(color="rgba(255,255,255,0.6)", size=10),
+                    tickangle=-38,
+                    gridcolor="rgba(255,255,255,0.05)",
+                    title=None,
+                ),
+                yaxis=dict(
+                    range=[0, 11.5],
+                    tickfont=dict(color="rgba(255,255,255,0.6)", size=10),
+                    gridcolor="rgba(255,255,255,0.07)",
+                    title=dict(text="Score /10", font=dict(color="rgba(255,255,255,0.4)", size=11)),
+                ),
+            )
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.plotly_chart(line_fig, use_container_width=True, config={"displayModeBar": False})
+            st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.info("Complete at least one interview to see the score trend.")
+
+    # RIGHT: Domain horizontal bar chart
+    with col_right:
+        st.markdown("""<div class="prog-section">
+            <span class="prog-section-icon">🌐</span>
+            <span class="prog-section-title">By Domain</span></div>""",
+            unsafe_allow_html=True)
+
+        if metrics["domain_stats"]:
+            ds = metrics["domain_stats"]
+            d_names  = list(ds.keys())
+            d_scores = [ds[d]["avg_score"] for d in d_names]
+            d_tries  = [ds[d]["attempts"]  for d in d_names]
+
+            # Shorten long domain names for display
+            d_labels = [n[:28] + "…" if len(n) > 28 else n for n in d_names]
+
+            hbar_fig = go.Figure(go.Bar(
+                y=d_labels,
+                x=d_scores,
+                orientation="h",
+                marker=dict(
+                    color=[_score_color(s) for s in d_scores],
+                    line=dict(color="rgba(0,0,0,0)", width=0),
+                    opacity=0.85,
+                ),
+                text=[f"<b>{s:.1f}</b>" for s in d_scores],
+                textposition="inside",
+                textfont=dict(color="#000000", size=12, family="Inter, sans-serif"),
+                customdata=list(zip(d_names, d_scores, d_tries)),
+                hovertemplate=(
+                    "<b>%{customdata[0]}</b><br>"
+                    "Avg Score: <b>%{customdata[1]:.1f}/10</b><br>"
+                    "Attempts: %{customdata[2]}<extra></extra>"
+                ),
+            ))
+            hbar_fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#ffffff"),
+                height=320,
+                margin=dict(t=20, b=30, l=10, r=30),
+                showlegend=False,
+                xaxis=dict(
+                    range=[0, 10.5],
+                    tickfont=dict(color="rgba(255,255,255,0.5)", size=10),
+                    gridcolor="rgba(255,255,255,0.07)",
+                    title=dict(text="Avg Score /10", font=dict(color="rgba(255,255,255,0.4)", size=11)),
+                ),
+                yaxis=dict(
+                    tickfont=dict(color="rgba(255,255,255,0.75)", size=10),
+                    gridcolor="rgba(255,255,255,0.04)",
+                    title=None,
+                ),
+            )
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.plotly_chart(hbar_fig, use_container_width=True, config={"displayModeBar": False})
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Role Performance + Radar side by side ─────────────────────────────────
+    col_roles, col_radar = st.columns([3, 2], gap="medium")
+
+    with col_roles:
+        st.markdown("""<div class="prog-section">
+            <span class="prog-section-icon">👔</span>
+            <span class="prog-section-title">Performance by Role</span></div>""",
+            unsafe_allow_html=True)
+
+        if metrics["role_stats"]:
+            rs = metrics["role_stats"]
+            r_names  = sorted(rs.keys(), key=lambda x: rs[x]["avg_score"], reverse=True)
+            r_scores = [rs[r]["avg_score"] for r in r_names]
+            r_tries  = [rs[r]["attempts"]  for r in r_names]
+
+            role_fig = go.Figure(go.Bar(
+                x=r_names,
+                y=r_scores,
+                marker=dict(
+                    color=[_score_color(s) for s in r_scores],
+                    opacity=0.85,
+                    line=dict(color="rgba(0,0,0,0)", width=0),
+                ),
+                text=[f"<b>{s:.1f}</b>" for s in r_scores],
+                textposition="outside",
+                textfont=dict(color="#ffffff", size=11),
+                customdata=list(zip(r_names, r_scores, r_tries)),
+                hovertemplate=(
+                    "<b>%{customdata[0]}</b><br>"
+                    "Avg Score: <b>%{customdata[1]:.1f}/10</b><br>"
+                    "Attempts: %{customdata[2]}<extra></extra>"
+                ),
+            ))
+            role_fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#ffffff"),
+                height=300,
+                margin=dict(t=20, b=80, l=44, r=20),
+                showlegend=False,
+                xaxis=dict(
+                    tickfont=dict(color="rgba(255,255,255,0.6)", size=10),
+                    tickangle=-32,
+                    gridcolor="rgba(255,255,255,0.05)",
+                    title=None,
+                ),
+                yaxis=dict(
+                    range=[0, 11.5],
+                    tickfont=dict(color="rgba(255,255,255,0.5)", size=10),
+                    gridcolor="rgba(255,255,255,0.07)",
+                    title=dict(text="Score /10", font=dict(color="rgba(255,255,255,0.4)", size=11)),
+                ),
+            )
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.plotly_chart(role_fig, use_container_width=True, config={"displayModeBar": False})
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_radar:
+        st.markdown("""<div class="prog-section">
+            <span class="prog-section-icon">🕸️</span>
+            <span class="prog-section-title">Skill Profile</span></div>""",
+            unsafe_allow_html=True)
+
+        if len(results) >= 1:
+            # Derive approximate skill dimensions from stored avg_score + domain/role context
+            def _bucket(r):
+                s = r.get("avg_score") or 0.0
+                dl = (r.get("domain") or "").lower()
+                rl = (r.get("role")   or "").lower()
+                t = 0.9 if any(k in dl for k in ["data","cloud","cyber","software"]) else 0.65
+                c = 0.85 if any(k in rl for k in ["manager","analyst","ux","product"]) else 0.70
+                return {
+                    "Technical":    min(10, round(s * t, 1)),
+                    "Communication":min(10, round(s * c, 1)),
+                    "Problem Solving":min(10, round(s * 0.80, 1)),
+                    "Domain Knowledge":min(10, round(s * 0.75, 1)),
+                    "Consistency":  min(10, round(s * 0.88, 1)),
+                }
+
+            from collections import defaultdict
+            agg = defaultdict(list)
+            for r in results:
+                for k, v in _bucket(r).items():
+                    agg[k].append(v)
+            radar_vals   = [round(sum(agg[k]) / len(agg[k]), 1) for k in agg]
+            radar_labels = list(agg.keys())
+
+            radar_fig = go.Figure()
+            radar_fig.add_trace(go.Scatterpolar(
+                r=radar_vals + [radar_vals[0]],
+                theta=radar_labels + [radar_labels[0]],
+                fill="toself",
+                line=dict(color="#00c3ff", width=2.5),
+                fillcolor="rgba(0,195,255,0.15)",
+                hovertemplate="<b>%{theta}</b><br>%{r:.1f}/10<extra></extra>",
+            ))
+            radar_fig.update_layout(
+                polar=dict(
+                    bgcolor="rgba(0,0,0,0)",
+                    radialaxis=dict(
+                        visible=True, range=[0, 10],
+                        tickfont=dict(color="rgba(255,255,255,0.4)", size=8),
+                        gridcolor="rgba(255,255,255,0.12)",
+                        linecolor="rgba(255,255,255,0.1)",
+                    ),
+                    angularaxis=dict(
+                        tickfont=dict(color="rgba(255,255,255,0.75)", size=10),
+                        gridcolor="rgba(255,255,255,0.1)",
+                    ),
+                ),
+                showlegend=False,
+                paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="white"),
+                height=300,
+                margin=dict(t=20, b=20, l=20, r=20),
+            )
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.plotly_chart(radar_fig, use_container_width=True, config={"displayModeBar": False})
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Recent Sessions List ───────────────────────────────────────────────────
+    st.markdown("""<div class="prog-section">
+        <span class="prog-section-icon">🗂️</span>
+        <span class="prog-section-title">Recent Interview Sessions</span></div>""",
+        unsafe_allow_html=True)
+
+    for i, r in enumerate(reversed(results)):
+        sc   = round(r.get("avg_score") or 0.0, 1)
+        col  = _score_color(sc)
+        date = str(r.get("completed_on", "")).split(" ")[0]
+        time_part = str(r.get("completed_on", ""))
+        time_str  = time_part.split(" ")[1][:5] if " " in time_part else ""
+        role   = r.get("role",   "—")
+        domain = r.get("domain", "—")
+        qs     = r.get("total_questions", "—")
+        sess_n = len(results) - i
+        bar_w  = int((sc / 10) * 100)
+        bdg    = _score_badge(sc)
+
+        st.markdown(f"""
+        <div class="session-card">
+            <div class="session-num">#{sess_n}</div>
+            <div style="flex:1; padding: 0 12px;">
+                <div style="font-size:14px; font-weight:600; color:#ffffff; margin-bottom:2px;">{role}</div>
+                <div style="font-size:11px; color:rgba(255,255,255,0.4);">{domain}</div>
+                <div class="score-bar-wrap" style="margin-top:7px; width:140px;">
+                    <div class="score-bar-fill" style="width:{bar_w}%; background:{col};"></div>
+                </div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.35); margin-bottom:3px;">{date} {time_str} · {qs} Qs</div>
+                <div class="session-score" style="color:{col};">{bdg} {sc:.1f}<span style="font-size:12px;color:rgba(255,255,255,0.4);">/10</span></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+
 
 # ======================================================
 # RESUME TEXT EXTRACTION (pdfplumber + OCR fallback)
@@ -9357,9 +9981,9 @@ JSON:
 # ======================================================
 def generate_resume_based_questions(resume_context, role, domain, difficulty, num_questions=3):
     """
-    Generate interview questions strictly based on resume context.
-    Each question is uniquely tied to a specific project, skill, experience, or technology
-    from the candidate's profile — no generic or hybrid questions.
+    Generate interview questions driven entirely by the candidate's profile.
+    Each question targets a distinct aspect: skills, projects, experience, technologies.
+    Questions are non-repetitive and calibrated to difficulty.
     """
 
     skills = resume_context.get("skills", [])
@@ -9368,37 +9992,41 @@ def generate_resume_based_questions(resume_context, role, domain, difficulty, nu
     technologies = resume_context.get("technologies", [])
 
     difficulty_guidance = {
-        "Easy": "Ask the candidate to explain or describe something from their resume at a foundational level.",
-        "Medium": "Ask the candidate to reason through a scenario or decision they faced in their listed projects/experience.",
-        "Hard": "Probe deeply: ask about design trade-offs, architectural decisions, edge cases, or scalability challenges within their specific listed projects or experience."
+        "Easy": "Ask the candidate to explain or describe their work. Focus on fundamentals, definitions, and what they did. Example framing: 'Can you explain...', 'What does X mean...', 'Describe how you...'",
+        "Medium": "Ask the candidate to reason through decisions, handle trade-offs, or describe how they solved a problem. Example framing: 'Why did you choose X over Y?', 'How would you approach...', 'Describe a situation where...'",
+        "Hard": "Ask the candidate to defend architectural choices, reason about scale, edge cases, or system design. Example framing: 'How would this behave at 10× scale?', 'What are the failure modes of...', 'How would you redesign X to support...'"
     }
+
+    # Build a deduplicated, prioritised source list per profile section
+    pool_skills = skills[:4]
+    pool_projects = projects[:3]
+    pool_experience = experience[:3]
+    pool_technologies = technologies[:4]
 
     prompt = f"""You are a senior technical interviewer conducting a real interview.
 
 CANDIDATE PROFILE:
-- Skills demonstrated: {', '.join(skills[:5]) if skills else 'Not specified'}
-- Projects: {'; '.join(projects[:3]) if projects else 'Not specified'}
-- Experience: {'; '.join(experience[:3]) if experience else 'Not specified'}
-- Technologies used: {', '.join(technologies[:5]) if technologies else 'Not specified'}
+- Skills demonstrated: {', '.join(pool_skills) if pool_skills else 'Not specified'}
+- Projects built: {chr(10) + chr(10).join(f'  • {p}' for p in pool_projects) if pool_projects else '  • Not specified'}
+- Work experience: {chr(10) + chr(10).join(f'  • {e}' for e in pool_experience) if pool_experience else '  • Not specified'}
+- Technologies used: {', '.join(pool_technologies) if pool_technologies else 'Not specified'}
 
 Target Role: {role}
 Domain: {domain}
 Difficulty: {difficulty}
-Difficulty Approach: {difficulty_guidance.get(difficulty, difficulty_guidance['Medium'])}
+Difficulty framing: {difficulty_guidance.get(difficulty, difficulty_guidance['Medium'])}
 
-TASK:
-Generate EXACTLY {num_questions} interview questions. Each question must:
-1. Be DIRECTLY tied to a SPECIFIC item in the candidate's profile above (a named project, a listed technology, a stated experience, or a demonstrated skill)
-2. Reference the actual content — do NOT write generic questions
-3. Be DISTINCT from each other — do not repeat the same angle or concept
-4. Sound natural, like a real interviewer speaking
+TASK: Generate EXACTLY {num_questions} interview questions.
 
-BAD EXAMPLE (generic): "Tell me about a challenging project."
-GOOD EXAMPLE (profile-specific): "In your [Project Name], you used [Tech] — what was the most difficult architectural decision you had to make and why?"
+STRICT RULES:
+1. Every question MUST be grounded in a SPECIFIC item from the candidate's profile above — name the skill, project, technology, or experience it references.
+2. Spread questions across DIFFERENT profile sections — do NOT ask multiple questions about the same skill or project.
+3. NO two questions may follow the same structure or framing pattern.
+4. Do NOT ask generic questions that could apply to any candidate (e.g., "Tell me about yourself", "What is your greatest strength?").
+5. Apply the difficulty framing above strictly.
+6. Output ONLY the questions, one per line, with no numbering, prefixes, or explanations.
 
-Output ONLY the questions, one per line, no numbering or prefixes.
-
-Generate now:
+Generate {num_questions} distinct, profile-specific questions now:
 """
 
     try:
@@ -9406,26 +10034,37 @@ Generate now:
         raw_questions = [q.strip() for q in response.split("\n") if q.strip()]
 
         cleaned_questions = []
+        seen_roots = set()  # deduplicate by first 6 words
         for q in raw_questions:
             q = re.sub(r'^[\d\)\.\-•\*]+\s*', '', q).strip()
-            if len(q) > 15:
+            root = ' '.join(q.lower().split()[:6])
+            if len(q) > 20 and root not in seen_roots:
                 cleaned_questions.append(q)
+                seen_roots.add(root)
             if len(cleaned_questions) >= num_questions:
                 break
 
-        while len(cleaned_questions) < num_questions:
-            cleaned_questions.append(
-                f"Explain your most significant project and the technical decisions you made."
-            )
+        # Pad with targeted fallbacks only if necessary
+        fallback_idx = 0
+        fallback_pool = [
+            f"Walk me through the architecture of your most technically involved project listed on your resume.",
+            f"You mentioned working with {pool_technologies[0] if pool_technologies else 'key technologies'} — what was the hardest problem you solved using it?",
+            f"Describe a technical decision you made in {pool_projects[0] if pool_projects else 'one of your projects'} and what alternatives you considered.",
+            f"In your experience as {pool_experience[0].split('–')[0].strip() if pool_experience else role}, how did you ensure quality and reliability of what you built?",
+            f"How has your background in {pool_skills[0] if pool_skills else domain} specifically prepared you for the {role} role?"
+        ]
+        while len(cleaned_questions) < num_questions and fallback_idx < len(fallback_pool):
+            cleaned_questions.append(fallback_pool[fallback_idx])
+            fallback_idx += 1
 
         return cleaned_questions[:num_questions]
 
     except Exception:
         return [
-            "Walk us through your most technically challenging project.",
-            "What design or implementation decisions did you personally make?",
-            "How does your experience prepare you for this role?"
-        ]
+            f"Walk me through the most technically complex project on your resume — what did you build and what problems did you solve?",
+            f"You have experience with {pool_technologies[0] if pool_technologies else 'several technologies'} — describe a real challenge you faced and how you resolved it.",
+            f"How does your specific background and skill set make you a strong fit for this {role} position?"
+        ][:num_questions]
 
 
 # ======================================================
@@ -10388,49 +11027,41 @@ with tab4:
             ]
         return base_questions[:count]
 
-    # UPDATED: AI-Generated Questions using LLM with DIFFICULTY SUPPORT + Profile Awareness
-    def generate_interview_questions_with_llm(domain, role, interview_type, num_questions, difficulty="Medium", resume_context=None, already_asked=None):
+    # UPDATED: AI-Generated Questions using LLM with DIFFICULTY SUPPORT
+    def generate_interview_questions_with_llm(domain, role, interview_type, num_questions, difficulty="Medium"):
         """
-        Generate interview questions using LLM based on domain, role, type, difficulty, and candidate profile.
-        Uses resume context to personalize and avoids repeating question types already covered.
+        Generate interview questions using LLM based on domain, role, type, and difficulty.
+
+        FIXED: Now difficulty is passed into LLM prompt and affects question complexity
         """
         # Define difficulty-specific instructions
         difficulty_instructions = {
             "Easy": "Generate BASIC and INTRODUCTORY level questions. Focus on fundamental concepts, definitions, and simple scenarios. Questions should be suitable for entry-level candidates or those new to the field.",
             "Medium": "Generate SCENARIO-BASED and MODERATELY TECHNICAL questions. Include situational questions that require practical thinking and intermediate technical knowledge. Suitable for candidates with some experience.",
-            "Hard": "Generate DEEP TECHNICAL, SYSTEM DESIGN, and COMPLEX PROBLEM-SOLVING questions. Include architecture decisions, trade-offs, scalability concerns, failure scenarios, and advanced concepts. Suitable for senior-level candidates."
+            "Hard": "Generate DEEP TECHNICAL, SYSTEM DESIGN, and COMPLEX PROBLEM-SOLVING questions. Include architecture decisions, trade-offs, scalability concerns, and advanced concepts. Suitable for senior-level candidates."
         }
 
-        # Build resume context hint if available
-        profile_hint = ""
-        if resume_context:
-            skills = resume_context.get("skills", [])
-            technologies = resume_context.get("technologies", [])
-            if skills or technologies:
-                profile_hint = f"\nCANDIDATE PROFILE CONTEXT (use to personalize questions):\n- Skills: {', '.join(skills[:4])}\n- Technologies: {', '.join(technologies[:4])}\n"
-
-        # Build exclusion list to avoid repetition
-        exclusion_hint = ""
-        if already_asked:
-            exclusion_hint = f"\nALREADY ASKED (do NOT repeat these topics or angles):\n" + "\n".join(f"- {q}" for q in already_asked[:5]) + "\n"
-
-        prompt = f"""You are an expert {interview_type} interviewer.
+        prompt = f"""You are an expert interviewer.
 
 Generate EXACTLY {num_questions} unique {interview_type} interview questions
 for the role of {role} in {domain}.
 
 DIFFICULTY LEVEL: {difficulty}
 {difficulty_instructions.get(difficulty, difficulty_instructions["Medium"])}
-{profile_hint}{exclusion_hint}
+
 CRITICAL REQUIREMENTS:
-- Generate EXACTLY {num_questions} questions — no more, no less
-- Each question must be DISTINCT in angle, topic, and phrasing
-- Questions must feel natural and conversational, like a real interviewer asking
-- Match the difficulty level strictly
-- For Hard: include system design, trade-offs, failure handling, and scalability angles
+- Generate EXACTLY {num_questions} questions - no more, no less
+- Keep each question concise (1-2 sentences max)
+- Avoid duplicates
+- Match the difficulty level specified above
 - Output ONLY the questions, one per line
 - DO NOT add numbering, bullet points, or any prefixes
 - DO NOT add any introductory text or explanations
+
+Output format example:
+What is your experience with cloud technologies?
+How would you handle a system outage?
+Describe your approach to code reviews.
 
 Generate exactly {num_questions} questions now:
 """
@@ -10610,6 +11241,8 @@ Generate exactly {num_questions} questions now:
                             </a>
                         </div>
                     """, unsafe_allow_html=True)
+
+
 
     # UPDATED SECTIONS
 
@@ -10834,11 +11467,14 @@ Generate exactly {num_questions} questions now:
         if 'resume_questions_answered' not in st.session_state:
             st.session_state.resume_questions_answered = 0
 
-        # RESUME UPLOAD SECTION (MANDATORY) — hidden once interview starts
-        interview_active = st.session_state.get('dynamic_interview_started', False) and not st.session_state.get('dynamic_interview_completed', False)
-        interview_done = st.session_state.get('dynamic_interview_completed', False)
+        # Determine interview active state early for UI gating
+        _interview_active = (
+            st.session_state.get('dynamic_interview_started', False) or
+            st.session_state.get('dynamic_interview_completed', False)
+        )
 
-        if not interview_active and not interview_done:
+        # RESUME UPLOAD SECTION (MANDATORY) — hidden once interview is active
+        if not _interview_active:
             st.markdown("---")
             st.markdown("<h3 style='color: #00c3ff;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
 
@@ -10851,22 +11487,18 @@ Generate exactly {num_questions} questions now:
 
                 if uploaded_resume:
                     with st.spinner("Processing your resume..."):
-                        # Extract text from PDF
                         resume_text = extract_resume_text_from_pdf(uploaded_resume)
 
                         if resume_text and len(resume_text.strip()) > 50:
-                            # Analyze resume
                             with st.spinner("Analyzing your resume with AI..."):
                                 resume_context = analyze_resume_with_llm(resume_text)
 
-                            # Store in session
                             st.session_state.resume_file = uploaded_resume.name
                             st.session_state.resume_context = resume_context
                             st.session_state.interview_phase = "resume"
                             st.session_state.resume_questions_answered = 0
 
                             st.success("✅ Resume uploaded and analyzed successfully!")
-                            
                             time.sleep(1)
                             st.rerun()
                         else:
@@ -10881,46 +11513,42 @@ Generate exactly {num_questions} questions now:
                     st.session_state.dynamic_interview_completed = False
                     st.rerun()
 
-        elif interview_active or interview_done:
-            # Resume is implicitly loaded; show minimal indicator only if needed
-            pass
+            # Step 2: domain/role selection — only if resume uploaded
+            if st.session_state.resume_file is not None:
+                st.markdown("---")
+                st.markdown("<h3 style='color: #00c3ff;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
 
-        # Only show domain/role selection if resume is uploaded AND interview not yet started
-        if st.session_state.resume_file is not None and not interview_active and not interview_done:
-            st.markdown("---")
-            st.markdown("<h3 style='color: #00c3ff;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
+                st.markdown('<div class="role-selector">', unsafe_allow_html=True)
 
-            # Domain and Role selection
-            st.markdown('<div class="role-selector">', unsafe_allow_html=True)
-
-            col1, col2 = st.columns(2)
-            with col1:
-                selected_domain = st.selectbox(
-                    "Select Career Domain",
-                    options=list(COURSES_BY_CATEGORY.keys()),
-                    key="interview_domain_selection"
-                )
-
-            with col2:
-                if selected_domain:
-                    roles = list(COURSES_BY_CATEGORY[selected_domain].keys())
-                    selected_role = st.selectbox(
-                        "Select Target Role",
-                        options=roles,
-                        key="interview_role_selection"
+                col1, col2 = st.columns(2)
+                with col1:
+                    selected_domain = st.selectbox(
+                        "Select Career Domain",
+                        options=list(COURSES_BY_CATEGORY.keys()),
+                        key="interview_domain_selection"
                     )
-                else:
-                    selected_role = None
 
-            st.markdown('</div>', unsafe_allow_html=True)
-        elif interview_active or interview_done:
-            # Retrieve domain/role from session state (set when interview started)
+                with col2:
+                    if selected_domain:
+                        roles = list(COURSES_BY_CATEGORY[selected_domain].keys())
+                        selected_role = st.selectbox(
+                            "Select Target Role",
+                            options=roles,
+                            key="interview_role_selection"
+                        )
+                    else:
+                        selected_role = None
+
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                selected_domain = None
+                selected_role = None
+
+        else:
+            # Interview is active — restore domain/role from session state silently
             selected_domain = st.session_state.get('interview_domain', None)
             selected_role = st.session_state.get('interview_role', None)
-        else:
-            selected_domain = None
-            selected_role = None
-        
+
         if selected_domain and selected_role:
             # Initialize interview state
             if 'dynamic_interview_questions' not in st.session_state:
@@ -10941,10 +11569,7 @@ Generate exactly {num_questions} questions now:
                 st.session_state.dynamic_answer_submitted = False
             if 'current_interview_question_text' not in st.session_state:
                 st.session_state.current_interview_question_text = ""
-            if 'interview_domain' not in st.session_state:
-                st.session_state.interview_domain = selected_domain
-                st.session_state.interview_role = selected_role
-            elif st.session_state.interview_domain != selected_domain and not interview_active:
+            if 'interview_domain' not in st.session_state or st.session_state.interview_domain != selected_domain:
                 st.session_state.interview_domain = selected_domain
                 st.session_state.interview_role = selected_role
                 st.session_state.dynamic_interview_started = False
@@ -10961,6 +11586,9 @@ Generate exactly {num_questions} questions now:
                 st.session_state.resume_based_questions = []
             if 'generic_questions' not in st.session_state:
                 st.session_state.generic_questions = []
+            # Guard flag: ensures DB save happens EXACTLY ONCE per completed interview
+            if 'interview_result_saved' not in st.session_state:
+                st.session_state.interview_result_saved = False
 
             # Start interview setup
             if not st.session_state.dynamic_interview_started:
@@ -10992,43 +11620,35 @@ Generate exactly {num_questions} questions now:
                     timer_seconds = st.slider("Time per question (seconds):", 60, 300, 120, step=30)
 
                 if st.button("🚀 Start Mock Interview"):
-                    with st.spinner("Generating personalized questions using AI..."):
-                        # Generate resume-based questions
-                        resume_based_qs = []
+                    with st.spinner("Generating personalized questions from your profile..."):
+                        # Generate ALL questions directly from resume profile — no generic fallback pool
+                        all_questions = []
                         if st.session_state.resume_context:
-                            with st.spinner("Creating resume-based questions..."):
-                                resume_based_qs = generate_resume_based_questions(
-                                    st.session_state.resume_context,
-                                    selected_role,
-                                    selected_domain,
-                                    interview_difficulty,
-                                    num_questions=2
-                                )
+                            show_resume_scanning_animation()
+                            all_questions = generate_resume_based_questions(
+                                st.session_state.resume_context,
+                                selected_role,
+                                selected_domain,
+                                interview_difficulty,
+                                num_questions=num_questions
+                            )
+                        else:
+                            # No resume: use LLM with role/domain only
+                            all_questions = generate_interview_questions_with_llm(
+                                selected_domain,
+                                selected_role,
+                                interview_type,
+                                num_questions,
+                                interview_difficulty
+                            )
 
-                        # Generate generic questions
-                        generic_qs = []
-                        remaining_questions = num_questions - len(resume_based_qs)
-                        if remaining_questions > 0:
-                            with st.spinner("Creating interview questions..."):
-                                generic_qs = generate_interview_questions_with_llm(
-                                    selected_domain,
-                                    selected_role,
-                                    interview_type,
-                                    remaining_questions,
-                                    interview_difficulty,
-                                    resume_context=st.session_state.resume_context,
-                                    already_asked=resume_based_qs
-                                )
-
-                        # Combine all questions: resume-based first, then generic
-                        all_questions = resume_based_qs + generic_qs
                         all_questions = all_questions[:num_questions]
 
                         if all_questions:
                             # Reset ALL interview state variables properly
                             st.session_state.dynamic_interview_questions = all_questions
-                            st.session_state.resume_based_questions = resume_based_qs
-                            st.session_state.generic_questions = generic_qs
+                            st.session_state.resume_based_questions = all_questions  # all profile-based
+                            st.session_state.generic_questions = []
                             st.session_state.original_num_questions = num_questions
                             st.session_state.current_dynamic_interview_question = 0
                             st.session_state.dynamic_interview_answers = []
@@ -11041,15 +11661,14 @@ Generate exactly {num_questions} questions now:
                             st.session_state.question_timer_start = time.time()
                             st.session_state.timer_seconds = timer_seconds
                             st.session_state.interview_difficulty = interview_difficulty
-                            st.session_state.interview_phase = "resume" if resume_based_qs else "generic"
+                            st.session_state.interview_phase = "profile"
+                            st.session_state.interview_result_saved = False  # Reset save guard for new interview
 
-                            # Show resume scanning animation if resume questions exist
-                            if resume_based_qs:
-                                st.info("🎯 Starting with resume-based questions...")
-                                show_resume_scanning_animation()
-
-                            st.success("Questions generated! Starting your mock interview...")
-                            time.sleep(1)
+                            # Use an empty placeholder so the message never bleeds into the interview UI
+                            _launch_msg = st.empty()
+                            _launch_msg.success("✅ Questions ready! Launching interview...")
+                            time.sleep(0.4)
+                            _launch_msg.empty()   # Explicitly clear before rerun — prevents glitch on Q1
                             st.rerun()
                         else:
                             st.error("Failed to generate questions. Please try again.")
@@ -11437,12 +12056,14 @@ Generate exactly {num_questions} questions now:
                         formatted_feedback = format_feedback_text(feedback_text)
                         st.markdown(formatted_feedback, unsafe_allow_html=True)
 
-                # Save to database
+                # Save to database — guarded by flag so it runs EXACTLY ONCE per completed interview
                 username = st.session_state.get("username", "Guest")
                 feedback_summary = f"Strengths: {metrics_sorted[0][0]}, {metrics_sorted[1][0]}. Weaknesses: {metrics_sorted[-1][0]}, {metrics_sorted[-2][0]}."
 
-                if save_interview_result(username, selected_role, selected_domain, overall_avg, st.session_state.original_num_questions, feedback_summary):
-                    log_user_action(username, "completed_interview")
+                if not st.session_state.get('interview_result_saved', False):
+                    if save_interview_result(username, selected_role, selected_domain, overall_avg, st.session_state.original_num_questions, feedback_summary):
+                        log_user_action(username, "completed_interview")
+                        st.session_state.interview_result_saved = True  # Mark as saved — prevents re-saves on rerender
 
                 # Generate PDF report
                 st.markdown("---")
@@ -11512,437 +12133,13 @@ Generate exactly {num_questions} questions now:
                     st.session_state.resume_based_questions = []
                     st.session_state.generic_questions = []
                     st.session_state.interview_phase = "resume"
+                    st.session_state.interview_result_saved = False  # Allow save for next interview
                     st.rerun()
         else:
             st.info("Please select both a career domain and target role to start the interview practice.")
 
-    # ─────────────────────────────────────────────────────────────
-    # Section 5: My Progress Dashboard
-    # ─────────────────────────────────────────────────────────────
+    # ── Section 5: My Progress ─────────────────────────────────────────────────
     elif page == "📊 My Progress":
-        # ── helpers ──────────────────────────────────────────────
-
-        def fetch_user_interview_results(username: str) -> list[dict]:
-            """
-            Fetch all interview results for the given user from SQLite.
-            Returns a list of row dicts, or [] on any error / no data.
-            """
-            import sqlite3
-            try:
-                conn = sqlite3.connect("resume_data.db")
-                conn.row_factory = sqlite3.Row
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT username, role, domain, avg_score, total_questions,
-                           completed_on, feedback_summary
-                    FROM   interview_results
-                    WHERE  username = ?
-                    ORDER  BY completed_on ASC
-                    """,
-                    (username,),
-                )
-                rows = [dict(r) for r in cursor.fetchall()]
-                conn.close()
-                return rows
-            except Exception:
-                return []
-
-        def calculate_progress_metrics(results: list[dict]) -> dict:
-            """
-            Derive all dashboard metrics from raw result rows.
-            Returns a dict with keys used by render_progress_dashboard.
-            """
-            import statistics
-
-            if not results:
-                return {}
-
-            scores      = [r["avg_score"] for r in results if r["avg_score"] is not None]
-            total       = len(results)
-            overall_avg = round(statistics.mean(scores), 2) if scores else 0.0
-            best_score  = round(max(scores), 2)            if scores else 0.0
-
-            # Domain aggregation
-            domain_map: dict[str, list[float]] = {}
-            for r in results:
-                d = r.get("domain") or "Unknown"
-                domain_map.setdefault(d, []).append(r["avg_score"] or 0.0)
-
-            domain_stats = [
-                {
-                    "Domain":        d,
-                    "Avg Score":     round(statistics.mean(v), 2),
-                    "Attempts":      len(v),
-                    "Best Score":    round(max(v), 2),
-                }
-                for d, v in domain_map.items()
-            ]
-
-            # Role aggregation
-            role_map: dict[str, list[float]] = {}
-            for r in results:
-                role = r.get("role") or "Unknown"
-                role_map.setdefault(role, []).append(r["avg_score"] or 0.0)
-
-            role_stats = [
-                {
-                    "Role":      role,
-                    "Avg Score": round(statistics.mean(v), 2),
-                    "Attempts":  len(v),
-                }
-                for role, v in role_map.items()
-            ]
-
-            # Time series — parse date from completed_on string
-            from datetime import datetime
-            time_series = []
-            for r in results:
-                try:
-                    dt = datetime.strptime(r["completed_on"][:10], "%Y-%m-%d")
-                    time_series.append({"date": dt, "score": r["avg_score"] or 0.0, "role": r.get("role", "")})
-                except Exception:
-                    pass
-            time_series.sort(key=lambda x: x["date"])
-
-            return {
-                "total":          total,
-                "overall_avg":    overall_avg,
-                "best_score":     best_score,
-                "domain_stats":   domain_stats,
-                "role_stats":     role_stats,
-                "time_series":    time_series,
-                "raw":            results,
-            }
-
-        def render_progress_dashboard(username: str) -> None:
-            """
-            Render the full My Progress page for the given user.
-            """
-            import pandas as pd
-            import plotly.graph_objects as go
-
-            # ── brand colours (consistent with existing theme) ───
-            ACCENT   = "#00c3ff"
-            BG_CARD  = "rgba(0, 195, 255, 0.07)"
-            BORDER   = "rgba(0, 195, 255, 0.25)"
-            TEXT     = "#ffffff"
-            GRID     = "rgba(255,255,255,0.15)"
-
-            # ── page title ───────────────────────────────────────
-            st.markdown(
-                f"""
-                <div style="background:linear-gradient(135deg,#0a0e27,#1a1f3a,#2d3561);
-                            border:1px solid {BORDER};border-radius:16px;
-                            padding:24px;text-align:center;margin-bottom:28px;
-                            box-shadow:0 8px 32px rgba(0,195,255,0.12);">
-                    <h2 style="color:{TEXT};margin:0;font-size:28px;font-weight:700;">
-                        📊 My Interview Progress
-                    </h2>
-                    <p style="color:{ACCENT};margin:8px 0 0;font-size:15px;">
-                        Performance analytics for <strong>{username}</strong>
-                    </p>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            # ── fetch + compute ───────────────────────────────────
-            results = fetch_user_interview_results(username)
-
-            if not results:
-                st.markdown(
-                    f"""
-                    <div style="background:{BG_CARD};border:1px solid {BORDER};
-                                border-radius:14px;padding:40px;text-align:center;margin-top:20px;">
-                        <div style="font-size:52px;margin-bottom:16px;">🎯</div>
-                        <h3 style="color:{ACCENT};margin:0 0 10px;">No Interview History Found</h3>
-                        <p style="color:rgba(255,255,255,0.75);font-size:15px;margin:0;">
-                            Complete an <strong>AI Interview</strong> to start tracking your progress here.
-                        </p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                return
-
-            metrics = calculate_progress_metrics(results)
-
-            # ── A) OVERALL PERFORMANCE CARDS ─────────────────────
-            st.markdown(
-                f"<h3 style='color:{ACCENT};margin:20px 0 12px;'>🏅 Overall Performance</h3>",
-                unsafe_allow_html=True,
-            )
-
-            def score_color(s: float) -> str:
-                if s >= 8:   return "#00e676"
-                if s >= 6:   return "#ffd740"
-                if s >= 4:   return "#ff9100"
-                return "#ff5252"
-
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric(
-                    label="📋 Total Interviews",
-                    value=metrics["total"],
-                )
-            with col2:
-                st.metric(
-                    label="📈 Overall Avg Score",
-                    value=f"{metrics['overall_avg']:.1f} / 10",
-                )
-            with col3:
-                st.metric(
-                    label="🏆 Best Score",
-                    value=f"{metrics['best_score']:.1f} / 10",
-                )
-
-            # Score band indicator
-            band_label = (
-                "Interview Ready 🏆" if metrics["overall_avg"] >= 8.5 else
-                "Excellent 🌟"       if metrics["overall_avg"] >= 7.0 else
-                "Good 👍"            if metrics["overall_avg"] >= 5.0 else
-                "Keep Practicing 💪"
-            )
-            st.markdown(
-                f"""
-                <div style="background:{BG_CARD};border:1px solid {BORDER};
-                            border-radius:12px;padding:14px 20px;margin:16px 0;
-                            display:flex;align-items:center;gap:12px;">
-                    <span style="font-size:15px;color:rgba(255,255,255,0.7);">Current Band:</span>
-                    <span style="font-size:16px;font-weight:600;
-                                 color:{score_color(metrics['overall_avg'])};">{band_label}</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            st.markdown("---")
-
-            # ── B) DOMAIN-WISE PERFORMANCE ────────────────────────
-            st.markdown(
-                f"<h3 style='color:{ACCENT};margin:0 0 12px;'>🗂️ Domain-Wise Performance</h3>",
-                unsafe_allow_html=True,
-            )
-
-            domain_df = pd.DataFrame(metrics["domain_stats"])
-
-            col_left, col_right = st.columns([1, 1])
-
-            with col_left:
-                st.markdown(
-                    f"<p style='color:rgba(255,255,255,0.7);font-size:14px;margin-bottom:8px;'>Summary Table</p>",
-                    unsafe_allow_html=True,
-                )
-                styled_df = domain_df.sort_values("Avg Score", ascending=False).reset_index(drop=True)
-                st.dataframe(
-                    styled_df,
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "Avg Score":  st.column_config.ProgressColumn("Avg Score", min_value=0, max_value=10, format="%.1f"),
-                        "Best Score": st.column_config.NumberColumn("Best Score", format="%.1f"),
-                        "Attempts":   st.column_config.NumberColumn("Attempts"),
-                    },
-                )
-
-            with col_right:
-                fig_domain = go.Figure()
-                sorted_domain = sorted(metrics["domain_stats"], key=lambda x: x["Avg Score"], reverse=True)
-                fig_domain.add_trace(
-                    go.Bar(
-                        x=[d["Domain"] for d in sorted_domain],
-                        y=[d["Avg Score"] for d in sorted_domain],
-                        marker=dict(
-                            color=[d["Avg Score"] for d in sorted_domain],
-                            colorscale=[[0, "#1a3a5c"], [0.5, "#0066cc"], [1, ACCENT]],
-                            showscale=False,
-                            line=dict(color=ACCENT, width=1),
-                        ),
-                        text=[f"{d['Avg Score']:.1f}" for d in sorted_domain],
-                        textposition="outside",
-                        textfont=dict(color=TEXT, size=12),
-                        hovertemplate="<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>",
-                    )
-                )
-                fig_domain.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color=TEXT),
-                    margin=dict(l=10, r=10, t=30, b=60),
-                    xaxis=dict(
-                        tickfont=dict(color=TEXT, size=11),
-                        gridcolor=GRID,
-                        tickangle=-20,
-                    ),
-                    yaxis=dict(
-                        range=[0, 11],
-                        tickfont=dict(color=TEXT),
-                        gridcolor=GRID,
-                        title=dict(text="Avg Score", font=dict(color=ACCENT)),
-                    ),
-                    height=300,
-                )
-                st.plotly_chart(fig_domain, use_container_width=True)
-
-            st.markdown("---")
-
-            # ── C) PROGRESS OVER TIME ─────────────────────────────
-            st.markdown(
-                f"<h3 style='color:{ACCENT};margin:0 0 12px;'>📈 Progress Over Time</h3>",
-                unsafe_allow_html=True,
-            )
-
-            ts = metrics["time_series"]
-            if ts:
-                dates  = [t["date"].strftime("%Y-%m-%d") for t in ts]
-                scores = [t["score"] for t in ts]
-                roles  = [t["role"] for t in ts]
-
-                # Compute rolling 3-interview average for trend line
-                trend = []
-                for i in range(len(scores)):
-                    window = scores[max(0, i - 2): i + 1]
-                    trend.append(round(sum(window) / len(window), 2))
-
-                fig_time = go.Figure()
-
-                # Shaded area under score line
-                fig_time.add_trace(
-                    go.Scatter(
-                        x=dates, y=scores,
-                        fill="tozeroy",
-                        fillcolor="rgba(0,195,255,0.07)",
-                        line=dict(color=ACCENT, width=2.5),
-                        mode="lines+markers",
-                        marker=dict(size=8, color=ACCENT, line=dict(color="#ffffff", width=1.5)),
-                        name="Score",
-                        hovertemplate="<b>%{x}</b><br>Score: %{y:.1f}/10<br>Role: " +
-                                      "<br>".join(f"{r}" for r in roles) + "<extra></extra>",
-                        customdata=roles,
-                        hovertemplate="<b>%{x}</b><br>Score: %{y:.1f}/10<br>Role: %{customdata}<extra></extra>",
-                    )
-                )
-
-                # Rolling average trend
-                if len(scores) >= 3:
-                    fig_time.add_trace(
-                        go.Scatter(
-                            x=dates, y=trend,
-                            line=dict(color="#ffd740", width=1.5, dash="dot"),
-                            mode="lines",
-                            name="3-Interview Trend",
-                            hovertemplate="Trend: %{y:.1f}/10<extra></extra>",
-                        )
-                    )
-
-                # Benchmark line at 7.0
-                fig_time.add_hline(
-                    y=7.0,
-                    line=dict(color="rgba(0,230,118,0.45)", width=1.5, dash="dash"),
-                    annotation_text="Target (7.0)",
-                    annotation_font=dict(color="rgba(0,230,118,0.85)", size=11),
-                )
-
-                fig_time.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color=TEXT),
-                    margin=dict(l=10, r=10, t=20, b=40),
-                    xaxis=dict(
-                        tickfont=dict(color=TEXT, size=11),
-                        gridcolor=GRID,
-                        tickangle=-20,
-                    ),
-                    yaxis=dict(
-                        range=[0, 11],
-                        tickfont=dict(color=TEXT),
-                        gridcolor=GRID,
-                        title=dict(text="Score / 10", font=dict(color=ACCENT)),
-                    ),
-                    legend=dict(
-                        font=dict(color=TEXT, size=11),
-                        bgcolor="rgba(0,0,0,0)",
-                        orientation="h",
-                        yanchor="bottom", y=1.02,
-                    ),
-                    height=340,
-                )
-                st.plotly_chart(fig_time, use_container_width=True)
-            else:
-                st.info("Not enough time-series data to render the progress chart.")
-
-            st.markdown("---")
-
-            # ── D) ROLE BREAKDOWN ──────────────────────────────────
-            if len(metrics["role_stats"]) > 1:
-                st.markdown(
-                    f"<h3 style='color:{ACCENT};margin:0 0 12px;'>🎯 Performance by Role</h3>",
-                    unsafe_allow_html=True,
-                )
-                role_df = pd.DataFrame(metrics["role_stats"]).sort_values("Avg Score", ascending=True)
-
-                fig_role = go.Figure(
-                    go.Bar(
-                        x=role_df["Avg Score"],
-                        y=role_df["Role"],
-                        orientation="h",
-                        marker=dict(
-                            color=role_df["Avg Score"],
-                            colorscale=[[0, "#1a3a5c"], [0.5, "#0066cc"], [1, ACCENT]],
-                            showscale=False,
-                            line=dict(color=ACCENT, width=0.8),
-                        ),
-                        text=[f"{s:.1f}" for s in role_df["Avg Score"]],
-                        textposition="outside",
-                        textfont=dict(color=TEXT, size=11),
-                        hovertemplate="<b>%{y}</b><br>Avg Score: %{x:.1f}/10<extra></extra>",
-                    )
-                )
-                fig_role.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(color=TEXT),
-                    margin=dict(l=10, r=40, t=10, b=20),
-                    xaxis=dict(
-                        range=[0, 11],
-                        tickfont=dict(color=TEXT),
-                        gridcolor=GRID,
-                        title=dict(text="Avg Score", font=dict(color=ACCENT)),
-                    ),
-                    yaxis=dict(tickfont=dict(color=TEXT, size=11), gridcolor=GRID),
-                    height=max(200, len(role_df) * 45),
-                )
-                st.plotly_chart(fig_role, use_container_width=True)
-                st.markdown("---")
-
-            # ── E) RECENT HISTORY TABLE ───────────────────────────
-            st.markdown(
-                f"<h3 style='color:{ACCENT};margin:0 0 12px;'>🗒️ Interview History</h3>",
-                unsafe_allow_html=True,
-            )
-            history_df = pd.DataFrame(
-                [
-                    {
-                        "Date":       r["completed_on"][:10] if r.get("completed_on") else "—",
-                        "Role":       r.get("role", "—"),
-                        "Domain":     r.get("domain", "—"),
-                        "Score":      round(r.get("avg_score") or 0, 1),
-                        "Questions":  r.get("total_questions", "—"),
-                    }
-                    for r in reversed(results)   # most recent first
-                ]
-            )
-            st.dataframe(
-                history_df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Score": st.column_config.ProgressColumn("Score", min_value=0, max_value=10, format="%.1f"),
-                },
-            )
-
-        # ── render ────────────────────────────────────────────────
         username = st.session_state.get("username", "Guest")
         render_progress_dashboard(username)
 if tab5:
