@@ -9894,7 +9894,7 @@ with tab4:
 
     page = st.radio(
         label="Select Learning Option",
-        options=["Courses by Role", "Resume Videos", "Interview Videos",  "AI Interview Coach 🤖"],
+        options=["Courses by Role", "Resume Videos", "Interview Videos", "AI Interview Coach 🤖", "📊 My Progress"],
         horizontal=True,
         key="page_selection",
         label_visibility="collapsed"
@@ -11484,6 +11484,460 @@ Generate exactly {num_questions} questions now:
                     st.rerun()
         else:
             st.info("Please select both a career domain and target role to start the interview practice.")
+
+    # =========================================================
+    # Section 5: 📊 My Progress Dashboard
+    # =========================================================
+    elif page == "📊 My Progress":
+
+        # ── helpers ──────────────────────────────────────────
+
+        def fetch_user_interview_results(username: str):
+            """Fetch all interview_results rows for the given username."""
+            import sqlite3
+            try:
+                conn = sqlite3.connect('resume_data.db')
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT username, role, domain, avg_score, total_questions,
+                           completed_on, feedback_summary
+                    FROM interview_results
+                    WHERE username = ?
+                    ORDER BY completed_on ASC
+                """, (username,))
+                rows = cursor.fetchall()
+                conn.close()
+                columns = ["username", "role", "domain", "avg_score",
+                           "total_questions", "completed_on", "feedback_summary"]
+                import pandas as pd
+                if rows:
+                    return pd.DataFrame(rows, columns=columns)
+                return pd.DataFrame(columns=columns)
+            except Exception as exc:
+                st.error(f"Database error while fetching progress: {exc}")
+                import pandas as pd
+                return pd.DataFrame()
+
+        def calculate_progress_metrics(df):
+            """Derive summary metrics from the results DataFrame."""
+            if df.empty:
+                return None
+            metrics = {
+                "overall_avg":      round(float(df["avg_score"].mean()), 2),
+                "total_interviews": int(len(df)),
+                "best_score":       round(float(df["avg_score"].max()), 2),
+                "worst_score":      round(float(df["avg_score"].min()), 2),
+                "domain_stats":     (
+                    df.groupby("domain")["avg_score"]
+                    .agg(avg_score="mean", attempts="count")
+                    .round(2)
+                    .reset_index()
+                ),
+                "role_stats": (
+                    df.groupby("role")["avg_score"]
+                    .agg(avg_score="mean", attempts="count")
+                    .round(2)
+                    .reset_index()
+                ),
+                "time_series": df[["completed_on", "avg_score", "role", "domain"]].copy(),
+            }
+            return metrics
+
+        def _dark_chart_layout(title: str, xaxis_title: str = "", yaxis_title: str = ""):
+            """Shared Plotly layout for dark theme."""
+            return dict(
+                title=dict(text=title, x=0.5, font=dict(color="#00c3ff", size=16)),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="white"),
+                xaxis=dict(
+                    title=xaxis_title,
+                    gridcolor="rgba(255,255,255,0.1)",
+                    color="white",
+                ),
+                yaxis=dict(
+                    title=yaxis_title,
+                    gridcolor="rgba(255,255,255,0.1)",
+                    color="white",
+                ),
+                height=400,
+                margin=dict(l=40, r=40, t=60, b=60),
+            )
+
+        def render_progress_dashboard(username: str):
+            """Main entry-point: renders the full My Progress dashboard."""
+            import pandas as pd
+            import plotly.graph_objects as go
+
+            st.markdown(
+                "<h2 style='color:#00c3ff; text-align:center;'>📊 My Interview Progress</h2>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                "<p style='text-align:center; color:#aaa; margin-bottom:30px;'>"
+                "Track your performance, identify trends, and keep improving.</p>",
+                unsafe_allow_html=True,
+            )
+
+            # ── fetch data ────────────────────────────────────
+            df = fetch_user_interview_results(username)
+
+            if df.empty:
+                st.markdown(
+                    """
+                    <div style="
+                        background: linear-gradient(135deg,#0f1419,#1a2332);
+                        border: 2px solid #00c3ff44;
+                        border-radius:16px; padding:40px; text-align:center; margin:30px 0;">
+                        <div style='font-size:60px; margin-bottom:16px;'>🎯</div>
+                        <h3 style='color:#00c3ff; margin-bottom:10px;'>No Interview History Found</h3>
+                        <p style='color:#aaa; font-size:16px;'>
+                            Start an AI Interview to track your progress here.<br>
+                            Head over to <strong>AI Interview Coach 🤖</strong> to begin!
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                return
+
+            metrics = calculate_progress_metrics(df)
+            if metrics is None:
+                st.warning("Could not calculate metrics. Please try again.")
+                return
+
+            # ── A. Overall Performance Card ───────────────────
+            st.markdown("---")
+            st.markdown(
+                "<h3 style='color:#00c3ff;'>🏆 Overall Performance</h3>",
+                unsafe_allow_html=True,
+            )
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("📈 Overall Avg Score",
+                          f"{metrics['overall_avg']:.1f} / 10",
+                          delta=None)
+            with col2:
+                st.metric("🎤 Total Interviews",
+                          metrics["total_interviews"])
+            with col3:
+                st.metric("🥇 Best Score",
+                          f"{metrics['best_score']:.1f} / 10")
+            with col4:
+                # Score band label
+                avg = metrics["overall_avg"]
+                if avg >= 8:
+                    band = "🏆 Expert"
+                elif avg >= 6:
+                    band = "🌟 Proficient"
+                elif avg >= 4:
+                    band = "📚 Developing"
+                else:
+                    band = "💪 Beginner"
+                st.metric("🎖️ Skill Band", band)
+
+            # Progress bar for overall avg
+            st.markdown(
+                f"""
+                <div style="margin:20px 0 30px 0;">
+                    <div style="display:flex; justify-content:space-between; color:#aaa; font-size:13px; margin-bottom:6px;">
+                        <span>0</span><span>Overall Score Progress</span><span>10</span>
+                    </div>
+                    <div style="background:#1a2332; border-radius:8px; height:14px; overflow:hidden; border:1px solid #00c3ff33;">
+                        <div style="
+                            width:{metrics['overall_avg']*10}%;
+                            height:100%;
+                            background:linear-gradient(90deg,#00c3ff,#0066cc);
+                            border-radius:8px;
+                            transition:width 1s ease;">
+                        </div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # ── B. Domain-wise Performance ────────────────────
+            st.markdown("---")
+            st.markdown(
+                "<h3 style='color:#00c3ff;'>🗂️ Domain-wise Performance</h3>",
+                unsafe_allow_html=True,
+            )
+
+            domain_df = metrics["domain_stats"].rename(
+                columns={"avg_score": "Avg Score", "attempts": "Attempts"}
+            )
+            domain_df["Avg Score"] = domain_df["Avg Score"].round(2)
+
+            col_left, col_right = st.columns([1, 1.6])
+
+            with col_left:
+                st.markdown("**Domain Breakdown**")
+                st.dataframe(
+                    domain_df.style
+                    .background_gradient(subset=["Avg Score"], cmap="Blues")
+                    .format({"Avg Score": "{:.2f}"}),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            with col_right:
+                bar_fig = go.Figure(go.Bar(
+                    x=domain_df["domain"],
+                    y=domain_df["Avg Score"],
+                    text=domain_df["Avg Score"].apply(lambda v: f"{v:.1f}"),
+                    textposition="outside",
+                    marker=dict(
+                        color=domain_df["Avg Score"],
+                        colorscale=[[0, "#003d66"], [0.5, "#0077aa"], [1, "#00c3ff"]],
+                        showscale=False,
+                        line=dict(color="#00c3ff55", width=1),
+                    ),
+                ))
+                bar_fig.update_layout(
+                    **_dark_chart_layout(
+                        "Domain vs Avg Score",
+                        xaxis_title="Domain",
+                        yaxis_title="Avg Score",
+                    )
+                )
+                bar_fig.update_yaxes(range=[0, 11])
+                st.plotly_chart(bar_fig, use_container_width=True)
+
+            # Role breakdown (collapsible)
+            with st.expander("📋 Role-wise Breakdown", expanded=False):
+                role_df = metrics["role_stats"].rename(
+                    columns={"avg_score": "Avg Score", "attempts": "Attempts"}
+                )
+                st.dataframe(
+                    role_df.style.background_gradient(subset=["Avg Score"], cmap="Blues")
+                    .format({"Avg Score": "{:.2f}"}),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+            # ── C. Progress Over Time ─────────────────────────
+            st.markdown("---")
+            st.markdown(
+                "<h3 style='color:#00c3ff;'>📅 Progress Over Time</h3>",
+                unsafe_allow_html=True,
+            )
+
+            ts = metrics["time_series"].copy()
+            try:
+                ts["completed_on"] = pd.to_datetime(ts["completed_on"])
+                ts = ts.sort_values("completed_on")
+                ts["Interview #"] = range(1, len(ts) + 1)
+
+                line_fig = go.Figure()
+
+                # Shaded area under curve
+                line_fig.add_trace(go.Scatter(
+                    x=ts["Interview #"],
+                    y=ts["avg_score"],
+                    mode="lines+markers",
+                    name="Score",
+                    line=dict(color="#00c3ff", width=2.5),
+                    marker=dict(size=8, color="#00c3ff",
+                                line=dict(color="white", width=1.5)),
+                    fill="tozeroy",
+                    fillcolor="rgba(0,195,255,0.08)",
+                    customdata=ts[["completed_on", "role", "domain"]].values,
+                    hovertemplate=(
+                        "<b>Interview #%{x}</b><br>"
+                        "Score: %{y:.1f}/10<br>"
+                        "Date: %{customdata[0]|%Y-%m-%d}<br>"
+                        "Role: %{customdata[1]}<br>"
+                        "Domain: %{customdata[2]}<extra></extra>"
+                    ),
+                ))
+
+                # Rolling avg (if ≥3 interviews)
+                if len(ts) >= 3:
+                    ts["rolling_avg"] = ts["avg_score"].rolling(3, min_periods=1).mean()
+                    line_fig.add_trace(go.Scatter(
+                        x=ts["Interview #"],
+                        y=ts["rolling_avg"],
+                        mode="lines",
+                        name="3-Interview Avg",
+                        line=dict(color="#ff9800", width=1.5, dash="dot"),
+                    ))
+
+                line_fig.update_layout(
+                    **_dark_chart_layout(
+                        "Score Trend Across Interviews",
+                        xaxis_title="Interview Number",
+                        yaxis_title="Avg Score (out of 10)",
+                    ),
+                    legend=dict(
+                        font=dict(color="white"),
+                        bgcolor="rgba(0,0,0,0.3)",
+                    ),
+                )
+                line_fig.update_yaxes(range=[0, 11])
+                line_fig.update_xaxes(dtick=1)
+                st.plotly_chart(line_fig, use_container_width=True)
+
+            except Exception as exc:
+                st.warning(f"Could not render time-series chart: {exc}")
+
+            # ── D. Score Distribution Histogram ───────────────
+            st.markdown("---")
+            st.markdown(
+                "<h3 style='color:#00c3ff;'>📊 Score Distribution</h3>",
+                unsafe_allow_html=True,
+            )
+
+            col_h1, col_h2 = st.columns(2)
+
+            with col_h1:
+                hist_fig = go.Figure(go.Histogram(
+                    x=df["avg_score"],
+                    nbinsx=10,
+                    marker=dict(
+                        color="#00c3ff",
+                        opacity=0.75,
+                        line=dict(color="#003d66", width=1),
+                    ),
+                ))
+                hist_fig.update_layout(
+                    **_dark_chart_layout(
+                        "Score Distribution",
+                        xaxis_title="Score (0–10)",
+                        yaxis_title="Count",
+                    )
+                )
+                st.plotly_chart(hist_fig, use_container_width=True)
+
+            with col_h2:
+                # Interview attempts per domain as pie
+                pie_fig = go.Figure(go.Pie(
+                    labels=metrics["domain_stats"]["domain"],
+                    values=metrics["domain_stats"]["attempts"],
+                    hole=0.45,
+                    marker=dict(
+                        colors=["#00c3ff", "#0099cc", "#006699",
+                                "#003d66", "#00e5ff", "#80d8ff"],
+                        line=dict(color="#0a0e27", width=2),
+                    ),
+                    textfont=dict(color="white"),
+                ))
+                pie_fig.update_layout(
+                    title=dict(
+                        text="Attempts by Domain",
+                        x=0.5,
+                        font=dict(color="#00c3ff", size=16),
+                    ),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color="white"),
+                    height=400,
+                    legend=dict(font=dict(color="white")),
+                )
+                st.plotly_chart(pie_fig, use_container_width=True)
+
+            # ── E. Skill Trend Radar (if scores columns exist) ─
+            skill_cols = {"knowledge", "communication", "relevance"}
+            if skill_cols.issubset(df.columns):
+                try:
+                    avg_k = float(df["knowledge"].mean())
+                    avg_c = float(df["communication"].mean())
+                    avg_r = float(df["relevance"].mean())
+
+                    st.markdown("---")
+                    st.markdown(
+                        "<h3 style='color:#00c3ff;'>🕸️ Skill Radar</h3>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        '<div class="radar-container">',
+                        unsafe_allow_html=True,
+                    )
+
+                    radar_fig = go.Figure()
+                    radar_fig.add_trace(go.Scatterpolar(
+                        r=[avg_k, avg_c, avg_r, avg_k],
+                        theta=["Knowledge", "Communication", "Confidence", "Knowledge"],
+                        fill="toself",
+                        name="Avg Skills",
+                        line=dict(color="#00c3ff", width=2),
+                        fillcolor="rgba(0,195,255,0.2)",
+                    ))
+                    radar_fig.update_layout(
+                        polar=dict(
+                            radialaxis=dict(
+                                visible=True, range=[0, 10],
+                                tickfont=dict(color="white", size=10),
+                                gridcolor="rgba(255,255,255,0.2)",
+                            ),
+                            angularaxis=dict(
+                                tickfont=dict(color="white", size=12),
+                                gridcolor="rgba(255,255,255,0.2)",
+                            ),
+                            bgcolor="rgba(0,0,0,0)",
+                        ),
+                        showlegend=False,
+                        title=dict(
+                            text="Average Skill Performance",
+                            x=0.5,
+                            font=dict(color="#00c3ff", size=16),
+                        ),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color="white"),
+                        height=420,
+                    )
+                    st.plotly_chart(radar_fig, use_container_width=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                except Exception:
+                    pass  # skip radar gracefully if data unavailable
+
+            # ── F. Recent Interview History Table ─────────────
+            st.markdown("---")
+            st.markdown(
+                "<h3 style='color:#00c3ff;'>📋 Recent Interview History</h3>",
+                unsafe_allow_html=True,
+            )
+
+            display_df = df[["completed_on", "role", "domain",
+                             "avg_score", "total_questions",
+                             "feedback_summary"]].copy()
+            display_df = display_df.sort_values(
+                "completed_on", ascending=False
+            ).reset_index(drop=True)
+            display_df.columns = [
+                "Date", "Role", "Domain",
+                "Avg Score", "Questions", "Feedback Summary"
+            ]
+            display_df["Avg Score"] = display_df["Avg Score"].round(2)
+
+            st.dataframe(
+                display_df.style.background_gradient(
+                    subset=["Avg Score"], cmap="Blues"
+                ).format({"Avg Score": "{:.2f}"}),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            # ── G. Improvement Tips ───────────────────────────
+            if metrics["overall_avg"] < 5:
+                tip = ("💡 **Tip:** Your average score is below 5. Focus on "
+                       "structuring answers using the STAR method and revisit "
+                       "the Interview Videos section for preparation strategies.")
+            elif metrics["overall_avg"] < 7.5:
+                tip = ("💡 **Tip:** Good progress! To push beyond 7.5, work on "
+                       "adding deeper technical examples and demonstrating "
+                       "ownership in your answers.")
+            else:
+                tip = ("🏆 **Outstanding!** You're consistently scoring above 7.5. "
+                       "Keep challenging yourself with Hard difficulty interviews "
+                       "to maintain your edge.")
+
+            st.info(tip)
+
+        # ── render ────────────────────────────────────────────
+        username = st.session_state.get("username", "Guest")
+        render_progress_dashboard(username)
 if tab5:
 	with tab5:
 		import sqlite3
