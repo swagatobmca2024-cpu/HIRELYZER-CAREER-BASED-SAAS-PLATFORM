@@ -9924,7 +9924,7 @@ with tab4:
 
     page = st.radio(
         label="Select Learning Option",
-        options=["Courses by Role", "Resume Videos", "Interview Videos",  "AI Interview Coach 🤖"],
+        options=["Courses by Role", "Resume Videos", "Interview Videos", "AI Interview Coach 🤖", "📊 My Progress"],
         horizontal=True,
         key="page_selection",
         label_visibility="collapsed"
@@ -10625,6 +10625,227 @@ Generate exactly {num_questions} questions now:
                             </a>
                         </div>
                     """, unsafe_allow_html=True)
+
+    # ======================================================
+    # 📊 MY PROGRESS — helper functions (defined before page routing)
+    # ======================================================
+
+    def fetch_user_interview_results(username: str):
+        """
+        Fetch all interview results for the given username from SQLite.
+        Returns a list of row dicts, or an empty list on any error.
+        """
+        import sqlite3
+        try:
+            conn = sqlite3.connect("resume_data.db")
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT username, role, domain, avg_score, total_questions,
+                       completed_on, feedback_summary
+                FROM interview_results
+                WHERE username = ?
+                ORDER BY completed_on ASC
+                """,
+                (username,),
+            )
+            rows = [dict(row) for row in cursor.fetchall()]
+            conn.close()
+            return rows
+        except Exception:
+            return []
+
+    def calculate_progress_metrics(results):
+        """
+        Derive all dashboard metrics from raw interview result rows.
+        Safe against empty input — returns a dict with 'has_data' flag.
+        """
+        if not results:
+            return {"has_data": False}
+
+        scores = [r["avg_score"] for r in results if r.get("avg_score") is not None]
+        overall_avg = round(sum(scores) / len(scores), 2) if scores else 0.0
+        best_score = round(max(scores), 2) if scores else 0.0
+        total_interviews = len(results)
+
+        # Domain-wise aggregation
+        domain_map = {}
+        for r in results:
+            d = r.get("domain") or "Unknown"
+            if r.get("avg_score") is not None:
+                domain_map.setdefault(d, []).append(r["avg_score"])
+        domain_stats = [
+            {
+                "Domain": d,
+                "Avg Score": round(sum(v) / len(v), 2),
+                "Attempts": len(v),
+            }
+            for d, v in domain_map.items()
+        ]
+
+        # Time-series data (keep raw string dates; Plotly handles them)
+        time_series = [
+            {"date": r["completed_on"], "score": r["avg_score"]}
+            for r in results
+            if r.get("completed_on") and r.get("avg_score") is not None
+        ]
+
+        return {
+            "has_data": True,
+            "overall_avg": overall_avg,
+            "best_score": best_score,
+            "total_interviews": total_interviews,
+            "domain_stats": domain_stats,
+            "time_series": time_series,
+        }
+
+    def render_progress_dashboard(username: str):
+        """
+        Render the full My Progress dashboard for the logged-in user.
+        Sections: Overall Performance, Domain-Wise, Progress Over Time.
+        """
+        import pandas as pd
+
+        st.markdown(
+            "<h3 style='color:#00c3ff;'>📊 My Interview Progress</h3>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            "<p style='color:#ccc;'>Track your performance across all mock interview sessions.</p>",
+            unsafe_allow_html=True,
+        )
+
+        results = fetch_user_interview_results(username)
+        metrics = calculate_progress_metrics(results)
+
+        if not metrics["has_data"]:
+            st.markdown(
+                """
+                <div style="
+                    background: linear-gradient(135deg, rgba(0,195,255,0.08), rgba(0,195,255,0.03));
+                    border: 1px solid rgba(0,195,255,0.25);
+                    border-radius: 14px;
+                    padding: 40px;
+                    text-align: center;
+                    margin-top: 30px;
+                ">
+                    <div style="font-size:48px; margin-bottom:16px;">📭</div>
+                    <p style="color:#ffffff; font-size:18px; font-weight:600; margin:0 0 8px;">
+                        No interview history found.
+                    </p>
+                    <p style="color:#aaa; font-size:15px; margin:0;">
+                        Start an <b>AI Interview</b> session to begin tracking your progress.
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            return
+
+        # ── A) OVERALL PERFORMANCE CARD ─────────────────────────────
+        st.markdown("---")
+        st.markdown(
+            "<h4 style='color:#00c3ff; margin-bottom:16px;'>🏅 Overall Performance</h4>",
+            unsafe_allow_html=True,
+        )
+        col1, col2, col3 = st.columns(3)
+        col1.metric(label="🎯 Overall Avg Score", value=f"{metrics['overall_avg']:.1f} / 10")
+        col2.metric(label="📋 Total Interviews", value=str(metrics["total_interviews"]))
+        col3.metric(label="🏆 Best Score", value=f"{metrics['best_score']:.1f} / 10")
+
+        # ── B) DOMAIN-WISE PERFORMANCE ──────────────────────────────
+        domain_stats = metrics.get("domain_stats", [])
+        if domain_stats:
+            st.markdown("---")
+            st.markdown(
+                "<h4 style='color:#00c3ff; margin-bottom:12px;'>🗂️ Domain-Wise Performance</h4>",
+                unsafe_allow_html=True,
+            )
+            df_domain = pd.DataFrame(domain_stats)
+            st.dataframe(
+                df_domain.style.format({"Avg Score": "{:.2f}"}),
+                use_container_width=True,
+                hide_index=True,
+            )
+            fig_domain = go.Figure(
+                go.Bar(
+                    x=df_domain["Domain"],
+                    y=df_domain["Avg Score"],
+                    marker=dict(
+                        color=df_domain["Avg Score"],
+                        colorscale=[[0, "#003d5c"], [0.5, "#0077aa"], [1, "#00c3ff"]],
+                        showscale=False,
+                        line=dict(color="rgba(0,195,255,0.6)", width=1),
+                    ),
+                    text=[f"{v:.1f}" for v in df_domain["Avg Score"]],
+                    textposition="outside",
+                    textfont=dict(color="#ffffff", size=12),
+                    hovertemplate="<b>%{x}</b><br>Avg Score: %{y:.2f}/10<extra></extra>",
+                )
+            )
+            fig_domain.update_layout(
+                title=dict(text="Average Score by Domain", x=0.5, font=dict(color="#00c3ff", size=15)),
+                xaxis=dict(tickfont=dict(color="#ffffff", size=11), gridcolor="rgba(255,255,255,0.08)", title=None),
+                yaxis=dict(range=[0, 10.5], tickfont=dict(color="#ffffff", size=11),
+                           gridcolor="rgba(255,255,255,0.08)",
+                           title=dict(text="Avg Score", font=dict(color="#aaa", size=12))),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#ffffff"),
+                height=340,
+                margin=dict(t=50, b=40, l=40, r=20),
+            )
+            st.plotly_chart(fig_domain, use_container_width=True)
+
+        # ── C) PROGRESS OVER TIME ───────────────────────────────────
+        time_series = metrics.get("time_series", [])
+        if len(time_series) >= 2:
+            st.markdown("---")
+            st.markdown(
+                "<h4 style='color:#00c3ff; margin-bottom:12px;'>📈 Score Trend Over Time</h4>",
+                unsafe_allow_html=True,
+            )
+            dates = [t["date"] for t in time_series]
+            scores_ts = [t["score"] for t in time_series]
+            fig_line = go.Figure()
+            fig_line.add_trace(
+                go.Scatter(
+                    x=dates,
+                    y=scores_ts,
+                    mode="lines+markers",
+                    line=dict(color="#00c3ff", width=2.5),
+                    marker=dict(size=8, color="#00c3ff", line=dict(color="#ffffff", width=1.5)),
+                    fill="tozeroy",
+                    fillcolor="rgba(0,195,255,0.08)",
+                    hovertemplate="<b>%{x}</b><br>Score: %{y:.2f}/10<extra></extra>",
+                    name="Score",
+                )
+            )
+            fig_line.add_hline(
+                y=metrics["overall_avg"],
+                line_dash="dot",
+                line_color="rgba(255,215,0,0.55)",
+                annotation_text=f"  Avg {metrics['overall_avg']:.1f}",
+                annotation_font_color="#ffd700",
+                annotation_font_size=11,
+            )
+            fig_line.update_layout(
+                title=dict(text="Interview Score Over Time", x=0.5, font=dict(color="#00c3ff", size=15)),
+                xaxis=dict(tickfont=dict(color="#ffffff", size=11), gridcolor="rgba(255,255,255,0.06)", title=None),
+                yaxis=dict(range=[0, 10.5], tickfont=dict(color="#ffffff", size=11),
+                           gridcolor="rgba(255,255,255,0.06)",
+                           title=dict(text="Avg Score", font=dict(color="#aaa", size=12))),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#ffffff"),
+                height=360,
+                margin=dict(t=50, b=40, l=40, r=20),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_line, use_container_width=True)
+        elif len(time_series) == 1:
+            st.info("Complete at least 2 interviews to see your score trend over time.")
 
     # UPDATED SECTIONS
 
@@ -11509,6 +11730,10 @@ Generate exactly {num_questions} questions now:
                     st.rerun()
         else:
             st.info("Please select both a career domain and target role to start the interview practice.")
+
+    elif page == "📊 My Progress":
+        username = st.session_state.get("username", "Guest")
+        render_progress_dashboard(username)
 
 if tab5:
 	with tab5:
