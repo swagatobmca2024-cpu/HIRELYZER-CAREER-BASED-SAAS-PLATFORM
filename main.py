@@ -9297,11 +9297,20 @@ def calculate_progress_metrics(results: list) -> dict:
 
     # Timeline: date + score pairs for line chart
     timeline = []
-    for r in results:
+    for idx, r in enumerate(results):
         if r["avg_score"] is not None and r.get("completed_on"):
-            # Parse only the date portion for clean x-axis labels
-            date_str = str(r["completed_on"]).split(" ")[0]
-            timeline.append({"date": date_str, "score": r["avg_score"], "role": r.get("role", "")})
+            # Use full datetime string for label, and session index for ordering
+            completed_str = str(r["completed_on"])
+            date_str = completed_str.split(" ")[0]
+            # Build a label like "Session 1 · 2026-02-23" so same-day sessions are distinct
+            label = f"Session {idx + 1} · {date_str}"
+            timeline.append({
+                "index": idx,
+                "date": date_str,
+                "label": label,
+                "score": r["avg_score"],
+                "role": r.get("role", ""),
+            })
 
     return {
         "total_interviews": len(results),
@@ -9443,15 +9452,16 @@ def render_progress_dashboard(username: str):
         st.markdown("### 📈 Progress Over Time")
 
         timeline = metrics["timeline"]
-        dates = [t["date"] for t in timeline]
+        labels = [t["label"] for t in timeline]
         scores = [t["score"] for t in timeline]
         roles = [t["role"] for t in timeline]
+        dates = [t["date"] for t in timeline]
 
         line_fig = go.Figure()
 
         # Shaded area under line
         line_fig.add_trace(go.Scatter(
-            x=dates,
+            x=labels,
             y=scores,
             mode="lines+markers+text",
             name="Score",
@@ -9467,8 +9477,8 @@ def render_progress_dashboard(username: str):
             text=[f"{s:.1f}" for s in scores],
             textposition="top center",
             textfont=dict(color="#ffffff", size=11),
-            customdata=roles,
-            hovertemplate="<b>Date:</b> %{x}<br><b>Score:</b> %{y:.1f}/10<br><b>Role:</b> %{customdata}<extra></extra>",
+            customdata=list(zip(roles, dates)),
+            hovertemplate="<b>%{x}</b><br><b>Score:</b> %{y:.1f}/10<br><b>Role:</b> %{customdata[0]}<br><b>Date:</b> %{customdata[1]}<extra></extra>",
         ))
 
         # Average reference line
@@ -9485,9 +9495,11 @@ def render_progress_dashboard(username: str):
         line_fig.update_layout(
             title=dict(text="Interview Score Trend", x=0.5, font=dict(color="#00c3ff", size=15)),
             xaxis=dict(
-                tickfont=dict(color="#ffffff", size=11),
+                tickfont=dict(color="#ffffff", size=10),
+                tickangle=-35,
                 gridcolor="rgba(255,255,255,0.06)",
                 title=None,
+                type="category",   # Treat labels as categories, never collapse same-day duplicates
             ),
             yaxis=dict(
                 range=[0, 11],
@@ -9498,8 +9510,8 @@ def render_progress_dashboard(username: str):
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
             font=dict(color="#ffffff"),
-            height=360,
-            margin=dict(t=50, b=40, l=50, r=30),
+            height=400,
+            margin=dict(t=50, b=100, l=50, r=30),
             showlegend=False,
         )
         st.plotly_chart(line_fig, use_container_width=True)
@@ -9588,15 +9600,49 @@ def render_progress_dashboard(username: str):
     st.markdown("### 🗂️ Recent Interview Sessions")
     recent_df = pd.DataFrame([
         {
+            "Session": f"#{len(results) - i}",
             "Date": str(r.get("completed_on", "")).split(" ")[0],
+            "Time": str(r.get("completed_on", "")).split(" ")[1][:5] if " " in str(r.get("completed_on", "")) else "—",
             "Role": r.get("role", "—"),
             "Domain": r.get("domain", "—"),
             "Score": f"{r['avg_score']:.1f}/10" if r.get("avg_score") is not None else "—",
             "Questions": r.get("total_questions", "—"),
         }
-        for r in reversed(results)   # Most recent first
+        for i, r in enumerate(reversed(results))   # Most recent first
     ])
     st.dataframe(recent_df, use_container_width=True, hide_index=True)
+
+    # ── Cleanup Tool for Existing Duplicate Records ───────────────────────────
+    with st.expander("🔧 Fix Duplicate Records (if count looks wrong)"):
+        st.markdown("""
+            <p style="color: rgba(255,255,255,0.7); font-size: 13px;">
+            If your interview count is higher than expected, duplicate records may exist from a previous
+            version of the app. Click below to keep only the <b>most recent unique record</b> per session
+            (de-duplicated by role + domain + date).
+            </p>
+        """, unsafe_allow_html=True)
+        if st.button("🧹 Remove Duplicate Records", key="dedup_btn"):
+            try:
+                conn = sqlite3.connect('resume_data.db')
+                cursor = conn.cursor()
+                # Keep only the row with the highest id for each (username, role, domain, date) group
+                cursor.execute("""
+                    DELETE FROM interview_results
+                    WHERE id NOT IN (
+                        SELECT MAX(id)
+                        FROM interview_results
+                        WHERE username = ?
+                        GROUP BY role, domain, date(completed_on)
+                    )
+                    AND username = ?
+                """, (username, username))
+                deleted = cursor.rowcount
+                conn.commit()
+                conn.close()
+                st.success(f"✅ Removed {deleted} duplicate record(s). Your counts are now accurate.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Cleanup failed: {e}")
 
 
 # ======================================================
@@ -11339,6 +11385,9 @@ Generate exactly {num_questions} questions now:
                 st.session_state.resume_based_questions = []
             if 'generic_questions' not in st.session_state:
                 st.session_state.generic_questions = []
+            # Guard flag: ensures DB save happens EXACTLY ONCE per completed interview
+            if 'interview_result_saved' not in st.session_state:
+                st.session_state.interview_result_saved = False
 
             # Start interview setup
             if not st.session_state.dynamic_interview_started:
@@ -11412,6 +11461,7 @@ Generate exactly {num_questions} questions now:
                             st.session_state.timer_seconds = timer_seconds
                             st.session_state.interview_difficulty = interview_difficulty
                             st.session_state.interview_phase = "profile"
+                            st.session_state.interview_result_saved = False  # Reset save guard for new interview
 
                             st.success("Profile-based questions ready! Starting your mock interview...")
                             time.sleep(1)
@@ -11802,12 +11852,14 @@ Generate exactly {num_questions} questions now:
                         formatted_feedback = format_feedback_text(feedback_text)
                         st.markdown(formatted_feedback, unsafe_allow_html=True)
 
-                # Save to database
+                # Save to database — guarded by flag so it runs EXACTLY ONCE per completed interview
                 username = st.session_state.get("username", "Guest")
                 feedback_summary = f"Strengths: {metrics_sorted[0][0]}, {metrics_sorted[1][0]}. Weaknesses: {metrics_sorted[-1][0]}, {metrics_sorted[-2][0]}."
 
-                if save_interview_result(username, selected_role, selected_domain, overall_avg, st.session_state.original_num_questions, feedback_summary):
-                    log_user_action(username, "completed_interview")
+                if not st.session_state.get('interview_result_saved', False):
+                    if save_interview_result(username, selected_role, selected_domain, overall_avg, st.session_state.original_num_questions, feedback_summary):
+                        log_user_action(username, "completed_interview")
+                        st.session_state.interview_result_saved = True  # Mark as saved — prevents re-saves on rerender
 
                 # Generate PDF report
                 st.markdown("---")
@@ -11877,6 +11929,7 @@ Generate exactly {num_questions} questions now:
                     st.session_state.resume_based_questions = []
                     st.session_state.generic_questions = []
                     st.session_state.interview_phase = "resume"
+                    st.session_state.interview_result_saved = False  # Allow save for next interview
                     st.rerun()
         else:
             st.info("Please select both a career domain and target role to start the interview practice.")
