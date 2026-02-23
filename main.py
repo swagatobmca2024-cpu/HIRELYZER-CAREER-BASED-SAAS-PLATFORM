@@ -11510,7 +11510,7 @@ Generate exactly {num_questions} questions now:
                     st.session_state.interview_phase = "resume"
                     st.rerun()
         else:
-            st.info("Please select both a career domain and target role to start the interview practice."
+            st.info("Please select both a career domain and target role to start the interview practice.")
 
 if tab5:
 	with tab5:
