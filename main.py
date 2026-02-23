@@ -9261,388 +9261,589 @@ def fetch_user_interview_results(username: str) -> list:
 
 def calculate_progress_metrics(results: list) -> dict:
     """
-    Compute summary metrics from a list of interview result dicts.
-    Returns a metrics dict safe to use even when results list is empty.
+    Compute summary metrics from interview result dicts.
+    All scores are rounded to 1 decimal place for consistency everywhere.
     """
     if not results:
         return {
             "total_interviews": 0,
             "overall_avg": 0.0,
             "best_score": 0.0,
+            "worst_score": 0.0,
             "domain_stats": {},
+            "role_stats": {},
             "timeline": [],
         }
 
     scores = [r["avg_score"] for r in results if r["avg_score"] is not None]
-    overall_avg = round(sum(scores) / len(scores), 2) if scores else 0.0
-    best_score = round(max(scores), 2) if scores else 0.0
+    # Round to 1dp everywhere — prevents "8.39 vs 8.4" inconsistency across widgets
+    overall_avg = round(sum(scores) / len(scores), 1) if scores else 0.0
+    best_score  = round(max(scores), 1) if scores else 0.0
+    worst_score = round(min(scores), 1) if scores else 0.0
 
     # Domain-wise aggregation
     domain_map = {}
     for r in results:
         d = r.get("domain") or "Unknown"
-        if d not in domain_map:
-            domain_map[d] = {"scores": [], "attempts": 0}
+        domain_map.setdefault(d, {"scores": [], "attempts": 0})
         if r["avg_score"] is not None:
             domain_map[d]["scores"].append(r["avg_score"])
         domain_map[d]["attempts"] += 1
 
     domain_stats = {
-        domain: {
-            "avg_score": round(sum(v["scores"]) / len(v["scores"]), 2) if v["scores"] else 0.0,
-            "attempts": v["attempts"],
+        d: {
+            "avg_score": round(sum(v["scores"]) / len(v["scores"]), 1) if v["scores"] else 0.0,
+            "attempts":  v["attempts"],
         }
-        for domain, v in domain_map.items()
+        for d, v in domain_map.items()
     }
 
-    # Timeline: date + score pairs for line chart
+    # Role-wise aggregation
+    role_map = {}
+    for r in results:
+        rl = r.get("role") or "Unknown"
+        role_map.setdefault(rl, {"scores": [], "attempts": 0})
+        if r["avg_score"] is not None:
+            role_map[rl]["scores"].append(r["avg_score"])
+        role_map[rl]["attempts"] += 1
+
+    role_stats = {
+        rl: {
+            "avg_score": round(sum(v["scores"]) / len(v["scores"]), 1) if v["scores"] else 0.0,
+            "attempts":  v["attempts"],
+        }
+        for rl, v in role_map.items()
+    }
+
+    # Timeline — session-indexed so same-day dupes are always distinct points
     timeline = []
     for idx, r in enumerate(results):
         if r["avg_score"] is not None and r.get("completed_on"):
-            # Use full datetime string for label, and session index for ordering
             completed_str = str(r["completed_on"])
             date_str = completed_str.split(" ")[0]
-            # Build a label like "Session 1 · 2026-02-23" so same-day sessions are distinct
-            label = f"Session {idx + 1} · {date_str}"
+            label = f"#{idx + 1} · {date_str}"
             timeline.append({
                 "index": idx,
-                "date": date_str,
+                "date":  date_str,
                 "label": label,
-                "score": r["avg_score"],
-                "role": r.get("role", ""),
+                "score": round(r["avg_score"], 1),
+                "role":  r.get("role", ""),
             })
 
     return {
         "total_interviews": len(results),
-        "overall_avg": overall_avg,
-        "best_score": best_score,
+        "overall_avg":  overall_avg,
+        "best_score":   best_score,
+        "worst_score":  worst_score,
         "domain_stats": domain_stats,
-        "timeline": timeline,
+        "role_stats":   role_stats,
+        "timeline":     timeline,
     }
+
+
+def _score_color(score: float) -> str:
+    """Return a hex colour that grades from red → amber → green based on 0-10 score."""
+    if score >= 8.0:
+        return "#00e676"   # vivid green
+    elif score >= 6.5:
+        return "#00c3ff"   # brand cyan
+    elif score >= 5.0:
+        return "#ffd740"   # amber
+    else:
+        return "#ff5252"   # red
+
+
+def _score_badge(score: float) -> str:
+    """Return emoji badge for a score."""
+    if score >= 8.5:   return "🏆"
+    elif score >= 7.0: return "🌟"
+    elif score >= 5.0: return "👍"
+    else:              return "💪"
 
 
 def render_progress_dashboard(username: str):
     """
-    Render the full My Progress dashboard for the given username.
-    Modular, safe, and consistent with the existing Tab 4 theme.
+    Fully redesigned My Progress dashboard — rich, visually consistent,
+    dark-theme cards + charts aligned with the app's #00c3ff palette.
+    All scores displayed at 1 d.p. everywhere for consistency.
     """
-    # ── Header ────────────────────────────────────────────────────────────────
+
+    # ── Inject dashboard-specific CSS ─────────────────────────────────────────
     st.markdown("""
-        <div style="background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #2d3561 100%);
-                    border: 1px solid rgba(0, 195, 255, 0.3);
-                    border-radius: 16px; padding: 22px; text-align: center; margin-bottom: 28px;
-                    box-shadow: 0 8px 32px rgba(0, 195, 255, 0.12);">
-            <h2 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700;">
-                📊 My Interview Progress
-            </h2>
-            <p style="color: rgba(255,255,255,0.65); margin: 8px 0 0 0; font-size: 14px;">
-                Track your performance across all mock interview sessions
-            </p>
+    <style>
+    .prog-header {
+        background: linear-gradient(135deg, #060b1e 0%, #0d1635 40%, #162152 70%, #1e2f6e 100%);
+        border: 1px solid rgba(0,195,255,0.35);
+        border-radius: 20px;
+        padding: 28px 24px 22px 24px;
+        text-align: center;
+        margin-bottom: 30px;
+        box-shadow: 0 8px 40px rgba(0,195,255,0.14), inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    .prog-header h1 {
+        margin: 0 0 6px 0;
+        font-size: 28px;
+        font-weight: 700;
+        color: #ffffff;
+        letter-spacing: -0.5px;
+    }
+    .prog-header p {
+        margin: 0;
+        color: rgba(255,255,255,0.55);
+        font-size: 14px;
+    }
+
+    /* KPI tiles */
+    .kpi-row { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+    .kpi-tile {
+        flex: 1;
+        min-width: 160px;
+        background: linear-gradient(135deg, #0d1635 0%, #162050 100%);
+        border: 1px solid rgba(0,195,255,0.25);
+        border-radius: 16px;
+        padding: 20px 18px 18px 18px;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+        transition: transform 0.2s ease;
+    }
+    .kpi-tile:hover { transform: translateY(-3px); }
+    .kpi-icon  { font-size: 26px; margin-bottom: 6px; }
+    .kpi-label { font-size: 11px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+    .kpi-value { font-size: 30px; font-weight: 700; color: #00c3ff; line-height: 1; }
+    .kpi-sub   { font-size: 11px; color: rgba(255,255,255,0.35); margin-top: 4px; }
+
+    /* Section headings */
+    .prog-section {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 30px 0 14px 0;
+    }
+    .prog-section-icon { font-size: 20px; }
+    .prog-section-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #00c3ff;
+        letter-spacing: -0.3px;
+    }
+
+    /* Chart card wrapper */
+    .chart-card {
+        background: linear-gradient(135deg, #0a0f26 0%, #111932 100%);
+        border: 1px solid rgba(0,195,255,0.18);
+        border-radius: 16px;
+        padding: 6px 6px 0 6px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+    }
+
+    /* Session row cards */
+    .session-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: linear-gradient(135deg, #0d1635 0%, #162050 100%);
+        border: 1px solid rgba(0,195,255,0.15);
+        border-radius: 12px;
+        padding: 14px 18px;
+        margin-bottom: 10px;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .session-card:hover { border-color: rgba(0,195,255,0.45); transform: translateX(3px); }
+    .session-num  { font-size: 13px; color: rgba(255,255,255,0.4); min-width: 36px; }
+    .session-role { font-size: 14px; font-weight: 600; color: #ffffff; flex: 1; padding: 0 12px; }
+    .session-meta { font-size: 12px; color: rgba(255,255,255,0.45); min-width: 90px; text-align: right; }
+    .session-score { font-size: 18px; font-weight: 700; min-width: 68px; text-align: right; }
+
+    /* Progress bar for score */
+    .score-bar-wrap { height: 6px; background: rgba(255,255,255,0.08); border-radius: 4px; margin-top: 3px; overflow: hidden; }
+    .score-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Header ─────────────────────────────────────────────────────────────────
+    st.markdown("""
+        <div class="prog-header">
+            <h1>📊 My Interview Progress</h1>
+            <p>Track your scores, growth, and performance trends across every mock interview session</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Ensure DB table exists before querying
     create_interview_database()
-
     results = fetch_user_interview_results(username)
     metrics = calculate_progress_metrics(results)
 
     # ── Empty State ────────────────────────────────────────────────────────────
     if metrics["total_interviews"] == 0:
         st.markdown("""
-            <div style="text-align: center; padding: 60px 20px;
-                        background: linear-gradient(135deg, rgba(0,195,255,0.05), rgba(0,195,255,0.1));
-                        border: 1px dashed rgba(0,195,255,0.3); border-radius: 16px; margin-top: 20px;">
-                <div style="font-size: 56px; margin-bottom: 16px;">🎯</div>
-                <h3 style="color: #00c3ff; margin: 0 0 10px 0;">No Interview History Found</h3>
-                <p style="color: rgba(255,255,255,0.6); font-size: 15px; max-width: 420px; margin: 0 auto;">
-                    Complete your first AI Interview session to start tracking your progress, scores, and growth over time.
+            <div style="text-align:center; padding:64px 24px;
+                        background:linear-gradient(135deg,rgba(0,195,255,0.04),rgba(0,195,255,0.09));
+                        border:1.5px dashed rgba(0,195,255,0.25); border-radius:20px; margin-top:16px;">
+                <div style="font-size:60px; margin-bottom:18px;">🎯</div>
+                <h3 style="color:#00c3ff; margin:0 0 10px 0; font-size:20px;">No Interview History Yet</h3>
+                <p style="color:rgba(255,255,255,0.55); font-size:14px; max-width:380px; margin:0 auto; line-height:1.6;">
+                    Complete an AI Interview session to start seeing your scores,
+                    trends, and domain performance tracked here automatically.
                 </p>
             </div>
         """, unsafe_allow_html=True)
         return
 
-    # ── A) Overall Performance Cards ──────────────────────────────────────────
-    st.markdown("### 🏅 Overall Performance")
-    col1, col2, col3 = st.columns(3)
+    overall      = metrics["overall_avg"]
+    best         = metrics["best_score"]
+    worst        = metrics["worst_score"]
+    total        = metrics["total_interviews"]
+    badge        = _score_badge(overall)
+    score_col    = _score_color(overall)
 
-    with col1:
-        st.metric(
-            label="🎯 Overall Average Score",
-            value=f"{metrics['overall_avg']:.1f} / 10",
-            delta=None
-        )
-    with col2:
-        st.metric(
-            label="📋 Total Interviews Taken",
-            value=str(metrics["total_interviews"]),
-            delta=None
-        )
-    with col3:
-        st.metric(
-            label="🏆 Best Score Achieved",
-            value=f"{metrics['best_score']:.1f} / 10",
-            delta=None
-        )
+    # ── KPI Row ────────────────────────────────────────────────────────────────
+    st.markdown("""<div class="prog-section">
+        <span class="prog-section-icon">🏅</span>
+        <span class="prog-section-title">Overall Performance</span></div>""",
+        unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="kpi-row">
+        <div class="kpi-tile">
+            <div class="kpi-icon">🎯</div>
+            <div class="kpi-label">Overall Average</div>
+            <div class="kpi-value" style="color:{score_col}">{overall:.1f}</div>
+            <div class="kpi-sub">out of 10</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-icon">📋</div>
+            <div class="kpi-label">Interviews Taken</div>
+            <div class="kpi-value">{total}</div>
+            <div class="kpi-sub">sessions</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-icon">🏆</div>
+            <div class="kpi-label">Best Score</div>
+            <div class="kpi-value" style="color:#00e676">{best:.1f}</div>
+            <div class="kpi-sub">out of 10</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-icon">📉</div>
+            <div class="kpi-label">Lowest Score</div>
+            <div class="kpi-value" style="color:{_score_color(worst)}">{worst:.1f}</div>
+            <div class="kpi-sub">out of 10</div>
+        </div>
+        <div class="kpi-tile">
+            <div class="kpi-icon">{badge}</div>
+            <div class="kpi-label">Current Badge</div>
+            <div class="kpi-value" style="font-size:16px; color:#ffffff; padding-top:4px;">
+                {"Interview Ready" if overall >= 8.5 else "Excellent" if overall >= 7.0 else "Good" if overall >= 5.0 else "Keep Practicing"}
+            </div>
+            <div class="kpi-sub">performance tier</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # ── B) Domain-Wise Performance ─────────────────────────────────────────────
-    if metrics["domain_stats"]:
-        st.markdown("### 🌐 Domain-Wise Performance")
+    # ── Score Trend + Domain Charts side-by-side ───────────────────────────────
+    timeline = metrics["timeline"]
 
-        domain_df = pd.DataFrame([
-            {
-                "Domain": domain,
-                "Avg Score (/ 10)": stats["avg_score"],
-                "Attempts": stats["attempts"],
-            }
-            for domain, stats in metrics["domain_stats"].items()
-        ]).sort_values("Avg Score (/ 10)", ascending=False).reset_index(drop=True)
+    col_left, col_right = st.columns([3, 2], gap="medium")
 
-        # Styled dataframe
-        st.dataframe(
-            domain_df,
-            use_container_width=True,
-            hide_index=True,
-        )
+    # LEFT: Score over time line chart
+    with col_left:
+        st.markdown("""<div class="prog-section">
+            <span class="prog-section-icon">📈</span>
+            <span class="prog-section-title">Score Trend</span></div>""",
+            unsafe_allow_html=True)
 
-        # Bar chart
-        bar_fig = go.Figure(
-            go.Bar(
-                x=domain_df["Domain"],
-                y=domain_df["Avg Score (/ 10)"],
+        if timeline:
+            labels = [t["label"] for t in timeline]
+            scores = [t["score"] for t in timeline]
+            roles  = [t["role"]  for t in timeline]
+            dates  = [t["date"]  for t in timeline]
+
+            line_fig = go.Figure()
+
+            # Gradient fill area
+            line_fig.add_trace(go.Scatter(
+                x=labels, y=scores,
+                mode="lines+markers",
+                line=dict(color="#00c3ff", width=3, shape="spline"),
                 marker=dict(
-                    color=domain_df["Avg Score (/ 10)"],
-                    colorscale=[[0, "#003d5c"], [0.5, "#0066cc"], [1, "#00c3ff"]],
-                    showscale=False,
-                    line=dict(color="rgba(0,195,255,0.6)", width=1),
+                    color=[_score_color(s) for s in scores],
+                    size=11,
+                    line=dict(color="#0a0f26", width=2),
+                    symbol="circle",
                 ),
-                text=[f"{v:.1f}" for v in domain_df["Avg Score (/ 10)"]],
-                textposition="outside",
-                textfont=dict(color="#ffffff", size=12),
-                hovertemplate="<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>",
+                fill="tozeroy",
+                fillcolor="rgba(0,195,255,0.07)",
+                customdata=list(zip(roles, dates, scores)),
+                hovertemplate=(
+                    "<b>%{customdata[0]}</b><br>"
+                    "Score: <b>%{customdata[2]:.1f}/10</b><br>"
+                    "Date: %{customdata[1]}<extra></extra>"
+                ),
+                name="Score",
+            ))
+
+            # Score labels on markers
+            line_fig.add_trace(go.Scatter(
+                x=labels, y=scores,
+                mode="text",
+                text=[f"<b>{s:.1f}</b>" for s in scores],
+                textposition="top center",
+                textfont=dict(color="#ffffff", size=11),
+                hoverinfo="skip",
+                showlegend=False,
+            ))
+
+            # Average dotted line
+            line_fig.add_hline(
+                y=overall,
+                line_dash="dot",
+                line_color="rgba(255,215,0,0.55)",
+                annotation_text=f"Avg {overall:.1f}",
+                annotation_position="top right",
+                annotation_font=dict(color="rgba(255,215,0,0.9)", size=11),
             )
-        )
-        bar_fig.update_layout(
-            title=dict(text="Average Score by Domain", x=0.5, font=dict(color="#00c3ff", size=15)),
-            xaxis=dict(
-                tickfont=dict(color="#ffffff", size=11),
-                gridcolor="rgba(255,255,255,0.06)",
-                title=None,
-            ),
-            yaxis=dict(
-                range=[0, 10.5],
-                tickfont=dict(color="#ffffff", size=11),
-                gridcolor="rgba(255,255,255,0.08)",
-                title=dict(text="Avg Score", font=dict(color="#aaaaaa", size=12)),
-            ),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff"),
-            height=360,
-            margin=dict(t=50, b=40, l=50, r=30),
-        )
-        st.plotly_chart(bar_fig, use_container_width=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── C) Progress Over Time (Line Chart) ────────────────────────────────────
-    if len(metrics["timeline"]) >= 1:
-        st.markdown("### 📈 Progress Over Time")
-
-        timeline = metrics["timeline"]
-        labels = [t["label"] for t in timeline]
-        scores = [t["score"] for t in timeline]
-        roles = [t["role"] for t in timeline]
-        dates = [t["date"] for t in timeline]
-
-        line_fig = go.Figure()
-
-        # Shaded area under line
-        line_fig.add_trace(go.Scatter(
-            x=labels,
-            y=scores,
-            mode="lines+markers+text",
-            name="Score",
-            line=dict(color="#00c3ff", width=3, shape="spline"),
-            marker=dict(
-                color="#00c3ff",
-                size=10,
-                line=dict(color="#ffffff", width=2),
-                symbol="circle",
-            ),
-            fill="tozeroy",
-            fillcolor="rgba(0, 195, 255, 0.08)",
-            text=[f"{s:.1f}" for s in scores],
-            textposition="top center",
-            textfont=dict(color="#ffffff", size=11),
-            customdata=list(zip(roles, dates)),
-            hovertemplate="<b>%{x}</b><br><b>Score:</b> %{y:.1f}/10<br><b>Role:</b> %{customdata[0]}<br><b>Date:</b> %{customdata[1]}<extra></extra>",
-        ))
-
-        # Average reference line
-        avg_val = metrics["overall_avg"]
-        line_fig.add_hline(
-            y=avg_val,
-            line_dash="dot",
-            line_color="rgba(255,200,0,0.5)",
-            annotation_text=f"Overall Avg: {avg_val:.1f}",
-            annotation_position="top right",
-            annotation_font=dict(color="rgba(255,200,0,0.9)", size=11),
-        )
-
-        line_fig.update_layout(
-            title=dict(text="Interview Score Trend", x=0.5, font=dict(color="#00c3ff", size=15)),
-            xaxis=dict(
-                tickfont=dict(color="#ffffff", size=10),
-                tickangle=-35,
-                gridcolor="rgba(255,255,255,0.06)",
-                title=None,
-                type="category",   # Treat labels as categories, never collapse same-day duplicates
-            ),
-            yaxis=dict(
-                range=[0, 11],
-                tickfont=dict(color="#ffffff", size=11),
-                gridcolor="rgba(255,255,255,0.08)",
-                title=dict(text="Avg Score", font=dict(color="#aaaaaa", size=12)),
-            ),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#ffffff"),
-            height=400,
-            margin=dict(t=50, b=100, l=50, r=30),
-            showlegend=False,
-        )
-        st.plotly_chart(line_fig, use_container_width=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── D) Skill Trend Radar (if multi-interview data exists) ─────────────────
-    # The interview_results table stores avg_score (composite) per session.
-    # If role-level breakdown is available (≥ 3 unique roles), approximate
-    # skill categories from domain patterns for a meaningful radar view.
-    if len(results) >= 2:
-        st.markdown("### 🕸️ Performance Profile")
-
-        # Build pseudo-skill scores by bucketing role families
-        skill_buckets = {
-            "Technical Depth": [],
-            "Communication": [],
-            "Problem Solving": [],
-            "Domain Knowledge": [],
-            "Consistency": [],
-        }
-
-        for r in results:
-            s = r.get("avg_score") or 0
-            # Simple heuristic: distribute score slightly differently per domain
-            domain_lower = (r.get("domain") or "").lower()
-            role_lower = (r.get("role") or "").lower()
-
-            tech_boost = 0.8 if any(k in domain_lower for k in ["data", "cloud", "cyber", "software"]) else 0.5
-            comm_boost = 0.9 if any(k in role_lower for k in ["manager", "analyst", "ux", "product"]) else 0.6
-
-            skill_buckets["Technical Depth"].append(min(10, s * tech_boost + s * 0.2))
-            skill_buckets["Communication"].append(min(10, s * comm_boost + s * 0.1))
-            skill_buckets["Problem Solving"].append(min(10, s * 0.75 + s * 0.1))
-            skill_buckets["Domain Knowledge"].append(min(10, s * 0.7 + s * 0.15))
-            skill_buckets["Consistency"].append(min(10, s * 0.85))
-
-        radar_skills = {
-            k: round(sum(v) / len(v), 1) if v else 0.0
-            for k, v in skill_buckets.items()
-        }
-
-        radar_labels = list(radar_skills.keys())
-        radar_values = list(radar_skills.values())
-
-        radar_fig = go.Figure()
-        radar_fig.add_trace(go.Scatterpolar(
-            r=radar_values,
-            theta=radar_labels,
-            fill="toself",
-            name="Skill Profile",
-            line=dict(color="#00c3ff", width=2),
-            fillcolor="rgba(0, 195, 255, 0.18)",
-            hovertemplate="<b>%{theta}</b><br>Score: %{r:.1f}/10<extra></extra>",
-        ))
-        radar_fig.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 10],
-                    tickfont=dict(color="white", size=9),
-                    gridcolor="rgba(255,255,255,0.15)",
+            line_fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#ffffff"),
+                height=320,
+                margin=dict(t=20, b=90, l=44, r=20),
+                showlegend=False,
+                xaxis=dict(
+                    type="category",
+                    tickfont=dict(color="rgba(255,255,255,0.6)", size=10),
+                    tickangle=-38,
+                    gridcolor="rgba(255,255,255,0.05)",
+                    title=None,
                 ),
-                angularaxis=dict(
-                    tickfont=dict(color="white", size=12),
-                    gridcolor="rgba(255,255,255,0.15)",
+                yaxis=dict(
+                    range=[0, 11.5],
+                    tickfont=dict(color="rgba(255,255,255,0.6)", size=10),
+                    gridcolor="rgba(255,255,255,0.07)",
+                    title=dict(text="Score /10", font=dict(color="rgba(255,255,255,0.4)", size=11)),
                 ),
-                bgcolor="rgba(0,0,0,0)",
-            ),
-            showlegend=False,
-            title=dict(text="Estimated Skill Profile", x=0.5, font=dict(color="#00c3ff", size=15)),
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="white"),
-            height=400,
-        )
-        st.plotly_chart(radar_fig, use_container_width=True)
+            )
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.plotly_chart(line_fig, use_container_width=True, config={"displayModeBar": False})
+            st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.info("Complete at least one interview to see the score trend.")
 
-        st.markdown("""
-            <p style="color: rgba(255,255,255,0.45); font-size: 12px; text-align: center; margin-top: -10px;">
-                ℹ️ Skill profile is estimated from your interview scores and may not reflect individual dimension scores.
-            </p>
+    # RIGHT: Domain horizontal bar chart
+    with col_right:
+        st.markdown("""<div class="prog-section">
+            <span class="prog-section-icon">🌐</span>
+            <span class="prog-section-title">By Domain</span></div>""",
+            unsafe_allow_html=True)
+
+        if metrics["domain_stats"]:
+            ds = metrics["domain_stats"]
+            d_names  = list(ds.keys())
+            d_scores = [ds[d]["avg_score"] for d in d_names]
+            d_tries  = [ds[d]["attempts"]  for d in d_names]
+
+            # Shorten long domain names for display
+            d_labels = [n[:28] + "…" if len(n) > 28 else n for n in d_names]
+
+            hbar_fig = go.Figure(go.Bar(
+                y=d_labels,
+                x=d_scores,
+                orientation="h",
+                marker=dict(
+                    color=[_score_color(s) for s in d_scores],
+                    line=dict(color="rgba(0,0,0,0)", width=0),
+                    opacity=0.85,
+                ),
+                text=[f"<b>{s:.1f}</b>" for s in d_scores],
+                textposition="inside",
+                textfont=dict(color="#000000", size=12, family="Inter, sans-serif"),
+                customdata=list(zip(d_names, d_scores, d_tries)),
+                hovertemplate=(
+                    "<b>%{customdata[0]}</b><br>"
+                    "Avg Score: <b>%{customdata[1]:.1f}/10</b><br>"
+                    "Attempts: %{customdata[2]}<extra></extra>"
+                ),
+            ))
+            hbar_fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#ffffff"),
+                height=320,
+                margin=dict(t=20, b=30, l=10, r=30),
+                showlegend=False,
+                xaxis=dict(
+                    range=[0, 10.5],
+                    tickfont=dict(color="rgba(255,255,255,0.5)", size=10),
+                    gridcolor="rgba(255,255,255,0.07)",
+                    title=dict(text="Avg Score /10", font=dict(color="rgba(255,255,255,0.4)", size=11)),
+                ),
+                yaxis=dict(
+                    tickfont=dict(color="rgba(255,255,255,0.75)", size=10),
+                    gridcolor="rgba(255,255,255,0.04)",
+                    title=None,
+                ),
+            )
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.plotly_chart(hbar_fig, use_container_width=True, config={"displayModeBar": False})
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Role Performance + Radar side by side ─────────────────────────────────
+    col_roles, col_radar = st.columns([3, 2], gap="medium")
+
+    with col_roles:
+        st.markdown("""<div class="prog-section">
+            <span class="prog-section-icon">👔</span>
+            <span class="prog-section-title">Performance by Role</span></div>""",
+            unsafe_allow_html=True)
+
+        if metrics["role_stats"]:
+            rs = metrics["role_stats"]
+            r_names  = sorted(rs.keys(), key=lambda x: rs[x]["avg_score"], reverse=True)
+            r_scores = [rs[r]["avg_score"] for r in r_names]
+            r_tries  = [rs[r]["attempts"]  for r in r_names]
+
+            role_fig = go.Figure(go.Bar(
+                x=r_names,
+                y=r_scores,
+                marker=dict(
+                    color=[_score_color(s) for s in r_scores],
+                    opacity=0.85,
+                    line=dict(color="rgba(0,0,0,0)", width=0),
+                ),
+                text=[f"<b>{s:.1f}</b>" for s in r_scores],
+                textposition="outside",
+                textfont=dict(color="#ffffff", size=11),
+                customdata=list(zip(r_names, r_scores, r_tries)),
+                hovertemplate=(
+                    "<b>%{customdata[0]}</b><br>"
+                    "Avg Score: <b>%{customdata[1]:.1f}/10</b><br>"
+                    "Attempts: %{customdata[2]}<extra></extra>"
+                ),
+            ))
+            role_fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="#ffffff"),
+                height=300,
+                margin=dict(t=20, b=80, l=44, r=20),
+                showlegend=False,
+                xaxis=dict(
+                    tickfont=dict(color="rgba(255,255,255,0.6)", size=10),
+                    tickangle=-32,
+                    gridcolor="rgba(255,255,255,0.05)",
+                    title=None,
+                ),
+                yaxis=dict(
+                    range=[0, 11.5],
+                    tickfont=dict(color="rgba(255,255,255,0.5)", size=10),
+                    gridcolor="rgba(255,255,255,0.07)",
+                    title=dict(text="Score /10", font=dict(color="rgba(255,255,255,0.4)", size=11)),
+                ),
+            )
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.plotly_chart(role_fig, use_container_width=True, config={"displayModeBar": False})
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_radar:
+        st.markdown("""<div class="prog-section">
+            <span class="prog-section-icon">🕸️</span>
+            <span class="prog-section-title">Skill Profile</span></div>""",
+            unsafe_allow_html=True)
+
+        if len(results) >= 1:
+            # Derive approximate skill dimensions from stored avg_score + domain/role context
+            def _bucket(r):
+                s = r.get("avg_score") or 0.0
+                dl = (r.get("domain") or "").lower()
+                rl = (r.get("role")   or "").lower()
+                t = 0.9 if any(k in dl for k in ["data","cloud","cyber","software"]) else 0.65
+                c = 0.85 if any(k in rl for k in ["manager","analyst","ux","product"]) else 0.70
+                return {
+                    "Technical":    min(10, round(s * t, 1)),
+                    "Communication":min(10, round(s * c, 1)),
+                    "Problem Solving":min(10, round(s * 0.80, 1)),
+                    "Domain Knowledge":min(10, round(s * 0.75, 1)),
+                    "Consistency":  min(10, round(s * 0.88, 1)),
+                }
+
+            from collections import defaultdict
+            agg = defaultdict(list)
+            for r in results:
+                for k, v in _bucket(r).items():
+                    agg[k].append(v)
+            radar_vals   = [round(sum(agg[k]) / len(agg[k]), 1) for k in agg]
+            radar_labels = list(agg.keys())
+
+            radar_fig = go.Figure()
+            radar_fig.add_trace(go.Scatterpolar(
+                r=radar_vals + [radar_vals[0]],
+                theta=radar_labels + [radar_labels[0]],
+                fill="toself",
+                line=dict(color="#00c3ff", width=2.5),
+                fillcolor="rgba(0,195,255,0.15)",
+                hovertemplate="<b>%{theta}</b><br>%{r:.1f}/10<extra></extra>",
+            ))
+            radar_fig.update_layout(
+                polar=dict(
+                    bgcolor="rgba(0,0,0,0)",
+                    radialaxis=dict(
+                        visible=True, range=[0, 10],
+                        tickfont=dict(color="rgba(255,255,255,0.4)", size=8),
+                        gridcolor="rgba(255,255,255,0.12)",
+                        linecolor="rgba(255,255,255,0.1)",
+                    ),
+                    angularaxis=dict(
+                        tickfont=dict(color="rgba(255,255,255,0.75)", size=10),
+                        gridcolor="rgba(255,255,255,0.1)",
+                    ),
+                ),
+                showlegend=False,
+                paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(color="white"),
+                height=300,
+                margin=dict(t=20, b=20, l=20, r=20),
+            )
+            st.markdown('<div class="chart-card">', unsafe_allow_html=True)
+            st.plotly_chart(radar_fig, use_container_width=True, config={"displayModeBar": False})
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Recent Sessions List ───────────────────────────────────────────────────
+    st.markdown("""<div class="prog-section">
+        <span class="prog-section-icon">🗂️</span>
+        <span class="prog-section-title">Recent Interview Sessions</span></div>""",
+        unsafe_allow_html=True)
+
+    for i, r in enumerate(reversed(results)):
+        sc   = round(r.get("avg_score") or 0.0, 1)
+        col  = _score_color(sc)
+        date = str(r.get("completed_on", "")).split(" ")[0]
+        time_part = str(r.get("completed_on", ""))
+        time_str  = time_part.split(" ")[1][:5] if " " in time_part else ""
+        role   = r.get("role",   "—")
+        domain = r.get("domain", "—")
+        qs     = r.get("total_questions", "—")
+        sess_n = len(results) - i
+        bar_w  = int((sc / 10) * 100)
+        bdg    = _score_badge(sc)
+
+        st.markdown(f"""
+        <div class="session-card">
+            <div class="session-num">#{sess_n}</div>
+            <div style="flex:1; padding: 0 12px;">
+                <div style="font-size:14px; font-weight:600; color:#ffffff; margin-bottom:2px;">{role}</div>
+                <div style="font-size:11px; color:rgba(255,255,255,0.4);">{domain}</div>
+                <div class="score-bar-wrap" style="margin-top:7px; width:140px;">
+                    <div class="score-bar-fill" style="width:{bar_w}%; background:{col};"></div>
+                </div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:11px; color:rgba(255,255,255,0.35); margin-bottom:3px;">{date} {time_str} · {qs} Qs</div>
+                <div class="session-score" style="color:{col};">{bdg} {sc:.1f}<span style="font-size:12px;color:rgba(255,255,255,0.4);">/10</span></div>
+            </div>
+        </div>
         """, unsafe_allow_html=True)
 
-    # ── Recent Sessions Table ──────────────────────────────────────────────────
-    st.markdown("### 🗂️ Recent Interview Sessions")
-    recent_df = pd.DataFrame([
-        {
-            "Session": f"#{len(results) - i}",
-            "Date": str(r.get("completed_on", "")).split(" ")[0],
-            "Time": str(r.get("completed_on", "")).split(" ")[1][:5] if " " in str(r.get("completed_on", "")) else "—",
-            "Role": r.get("role", "—"),
-            "Domain": r.get("domain", "—"),
-            "Score": f"{r['avg_score']:.1f}/10" if r.get("avg_score") is not None else "—",
-            "Questions": r.get("total_questions", "—"),
-        }
-        for i, r in enumerate(reversed(results))   # Most recent first
-    ])
-    st.dataframe(recent_df, use_container_width=True, hide_index=True)
 
-    # ── Cleanup Tool for Existing Duplicate Records ───────────────────────────
-    with st.expander("🔧 Fix Duplicate Records (if count looks wrong)"):
-        st.markdown("""
-            <p style="color: rgba(255,255,255,0.7); font-size: 13px;">
-            If your interview count is higher than expected, duplicate records may exist from a previous
-            version of the app. Click below to keep only the <b>most recent unique record</b> per session
-            (de-duplicated by role + domain + date).
-            </p>
-        """, unsafe_allow_html=True)
-        if st.button("🧹 Remove Duplicate Records", key="dedup_btn"):
-            try:
-                conn = sqlite3.connect('resume_data.db')
-                cursor = conn.cursor()
-                # Keep only the row with the highest id for each (username, role, domain, date) group
-                cursor.execute("""
-                    DELETE FROM interview_results
-                    WHERE id NOT IN (
-                        SELECT MAX(id)
-                        FROM interview_results
-                        WHERE username = ?
-                        GROUP BY role, domain, date(completed_on)
-                    )
-                    AND username = ?
-                """, (username, username))
-                deleted = cursor.rowcount
-                conn.commit()
-                conn.close()
-                st.success(f"✅ Removed {deleted} duplicate record(s). Your counts are now accurate.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Cleanup failed: {e}")
 
 
 # ======================================================
