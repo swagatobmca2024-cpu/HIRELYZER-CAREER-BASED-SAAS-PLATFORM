@@ -8891,7 +8891,7 @@ Provide detailed, flowing feedback that covers:
 
 Write feedback as natural, flowing paragraphs (not bullet points). Make it detailed, specific to their answer, and constructive.
 
-{"STEP 5 - FOLLOW-UP QUESTION (Hard difficulty only): Based on the candidate's answer, generate ONE high-quality follow-up question that a senior engineer or tech lead would ask in a real interview. The follow-up must: (a) probe a gap, assumption, or shallow explanation in their answer; (b) push into system design, edge cases, trade-offs, or failure scenarios they did not address; (c) be specific to what they actually said — not generic. Examples of good follow-ups: 'You mentioned using Redis for caching — how would you handle cache invalidation at scale?', 'What happens to your proposed design if the third-party API you rely on goes down?', 'How would your approach change if the dataset grew 100x?'" if difficulty == "Hard" else ""}
+{"STEP 5 - FOLLOW-UP QUESTION: Generate ONE probing follow-up question that digs deeper based on their answer." if difficulty == "Hard" else ""}
 
 OUTPUT FORMAT (strict JSON):
 {{
@@ -9357,9 +9357,7 @@ JSON:
 # ======================================================
 def generate_resume_based_questions(resume_context, role, domain, difficulty, num_questions=3):
     """
-    Generate interview questions strictly based on resume context.
-    Each question is uniquely tied to a specific project, skill, experience, or technology
-    from the candidate's profile — no generic or hybrid questions.
+    Generate interview questions strictly based on resume context
     """
 
     skills = resume_context.get("skills", [])
@@ -9367,36 +9365,31 @@ def generate_resume_based_questions(resume_context, role, domain, difficulty, nu
     experience = resume_context.get("experience", [])
     technologies = resume_context.get("technologies", [])
 
-    difficulty_guidance = {
-        "Easy": "Ask the candidate to explain or describe something from their resume at a foundational level.",
-        "Medium": "Ask the candidate to reason through a scenario or decision they faced in their listed projects/experience.",
-        "Hard": "Probe deeply: ask about design trade-offs, architectural decisions, edge cases, or scalability challenges within their specific listed projects or experience."
-    }
+    prompt = f"""
+You are a technical interviewer.
 
-    prompt = f"""You are a senior technical interviewer conducting a real interview.
+Generate EXACTLY {num_questions} interview questions based ONLY on the candidate's resume.
 
-CANDIDATE PROFILE:
-- Skills demonstrated: {', '.join(skills[:5]) if skills else 'Not specified'}
-- Projects: {'; '.join(projects[:3]) if projects else 'Not specified'}
-- Experience: {'; '.join(experience[:3]) if experience else 'Not specified'}
-- Technologies used: {', '.join(technologies[:5]) if technologies else 'Not specified'}
+RESUME CONTEXT:
+- Skills: {', '.join(skills[:4])}
+- Projects: {', '.join(projects[:2])}
+- Experience: {', '.join(experience[:2])}
+- Technologies: {', '.join(technologies[:4])}
 
 Target Role: {role}
 Domain: {domain}
 Difficulty: {difficulty}
-Difficulty Approach: {difficulty_guidance.get(difficulty, difficulty_guidance['Medium'])}
 
-TASK:
-Generate EXACTLY {num_questions} interview questions. Each question must:
-1. Be DIRECTLY tied to a SPECIFIC item in the candidate's profile above (a named project, a listed technology, a stated experience, or a demonstrated skill)
-2. Reference the actual content — do NOT write generic questions
-3. Be DISTINCT from each other — do not repeat the same angle or concept
-4. Sound natural, like a real interviewer speaking
-
-BAD EXAMPLE (generic): "Tell me about a challenging project."
-GOOD EXAMPLE (profile-specific): "In your [Project Name], you used [Tech] — what was the most difficult architectural decision you had to make and why?"
-
-Output ONLY the questions, one per line, no numbering or prefixes.
+RULES:
+- Every question MUST reference resume content
+- Ask like a real interviewer
+- Difficulty:
+  - Easy: explanation & fundamentals
+  - Medium: scenarios & decisions
+  - Hard: deep technical trade-offs or design
+- Output ONLY questions
+- One question per line
+- No numbering, no prefixes
 
 Generate now:
 """
@@ -10388,49 +10381,41 @@ with tab4:
             ]
         return base_questions[:count]
 
-    # UPDATED: AI-Generated Questions using LLM with DIFFICULTY SUPPORT + Profile Awareness
-    def generate_interview_questions_with_llm(domain, role, interview_type, num_questions, difficulty="Medium", resume_context=None, already_asked=None):
+    # UPDATED: AI-Generated Questions using LLM with DIFFICULTY SUPPORT
+    def generate_interview_questions_with_llm(domain, role, interview_type, num_questions, difficulty="Medium"):
         """
-        Generate interview questions using LLM based on domain, role, type, difficulty, and candidate profile.
-        Uses resume context to personalize and avoids repeating question types already covered.
+        Generate interview questions using LLM based on domain, role, type, and difficulty.
+
+        FIXED: Now difficulty is passed into LLM prompt and affects question complexity
         """
         # Define difficulty-specific instructions
         difficulty_instructions = {
             "Easy": "Generate BASIC and INTRODUCTORY level questions. Focus on fundamental concepts, definitions, and simple scenarios. Questions should be suitable for entry-level candidates or those new to the field.",
             "Medium": "Generate SCENARIO-BASED and MODERATELY TECHNICAL questions. Include situational questions that require practical thinking and intermediate technical knowledge. Suitable for candidates with some experience.",
-            "Hard": "Generate DEEP TECHNICAL, SYSTEM DESIGN, and COMPLEX PROBLEM-SOLVING questions. Include architecture decisions, trade-offs, scalability concerns, failure scenarios, and advanced concepts. Suitable for senior-level candidates."
+            "Hard": "Generate DEEP TECHNICAL, SYSTEM DESIGN, and COMPLEX PROBLEM-SOLVING questions. Include architecture decisions, trade-offs, scalability concerns, and advanced concepts. Suitable for senior-level candidates."
         }
 
-        # Build resume context hint if available
-        profile_hint = ""
-        if resume_context:
-            skills = resume_context.get("skills", [])
-            technologies = resume_context.get("technologies", [])
-            if skills or technologies:
-                profile_hint = f"\nCANDIDATE PROFILE CONTEXT (use to personalize questions):\n- Skills: {', '.join(skills[:4])}\n- Technologies: {', '.join(technologies[:4])}\n"
-
-        # Build exclusion list to avoid repetition
-        exclusion_hint = ""
-        if already_asked:
-            exclusion_hint = f"\nALREADY ASKED (do NOT repeat these topics or angles):\n" + "\n".join(f"- {q}" for q in already_asked[:5]) + "\n"
-
-        prompt = f"""You are an expert {interview_type} interviewer.
+        prompt = f"""You are an expert interviewer.
 
 Generate EXACTLY {num_questions} unique {interview_type} interview questions
 for the role of {role} in {domain}.
 
 DIFFICULTY LEVEL: {difficulty}
 {difficulty_instructions.get(difficulty, difficulty_instructions["Medium"])}
-{profile_hint}{exclusion_hint}
+
 CRITICAL REQUIREMENTS:
-- Generate EXACTLY {num_questions} questions — no more, no less
-- Each question must be DISTINCT in angle, topic, and phrasing
-- Questions must feel natural and conversational, like a real interviewer asking
-- Match the difficulty level strictly
-- For Hard: include system design, trade-offs, failure handling, and scalability angles
+- Generate EXACTLY {num_questions} questions - no more, no less
+- Keep each question concise (1-2 sentences max)
+- Avoid duplicates
+- Match the difficulty level specified above
 - Output ONLY the questions, one per line
 - DO NOT add numbering, bullet points, or any prefixes
 - DO NOT add any introductory text or explanations
+
+Output format example:
+What is your experience with cloud technologies?
+How would you handle a system outage?
+Describe your approach to code reviews.
 
 Generate exactly {num_questions} questions now:
 """
@@ -10834,59 +10819,52 @@ Generate exactly {num_questions} questions now:
         if 'resume_questions_answered' not in st.session_state:
             st.session_state.resume_questions_answered = 0
 
-        # RESUME UPLOAD SECTION (MANDATORY) — hidden once interview starts
-        interview_active = st.session_state.get('dynamic_interview_started', False) and not st.session_state.get('dynamic_interview_completed', False)
-        interview_done = st.session_state.get('dynamic_interview_completed', False)
+        # RESUME UPLOAD SECTION (MANDATORY)
+        st.markdown("---")
+        st.markdown("<h3 style='color: #00c3ff;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
 
-        if not interview_active and not interview_done:
-            st.markdown("---")
-            st.markdown("<h3 style='color: #00c3ff;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
+        if st.session_state.resume_file is None:
+            uploaded_resume = st.file_uploader(
+                "Upload your resume (PDF format)",
+                type=['pdf'],
+                key="resume_uploader"
+            )
 
-            if st.session_state.resume_file is None:
-                uploaded_resume = st.file_uploader(
-                    "Upload your resume (PDF format)",
-                    type=['pdf'],
-                    key="resume_uploader"
-                )
+            if uploaded_resume:
+                with st.spinner("Processing your resume..."):
+                    # Extract text from PDF
+                    resume_text = extract_resume_text_from_pdf(uploaded_resume)
 
-                if uploaded_resume:
-                    with st.spinner("Processing your resume..."):
-                        # Extract text from PDF
-                        resume_text = extract_resume_text_from_pdf(uploaded_resume)
+                    if resume_text and len(resume_text.strip()) > 50:
+                        # Analyze resume
+                        with st.spinner("Analyzing your resume with AI..."):
+                            resume_context = analyze_resume_with_llm(resume_text)
 
-                        if resume_text and len(resume_text.strip()) > 50:
-                            # Analyze resume
-                            with st.spinner("Analyzing your resume with AI..."):
-                                resume_context = analyze_resume_with_llm(resume_text)
+                        # Store in session
+                        st.session_state.resume_file = uploaded_resume.name
+                        st.session_state.resume_context = resume_context
+                        st.session_state.interview_phase = "resume"
+                        st.session_state.resume_questions_answered = 0
 
-                            # Store in session
-                            st.session_state.resume_file = uploaded_resume.name
-                            st.session_state.resume_context = resume_context
-                            st.session_state.interview_phase = "resume"
-                            st.session_state.resume_questions_answered = 0
+                        st.success("✅ Resume uploaded and analyzed successfully!")
+                        
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("Could not extract text from resume. Please ensure it's a valid PDF.")
+        else:
+            st.success(f"✅ Resume loaded: {st.session_state.resume_file}")
+            
 
-                            st.success("✅ Resume uploaded and analyzed successfully!")
-                            
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error("Could not extract text from resume. Please ensure it's a valid PDF.")
-            else:
-                st.success(f"✅ Resume loaded: {st.session_state.resume_file}")
+            if st.button("🔄 Upload Different Resume"):
+                st.session_state.resume_file = None
+                st.session_state.resume_context = None
+                st.session_state.dynamic_interview_started = False
+                st.session_state.dynamic_interview_completed = False
+                st.rerun()
 
-                if st.button("🔄 Upload Different Resume"):
-                    st.session_state.resume_file = None
-                    st.session_state.resume_context = None
-                    st.session_state.dynamic_interview_started = False
-                    st.session_state.dynamic_interview_completed = False
-                    st.rerun()
-
-        elif interview_active or interview_done:
-            # Resume is implicitly loaded; show minimal indicator only if needed
-            pass
-
-        # Only show domain/role selection if resume is uploaded AND interview not yet started
-        if st.session_state.resume_file is not None and not interview_active and not interview_done:
+        # Only show domain/role selection if resume is uploaded
+        if st.session_state.resume_file is not None:
             st.markdown("---")
             st.markdown("<h3 style='color: #00c3ff;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
 
@@ -10913,10 +10891,6 @@ Generate exactly {num_questions} questions now:
                     selected_role = None
 
             st.markdown('</div>', unsafe_allow_html=True)
-        elif interview_active or interview_done:
-            # Retrieve domain/role from session state (set when interview started)
-            selected_domain = st.session_state.get('interview_domain', None)
-            selected_role = st.session_state.get('interview_role', None)
         else:
             selected_domain = None
             selected_role = None
@@ -10941,10 +10915,7 @@ Generate exactly {num_questions} questions now:
                 st.session_state.dynamic_answer_submitted = False
             if 'current_interview_question_text' not in st.session_state:
                 st.session_state.current_interview_question_text = ""
-            if 'interview_domain' not in st.session_state:
-                st.session_state.interview_domain = selected_domain
-                st.session_state.interview_role = selected_role
-            elif st.session_state.interview_domain != selected_domain and not interview_active:
+            if 'interview_domain' not in st.session_state or st.session_state.interview_domain != selected_domain:
                 st.session_state.interview_domain = selected_domain
                 st.session_state.interview_role = selected_role
                 st.session_state.dynamic_interview_started = False
@@ -11009,15 +10980,13 @@ Generate exactly {num_questions} questions now:
                         generic_qs = []
                         remaining_questions = num_questions - len(resume_based_qs)
                         if remaining_questions > 0:
-                            with st.spinner("Creating interview questions..."):
+                            with st.spinner("Creating generic interview questions..."):
                                 generic_qs = generate_interview_questions_with_llm(
                                     selected_domain,
                                     selected_role,
                                     interview_type,
                                     remaining_questions,
-                                    interview_difficulty,
-                                    resume_context=st.session_state.resume_context,
-                                    already_asked=resume_based_qs
+                                    interview_difficulty
                                 )
 
                         # Combine all questions: resume-based first, then generic
