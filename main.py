@@ -9024,7 +9024,7 @@ def log_user_action(username: str, action: str):
 
 
 def create_interview_database():
-    """Create interview_results table if not exists"""
+    """Create interview_results table if not exists, safely migrate new columns"""
     import sqlite3
     try:
         conn = sqlite3.connect('resume_data.db')
@@ -9042,23 +9042,48 @@ def create_interview_database():
             )
         """)
         conn.commit()
+
+        # Safe migration: add new columns only if they don't exist
+        existing_columns = [row[1] for row in cursor.execute("PRAGMA table_info(interview_results)").fetchall()]
+
+        migrations = [
+            ("knowledge_avg", "REAL"),
+            ("communication_avg", "REAL"),
+            ("relevance_avg", "REAL"),
+            ("difficulty", "TEXT"),
+            ("duration_seconds", "INTEGER"),
+            ("created_timestamp", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
+        ]
+
+        for col_name, col_type in migrations:
+            if col_name not in existing_columns:
+                try:
+                    cursor.execute(f"ALTER TABLE interview_results ADD COLUMN {col_name} {col_type}")
+                    conn.commit()
+                except Exception:
+                    pass
+
         conn.close()
     except Exception as e:
         import streamlit as st
         st.error(f"Database error: {e}")
 
 
-def save_interview_result(username: str, role: str, domain: str, avg_score: float, total_questions: int, feedback_summary: str):
-    """Save interview result to database"""
+def save_interview_result(username: str, role: str, domain: str, avg_score: float, total_questions: int, feedback_summary: str,
+                          knowledge_avg: float = None, communication_avg: float = None, relevance_avg: float = None,
+                          difficulty: str = None, duration_seconds: int = None):
+    """Save interview result to database with extended columns"""
     import sqlite3
     try:
         conn = sqlite3.connect('resume_data.db')
         cursor = conn.cursor()
         completed_on = get_ist_time()
         cursor.execute("""
-            INSERT INTO interview_results (username, role, domain, avg_score, total_questions, completed_on, feedback_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (username, role, domain, avg_score, total_questions, completed_on, feedback_summary))
+            INSERT INTO interview_results (username, role, domain, avg_score, total_questions, completed_on, feedback_summary,
+                                          knowledge_avg, communication_avg, relevance_avg, difficulty, duration_seconds, created_timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (username, role, domain, avg_score, total_questions, completed_on, feedback_summary,
+              knowledge_avg, communication_avg, relevance_avg, difficulty, duration_seconds))
         conn.commit()
         conn.close()
         return True
@@ -9894,7 +9919,7 @@ with tab4:
 
     page = st.radio(
         label="Select Learning Option",
-        options=["Courses by Role", "Resume Videos", "Interview Videos",  "AI Interview Coach 🤖"],
+        options=["Courses by Role", "Resume Videos", "Interview Videos", "AI Interview Coach 🤖", "My Progress 📊"],
         horizontal=True,
         key="page_selection",
         label_visibility="collapsed"
@@ -11005,6 +11030,7 @@ Generate exactly {num_questions} questions now:
                             st.session_state.dynamic_interview_feedbacks = []
                             st.session_state.dynamic_interview_completed = False
                             st.session_state.dynamic_interview_started = True
+                            st.session_state.interview_actual_start_time = time.time()
                             st.session_state.dynamic_answer_submitted = False
                             st.session_state.current_interview_question_text = all_questions[0]
                             st.session_state.question_timer_start = time.time()
@@ -11410,7 +11436,14 @@ Generate exactly {num_questions} questions now:
                 username = st.session_state.get("username", "Guest")
                 feedback_summary = f"Strengths: {metrics_sorted[0][0]}, {metrics_sorted[1][0]}. Weaknesses: {metrics_sorted[-1][0]}, {metrics_sorted[-2][0]}."
 
-                if save_interview_result(username, selected_role, selected_domain, overall_avg, st.session_state.original_num_questions, feedback_summary):
+                # Calculate interview duration if start time tracked
+                _interview_duration = None
+                if st.session_state.get('interview_actual_start_time'):
+                    _interview_duration = int(time.time() - st.session_state.interview_actual_start_time)
+
+                if save_interview_result(username, selected_role, selected_domain, overall_avg, st.session_state.original_num_questions, feedback_summary,
+                                         knowledge_avg=avg_knowledge, communication_avg=avg_communication, relevance_avg=avg_relevance,
+                                         difficulty=st.session_state.interview_difficulty, duration_seconds=_interview_duration):
                     log_user_action(username, "completed_interview")
 
                 # Generate PDF report
@@ -11484,7 +11517,424 @@ Generate exactly {num_questions} questions now:
                     st.rerun()
         else:
             st.info("Please select both a career domain and target role to start the interview practice.")
+    # Section 5: My Progress 📊
+    elif page == "My Progress 📊":
+        import sqlite3
+        import pandas as pd
+        import numpy as np
+        import matplotlib.pyplot as plt
+        import matplotlib
+        matplotlib.use('Agg')
 
+        st.subheader("📊 My Progress Dashboard")
+
+        username = st.session_state.get("username", "Guest")
+
+        # Ensure DB and columns exist
+        create_interview_database()
+
+        # Load data for current user only
+        try:
+            conn = sqlite3.connect('resume_data.db')
+            df = pd.read_sql_query(
+                "SELECT * FROM interview_results WHERE username = ? ORDER BY id ASC",
+                conn, params=(username,)
+            )
+            conn.close()
+        except Exception as e:
+            st.error(f"Error loading data: {e}")
+            df = pd.DataFrame()
+
+        if df.empty:
+            st.info("📭 No interview data yet. Complete some interviews in the AI Interview Coach to see your progress here!")
+        else:
+            # Ensure numeric types
+            for col in ['avg_score', 'knowledge_avg', 'communication_avg', 'relevance_avg', 'duration_seconds', 'total_questions']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            if 'difficulty' not in df.columns:
+                df['difficulty'] = 'Unknown'
+            df['difficulty'] = df['difficulty'].fillna('Unknown')
+
+            # =====================================================
+            # SECTION A — EXECUTIVE SUMMARY METRICS
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🏆 Executive Summary")
+
+            total_interviews = len(df)
+            highest_score = df['avg_score'].max()
+            lowest_score = df['avg_score'].min()
+            overall_avg = df['avg_score'].mean()
+            total_questions = int(df['total_questions'].sum()) if 'total_questions' in df.columns else 0
+
+            # Improvement %
+            if total_interviews >= 2:
+                first_score = df.iloc[0]['avg_score']
+                latest_score = df.iloc[-1]['avg_score']
+                if first_score and first_score > 0:
+                    improvement_pct = ((latest_score - first_score) / first_score) * 100
+                else:
+                    improvement_pct = 0.0
+            else:
+                improvement_pct = 0.0
+
+            # Consistency score based on std deviation
+            score_std = df['avg_score'].std() if total_interviews > 1 else 0.0
+            if score_std < 0.5:
+                consistency_label = "🟢 Highly Consistent"
+            elif score_std < 1.5:
+                consistency_label = "🟡 Moderately Consistent"
+            else:
+                consistency_label = "🔴 Unstable Performance"
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Total Interviews", total_interviews)
+            with col2:
+                st.metric("Highest Score", f"{highest_score:.1f}/10" if not pd.isna(highest_score) else "N/A")
+            with col3:
+                st.metric("Lowest Score", f"{lowest_score:.1f}/10" if not pd.isna(lowest_score) else "N/A")
+            with col4:
+                st.metric("Overall Avg Score", f"{overall_avg:.2f}/10" if not pd.isna(overall_avg) else "N/A")
+
+            col5, col6, col7 = st.columns(3)
+            with col5:
+                st.metric("Total Questions Answered", total_questions)
+            with col6:
+                sign = "+" if improvement_pct >= 0 else ""
+                st.metric("Improvement %", f"{sign}{improvement_pct:.1f}%")
+            with col7:
+                st.metric("Consistency", consistency_label, delta=f"Std Dev: {score_std:.2f}")
+
+            # =====================================================
+            # SECTION B — SCORE TREND INTELLIGENCE
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 📈 Score Trend Intelligence")
+
+            trend_df = df[['avg_score']].copy().reset_index(drop=True)
+            trend_df.index = trend_df.index + 1
+            trend_df.index.name = "Interview #"
+
+            # 3-point moving average
+            trend_df['Moving Avg (3pt)'] = trend_df['avg_score'].rolling(window=3, min_periods=1).mean()
+
+            st.line_chart(trend_df[['avg_score', 'Moving Avg (3pt)']])
+
+            # Detect trend direction
+            if total_interviews >= 3:
+                recent_half = df['avg_score'].tail(max(2, total_interviews // 2)).mean()
+                older_half = df['avg_score'].head(max(2, total_interviews // 2)).mean()
+                diff = recent_half - older_half
+                if diff > 0.3:
+                    trend_badge = "🟢 **Trend: Improving** ↑"
+                elif diff < -0.3:
+                    trend_badge = "🔴 **Trend: Declining** ↓"
+                else:
+                    trend_badge = "🟡 **Trend: Stable** →"
+            else:
+                trend_badge = "ℹ️ **Trend: Not enough data** (need 3+ interviews)"
+            st.markdown(trend_badge)
+
+            # =====================================================
+            # SECTION C — DOMAIN & ROLE ANALYTICS
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🌐 Domain & Role Analytics")
+
+            if 'domain' in df.columns:
+                col_l, col_r = st.columns(2)
+
+                domain_counts = df.groupby('domain').size().rename('Interviews')
+                domain_avg = df.groupby('domain')['avg_score'].mean().rename('Avg Score')
+
+                with col_l:
+                    st.markdown("**Interviews per Domain**")
+                    st.bar_chart(domain_counts)
+
+                with col_r:
+                    st.markdown("**Avg Score per Domain**")
+                    st.bar_chart(domain_avg)
+
+                # Strongest / Weakest Domain
+                if len(domain_avg) >= 1:
+                    strongest_domain = domain_avg.idxmax()
+                    weakest_domain = domain_avg.idxmin()
+                    st.markdown(f"🏆 **Strongest Domain:** {strongest_domain} ({domain_avg[strongest_domain]:.1f}/10)")
+                    st.markdown(f"⚠️ **Weakest Domain:** {weakest_domain} ({domain_avg[weakest_domain]:.1f}/10)")
+
+            # Role performance table
+            if 'role' in df.columns:
+                role_perf = df.groupby('role').agg(
+                    Attempts=('avg_score', 'count'),
+                    Avg_Score=('avg_score', 'mean'),
+                    Best_Score=('avg_score', 'max'),
+                    Latest_Score=('avg_score', 'last')
+                ).reset_index()
+                role_perf.columns = ['Role', 'Attempts', 'Avg Score', 'Best Score', 'Latest Score']
+                role_perf = role_perf.round(2)
+                st.markdown("**Role Performance Table**")
+                st.dataframe(role_perf, use_container_width=True)
+
+            # =====================================================
+            # SECTION D — DIFFICULTY PERFORMANCE
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🎯 Difficulty Performance")
+
+            if 'difficulty' in df.columns:
+                diff_counts = df.groupby('difficulty').size().rename('Attempts')
+                diff_avg = df.groupby('difficulty')['avg_score'].mean().rename('Avg Score')
+
+                col_dl, col_dr = st.columns(2)
+                with col_dl:
+                    st.markdown("**Attempts per Difficulty**")
+                    st.bar_chart(diff_counts)
+                with col_dr:
+                    st.markdown("**Avg Score per Difficulty**")
+                    st.bar_chart(diff_avg)
+
+                # Analysis
+                hard_count = diff_counts.get('Hard', 0)
+                total_count = diff_counts.sum()
+                if total_count > 0 and hard_count / total_count < 0.2:
+                    st.warning("⚠️ You appear to be avoiding Hard interviews. Challenge yourself to improve faster!")
+
+                hard_avg = diff_avg.get('Hard', None)
+                medium_avg = diff_avg.get('Medium', None)
+                if hard_avg is not None and medium_avg is not None:
+                    if hard_avg >= medium_avg - 0.5:
+                        st.success("✅ Great performance in Hard interviews! You're improving in difficulty.")
+                    else:
+                        st.info("💡 Your Hard interview scores are lower than Medium. Focus on harder practice!")
+
+            # =====================================================
+            # SECTION E — SKILL INTELLIGENCE (RADAR CHART)
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🕸️ Skill Intelligence Radar")
+
+            skill_cols = ['knowledge_avg', 'communication_avg', 'relevance_avg']
+            skill_labels = ['Knowledge', 'Communication', 'Relevance']
+
+            # Use actual columns if available, else fallback to avg_score
+            skill_avgs = []
+            for col in skill_cols:
+                if col in df.columns and df[col].notna().any():
+                    skill_avgs.append(df[col].mean())
+                else:
+                    skill_avgs.append(df['avg_score'].mean())
+
+            # Draw radar with matplotlib
+            categories = skill_labels + [skill_labels[0]]
+            values = skill_avgs + [skill_avgs[0]]
+            angles = np.linspace(0, 2 * np.pi, len(skill_labels), endpoint=False).tolist()
+            angles += angles[:1]
+
+            fig_radar, ax_radar = plt.subplots(figsize=(5, 5), subplot_kw=dict(polar=True))
+            fig_radar.patch.set_facecolor('#0f1419')
+            ax_radar.set_facecolor('#1a2332')
+            ax_radar.plot(angles, values, color='#00c3ff', linewidth=2)
+            ax_radar.fill(angles, values, color='#00c3ff', alpha=0.25)
+            ax_radar.set_xticks(angles[:-1])
+            ax_radar.set_xticklabels(skill_labels, color='white', size=12)
+            ax_radar.set_ylim(0, 10)
+            ax_radar.set_yticks([2, 4, 6, 8, 10])
+            ax_radar.set_yticklabels(['2', '4', '6', '8', '10'], color='gray', size=8)
+            ax_radar.tick_params(colors='white')
+            ax_radar.spines['polar'].set_color('#00c3ff')
+            ax_radar.grid(color='gray', alpha=0.3)
+            ax_radar.set_title("Skill Radar", color='#00c3ff', pad=20, size=14)
+
+            col_radar, col_skill_info = st.columns([1, 1])
+            with col_radar:
+                st.pyplot(fig_radar)
+            plt.close(fig_radar)
+
+            with col_skill_info:
+                weakest_skill_idx = skill_avgs.index(min(skill_avgs))
+                weakest_skill = skill_labels[weakest_skill_idx]
+                strongest_skill_idx = skill_avgs.index(max(skill_avgs))
+                strongest_skill = skill_labels[strongest_skill_idx]
+
+                st.markdown(f"🌟 **Strongest Skill:** {strongest_skill} ({skill_avgs[strongest_skill_idx]:.1f}/10)")
+                st.markdown(f"⚠️ **Weakest Skill:** {weakest_skill} ({skill_avgs[weakest_skill_idx]:.1f}/10)")
+                for lbl, val in zip(skill_labels, skill_avgs):
+                    bar_pct = int(val * 10)
+                    st.markdown(f"**{lbl}:** {val:.1f}/10")
+                    st.progress(val / 10.0)
+
+            # =====================================================
+            # SECTION F — BEHAVIORAL ANALYTICS
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🧠 Behavioral Analytics")
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+
+            dur_available = 'duration_seconds' in df.columns and df['duration_seconds'].notna().any()
+            avg_duration_mins = (df['duration_seconds'].mean() / 60) if dur_available else None
+            avg_score_per_q = (df['avg_score'] / df['total_questions'].replace(0, 1)).mean() if 'total_questions' in df.columns else None
+
+            with col_b1:
+                if avg_duration_mins is not None:
+                    st.metric("Avg Interview Duration", f"{avg_duration_mins:.1f} min")
+                else:
+                    st.metric("Avg Interview Duration", "N/A")
+
+            with col_b2:
+                if avg_score_per_q is not None:
+                    st.metric("Avg Score per Question", f"{avg_score_per_q:.2f}")
+                else:
+                    st.metric("Avg Score per Question", "N/A")
+
+            with col_b3:
+                # Score vs duration correlation
+                if dur_available and len(df) >= 3:
+                    corr = df[['avg_score', 'duration_seconds']].dropna().corr().iloc[0, 1]
+                    st.metric("Score-Duration Correlation", f"{corr:.2f}")
+                else:
+                    st.metric("Score-Duration Correlation", "N/A (need 3+ interviews)")
+
+            # Candidate type classification
+            if dur_available and avg_duration_mins is not None:
+                if avg_duration_mins < 10:
+                    candidate_type = "⚡ Rushed Candidate — Consider spending more time on each answer."
+                elif avg_duration_mins > 35:
+                    candidate_type = "🤔 Overthinking Candidate — Try to be more concise and structured."
+                else:
+                    candidate_type = "⚖️ Balanced Performer — Good pacing on interviews!"
+                st.info(candidate_type)
+
+            # =====================================================
+            # SECTION G — CLASSIFICATION ENGINE
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🎖️ Performance Classification")
+
+            if not pd.isna(overall_avg):
+                if overall_avg < 5:
+                    classification = "🔵 Beginner"
+                    cls_color = "#4fc3f7"
+                    cls_desc = "Keep practicing! Focus on understanding fundamentals."
+                elif overall_avg < 6.5:
+                    classification = "🟡 Developing"
+                    cls_color = "#ffcc02"
+                    cls_desc = "Good progress! Work on technical depth and communication."
+                elif overall_avg < 7.5:
+                    classification = "🟠 Growing Professional"
+                    cls_color = "#ff9800"
+                    cls_desc = "Solid candidate! Refine your answers and push for harder interviews."
+                elif overall_avg < 8.5:
+                    classification = "🟢 Strong Candidate"
+                    cls_color = "#66bb6a"
+                    cls_desc = "Excellent performance! You're nearly interview-ready."
+                else:
+                    classification = "🏆 Interview Ready"
+                    cls_color = "#00e676"
+                    cls_desc = "Outstanding! You're ready to ace real interviews."
+
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, rgba(0,195,255,0.1), rgba(0,195,255,0.05));
+                            border: 2px solid {cls_color}; border-radius: 12px; padding: 20px; text-align: center; margin: 10px 0;">
+                    <h2 style="color: {cls_color}; margin: 0;">{classification}</h2>
+                    <p style="color: #ffffff; margin: 10px 0 0 0;">{cls_desc}</p>
+                    <p style="color: #aaaaaa; margin: 5px 0 0 0;">Overall Average: {overall_avg:.2f}/10</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # =====================================================
+            # SECTION H — AI GENERATED PERFORMANCE SUMMARY
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 📝 AI Performance Summary")
+
+            # Generate programmatic summary from real data
+            summary_parts = []
+
+            if 'domain' in df.columns and len(domain_avg) >= 1:
+                summary_parts.append(f"You are strongest in the **{strongest_domain}** domain with an average score of {domain_avg[strongest_domain]:.1f}/10.")
+                if len(domain_avg) > 1:
+                    summary_parts.append(f"Your weakest domain is **{weakest_domain}** ({domain_avg[weakest_domain]:.1f}/10), which warrants focused practice.")
+
+            summary_parts.append(f"Your strongest skill is **{strongest_skill}** ({skill_avgs[strongest_skill_idx]:.1f}/10), while **{weakest_skill}** ({skill_avgs[weakest_skill_idx]:.1f}/10) needs improvement.")
+
+            if total_interviews >= 3:
+                if 'Improving' in trend_badge:
+                    summary_parts.append("Your score trend shows **steady improvement** over recent interviews — great momentum!")
+                elif 'Declining' in trend_badge:
+                    summary_parts.append("Your recent scores show a **declining trend**. Consider reviewing your weaker areas and attempting more structured practice.")
+                else:
+                    summary_parts.append("Your performance has been **stable** over recent interviews. Push yourself with harder difficulty levels to accelerate growth.")
+
+            summary_parts.append(f"You have completed **{total_interviews} interview(s)** answering **{total_questions} questions** in total.")
+
+            if improvement_pct > 0:
+                summary_parts.append(f"Your overall improvement from your first to latest interview is **+{improvement_pct:.1f}%** — keep up the great work!")
+            elif improvement_pct < 0:
+                summary_parts.append(f"Your score has dropped by **{abs(improvement_pct):.1f}%** since your first interview. Use structured revision to recover your performance.")
+
+            full_summary = " ".join(summary_parts)
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(0,195,255,0.08), rgba(0,195,255,0.03));
+                        border: 1px solid rgba(0,195,255,0.3); border-radius: 12px; padding: 20px; margin: 10px 0;">
+                <p style="color: #ffffff; font-size: 15px; line-height: 1.7; margin: 0;">{full_summary}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # =====================================================
+            # SECTION I — RECOMMENDATION ENGINE
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 💡 Personalized Recommendations")
+
+            recommendations = []
+
+            # Skill-based recommendations
+            if weakest_skill == "Communication":
+                recommendations.append("🗣️ **Communication Practice:** Your communication scores are lowest. Practice explaining technical concepts clearly using the STAR method (Situation, Task, Action, Result). Record yourself answering questions out loud.")
+            elif weakest_skill == "Knowledge":
+                recommendations.append("📚 **Knowledge Deepening:** Your knowledge scores indicate gaps in technical understanding. Revisit core concepts in your target domain, study system design, and review common interview questions for your target role.")
+            elif weakest_skill == "Relevance":
+                recommendations.append("🎯 **Relevance Improvement:** Your answers sometimes go off-topic. Practice answering the exact question asked before expanding. Use bullet points mentally before answering.")
+
+            # Difficulty-based recommendations
+            if 'difficulty' in df.columns:
+                hard_avg_val = df[df['difficulty'] == 'Hard']['avg_score'].mean() if 'Hard' in df['difficulty'].values else None
+                medium_avg_val = df[df['difficulty'] == 'Medium']['avg_score'].mean() if 'Medium' in df['difficulty'].values else None
+                if hard_avg_val is not None and medium_avg_val is not None and hard_avg_val < medium_avg_val - 1.0:
+                    recommendations.append("💪 **Hard Interview Practice:** Your Hard interview scores are significantly lower than Medium. Schedule dedicated Hard interview practice sessions to build confidence under pressure.")
+                hard_c = len(df[df['difficulty'] == 'Hard'])
+                if total_interviews >= 3 and hard_c == 0:
+                    recommendations.append("🔥 **Challenge Yourself:** You haven't attempted any Hard interviews yet. Jumping to Hard difficulty will accelerate your learning curve significantly.")
+
+            # Stagnation detection
+            if total_interviews >= 5 and abs(improvement_pct) < 5:
+                recommendations.append("📖 **Structured Revision:** Your scores have plateaued. Try a structured 2-week revision plan: week 1 on technical concepts, week 2 on behavioral questions. Take a mock interview at the end of each week.")
+
+            # More interviews
+            if total_interviews < 3:
+                recommendations.append("📅 **Build Your History:** Complete at least 5 interviews to generate meaningful trend analysis and personalized insights.")
+
+            if recommendations:
+                for rec in recommendations:
+                    st.markdown(f"""
+                    <div style="background: rgba(0,195,255,0.07); border-left: 4px solid #00c3ff;
+                                padding: 12px 16px; margin: 8px 0; border-radius: 0 8px 8px 0;">
+                        <p style="color: #ffffff; margin: 0;">{rec}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.success("🎉 You're on track! Keep practicing consistently to maintain your performance.")
+
+            # Raw data expander
+            with st.expander("📋 View Raw Interview History"):
+                display_cols = [c for c in ['id', 'role', 'domain', 'avg_score', 'knowledge_avg', 'communication_avg',
+                                             'relevance_avg', 'difficulty', 'total_questions', 'duration_seconds', 'completed_on']
+                                if c in df.columns]
+                st.dataframe(df[display_cols], use_container_width=True)
 
 if tab5:
 	with tab5:
