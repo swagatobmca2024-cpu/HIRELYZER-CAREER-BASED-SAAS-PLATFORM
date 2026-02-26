@@ -8813,8 +8813,8 @@ with tab3:
                     showlegend=False,
                     xaxis_title=None,
                     yaxis_title=None,
-                    xaxis=dict(**_PLOTLY_BASE['xaxis'], showgrid=True),
-                    yaxis=dict(**_PLOTLY_BASE['yaxis'], showgrid=False),
+                    xaxis=dict(**_XAXIS, showgrid=True),
+                    yaxis=dict(**_YAXIS, showgrid=False),
                 )
                 st.plotly_chart(fig_roles, use_container_width=True, config={"displayModeBar": False})
 
@@ -8847,8 +8847,8 @@ with tab3:
                     showlegend=False,
                     xaxis_title=None,
                     yaxis_title=None,
-                    xaxis=dict(**_PLOTLY_BASE['xaxis'], showgrid=True),
-                    yaxis=dict(**_PLOTLY_BASE['yaxis'], showgrid=False),
+                    xaxis=dict(**_XAXIS, showgrid=True),
+                    yaxis=dict(**_YAXIS, showgrid=False),
                 )
                 st.plotly_chart(fig_locs, use_container_width=True, config={"displayModeBar": False})
 
@@ -8880,8 +8880,8 @@ with tab3:
                     **_PLOTLY_BASE,
                     height=270,
                     showlegend=False,
-                    xaxis=dict(**_PLOTLY_BASE['xaxis'], tickangle=-25),
-                    yaxis=dict(**_PLOTLY_BASE['yaxis']),
+                    xaxis=dict(**_XAXIS, tickangle=-25),
+                    yaxis=dict(**_YAXIS),
                     bargap=0.3,
                 )
                 st.plotly_chart(fig_plat, use_container_width=True, config={"displayModeBar": False})
@@ -8911,8 +8911,8 @@ with tab3:
                     **_PLOTLY_BASE,
                     height=270,
                     showlegend=False,
-                    xaxis=dict(**_PLOTLY_BASE['xaxis'], tickangle=-25),
-                    yaxis=dict(**_PLOTLY_BASE['yaxis']),
+                    xaxis=dict(**_XAXIS, tickangle=-25),
+                    yaxis=dict(**_YAXIS),
                 )
                 st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False})
 
@@ -8967,8 +8967,8 @@ with tab3:
                 height=290,
                 showlegend=False,
                 bargap=0.15,
-                xaxis=dict(**_PLOTLY_BASE['xaxis'], tickangle=-45, tickfont=dict(size=10)),
-                yaxis=dict(**_PLOTLY_BASE['yaxis']),
+                xaxis=dict(**_XAXIS, tickangle=-45, tickfont=dict(size=10)),
+                yaxis=dict(**_YAXIS),
             )
             st.plotly_chart(fig_hour, use_container_width=True, config={"displayModeBar": False})
 
