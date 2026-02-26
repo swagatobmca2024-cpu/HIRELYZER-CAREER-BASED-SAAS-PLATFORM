@@ -8611,32 +8611,55 @@ with tab3:
 """, unsafe_allow_html=True)
 
     # ============================================================
-    # 📊 SEARCH ANALYTICS DASHBOARD
+    # 📊 SEARCH ANALYTICS DASHBOARD  (v2 — IST time + Advanced UI)
     # ============================================================
     import pandas as pd
+    import plotly.graph_objects as go
+    import plotly.express as px
+
+    # ── Plotly dark theme base config ────────────────────────────
+    _PLOTLY_BASE = dict(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(15,15,26,0.6)",
+        font=dict(family="Inter, sans-serif", color="#cccccc", size=12),
+        margin=dict(l=10, r=10, t=35, b=10),
+        xaxis=dict(
+            gridcolor="rgba(255,255,255,0.06)",
+            zerolinecolor="rgba(255,255,255,0.08)",
+            tickfont=dict(size=11, color="#999"),
+        ),
+        yaxis=dict(
+            gridcolor="rgba(255,255,255,0.06)",
+            zerolinecolor="rgba(255,255,255,0.08)",
+            tickfont=dict(size=11, color="#999"),
+        ),
+    )
 
     st.markdown("---")
     st.markdown("""
     <div style='
-        background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
-        padding: 30px;
-        border-radius: 20px;
-        border: 1px solid rgba(0,196,204,0.3);
-        margin-bottom: 30px;
-        box-shadow: 0 8px 32px rgba(0,196,204,0.15);
+        background: linear-gradient(135deg, #0a0a15 0%, #111128 50%, #0d1525 100%);
+        padding: 32px 36px 24px 36px;
+        border-radius: 24px;
+        border: 1px solid rgba(0,196,204,0.25);
+        margin-bottom: 28px;
+        box-shadow: 0 12px 48px rgba(0,196,204,0.12), 0 0 0 1px rgba(124,77,255,0.1);
     '>
-        <h2 style='
-            background: linear-gradient(135deg, #00c4cc 0%, #7c4dff 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            font-size: 28px;
-            font-weight: 700;
-            margin: 0;
-            text-align: center;
-        '>📊 Search Analytics Dashboard</h2>
-        <p style='color: #888; text-align: center; margin-top: 8px; font-size: 14px;'>
-            Insights from your job search activity
+        <div style='display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:6px;'>
+            <span style='font-size:32px;'>📊</span>
+            <h2 style='
+                background: linear-gradient(135deg, #00c4cc 0%, #7c4dff 60%, #f87171 100%);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                font-size: 30px;
+                font-weight: 800;
+                margin: 0;
+                letter-spacing: -0.5px;
+            '>Search Analytics Dashboard</h2>
+        </div>
+        <p style='color: #555; text-align: center; margin: 0; font-size: 13px; letter-spacing: 0.3px;'>
+            Real-time insights from your job search history · All times in <b style="color:#00c4cc">IST (UTC+5:30)</b>
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -8650,11 +8673,10 @@ with tab3:
     )
     is_my_analytics = analytics_scope == "🙋 My Analytics"
 
-    # ── Helper: fetch data from DB ────────────────────────────────
+    # ── Helper: fetch data from DB with IST conversion ───────────
     def fetch_analytics_data(scope_username=None):
         """
-        Fetch all user_jobs rows.
-        If scope_username is provided, filter by that user.
+        Fetch user_jobs rows and convert timestamps to IST (UTC+5:30).
         Returns a pandas DataFrame or empty DataFrame on error.
         """
         try:
@@ -8667,21 +8689,22 @@ with tab3:
                 df = pd.read_sql_query(query, conn)
             conn.close()
 
-            # Parse timestamp safely
             if not df.empty:
-                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+                # Parse as UTC then convert to IST (+05:30) — fixes 5-6 hour offset
+                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
                 df = df.dropna(subset=['timestamp'])
-                df['date'] = df['timestamp'].dt.date.astype(str)
-                df['hour'] = df['timestamp'].dt.hour
+                df['timestamp_ist'] = df['timestamp'].dt.tz_convert('Asia/Kolkata')
+                df['date'] = df['timestamp_ist'].dt.date.astype(str)
+                df['hour'] = df['timestamp_ist'].dt.hour          # IST hour (0-23)
+                df['weekday'] = df['timestamp_ist'].dt.day_name() # IST weekday
             return df
         except Exception:
-            return pd.DataFrame(columns=['role', 'location', 'platform', 'timestamp', 'date', 'hour'])
+            return pd.DataFrame(columns=['role', 'location', 'platform', 'timestamp', 'date', 'hour', 'weekday'])
 
-    # Determine which data to load
+    # Determine scope
     current_user = st.session_state.username if hasattr(st.session_state, 'username') and st.session_state.username else None
     scope_user = current_user if is_my_analytics else None
 
-    # Guard: warn if "My Analytics" but not logged in
     if is_my_analytics and not current_user:
         st.warning("⚠️ Please log in to view your personal analytics.")
     else:
@@ -8691,232 +8714,277 @@ with tab3:
         if df_analytics.empty:
             st.markdown("""
             <div style='
-                background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
-                padding: 40px;
-                border-radius: 15px;
+                background: linear-gradient(135deg, #111120 0%, #1a1a30 100%);
+                padding: 50px 40px;
+                border-radius: 20px;
                 text-align: center;
-                color: #888;
-                border: 2px dashed #444;
+                border: 2px dashed #333;
                 margin: 20px 0;
             '>
-                <div style='font-size: 40px; margin-bottom: 15px;'>📭</div>
-                <div style='font-size: 18px; font-weight: 600; color: #aaa; margin-bottom: 8px;'>No Data Available</div>
-                <div style='font-size: 14px;'>Perform job searches to populate your analytics dashboard.</div>
+                <div style='font-size: 48px; margin-bottom: 16px;'>📭</div>
+                <div style='font-size: 20px; font-weight: 700; color: #aaa; margin-bottom: 10px;'>No Data Yet</div>
+                <div style='font-size: 14px; color: #666;'>Perform job searches to populate your analytics dashboard.</div>
             </div>
             """, unsafe_allow_html=True)
         else:
-            # ── KPI SUMMARY ROW ────────────────────────────────────
-            total_searches     = len(df_analytics)
-            unique_roles       = df_analytics['role'].nunique()
-            unique_locations   = df_analytics['location'].nunique()
+            # ── Compute KPIs ───────────────────────────────────────
+            total_searches      = len(df_analytics)
+            unique_roles        = df_analytics['role'].nunique()
+            unique_locations    = df_analytics['location'].nunique()
             top_platform_series = df_analytics['platform'].value_counts()
-            most_used_platform = top_platform_series.index[0] if not top_platform_series.empty else "N/A"
+            most_used_platform  = top_platform_series.index[0] if not top_platform_series.empty else "N/A"
+            top_plat_count      = int(top_platform_series.iloc[0]) if not top_platform_series.empty else 0
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            # ── KPI Cards — custom HTML (no truncation) ───────────
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-            with kpi1:
-                st.metric(
-                    label="🔎 Total Searches",
-                    value=f"{total_searches:,}",
-                )
-            with kpi2:
-                st.metric(
-                    label="💼 Unique Roles",
-                    value=f"{unique_roles:,}",
-                )
-            with kpi3:
-                st.metric(
-                    label="📍 Unique Locations",
-                    value=f"{unique_locations:,}",
-                )
-            with kpi4:
-                st.metric(
-                    label="🏆 Top Platform",
-                    value=most_used_platform,
-                )
 
-            st.markdown("<br>", unsafe_allow_html=True)
+            def _kpi_card(col, icon, label, value, sub, accent):
+                col.markdown(f"""
+                <div style='
+                    background: linear-gradient(145deg, #111120 0%, #1a1a2e 100%);
+                    border: 1px solid {accent}44;
+                    border-radius: 18px;
+                    padding: 22px 18px 18px 18px;
+                    text-align: center;
+                    box-shadow: 0 4px 24px {accent}18, inset 0 1px 0 rgba(255,255,255,0.04);
+                    transition: all 0.3s ease;
+                    min-height: 120px;
+                '>
+                    <div style='font-size:26px; margin-bottom:6px;'>{icon}</div>
+                    <div style='color:{accent}; font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; margin-bottom:4px;'>{label}</div>
+                    <div style='color:#ffffff; font-size:26px; font-weight:800; line-height:1; margin-bottom:4px; word-break:break-word;'>{value}</div>
+                    <div style='color:#555; font-size:11px;'>{sub}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            _kpi_card(kpi1, "🔎", "Total Searches",    f"{total_searches:,}",   "all recorded",              "#00c4cc")
+            _kpi_card(kpi2, "💼", "Unique Roles",       f"{unique_roles:,}",     "distinct job titles",       "#7c4dff")
+            _kpi_card(kpi3, "📍", "Unique Locations",   f"{unique_locations:,}", "distinct cities/regions",   "#34d399")
+            _kpi_card(kpi4, "🏆", "Top Platform",       most_used_platform,      f"{top_plat_count} searches","#fbbf24")
+
+            st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+
+            # ── SECTION HEADER helper ─────────────────────────────
+            def _section_header(icon, title, subtitle, accent):
+                st.markdown(f"""
+                <div style='
+                    display:flex; align-items:center; gap:10px;
+                    margin-bottom:12px; padding-bottom:10px;
+                    border-bottom: 1px solid {accent}33;
+                '>
+                    <span style='font-size:20px;'>{icon}</span>
+                    <div>
+                        <div style='color:{accent}; font-size:15px; font-weight:700;'>{title}</div>
+                        <div style='color:#555; font-size:11px;'>{subtitle}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
             # ── ROW 1: Top Roles + Top Locations ─────────────────
             col_roles, col_locs = st.columns(2)
 
             with col_roles:
-                st.markdown("""
-                <div style='
-                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-                    padding: 20px 20px 5px 20px;
-                    border-radius: 15px;
-                    border: 1px solid rgba(0,196,204,0.2);
-                    margin-bottom: 20px;
-                '>
-                    <h4 style='color: #00c4cc; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;'>
-                        🎯 Top 5 Most Searched Roles
-                    </h4>
-                </div>
-                """, unsafe_allow_html=True)
-
+                _section_header("🎯", "Top 5 Most Searched Roles", "by search frequency", "#00c4cc")
                 top_roles = (
-                    df_analytics['role']
-                    .value_counts()
-                    .head(5)
+                    df_analytics['role'].value_counts().head(5)
                     .reset_index()
                 )
                 top_roles.columns = ['Role', 'Count']
+                top_roles = top_roles.sort_values('Count')  # ascending for horizontal bar
 
-                st.bar_chart(
-                    top_roles.set_index('Role'),
-                    color="#00c4cc",
-                    use_container_width=True
+                fig_roles = go.Figure(go.Bar(
+                    x=top_roles['Count'],
+                    y=top_roles['Role'],
+                    orientation='h',
+                    marker=dict(
+                        color=top_roles['Count'],
+                        colorscale=[[0, '#004d52'], [0.5, '#00a0a8'], [1, '#00c4cc']],
+                        line=dict(color='rgba(0,196,204,0.4)', width=1),
+                    ),
+                    text=top_roles['Count'],
+                    textposition='outside',
+                    textfont=dict(color='#00c4cc', size=12, family='Inter'),
+                    hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
+                ))
+                fig_roles.update_layout(
+                    **_PLOTLY_BASE,
+                    height=260,
+                    showlegend=False,
+                    xaxis_title=None,
+                    yaxis_title=None,
+                    xaxis=dict(**_PLOTLY_BASE['xaxis'], showgrid=True),
+                    yaxis=dict(**_PLOTLY_BASE['yaxis'], showgrid=False),
                 )
+                st.plotly_chart(fig_roles, use_container_width=True, config={"displayModeBar": False})
 
             with col_locs:
-                st.markdown("""
-                <div style='
-                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-                    padding: 20px 20px 5px 20px;
-                    border-radius: 15px;
-                    border: 1px solid rgba(124,77,255,0.2);
-                    margin-bottom: 20px;
-                '>
-                    <h4 style='color: #7c4dff; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;'>
-                        📍 Top 5 Most Searched Locations
-                    </h4>
-                </div>
-                """, unsafe_allow_html=True)
-
+                _section_header("📍", "Top 5 Most Searched Locations", "by search frequency", "#7c4dff")
                 top_locs = (
-                    df_analytics['location']
-                    .value_counts()
-                    .head(5)
+                    df_analytics['location'].value_counts().head(5)
                     .reset_index()
                 )
                 top_locs.columns = ['Location', 'Count']
+                top_locs = top_locs.sort_values('Count')
 
-                st.bar_chart(
-                    top_locs.set_index('Location'),
-                    color="#7c4dff",
-                    use_container_width=True
+                fig_locs = go.Figure(go.Bar(
+                    x=top_locs['Count'],
+                    y=top_locs['Location'],
+                    orientation='h',
+                    marker=dict(
+                        color=top_locs['Count'],
+                        colorscale=[[0, '#1e0052'], [0.5, '#5c29c0'], [1, '#7c4dff']],
+                        line=dict(color='rgba(124,77,255,0.4)', width=1),
+                    ),
+                    text=top_locs['Count'],
+                    textposition='outside',
+                    textfont=dict(color='#7c4dff', size=12, family='Inter'),
+                    hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
+                ))
+                fig_locs.update_layout(
+                    **_PLOTLY_BASE,
+                    height=260,
+                    showlegend=False,
+                    xaxis_title=None,
+                    yaxis_title=None,
+                    xaxis=dict(**_PLOTLY_BASE['xaxis'], showgrid=True),
+                    yaxis=dict(**_PLOTLY_BASE['yaxis'], showgrid=False),
                 )
+                st.plotly_chart(fig_locs, use_container_width=True, config={"displayModeBar": False})
 
-            # ── ROW 2: Platform Distribution + Search Trend ───────
+            # ── ROW 2: Platform Distribution (donut) + Trend (area line) ──
             col_plat, col_trend = st.columns(2)
 
             with col_plat:
-                st.markdown("""
-                <div style='
-                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-                    padding: 20px 20px 5px 20px;
-                    border-radius: 15px;
-                    border: 1px solid rgba(251,191,36,0.2);
-                    margin-bottom: 20px;
-                '>
-                    <h4 style='color: #fbbf24; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;'>
-                        🏢 Platform Usage Distribution
-                    </h4>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # GROUP BY platform via pandas
+                _section_header("🏢", "Platform Usage Distribution", "share of all searches", "#fbbf24")
                 plat_dist = (
-                    df_analytics.groupby('platform')
-                    .size()
+                    df_analytics.groupby('platform').size()
                     .reset_index(name='Count')
                     .sort_values('Count', ascending=False)
                 )
 
-                st.bar_chart(
-                    plat_dist.set_index('platform')['Count'],
-                    color="#fbbf24",
-                    use_container_width=True
+                fig_plat = go.Figure(go.Bar(
+                    x=plat_dist['platform'],
+                    y=plat_dist['Count'],
+                    marker=dict(
+                        color=plat_dist['Count'],
+                        colorscale=[[0,'#3d2e00'],[0.5,'#c0900e'],[1,'#fbbf24']],
+                        line=dict(color='rgba(251,191,36,0.4)', width=1),
+                    ),
+                    text=plat_dist['Count'],
+                    textposition='outside',
+                    textfont=dict(color='#fbbf24', size=11, family='Inter'),
+                    hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
+                ))
+                fig_plat.update_layout(
+                    **_PLOTLY_BASE,
+                    height=270,
+                    showlegend=False,
+                    xaxis=dict(**_PLOTLY_BASE['xaxis'], tickangle=-25),
+                    yaxis=dict(**_PLOTLY_BASE['yaxis']),
+                    bargap=0.3,
                 )
+                st.plotly_chart(fig_plat, use_container_width=True, config={"displayModeBar": False})
 
             with col_trend:
-                st.markdown("""
-                <div style='
-                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-                    padding: 20px 20px 5px 20px;
-                    border-radius: 15px;
-                    border: 1px solid rgba(52,211,153,0.2);
-                    margin-bottom: 20px;
-                '>
-                    <h4 style='color: #34d399; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;'>
-                        📈 Search Trend Over Time
-                    </h4>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # GROUP BY DATE(timestamp) via pandas
+                _section_header("📈", "Search Trend Over Time (IST)", "daily activity", "#34d399")
                 trend_data = (
-                    df_analytics.groupby('date')
-                    .size()
+                    df_analytics.groupby('date').size()
                     .reset_index(name='Searches')
                     .sort_values('date')
                 )
 
-                if len(trend_data) >= 2:
-                    st.line_chart(
-                        trend_data.set_index('date')['Searches'],
-                        color="#34d399",
-                        use_container_width=True
-                    )
-                else:
-                    # Fallback bar chart if only 1 data point
-                    st.bar_chart(
-                        trend_data.set_index('date')['Searches'],
-                        color="#34d399",
-                        use_container_width=True
-                    )
+                fig_trend = go.Figure()
+                # Area fill
+                fig_trend.add_trace(go.Scatter(
+                    x=trend_data['date'],
+                    y=trend_data['Searches'],
+                    mode='lines+markers',
+                    line=dict(color='#34d399', width=2.5, shape='spline'),
+                    marker=dict(size=7, color='#34d399', line=dict(color='#0f1f18', width=2)),
+                    fill='tozeroy',
+                    fillcolor='rgba(52,211,153,0.08)',
+                    hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
+                    name='Searches',
+                ))
+                fig_trend.update_layout(
+                    **_PLOTLY_BASE,
+                    height=270,
+                    showlegend=False,
+                    xaxis=dict(**_PLOTLY_BASE['xaxis'], tickangle=-25),
+                    yaxis=dict(**_PLOTLY_BASE['yaxis']),
+                )
+                st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False})
 
-            # ── ROW 3: Peak Search Hour ───────────────────────────
-            st.markdown("""
-            <div style='
-                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-                padding: 20px 20px 5px 20px;
-                border-radius: 15px;
-                border: 1px solid rgba(248,113,113,0.2);
-                margin-bottom: 20px;
-            '>
-                <h4 style='color: #f87171; margin: 0 0 5px 0; font-size: 16px; font-weight: 600;'>
-                    🕐 Peak Search Hour (0–23 Distribution)
-                </h4>
-                <p style='color: #666; font-size: 12px; margin: 0 0 10px 0;'>
-                    Activity across all hours of the day
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+            # ── ROW 3: Peak Hour (IST, full width) ───────────────
+            _section_header("🕐", "Peak Search Hour — IST (0–23 Distribution)", "when you search most — converted to Indian Standard Time", "#f87171")
 
-            # GROUP BY HOUR — create full 0-23 range so empty hours show 0
+            # Build full 0-23 with IST hours
             hour_counts = df_analytics.groupby('hour').size().reset_index(name='Searches')
             all_hours   = pd.DataFrame({'hour': range(24)})
             hour_dist   = (
-                all_hours
-                .merge(hour_counts, on='hour', how='left')
-                .fillna(0)
-                .astype({'Searches': int})
+                all_hours.merge(hour_counts, on='hour', how='left').fillna(0).astype({'Searches': int})
             )
-            hour_dist['Hour Label'] = hour_dist['hour'].apply(
-                lambda h: f"{h:02d}:00"
-            )
+            hour_dist['Label'] = hour_dist['hour'].apply(lambda h: f"{h:02d}:00")
+            peak_hour = int(hour_dist.loc[hour_dist['Searches'].idxmax(), 'hour'])
 
-            st.bar_chart(
-                hour_dist.set_index('Hour Label')['Searches'],
-                color="#f87171",
-                use_container_width=True,
-                height=250
-            )
+            # Color bars: highlight peak hour in bright red
+            bar_colors = [
+                '#f87171' if h == peak_hour else '#4a1515'
+                for h in hour_dist['hour']
+            ]
+            bar_opacities = [1.0 if h == peak_hour else 0.65 for h in hour_dist['hour']]
 
-            # ── Footer note ───────────────────────────────────────
+            fig_hour = go.Figure(go.Bar(
+                x=hour_dist['Label'],
+                y=hour_dist['Searches'],
+                marker_color=bar_colors,
+                marker_opacity=bar_opacities,
+                marker_line=dict(color='rgba(248,113,113,0.3)', width=0.5),
+                text=[str(v) if v > 0 else '' for v in hour_dist['Searches']],
+                textposition='outside',
+                textfont=dict(color='#f87171', size=10, family='Inter'),
+                hovertemplate='<b>%{x} IST</b><br>Searches: %{y}<extra></extra>',
+            ))
+            # Annotation for peak
+            if hour_dist['Searches'].max() > 0:
+                fig_hour.add_annotation(
+                    x=f"{peak_hour:02d}:00",
+                    y=hour_dist['Searches'].max(),
+                    text=f"⚡ Peak: {peak_hour:02d}:00 IST",
+                    showarrow=True,
+                    arrowhead=2,
+                    arrowcolor='#f87171',
+                    font=dict(color='#f87171', size=12, family='Inter'),
+                    bgcolor='rgba(248,113,113,0.15)',
+                    bordercolor='#f87171',
+                    borderwidth=1,
+                    borderpad=5,
+                    yshift=10,
+                )
+            fig_hour.update_layout(
+                **_PLOTLY_BASE,
+                height=290,
+                showlegend=False,
+                bargap=0.15,
+                xaxis=dict(**_PLOTLY_BASE['xaxis'], tickangle=-45, tickfont=dict(size=10)),
+                yaxis=dict(**_PLOTLY_BASE['yaxis']),
+            )
+            st.plotly_chart(fig_hour, use_container_width=True, config={"displayModeBar": False})
+
+            # ── Footer ────────────────────────────────────────────
             scope_label = f"@{current_user}" if is_my_analytics else "all users"
+            ist_now = datetime.datetime.now(ZoneInfo('Asia/Kolkata')).strftime("%b %d, %Y %I:%M %p IST")
             st.markdown(f"""
             <div style='
-                color: #555;
-                font-size: 12px;
+                color: #444;
+                font-size: 11px;
                 text-align: right;
-                margin-top: 10px;
+                margin-top: 12px;
                 padding-top: 10px;
-                border-top: 1px solid #333;
+                border-top: 1px solid #1e1e2e;
             '>
-                Analytics based on {total_searches:,} search records for {scope_label} · Powered by resume_data.db
+                {total_searches:,} records · {scope_label} · Updated {ist_now} · resume_data.db
             </div>
             """, unsafe_allow_html=True)
 
