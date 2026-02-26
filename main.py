@@ -8610,6 +8610,320 @@ with tab3:
 </div>
 """, unsafe_allow_html=True)
 
+    # ============================================================
+    # 📊 SEARCH ANALYTICS DASHBOARD
+    # ============================================================
+    import pandas as pd
+
+    st.markdown("---")
+    st.markdown("""
+    <div style='
+        background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+        padding: 30px;
+        border-radius: 20px;
+        border: 1px solid rgba(0,196,204,0.3);
+        margin-bottom: 30px;
+        box-shadow: 0 8px 32px rgba(0,196,204,0.15);
+    '>
+        <h2 style='
+            background: linear-gradient(135deg, #00c4cc 0%, #7c4dff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 28px;
+            font-weight: 700;
+            margin: 0;
+            text-align: center;
+        '>📊 Search Analytics Dashboard</h2>
+        <p style='color: #888; text-align: center; margin-top: 8px; font-size: 14px;'>
+            Insights from your job search activity
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Analytics Scope Toggle ────────────────────────────────────
+    analytics_scope = st.radio(
+        "📡 Analytics Scope",
+        ["🙋 My Analytics", "🌐 Global Analytics"],
+        horizontal=True,
+        key="analytics_scope_toggle"
+    )
+    is_my_analytics = analytics_scope == "🙋 My Analytics"
+
+    # ── Helper: fetch data from DB ────────────────────────────────
+    def fetch_analytics_data(scope_username=None):
+        """
+        Fetch all user_jobs rows.
+        If scope_username is provided, filter by that user.
+        Returns a pandas DataFrame or empty DataFrame on error.
+        """
+        try:
+            conn = sqlite3.connect('resume_data.db')
+            if scope_username:
+                query = "SELECT role, location, platform, timestamp FROM user_jobs WHERE username = ?"
+                df = pd.read_sql_query(query, conn, params=(scope_username,))
+            else:
+                query = "SELECT role, location, platform, timestamp FROM user_jobs"
+                df = pd.read_sql_query(query, conn)
+            conn.close()
+
+            # Parse timestamp safely
+            if not df.empty:
+                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
+                df = df.dropna(subset=['timestamp'])
+                df['date'] = df['timestamp'].dt.date.astype(str)
+                df['hour'] = df['timestamp'].dt.hour
+            return df
+        except Exception:
+            return pd.DataFrame(columns=['role', 'location', 'platform', 'timestamp', 'date', 'hour'])
+
+    # Determine which data to load
+    current_user = st.session_state.username if hasattr(st.session_state, 'username') and st.session_state.username else None
+    scope_user = current_user if is_my_analytics else None
+
+    # Guard: warn if "My Analytics" but not logged in
+    if is_my_analytics and not current_user:
+        st.warning("⚠️ Please log in to view your personal analytics.")
+    else:
+        df_analytics = fetch_analytics_data(scope_username=scope_user)
+
+        # ── Empty State Guard ──────────────────────────────────────
+        if df_analytics.empty:
+            st.markdown("""
+            <div style='
+                background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+                padding: 40px;
+                border-radius: 15px;
+                text-align: center;
+                color: #888;
+                border: 2px dashed #444;
+                margin: 20px 0;
+            '>
+                <div style='font-size: 40px; margin-bottom: 15px;'>📭</div>
+                <div style='font-size: 18px; font-weight: 600; color: #aaa; margin-bottom: 8px;'>No Data Available</div>
+                <div style='font-size: 14px;'>Perform job searches to populate your analytics dashboard.</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            # ── KPI SUMMARY ROW ────────────────────────────────────
+            total_searches     = len(df_analytics)
+            unique_roles       = df_analytics['role'].nunique()
+            unique_locations   = df_analytics['location'].nunique()
+            top_platform_series = df_analytics['platform'].value_counts()
+            most_used_platform = top_platform_series.index[0] if not top_platform_series.empty else "N/A"
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+            with kpi1:
+                st.metric(
+                    label="🔎 Total Searches",
+                    value=f"{total_searches:,}",
+                )
+            with kpi2:
+                st.metric(
+                    label="💼 Unique Roles",
+                    value=f"{unique_roles:,}",
+                )
+            with kpi3:
+                st.metric(
+                    label="📍 Unique Locations",
+                    value=f"{unique_locations:,}",
+                )
+            with kpi4:
+                st.metric(
+                    label="🏆 Top Platform",
+                    value=most_used_platform,
+                )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # ── ROW 1: Top Roles + Top Locations ─────────────────
+            col_roles, col_locs = st.columns(2)
+
+            with col_roles:
+                st.markdown("""
+                <div style='
+                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                    padding: 20px 20px 5px 20px;
+                    border-radius: 15px;
+                    border: 1px solid rgba(0,196,204,0.2);
+                    margin-bottom: 20px;
+                '>
+                    <h4 style='color: #00c4cc; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;'>
+                        🎯 Top 5 Most Searched Roles
+                    </h4>
+                </div>
+                """, unsafe_allow_html=True)
+
+                top_roles = (
+                    df_analytics['role']
+                    .value_counts()
+                    .head(5)
+                    .reset_index()
+                )
+                top_roles.columns = ['Role', 'Count']
+
+                st.bar_chart(
+                    top_roles.set_index('Role'),
+                    color="#00c4cc",
+                    use_container_width=True
+                )
+
+            with col_locs:
+                st.markdown("""
+                <div style='
+                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                    padding: 20px 20px 5px 20px;
+                    border-radius: 15px;
+                    border: 1px solid rgba(124,77,255,0.2);
+                    margin-bottom: 20px;
+                '>
+                    <h4 style='color: #7c4dff; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;'>
+                        📍 Top 5 Most Searched Locations
+                    </h4>
+                </div>
+                """, unsafe_allow_html=True)
+
+                top_locs = (
+                    df_analytics['location']
+                    .value_counts()
+                    .head(5)
+                    .reset_index()
+                )
+                top_locs.columns = ['Location', 'Count']
+
+                st.bar_chart(
+                    top_locs.set_index('Location'),
+                    color="#7c4dff",
+                    use_container_width=True
+                )
+
+            # ── ROW 2: Platform Distribution + Search Trend ───────
+            col_plat, col_trend = st.columns(2)
+
+            with col_plat:
+                st.markdown("""
+                <div style='
+                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                    padding: 20px 20px 5px 20px;
+                    border-radius: 15px;
+                    border: 1px solid rgba(251,191,36,0.2);
+                    margin-bottom: 20px;
+                '>
+                    <h4 style='color: #fbbf24; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;'>
+                        🏢 Platform Usage Distribution
+                    </h4>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # GROUP BY platform via pandas
+                plat_dist = (
+                    df_analytics.groupby('platform')
+                    .size()
+                    .reset_index(name='Count')
+                    .sort_values('Count', ascending=False)
+                )
+
+                st.bar_chart(
+                    plat_dist.set_index('platform')['Count'],
+                    color="#fbbf24",
+                    use_container_width=True
+                )
+
+            with col_trend:
+                st.markdown("""
+                <div style='
+                    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                    padding: 20px 20px 5px 20px;
+                    border-radius: 15px;
+                    border: 1px solid rgba(52,211,153,0.2);
+                    margin-bottom: 20px;
+                '>
+                    <h4 style='color: #34d399; margin: 0 0 15px 0; font-size: 16px; font-weight: 600;'>
+                        📈 Search Trend Over Time
+                    </h4>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # GROUP BY DATE(timestamp) via pandas
+                trend_data = (
+                    df_analytics.groupby('date')
+                    .size()
+                    .reset_index(name='Searches')
+                    .sort_values('date')
+                )
+
+                if len(trend_data) >= 2:
+                    st.line_chart(
+                        trend_data.set_index('date')['Searches'],
+                        color="#34d399",
+                        use_container_width=True
+                    )
+                else:
+                    # Fallback bar chart if only 1 data point
+                    st.bar_chart(
+                        trend_data.set_index('date')['Searches'],
+                        color="#34d399",
+                        use_container_width=True
+                    )
+
+            # ── ROW 3: Peak Search Hour ───────────────────────────
+            st.markdown("""
+            <div style='
+                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                padding: 20px 20px 5px 20px;
+                border-radius: 15px;
+                border: 1px solid rgba(248,113,113,0.2);
+                margin-bottom: 20px;
+            '>
+                <h4 style='color: #f87171; margin: 0 0 5px 0; font-size: 16px; font-weight: 600;'>
+                    🕐 Peak Search Hour (0–23 Distribution)
+                </h4>
+                <p style='color: #666; font-size: 12px; margin: 0 0 10px 0;'>
+                    Activity across all hours of the day
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # GROUP BY HOUR — create full 0-23 range so empty hours show 0
+            hour_counts = df_analytics.groupby('hour').size().reset_index(name='Searches')
+            all_hours   = pd.DataFrame({'hour': range(24)})
+            hour_dist   = (
+                all_hours
+                .merge(hour_counts, on='hour', how='left')
+                .fillna(0)
+                .astype({'Searches': int})
+            )
+            hour_dist['Hour Label'] = hour_dist['hour'].apply(
+                lambda h: f"{h:02d}:00"
+            )
+
+            st.bar_chart(
+                hour_dist.set_index('Hour Label')['Searches'],
+                color="#f87171",
+                use_container_width=True,
+                height=250
+            )
+
+            # ── Footer note ───────────────────────────────────────
+            scope_label = f"@{current_user}" if is_my_analytics else "all users"
+            st.markdown(f"""
+            <div style='
+                color: #555;
+                font-size: 12px;
+                text-align: right;
+                margin-top: 10px;
+                padding-top: 10px;
+                border-top: 1px solid #333;
+            '>
+                Analytics based on {total_searches:,} search records for {scope_label} · Powered by resume_data.db
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ============================================================
+    # END OF SEARCH ANALYTICS DASHBOARD
+    # ============================================================
+
     # Enhanced CSS with advanced animations and effects
     st.markdown("""
     <style>
