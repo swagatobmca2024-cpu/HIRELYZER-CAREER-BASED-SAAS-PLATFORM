@@ -8786,105 +8786,183 @@ with tab3:
 
             with col_roles:
                 _section_header("🎯", "Top 5 Most Searched Roles", "by search frequency", "#00c4cc")
+                roles_orient = st.radio("Orientation", ["↔ Horizontal", "↕ Vertical"], index=0, horizontal=True, key="roles_orient")
                 top_roles = (
                     df_analytics['role'].value_counts().head(5)
                     .reset_index()
                 )
                 top_roles.columns = ['Role', 'Count']
-                top_roles = top_roles.sort_values('Count')  # ascending for horizontal bar
-
-                fig_roles = go.Figure(go.Bar(
-                    x=top_roles['Count'],
-                    y=top_roles['Role'],
-                    orientation='h',
-                    marker=dict(
-                        color=top_roles['Count'],
-                        colorscale=[[0, '#004d52'], [0.5, '#00a0a8'], [1, '#00c4cc']],
-                        line=dict(color='rgba(0,196,204,0.4)', width=1),
-                    ),
-                    text=top_roles['Count'],
-                    textposition='outside',
-                    textfont=dict(color='#00c4cc', size=12, family='Inter'),
-                    hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
-                ))
-                fig_roles.update_layout(
-                    **_PLOTLY_BASE,
-                    height=260,
-                    showlegend=False,
-                    xaxis_title=None,
-                    yaxis_title=None,
-                    xaxis=dict(**_XAXIS, showgrid=True),
-                    yaxis=dict(**_YAXIS, showgrid=False),
-                )
-                st.plotly_chart(fig_roles, use_container_width=True, config={"displayModeBar": False})
+                top_roles = top_roles.sort_values('Count')
+                if roles_orient == "↔ Horizontal":
+                    fig_roles = go.Figure(go.Bar(
+                        x=top_roles['Count'],
+                        y=top_roles['Role'],
+                        orientation='h',
+                        marker=dict(
+                            color=top_roles['Count'],
+                            colorscale=[[0, '#004d52'], [0.5, '#00a0a8'], [1, '#00c4cc']],
+                            line=dict(color='rgba(0,196,204,0.4)', width=1),
+                        ),
+                        text=top_roles['Count'],
+                        textposition='outside',
+                        textfont=dict(color='#00c4cc', size=12, family='Inter'),
+                        hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
+                    ))
+                    fig_roles.update_layout(
+                        **_PLOTLY_BASE, height=260, showlegend=False,
+                        xaxis_title=None, yaxis_title=None,
+                        xaxis=dict(**_XAXIS, showgrid=True),
+                        yaxis=dict(**_YAXIS, showgrid=False),
+                    )
+                else:
+                    fig_roles = go.Figure(go.Bar(
+                        x=top_roles['Role'],
+                        y=top_roles['Count'],
+                        orientation='v',
+                        marker=dict(
+                            color=top_roles['Count'],
+                            colorscale=[[0, '#004d52'], [0.5, '#00a0a8'], [1, '#00c4cc']],
+                            line=dict(color='rgba(0,196,204,0.4)', width=1),
+                        ),
+                        text=top_roles['Count'],
+                        textposition='outside',
+                        textfont=dict(color='#00c4cc', size=12, family='Inter'),
+                        hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
+                    ))
+                    fig_roles.update_layout(
+                        **_PLOTLY_BASE, height=260, showlegend=False,
+                        xaxis_title=None, yaxis_title=None,
+                        xaxis=dict(**_XAXIS, tickangle=-25),
+                        yaxis=dict(**_YAXIS, showgrid=True),
+                    )
+                st.plotly_chart(fig_roles, use_container_width=True, config={
+                    "displayModeBar": True,
+                    "displaylogo": False,
+                    "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
+                    "toImageButtonOptions": {"format": "png", "filename": "top_roles"},
+                    "scrollZoom": False,
+                })
 
             with col_locs:
                 _section_header("📍", "Top 5 Most Searched Locations", "by search frequency", "#7c4dff")
+                locs_orient = st.radio("Orientation", ["↔ Horizontal", "↕ Vertical"], index=0, horizontal=True, key="locs_orient")
                 top_locs = (
                     df_analytics['location'].value_counts().head(5)
                     .reset_index()
                 )
                 top_locs.columns = ['Location', 'Count']
                 top_locs = top_locs.sort_values('Count')
-
-                fig_locs = go.Figure(go.Bar(
-                    x=top_locs['Count'],
-                    y=top_locs['Location'],
-                    orientation='h',
-                    marker=dict(
-                        color=top_locs['Count'],
-                        colorscale=[[0, '#1e0052'], [0.5, '#5c29c0'], [1, '#7c4dff']],
-                        line=dict(color='rgba(124,77,255,0.4)', width=1),
-                    ),
-                    text=top_locs['Count'],
-                    textposition='outside',
-                    textfont=dict(color='#7c4dff', size=12, family='Inter'),
-                    hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
-                ))
-                fig_locs.update_layout(
-                    **_PLOTLY_BASE,
-                    height=260,
-                    showlegend=False,
-                    xaxis_title=None,
-                    yaxis_title=None,
-                    xaxis=dict(**_XAXIS, showgrid=True),
-                    yaxis=dict(**_YAXIS, showgrid=False),
-                )
-                st.plotly_chart(fig_locs, use_container_width=True, config={"displayModeBar": False})
+                if locs_orient == "↔ Horizontal":
+                    fig_locs = go.Figure(go.Bar(
+                        x=top_locs['Count'],
+                        y=top_locs['Location'],
+                        orientation='h',
+                        marker=dict(
+                            color=top_locs['Count'],
+                            colorscale=[[0, '#1e0052'], [0.5, '#5c29c0'], [1, '#7c4dff']],
+                            line=dict(color='rgba(124,77,255,0.4)', width=1),
+                        ),
+                        text=top_locs['Count'],
+                        textposition='outside',
+                        textfont=dict(color='#7c4dff', size=12, family='Inter'),
+                        hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
+                    ))
+                    fig_locs.update_layout(
+                        **_PLOTLY_BASE, height=260, showlegend=False,
+                        xaxis_title=None, yaxis_title=None,
+                        xaxis=dict(**_XAXIS, showgrid=True),
+                        yaxis=dict(**_YAXIS, showgrid=False),
+                    )
+                else:
+                    fig_locs = go.Figure(go.Bar(
+                        x=top_locs['Location'],
+                        y=top_locs['Count'],
+                        orientation='v',
+                        marker=dict(
+                            color=top_locs['Count'],
+                            colorscale=[[0, '#1e0052'], [0.5, '#5c29c0'], [1, '#7c4dff']],
+                            line=dict(color='rgba(124,77,255,0.4)', width=1),
+                        ),
+                        text=top_locs['Count'],
+                        textposition='outside',
+                        textfont=dict(color='#7c4dff', size=12, family='Inter'),
+                        hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
+                    ))
+                    fig_locs.update_layout(
+                        **_PLOTLY_BASE, height=260, showlegend=False,
+                        xaxis_title=None, yaxis_title=None,
+                        xaxis=dict(**_XAXIS, tickangle=-25),
+                        yaxis=dict(**_YAXIS, showgrid=True),
+                    )
+                st.plotly_chart(fig_locs, use_container_width=True, config={
+                    "displayModeBar": True,
+                    "displaylogo": False,
+                    "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
+                    "toImageButtonOptions": {"format": "png", "filename": "top_locations"},
+                    "scrollZoom": False,
+                })
 
             # ── ROW 2: Platform Distribution (donut) + Trend (area line) ──
             col_plat, col_trend = st.columns(2)
 
             with col_plat:
                 _section_header("🏢", "Platform Usage Distribution", "share of all searches", "#fbbf24")
+                plat_orient = st.radio("Orientation", ["↕ Vertical", "↔ Horizontal"], index=0, horizontal=True, key="plat_orient")
                 plat_dist = (
                     df_analytics.groupby('platform').size()
                     .reset_index(name='Count')
                     .sort_values('Count', ascending=False)
                 )
-
-                fig_plat = go.Figure(go.Bar(
-                    x=plat_dist['platform'],
-                    y=plat_dist['Count'],
-                    marker=dict(
-                        color=plat_dist['Count'],
-                        colorscale=[[0,'#3d2e00'],[0.5,'#c0900e'],[1,'#fbbf24']],
-                        line=dict(color='rgba(251,191,36,0.4)', width=1),
-                    ),
-                    text=plat_dist['Count'],
-                    textposition='outside',
-                    textfont=dict(color='#fbbf24', size=11, family='Inter'),
-                    hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
-                ))
-                fig_plat.update_layout(
-                    **_PLOTLY_BASE,
-                    height=270,
-                    showlegend=False,
-                    xaxis=dict(**_XAXIS, tickangle=-25),
-                    yaxis=dict(**_YAXIS),
-                    bargap=0.3,
-                )
-                st.plotly_chart(fig_plat, use_container_width=True, config={"displayModeBar": False})
+                if plat_orient == "↕ Vertical":
+                    fig_plat = go.Figure(go.Bar(
+                        x=plat_dist['platform'],
+                        y=plat_dist['Count'],
+                        orientation='v',
+                        marker=dict(
+                            color=plat_dist['Count'],
+                            colorscale=[[0,'#3d2e00'],[0.5,'#c0900e'],[1,'#fbbf24']],
+                            line=dict(color='rgba(251,191,36,0.4)', width=1),
+                        ),
+                        text=plat_dist['Count'],
+                        textposition='outside',
+                        textfont=dict(color='#fbbf24', size=11, family='Inter'),
+                        hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
+                    ))
+                    fig_plat.update_layout(
+                        **_PLOTLY_BASE, height=270, showlegend=False,
+                        xaxis=dict(**_XAXIS, tickangle=-25),
+                        yaxis=dict(**_YAXIS),
+                        bargap=0.3,
+                    )
+                else:
+                    plat_dist_h = plat_dist.sort_values('Count')
+                    fig_plat = go.Figure(go.Bar(
+                        x=plat_dist_h['Count'],
+                        y=plat_dist_h['platform'],
+                        orientation='h',
+                        marker=dict(
+                            color=plat_dist_h['Count'],
+                            colorscale=[[0,'#3d2e00'],[0.5,'#c0900e'],[1,'#fbbf24']],
+                            line=dict(color='rgba(251,191,36,0.4)', width=1),
+                        ),
+                        text=plat_dist_h['Count'],
+                        textposition='outside',
+                        textfont=dict(color='#fbbf24', size=11, family='Inter'),
+                        hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
+                    ))
+                    fig_plat.update_layout(
+                        **_PLOTLY_BASE, height=270, showlegend=False,
+                        xaxis=dict(**_XAXIS, showgrid=True),
+                        yaxis=dict(**_YAXIS, showgrid=False),
+                        bargap=0.3,
+                    )
+                st.plotly_chart(fig_plat, use_container_width=True, config={
+                    "displayModeBar": True,
+                    "displaylogo": False,
+                    "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
+                    "toImageButtonOptions": {"format": "png", "filename": "platform_distribution"},
+                    "scrollZoom": False,
+                })
 
             with col_trend:
                 _section_header("📈", "Search Trend Over Time (IST)", "daily activity", "#34d399")
@@ -8914,10 +8992,17 @@ with tab3:
                     xaxis=dict(**_XAXIS, tickangle=-25),
                     yaxis=dict(**_YAXIS),
                 )
-                st.plotly_chart(fig_trend, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig_trend, use_container_width=True, config={
+                                    "displayModeBar": True,
+                                    "displaylogo": False,
+                                    "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
+                                    "toImageButtonOptions": {"format": "png", "filename": "search_trend"},
+                                    "scrollZoom": False,
+                                })
 
             # ── ROW 3: Peak Hour (IST, full width) ───────────────
             _section_header("🕐", "Peak Search Hour — IST (0–23 Distribution)", "when you search most — converted to Indian Standard Time", "#f87171")
+            hour_orient = st.radio("Orientation", ["↕ Vertical", "↔ Horizontal"], index=0, horizontal=True, key="hour_orient")
 
             # Build full 0-23 with IST hours
             hour_counts = df_analytics.groupby('hour').size().reset_index(name='Searches')
@@ -8935,42 +9020,69 @@ with tab3:
             ]
             bar_opacities = [1.0 if h == peak_hour else 0.65 for h in hour_dist['hour']]
 
-            fig_hour = go.Figure(go.Bar(
-                x=hour_dist['Label'],
-                y=hour_dist['Searches'],
-                marker_color=bar_colors,
-                marker_opacity=bar_opacities,
-                marker_line=dict(color='rgba(248,113,113,0.3)', width=0.5),
-                text=[str(v) if v > 0 else '' for v in hour_dist['Searches']],
-                textposition='outside',
-                textfont=dict(color='#f87171', size=10, family='Inter'),
-                hovertemplate='<b>%{x} IST</b><br>Searches: %{y}<extra></extra>',
-            ))
-            # Annotation for peak
-            if hour_dist['Searches'].max() > 0:
-                fig_hour.add_annotation(
-                    x=f"{peak_hour:02d}:00",
-                    y=hour_dist['Searches'].max(),
-                    text=f"⚡ Peak: {peak_hour:02d}:00 IST",
-                    showarrow=True,
-                    arrowhead=2,
-                    arrowcolor='#f87171',
-                    font=dict(color='#f87171', size=12, family='Inter'),
-                    bgcolor='rgba(248,113,113,0.15)',
-                    bordercolor='#f87171',
-                    borderwidth=1,
-                    borderpad=5,
-                    yshift=10,
+            if hour_orient == "↕ Vertical":
+                fig_hour = go.Figure(go.Bar(
+                    x=hour_dist['Label'],
+                    y=hour_dist['Searches'],
+                    marker_color=bar_colors,
+                    marker_opacity=bar_opacities,
+                    marker_line=dict(color='rgba(248,113,113,0.3)', width=0.5),
+                    text=[str(v) if v > 0 else '' for v in hour_dist['Searches']],
+                    textposition='outside',
+                    textfont=dict(color='#f87171', size=10, family='Inter'),
+                    hovertemplate='<b>%{x} IST</b><br>Searches: %{y}<extra></extra>',
+                ))
+                # Annotation for peak
+                if hour_dist['Searches'].max() > 0:
+                    fig_hour.add_annotation(
+                        x=f"{peak_hour:02d}:00",
+                        y=hour_dist['Searches'].max(),
+                        text=f"⚡ Peak: {peak_hour:02d}:00 IST",
+                        showarrow=True, arrowhead=2, arrowcolor='#f87171',
+                        font=dict(color='#f87171', size=12, family='Inter'),
+                        bgcolor='rgba(248,113,113,0.15)',
+                        bordercolor='#f87171', borderwidth=1, borderpad=5, yshift=10,
+                    )
+                fig_hour.update_layout(
+                    **_PLOTLY_BASE, height=290, showlegend=False, bargap=0.15,
+                    xaxis=dict(**{**_XAXIS, "tickfont": dict(size=10, color="#999"), "tickangle": -45}),
+                    yaxis=dict(**_YAXIS),
                 )
-            fig_hour.update_layout(
-                **_PLOTLY_BASE,
-                height=290,
-                showlegend=False,
-                bargap=0.15,
-                xaxis=dict(**{**_XAXIS, "tickfont": dict(size=10, color="#999"), "tickangle": -45}),
-                yaxis=dict(**_YAXIS),
-            )
-            st.plotly_chart(fig_hour, use_container_width=True, config={"displayModeBar": False})
+            else:
+                fig_hour = go.Figure(go.Bar(
+                    x=hour_dist['Searches'],
+                    y=hour_dist['Label'],
+                    orientation='h',
+                    marker_color=bar_colors,
+                    marker_opacity=bar_opacities,
+                    marker_line=dict(color='rgba(248,113,113,0.3)', width=0.5),
+                    text=[str(v) if v > 0 else '' for v in hour_dist['Searches']],
+                    textposition='outside',
+                    textfont=dict(color='#f87171', size=10, family='Inter'),
+                    hovertemplate='<b>%{y} IST</b><br>Searches: %{x}<extra></extra>',
+                ))
+                if hour_dist['Searches'].max() > 0:
+                    fig_hour.add_annotation(
+                        y=f"{peak_hour:02d}:00",
+                        x=hour_dist['Searches'].max(),
+                        text=f"⚡ Peak: {peak_hour:02d}:00 IST",
+                        showarrow=True, arrowhead=2, arrowcolor='#f87171',
+                        font=dict(color='#f87171', size=12, family='Inter'),
+                        bgcolor='rgba(248,113,113,0.15)',
+                        bordercolor='#f87171', borderwidth=1, borderpad=5, xshift=10,
+                    )
+                fig_hour.update_layout(
+                    **_PLOTLY_BASE, height=600, showlegend=False, bargap=0.15,
+                    xaxis=dict(**_XAXIS, showgrid=True),
+                    yaxis=dict(**{**_YAXIS, "tickfont": dict(size=10, color="#999")}),
+                )
+            st.plotly_chart(fig_hour, use_container_width=True, config={
+                "displayModeBar": True,
+                "displaylogo": False,
+                "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
+                "toImageButtonOptions": {"format": "png", "filename": "peak_hour"},
+                "scrollZoom": False,
+            })
 
             # ── Footer ────────────────────────────────────────────
             scope_label = f"@{current_user}" if is_my_analytics else "all users"
@@ -9300,7 +9412,6 @@ with tab3:
             <p style="position: relative; z-index: 2;">💵 Salary Range: <span style="color: #34d399; font-weight: 600;">{role['range']}</span></p>
         </div>
         """, unsafe_allow_html=True)
-
 def evaluate_interview_answer(answer: str, question: str = None):
     """
     Uses an LLM to strictly evaluate an interview answer.
