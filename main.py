@@ -8717,6 +8717,7 @@ with tab3:
             <p style="position: relative; z-index: 2;">💵 Salary Range: <span style="color: #34d399; font-weight: 600;">{role['range']}</span></p>
         </div>
         """, unsafe_allow_html=True)
+
 def evaluate_interview_answer(answer: str, question: str = None):
     """
     Uses an LLM to strictly evaluate an interview answer.
@@ -12153,9 +12154,45 @@ Generate exactly {num_questions} questions now:
         import matplotlib.pyplot as plt
         import matplotlib
         matplotlib.use('Agg')
+        import plotly.graph_objects as go
+        import plotly.express as px
+        from plotly.subplots import make_subplots
 
-        st.subheader("📊 My Progress Dashboard")
-        st.markdown("Track how you're improving over time, spot your strengths, and find exactly what to work on next.")
+        # ─── Dark-theme CSS for card metrics & table badges ───────────────────
+        st.markdown("""
+        <style>
+        .dash-card {
+            background: linear-gradient(135deg, rgba(0,195,255,0.08), rgba(0,195,255,0.03));
+            border: 1px solid rgba(0,195,255,0.25);
+            border-radius: 14px;
+            padding: 18px 22px;
+            margin-bottom: 12px;
+            transition: border-color 0.2s ease;
+        }
+        .dash-card:hover { border-color: rgba(0,195,255,0.6); }
+        .metric-label { color: #8ab4d4; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+        .metric-value { color: #ffffff; font-size: 28px; font-weight: 700; line-height: 1; }
+        .metric-sub   { color: #aaaaaa; font-size: 12px; margin-top: 4px; }
+        .badge-excellent { background: rgba(0,230,118,0.18); color: #00e676; border: 1px solid rgba(0,230,118,0.4); border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+        .badge-good      { background: rgba(102,187,106,0.18); color: #66bb6a; border: 1px solid rgba(102,187,106,0.4); border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+        .badge-average   { background: rgba(255,204,2,0.18); color: #ffcc02; border: 1px solid rgba(255,204,2,0.4); border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+        .badge-weak      { background: rgba(255,152,0,0.18); color: #ff9800; border: 1px solid rgba(255,152,0,0.4); border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+        .badge-poor      { background: rgba(244,67,54,0.18); color: #f44336; border: 1px solid rgba(244,67,54,0.4); border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 600; }
+        .section-header { color: #00c3ff; font-size: 20px; font-weight: 700; margin: 6px 0 2px 0; }
+        .rec-card { background: rgba(0,195,255,0.07); border-left: 4px solid #00c3ff; padding: 12px 16px; margin: 8px 0; border-radius: 0 8px 8px 0; }
+        .rec-card p { color: #ffffff; margin: 0; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown("""
+        <div style="display:flex; align-items:center; gap:12px; margin-bottom:4px;">
+            <span style="font-size:32px;">📊</span>
+            <div>
+                <h2 style="color:#ffffff; margin:0; font-size:26px; font-weight:800;">My Progress Dashboard</h2>
+                <p style="color:#8ab4d4; margin:0; font-size:14px;">Track how you're improving over time, spot your strengths, and find exactly what to work on next.</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
         username = st.session_state.get("username", "Guest")
 
@@ -12193,10 +12230,10 @@ Generate exactly {num_questions} questions now:
                 df['weighted_score'] = df['weighted_score'].fillna(df['avg_score'])
 
             # =====================================================
-            # SECTION A — EXECUTIVE SUMMARY METRICS
+            # SECTION A — EXECUTIVE SUMMARY METRICS (CARD STYLE)
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🏆 Your Progress at a Glance")
+            st.markdown('<p class="section-header">🏆 Your Progress at a Glance</p>', unsafe_allow_html=True)
             st.caption("Here's a quick overview of everything you've accomplished so far.")
 
             total_interviews = len(df)
@@ -12225,31 +12262,65 @@ Generate exactly {num_questions} questions now:
             else:
                 consistency_label = "🔴 Varies a Lot"
 
+            # Row 1 — four cards
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Interviews Completed", total_interviews)
+                st.markdown(f"""<div class="dash-card">
+                    <div class="metric-label">Interviews Completed</div>
+                    <div class="metric-value">{total_interviews}</div>
+                    <div class="metric-sub">sessions practised</div>
+                </div>""", unsafe_allow_html=True)
             with col2:
-                st.metric("Best Score Ever", f"{highest_score:.1f}/10" if not pd.isna(highest_score) else "N/A")
+                best_disp = f"{highest_score:.1f}/10" if not pd.isna(highest_score) else "N/A"
+                st.markdown(f"""<div class="dash-card">
+                    <div class="metric-label">Best Score Ever</div>
+                    <div class="metric-value" style="color:#00e676;">{best_disp}</div>
+                    <div class="metric-sub">personal best</div>
+                </div>""", unsafe_allow_html=True)
             with col3:
-                st.metric("Lowest Score", f"{lowest_score:.1f}/10" if not pd.isna(lowest_score) else "N/A")
+                low_disp = f"{lowest_score:.1f}/10" if not pd.isna(lowest_score) else "N/A"
+                st.markdown(f"""<div class="dash-card">
+                    <div class="metric-label">Lowest Score</div>
+                    <div class="metric-value" style="color:#ff9800;">{low_disp}</div>
+                    <div class="metric-sub">room to grow</div>
+                </div>""", unsafe_allow_html=True)
             with col4:
-                st.metric("Average Score", f"{overall_avg:.2f}/10" if not pd.isna(overall_avg) else "N/A")
+                avg_disp = f"{overall_avg:.2f}/10" if not pd.isna(overall_avg) else "N/A"
+                st.markdown(f"""<div class="dash-card">
+                    <div class="metric-label">Average Score</div>
+                    <div class="metric-value" style="color:#00c3ff;">{avg_disp}</div>
+                    <div class="metric-sub">overall average</div>
+                </div>""", unsafe_allow_html=True)
 
+            # Row 2 — three cards
             col5, col6, col7 = st.columns(3)
             with col5:
-                st.metric("Total Questions Answered", total_questions)
+                st.markdown(f"""<div class="dash-card">
+                    <div class="metric-label">Total Questions Answered</div>
+                    <div class="metric-value">{total_questions}</div>
+                    <div class="metric-sub">practice reps logged</div>
+                </div>""", unsafe_allow_html=True)
             with col6:
                 sign = "+" if improvement_pct >= 0 else ""
-                st.metric("How Much You've Improved", f"{sign}{improvement_pct:.1f}%", help="Compared to your very first interview")
+                imp_color = "#00e676" if improvement_pct >= 0 else "#f44336"
+                st.markdown(f"""<div class="dash-card">
+                    <div class="metric-label">How Much You've Improved</div>
+                    <div class="metric-value" style="color:{imp_color};">{sign}{improvement_pct:.1f}%</div>
+                    <div class="metric-sub">vs. your first interview</div>
+                </div>""", unsafe_allow_html=True)
             with col7:
-                st.metric("Your Score Consistency", consistency_label, help="Are your scores similar across interviews, or do they vary a lot?")
+                st.markdown(f"""<div class="dash-card">
+                    <div class="metric-label">Score Consistency</div>
+                    <div class="metric-value" style="font-size:20px;">{consistency_label}</div>
+                    <div class="metric-sub">std deviation: {score_std:.2f}</div>
+                </div>""", unsafe_allow_html=True)
 
             # =====================================================
-            # SECTION B — SCORE TREND INTELLIGENCE
+            # SECTION B — INTERACTIVE SCORE TREND (PLOTLY)
             # =====================================================
             st.markdown("---")
-            st.markdown("### 📈 Are You Getting Better Over Time?")
-            st.caption("This chart shows how your scores have changed across every interview you've done. The smoother line helps filter out one-off good or bad days.")
+            st.markdown('<p class="section-header">📈 Are You Getting Better Over Time?</p>', unsafe_allow_html=True)
+            st.caption("This chart shows how your scores have changed across every interview you've done. Hover over any point for details.")
 
             trend_df = df[['avg_score', 'weighted_score']].copy().reset_index(drop=True)
             trend_df.index = trend_df.index + 1
@@ -12262,7 +12333,107 @@ Generate exactly {num_questions} questions now:
                 'weighted_score': 'Adjusted Score (Hard Interviews Count More)'
             })
 
-            st.line_chart(trend_df[['Your Score', 'Adjusted Score (Hard Interviews Count More)', 'Smoothed Performance Trend']])
+            # Build Plotly interactive trend chart
+            _x_vals = list(range(1, len(trend_df) + 1))
+            _raw_scores = trend_df['Your Score'].tolist()
+            _adj_scores = trend_df['Adjusted Score (Hard Interviews Count More)'].tolist()
+            _smooth_scores = trend_df['Smoothed Performance Trend'].tolist()
+
+            # Best and worst points
+            _best_idx = int(np.argmax(_raw_scores))
+            _worst_idx = int(np.argmin(_raw_scores))
+
+            _diff_labels = df['difficulty'].tolist() if 'difficulty' in df.columns else ['Unknown'] * len(_raw_scores)
+            _role_labels = df['role'].tolist() if 'role' in df.columns else ['N/A'] * len(_raw_scores)
+            _hover_texts = [
+                f"Interview #{i}<br>Score: {s:.2f}/10<br>Role: {r}<br>Difficulty: {d}"
+                for i, s, r, d in zip(_x_vals, _raw_scores, _role_labels, _diff_labels)
+            ]
+
+            fig_trend = go.Figure()
+
+            # Shaded area under raw score
+            fig_trend.add_trace(go.Scatter(
+                x=_x_vals, y=_raw_scores,
+                fill='tozeroy', fillcolor='rgba(0,195,255,0.06)',
+                line=dict(color='rgba(0,195,255,0)', width=0),
+                showlegend=False, hoverinfo='skip'
+            ))
+
+            # Raw score line
+            fig_trend.add_trace(go.Scatter(
+                x=_x_vals, y=_raw_scores,
+                mode='lines+markers',
+                name='Your Score',
+                line=dict(color='#00c3ff', width=2.5),
+                marker=dict(size=7, color='#00c3ff', line=dict(width=1.5, color='#ffffff')),
+                hovertext=_hover_texts, hoverinfo='text'
+            ))
+
+            # Adjusted score
+            fig_trend.add_trace(go.Scatter(
+                x=_x_vals, y=_adj_scores,
+                mode='lines+markers',
+                name='Adjusted Score',
+                line=dict(color='#b388ff', width=2, dash='dot'),
+                marker=dict(size=5, color='#b388ff'),
+                hovertemplate='Interview #%{x}<br>Adjusted: %{y:.2f}/10<extra></extra>'
+            ))
+
+            # Smoothed trend
+            fig_trend.add_trace(go.Scatter(
+                x=_x_vals, y=_smooth_scores,
+                mode='lines',
+                name='Smoothed Trend',
+                line=dict(color='#ffcc02', width=2.5, dash='dash'),
+                hovertemplate='Interview #%{x}<br>Trend: %{y:.2f}/10<extra></extra>'
+            ))
+
+            # Best score marker
+            fig_trend.add_trace(go.Scatter(
+                x=[_x_vals[_best_idx]], y=[_raw_scores[_best_idx]],
+                mode='markers+text',
+                name='Best Interview',
+                marker=dict(size=14, color='#00e676', symbol='star', line=dict(width=2, color='#ffffff')),
+                text=['★ Best'], textposition='top center',
+                textfont=dict(color='#00e676', size=11),
+                hovertemplate=f'🏆 Best Interview #{_x_vals[_best_idx]}<br>Score: {_raw_scores[_best_idx]:.2f}/10<extra></extra>'
+            ))
+
+            # Worst score marker
+            fig_trend.add_trace(go.Scatter(
+                x=[_x_vals[_worst_idx]], y=[_raw_scores[_worst_idx]],
+                mode='markers+text',
+                name='Lowest Interview',
+                marker=dict(size=14, color='#f44336', symbol='x', line=dict(width=2, color='#ffffff')),
+                text=['▼ Low'], textposition='bottom center',
+                textfont=dict(color='#f44336', size=11),
+                hovertemplate=f'📉 Lowest Interview #{_x_vals[_worst_idx]}<br>Score: {_raw_scores[_worst_idx]:.2f}/10<extra></extra>'
+            ))
+
+            fig_trend.update_layout(
+                paper_bgcolor='#0f1419', plot_bgcolor='#0f1419',
+                font=dict(color='#ffffff', family='sans-serif'),
+                xaxis=dict(
+                    title='Interview #', tickmode='linear', tick0=1, dtick=1,
+                    gridcolor='rgba(255,255,255,0.06)', zeroline=False,
+                    titlefont=dict(color='#8ab4d4'), tickfont=dict(color='#8ab4d4')
+                ),
+                yaxis=dict(
+                    title='Score (/10)', range=[0, 10.5],
+                    gridcolor='rgba(255,255,255,0.06)', zeroline=False,
+                    titlefont=dict(color='#8ab4d4'), tickfont=dict(color='#8ab4d4')
+                ),
+                legend=dict(
+                    bgcolor='rgba(0,0,0,0.4)', bordercolor='rgba(0,195,255,0.3)',
+                    borderwidth=1, font=dict(color='#ffffff', size=12)
+                ),
+                hovermode='x unified',
+                margin=dict(l=50, r=30, t=30, b=50),
+                height=380
+            )
+
+            st.plotly_chart(fig_trend, use_container_width=True)
             st.caption("💡 **Adjusted Score** gives a little extra credit for completing harder interviews. **Smoothed Trend** is the average of your last 3 interviews — it shows your real direction without single-interview spikes.")
 
             # Detect trend direction using linear regression slope
@@ -12284,10 +12455,10 @@ Generate exactly {num_questions} questions now:
             st.markdown(trend_badge)
 
             # =====================================================
-            # SECTION C — DOMAIN & ROLE ANALYTICS
+            # SECTION C — DOMAIN & ROLE ANALYTICS (PLOTLY CHARTS)
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🌐 Where Are You Strongest?")
+            st.markdown('<p class="section-header">🌐 Where Are You Strongest?</p>', unsafe_allow_html=True)
             st.caption("See which career areas and job roles you score highest in — and which ones need more practice.")
 
             if 'domain' in df.columns:
@@ -12311,7 +12482,7 @@ Generate exactly {num_questions} questions now:
                     st.markdown(f"🏆 **You shine in:** {strongest_domain} — avg score {domain_avg[strongest_domain]:.1f}/10")
                     st.markdown(f"📌 **Room to grow in:** {weakest_domain} — avg score {domain_avg[weakest_domain]:.1f}/10. Spend more time practising here.")
 
-            # Role performance table
+            # Role performance — interactive bar + pie + styled table
             if 'role' in df.columns:
                 role_perf = df.groupby('role').agg(
                     Attempts=('avg_score', 'count'),
@@ -12321,14 +12492,100 @@ Generate exactly {num_questions} questions now:
                 ).reset_index()
                 role_perf.columns = ['Role', 'Times Practised', 'Avg Score', 'Best Score', 'Last Score']
                 role_perf = role_perf.round(2)
-                st.markdown("**Your Scores by Job Role**")
-                st.dataframe(role_perf, use_container_width=True)
+
+                st.markdown("#### 📊 Role Breakdown")
+                col_rb1, col_rb2 = st.columns(2)
+
+                # Interactive bar chart — Avg Score by Role
+                with col_rb1:
+                    _bar_colors = ['#00c3ff' if v == role_perf['Avg Score'].max() else '#4a90d9'
+                                   for v in role_perf['Avg Score']]
+                    fig_role_bar = go.Figure(go.Bar(
+                        x=role_perf['Role'],
+                        y=role_perf['Avg Score'],
+                        marker_color=_bar_colors,
+                        text=[f"{v:.1f}" for v in role_perf['Avg Score']],
+                        textposition='outside',
+                        hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.2f}/10<extra></extra>'
+                    ))
+                    fig_role_bar.update_layout(
+                        title=dict(text='Avg Score by Role', font=dict(color='#00c3ff', size=14)),
+                        paper_bgcolor='#0f1419', plot_bgcolor='#0f1419',
+                        font=dict(color='#ffffff'),
+                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)', tickfont=dict(color='#8ab4d4')),
+                        yaxis=dict(range=[0, 10.5], gridcolor='rgba(255,255,255,0.06)', tickfont=dict(color='#8ab4d4')),
+                        margin=dict(l=30, r=20, t=40, b=60), height=300
+                    )
+                    st.plotly_chart(fig_role_bar, use_container_width=True)
+
+                # Interactive pie chart — Interview distribution by Role
+                with col_rb2:
+                    _pie_colors = ['#00c3ff', '#b388ff', '#ffcc02', '#00e676', '#ff9800',
+                                   '#f48fb1', '#80cbc4', '#ce93d8', '#90caf9', '#a5d6a7']
+                    fig_role_pie = go.Figure(go.Pie(
+                        labels=role_perf['Role'],
+                        values=role_perf['Times Practised'],
+                        hole=0.4,
+                        marker=dict(colors=_pie_colors[:len(role_perf)],
+                                    line=dict(color='#0f1419', width=2)),
+                        textfont=dict(color='#ffffff', size=12),
+                        hovertemplate='<b>%{label}</b><br>Interviews: %{value}<br>Share: %{percent}<extra></extra>'
+                    ))
+                    fig_role_pie.update_layout(
+                        title=dict(text='Interview Distribution by Role', font=dict(color='#00c3ff', size=14)),
+                        paper_bgcolor='#0f1419',
+                        font=dict(color='#ffffff'),
+                        legend=dict(font=dict(color='#ffffff', size=11), bgcolor='rgba(0,0,0,0)'),
+                        margin=dict(l=20, r=20, t=40, b=20), height=300
+                    )
+                    st.plotly_chart(fig_role_pie, use_container_width=True)
+
+                # Styled role table
+                st.markdown("**Detailed Role Performance Table**")
+
+                def _score_badge(v):
+                    if v >= 8.5:
+                        return f'<span class="badge-excellent">{v:.2f}</span>'
+                    elif v >= 7.0:
+                        return f'<span class="badge-good">{v:.2f}</span>'
+                    elif v >= 5.5:
+                        return f'<span class="badge-average">{v:.2f}</span>'
+                    elif v >= 4.0:
+                        return f'<span class="badge-weak">{v:.2f}</span>'
+                    else:
+                        return f'<span class="badge-poor">{v:.2f}</span>'
+
+                _table_html = """
+                <table style="width:100%; border-collapse:collapse; font-size:14px;">
+                <thead>
+                <tr style="background:rgba(0,195,255,0.15); color:#00c3ff; text-align:left;">
+                    <th style="padding:10px 14px;">Role</th>
+                    <th style="padding:10px 14px;">Practised</th>
+                    <th style="padding:10px 14px;">Avg Score</th>
+                    <th style="padding:10px 14px;">Best Score</th>
+                    <th style="padding:10px 14px;">Last Score</th>
+                </tr>
+                </thead><tbody>
+                """
+                _best_role_avg = role_perf['Avg Score'].max()
+                for _, row in role_perf.iterrows():
+                    _row_bg = "rgba(0,195,255,0.06)" if row['Avg Score'] == _best_role_avg else "rgba(255,255,255,0.02)"
+                    _table_html += f"""
+                    <tr style="background:{_row_bg}; border-bottom:1px solid rgba(255,255,255,0.06);">
+                        <td style="padding:10px 14px; color:#ffffff; font-weight:500;">{row['Role']}</td>
+                        <td style="padding:10px 14px; color:#8ab4d4;">{int(row['Times Practised'])}</td>
+                        <td style="padding:10px 14px;">{_score_badge(row['Avg Score'])}</td>
+                        <td style="padding:10px 14px;">{_score_badge(row['Best Score'])}</td>
+                        <td style="padding:10px 14px;">{_score_badge(row['Last Score'])}</td>
+                    </tr>"""
+                _table_html += "</tbody></table>"
+                st.markdown(_table_html, unsafe_allow_html=True)
 
             # =====================================================
             # SECTION D — DIFFICULTY PERFORMANCE
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🎯 How You Handle Different Difficulty Levels")
+            st.markdown('<p class="section-header">🎯 How You Handle Different Difficulty Levels</p>', unsafe_allow_html=True)
             st.caption("Easy interviews build confidence. Medium tests your thinking. Hard interviews push your limits — and show real growth.")
 
             if 'difficulty' in df.columns:
@@ -12366,7 +12623,7 @@ Generate exactly {num_questions} questions now:
             # SECTION E — SKILL INTELLIGENCE (RADAR CHART)
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🕸️ Your Skill Strengths")
+            st.markdown('<p class="section-header">🕸️ Your Skill Strengths</p>', unsafe_allow_html=True)
             st.caption("This chart shows how you're performing across three key interview skills. The bigger the shape, the stronger you are overall.")
 
             skill_cols = ['knowledge_avg', 'communication_avg', 'relevance_avg']
@@ -12423,7 +12680,7 @@ Generate exactly {num_questions} questions now:
             # SECTION F — BEHAVIORAL ANALYTICS
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🧠 Your Interview Style")
+            st.markdown('<p class="section-header">🧠 Your Interview Style</p>', unsafe_allow_html=True)
             st.caption("This section looks at how you behave during interviews — how long you spend, how that affects your score, and what kind of interviewer you are.")
 
             col_b1, col_b2, col_b3 = st.columns(3)
@@ -12434,16 +12691,20 @@ Generate exactly {num_questions} questions now:
             avg_score_per_q = float((df['avg_score'] / df['total_questions'].replace(0, 1)).mean()) if ('total_questions' in df.columns and df['total_questions'].notna().any()) else None
 
             with col_b1:
-                if avg_duration_mins is not None:
-                    st.metric("Average Time Per Interview", f"{avg_duration_mins:.1f} min", help="How long your interviews typically last")
-                else:
-                    st.metric("Average Time Per Interview", "N/A")
+                _dur_disp = f"{avg_duration_mins:.1f} min" if avg_duration_mins is not None else "N/A"
+                st.markdown(f"""<div class="dash-card">
+                    <div class="metric-label">Average Time Per Interview</div>
+                    <div class="metric-value" style="font-size:22px;">{_dur_disp}</div>
+                    <div class="metric-sub">how long your sessions last</div>
+                </div>""", unsafe_allow_html=True)
 
             with col_b2:
-                if avg_score_per_q is not None:
-                    st.metric("Score Per Question", f"{avg_score_per_q:.2f}", help="On average, how well you answer each individual question")
-                else:
-                    st.metric("Score Per Question", "N/A")
+                _spq_disp = f"{avg_score_per_q:.2f}" if avg_score_per_q is not None else "N/A"
+                st.markdown(f"""<div class="dash-card">
+                    <div class="metric-label">Score Per Question</div>
+                    <div class="metric-value" style="font-size:22px; color:#00c3ff;">{_spq_disp}</div>
+                    <div class="metric-sub">per-question average</div>
+                </div>""", unsafe_allow_html=True)
 
             with col_b3:
                 # Score vs duration correlation — convert to human badge
@@ -12455,9 +12716,13 @@ Generate exactly {num_questions} questions now:
                         corr_badge = "🤔 Not really — taking more time isn't helping"
                     else:
                         corr_badge = "⚖️ Not much difference"
-                    st.metric("Does Spending More Time Help?", corr_badge, help="Based on all your interviews so far")
                 else:
-                    st.metric("Does Spending More Time Help?", "Need 3+ interviews")
+                    corr_badge = "Need 3+ interviews"
+                st.markdown(f"""<div class="dash-card">
+                    <div class="metric-label">Does More Time Help?</div>
+                    <div class="metric-value" style="font-size:16px;">{corr_badge}</div>
+                    <div class="metric-sub">score-vs-duration correlation</div>
+                </div>""", unsafe_allow_html=True)
 
             # Candidate type classification
             if dur_available and avg_duration_mins is not None:
@@ -12503,7 +12768,7 @@ Generate exactly {num_questions} questions now:
             # SECTION G — CLASSIFICATION ENGINE
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🎖️ Where Do You Stand Right Now?")
+            st.markdown('<p class="section-header">🎖️ Where Do You Stand Right Now?</p>', unsafe_allow_html=True)
             st.caption("Based on all your interviews, here's an honest picture of where you are today — and where you're headed.")
 
             if not pd.isna(overall_avg):
@@ -12541,7 +12806,7 @@ Generate exactly {num_questions} questions now:
             # SECTION H — AI GENERATED PERFORMANCE SUMMARY
             # =====================================================
             st.markdown("---")
-            st.markdown("### 📝 Your Personal Progress Report")
+            st.markdown('<p class="section-header">📝 Your Personal Progress Report</p>', unsafe_allow_html=True)
             st.caption("Here's a plain-English summary of everything your data is telling us about your interview journey so far.")
 
             # Generate programmatic summary from real data
@@ -12614,7 +12879,7 @@ Generate exactly {num_questions} questions now:
             # SECTION I — RECOMMENDATION ENGINE
             # =====================================================
             st.markdown("---")
-            st.markdown("### 💡 What You Should Do Next")
+            st.markdown('<p class="section-header">💡 What You Should Do Next</p>', unsafe_allow_html=True)
             st.caption("These suggestions are personalised based on your actual interview history. Follow them and you'll see real improvement.")
 
             recommendations = []
@@ -12648,20 +12913,14 @@ Generate exactly {num_questions} questions now:
 
             if recommendations:
                 for rec in recommendations:
-                    st.markdown(f"""
-                    <div style="background: rgba(0,195,255,0.07); border-left: 4px solid #00c3ff;
-                                padding: 12px 16px; margin: 8px 0; border-radius: 0 8px 8px 0;">
-                        <p style="color: #ffffff; margin: 0;">{rec}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(f'<div class="rec-card"><p>{rec}</p></div>', unsafe_allow_html=True)
             else:
                 st.success("🎉 You're on track! Keep practising consistently and the results will keep coming.")
 
-            # Raw data expander
             # Mode breakdown if available
             if 'interview_mode' in df.columns and df['interview_mode'].notna().any():
                 st.markdown("---")
-                st.markdown("### 🎮 Which Interview Type Do You Prefer?")
+                st.markdown('<p class="section-header">🎮 Which Interview Type Do You Prefer?</p>', unsafe_allow_html=True)
                 st.caption("See how you perform across technical, behavioural, and mixed interview formats.")
                 _mode_df = df[df['interview_mode'].notna() & (df['interview_mode'] != '')]
                 if not _mode_df.empty:
@@ -12673,6 +12932,9 @@ Generate exactly {num_questions} questions now:
                         st.markdown("**Your Average Score by Format**")
                         st.bar_chart(_mode_df.groupby('interview_mode')['avg_score'].mean().rename('Avg Score'))
 
+            # =====================================================
+            # INTERVIEW RECORDS TABLE — Enhanced with badges & trend
+            # =====================================================
             with st.expander("📋 See All Your Interview Records"):
                 display_cols = [c for c in ['id', 'role', 'domain', 'avg_score', 'weighted_score', 'knowledge_avg', 'communication_avg',
                                              'relevance_avg', 'difficulty', 'interview_mode', 'total_questions', 'duration_seconds',
@@ -12687,7 +12949,81 @@ Generate exactly {num_questions} questions now:
                     'follow_up_count': 'Follow-ups', 'depth_score': 'Depth', 'behavior_class': 'Style'
                 }
                 display_df = df[display_cols].rename(columns=rename_map)
-                st.dataframe(display_df, use_container_width=True)
+
+                # Build enhanced HTML table with badges, trend arrows, best-row highlight
+                _scores_col = display_df['Score'] if 'Score' in display_df.columns else None
+                _best_score_val = float(_scores_col.max()) if _scores_col is not None else None
+
+                def _score_badge_str(v):
+                    try:
+                        v = float(v)
+                    except Exception:
+                        return str(v)
+                    if v >= 8.5:
+                        cls = "badge-excellent"
+                    elif v >= 7.0:
+                        cls = "badge-good"
+                    elif v >= 5.5:
+                        cls = "badge-average"
+                    elif v >= 4.0:
+                        cls = "badge-weak"
+                    else:
+                        cls = "badge-poor"
+                    return f'<span class="{cls}">{v:.2f}</span>'
+
+                def _trend_arrow(curr, prev):
+                    try:
+                        delta = float(curr) - float(prev)
+                        if delta > 0.3:
+                            return f'<span style="color:#00e676;font-size:14px;">▲ +{delta:.1f}</span>'
+                        elif delta < -0.3:
+                            return f'<span style="color:#f44336;font-size:14px;">▼ {delta:.1f}</span>'
+                        else:
+                            return f'<span style="color:#ffcc02;font-size:14px;">→ {delta:+.1f}</span>'
+                    except Exception:
+                        return "—"
+
+                _diff_colors = {'Easy': '#00e676', 'Medium': '#ffcc02', 'Hard': '#f44336', 'Unknown': '#8ab4d4'}
+
+                # Table header
+                _tbl = """<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:700px;">
+                <thead><tr style="background:rgba(0,195,255,0.15);color:#00c3ff;text-align:left;position:sticky;top:0;">"""
+                for col_h in display_df.columns:
+                    _tbl += f'<th style="padding:9px 12px;white-space:nowrap;">{col_h}</th>'
+                _tbl += "</tr></thead><tbody>"
+
+                _prev_score = None
+                for _ri, (_ridx, row) in enumerate(display_df.iterrows()):
+                    _score_val = row.get('Score', None)
+                    _is_best = (_best_score_val is not None and _score_val is not None
+                                and abs(float(_score_val) - _best_score_val) < 0.001)
+                    _row_bg = "rgba(0,230,118,0.07)" if _is_best else ("rgba(255,255,255,0.03)" if _ri % 2 == 0 else "rgba(0,0,0,0)")
+                    _border = "border:1px solid rgba(0,230,118,0.3);" if _is_best else ""
+                    _tbl += f'<tr style="background:{_row_bg};{_border}border-bottom:1px solid rgba(255,255,255,0.05);">'
+                    for col_h in display_df.columns:
+                        val = row[col_h]
+                        cell = ""
+                        if col_h == 'Score':
+                            cell = _score_badge_str(val)
+                            if _prev_score is not None:
+                                cell += " " + _trend_arrow(val, _prev_score)
+                            if _is_best:
+                                cell += ' <span style="color:#00e676;font-size:11px;">★ Best</span>'
+                            _prev_score = val
+                        elif col_h in ('Adjusted Score', 'Knowledge', 'Communication', 'Relevance', 'Depth'):
+                            cell = _score_badge_str(val) if val is not None and str(val) not in ('', 'nan') else "—"
+                        elif col_h == 'Level':
+                            _dc = _diff_colors.get(str(val), '#8ab4d4')
+                            cell = f'<span style="color:{_dc};font-weight:600;">{val}</span>'
+                        elif col_h == '#':
+                            cell = f'<span style="color:#8ab4d4;">{val}</span>'
+                        else:
+                            cell = str(val) if val is not None and str(val) != 'nan' else "—"
+                        _tbl += f'<td style="padding:9px 12px;color:#ffffff;white-space:nowrap;">{cell}</td>'
+                    _tbl += "</tr>"
+                _tbl += "</tbody></table></div>"
+                st.markdown(_tbl, unsafe_allow_html=True)
+                st.caption("★ Gold row = your best score. ▲▼ arrows show change from previous interview. Color badges reflect score tier.")
 
 
 
