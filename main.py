@@ -182,33 +182,41 @@ def generate_cover_letter_from_resume_builder():
             return
 
         prompt = f"""
-You are a professional cover letter writer.
+You are a world-class executive cover letter writer with 20+ years of experience helping candidates land roles at top-tier companies.
 
-Write a formal and compelling cover letter using the information below. 
-Format it as a real letter with:
-1. Date
-2. Recipient heading
-3. Proper salutation
-4. Three short paragraphs
-5. Professional closing
+Write a compelling, personalized cover letter using the candidate information below.
 
-Ensure you **only include the company name once** in the header or salutation, 
-and avoid repeating it redundantly in the body.
+COVER LETTER STRUCTURE:
+1. **Header** — Date, Hiring Manager, Company Name
+2. **Opening Paragraph** — Hook with specific value proposition; mention the role and why this company specifically
+3. **Core Value Paragraph** — Top 2 achievements from their background (quantified if possible); connect directly to company's likely needs
+4. **Skills-Fit Paragraph** — Bridge candidate skills to the role requirements; show cultural awareness
+5. **Closing Paragraph** — Confident call to action; express enthusiasm; professional closing
 
-### Heading Info:
-{today_date}
-Hiring Manager, {company}, {location}
+TONE: Professional, confident, specific — NOT generic. Avoid clichés like "I am passionate about..." or "I believe I would be a great fit."
+INCLUDE the contact block at the very top: Name, LinkedIn, Email, Phone.
+ENSURE company name appears only once (in the header or salutation).
+LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
 
-### Candidate Info:
-- Name: {name}
-- Job Title: {job_title}
-- Summary: {summary}
-- Skills: {skills}
+### CANDIDATE DETAILS:
+- Full Name: {name}
+- Job Title Applying For: {job_title}
+- Professional Summary: {summary}
+- Key Skills: {skills}
 - Location: {location}
+- Date: {today_date}
 
-### Instructions:
-- Do not use HTML tags. 
-- Return plain text only.
+### COMPANY DETAILS:
+- Target Company: {company}
+- Candidate LinkedIn: {linkedin}
+- Candidate Email: {email}
+- Candidate Phone: {mobile}
+
+### INSTRUCTIONS:
+- Return PLAIN TEXT ONLY — no HTML, no markdown, no asterisks
+- Do NOT mention company name more than once
+- Make it feel tailored — not templated
+- End with: "Sincerely," followed by the candidate's full name
 """
 
         # ✅ Call LLM
@@ -1865,9 +1873,55 @@ reader = get_easyocr_reader()
 
 def generate_docx(text, filename="bias_free_resume.docx"):
     doc = Document()
-    doc.add_heading('Bias-Free Resume', 0)
-    doc.add_paragraph(text)
-    
+
+    # ── Page margins (standard resume: 1 inch all sides) ──
+    from docx.oxml.ns import qn as _qn
+    from docx.oxml import OxmlElement as _OE
+    section = doc.sections[0]
+    section.top_margin    = Inches(1.0)
+    section.bottom_margin = Inches(1.0)
+    section.left_margin   = Inches(1.0)
+    section.right_margin  = Inches(1.0)
+
+    # ── Document title heading ──
+    title = doc.add_heading('Bias-Free Resume', 0)
+    title.alignment = 1  # center
+    title_run = title.runs[0]
+    title_run.font.color.rgb = RGBColor(0x2F, 0x4F, 0x6F)
+    title_run.font.size = Pt(18)
+
+    doc.add_paragraph()  # spacer
+
+    # ── Process text: detect section headers and bullet points ──
+    lines = text.strip().split('\n')
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            doc.add_paragraph()
+            continue
+
+        # Section headers (emoji + CAPS or all-caps lines)
+        if (stripped.isupper() and len(stripped) > 3) or \
+           any(stripped.startswith(e) for e in ['🏷️','📞','📧','📍','🔗','🌐','✍️','🛠️','💼','🧑‍💼','📂','🎓','🏫','🤝','🌟','🎯']):
+            p = doc.add_heading(stripped, level=2)
+            p.runs[0].font.color.rgb = RGBColor(0x2F, 0x4F, 0x6F)
+            p.runs[0].font.size = Pt(12)
+            continue
+
+        # Bullet points
+        if stripped.startswith(('•', '-', '*')):
+            content = stripped.lstrip('•-* ').strip()
+            p = doc.add_paragraph(style='List Bullet')
+            run = p.add_run(content)
+            run.font.size = Pt(10.5)
+            p.paragraph_format.space_after = Pt(3)
+            continue
+
+        # Regular paragraph
+        p = doc.add_paragraph(stripped)
+        p.runs[0].font.size = Pt(10.5)
+        p.paragraph_format.space_after = Pt(4)
+
     buffer = BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -1921,23 +1975,40 @@ def safe_extract_text(uploaded_file):
 # Predefined gender-coded word lists
 gender_words = {
     "masculine": [
-        "active", "aggressive", "ambitious", "analytical", "assertive", "autonomous", "boast", "bold",
+        # Dominance / aggression-coded
+        "active", "aggressive", "ambitious", "assertive", "autonomous", "boast", "bold",
         "challenging", "competitive", "confident", "courageous", "decisive", "determined", "dominant", "driven",
         "dynamic", "forceful", "independent", "individualistic", "intellectual", "lead", "leader", "objective",
         "outspoken", "persistent", "principled", "proactive", "resilient", "self-reliant", "self-sufficient",
-        "strong", "superior", "tenacious","guru","tech guru","technical guru", "visionary", "manpower", "strongman", "command",
-        "assert", "headstrong", "rockstar", "superstar", "go-getter", "trailblazer", "results-driven",
-        "fast-paced", "driven", "determination", "competitive spirit"
+        "strong", "superior", "tenacious", "guru", "tech guru", "technical guru", "visionary", "manpower",
+        "strongman", "command", "assert", "headstrong", "rockstar", "superstar", "go-getter", "trailblazer",
+        "results-driven", "fast-paced", "determination", "competitive spirit",
+        # Additional research-backed masculine-coded terms (Gaucher et al., 2011)
+        "analytical", "backbone", "challenge", "champion", "combat", "conquer", "courageous",
+        "crusade", "debate", "fearless", "fight", "grit", "hustle", "impact", "ninja",
+        "power", "ruthless", "self-starter", "sharp", "warrior", "win", "wrestler",
+        "alpha", "beast", "brutally honest", "cutting-edge", "dominate", "edge", "elite",
+        "fearless", "grind", "hardcore", "hero", "high-performance", "intense",
+        "kill it", "relentless", "savage", "slayer", "tiger", "tough", "uncompromising"
     ],
     
     "feminine": [
+        # Communal / warmth-coded
         "affectionate", "agreeable", "attentive", "collaborative", "committed", "compassionate", "considerate",
         "cooperative", "dependable", "dependent", "emotional", "empathetic", "enthusiastic", "friendly", "gentle",
         "honest", "inclusive", "interpersonal", "kind", "loyal", "modest", "nurturing", "pleasant", "polite",
         "sensitive", "supportive", "sympathetic", "tactful", "tender", "trustworthy", "understanding", "warm",
         "yield", "adaptable", "communal", "helpful", "dedicated", "respectful", "nurture", "sociable",
-        "relationship-oriented", "team player", "dependable", "people-oriented", "empathetic listener",
-        "gentle communicator", "open-minded"
+        "relationship-oriented", "team player", "people-oriented", "empathetic listener",
+        "gentle communicator", "open-minded",
+        # Additional research-backed feminine-coded terms
+        "balance", "caring", "child-friendly", "connect", "connection", "flexible hours",
+        "harmony", "heart", "humanize", "mindful", "patience", "patient", "peace",
+        "personal touch", "responsive", "share", "sharing", "together", "unite",
+        "welcoming", "wholesome", "connect with", "feeling", "feelings", "giving back",
+        "heartfelt", "humanity", "inspire", "inspired", "passion", "passionate",
+        "personable", "relate", "relatable", "soften", "soft skills", "spread",
+        "thrive", "togetherness", "transparent", "uplift", "vulnerable"
     ]
 }
 
@@ -2014,7 +2085,7 @@ replacement_mapping = {
         "aggressive": "proactive",
         "ambitious": "motivated",
         "analytical": "detail-oriented",
-        "assertive": "confident",
+        "assertive": "direct",
         "autonomous": "self-directed",
         "boast": "highlight",
         "bold": "confident",
@@ -2028,7 +2099,7 @@ replacement_mapping = {
         "driven": "committed",
         "dynamic": "adaptable",
         "forceful": "persuasive",
-        "guru":"technical expert",
+        "guru": "technical expert",
         "independent": "self-sufficient",
         "individualistic": "self-motivated",
         "intellectual": "knowledgeable",
@@ -2036,7 +2107,7 @@ replacement_mapping = {
         "leader": "team lead",
         "objective": "unbiased",
         "outspoken": "expressive",
-        "persistent": "resilient",
+        "persistent": "tenacious",
         "principled": "ethical",
         "proactive": "initiative-taking",
         "resilient": "adaptable",
@@ -2050,7 +2121,7 @@ replacement_mapping = {
         "manpower": "workforce",
         "strongman": "resilient individual",
         "command": "direct",
-        "assert": "state confidently",
+        "assert": "state clearly",
         "headstrong": "determined",
         "rockstar": "top performer",
         "superstar": "outstanding contributor",
@@ -2059,7 +2130,32 @@ replacement_mapping = {
         "results-driven": "outcome-focused",
         "fast-paced": "dynamic",
         "determination": "commitment",
-        "competitive spirit": "goal-oriented mindset"
+        "competitive spirit": "goal-oriented mindset",
+        # New additions
+        "ninja": "specialist",
+        "warrior": "dedicated professional",
+        "alpha": "senior",
+        "beast": "high performer",
+        "dominate": "excel in",
+        "elite": "high-performing",
+        "relentless": "persistent",
+        "savage": "highly skilled",
+        "hustle": "work efficiently",
+        "grit": "resilience",
+        "hardcore": "rigorous",
+        "hero": "key contributor",
+        "ruthless": "highly focused",
+        "kill it": "excel",
+        "champion": "advocate",
+        "conquer": "achieve",
+        "fight": "address",
+        "win": "achieve success",
+        "crush": "exceed targets",
+        "unstoppable": "highly motivated",
+        "fearless": "courageous",
+        "power": "capability",
+        "backbone": "core strength",
+        "sharp": "perceptive"
     },
     
     "feminine": {
@@ -2076,129 +2172,220 @@ replacement_mapping = {
         "dependable": "reliable",
         "dependent": "team-oriented",
         "emotional": "passionate",
-        "empathetic": "understanding",
-        "enthusiastic": "positive",
+        "empathetic": "perceptive",
+        "enthusiastic": "energized",
         "gentle": "respectful",
-        "honest": "trustworthy",
+        "honest": "transparent",
         "inclusive": "open-minded",
         "interpersonal": "people-focused",
         "kind": "respectful",
         "loyal": "dedicated",
-        "modest": "humble",
+        "modest": "measured",
         "nurturing": "supportive",
-        "pleasant": "positive",
-        "polite": "professional",
-        "sensitive": "attentive",
-        "supportive": "encouraging",
+        "pleasant": "professional",
+        "polite": "courteous",
+        "sensitive": "perceptive",
+        "supportive": "enabling",
         "sympathetic": "understanding",
         "tactful": "diplomatic",
         "tender": "considerate",
         "trustworthy": "reliable",
         "understanding": "empathetic",
         "warm": "welcoming",
-        "yield": "adaptable",
+        "yield": "adjust",
         "adaptable": "flexible",
         "communal": "team-centered",
-        "helpful": "supportive",
+        "helpful": "contributive",
         "dedicated": "committed",
-        "respectful": "considerate",
+        "respectful": "professional",
         "nurture": "develop",
-        "sociable": "friendly",
+        "sociable": "collegial",
         "relationship-oriented": "team-focused",
         "team player": "collaborative member",
-        "people-oriented": "person-focused",
+        "people-oriented": "stakeholder-focused",
         "empathetic listener": "active listener",
         "gentle communicator": "considerate communicator",
-        "open-minded": "inclusive"
+        "open-minded": "inclusive",
+        # New additions
+        "passionate": "highly motivated",
+        "inspired": "driven by purpose",
+        "inspire": "motivate",
+        "vulnerable": "transparent",
+        "heartfelt": "sincere",
+        "harmony": "alignment",
+        "caring": "attentive",
+        "patient": "thorough",
+        "wholesome": "balanced",
+        "togetherness": "team cohesion",
+        "soft skills": "professional competencies",
+        "personal touch": "tailored approach",
+        "feeling": "assessment",
+        "feelings": "perspectives",
+        "transparent": "accountable",
+        "uplift": "elevate",
+        "thrive": "excel",
+        "welcoming": "inclusive",
+        "relatable": "accessible",
+        "connect": "engage",
+        "together": "collaboratively",
+        "sharing": "distributing",
+        "mindful": "deliberate",
+        "balance": "manage effectively"
     }
 }
+
 def rewrite_text_with_llm(text, replacement_mapping, user_location):
     """
-    Uses LLM to rewrite a resume with bias-free language, while preserving
-    the original content length. Enhances grammar, structure, and clarity.
-    Ensures structured formatting and includes relevant links and job suggestions.
+    Enhanced resume rewrite engine (backward compatible).
+    - Improves structure, clarity, and ATS readiness
+    - Fills missing sections using internal evidence
+    - Maintains bias-free language
+    - Preserves and ENFORCES suggested job titles output
     """
 
-    # Create a clear mapping in bullet format
+    # -----------------------------
+    # Format bias replacement rules
+    # -----------------------------
     formatted_mapping = "\n".join(
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
-    # Prompt for LLM
+    # -----------------------------
+    # MASTER PROMPT
+    # -----------------------------
     prompt = f"""
-You are an expert resume editor and career advisor.
+You are an elite Resume Optimization Engine used by Fortune 500 recruiters and executive career coaches.
 
-Your tasks:
+You will receive:
+1. Original Resume Text
+2. Bias Replacement Rules
+3. Candidate Location
 
-1. ✨ Rewrite the resume text below with these rules:
-   - Replace any biased or gender-coded language using the exact matches from the replacement mapping.
-   - Do NOT reduce the length of any section — preserve the original **number of words per section**.
-   - Improve grammar, tone, sentence clarity, and flow without shortening or removing any content.
-   - Do NOT change or remove names, tools, technologies, certifications, or project details.
+Your goal is to TRANSFORM the resume into a top-1% recruiter-ready document:
+ATS-optimized, bias-free, quantification-rich, and professionally compelling.
 
-2. 🧾 Structure the resume using these sections **if present** in the original, keeping the original text size:
-   - 🏷️ **Name**
-   - 📞 **Contact Information**
-   - 📍 **Location**
-   - 📧 **Email**
-   - 🔗 **LinkedIn** → If missing, insert: 🔗 Please paste your LinkedIn URL here.
-   - 🌐 **Portfolio** → If missing, insert: 🌐 Please paste your GitHub or portfolio link here.
-   - ✍️ **Professional Summary**
-   - 💼 **Work Experience**
-   - 🧑‍💼 **Internships**
-   - 🛠️ **Skills**
-   - 🤝 **Soft Skills**
-   - 🎓 **Certifications**
-   - 🏫 **Education**
-   - 📂 **Projects**
-   - 🌟 **Interests**
+═══════════════════════════════════════════════════
+🔒 ABSOLUTE RULES (NON-NEGOTIABLE)
+═══════════════════════════════════════════════════
 
-   - Use bullet points (•) inside each section for clarity.
-   - Maintain new lines after each points properly.
-   - Keep all hyperlinks intact and show them in full where applicable (e.g., LinkedIn, GitHub, project links).
-   - Do not invent or assume any information not present in the original.
+- DO NOT fabricate companies, job titles, degrees, institutions, or dates
+- DO NOT invent metrics or statistics not implied by the resume
+- DO NOT add certifications or skills that don't appear anywhere in the resume
+- You MAY:
+  ✅ Strengthen and expand existing bullet points with stronger action verbs
+  ✅ CREATE missing sections if clear evidence exists elsewhere in the resume
+  ✅ Move skills from projects/experience into the dedicated Skills section
+  ✅ Infer tool proficiency ONLY when strongly implied (e.g., "built Flask API" → Python/Flask listed)
+  ✅ Estimate impact framing ONLY when role implies it (e.g., "customer support" → "resolved X+ client issues")
+  ✅ Reorder sections for maximum ATS impact
 
-3. 📌 Strictly apply this **replacement mapping** (match exact phrases only — avoid altering keywords or terminology):
+═══════════════════════════════════════════════════
+📌 OPTIMIZATION RULES
+═══════════════════════════════════════════════════
+
+1. **Professional Summary** — Write a 3–4 sentence executive-level summary that:
+   - Opens with seniority + core domain (e.g., "Results-driven Data Engineer with 3+ years...")
+   - Highlights top 2–3 technical strengths with specificity
+   - Closes with value proposition aligned to career goals
+
+2. **Experience Bullet Points** — Every bullet MUST follow:
+   → **Action Verb + Specific Task + Technology/Method Used + Quantified Impact**
+   → Example: "Engineered real-time data pipeline using Apache Kafka and Spark, reducing latency by 40%"
+   → Use STRONG action verbs: Architected, Engineered, Designed, Deployed, Optimized, Automated, Reduced, Increased, Led, Built, Launched, Delivered
+
+3. **Skills Section** — Must include ALL technologies, tools, frameworks, platforms, and methodologies mentioned ANYWHERE in the resume.
+   Format as clean ATS-friendly lists grouped by category:
+   - Programming Languages | Frameworks & Libraries | Cloud & DevOps | Databases | Tools & Platforms | Soft Skills
+
+4. **Projects Section** — Each project must include:
+   - Project name + brief (1 sentence) description
+   - Full tech stack used
+   - Your specific role/contribution
+   - Outcome, metric, or learning
+
+5. **Education** — Include: Degree, Institution, Year, GPA (if strong), Relevant Coursework (if applicable)
+
+6. **Certifications** — List ALL found in resume. Add plausible ones ONLY if tool names strongly imply them.
+
+7. **Sections to create if evidence exists but are missing:**
+   🛠️ Skills | 📂 Projects | 🎓 Certifications | 🤝 Professional Competencies | 🌟 Interests
+
+═══════════════════════════════════════════════════
+🧾 REQUIRED OUTPUT STRUCTURE
+═══════════════════════════════════════════════════
+
+Return a COMPLETE, polished resume with these sections (skip only if truly impossible):
+
+🏷️ Full Name  
+📞 Phone Number  
+📧 Email Address  
+📍 Location  
+🔗 LinkedIn Profile URL  
+🌐 GitHub / Portfolio URL  
+
+✍️ Professional Summary  
+🛠️ Technical Skills  
+💼 Work Experience  
+🧑‍💼 Internships (if applicable)  
+📂 Projects  
+🎓 Certifications & Training  
+🏫 Education  
+🤝 Professional Competencies  
+🌟 Interests & Extracurriculars  
+
+Formatting requirements:
+- Bullet points (•) for all list items
+- Clean spacing between sections
+- Section headers in CAPS or bold
+- ATS-safe formatting (no tables, columns, or special characters)
+- Tense: past for completed roles, present for current role
+
+═══════════════════════════════════════════════════
+🧠 BIAS REPLACEMENT RULES (APPLY EXACTLY)
+═══════════════════════════════════════════════════
 {formatted_mapping}
 
-4. 💼 Suggest **5 relevant job titles** suited for this candidate based in **{user_location}**. For each:
-   - Provide a detailed  reason for relevance.
-   - Attach a direct LinkedIn job search URL.
-
----
-
-### 📄 Original Resume Text
+═══════════════════════════════════════════════════
+📄 ORIGINAL RESUME
+═══════════════════════════════════════════════════
 \"\"\"{text}\"\"\"
 
----
+═══════════════════════════════════════════════════
+🎯 MANDATORY JOB TITLE SUGGESTIONS
+═══════════════════════════════════════════════════
 
-### ✅ Bias-Free Rewritten Resume (Fully Structured, Same Length)
+After the resume, include a clearly separated section:
 
----
+### 🎯 Suggested Job Titles (Based on Resume)
 
-### 🎯 Suggested Job Titles with Reasoning and LinkedIn Search Links
+Provide EXACTLY **5 job titles** suited for a candidate in **{user_location}**.
 
-1. **[Job Title 1]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%201&location={user_location})
+For EACH job title, provide:
+- A specific reason why this role fits the candidate's background
+- A DIRECT LinkedIn job search URL using the exact format below
 
-2. **[Job Title 2]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%202&location={user_location})
+FORMAT STRICTLY AS:
 
-3. **[Job Title 3]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%203&location={user_location})
+1. **[Job Title]** — [Specific reason based on resume content]  
+🔗 https://www.linkedin.com/jobs/search/?keywords=[URL+encoded+title]&location={urllib.parse.quote(user_location)}
 
-4. **[Job Title 4]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%204&location={user_location})
+2. **[Job Title]** — ...  
+🔗 ...
 
-5. **[Job Title 5]** — Brief reason  
-🔗 [Search on LinkedIn](https://www.linkedin.com/jobs/search/?keywords=Job%20Title%205&location={user_location})
+(Continue for all 5)
+
+═══════════════════════════════════════════════════
+✅ FINAL OUTPUT
+═══════════════════════════════════════════════════
+1. Fully optimized, bias-free resume (complete, not a summary)
+2. Suggested Job Titles section (MANDATORY — 5 titles with URLs)
 """
 
-    # Call the LLM of your choice
+    # -----------------------------
+    # Call LLM
+    # -----------------------------
     response = call_llm(prompt, session=st.session_state)
     return response
-
-
 
 
 def rewrite_and_highlight(text, replacement_mapping, user_location):
@@ -2295,28 +2482,37 @@ def rewrite_and_highlight(text, replacement_mapping, user_location):
 # ✅ Enhanced Grammar evaluation using LLM with suggestions
 def get_grammar_score_with_llm(text, max_score=5):
     grammar_prompt = f"""
-You are a grammar and tone evaluator AI. Analyze the following resume text and:
+You are a senior HR language quality specialist and professional resume reviewer with 15+ years of experience evaluating resumes for Fortune 500 companies.
 
-1. Give a grammar score out of {max_score} based on grammar quality, sentence structure, clarity, and tone.
-2. Return a 1-sentence summary of the grammar and tone.
-3. Provide 3 to 5 **specific improvement suggestions** (bullet points) for enhancing grammar, clarity, tone, or structure.
+Analyze the following resume text across FIVE dimensions and provide an overall language quality score:
 
-**Scoring Guidelines for Balance:**
-- {max_score}: Exceptional - Professional, error-free, excellent flow
-- {max_score-1}: Very Good - Minor issues, mostly professional
-- {max_score-2}: Good - Some grammar issues but readable and professional
-- {max_score-3}: Fair - Noticeable issues but understandable
-- {max_score-4}: Poor - Multiple errors affecting readability
-- 0-1: Very Poor - Significant grammar problems
+**EVALUATION DIMENSIONS:**
+1. **Grammar & Mechanics** — Correct grammar, punctuation, subject-verb agreement, tense consistency
+2. **Clarity & Conciseness** — Ideas expressed directly; no filler words or redundancy
+3. **Professional Tone** — Appropriate formality, no informal slang or casual phrasing
+4. **Action Verb Usage** — Starts bullet points with strong, quantifiable action verbs (e.g., "Led", "Engineered", "Reduced")
+5. **ATS Language Alignment** — Industry-standard terminology, keyword density, no keyword stuffing
 
-Return response in the exact format below:
+**SCORING SCALE (out of {max_score}):**
+- {max_score}: Exceptional — Flawless grammar, powerful action verbs, crystal-clear and professional throughout
+- {max_score-1}: Very Good — Minor stylistic issues; highly professional and readable
+- {max_score-2}: Good — Some grammar or clarity issues but largely professional and effective
+- {max_score-3}: Fair — Noticeable grammar, tone, or clarity problems that could affect readability
+- {max_score-4}: Poor — Multiple errors affecting professional impression; needs significant editing
+- 0-1: Very Poor — Significant language issues that would cause ATS rejection or recruiter dismissal
+
+**IMPORTANT:** Be balanced — a technically competent resume with minor grammar issues should not be harshly penalized. Focus on overall professional impression.
+
+Return EXACTLY in this format (no extra text):
 
 Score: <number>
-Feedback: <summary>
+Feedback: <single sentence summarizing overall language quality and tone>
 Suggestions:
-- <suggestion 1>
-- <suggestion 2>
-...
+- <Actionable suggestion 1 with example if helpful>
+- <Actionable suggestion 2 with example if helpful>
+- <Actionable suggestion 3 with example if helpful>
+- <Actionable suggestion 4 with example if helpful>
+- <Actionable suggestion 5 with example if helpful>
 
 ---
 {text}
@@ -2329,7 +2525,7 @@ Suggestions:
     suggestions = re.findall(r"- (.+)", response)
 
     score = int(score_match.group(1)) if score_match else max(3, max_score-2)  # More generous default
-    feedback = feedback_match.group(1).strip() if feedback_match else "Grammar appears adequate for professional communication."
+    feedback = feedback_match.group(1).strip() if feedback_match else "Language quality appears adequate for professional communication."
     return score, feedback, suggestions
 
 # ✅ Main ATS Evaluation Function
@@ -2422,208 +2618,204 @@ def ats_percentage_score(
     
     # ✅ UPDATED: Stable education scoring with priority degrees minimum
     prompt = f"""
-You are a professional ATS evaluator specializing in **technical roles** (AI/ML, Blockchain, Cloud, Data, Software, Cybersecurity). 
-Your role is to provide **balanced, objective scoring** that reflects industry standards and recognizes candidate potential while maintaining professional standards.
+You are a senior ATS (Applicant Tracking System) Evaluator and Technical Recruiter with 15+ years of experience at top-tier tech firms.
+Your evaluation must be rigorous, consistent, evidence-based, and match industry-standard hiring benchmarks.
 
-🎯 **BALANCED SCORING GUIDELINES - Tech-Focused (AI/ML/Blockchain/Software/Data):**
+You specialize in: AI/ML, Blockchain, Cloud Computing, Data Engineering, Software Development, DevOps, and Cybersecurity roles.
 
-**Education Scoring Framework ({edu_weight} points max):**
+═══════════════════════════════════════════════════
+🎯 EVALUATION PHILOSOPHY
+═══════════════════════════════════════════════════
+- Score based on EVIDENCE found in the resume — not assumptions
+- Reward quantified achievements (numbers, percentages, scale)
+- Credit projects, GitHub, hackathons, Kaggle, open-source contributions, certifications
+- Penalize vague claims without evidence ("good communication skills")
+- Recognize career stage: entry-level vs senior vs lead
+- Prioritize recency: skills/experience from the last 3 years matter most
+- Be encouraging but calibrated: do not inflate scores without evidence
 
-⚡ **PRIORITY RULE - Minimum Points for Relevant Degrees:**
-If candidate is **currently pursuing OR has completed** any of these degrees:
-- BSc CS / BSc Computer Science
-- BSc Mathematics / BSc Maths
-- MSc CS / MSc Computer Science
-- MSc Mathematics / MSc Maths
-- MCA (Master of Computer Applications)
-- BE CS / BTech CS / BTech IT
+═══════════════════════════════════════════════════
+📐 SCORING FRAMEWORK
+═══════════════════════════════════════════════════
 
-→ **ASSIGN MINIMUM {int(edu_weight * 0.75)} points** out of {edu_weight} max points
-→ **DO NOT penalize** for ongoing status - pursuing counts equally as completed
-→ If completed with strong academic performance, allow scoring up to {int(edu_weight * 0.9)}-{edu_weight} points
+**🎓 Education Score ({edu_weight} points max):**
 
-**CRITICAL DATE PARSING RULES:**
-- If end year < 2025 → ✅ ALWAYS Completed (HARDCODED CUTOFF)
-- If end year == 2025 → ✅ Completed
-- If end year > 2025 → 🔄 Ongoing  
+PRIORITY RULE — Minimum {int(edu_weight * 0.75)} pts for these degrees (completed OR pursuing):
+  • BSc/MSc Computer Science or Mathematics
+  • MCA (Master of Computer Applications)  
+  • BE/BTech Computer Science or IT
+  • BCA + MCA combination
 
-**EXPLICIT STATUS INDICATORS (override year logic for years >= 2025):**
-- Words like "pursuing", "currently enrolled", "in progress" → 🔄 Ongoing  
-- Words like "Graduated", "Completed", "Finished" → ✅ Completed
-- **OVERRIDE RULE**: If end year < 2025, it is ✅ Completed no matter what the text says (2025 IS THE CUTOFF YEAR).
+DATE PARSING (STRICT — Non-negotiable):
+  • End year < 2025 → ✅ COMPLETED (hardcoded cutoff)
+  • End year = 2025 → ✅ COMPLETED
+  • End year > 2025 → 🔄 ONGOING
+  • Keywords "pursuing", "in progress", "currently enrolled" → 🔄 ONGOING
+  • Keywords "graduated", "completed", "finished" → ✅ COMPLETED
+  • If end year < 2025, ALWAYS mark completed regardless of text
 
-**SCORING IMPACT:**
-- ✅ Completed relevant education → Full scoring potential (up to max points)
-- 🔄 Ongoing relevant education → **MINIMUM {int(edu_weight * 0.75)} points for priority degrees listed above**
-- Education score is based ONLY on degree relevance and completion status
-- DO NOT add points for certifications/projects in education - these belong in skills/experience sections
+Scoring bands:
+  • {int(edu_weight * 0.90)}–{edu_weight}: Outstanding — completed highly relevant degree + exceptional academic record
+  • {int(edu_weight * 0.75)}–{int(edu_weight * 0.85)}: Excellent — priority degree (completed or ongoing), good standing
+  • {int(edu_weight * 0.60)}–{int(edu_weight * 0.70)}: Very Good — related STEM/technical degree
+  • {int(edu_weight * 0.45)}–{int(edu_weight * 0.55)}: Good — partially related degree with transferable foundation
+  • {int(edu_weight * 0.30)}–{int(edu_weight * 0.40)}: Fair — unrelated degree with relevant self-learning evidence
+  • {int(edu_weight * 0.15)}–{int(edu_weight * 0.25)}: Basic — minimal or no degree information
+  • 0–{int(edu_weight * 0.10)}: Insufficient — no education details at all
 
-**Stable Education Scoring Framework (Independent of Job Description):**
-- {int(edu_weight * 0.90)}-{edu_weight}: Outstanding (completed highly relevant degree with excellent academic performance)
-- {int(edu_weight * 0.75)}-{int(edu_weight * 0.85)}: Excellent (priority degrees listed above - completed or ongoing)
-- {int(edu_weight * 0.60)}-{int(edu_weight * 0.70)}: Very Good (related technical/quantitative degree)
-- {int(edu_weight * 0.45)}-{int(edu_weight * 0.55)}: Good (somewhat related education with transferable knowledge)
-- {int(edu_weight * 0.30)}-{int(edu_weight * 0.40)}: Fair (different degree but shows analytical/technical foundation)
-- {int(edu_weight * 0.15)}-{int(edu_weight * 0.25)}: Basic (unrelated degree)
-- 0-{int(edu_weight * 0.10)}: Insufficient (no degree information or incomplete details)
+**💼 Experience Score ({exp_weight} points max):**
 
+Evaluate: years of relevant experience, role seniority, domain fit, impact, leadership, quantification.
 
-**Experience Scoring Framework ({exp_weight} points max):**
-- {int(exp_weight * 0.91)}-{exp_weight}: Exceptional (exceeds requirements + perfect fit + leadership + outstanding results)
-- {int(exp_weight * 0.80)}-{int(exp_weight * 0.89)}: Excellent (meets/exceeds years + strong domain fit + leadership + clear results)
-- {int(exp_weight * 0.69)}-{int(exp_weight * 0.77)}: Very Good (adequate years + good domain fit + solid responsibilities + some results)
-- {int(exp_weight * 0.57)}-{int(exp_weight * 0.66)}: Good (reasonable years + relevant experience + decent responsibilities)
-- {int(exp_weight * 0.43)}-{int(exp_weight * 0.54)}: Fair (some gaps in years OR domain but shows potential)
-- {int(exp_weight * 0.29)}-{int(exp_weight * 0.40)}: Basic (limited experience but relevant skills/potential shown)
-- {int(exp_weight * 0.14)}-{int(exp_weight * 0.26)}: Entry Level (minimal experience but shows promise)
-- 0-{int(exp_weight * 0.11)}: Insufficient (major gaps with no transferable skills)
+  • {int(exp_weight * 0.91)}–{exp_weight}: Exceptional — exceeds requirements; strong leadership; quantified high-impact results
+  • {int(exp_weight * 0.80)}–{int(exp_weight * 0.89)}: Excellent — meets/exceeds years; strong domain fit; clear achievements
+  • {int(exp_weight * 0.69)}–{int(exp_weight * 0.77)}: Very Good — adequate years; good domain fit; solid responsibilities
+  • {int(exp_weight * 0.57)}–{int(exp_weight * 0.66)}: Good — reasonable experience; relevant domain; some achievements
+  • {int(exp_weight * 0.43)}–{int(exp_weight * 0.54)}: Fair — some gaps but shows clear potential and transferable skills
+  • {int(exp_weight * 0.29)}–{int(exp_weight * 0.40)}: Basic — limited experience but relevant direction shown
+  • {int(exp_weight * 0.14)}–{int(exp_weight * 0.26)}: Entry Level — minimal experience; strong potential only
+  • 0–{int(exp_weight * 0.11)}: Insufficient — major gaps; no transferable evidence
 
-**Skills Scoring Framework ({skills_weight} points max):**
-- {int(skills_weight * 0.93)}-{skills_weight}: Outstanding (90%+ required skills + expert proficiency + recent usage)
-- {int(skills_weight * 0.80)}-{int(skills_weight * 0.90)}: Excellent (80%+ required skills + advanced proficiency)
-- {int(skills_weight * 0.67)}-{int(skills_weight * 0.77)}: Very Good (70%+ required skills + good proficiency)
-- {int(skills_weight * 0.53)}-{int(skills_weight * 0.63)}: Good (60%+ required skills + adequate proficiency)
-- {int(skills_weight * 0.40)}-{int(skills_weight * 0.50)}: Fair (50%+ required skills + basic proficiency OR strong learning ability)
-- {int(skills_weight * 0.27)}-{int(skills_weight * 0.37)}: Basic (40%+ skills OR strong foundational skills with growth potential)
-- {int(skills_weight * 0.13)}-{int(skills_weight * 0.23)}: Limited (30%+ skills but shows willingness to learn)
-- 0-{int(skills_weight * 0.10)}: Insufficient (<30% skills with no evidence of learning ability)
+NOTE: Internships, freelance projects, and open-source contributions count as valid experience.
 
-**Keyword Scoring Framework ({keyword_weight} points max):**
-- {int(keyword_weight * 0.90)}-{keyword_weight}: Excellent optimization (85%+ critical terms + industry language)
-- {int(keyword_weight * 0.80)}: Very Good (75%+ critical terms + good industry awareness)
-- {int(keyword_weight * 0.60)}-{int(keyword_weight * 0.70)}: Good (65%+ critical terms + adequate industry knowledge)
-- {int(keyword_weight * 0.40)}-{int(keyword_weight * 0.50)}: Fair (50%+ critical terms + some industry understanding)
-- {int(keyword_weight * 0.20)}-{int(keyword_weight * 0.30)}: Basic (35%+ critical terms + basic awareness)
-- {int(keyword_weight * 0.10)}: Limited (20%+ critical terms)
-- 0: Poor (<20% critical terms)
+**🛠️ Skills Score ({skills_weight} points max):**
 
-**EVALUATION INSTRUCTIONS (Tech-Focused):**
-- Always credit **projects, GitHub repos, hackathons, Kaggle competitions, blockchain DApps, cloud deployments, AI model training, open-source contributions**.
-- Emphasize **cutting-edge skills**: LLMs, Generative AI, Web3, Smart Contracts, DeFi, Cloud-Native tools, MLOps, Vector DBs.
-- Highlight both **industry experience** and **hands-on learning** (projects, MOOCs, certifications).
-- Be encouraging but factual: focus on **growth potential + adaptability**.
+Match each listed skill against job description requirements. Reward:
+  • Hard skills: programming languages, frameworks, tools, platforms
+  • Certifications: AWS, GCP, Azure, Kubernetes, Terraform, etc.
+  • Emerging skills: LLMs, GenAI, Vector DBs, Web3, MLOps, DeFi, Smart Contracts
 
-**EVALUATION INSTRUCTIONS - BE ENCOURAGING BUT HONEST:**
+  • {int(skills_weight * 0.93)}–{skills_weight}: Outstanding — 90%+ required skills; expert proficiency; recent hands-on usage
+  • {int(skills_weight * 0.80)}–{int(skills_weight * 0.90)}: Excellent — 80%+ required skills; advanced proficiency
+  • {int(skills_weight * 0.67)}–{int(skills_weight * 0.77)}: Very Good — 70%+ required skills; competent usage
+  • {int(skills_weight * 0.53)}–{int(skills_weight * 0.63)}: Good — 60%+ required skills; working knowledge
+  • {int(skills_weight * 0.40)}–{int(skills_weight * 0.50)}: Fair — 50%+ skills OR strong foundational skills
+  • {int(skills_weight * 0.27)}–{int(skills_weight * 0.37)}: Basic — 40%+ skills; clear learning trajectory
+  • {int(skills_weight * 0.13)}–{int(skills_weight * 0.23)}: Limited — 30%+ skills; self-learning evident
+  • 0–{int(skills_weight * 0.10)}: Insufficient — fewer than 30% required skills
 
-Follow this exact structure and be **specific with evidence while highlighting strengths**:
+**🔑 Keyword Score ({keyword_weight} points max):**
+
+Systematically extract ALL critical terms from the job description:
+technical tools, frameworks, methodologies, role titles, industry terms, certification names.
+Compare against resume. Credit synonyms and equivalent terms.
+
+  • {int(keyword_weight * 0.90)}–{keyword_weight}: Excellent — 85%+ critical terms; strong industry vocabulary
+  • {int(keyword_weight * 0.80)}: Very Good — 75%+ critical terms
+  • {int(keyword_weight * 0.60)}–{int(keyword_weight * 0.70)}: Good — 65%+ critical terms
+  • {int(keyword_weight * 0.40)}–{int(keyword_weight * 0.50)}: Fair — 50%+ critical terms
+  • {int(keyword_weight * 0.20)}–{int(keyword_weight * 0.30)}: Basic — 35%+ critical terms
+  • {int(keyword_weight * 0.10)}: Limited — 20%+ critical terms
+  • 0: Poor — fewer than 20% critical terms
+
+═══════════════════════════════════════════════════
+📋 REQUIRED OUTPUT FORMAT
+═══════════════════════════════════════════════════
+
+Follow this EXACT structure. Do not skip any section:
 
 ### 🏷️ Candidate Name
-<Extract full name clearly - check resume header, contact section, or first few lines>
+<Extract full name from resume header or contact section>
 
 ### 🏫 Education Analysis
 **Score:** <0–{edu_weight}> / {edu_weight}
 
 **Scoring Rationale:**
-- Degree Level & Relevance: <Check if degree qualifies for minimum 15 points rule - BSc/MSc CS, BSc/MSc Maths, MCA, BE/BTech CS/IT>
-- Completion Status: <Apply 2025 cutoff rule and keyword overrides>
-- Academic Foundation: <Assess degree relevance to technical roles>
-- **Score Justification:** <Apply minimum 15 points if relevant degree detected; pursuing status not penalized; score based only on degree relevance>
+- Degree Level & Relevance: <Does it qualify for minimum {int(edu_weight * 0.75)}-pt rule? Which degree?>
+- Completion Status: <Apply strict 2025 cutoff rule; state year and final status>
+- Academic Quality Indicators: <GPA, honors, relevant coursework if mentioned>
+- **Score Justification:** <Explain exact score with evidence from resume>
 
-
-### 💼 Experience Analysis  
+### 💼 Experience Analysis
 **Score:** <0–{exp_weight}> / {exp_weight}
 
 **Experience Breakdown:**
-- Total Years: <X years - consider quality over quantity>
-- Role Progression: <Look for growth, even if not linear>
-- Domain Relevance: <Consider transferable skills from related fields>
-- Leadership Evidence: <Include informal leadership, mentoring, project ownership>
-- Quantified Achievements: <Value any metrics, even small improvements>
-- Technology/Tools Usage: <Credit learning new tools, adaptability>
-- Transferable Skills: <Highlight skills that apply across domains>
-- **Score Justification:** <Emphasize growth potential and adaptability>
+- Total Years of Relevant Experience: <X years — include internships, freelance, open-source>
+- Role Progression & Seniority: <Entry → Mid → Senior trajectory>
+- Domain Alignment: <How well does background match job domain?>
+- Quantified Achievements: <List metrics found: % improvement, $ savings, users served, etc.>
+- Leadership & Ownership Evidence: <Managed teams? Led projects? Mentored?>
+- Technology Currency: <Are skills/tools recent and relevant (last 3 years)?>
+- **Score Justification:** <Explain score with specific resume evidence>
 
 ### 🛠 Skills Analysis
 **Score:** <0–{skills_weight}> / {skills_weight}
 
 **Skills Assessment:**
-- Technical Skills Present: <List with evidence, include learning in progress>
-- Soft Skills Demonstrated: <Value communication, teamwork, problem-solving>
-- Domain-Specific Expertise: <Consider related domain knowledge>
-- Skill Currency: <Value recent learning and adaptation>
-- Learning Ability: <Evidence of picking up new skills>
+- Core Technical Skills Matched: <List matched skills with evidence>
+- Emerging/Cutting-Edge Skills: <LLMs, GenAI, Web3, MLOps, Cloud, etc.>
+- Certifications Detected: <List any certifications found>
+- Soft Skills with Evidence: <Only count if backed by concrete examples>
+- Proficiency Depth: <Surface knowledge vs. demonstrated project usage>
 
-**Skills Gaps (Opportunities for Growth):**
-- <Skill 1 - frame as development opportunity>
-- <Skill 2 - suggest how existing skills could transfer>  
-- <Skill 3 - note if easily learnable>
-- <Skill 4 - additional growth areas>
-- <Skill 5 - more opportunities if applicable>
+**Skills Gaps (Development Opportunities):**
+- <Gap 1 — specific missing skill from job description>
+- <Gap 2 — specific missing skill>
+- <Gap 3 — specific missing skill>
+- <Gap 4 — specific missing skill>
+- <Gap 5 — specific missing skill>
 
-**Score Justification:** <Focus on existing strengths + learning potential>
+**Score Justification:** <Explain with matched vs. required skills ratio>
 
 ### 🗣 Language Quality Analysis
 **Score:** {grammar_score} / {lang_weight}
 **Grammar & Professional Tone:** {grammar_feedback}
-**Assessment:** <Be constructive - focus on communication effectiveness>
+**Assessment:** <Specific feedback on action verb usage, clarity, tense consistency, and ATS language>
 
 ### 🔑 Keyword Analysis
 **Score:** <0–{keyword_weight}> / {keyword_weight}
 
 **Keyword Assessment:**
-- Industry Terminology: <Credit related industry knowledge>
-- Role-Specific Terms: <Look for equivalent terms, not just exact matches>
-- Technical Vocabulary: <Value understanding even if different tools>
+- Industry Terminology Match: <Percentage and specific matches found>
+- Role-Specific Keywords Present: <List matched keywords>
+- Technical Vocabulary: <Tools, frameworks, platforms found in both>
+- Keyword Density Quality: <Natural integration vs. stuffing>
 
 **Keyword Enhancement Opportunities:**
-- <Keyword 1 from job description>
-- <Keyword 2 from job description>
-- <Keyword 3 from job description>
-- <Keyword 4 from job description>
-- <Keyword 5 from job description>
-- <Keyword 6 from job description>
-- <Keyword 7 from job description>
-- <Keyword 8 from job description>
+- <Critical keyword 1 from job description — not in resume>
+- <Critical keyword 2>
+- <Critical keyword 3>
+- <Critical keyword 4>
+- <Critical keyword 5>
+- <Critical keyword 6>
+- <Critical keyword 7>
+- <Critical keyword 8>
 
-**INSTRUCTION**: Extract ALL important keywords, technical terms, industry jargon, tool names, certification names, and role-specific terminology from the job description that are missing from the resume. Include variations and synonyms.
-
-**Score Justification:** <Credit understanding of concepts even if terminology differs>
+**Score Justification:** <Evidence-based explanation>
 
 ### ✅ Final Assessment
 
 **Overall Evaluation:**
-<4-6 sentences covering:>
-- Primary strengths and unique value proposition
-- Growth areas framed as development opportunities
-- Cultural/team fit indicators and soft skills
-- Clear recommendation with constructive reasoning
+<5–7 sentences covering: candidate's unique value proposition, strongest evidence-backed qualifications, key gaps, culture/team fit signals, and a clear hire/interview recommendation>
 
-**Development Areas:** <Frame gaps as growth opportunities, not failures>
-**Key Strengths:** <Highlight what makes this candidate valuable>
-**Recommendation:** <Be specific about interview potential and role fit>
+**Top 3 Strengths (with evidence):**
+1. <Strength 1 — backed by resume evidence>
+2. <Strength 2 — backed by resume evidence>
+3. <Strength 3 — backed by resume evidence>
+
+**Top 3 Development Areas:**
+1. <Gap 1 framed as a growth opportunity>
+2. <Gap 2 framed as a growth opportunity>
+3. <Gap 3 framed as a growth opportunity>
+
+**Hiring Recommendation:** <Strongly Recommend / Recommend / Recommend with Reservations / Do Not Recommend> — <2-sentence reasoning>
 
 ---
 
-**IMPORTANT REMINDERS FOR BALANCED EVALUATION:**
-- Look for potential, not just perfect matches
-- Value diverse backgrounds and transferable skills
-- Consider the candidate's career stage and growth trajectory
-- Credit all forms of learning and skill development
-- Be constructive in feedback - focus on opportunities
-- Recognize that great employees come from varied backgrounds
-- LIST ALL missing skills and keywords comprehensively (aim for 5-8 items each if gaps exist)
-- Be thorough in identifying development opportunities from the job description
-- **CRITICAL**: Analyze the ENTIRE job description systematically - go through each requirement, skill, and qualification mentioned
-- **KEYWORD EXTRACTION**: Identify ALL technical terms, tools, frameworks, methodologies, certifications mentioned in job description
-- **SKILL MAPPING**: Compare each job requirement against resume content - if not found, list it as missing
-- **CONTEXT UNDERSTANDING**: Consider synonyms and related terms (e.g., "JavaScript" and "JS", "Machine Learning" and "ML")
-- **PRIORITY RANKING**: Focus on must-have vs nice-to-have requirements from job description
-- **EXPERIENCE MATCHING**: Look for similar roles, projects, or responsibilities even if not exact title matches
-- **EDUCATION PRIORITY**: Apply minimum 15 points rule for BSc/MSc CS, BSc/MSc Maths, MCA, BE/BTech CS/IT degrees
-Context for Evaluation:
+**EVALUATION CONTEXT:**
 - Current Date: {datetime.datetime.now().strftime('%B %Y')} (Year: {current_year}, Month: {current_month})
-- Grammar Score: {grammar_score} / {lang_weight}
-- Grammar Feedback: {grammar_feedback}  
-- Resume Domain: {resume_domain}
-- Job Domain: {job_domain}
-- Domain Mismatch Penalty: {domain_penalty} points (similarity: {similarity_score:.2f})
+- Grammar Score Pre-evaluated: {grammar_score} / {lang_weight} — {grammar_feedback}
+- Resume Domain Detected: {resume_domain}
+- Target Job Domain: {job_domain}
+- Domain Similarity Score: {similarity_score:.2f}/1.0
+- Domain Mismatch Penalty Applied: {domain_penalty}/{MAX_DOMAIN_PENALTY} pts
 
 ---
 
-📄 **Job Description:**
+📄 **JOB DESCRIPTION:**
 {job_description}
 
-📄 **Resume Text:**
+📄 **RESUME TEXT:**
 {resume_text}
 
 {logic_score_note}
@@ -2709,14 +2901,14 @@ Context for Evaluation:
     total_score = min(total_score, 100)
     total_score = max(total_score, 15)  # Minimum score of 15 to avoid completely crushing candidates
 
-    # ✅ IMPROVED: More encouraging score formatting with better thresholds
+    # ✅ Industry-standard score labels with clear hiring signal
     formatted_score = (
-        "🌟 Exceptional Match" if total_score >= 85 else  # Lowered from 90
-        "✅ Strong Match" if total_score >= 70 else       # Lowered from 75
-        "🟡 Good Potential" if total_score >= 55 else    # Lowered from 60
-        "⚠️ Fair Match" if total_score >= 40 else        # Lowered from 45
-        "🔄 Needs Development" if total_score >= 25 else # New category
-        "❌ Poor Match"
+        "🌟 Exceptional Match — Top 10% Candidate" if total_score >= 85 else
+        "✅ Strong Match — Recommend for Interview" if total_score >= 70 else
+        "🟡 Good Potential — Competitive Candidate" if total_score >= 55 else
+        "⚠️ Fair Match — Needs Resume Optimization" if total_score >= 40 else
+        "🔄 Developing — Significant Skill Gaps" if total_score >= 25 else
+        "❌ Poor Match — Major Role Misalignment"
     )
 
     # ✅ Format suggestions nicely
@@ -2730,20 +2922,29 @@ Context for Evaluation:
 <br><b>Improvement Suggestions:</b> {suggestions_html}
 """
 
-    # Enhanced final thoughts with domain analysis
+    # Enhanced final thoughts with domain analysis and industry benchmarks
     final_thoughts += f"""
 
-**📊 Technical Assessment Details:**
-- Domain Similarity Score: {similarity_score:.2f}/1.0  
-- Domain Penalty Applied: {domain_penalty}/{MAX_DOMAIN_PENALTY} points
-- Resume Domain: {resume_domain}
+**📊 Technical Evaluation Details:**
+- Domain Similarity Score: {similarity_score:.2f}/1.0 ({int(similarity_score * 100)}% domain alignment)
+- Domain Penalty Applied: -{domain_penalty} pts (out of max -{MAX_DOMAIN_PENALTY} pts)
+- Resume Domain Detected: {resume_domain}
 - Target Job Domain: {job_domain}
+- Grammar & Language Pre-Score: {grammar_score}/{lang_weight}
 
-**💡 Balanced Scoring Notes:**
-- Minimum score thresholds applied to prevent overly harsh penalties
-- Transferable skills and learning potential considered
-- Growth opportunities highlighted rather than just gaps identified
-- **Date Logic Applied**: Year-only ranges properly classified as completed/ongoing based on current date context
+**📈 Score Interpretation (Industry Benchmarks):**
+- 85–100: 🌟 Top 10% candidates — Strong interview recommendation
+- 70–84: ✅ Above average — Likely to advance past ATS screening
+- 55–69: 🟡 Competitive — May advance with strong cover letter
+- 40–54: ⚠️ Below average — Needs resume optimization before applying
+- 25–39: 🔄 Significant gaps — Upskilling recommended
+- 0–24: ❌ Major misalignment — Not suitable for this specific role
+
+**🔍 ATS Scoring Notes:**
+- Minimum score thresholds applied to prevent unfair penalization
+- Transferable skills, projects, and open-source contributions were credited
+- Career stage (entry/mid/senior) considered in experience scoring
+- Date parsing uses 2025 cutoff for education completion determination
 """
 
     return ats_result, {
