@@ -11920,6 +11920,7 @@ Generate exactly {num_questions} questions now:
         matplotlib.use('Agg')
 
         st.subheader("📊 My Progress Dashboard")
+        st.markdown("Track how you're improving over time, spot your strengths, and find exactly what to work on next.")
 
         username = st.session_state.get("username", "Guest")
 
@@ -11939,7 +11940,7 @@ Generate exactly {num_questions} questions now:
             df = pd.DataFrame()
 
         if df.empty:
-            st.info("📭 No interview data yet. Complete some interviews in the AI Interview Coach to see your progress here!")
+            st.info("👋 You haven't completed any interviews yet. Head over to the **AI Interview Coach** tab, do your first practice session, and come back here to see your results!")
         else:
             # Ensure numeric types
             for col in ['avg_score', 'knowledge_avg', 'communication_avg', 'relevance_avg', 'duration_seconds', 'total_questions', 'weighted_score', 'raw_avg_score', 'depth_score', 'follow_up_count']:
@@ -11960,7 +11961,8 @@ Generate exactly {num_questions} questions now:
             # SECTION A — EXECUTIVE SUMMARY METRICS
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🏆 Executive Summary")
+            st.markdown("### 🏆 Your Progress at a Glance")
+            st.caption("Here's a quick overview of everything you've accomplished so far.")
 
             total_interviews = len(df)
             highest_score = df['avg_score'].max()
@@ -11982,70 +11984,76 @@ Generate exactly {num_questions} questions now:
             # Consistency score based on std deviation
             score_std = df['avg_score'].std() if total_interviews > 1 else 0.0
             if score_std < 0.5:
-                consistency_label = "🟢 Highly Consistent"
+                consistency_label = "🟢 Very Consistent"
             elif score_std < 1.5:
-                consistency_label = "🟡 Moderately Consistent"
+                consistency_label = "🟡 Fairly Consistent"
             else:
-                consistency_label = "🔴 Unstable Performance"
+                consistency_label = "🔴 Varies a Lot"
 
             col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Total Interviews", total_interviews)
+                st.metric("Interviews Completed", total_interviews)
             with col2:
-                st.metric("Highest Score", f"{highest_score:.1f}/10" if not pd.isna(highest_score) else "N/A")
+                st.metric("Best Score Ever", f"{highest_score:.1f}/10" if not pd.isna(highest_score) else "N/A")
             with col3:
                 st.metric("Lowest Score", f"{lowest_score:.1f}/10" if not pd.isna(lowest_score) else "N/A")
             with col4:
-                st.metric("Overall Avg Score", f"{overall_avg:.2f}/10" if not pd.isna(overall_avg) else "N/A")
+                st.metric("Average Score", f"{overall_avg:.2f}/10" if not pd.isna(overall_avg) else "N/A")
 
             col5, col6, col7 = st.columns(3)
             with col5:
                 st.metric("Total Questions Answered", total_questions)
             with col6:
                 sign = "+" if improvement_pct >= 0 else ""
-                st.metric("Improvement %", f"{sign}{improvement_pct:.1f}%")
+                st.metric("How Much You've Improved", f"{sign}{improvement_pct:.1f}%", help="Compared to your very first interview")
             with col7:
-                st.metric("Consistency", consistency_label, help=f"Std deviation of scores: {score_std:.2f}")
+                st.metric("Your Score Consistency", consistency_label, help="Are your scores similar across interviews, or do they vary a lot?")
 
             # =====================================================
             # SECTION B — SCORE TREND INTELLIGENCE
             # =====================================================
             st.markdown("---")
-            st.markdown("### 📈 Score Trend Intelligence")
+            st.markdown("### 📈 Are You Getting Better Over Time?")
+            st.caption("This chart shows how your scores have changed across every interview you've done. The smoother line helps filter out one-off good or bad days.")
 
             trend_df = df[['avg_score', 'weighted_score']].copy().reset_index(drop=True)
             trend_df.index = trend_df.index + 1
             trend_df.index.name = "Interview #"
 
             # 3-point moving average
-            trend_df['Moving Avg (3pt)'] = trend_df['avg_score'].rolling(window=3, min_periods=1).mean()
+            trend_df['Smoothed Performance Trend'] = trend_df['avg_score'].rolling(window=3, min_periods=1).mean()
+            trend_df = trend_df.rename(columns={
+                'avg_score': 'Your Score',
+                'weighted_score': 'Adjusted Score (Hard Interviews Count More)'
+            })
 
-            st.line_chart(trend_df[['avg_score', 'weighted_score', 'Moving Avg (3pt)']])
-            st.caption("📊 avg_score = raw score | weighted_score = difficulty-adjusted score | Moving Avg = 3-interview rolling average")
+            st.line_chart(trend_df[['Your Score', 'Adjusted Score (Hard Interviews Count More)', 'Smoothed Performance Trend']])
+            st.caption("💡 **Adjusted Score** gives a little extra credit for completing harder interviews. **Smoothed Trend** is the average of your last 3 interviews — it shows your real direction without single-interview spikes.")
 
             # Detect trend direction using linear regression slope
             if total_interviews >= 3:
                 _scores_list = df['avg_score'].dropna().tolist()
                 _slope = compute_trend_slope(_scores_list)
                 if _slope > 0.15:
-                    trend_badge = f"🟢 **Trend: Improving** ↑ (slope: +{_slope:.2f}/interview)"
+                    trend_badge = "🟢 **You're Improving!** Your scores are going up across your recent interviews. Keep it up!"
                 elif _slope < -0.15:
-                    trend_badge = f"🔴 **Trend: Declining** ↓ (slope: {_slope:.2f}/interview)"
+                    trend_badge = "🔴 **Scores Are Slipping.** Your recent interviews scored lower than earlier ones. Try reviewing feedback from your past sessions."
                 else:
-                    trend_badge = f"🟡 **Trend: Stable** → (slope: {_slope:.2f}/interview)"
+                    trend_badge = "🟡 **Holding Steady.** Your scores are staying about the same. Try harder difficulty levels to push your growth."
                 # Stagnation detection
                 if abs(_slope) < 0.05 and total_interviews >= 5:
-                    trend_badge += " — ⚠️ **Stagnation detected!** Challenge yourself with harder interviews."
+                    trend_badge += " — ⚠️ **You may be in a plateau.** Switch to Hard mode or try a new topic to break through."
             else:
                 _slope = 0.0
-                trend_badge = "ℹ️ **Trend: Not enough data** (need 3+ interviews)"
+                trend_badge = "ℹ️ **Complete at least 3 interviews** to see your improvement trend here."
             st.markdown(trend_badge)
 
             # =====================================================
             # SECTION C — DOMAIN & ROLE ANALYTICS
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🌐 Domain & Role Analytics")
+            st.markdown("### 🌐 Where Are You Strongest?")
+            st.caption("See which career areas and job roles you score highest in — and which ones need more practice.")
 
             if 'domain' in df.columns:
                 col_l, col_r = st.columns(2)
@@ -12054,19 +12062,19 @@ Generate exactly {num_questions} questions now:
                 domain_avg = df.groupby('domain')['avg_score'].mean().rename('Avg Score')
 
                 with col_l:
-                    st.markdown("**Interviews per Domain**")
+                    st.markdown("**Interviews Done per Career Area**")
                     st.bar_chart(domain_counts)
 
                 with col_r:
-                    st.markdown("**Avg Score per Domain**")
+                    st.markdown("**Average Score per Career Area**")
                     st.bar_chart(domain_avg)
 
                 # Strongest / Weakest Domain
                 if len(domain_avg) >= 1:
                     strongest_domain = domain_avg.idxmax()
                     weakest_domain = domain_avg.idxmin()
-                    st.markdown(f"🏆 **Strongest Domain:** {strongest_domain} ({domain_avg[strongest_domain]:.1f}/10)")
-                    st.markdown(f"⚠️ **Weakest Domain:** {weakest_domain} ({domain_avg[weakest_domain]:.1f}/10)")
+                    st.markdown(f"🏆 **You shine in:** {strongest_domain} — avg score {domain_avg[strongest_domain]:.1f}/10")
+                    st.markdown(f"📌 **Room to grow in:** {weakest_domain} — avg score {domain_avg[weakest_domain]:.1f}/10. Spend more time practising here.")
 
             # Role performance table
             if 'role' in df.columns:
@@ -12076,53 +12084,55 @@ Generate exactly {num_questions} questions now:
                     Best_Score=('avg_score', 'max'),
                     Latest_Score=('avg_score', 'last')
                 ).reset_index()
-                role_perf.columns = ['Role', 'Attempts', 'Avg Score', 'Best Score', 'Latest Score']
+                role_perf.columns = ['Role', 'Times Practised', 'Avg Score', 'Best Score', 'Last Score']
                 role_perf = role_perf.round(2)
-                st.markdown("**Role Performance Table**")
+                st.markdown("**Your Scores by Job Role**")
                 st.dataframe(role_perf, use_container_width=True)
 
             # =====================================================
             # SECTION D — DIFFICULTY PERFORMANCE
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🎯 Difficulty Performance")
+            st.markdown("### 🎯 How You Handle Different Difficulty Levels")
+            st.caption("Easy interviews build confidence. Medium tests your thinking. Hard interviews push your limits — and show real growth.")
 
             if 'difficulty' in df.columns:
                 # Only show rows where difficulty is known
                 df_diff = df[df['difficulty'].notna() & (df['difficulty'] != 'Unknown') & (df['difficulty'] != '')]
                 if df_diff.empty:
-                    st.info("⚠️ Difficulty data not available yet. Complete new interviews to see difficulty breakdown.")
+                    st.info("⚠️ No difficulty data yet. Complete a few more interviews and this section will fill up!")
                 else:
                     diff_counts = df_diff.groupby('difficulty').size().rename('Attempts')
                     diff_avg = df_diff.groupby('difficulty')['avg_score'].mean().rename('Avg Score')
 
                     col_dl, col_dr = st.columns(2)
                     with col_dl:
-                        st.markdown("**Attempts per Difficulty**")
+                        st.markdown("**How Many Times You Tried Each Level**")
                         st.bar_chart(diff_counts)
                     with col_dr:
-                        st.markdown("**Avg Score per Difficulty**")
+                        st.markdown("**Your Average Score at Each Level**")
                         st.bar_chart(diff_avg)
 
                     # Analysis
                     hard_count = int(diff_counts.get('Hard', 0))
                     total_count = int(diff_counts.sum())
                     if total_count > 0 and hard_count / total_count < 0.2:
-                        st.warning("⚠️ You appear to be avoiding Hard interviews. Challenge yourself to improve faster!")
+                        st.warning("⚠️ You haven't tried many Hard interviews yet. Pushing yourself to Hard level is one of the fastest ways to improve!")
 
                     hard_avg = float(diff_avg['Hard']) if 'Hard' in diff_avg.index else None
                     medium_avg = float(diff_avg['Medium']) if 'Medium' in diff_avg.index else None
                     if hard_avg is not None and medium_avg is not None:
                         if hard_avg >= medium_avg - 0.5:
-                            st.success("✅ Great performance in Hard interviews! You're improving in difficulty.")
+                            st.success("✅ You're holding up well even in Hard interviews — that's a great sign of real progress!")
                         else:
-                            st.info("💡 Your Hard interview scores are lower than Medium. Focus on harder practice!")
+                            st.info("💡 Your Hard interview scores are a bit lower than Medium, which is totally normal. Keep practising Hard mode to close the gap.")
 
             # =====================================================
             # SECTION E — SKILL INTELLIGENCE (RADAR CHART)
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🕸️ Skill Intelligence Radar")
+            st.markdown("### 🕸️ Your Skill Strengths")
+            st.caption("This chart shows how you're performing across three key interview skills. The bigger the shape, the stronger you are overall.")
 
             skill_cols = ['knowledge_avg', 'communication_avg', 'relevance_avg']
             skill_labels = ['Knowledge', 'Communication', 'Relevance']
@@ -12167,10 +12177,10 @@ Generate exactly {num_questions} questions now:
                 strongest_skill_idx = skill_avgs.index(max(skill_avgs))
                 strongest_skill = skill_labels[strongest_skill_idx]
 
-                st.markdown(f"🌟 **Strongest Skill:** {strongest_skill} ({skill_avgs[strongest_skill_idx]:.1f}/10)")
-                st.markdown(f"⚠️ **Weakest Skill:** {weakest_skill} ({skill_avgs[weakest_skill_idx]:.1f}/10)")
+                st.markdown(f"🌟 **You're best at:** {strongest_skill} ({skill_avgs[strongest_skill_idx]:.1f}/10)")
+                st.markdown(f"📌 **Focus area:** {weakest_skill} ({skill_avgs[weakest_skill_idx]:.1f}/10) — this is where more practice will help the most")
+                st.markdown("")
                 for lbl, val in zip(skill_labels, skill_avgs):
-                    bar_pct = int(val * 10)
                     st.markdown(f"**{lbl}:** {val:.1f}/10")
                     st.progress(val / 10.0)
 
@@ -12178,7 +12188,8 @@ Generate exactly {num_questions} questions now:
             # SECTION F — BEHAVIORAL ANALYTICS
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🧠 Behavioral Analytics")
+            st.markdown("### 🧠 Your Interview Style")
+            st.caption("This section looks at how you behave during interviews — how long you spend, how that affects your score, and what kind of interviewer you are.")
 
             col_b1, col_b2, col_b3 = st.columns(3)
 
@@ -12189,32 +12200,38 @@ Generate exactly {num_questions} questions now:
 
             with col_b1:
                 if avg_duration_mins is not None:
-                    st.metric("Avg Interview Duration", f"{avg_duration_mins:.1f} min")
+                    st.metric("Average Time Per Interview", f"{avg_duration_mins:.1f} min", help="How long your interviews typically last")
                 else:
-                    st.metric("Avg Interview Duration", "N/A")
+                    st.metric("Average Time Per Interview", "N/A")
 
             with col_b2:
                 if avg_score_per_q is not None:
-                    st.metric("Avg Score per Question", f"{avg_score_per_q:.2f}")
+                    st.metric("Score Per Question", f"{avg_score_per_q:.2f}", help="On average, how well you answer each individual question")
                 else:
-                    st.metric("Avg Score per Question", "N/A")
+                    st.metric("Score Per Question", "N/A")
 
             with col_b3:
-                # Score vs duration correlation
+                # Score vs duration correlation — convert to human badge
                 if dur_available and len(df) >= 3:
                     corr = df[['avg_score', 'duration_seconds']].dropna().corr().iloc[0, 1]
-                    st.metric("Score-Duration Correlation", f"{corr:.2f}")
+                    if corr > 0.4:
+                        corr_badge = "⚡ Yes — more time = better score"
+                    elif corr < -0.2:
+                        corr_badge = "🤔 Not really — taking more time isn't helping"
+                    else:
+                        corr_badge = "⚖️ Not much difference"
+                    st.metric("Does Spending More Time Help?", corr_badge, help="Based on all your interviews so far")
                 else:
-                    st.metric("Score-Duration Correlation", "N/A (need 3+ interviews)")
+                    st.metric("Does Spending More Time Help?", "Need 3+ interviews")
 
             # Candidate type classification
             if dur_available and avg_duration_mins is not None:
                 if avg_duration_mins < 10:
-                    candidate_type = "⚡ Rushed Candidate — Consider spending more time on each answer."
+                    candidate_type = "⚡ **You tend to answer quickly.** That's great for pace, but try spending a bit more time structuring your answers — quality over speed!"
                 elif avg_duration_mins > 35:
-                    candidate_type = "🤔 Overthinking Candidate — Try to be more concise and structured."
+                    candidate_type = "🤔 **You take your time — sometimes too much.** Try to be more concise and direct. Interviewers appreciate clear, structured answers."
                 else:
-                    candidate_type = "⚖️ Balanced Performer — Good pacing on interviews!"
+                    candidate_type = "⚖️ **Great balance!** You're pacing your interviews well — not too rushed, not too slow."
                 st.info(candidate_type)
 
             # PART 6: Enhanced behavior classification using stored data
@@ -12222,51 +12239,59 @@ Generate exactly {num_questions} questions now:
                 _bc_counts = df['behavior_class'].value_counts()
                 _dominant_class = _bc_counts.index[0] if len(_bc_counts) > 0 else None
                 if _dominant_class:
-                    st.markdown(f"**🧠 Dominant Behavior Pattern:** {_dominant_class}")
+                    st.markdown(f"**🎭 Your Typical Interview Style:** {_dominant_class}")
 
             # Hard mode delta analysis
             if 'difficulty' in df.columns and 'Hard' in df['difficulty'].values and 'Medium' in df['difficulty'].values:
                 _hard_avg_b = df[df['difficulty'] == 'Hard']['avg_score'].mean()
                 _med_avg_b = df[df['difficulty'] == 'Medium']['avg_score'].mean()
                 _hard_delta = _hard_avg_b - _med_avg_b
+                st.markdown("#### 💪 How You Perform in Hard Interviews")
+                st.caption("Hard interviews are more demanding — it's normal to score a little lower. Here's how you're doing.")
                 col_hd1, col_hd2 = st.columns(2)
                 with col_hd1:
-                    st.metric("Hard Mode Score", f"{_hard_avg_b:.2f}/10")
+                    st.metric("Your Hard Interview Score", f"{_hard_avg_b:.2f}/10")
                 with col_hd2:
-                    _delta_label = f"{_hard_delta:+.2f} vs Medium"
-                    st.metric("Hard vs Medium Delta", _delta_label)
+                    if _hard_delta >= 0:
+                        _delta_display = f"⬆️ {abs(_hard_delta):.1f} pts above Medium"
+                    elif _hard_delta >= -1.0:
+                        _delta_display = f"Slightly below Medium (–{abs(_hard_delta):.1f} pts)"
+                    else:
+                        _delta_display = f"Below Medium (–{abs(_hard_delta):.1f} pts)"
+                    st.metric("Compared to Medium Interviews", _delta_display)
                 if _hard_delta < -1.5:
-                    st.warning("⚠️ **Performance Under Pressure**: Your Hard interview scores drop significantly. Simulate pressure conditions regularly to build resilience.")
+                    st.warning("⚠️ Hard interviews are noticeably tougher for you right now. That's okay — keep practising Hard mode and you'll build the muscle for it.")
                 elif _hard_delta >= -0.5:
-                    st.success("✅ **Pressure Resilient**: You maintain strong performance even under hard interview conditions!")
+                    st.success("✅ You're doing great under pressure! Your Hard interview scores are close to your Medium ones — a real strength.")
 
             # =====================================================
             # SECTION G — CLASSIFICATION ENGINE
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🎖️ Performance Classification")
+            st.markdown("### 🎖️ Where Do You Stand Right Now?")
+            st.caption("Based on all your interviews, here's an honest picture of where you are today — and where you're headed.")
 
             if not pd.isna(overall_avg):
                 if overall_avg < 5:
-                    classification = "🔵 Beginner"
+                    classification = "🔵 Just Getting Started"
                     cls_color = "#4fc3f7"
-                    cls_desc = "Keep practicing! Focus on understanding fundamentals."
+                    cls_desc = "Every expert was once a beginner. Focus on understanding the basics and practise regularly — you'll improve fast!"
                 elif overall_avg < 6.5:
-                    classification = "🟡 Developing"
+                    classification = "🟡 Building Momentum"
                     cls_color = "#ffcc02"
-                    cls_desc = "Good progress! Work on technical depth and communication."
+                    cls_desc = "You're making real progress! Work on giving more detailed answers and communicating your ideas more clearly."
                 elif overall_avg < 7.5:
-                    classification = "🟠 Growing Professional"
+                    classification = "🟠 Looking Strong"
                     cls_color = "#ff9800"
-                    cls_desc = "Solid candidate! Refine your answers and push for harder interviews."
+                    cls_desc = "Solid work! You're getting there. Keep sharpening your answers and push yourself with harder interview levels."
                 elif overall_avg < 8.5:
-                    classification = "🟢 Strong Candidate"
+                    classification = "🟢 Almost There!"
                     cls_color = "#66bb6a"
-                    cls_desc = "Excellent performance! You're nearly interview-ready."
+                    cls_desc = "You're performing at a high level. A little more polish and you'll be fully interview-ready!"
                 else:
-                    classification = "🏆 Interview Ready"
+                    classification = "🏆 Interview Ready!"
                     cls_color = "#00e676"
-                    cls_desc = "Outstanding! You're ready to ace real interviews."
+                    cls_desc = "Outstanding! You're ready to walk into real interviews with confidence. Go get that job!"
 
                 st.markdown(f"""
                 <div style="background: linear-gradient(135deg, rgba(0,195,255,0.1), rgba(0,195,255,0.05));
@@ -12281,7 +12306,8 @@ Generate exactly {num_questions} questions now:
             # SECTION H — AI GENERATED PERFORMANCE SUMMARY
             # =====================================================
             st.markdown("---")
-            st.markdown("### 📝 AI Performance Summary")
+            st.markdown("### 📝 Your Personal Progress Report")
+            st.caption("Here's a plain-English summary of everything your data is telling us about your interview journey so far.")
 
             # Generate programmatic summary from real data
             summary_parts = []
@@ -12290,53 +12316,62 @@ Generate exactly {num_questions} questions now:
             if _domain_avg_safe is not None and len(_domain_avg_safe) >= 1:
                 _s_domain = _domain_avg_safe.idxmax()
                 _w_domain = _domain_avg_safe.idxmin()
-                summary_parts.append(f"You are strongest in the **{_s_domain}** domain with an average score of {_domain_avg_safe[_s_domain]:.1f}/10.")
+                summary_parts.append(f"You perform best in **{_s_domain}** — that's where your confidence and knowledge really shows, with an average score of {_domain_avg_safe[_s_domain]:.1f}/10.")
                 if len(_domain_avg_safe) > 1:
-                    summary_parts.append(f"Your weakest domain is **{_w_domain}** ({_domain_avg_safe[_w_domain]:.1f}/10), which warrants focused practice.")
+                    summary_parts.append(f"**{_w_domain}** is the area that needs the most attention right now ({_domain_avg_safe[_w_domain]:.1f}/10). A little focused practice there will go a long way.")
 
-            summary_parts.append(f"Your strongest skill is **{strongest_skill}** ({skill_avgs[strongest_skill_idx]:.1f}/10), while **{weakest_skill}** ({skill_avgs[weakest_skill_idx]:.1f}/10) needs improvement.")
+            summary_parts.append(f"Across all your interviews, **{strongest_skill}** is your strongest skill ({skill_avgs[strongest_skill_idx]:.1f}/10). **{weakest_skill}** is the skill to focus on next ({skill_avgs[weakest_skill_idx]:.1f}/10) — even small improvements here will lift your overall scores.")
 
-            # Trend direction using regression slope
+            # Trend direction — fully plain English, no slope values shown
             if total_interviews >= 3:
                 _scores_for_summary = df['avg_score'].dropna().tolist()
                 _slope_summary = compute_trend_slope(_scores_for_summary)
                 if _slope_summary > 0.15:
-                    summary_parts.append(f"Your score trend shows **steady improvement** (slope: +{_slope_summary:.2f}/interview) — great momentum!")
+                    summary_parts.append("The great news? **Your scores are going up** across your recent interviews. Whatever you're doing, keep doing it — it's working!")
                 elif _slope_summary < -0.15:
-                    summary_parts.append(f"Your recent scores show a **declining trend** (slope: {_slope_summary:.2f}/interview). Consider reviewing weaker areas and practicing more structured answers.")
+                    summary_parts.append("Your recent scores have dipped a little compared to earlier interviews. Don't worry — this is normal. Try revisiting the feedback from your past sessions and focus on one skill at a time.")
                 else:
-                    summary_parts.append(f"Your performance has been **stable** (slope: {_slope_summary:.2f}/interview). Push yourself with harder difficulty levels to accelerate growth.")
+                    summary_parts.append("Your scores have been fairly steady. That's a stable foundation to build on. To move to the next level, try bumping up to a harder difficulty or exploring a new topic area.")
 
-            summary_parts.append(f"You have completed **{total_interviews} interview(s)** answering **{total_questions} questions** in total.")
+            summary_parts.append(f"So far, you've completed **{total_interviews} interview{'s' if total_interviews != 1 else ''}** and answered **{total_questions} questions** in total — that's real practice time that adds up!")
 
-            # Weighted score summary
+            # Weighted score — explained simply
             _w_avg = df['weighted_score'].mean() if 'weighted_score' in df.columns else overall_avg
-            summary_parts.append(f"Your difficulty-adjusted weighted average score is **{_w_avg:.2f}/10**, accounting for interview difficulty levels.")
+            summary_parts.append(f"Your adjusted score — which gives a little extra credit for harder interviews — is **{_w_avg:.2f}/10**. Hard interviews count more because they're more demanding.")
 
-            if improvement_pct > 0:
-                summary_parts.append(f"Your overall improvement from your first to latest interview is **+{improvement_pct:.1f}%** — keep up the great work!")
+            if improvement_pct > 5:
+                summary_parts.append(f"Since your very first interview, you've improved by **{improvement_pct:.1f}%**. That's a meaningful jump — you should feel great about that progress!")
+            elif improvement_pct > 0:
+                summary_parts.append(f"You're up **{improvement_pct:.1f}%** since your first interview. You're moving in the right direction — keep the momentum going.")
             elif improvement_pct < 0:
-                summary_parts.append(f"Your score has dropped by **{abs(improvement_pct):.1f}%** since your first interview. Use structured revision to recover your performance.")
+                summary_parts.append(f"Your score has dipped **{abs(improvement_pct):.1f}%** since your first interview. A small setback is part of learning. Try revisiting easier difficulty levels to rebuild your confidence, then push back up.")
 
-            # Performance under pressure
+            # Performance under pressure — plain English
             if 'difficulty' in df.columns and 'Hard' in df['difficulty'].values:
                 _hard_avg_s = df[df['difficulty'] == 'Hard']['avg_score'].mean()
                 if _hard_avg_s < overall_avg - 1.0:
-                    summary_parts.append(f"Your Hard interview average ({_hard_avg_s:.1f}/10) is significantly below your overall average. **Deliberate practice under pressure** is recommended.")
+                    summary_parts.append(f"Hard interviews are a challenge for you right now — you average {_hard_avg_s:.1f}/10 there, which is lower than your overall average. That's completely normal. The more you practise Hard mode, the more comfortable you'll get with tough questions.")
                 else:
-                    summary_parts.append(f"You perform well under Hard interview conditions ({_hard_avg_s:.1f}/10), showing **strong pressure resilience**.")
+                    summary_parts.append(f"You're handling Hard interviews really well — averaging {_hard_avg_s:.1f}/10 even under pressure. That kind of resilience is exactly what real interviews reward.")
 
-            # Behavior class
+            # Behavior class — explained naturally
             if 'behavior_class' in df.columns and df['behavior_class'].notna().any():
                 _bc = df['behavior_class'].mode().iloc[0] if not df['behavior_class'].dropna().empty else None
+                _bc_descriptions = {
+                    "⚡ Rushed": "You tend to answer quickly. Slowing down a little and structuring your thoughts before speaking can really lift your scores.",
+                    "🤔 Overthinking": "You tend to take more time than needed. Practise giving focused, direct answers — interviewers love clarity.",
+                    "⚖️ Balanced": "You have a great natural rhythm in interviews — not too fast, not too slow. That's a real skill.",
+                    "🎯 Adaptive Learner": "You're adapting well as interviews get harder. That's a sign of someone who learns fast under pressure.",
+                }
                 if _bc:
-                    summary_parts.append(f"Your behavioral pattern is classified as **{_bc}** based on interview duration and performance consistency.")
+                    _bc_desc = _bc_descriptions.get(_bc, f"Your typical style is: {_bc}.")
+                    summary_parts.append(_bc_desc)
 
             full_summary = " ".join(summary_parts)
             st.markdown(f"""
             <div style="background: linear-gradient(135deg, rgba(0,195,255,0.08), rgba(0,195,255,0.03));
                         border: 1px solid rgba(0,195,255,0.3); border-radius: 12px; padding: 20px; margin: 10px 0;">
-                <p style="color: #ffffff; font-size: 15px; line-height: 1.7; margin: 0;">{full_summary}</p>
+                <p style="color: #ffffff; font-size: 15px; line-height: 1.8; margin: 0;">{full_summary}</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -12344,17 +12379,18 @@ Generate exactly {num_questions} questions now:
             # SECTION I — RECOMMENDATION ENGINE
             # =====================================================
             st.markdown("---")
-            st.markdown("### 💡 Personalized Recommendations")
+            st.markdown("### 💡 What You Should Do Next")
+            st.caption("These suggestions are personalised based on your actual interview history. Follow them and you'll see real improvement.")
 
             recommendations = []
 
             # Skill-based recommendations
             if weakest_skill == "Communication":
-                recommendations.append("🗣️ **Communication Practice:** Your communication scores are lowest. Practice explaining technical concepts clearly using the STAR method (Situation, Task, Action, Result). Record yourself answering questions out loud.")
+                recommendations.append("🗣️ **Work on explaining yourself more clearly.** Your communication scores are your lowest right now. Try practising with the STAR method: describe the Situation, your Task, the Action you took, and the Result. Even better — record yourself answering a question out loud and listen back.")
             elif weakest_skill == "Knowledge":
-                recommendations.append("📚 **Knowledge Deepening:** Your knowledge scores indicate gaps in technical understanding. Revisit core concepts in your target domain, study system design, and review common interview questions for your target role.")
+                recommendations.append("📚 **Deepen your technical knowledge.** Your knowledge scores suggest there are some topic gaps. Go back to basics in your target field, review common interview questions for your role, and spend time on real-world concepts like system design and best practices.")
             elif weakest_skill == "Relevance":
-                recommendations.append("🎯 **Relevance Improvement:** Your answers sometimes go off-topic. Practice answering the exact question asked before expanding. Use bullet points mentally before answering.")
+                recommendations.append("🎯 **Stay on-topic when you answer.** Your answers sometimes drift away from what was asked. Before you respond, mentally note the 2–3 key points that directly answer the question — then expand from there.")
 
             # Difficulty-based recommendations
             if 'difficulty' in df.columns:
@@ -12362,18 +12398,18 @@ Generate exactly {num_questions} questions now:
                 hard_avg_val = float(df[df['difficulty'] == 'Hard']['avg_score'].mean()) if 'Hard' in _diff_vals else None
                 medium_avg_val = float(df[df['difficulty'] == 'Medium']['avg_score'].mean()) if 'Medium' in _diff_vals else None
                 if hard_avg_val is not None and medium_avg_val is not None and hard_avg_val < medium_avg_val - 1.0:
-                    recommendations.append("💪 **Hard Interview Practice:** Your Hard interview scores are significantly lower than Medium. Schedule dedicated Hard interview practice sessions to build confidence under pressure.")
+                    recommendations.append("💪 **Practise more Hard interviews.** There's a noticeable gap between your Medium and Hard scores. The best way to close it is to get comfortable with the discomfort — book a few Hard mode sessions and treat each one as a learning experience, not a test.")
                 hard_c = int((df['difficulty'] == 'Hard').sum())
                 if total_interviews >= 3 and hard_c == 0:
-                    recommendations.append("🔥 **Challenge Yourself:** You haven't attempted any Hard interviews yet. Jumping to Hard difficulty will accelerate your learning curve significantly.")
+                    recommendations.append("🔥 **Try your first Hard interview!** You haven't attempted Hard level yet. It's challenging, but one Hard interview teaches you more than three Easy ones. Give it a go — you're ready.")
 
             # Stagnation detection
             if total_interviews >= 5 and abs(improvement_pct) < 5:
-                recommendations.append("📖 **Structured Revision:** Your scores have plateaued. Try a structured 2-week revision plan: week 1 on technical concepts, week 2 on behavioral questions. Take a mock interview at the end of each week.")
+                recommendations.append("📖 **Your scores have plateaued — it's time to shake things up.** Try a structured 2-week plan: spend week one revisiting technical concepts, and week two on behavioural questions. Finish each week with a full mock interview to test yourself.")
 
             # More interviews
             if total_interviews < 3:
-                recommendations.append("📅 **Build Your History:** Complete at least 5 interviews to generate meaningful trend analysis and personalized insights.")
+                recommendations.append("📅 **Complete at least 5 interviews to unlock full insights.** Right now you don't have enough data for detailed trend analysis. The more you practise, the more personalised your recommendations become.")
 
             if recommendations:
                 for rec in recommendations:
@@ -12384,35 +12420,36 @@ Generate exactly {num_questions} questions now:
                     </div>
                     """, unsafe_allow_html=True)
             else:
-                st.success("🎉 You're on track! Keep practicing consistently to maintain your performance.")
+                st.success("🎉 You're on track! Keep practising consistently and the results will keep coming.")
 
             # Raw data expander
             # Mode breakdown if available
             if 'interview_mode' in df.columns and df['interview_mode'].notna().any():
                 st.markdown("---")
-                st.markdown("### 🎮 Interview Mode Breakdown")
+                st.markdown("### 🎮 Which Interview Type Do You Prefer?")
+                st.caption("See how you perform across technical, behavioural, and mixed interview formats.")
                 _mode_df = df[df['interview_mode'].notna() & (df['interview_mode'] != '')]
                 if not _mode_df.empty:
                     col_m1, col_m2 = st.columns(2)
                     with col_m1:
-                        st.markdown("**Attempts per Mode**")
-                        st.bar_chart(_mode_df.groupby('interview_mode').size().rename('Attempts'))
+                        st.markdown("**How Many Times You Tried Each Format**")
+                        st.bar_chart(_mode_df.groupby('interview_mode').size().rename('Times Tried'))
                     with col_m2:
-                        st.markdown("**Avg Score per Mode**")
+                        st.markdown("**Your Average Score by Format**")
                         st.bar_chart(_mode_df.groupby('interview_mode')['avg_score'].mean().rename('Avg Score'))
 
-            with st.expander("📋 View Raw Interview History"):
+            with st.expander("📋 See All Your Interview Records"):
                 display_cols = [c for c in ['id', 'role', 'domain', 'avg_score', 'weighted_score', 'knowledge_avg', 'communication_avg',
                                              'relevance_avg', 'difficulty', 'interview_mode', 'total_questions', 'duration_seconds',
                                              'follow_up_count', 'depth_score', 'behavior_class', 'completed_on']
                                 if c in df.columns]
-                # Rename columns for display clarity
                 rename_map = {
-                    'avg_score': 'Avg Score', 'weighted_score': 'Weighted Score', 'knowledge_avg': 'Knowledge', 'communication_avg': 'Communication',
-                    'relevance_avg': 'Relevance', 'difficulty': 'Difficulty', 'interview_mode': 'Mode',
-                    'total_questions': 'Questions', 'duration_seconds': 'Duration (s)', 'completed_on': 'Completed On',
-                    'role': 'Role', 'domain': 'Domain', 'id': 'ID', 'follow_up_count': 'Follow-ups',
-                    'depth_score': 'Depth Score', 'behavior_class': 'Behavior'
+                    'avg_score': 'Score', 'weighted_score': 'Adjusted Score', 'knowledge_avg': 'Knowledge',
+                    'communication_avg': 'Communication', 'relevance_avg': 'Relevance',
+                    'difficulty': 'Level', 'interview_mode': 'Format',
+                    'total_questions': 'Questions', 'duration_seconds': 'Duration (s)',
+                    'completed_on': 'Date', 'role': 'Role', 'domain': 'Career Area', 'id': '#',
+                    'follow_up_count': 'Follow-ups', 'depth_score': 'Depth', 'behavior_class': 'Style'
                 }
                 display_df = df[display_cols].rename(columns=rename_map)
                 st.dataframe(display_df, use_container_width=True)
