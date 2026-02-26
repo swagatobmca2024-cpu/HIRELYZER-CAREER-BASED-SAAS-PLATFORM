@@ -8967,7 +8967,7 @@ with tab3:
                 height=290,
                 showlegend=False,
                 bargap=0.15,
-                xaxis=dict(**_XAXIS, tickangle=-45, tickfont=dict(size=10)),
+                xaxis=dict(**{**_XAXIS, "tickfont": dict(size=10, color="#999"), "tickangle": -45}),
                 yaxis=dict(**_YAXIS),
             )
             st.plotly_chart(fig_hour, use_container_width=True, config={"displayModeBar": False})
