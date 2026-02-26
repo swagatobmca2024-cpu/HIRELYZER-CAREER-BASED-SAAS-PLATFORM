@@ -13086,7 +13086,8 @@ Generate exactly {num_questions} questions now:
                         st.plotly_chart(_fig_ma, use_container_width=True)
 
             with st.expander("📋 See All Your Interview Records"):
-                display_cols = [c for c in ['id', 'role', 'domain', 'avg_score', 'weighted_score', 'knowledge_avg', 'communication_avg',
+                # Exclude raw DB 'id' — inject a clean per-user sequential # instead
+                display_cols = [c for c in ['role', 'domain', 'avg_score', 'weighted_score', 'knowledge_avg', 'communication_avg',
                                              'relevance_avg', 'difficulty', 'interview_mode', 'total_questions', 'duration_seconds',
                                              'follow_up_count', 'depth_score', 'behavior_class', 'completed_on']
                                 if c in df.columns]
@@ -13095,10 +13096,12 @@ Generate exactly {num_questions} questions now:
                     'communication_avg': 'Communication', 'relevance_avg': 'Relevance',
                     'difficulty': 'Level', 'interview_mode': 'Format',
                     'total_questions': 'Questions', 'duration_seconds': 'Duration (s)',
-                    'completed_on': 'Date', 'role': 'Role', 'domain': 'Career Area', 'id': '#',
+                    'completed_on': 'Date', 'role': 'Role', 'domain': 'Career Area',
                     'follow_up_count': 'Follow-ups', 'depth_score': 'Depth', 'behavior_class': 'Style'
                 }
                 display_df = df[display_cols].rename(columns=rename_map)
+                # Per-user sequential numbering: always starts at 1 regardless of DB id
+                display_df.insert(0, '#', range(1, len(display_df) + 1))
 
                 # Build enhanced HTML table with score badges, trend arrows, best-row highlight
                 _score_col = 'Score'
@@ -13163,7 +13166,6 @@ Generate exactly {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
-
 
 
 
