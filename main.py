@@ -8623,16 +8623,16 @@ with tab3:
         plot_bgcolor="rgba(15,15,26,0.6)",
         font=dict(family="Inter, sans-serif", color="#cccccc", size=12),
         margin=dict(l=10, r=10, t=35, b=10),
-        xaxis=dict(
-            gridcolor="rgba(255,255,255,0.06)",
-            zerolinecolor="rgba(255,255,255,0.08)",
-            tickfont=dict(size=11, color="#999"),
-        ),
-        yaxis=dict(
-            gridcolor="rgba(255,255,255,0.06)",
-            zerolinecolor="rgba(255,255,255,0.08)",
-            tickfont=dict(size=11, color="#999"),
-        ),
+    )
+    _XAXIS = dict(
+        gridcolor="rgba(255,255,255,0.06)",
+        zerolinecolor="rgba(255,255,255,0.08)",
+        tickfont=dict(size=11, color="#999"),
+    )
+    _YAXIS = dict(
+        gridcolor="rgba(255,255,255,0.06)",
+        zerolinecolor="rgba(255,255,255,0.08)",
+        tickfont=dict(size=11, color="#999"),
     )
 
     st.markdown("---")
