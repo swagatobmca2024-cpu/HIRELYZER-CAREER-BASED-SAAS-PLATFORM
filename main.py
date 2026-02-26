@@ -9968,6 +9968,71 @@ with tab4:
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
 
+        /* ================================================================
+           METRIC TRUNCATION FIX — My Progress tab
+           Streamlit's st.metric uses internal classes that enforce
+           white-space:nowrap and overflow:hidden on the value element.
+           Override every known selector to allow wrapping and full display.
+        ================================================================ */
+
+        /* Streamlit metric value — allow full text, no clipping */
+        [data-testid="stMetricValue"],
+        [data-testid="stMetricValue"] > div,
+        [data-testid="stMetricValue"] * {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: unset !important;
+            word-break: break-word !important;
+            overflow-wrap: break-word !important;
+            max-width: 100% !important;
+        }
+
+        /* Metric label — allow wrapping too */
+        [data-testid="stMetricLabel"],
+        [data-testid="stMetricLabel"] > div,
+        [data-testid="stMetricLabel"] p {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: unset !important;
+            word-break: break-word !important;
+            line-height: 1.3 !important;
+        }
+
+        /* Metric delta — don't clip */
+        [data-testid="stMetricDelta"],
+        [data-testid="stMetricDelta"] * {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: unset !important;
+        }
+
+        /* Metric container — use min-height, not fixed height */
+        [data-testid="metric-container"],
+        div[data-testid="stMetric"] {
+            height: auto !important;
+            min-height: 80px !important;
+            overflow: visible !important;
+        }
+
+        /* Metric value font — scale down slightly for long strings */
+        [data-testid="stMetricValue"] > div {
+            font-size: clamp(14px, 2.2vw, 28px) !important;
+            line-height: 1.25 !important;
+        }
+
+        /* Column containers — don't clip children */
+        [data-testid="column"] {
+            overflow: visible !important;
+        }
+
+        /* Generic Streamlit element containers */
+        .element-container {
+            overflow: visible !important;
+        }
+
+        /* ================================================================
+           HEADER BOX
+        ================================================================ */
         .header-box {
             background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 25%, #2d3561 50%, #3f4787 75%, #5158ae 100%);
             border: 2px solid transparent;
@@ -9982,6 +10047,8 @@ with tab4:
                 0 4px 16px rgba(0, 195, 255, 0.1),
                 inset 0 1px 0 rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
+            /* overflow:hidden kept only for the animated border pseudo-element,
+               NOT for child text content */
             overflow: hidden;
         }
 
@@ -10018,6 +10085,9 @@ with tab4:
             letter-spacing: -0.5px;
         }
 
+        /* ================================================================
+           GLOW HEADER
+        ================================================================ */
         .glow-header {
             font-size: 24px;
             text-align: center;
@@ -10036,6 +10106,9 @@ with tab4:
             50% { opacity: 0.9; transform: scale(1.02); }
         }
 
+        /* ================================================================
+           RADIO BUTTONS
+        ================================================================ */
         .stRadio > div {
             flex-direction: row !important;
             justify-content: center !important;
@@ -10056,6 +10129,7 @@ with tab4:
             min-width: 190px;
             text-align: center;
             position: relative;
+            /* overflow:hidden only clips the shimmer pseudo-element, not text */
             overflow: hidden;
             box-shadow: 
                 0 4px 15px rgba(0, 195, 255, 0.1),
@@ -10095,6 +10169,10 @@ with tab4:
                 inset 0 1px 0 rgba(255, 255, 255, 0.3);
         }
 
+        /* ================================================================
+           CARD — shimmer uses overflow:hidden on ::after only via clip-path
+           The card itself must NOT clip text.
+        ================================================================ */
         .card {
             background: linear-gradient(135deg, #0f1419 0%, #1a2332 25%, #253447 50%, #30455c 75%, #3b5671 100%);
             border: 2px solid transparent;
@@ -10102,7 +10180,8 @@ with tab4:
             padding: 20px 25px;
             margin: 12px 0;
             position: relative;
-            overflow: hidden;
+            /* Do NOT use overflow:hidden here — use clip-path on ::after instead */
+            overflow: visible;
             transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             box-shadow: 
                 0 4px 20px rgba(0, 195, 255, 0.1),
@@ -10134,6 +10213,9 @@ with tab4:
             height: 100%;
             background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
             transition: left 0.6s;
+            /* clip shimmer to card bounds without hiding child text */
+            clip-path: inset(0 round 16px);
+            pointer-events: none;
         }
 
         .card:hover {
@@ -10158,6 +10240,9 @@ with tab4:
             gap: 8px;
             transition: all 0.3s ease;
             text-shadow: 0 0 10px rgba(0, 195, 255, 0.3);
+            /* ensure links wrap properly */
+            white-space: normal;
+            word-break: break-word;
         }
 
         .card a:hover {
@@ -10169,7 +10254,9 @@ with tab4:
             transform: translateX(4px);
         }
 
-        /* Enhanced selectbox styling */
+        /* ================================================================
+           SELECTBOX
+        ================================================================ */
         .stSelectbox > div > div {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             border: 2px solid #00c3ff;
@@ -10189,7 +10276,9 @@ with tab4:
             margin-bottom: 20px;
         }
 
-        /* Learning path container */
+        /* ================================================================
+           LEARNING PATH CONTAINER
+        ================================================================ */
         .learning-path-container {
             text-align: center;
             margin: 30px 0 20px 0;
@@ -10207,7 +10296,9 @@ with tab4:
             letter-spacing: -0.3px;
         }
 
-        /* Video container enhancements */
+        /* ================================================================
+           VIDEO
+        ================================================================ */
         .stVideo {
             border-radius: 12px;
             overflow: hidden;
@@ -10226,7 +10317,9 @@ with tab4:
             border-radius: 10px;
         }
 
-        /* New styles for quiz and interview sections */
+        /* ================================================================
+           QUIZ CARD
+        ================================================================ */
         .quiz-card {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             border: 2px solid #00c3ff;
@@ -10234,8 +10327,14 @@ with tab4:
             padding: 20px;
             margin: 15px 0;
             box-shadow: 0 4px 20px rgba(0, 195, 255, 0.15);
+            /* no fixed height — content determines size */
+            height: auto;
+            overflow: visible;
         }
 
+        /* ================================================================
+           BADGE CONTAINER
+        ================================================================ */
         .badge-container {
             text-align: center;
             padding: 30px;
@@ -10246,6 +10345,8 @@ with tab4:
             border: 1px solid rgba(0, 195, 255, 0.25);
             margin: 20px 0;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            height: auto;
+            overflow: visible;
         }
 
         .score-display {
@@ -10256,15 +10357,22 @@ with tab4:
             letter-spacing: 2px;
         }
 
+        /* ================================================================
+           ROLE SELECTOR
+        ================================================================ */
         .role-selector {
             background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
             border: 1px solid rgba(0, 195, 255, 0.2);
             border-radius: 12px;
             padding: 20px;
             margin: 15px 0;
+            height: auto;
+            overflow: visible;
         }
 
-        /* Course tile styling */
+        /* ================================================================
+           COURSE TILE
+        ================================================================ */
         .course-tile {
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
             border: 2px solid #00c3ff;
@@ -10273,7 +10381,11 @@ with tab4:
             margin: 15px 0;
             transition: all 0.3s ease;
             position: relative;
+            /* overflow:hidden clips the hover shimmer — acceptable here
+               because course tile text is in static children, not metrics */
             overflow: hidden;
+            height: auto;
+            min-height: 0;
         }
 
         .course-tile:hover {
@@ -10286,6 +10398,8 @@ with tab4:
             font-size: 18px;
             font-weight: 600;
             margin-bottom: 10px;
+            white-space: normal;
+            word-break: break-word;
         }
 
         .course-description {
@@ -10293,6 +10407,8 @@ with tab4:
             font-size: 14px;
             margin-bottom: 15px;
             line-height: 1.4;
+            white-space: normal;
+            word-break: break-word;
         }
 
         .difficulty-badge {
@@ -10302,6 +10418,7 @@ with tab4:
             font-size: 12px;
             font-weight: 500;
             margin-bottom: 15px;
+            white-space: normal;
         }
 
         .difficulty-beginner {
@@ -10337,16 +10454,22 @@ with tab4:
             color: white;
         }
 
-        /* Radar chart container */
+        /* ================================================================
+           RADAR CHART CONTAINER
+        ================================================================ */
         .radar-container {
             background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
             border: 1px solid rgba(0, 195, 255, 0.2);
             border-radius: 15px;
             padding: 20px;
             margin: 20px 0;
+            height: auto;
+            overflow: visible;
         }
 
-        /* Timer styling */
+        /* ================================================================
+           TIMER
+        ================================================================ */
         .timer-container {
             background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);
             border: 1px solid rgba(255, 193, 7, 0.3);
@@ -10354,6 +10477,8 @@ with tab4:
             padding: 15px;
             margin: 15px 0;
             text-align: center;
+            height: auto;
+            overflow: visible;
         }
 
         .timer-display {
@@ -10361,6 +10486,7 @@ with tab4:
             font-weight: bold;
             color: #ffd700;
             text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            white-space: normal;
         }
 
         .timer-urgent {
@@ -10368,6 +10494,39 @@ with tab4:
             text-shadow: 0 0 15px rgba(255, 68, 68, 0.8);
             animation: pulse 1s ease-in-out infinite;
         }
+
+        /* ================================================================
+           PROGRESS / MY PROGRESS TAB — generic container fixes
+           Prevent any parent wrapper from clipping metric cards.
+        ================================================================ */
+        section[data-testid="stSidebar"],
+        .main .block-container {
+            overflow: visible !important;
+        }
+
+        /* Consistency label and other long-text metric values */
+        [data-testid="stMetricValue"] div {
+            display: block !important;
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: unset !important;
+            word-wrap: break-word !important;
+            hyphens: auto !important;
+            font-size: clamp(13px, 2vw, 26px) !important;
+            line-height: 1.3 !important;
+            max-width: 100% !important;
+        }
+
+        /* Make metric card itself auto-height */
+        div[data-testid="stMetric"] > div {
+            height: auto !important;
+            min-height: 70px !important;
+            overflow: visible !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
+        }
+
         </style>
     """, unsafe_allow_html=True)
 
@@ -12688,7 +12847,6 @@ Generate exactly {num_questions} questions now:
                 }
                 display_df = df[display_cols].rename(columns=rename_map)
                 st.dataframe(display_df, use_container_width=True)
-
 
 
 
