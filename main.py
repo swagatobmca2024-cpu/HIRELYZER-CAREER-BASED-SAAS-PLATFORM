@@ -8891,7 +8891,7 @@ Provide detailed, flowing feedback that covers:
 
 Write feedback as natural, flowing paragraphs (not bullet points). Make it detailed, specific to their answer, and constructive.
 
-{"STEP 5 - FOLLOW-UP QUESTION: Generate ONE probing follow-up question that digs deeper based on their answer." if difficulty == "Hard" else ""}
+{"STEP 5 - FOLLOW-UP QUESTION: Generate ONE probing follow-up question that digs deeper based on their answer. Consider using one of these strategies: Depth Probe, Tradeoff Challenge, Edge Case Scenario, Scalability Challenge, Constraint Injection, Failure Simulation, Security Consideration, Architecture Breakdown, Metric Justification, or Alternative Design Comparison. Choose the strategy that targets the biggest weakness in their answer." if difficulty == "Hard" else ""}
 
 OUTPUT FORMAT (strict JSON):
 {{
@@ -9054,6 +9054,11 @@ def create_interview_database():
             ("duration_seconds", "INTEGER"),
             ("interview_mode", "TEXT"),
             ("created_timestamp", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
+            ("weighted_score", "REAL"),
+            ("raw_avg_score", "REAL"),
+            ("follow_up_count", "INTEGER DEFAULT 0"),
+            ("depth_score", "REAL"),
+            ("behavior_class", "TEXT"),
         ]
 
         for col_name, col_type in migrations:
@@ -9072,7 +9077,9 @@ def create_interview_database():
 
 def save_interview_result(username: str, role: str, domain: str, avg_score: float, total_questions: int, feedback_summary: str,
                           knowledge_avg: float = None, communication_avg: float = None, relevance_avg: float = None,
-                          difficulty: str = None, duration_seconds: int = None, interview_mode: str = None):
+                          difficulty: str = None, duration_seconds: int = None, interview_mode: str = None,
+                          weighted_score: float = None, raw_avg_score: float = None,
+                          follow_up_count: int = 0, depth_score: float = None, behavior_class: str = None):
     """Save interview result to database with extended columns"""
     import sqlite3
     try:
@@ -9081,10 +9088,12 @@ def save_interview_result(username: str, role: str, domain: str, avg_score: floa
         completed_on = get_ist_time()
         cursor.execute("""
             INSERT INTO interview_results (username, role, domain, avg_score, total_questions, completed_on, feedback_summary,
-                                          knowledge_avg, communication_avg, relevance_avg, difficulty, duration_seconds, interview_mode, created_timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                                          knowledge_avg, communication_avg, relevance_avg, difficulty, duration_seconds, interview_mode, created_timestamp,
+                                          weighted_score, raw_avg_score, follow_up_count, depth_score, behavior_class)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)
         """, (username, role, domain, avg_score, total_questions, completed_on, feedback_summary,
-              knowledge_avg, communication_avg, relevance_avg, difficulty, duration_seconds, interview_mode))
+              knowledge_avg, communication_avg, relevance_avg, difficulty, duration_seconds, interview_mode,
+              weighted_score, raw_avg_score, follow_up_count, depth_score, behavior_class))
         conn.commit()
         conn.close()
         return True
@@ -9474,6 +9483,290 @@ def show_resume_scanning_animation():
 
     status.empty()
     progress.empty()
+
+
+
+# =============================================================================
+# PART 1-9: UPGRADED ENGINE FUNCTIONS
+# =============================================================================
+
+HARD_FOLLOWUP_STRATEGIES = [
+    "Depth Probe",
+    "Tradeoff Challenge",
+    "Edge Case Scenario",
+    "Scalability Challenge",
+    "Constraint Injection",
+    "Failure Simulation",
+    "Security Consideration",
+    "Architecture Breakdown",
+    "Metric Justification",
+    "Alternative Design Comparison",
+]
+
+DIFFICULTY_MULTIPLIERS = {"Easy": 1.0, "Medium": 1.1, "Hard": 1.25}
+
+
+def analyze_answer_weaknesses(answer_text: str, scoring: dict) -> dict:
+    """
+    PART 2: Adaptive follow-up strategy engine.
+    Detect weaknesses and select appropriate follow-up strategy.
+    Returns dict with detected weaknesses and selected strategy.
+    """
+    weaknesses = []
+    answer_lower = answer_text.lower()
+    word_count = len(answer_text.split())
+
+    knowledge = scoring.get("knowledge", 5)
+    communication = scoring.get("communication", 5)
+    relevance = scoring.get("relevance", 5)
+
+    # Detect missing elements
+    tradeoff_keywords = ["tradeoff", "trade-off", "versus", "vs", "compared", "alternative", "however", "but", "downside", "pros and cons"]
+    if not any(kw in answer_lower for kw in tradeoff_keywords):
+        weaknesses.append("no_tradeoff")
+
+    project_keywords = ["project", "built", "implemented", "worked on", "experience", "at my", "in my", "when i", "i developed"]
+    if not any(kw in answer_lower for kw in project_keywords):
+        weaknesses.append("no_project_reference")
+
+    metric_keywords = ["%", "percent", "ms", "seconds", "users", "requests", "throughput", "latency", "availability", "uptime", "scale", "million", "thousand"]
+    if not any(kw in answer_lower for kw in metric_keywords):
+        weaknesses.append("no_metrics")
+
+    if knowledge < 5:
+        weaknesses.append("weak_knowledge")
+    if communication < 5:
+        weaknesses.append("weak_communication")
+    if relevance < 5:
+        weaknesses.append("weak_relevance")
+    if word_count < 50:
+        weaknesses.append("superficial_explanation")
+
+    # Select strategy based on primary weakness
+    strategy = "Depth Probe"  # default
+    if "no_tradeoff" in weaknesses:
+        strategy = "Tradeoff Challenge"
+    elif "no_metrics" in weaknesses:
+        strategy = "Metric Justification"
+    elif "no_project_reference" in weaknesses:
+        strategy = "Architecture Breakdown"
+    elif "superficial_explanation" in weaknesses:
+        strategy = "Depth Probe"
+    elif "weak_knowledge" in weaknesses:
+        strategy = "Edge Case Scenario"
+    elif "weak_communication" in weaknesses:
+        strategy = "Alternative Design Comparison"
+    elif len(weaknesses) == 0:
+        # Answer was good, escalate with harder challenge
+        import random
+        strategy = random.choice(["Scalability Challenge", "Failure Simulation", "Security Consideration", "Constraint Injection"])
+
+    return {
+        "weaknesses": weaknesses,
+        "strategy": strategy,
+        "follow_up_count": 0,
+        "depth_score": min(10, max(0, (knowledge + communication + relevance) / 3)),
+    }
+
+
+def generate_adaptive_followup(question: str, answer: str, strategy: str, escalation_layer: int, role: str, domain: str) -> str:
+    """
+    PART 4: Generate escalating follow-up question based on strategy and layer.
+    Escalation layers 1-5 increase cognitive load progressively.
+    """
+    from llm_manager import call_llm
+
+    layer_desc = {
+        1: "Ask about the internal workings or mechanism behind their answer.",
+        2: "Challenge them with a tradeoff or alternative approach comparison.",
+        3: "Probe with a real-world project mapping or example requirement.",
+        4: "Inject a constraint (e.g., 10x scale, limited budget, legacy system) and ask how they'd adapt.",
+        5: "Simulate a failure or security breach scenario related to their approach and ask for resolution.",
+    }
+    layer_instruction = layer_desc.get(escalation_layer, layer_desc[2])
+
+    strategy_instructions = {
+        "Depth Probe": "Ask them to explain HOW it works internally, step by step.",
+        "Tradeoff Challenge": "Ask them to compare their approach with an alternative and justify their choice with specific tradeoffs.",
+        "Edge Case Scenario": "Present an edge case or unexpected condition and ask how their solution handles it.",
+        "Scalability Challenge": "Ask how their approach would handle 100x traffic or 10x data volume.",
+        "Constraint Injection": "Add a realistic constraint (e.g., no database, offline mode, 50ms SLA) and ask how they'd adapt.",
+        "Failure Simulation": "Describe a production failure scenario and ask how they'd diagnose and fix it.",
+        "Security Consideration": "Ask about the security implications or attack vectors related to their approach.",
+        "Architecture Breakdown": "Ask them to draw out the architecture components and explain data flow.",
+        "Metric Justification": "Ask them to provide specific metrics or success criteria they'd use to validate their solution.",
+        "Alternative Design Comparison": "Ask them to propose a completely different design and compare both approaches.",
+    }
+    strategy_instruction = strategy_instructions.get(strategy, "Ask a deeper technical follow-up question.")
+
+    prompt = f"""You are a senior technical interviewer conducting a {domain} interview for {role}.
+
+The candidate answered this question:
+ORIGINAL QUESTION: {question}
+CANDIDATE ANSWER: {answer[:500]}
+
+Generate ONE follow-up question using this strategy: {strategy}
+Strategy instruction: {strategy_instruction}
+Escalation layer: {escalation_layer}/5 — {layer_instruction}
+
+Rules:
+- The question must directly reference something from their answer
+- It should increase cognitive load compared to the original question
+- Keep it to 1-2 sentences maximum
+- Do NOT add numbering or prefixes
+- Output only the question itself
+
+Follow-up question:"""
+
+    try:
+        return call_llm(prompt, session=st.session_state).strip()
+    except Exception:
+        return f"Can you walk me through how you would handle this at 10x scale, including specific failure points and mitigations?"
+
+
+def get_user_weakness_history(username: str) -> dict:
+    """
+    PART 5: Weakness Memory Engine.
+    Query past 5 interviews and detect recurring weak skill.
+    Returns dict with weakest_skill and bias recommendation.
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        import pandas as pd
+        df = pd.read_sql_query(
+            "SELECT knowledge_avg, communication_avg, relevance_avg FROM interview_results WHERE username=? ORDER BY id DESC LIMIT 5",
+            conn, params=(username,)
+        )
+        conn.close()
+
+        if df.empty or len(df) < 2:
+            return {"weakest_skill": None, "bias": "balanced"}
+
+        avgs = {
+            "knowledge": df["knowledge_avg"].mean(),
+            "communication": df["communication_avg"].mean(),
+            "relevance": df["relevance_avg"].mean(),
+        }
+        weakest = min(avgs, key=avgs.get)
+        bias_map = {
+            "knowledge": "technical depth",
+            "communication": "explanation clarity",
+            "relevance": "answer precision",
+        }
+        return {"weakest_skill": weakest, "bias": bias_map.get(weakest, "balanced"), "averages": avgs}
+    except Exception:
+        return {"weakest_skill": None, "bias": "balanced"}
+
+
+def compute_weighted_score(raw_avg: float, difficulty: str) -> float:
+    """PART 3: Apply difficulty multiplier to raw average score."""
+    multiplier = DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)
+    return round(min(10.0, raw_avg * multiplier), 2)
+
+
+def compute_trend_slope(scores: list) -> float:
+    """PART 6: Compute linear regression slope over score list."""
+    n = len(scores)
+    if n < 2:
+        return 0.0
+    try:
+        x = list(range(n))
+        x_mean = sum(x) / n
+        y_mean = sum(scores) / n
+        numerator = sum((x[i] - x_mean) * (scores[i] - y_mean) for i in range(n))
+        denominator = sum((x[i] - x_mean) ** 2 for i in range(n))
+        return numerator / denominator if denominator != 0 else 0.0
+    except Exception:
+        return 0.0
+
+
+def classify_behavior(avg_duration_mins, score_std, hard_delta) -> str:
+    """PART 6: Behavioral classification based on performance patterns."""
+    if avg_duration_mins is not None and avg_duration_mins < 8:
+        return "⚡ Rushed"
+    elif avg_duration_mins is not None and avg_duration_mins > 40:
+        return "🤔 Overthinking"
+    elif score_std < 0.8 and hard_delta is not None and hard_delta > -1:
+        return "🎯 Adaptive Learner"
+    else:
+        return "⚖️ Balanced"
+
+
+def generate_resume_based_questions_enhanced(resume_context: dict, role: str, domain: str, difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced") -> list:
+    """
+    PART 7: Enhanced resume intelligence — asks architecture, decisions, tradeoffs, outcomes, and scale.
+    """
+    from llm_manager import call_llm
+
+    skills = resume_context.get("skills", [])
+    projects = resume_context.get("projects", [])
+    experience = resume_context.get("experience", [])
+    technologies = resume_context.get("technologies", [])
+
+    bias_instruction = ""
+    if weakness_bias == "explanation clarity":
+        bias_instruction = "Focus on questions that require the candidate to explain complex concepts clearly, describe their reasoning process, and articulate decisions step-by-step."
+    elif weakness_bias == "technical depth":
+        bias_instruction = "Focus on questions that require deep technical knowledge, architecture reasoning, and internal mechanism understanding."
+    elif weakness_bias == "answer precision":
+        bias_instruction = "Focus on questions that require precise, targeted answers directly relevant to the role and their stated experience."
+
+    difficulty_map = {
+        "Easy": "Ask about what they built and what technologies they used. Keep it conceptual.",
+        "Medium": "Ask about specific decisions made, tradeoffs considered, and real-world challenges faced.",
+        "Hard": "Ask deep questions about architecture choices, scalability design, measurable outcomes, failure handling, and how they'd redesign it today."
+    }
+
+    prompt = f"""You are a senior technical interviewer for {role} in {domain}.
+
+Generate EXACTLY {num_questions} interview questions based on the candidate's actual resume.
+
+RESUME CONTEXT:
+- Skills: {', '.join(skills[:5])}
+- Projects: {', '.join(projects[:3])}
+- Experience: {', '.join(experience[:3])}
+- Technologies: {', '.join(technologies[:5])}
+
+DIFFICULTY: {difficulty}
+{difficulty_map.get(difficulty, '')}
+
+{bias_instruction}
+
+For each question, MUST cover at least one of:
+1. Architecture breakdown or design rationale
+2. Decision reasoning (why they chose X over Y)
+3. Tradeoffs explicitly made
+4. Measurable outcomes or success metrics
+5. Scaling challenges or failure scenarios
+
+RULES:
+- Reference specific resume content directly
+- No generic questions
+- One question per line
+- No numbering, bullets, or prefixes
+
+Generate {num_questions} questions:"""
+
+    try:
+        response = call_llm(prompt, session=st.session_state)
+        raw = [q.strip() for q in response.split("\n") if q.strip()]
+        cleaned = []
+        for q in raw:
+            q = re.sub(r'^[\d\)\.\-•\*]+\s*', '', q).strip()
+            if len(q) > 15:
+                cleaned.append(q)
+            if len(cleaned) >= num_questions:
+                break
+        while len(cleaned) < num_questions:
+            cleaned.append(f"Walk me through your most technically challenging project and the specific decisions you made.")
+        return cleaned[:num_questions]
+    except Exception:
+        return [
+            "Walk me through the architecture of your most complex project and the decisions you made.",
+            "What tradeoffs did you face and how did you justify your technology choices?",
+            "How would you scale your largest project to handle 10x the load?"
+        ]
 
 
 with tab4:
@@ -10971,6 +11264,15 @@ Generate exactly {num_questions} questions now:
             if not st.session_state.dynamic_interview_started:
                 st.markdown(f"### Practice interview for: {selected_role}")
 
+                # PART 5: Show weakness memory insight
+                _username_wm = st.session_state.get("username", "Guest")
+                _wm = get_user_weakness_history(_username_wm)
+                if _wm.get("weakest_skill"):
+                    _wm_avgs = _wm.get("averages", {})
+                    _wm_skill = _wm["weakest_skill"].title()
+                    _wm_score = _wm_avgs.get(_wm["weakest_skill"], 0)
+                    st.info(f"🧠 **Weakness Memory:** Based on your last 5 interviews, your weakest recurring skill is **{_wm_skill}** (avg: {_wm_score:.1f}/10). Questions will be biased toward improving this.")
+
                 col1, col2 = st.columns(2)
 
                 with col1:
@@ -11002,12 +11304,17 @@ Generate exactly {num_questions} questions now:
                         resume_based_qs = []
                         if st.session_state.resume_context:
                             with st.spinner("Creating resume-based questions..."):
-                                resume_based_qs = generate_resume_based_questions(
+                                # PART 5: Get user weakness for bias
+                                _username_for_bias = st.session_state.get("username", "Guest")
+                                _weakness_data = get_user_weakness_history(_username_for_bias)
+                                _bias = _weakness_data.get("bias", "balanced")
+                                resume_based_qs = generate_resume_based_questions_enhanced(
                                     st.session_state.resume_context,
                                     selected_role,
                                     selected_domain,
                                     interview_difficulty,
-                                    num_questions=2
+                                    num_questions=2,
+                                    weakness_bias=_bias
                                 )
 
                         # Generate generic questions
@@ -11047,6 +11354,10 @@ Generate exactly {num_questions} questions now:
                             st.session_state.interview_difficulty = interview_difficulty
                             st.session_state.interview_mode = interview_type
                             st.session_state.interview_phase = "resume" if resume_based_qs else "generic"
+                            # PART 4: Escalation ladder tracking
+                            st.session_state.escalation_layer = 1
+                            st.session_state.follow_up_count = 0
+                            st.session_state.follow_up_strategy = "Depth Probe"
 
                             # Show resume scanning animation if resume questions exist
                             if resume_based_qs:
@@ -11145,6 +11456,10 @@ Generate exactly {num_questions} questions now:
                             st.session_state.interview_result_saved = False
                             st.session_state.interview_final_duration_seconds = None
                             st.session_state.interview_actual_start_time = None
+                            st.session_state.pending_followup_display = ""
+                            st.session_state.pending_followup_strategy = ""
+                            st.session_state.escalation_layer = 1
+                            st.session_state.follow_up_count = 0
                             # Force regeneration
                             st.rerun()
 
@@ -11159,37 +11474,74 @@ Generate exactly {num_questions} questions now:
                         help="Maximum 2000 characters"
                     )
 
+                    # ── SINGLE helper: evaluate + inject follow-up (called from both submit paths) ──
+                    def _process_submission(ans_text, q_text, q_idx, n_answered):
+                        """
+                        Evaluate the answer, store results, and inject the follow-up question
+                        into the question list.  The exact same follow-up text is stored in
+                        session_state.pending_followup_display so the preview shown to the user
+                        is always identical to the question that will appear next.
+                        """
+                        diff = st.session_state.interview_difficulty
+                        eval_res = evaluate_interview_answer_for_scores(
+                            ans_text, q_text, diff,
+                            role=selected_role, domain=selected_domain
+                        )
+
+                        st.session_state.dynamic_interview_answers.append(ans_text)
+                        st.session_state.dynamic_interview_scores.append(eval_res)
+                        st.session_state.dynamic_interview_feedbacks.append(eval_res["feedback"])
+                        st.session_state.dynamic_answer_submitted = True
+                        st.session_state.pending_followup_display = ""   # reset
+                        st.session_state.pending_followup_strategy = ""
+
+                        can_add_followup = n_answered < st.session_state.original_num_questions - 1
+
+                        if diff == "Hard" and can_add_followup:
+                            # ── Hard mode: use adaptive engine (single source of truth) ──
+                            weakness_data = analyze_answer_weaknesses(ans_text, eval_res)
+                            strategy = weakness_data["strategy"]
+                            layer = getattr(st.session_state, 'escalation_layer', 1)
+                            followup_q = generate_adaptive_followup(
+                                q_text, ans_text, strategy, layer, selected_role, selected_domain
+                            )
+                            followup_q = followup_q.strip() if followup_q else ""
+                            if followup_q:
+                                st.session_state.dynamic_interview_questions.insert(
+                                    q_idx + 1, followup_q
+                                )
+                                st.session_state.follow_up_count = getattr(st.session_state, 'follow_up_count', 0) + 1
+                                st.session_state.escalation_layer = min(5, layer + 1)
+                                st.session_state.follow_up_strategy = strategy
+                                # ★ Store SAME text for preview ★
+                                st.session_state.pending_followup_display = followup_q
+                                st.session_state.pending_followup_strategy = strategy
+
+                        elif diff in ("Easy", "Medium") and can_add_followup:
+                            # ── Easy/Medium: only inject if LLM returned a valid followup ──
+                            # The evaluation prompt does NOT ask for a follow-up for Easy/Medium,
+                            # so eval_res["followup"] is always "".  We deliberately do NOT inject
+                            # anything — this prevents mismatched questions.
+                            pass   # No follow-up for Easy/Medium
+
+                        return eval_res
+
+                    # ── initialise session key on first load ──
+                    if 'pending_followup_display' not in st.session_state:
+                        st.session_state.pending_followup_display = ""
+                    if 'pending_followup_strategy' not in st.session_state:
+                        st.session_state.pending_followup_strategy = ""
+
                     # Auto-submit logic when timer expires
                     if remaining_time <= 0 and not st.session_state.dynamic_answer_submitted:
                         if not answer.strip():
                             answer = "⚠️ No Answer"
-
-                        # Evaluate answer using enhanced evaluation with role/domain context
                         with st.spinner("Evaluating your answer..."):
-                            eval_result = evaluate_interview_answer_for_scores(
-                                answer,
-                                question,
-                                st.session_state.interview_difficulty,
-                                role=selected_role,
-                                domain=selected_domain
+                            _process_submission(
+                                answer, question,
+                                st.session_state.current_dynamic_interview_question,
+                                questions_answered
                             )
-
-                        # FIXED: Store answer, scores, and feedback - ensuring all are tracked properly
-                        st.session_state.dynamic_interview_answers.append(answer)
-                        st.session_state.dynamic_interview_scores.append(eval_result)
-                        st.session_state.dynamic_interview_feedbacks.append(eval_result["feedback"])
-                        st.session_state.dynamic_answer_submitted = True
-
-                        # FIXED: Handle follow-up for Hard difficulty without breaking indexing
-                        # Follow-ups are added but don't count toward original_num_questions
-                        if st.session_state.interview_difficulty == "Hard" and eval_result.get("followup") and eval_result["followup"].strip():
-                            # Only add follow-up if we haven't reached the end
-                            if questions_answered < st.session_state.original_num_questions - 1:
-                                st.session_state.dynamic_interview_questions.insert(
-                                    st.session_state.current_dynamic_interview_question + 1,
-                                    eval_result["followup"]
-                                )
-
                         st.warning("⏰ Time's up! Answer auto-submitted.")
                         st.rerun()
 
@@ -11198,31 +11550,12 @@ Generate exactly {num_questions} questions now:
                         if st.button("Submit Answer & Get Feedback"):
                             if answer.strip():
                                 with st.spinner("Evaluating your answer..."):
-                                    # Evaluate answer using enhanced evaluation with role/domain context
-                                    eval_result = evaluate_interview_answer_for_scores(
-                                        answer,
-                                        question,
-                                        st.session_state.interview_difficulty,
-                                        role=selected_role,
-                                        domain=selected_domain
+                                    _process_submission(
+                                        answer, question,
+                                        st.session_state.current_dynamic_interview_question,
+                                        questions_answered
                                     )
-
-                                    # FIXED: Store answer, scores, and feedback ensuring proper tracking
-                                    st.session_state.dynamic_interview_answers.append(answer)
-                                    st.session_state.dynamic_interview_scores.append(eval_result)
-                                    st.session_state.dynamic_interview_feedbacks.append(eval_result["feedback"])
-                                    st.session_state.dynamic_answer_submitted = True
-
-                                    # FIXED: Handle follow-up for Hard difficulty without breaking indexing
-                                    if st.session_state.interview_difficulty == "Hard" and eval_result.get("followup") and eval_result["followup"].strip():
-                                        # Only add follow-up if we haven't reached the end
-                                        if questions_answered < st.session_state.original_num_questions - 1:
-                                            st.session_state.dynamic_interview_questions.insert(
-                                                st.session_state.current_dynamic_interview_question + 1,
-                                                eval_result["followup"]
-                                            )
-
-                                    st.rerun()
+                                st.rerun()
                             else:
                                 st.warning("Please provide an answer before proceeding.")
 
@@ -11247,9 +11580,20 @@ Generate exactly {num_questions} questions now:
                         </div>
                         """, unsafe_allow_html=True)
 
-                        # Show follow-up question for Hard difficulty
-                        if st.session_state.interview_difficulty == "Hard" and current_score_dict.get("followup"):
-                            st.info(f"🔎 Follow-Up Question: {current_score_dict['followup']}")
+                        # ★ Show follow-up preview using SAME text that was injected ★
+                        _preview_fq = st.session_state.get('pending_followup_display', '')
+                        _preview_strategy = st.session_state.get('pending_followup_strategy', '')
+                        if st.session_state.interview_difficulty == "Hard" and _preview_fq:
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(135deg, rgba(255,165,0,0.12), rgba(255,165,0,0.06));
+                                        border: 1px solid rgba(255,165,0,0.4); border-radius: 10px;
+                                        padding: 14px 18px; margin: 12px 0; text-align: center;">
+                                <p style="color: #ffa500; font-weight: 600; margin: 0 0 6px 0;">
+                                    🔎 Follow-Up Question [{_preview_strategy}]
+                                </p>
+                                <p style="color: #ffffff; margin: 0; font-size: 15px;">{_preview_fq}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
 
                         # Continue/Complete button
                         # CRITICAL FIX: Check if we've answered all original questions
@@ -11269,6 +11613,8 @@ Generate exactly {num_questions} questions now:
                             if st.button("Continue to Next Question ➡️"):
                                 st.session_state.current_dynamic_interview_question += 1
                                 st.session_state.dynamic_answer_submitted = False
+                                st.session_state.pending_followup_display = ""
+                                st.session_state.pending_followup_strategy = ""
                                 if st.session_state.current_dynamic_interview_question < len(st.session_state.dynamic_interview_questions):
                                     st.session_state.current_interview_question_text = st.session_state.dynamic_interview_questions[st.session_state.current_dynamic_interview_question]
                                 else:
@@ -11335,6 +11681,12 @@ Generate exactly {num_questions} questions now:
                 avg_relevance = sum(relevance_scores) / len(relevance_scores)
                 overall_avg = (avg_knowledge + avg_communication + avg_relevance) / 3
 
+                # PART 3: Compute weighted score using difficulty multiplier
+                _raw_avg = overall_avg
+                _weighted_avg = compute_weighted_score(_raw_avg, st.session_state.interview_difficulty)
+                _follow_up_count = getattr(st.session_state, 'follow_up_count', 0)
+                _depth_score = (avg_knowledge + avg_relevance) / 2
+
                 # Determine badge based on overall average
                 if overall_avg >= 8.5:
                     badge = "Interview Ready"
@@ -11358,6 +11710,8 @@ Generate exactly {num_questions} questions now:
                     </div>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Role: {selected_role} in {selected_domain}</p>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Difficulty: {st.session_state.interview_difficulty}</p>
+                    <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.2f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
+                    <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; margin: 4px 0;">Follow-up Probes: {_follow_up_count} | Depth Score: {_depth_score:.1f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -11465,10 +11819,15 @@ Generate exactly {num_questions} questions now:
                     # Capture duration at the exact moment of first save, not on reruns
                     _interview_duration = st.session_state.get('interview_final_duration_seconds', None)
                     _interview_mode = st.session_state.get('interview_mode', None)
+                    # PART 6: Compute behavior class
+                    _dur_mins = (_interview_duration / 60.0) if _interview_duration else None
+                    _b_class = classify_behavior(_dur_mins, 0.0, None)
                     if save_interview_result(username, selected_role, selected_domain, overall_avg, st.session_state.original_num_questions, feedback_summary,
                                              knowledge_avg=avg_knowledge, communication_avg=avg_communication, relevance_avg=avg_relevance,
                                              difficulty=st.session_state.interview_difficulty, duration_seconds=_interview_duration,
-                                             interview_mode=_interview_mode):
+                                             interview_mode=_interview_mode,
+                                             weighted_score=_weighted_avg, raw_avg_score=_raw_avg,
+                                             follow_up_count=_follow_up_count, depth_score=_depth_score, behavior_class=_b_class):
                         st.session_state.interview_result_saved = True
                         log_user_action(username, "completed_interview")
 
@@ -11544,6 +11903,10 @@ Generate exactly {num_questions} questions now:
                     st.session_state.interview_final_duration_seconds = None
                     st.session_state.interview_actual_start_time = None
                     st.session_state.interview_mode = "mixed"
+                    st.session_state.pending_followup_display = ""
+                    st.session_state.pending_followup_strategy = ""
+                    st.session_state.escalation_layer = 1
+                    st.session_state.follow_up_count = 0
                     st.rerun()
         else:
             st.info("Please select both a career domain and target role to start the interview practice.")
@@ -11579,13 +11942,19 @@ Generate exactly {num_questions} questions now:
             st.info("📭 No interview data yet. Complete some interviews in the AI Interview Coach to see your progress here!")
         else:
             # Ensure numeric types
-            for col in ['avg_score', 'knowledge_avg', 'communication_avg', 'relevance_avg', 'duration_seconds', 'total_questions']:
+            for col in ['avg_score', 'knowledge_avg', 'communication_avg', 'relevance_avg', 'duration_seconds', 'total_questions', 'weighted_score', 'raw_avg_score', 'depth_score', 'follow_up_count']:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
 
             if 'difficulty' not in df.columns:
                 df['difficulty'] = 'Unknown'
             df['difficulty'] = df['difficulty'].fillna('Unknown')
+
+            # Backfill weighted_score if missing
+            if 'weighted_score' not in df.columns or df['weighted_score'].isna().all():
+                df['weighted_score'] = df['avg_score']
+            else:
+                df['weighted_score'] = df['weighted_score'].fillna(df['avg_score'])
 
             # =====================================================
             # SECTION A — EXECUTIVE SUMMARY METRICS
@@ -11644,27 +12013,31 @@ Generate exactly {num_questions} questions now:
             st.markdown("---")
             st.markdown("### 📈 Score Trend Intelligence")
 
-            trend_df = df[['avg_score']].copy().reset_index(drop=True)
+            trend_df = df[['avg_score', 'weighted_score']].copy().reset_index(drop=True)
             trend_df.index = trend_df.index + 1
             trend_df.index.name = "Interview #"
 
             # 3-point moving average
             trend_df['Moving Avg (3pt)'] = trend_df['avg_score'].rolling(window=3, min_periods=1).mean()
 
-            st.line_chart(trend_df[['avg_score', 'Moving Avg (3pt)']])
+            st.line_chart(trend_df[['avg_score', 'weighted_score', 'Moving Avg (3pt)']])
+            st.caption("📊 avg_score = raw score | weighted_score = difficulty-adjusted score | Moving Avg = 3-interview rolling average")
 
-            # Detect trend direction
+            # Detect trend direction using linear regression slope
             if total_interviews >= 3:
-                recent_half = df['avg_score'].tail(max(2, total_interviews // 2)).mean()
-                older_half = df['avg_score'].head(max(2, total_interviews // 2)).mean()
-                diff = recent_half - older_half
-                if diff > 0.3:
-                    trend_badge = "🟢 **Trend: Improving** ↑"
-                elif diff < -0.3:
-                    trend_badge = "🔴 **Trend: Declining** ↓"
+                _scores_list = df['avg_score'].dropna().tolist()
+                _slope = compute_trend_slope(_scores_list)
+                if _slope > 0.15:
+                    trend_badge = f"🟢 **Trend: Improving** ↑ (slope: +{_slope:.2f}/interview)"
+                elif _slope < -0.15:
+                    trend_badge = f"🔴 **Trend: Declining** ↓ (slope: {_slope:.2f}/interview)"
                 else:
-                    trend_badge = "🟡 **Trend: Stable** →"
+                    trend_badge = f"🟡 **Trend: Stable** → (slope: {_slope:.2f}/interview)"
+                # Stagnation detection
+                if abs(_slope) < 0.05 and total_interviews >= 5:
+                    trend_badge += " — ⚠️ **Stagnation detected!** Challenge yourself with harder interviews."
             else:
+                _slope = 0.0
                 trend_badge = "ℹ️ **Trend: Not enough data** (need 3+ interviews)"
             st.markdown(trend_badge)
 
@@ -11844,6 +12217,29 @@ Generate exactly {num_questions} questions now:
                     candidate_type = "⚖️ Balanced Performer — Good pacing on interviews!"
                 st.info(candidate_type)
 
+            # PART 6: Enhanced behavior classification using stored data
+            if 'behavior_class' in df.columns and df['behavior_class'].notna().any():
+                _bc_counts = df['behavior_class'].value_counts()
+                _dominant_class = _bc_counts.index[0] if len(_bc_counts) > 0 else None
+                if _dominant_class:
+                    st.markdown(f"**🧠 Dominant Behavior Pattern:** {_dominant_class}")
+
+            # Hard mode delta analysis
+            if 'difficulty' in df.columns and 'Hard' in df['difficulty'].values and 'Medium' in df['difficulty'].values:
+                _hard_avg_b = df[df['difficulty'] == 'Hard']['avg_score'].mean()
+                _med_avg_b = df[df['difficulty'] == 'Medium']['avg_score'].mean()
+                _hard_delta = _hard_avg_b - _med_avg_b
+                col_hd1, col_hd2 = st.columns(2)
+                with col_hd1:
+                    st.metric("Hard Mode Score", f"{_hard_avg_b:.2f}/10")
+                with col_hd2:
+                    _delta_label = f"{_hard_delta:+.2f} vs Medium"
+                    st.metric("Hard vs Medium Delta", _delta_label)
+                if _hard_delta < -1.5:
+                    st.warning("⚠️ **Performance Under Pressure**: Your Hard interview scores drop significantly. Simulate pressure conditions regularly to build resilience.")
+                elif _hard_delta >= -0.5:
+                    st.success("✅ **Pressure Resilient**: You maintain strong performance even under hard interview conditions!")
+
             # =====================================================
             # SECTION G — CLASSIFICATION ENGINE
             # =====================================================
@@ -11900,20 +12296,41 @@ Generate exactly {num_questions} questions now:
 
             summary_parts.append(f"Your strongest skill is **{strongest_skill}** ({skill_avgs[strongest_skill_idx]:.1f}/10), while **{weakest_skill}** ({skill_avgs[weakest_skill_idx]:.1f}/10) needs improvement.")
 
-            if total_interviews >= 3 and 'trend_badge' in dir():
-                if 'Improving' in trend_badge:
-                    summary_parts.append("Your score trend shows **steady improvement** over recent interviews — great momentum!")
-                elif 'Declining' in trend_badge:
-                    summary_parts.append("Your recent scores show a **declining trend**. Consider reviewing your weaker areas and attempting more structured practice.")
+            # Trend direction using regression slope
+            if total_interviews >= 3:
+                _scores_for_summary = df['avg_score'].dropna().tolist()
+                _slope_summary = compute_trend_slope(_scores_for_summary)
+                if _slope_summary > 0.15:
+                    summary_parts.append(f"Your score trend shows **steady improvement** (slope: +{_slope_summary:.2f}/interview) — great momentum!")
+                elif _slope_summary < -0.15:
+                    summary_parts.append(f"Your recent scores show a **declining trend** (slope: {_slope_summary:.2f}/interview). Consider reviewing weaker areas and practicing more structured answers.")
                 else:
-                    summary_parts.append("Your performance has been **stable** over recent interviews. Push yourself with harder difficulty levels to accelerate growth.")
+                    summary_parts.append(f"Your performance has been **stable** (slope: {_slope_summary:.2f}/interview). Push yourself with harder difficulty levels to accelerate growth.")
 
             summary_parts.append(f"You have completed **{total_interviews} interview(s)** answering **{total_questions} questions** in total.")
+
+            # Weighted score summary
+            _w_avg = df['weighted_score'].mean() if 'weighted_score' in df.columns else overall_avg
+            summary_parts.append(f"Your difficulty-adjusted weighted average score is **{_w_avg:.2f}/10**, accounting for interview difficulty levels.")
 
             if improvement_pct > 0:
                 summary_parts.append(f"Your overall improvement from your first to latest interview is **+{improvement_pct:.1f}%** — keep up the great work!")
             elif improvement_pct < 0:
                 summary_parts.append(f"Your score has dropped by **{abs(improvement_pct):.1f}%** since your first interview. Use structured revision to recover your performance.")
+
+            # Performance under pressure
+            if 'difficulty' in df.columns and 'Hard' in df['difficulty'].values:
+                _hard_avg_s = df[df['difficulty'] == 'Hard']['avg_score'].mean()
+                if _hard_avg_s < overall_avg - 1.0:
+                    summary_parts.append(f"Your Hard interview average ({_hard_avg_s:.1f}/10) is significantly below your overall average. **Deliberate practice under pressure** is recommended.")
+                else:
+                    summary_parts.append(f"You perform well under Hard interview conditions ({_hard_avg_s:.1f}/10), showing **strong pressure resilience**.")
+
+            # Behavior class
+            if 'behavior_class' in df.columns and df['behavior_class'].notna().any():
+                _bc = df['behavior_class'].mode().iloc[0] if not df['behavior_class'].dropna().empty else None
+                if _bc:
+                    summary_parts.append(f"Your behavioral pattern is classified as **{_bc}** based on interview duration and performance consistency.")
 
             full_summary = " ".join(summary_parts)
             st.markdown(f"""
@@ -11985,19 +12402,20 @@ Generate exactly {num_questions} questions now:
                         st.bar_chart(_mode_df.groupby('interview_mode')['avg_score'].mean().rename('Avg Score'))
 
             with st.expander("📋 View Raw Interview History"):
-                display_cols = [c for c in ['id', 'role', 'domain', 'avg_score', 'knowledge_avg', 'communication_avg',
-                                             'relevance_avg', 'difficulty', 'interview_mode', 'total_questions', 'duration_seconds', 'completed_on']
+                display_cols = [c for c in ['id', 'role', 'domain', 'avg_score', 'weighted_score', 'knowledge_avg', 'communication_avg',
+                                             'relevance_avg', 'difficulty', 'interview_mode', 'total_questions', 'duration_seconds',
+                                             'follow_up_count', 'depth_score', 'behavior_class', 'completed_on']
                                 if c in df.columns]
                 # Rename columns for display clarity
                 rename_map = {
-                    'avg_score': 'Avg Score', 'knowledge_avg': 'Knowledge', 'communication_avg': 'Communication',
+                    'avg_score': 'Avg Score', 'weighted_score': 'Weighted Score', 'knowledge_avg': 'Knowledge', 'communication_avg': 'Communication',
                     'relevance_avg': 'Relevance', 'difficulty': 'Difficulty', 'interview_mode': 'Mode',
                     'total_questions': 'Questions', 'duration_seconds': 'Duration (s)', 'completed_on': 'Completed On',
-                    'role': 'Role', 'domain': 'Domain', 'id': 'ID'
+                    'role': 'Role', 'domain': 'Domain', 'id': 'ID', 'follow_up_count': 'Follow-ups',
+                    'depth_score': 'Depth Score', 'behavior_class': 'Behavior'
                 }
                 display_df = df[display_cols].rename(columns=rename_map)
                 st.dataframe(display_df, use_container_width=True)
-
 
 
 
