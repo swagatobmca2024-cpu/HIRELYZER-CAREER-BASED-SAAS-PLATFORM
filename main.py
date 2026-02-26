@@ -9070,9 +9070,122 @@ def create_interview_database():
                     pass
 
         conn.close()
+        # Also ensure interview_questions table exists
+        create_interview_questions_table()
     except Exception as e:
         import streamlit as st
         st.error(f"Database error: {e}")
+
+
+def create_interview_questions_table():
+    """
+    Create interview_questions table for storing every question and answer with full context.
+    This is the SINGLE SOURCE OF TRUTH for PDF generation.
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS interview_questions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                interview_id TEXT NOT NULL,
+                question_text TEXT NOT NULL,
+                answer_text TEXT,
+                difficulty TEXT,
+                is_follow_up INTEGER DEFAULT 0,
+                parent_question_id INTEGER,
+                timestamp TEXT NOT NULL,
+                score_breakdown TEXT,
+                question_order INTEGER DEFAULT 0
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Failed to create interview_questions table: {e}")
+
+
+def save_interview_question(interview_id: str, question_text: str, answer_text: str = None,
+                             difficulty: str = "Medium", is_follow_up: bool = False,
+                             parent_question_id: int = None, score_breakdown: dict = None,
+                             question_order: int = 0) -> int:
+    """
+    Save a single question (and optionally its answer) to the interview_questions table.
+    Returns the row id of the inserted record, or -1 on failure.
+    This must be called immediately when a question is answered.
+    """
+    import sqlite3
+    import json
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        cursor = conn.cursor()
+        score_json = json.dumps(score_breakdown) if score_breakdown else None
+        timestamp = get_ist_time()
+        cursor.execute("""
+            INSERT INTO interview_questions
+                (interview_id, question_text, answer_text, difficulty, is_follow_up,
+                 parent_question_id, timestamp, score_breakdown, question_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (interview_id, question_text, answer_text,
+              difficulty, 1 if is_follow_up else 0,
+              parent_question_id, timestamp, score_json, question_order))
+        conn.commit()
+        row_id = cursor.lastrowid
+        conn.close()
+        return row_id
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Failed to save interview question: {e}")
+        return -1
+
+
+def get_interview_questions_from_db(interview_id: str) -> list:
+    """
+    Fetch all questions for an interview from DB, ordered by timestamp then question_order.
+    Returns list of dicts with keys: id, question_text, answer_text, difficulty,
+    is_follow_up, parent_question_id, timestamp, score_breakdown, question_order.
+    """
+    import sqlite3
+    import json
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, question_text, answer_text, difficulty, is_follow_up,
+                   parent_question_id, timestamp, score_breakdown, question_order
+            FROM interview_questions
+            WHERE interview_id = ?
+            ORDER BY question_order ASC, timestamp ASC
+        """, (interview_id,))
+        rows = cursor.fetchall()
+        conn.close()
+
+        result = []
+        for row in rows:
+            score = None
+            if row[7]:
+                try:
+                    score = json.loads(row[7])
+                except Exception:
+                    score = None
+            result.append({
+                "id": row[0],
+                "question_text": row[1],
+                "answer_text": row[2] or "",
+                "difficulty": row[3],
+                "is_follow_up": bool(row[4]),
+                "parent_question_id": row[5],
+                "timestamp": row[6],
+                "score_breakdown": score,
+                "question_order": row[8],
+            })
+        return result
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Failed to fetch interview questions: {e}")
+        return []
 
 
 def save_interview_result(username: str, role: str, domain: str, avg_score: float, total_questions: int, feedback_summary: str,
@@ -9120,16 +9233,23 @@ def format_feedback_text(feedback):
     return formatted
 
 
-def generate_interview_pdf_report(username, role, domain, completed_on, questions, answers, scores, feedbacks, overall_avg, badge, difficulty="Medium"):
+def generate_interview_pdf_report(username, role, domain, completed_on, questions, answers, scores, feedbacks, overall_avg, badge, difficulty="Medium", interview_id=None):
     """
-    Generate PDF report for interview using xhtml2pdf
+    Generate PDF report for interview using xhtml2pdf.
 
-    FIXED: Now shows full answers (up to 2000 chars) instead of truncating at 500
-    FIXED: Added follow-up questions for Hard difficulty interviews
+    ARCHITECTURE FIX: When interview_id is provided, fetches ALL Q&A data exclusively
+    from the interview_questions DB table (the single source of truth).
+    Never regenerates follow-up questions. Preserves original order via timestamp/question_order.
+    Falls back to passed-in arrays only when interview_id is unavailable (legacy).
     """
     try:
         from xhtml2pdf import pisa
         from io import BytesIO
+
+        # ── SINGLE SOURCE OF TRUTH: fetch from DB when interview_id is available ──
+        db_rows = []
+        if interview_id:
+            db_rows = get_interview_questions_from_db(interview_id)
 
         # Build XHTML content
         xhtml = f"""
@@ -9143,12 +9263,14 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
                 h2 {{ color: #0099cc; margin-top: 20px; }}
                 .header {{ background: #f0f0f0; padding: 15px; border-radius: 8px; margin-bottom: 20px; }}
                 .question-block {{ margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; page-break-inside: avoid; }}
+                .followup-block {{ margin: 10px 0 20px 30px; padding: 15px; border: 1px solid #ffc107; border-radius: 8px; background: #fffdf0; page-break-inside: avoid; }}
                 .score {{ font-weight: bold; color: #00c3ff; }}
                 .feedback {{ color: #666; margin-top: 10px; padding: 10px; background: #f9f9f9; border-left: 3px solid #00c3ff; }}
                 .feedback ul {{ margin: 5px 0 0 0; padding-left: 20px; }}
                 .feedback li {{ margin: 8px 0; line-height: 1.5; }}
                 .summary {{ background: #fffacd; padding: 15px; border-radius: 8px; margin: 20px 0; }}
                 .answer-text {{ white-space: pre-wrap; word-wrap: break-word; margin: 10px 0; }}
+                .followup-label {{ color: #b8860b; font-weight: bold; font-size: 13px; margin-bottom: 6px; }}
             </style>
         </head>
         <body>
@@ -9164,63 +9286,129 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
                 <p class="score">Average Score: {overall_avg:.1f}/10</p>
                 <p><strong>Badge Earned:</strong> {badge}</p>
             </div>
-            <h2>Detailed Q&A Review</h2>
+            <h2>Detailed Q&amp;A Review</h2>
         """
 
-        # CRITICAL FIX: Add each question/answer/score/feedback with FULL answer (no truncation)
-        for i, (q, a, score_dict, f) in enumerate(zip(questions, answers, scores, feedbacks), 1):
-            # Ensure score_dict is a dictionary
-            if isinstance(score_dict, dict):
-                avg_q_score = (score_dict.get('knowledge', 5) + score_dict.get('communication', 5) + score_dict.get('relevance', 5)) / 3
-            else:
-                # Fallback if score_dict is not a dict
-                avg_q_score = 5.0
-                score_dict = {'knowledge': 5, 'communication': 5, 'relevance': 5}
+        if db_rows:
+            # ── DB-backed path: use ONLY stored data, never regenerate ──
+            # Separate main questions and follow-ups
+            main_questions = [r for r in db_rows if not r["is_follow_up"]]
+            followup_map = {}  # parent_question_id -> list of follow-up rows
+            for r in db_rows:
+                if r["is_follow_up"] and r["parent_question_id"] is not None:
+                    followup_map.setdefault(r["parent_question_id"], []).append(r)
 
-            # Escape HTML special characters to prevent rendering issues
-            q_escaped = q.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            a_escaped = a.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-
-            # Handle feedback as string (convert list to paragraphs if needed)
-            if isinstance(f, list):
-                f_text = "\n\n".join(f)
-            else:
-                f_text = str(f)
-
-            # Format feedback into bullet points
             import re
-            sentences = re.split(r'(?<=\.)\s+', f_text.strip())
-            sentences = [sent.strip() for sent in sentences if len(sent.strip()) > 0]
-            bullet_feedback = "<b>💡 Improvement Tips:</b><ul>"
-            for sent in sentences:
-                sent_escaped = sent.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                bullet_feedback += f"<li>{sent_escaped}</li>"
-            bullet_feedback += "</ul>"
-            f_escaped = bullet_feedback
+            for idx, row in enumerate(main_questions, 1):
+                q_escaped = row["question_text"].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                a_escaped = row["answer_text"].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
-            # SHOW FULL ANSWER - NO TRUNCATION IN PDF
-            answer_display = a_escaped
+                score_dict = row["score_breakdown"] or {}
+                if isinstance(score_dict, dict) and score_dict:
+                    avg_q_score = (score_dict.get('knowledge', 5) + score_dict.get('communication', 5) + score_dict.get('relevance', 5)) / 3
+                else:
+                    avg_q_score = 5.0
+                    score_dict = {'knowledge': 5, 'communication': 5, 'relevance': 5}
 
-            # Get follow-up question if exists (for Hard difficulty)
-            followup_text = ""
-            if difficulty == "Hard" and isinstance(score_dict, dict) and score_dict.get('followup'):
-                followup_escaped = score_dict['followup'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                followup_text = f"""<div style="margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 5px;">
-                    <strong>Follow-up Question (for Hard interviews):</strong><br/>
-                    {followup_escaped}
-                </div>"""
+                feedback_raw = score_dict.get("feedback", "") if isinstance(score_dict, dict) else ""
+                if isinstance(feedback_raw, list):
+                    feedback_raw = "\n\n".join(feedback_raw)
+                sentences = re.split(r'(?<=\.)\s+', str(feedback_raw).strip())
+                sentences = [s.strip() for s in sentences if len(s.strip()) > 0]
+                bullet_feedback = "<b>💡 Improvement Tips:</b><ul>"
+                for sent in sentences:
+                    sent_esc = sent.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    bullet_feedback += f"<li>{sent_esc}</li>"
+                bullet_feedback += "</ul>"
 
-            xhtml += f"""
+                xhtml += f"""
+            <div class="question-block">
+                <h3>Question {idx}</h3>
+                <p><strong>Q:</strong> {q_escaped}</p>
+                <div class="answer-text"><strong>Your Answer:</strong><br/>{a_escaped}</div>
+                <p class="score">Knowledge: {score_dict.get('knowledge', 0)}/10 | Communication: {score_dict.get('communication', 0)}/10 | Relevance: {score_dict.get('relevance', 0)}/10</p>
+                <p class="score">Question Score: {avg_q_score:.1f}/10</p>
+                <div class="feedback">{bullet_feedback}</div>
+            </div>
+                """
+
+                # Nest follow-up questions under this main question
+                for fu in followup_map.get(row["id"], []):
+                    fu_q_esc = fu["question_text"].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    fu_a_esc = fu["answer_text"].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    fu_score = fu["score_breakdown"] or {}
+                    if isinstance(fu_score, dict) and fu_score:
+                        fu_avg = (fu_score.get('knowledge', 5) + fu_score.get('communication', 5) + fu_score.get('relevance', 5)) / 3
+                    else:
+                        fu_avg = 5.0
+                        fu_score = {'knowledge': 5, 'communication': 5, 'relevance': 5}
+
+                    fu_feedback_raw = fu_score.get("feedback", "") if isinstance(fu_score, dict) else ""
+                    if isinstance(fu_feedback_raw, list):
+                        fu_feedback_raw = "\n\n".join(fu_feedback_raw)
+                    fu_sentences = re.split(r'(?<=\.)\s+', str(fu_feedback_raw).strip())
+                    fu_sentences = [s.strip() for s in fu_sentences if len(s.strip()) > 0]
+                    fu_bullets = "<b>💡 Improvement Tips:</b><ul>"
+                    for s in fu_sentences:
+                        s_esc = s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                        fu_bullets += f"<li>{s_esc}</li>"
+                    fu_bullets += "</ul>"
+
+                    xhtml += f"""
+            <div class="followup-block">
+                <div class="followup-label">↳ Follow-Up Question (Hard Mode)</div>
+                <p><strong>Q:</strong> {fu_q_esc}</p>
+                <div class="answer-text"><strong>Your Answer:</strong><br/>{fu_a_esc}</div>
+                <p class="score">Knowledge: {fu_score.get('knowledge', 0)}/10 | Communication: {fu_score.get('communication', 0)}/10 | Relevance: {fu_score.get('relevance', 0)}/10</p>
+                <p class="score">Follow-Up Score: {fu_avg:.1f}/10</p>
+                <div class="feedback">{fu_bullets}</div>
+            </div>
+                    """
+        else:
+            # ── Legacy fallback: use passed-in arrays (no interview_id) ──
+            import re
+            for i, (q, a, score_dict, f) in enumerate(zip(questions, answers, scores, feedbacks), 1):
+                if isinstance(score_dict, dict):
+                    avg_q_score = (score_dict.get('knowledge', 5) + score_dict.get('communication', 5) + score_dict.get('relevance', 5)) / 3
+                else:
+                    avg_q_score = 5.0
+                    score_dict = {'knowledge': 5, 'communication': 5, 'relevance': 5}
+
+                q_escaped = q.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                a_escaped = a.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+                if isinstance(f, list):
+                    f_text = "\n\n".join(f)
+                else:
+                    f_text = str(f)
+
+                sentences = re.split(r'(?<=\.)\s+', f_text.strip())
+                sentences = [sent.strip() for sent in sentences if len(sent.strip()) > 0]
+                bullet_feedback = "<b>💡 Improvement Tips:</b><ul>"
+                for sent in sentences:
+                    sent_escaped = sent.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    bullet_feedback += f"<li>{sent_escaped}</li>"
+                bullet_feedback += "</ul>"
+
+                followup_text = ""
+                if difficulty == "Hard" and isinstance(score_dict, dict) and score_dict.get('followup'):
+                    followup_escaped = score_dict['followup'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    followup_text = f"""<div style="margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 5px;">
+                        <strong>Follow-up Question (for Hard interviews):</strong><br/>
+                        {followup_escaped}
+                    </div>"""
+
+                xhtml += f"""
             <div class="question-block">
                 <h3>Question {i}</h3>
                 <p><strong>Q:</strong> {q_escaped}</p>
-                <div class="answer-text"><strong>Your Answer:</strong><br/>{answer_display}</div>
+                <div class="answer-text"><strong>Your Answer:</strong><br/>{a_escaped}</div>
                 <p class="score">Knowledge: {score_dict.get('knowledge', 0)}/10 | Communication: {score_dict.get('communication', 0)}/10 | Relevance: {score_dict.get('relevance', 0)}/10</p>
                 <p class="score">Question Score: {avg_q_score:.1f}/10</p>
-                <div class="feedback">{f_escaped}</div>
+                <div class="feedback">{bullet_feedback}</div>
                 {followup_text}
             </div>
-            """
+                """
 
         xhtml += """
         </body>
@@ -9241,6 +9429,7 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
         import streamlit as st
         st.error(f"PDF generation failed: {e}")
         return None
+
 
 
 import streamlit as st
@@ -11259,6 +11448,11 @@ Generate exactly {num_questions} questions now:
                 st.session_state.resume_based_questions = []
             if 'generic_questions' not in st.session_state:
                 st.session_state.generic_questions = []
+            if 'current_interview_id' not in st.session_state:
+                st.session_state.current_interview_id = None
+            # Track DB row ids for parent_question_id linkage: list of row ids per question answered
+            if 'question_db_ids' not in st.session_state:
+                st.session_state.question_db_ids = []
 
             # Start interview setup
             if not st.session_state.dynamic_interview_started:
@@ -11336,6 +11530,9 @@ Generate exactly {num_questions} questions now:
 
                         if all_questions:
                             # Reset ALL interview state variables properly
+                            import uuid
+                            st.session_state.current_interview_id = str(uuid.uuid4())
+                            st.session_state.question_db_ids = []
                             st.session_state.dynamic_interview_questions = all_questions
                             st.session_state.resume_based_questions = resume_based_qs
                             st.session_state.generic_questions = generic_qs
@@ -11460,6 +11657,8 @@ Generate exactly {num_questions} questions now:
                             st.session_state.pending_followup_strategy = ""
                             st.session_state.escalation_layer = 1
                             st.session_state.follow_up_count = 0
+                            st.session_state.current_interview_id = None
+                            st.session_state.question_db_ids = []
                             # Force regeneration
                             st.rerun()
 
@@ -11481,6 +11680,9 @@ Generate exactly {num_questions} questions now:
                         into the question list.  The exact same follow-up text is stored in
                         session_state.pending_followup_display so the preview shown to the user
                         is always identical to the question that will appear next.
+
+                        ARCHITECTURE FIX: Every answered question is immediately saved to the
+                        interview_questions DB table so the PDF can use it as single source of truth.
                         """
                         diff = st.session_state.interview_difficulty
                         eval_res = evaluate_interview_answer_for_scores(
@@ -11494,6 +11696,36 @@ Generate exactly {num_questions} questions now:
                         st.session_state.dynamic_answer_submitted = True
                         st.session_state.pending_followup_display = ""   # reset
                         st.session_state.pending_followup_strategy = ""
+
+                        # ── IMMEDIATELY save to DB (single source of truth for PDF) ──
+                        interview_id = st.session_state.get('current_interview_id')
+                        parent_db_id = None
+                        is_fu = False
+                        # Determine if this is a follow-up: index beyond original questions
+                        original_count = len(st.session_state.get('resume_based_questions', [])) + len(st.session_state.get('generic_questions', []))
+                        if q_idx >= original_count and len(st.session_state.question_db_ids) > 0:
+                            # It's a follow-up — find the parent: the main question that triggered it
+                            # The parent is the last main question before this follow-up
+                            # We store follow-ups linked to the most recent main question db id
+                            parent_db_id = st.session_state.question_db_ids[-1]
+                            is_fu = True
+
+                        db_row_id = -1
+                        if interview_id:
+                            score_to_save = dict(eval_res)
+                            db_row_id = save_interview_question(
+                                interview_id=interview_id,
+                                question_text=q_text,
+                                answer_text=ans_text,
+                                difficulty=diff,
+                                is_follow_up=is_fu,
+                                parent_question_id=parent_db_id,
+                                score_breakdown=score_to_save,
+                                question_order=q_idx,
+                            )
+                        # Track db row id - only for main questions (used as parent for follow-ups)
+                        if not is_fu and db_row_id != -1:
+                            st.session_state.question_db_ids.append(db_row_id)
 
                         can_add_followup = n_answered < st.session_state.original_num_questions - 1
 
@@ -11856,7 +12088,8 @@ Generate exactly {num_questions} questions now:
                     st.session_state.dynamic_interview_feedbacks[:num_complete],
                     overall_avg,
                     badge,
-                    difficulty=st.session_state.interview_difficulty
+                    difficulty=st.session_state.interview_difficulty,
+                    interview_id=st.session_state.get('current_interview_id')
                 )
 
                 if pdf_bytes:
@@ -11907,6 +12140,8 @@ Generate exactly {num_questions} questions now:
                     st.session_state.pending_followup_strategy = ""
                     st.session_state.escalation_layer = 1
                     st.session_state.follow_up_count = 0
+                    st.session_state.current_interview_id = None
+                    st.session_state.question_db_ids = []
                     st.rerun()
         else:
             st.info("Please select both a career domain and target role to start the interview practice.")
@@ -12453,6 +12688,8 @@ Generate exactly {num_questions} questions now:
                 }
                 display_df = df[display_cols].rename(columns=rename_map)
                 st.dataframe(display_df, use_container_width=True)
+
+
 
 
 if tab5:
