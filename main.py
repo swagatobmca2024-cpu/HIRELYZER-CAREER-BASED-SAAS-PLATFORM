@@ -9586,7 +9586,7 @@ Provide detailed, flowing feedback that covers:
 
 Write feedback as natural, flowing paragraphs (not bullet points). Make it detailed, specific to their answer, and constructive.
 
-{"STEP 5 - FOLLOW-UP QUESTION: Generate ONE probing follow-up question that digs deeper based on their answer." if difficulty == "Hard" else ""}
+{"STEP 5 - FOLLOW-UP QUESTION: Generate ONE probing follow-up question that digs deeper based on their answer. Consider using one of these strategies: Depth Probe, Tradeoff Challenge, Edge Case Scenario, Scalability Challenge, Constraint Injection, Failure Simulation, Security Consideration, Architecture Breakdown, Metric Justification, or Alternative Design Comparison. Choose the strategy that targets the biggest weakness in their answer." if difficulty == "Hard" else ""}
 
 OUTPUT FORMAT (strict JSON):
 {{
@@ -9719,7 +9719,7 @@ def log_user_action(username: str, action: str):
 
 
 def create_interview_database():
-    """Create interview_results table if not exists"""
+    """Create interview_results table if not exists, safely migrate new columns"""
     import sqlite3
     try:
         conn = sqlite3.connect('resume_data.db')
@@ -9737,23 +9737,171 @@ def create_interview_database():
             )
         """)
         conn.commit()
+
+        # Safe migration: add new columns only if they don't exist
+        existing_columns = [row[1] for row in cursor.execute("PRAGMA table_info(interview_results)").fetchall()]
+
+        migrations = [
+            ("knowledge_avg", "REAL"),
+            ("communication_avg", "REAL"),
+            ("relevance_avg", "REAL"),
+            ("difficulty", "TEXT"),
+            ("duration_seconds", "INTEGER"),
+            ("interview_mode", "TEXT"),
+            ("created_timestamp", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
+            ("weighted_score", "REAL"),
+            ("raw_avg_score", "REAL"),
+            ("follow_up_count", "INTEGER DEFAULT 0"),
+            ("depth_score", "REAL"),
+            ("behavior_class", "TEXT"),
+        ]
+
+        for col_name, col_type in migrations:
+            if col_name not in existing_columns:
+                try:
+                    cursor.execute(f"ALTER TABLE interview_results ADD COLUMN {col_name} {col_type}")
+                    conn.commit()
+                except Exception:
+                    pass
+
         conn.close()
+        # Also ensure interview_questions table exists
+        create_interview_questions_table()
     except Exception as e:
         import streamlit as st
         st.error(f"Database error: {e}")
 
 
-def save_interview_result(username: str, role: str, domain: str, avg_score: float, total_questions: int, feedback_summary: str):
-    """Save interview result to database"""
+def create_interview_questions_table():
+    """
+    Create interview_questions table for storing every question and answer with full context.
+    This is the SINGLE SOURCE OF TRUTH for PDF generation.
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS interview_questions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                interview_id TEXT NOT NULL,
+                question_text TEXT NOT NULL,
+                answer_text TEXT,
+                difficulty TEXT,
+                is_follow_up INTEGER DEFAULT 0,
+                parent_question_id INTEGER,
+                timestamp TEXT NOT NULL,
+                score_breakdown TEXT,
+                question_order INTEGER DEFAULT 0
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Failed to create interview_questions table: {e}")
+
+
+def save_interview_question(interview_id: str, question_text: str, answer_text: str = None,
+                             difficulty: str = "Medium", is_follow_up: bool = False,
+                             parent_question_id: int = None, score_breakdown: dict = None,
+                             question_order: int = 0) -> int:
+    """
+    Save a single question (and optionally its answer) to the interview_questions table.
+    Returns the row id of the inserted record, or -1 on failure.
+    This must be called immediately when a question is answered.
+    """
+    import sqlite3
+    import json
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        cursor = conn.cursor()
+        score_json = json.dumps(score_breakdown) if score_breakdown else None
+        timestamp = get_ist_time()
+        cursor.execute("""
+            INSERT INTO interview_questions
+                (interview_id, question_text, answer_text, difficulty, is_follow_up,
+                 parent_question_id, timestamp, score_breakdown, question_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (interview_id, question_text, answer_text,
+              difficulty, 1 if is_follow_up else 0,
+              parent_question_id, timestamp, score_json, question_order))
+        conn.commit()
+        row_id = cursor.lastrowid
+        conn.close()
+        return row_id
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Failed to save interview question: {e}")
+        return -1
+
+
+def get_interview_questions_from_db(interview_id: str) -> list:
+    """
+    Fetch all questions for an interview from DB, ordered by timestamp then question_order.
+    Returns list of dicts with keys: id, question_text, answer_text, difficulty,
+    is_follow_up, parent_question_id, timestamp, score_breakdown, question_order.
+    """
+    import sqlite3
+    import json
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, question_text, answer_text, difficulty, is_follow_up,
+                   parent_question_id, timestamp, score_breakdown, question_order
+            FROM interview_questions
+            WHERE interview_id = ?
+            ORDER BY question_order ASC, timestamp ASC
+        """, (interview_id,))
+        rows = cursor.fetchall()
+        conn.close()
+
+        result = []
+        for row in rows:
+            score = None
+            if row[7]:
+                try:
+                    score = json.loads(row[7])
+                except Exception:
+                    score = None
+            result.append({
+                "id": row[0],
+                "question_text": row[1],
+                "answer_text": row[2] or "",
+                "difficulty": row[3],
+                "is_follow_up": bool(row[4]),
+                "parent_question_id": row[5],
+                "timestamp": row[6],
+                "score_breakdown": score,
+                "question_order": row[8],
+            })
+        return result
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Failed to fetch interview questions: {e}")
+        return []
+
+
+def save_interview_result(username: str, role: str, domain: str, avg_score: float, total_questions: int, feedback_summary: str,
+                          knowledge_avg: float = None, communication_avg: float = None, relevance_avg: float = None,
+                          difficulty: str = None, duration_seconds: int = None, interview_mode: str = None,
+                          weighted_score: float = None, raw_avg_score: float = None,
+                          follow_up_count: int = 0, depth_score: float = None, behavior_class: str = None):
+    """Save interview result to database with extended columns"""
     import sqlite3
     try:
         conn = sqlite3.connect('resume_data.db')
         cursor = conn.cursor()
         completed_on = get_ist_time()
         cursor.execute("""
-            INSERT INTO interview_results (username, role, domain, avg_score, total_questions, completed_on, feedback_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (username, role, domain, avg_score, total_questions, completed_on, feedback_summary))
+            INSERT INTO interview_results (username, role, domain, avg_score, total_questions, completed_on, feedback_summary,
+                                          knowledge_avg, communication_avg, relevance_avg, difficulty, duration_seconds, interview_mode, created_timestamp,
+                                          weighted_score, raw_avg_score, follow_up_count, depth_score, behavior_class)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)
+        """, (username, role, domain, avg_score, total_questions, completed_on, feedback_summary,
+              knowledge_avg, communication_avg, relevance_avg, difficulty, duration_seconds, interview_mode,
+              weighted_score, raw_avg_score, follow_up_count, depth_score, behavior_class))
         conn.commit()
         conn.close()
         return True
@@ -9780,16 +9928,23 @@ def format_feedback_text(feedback):
     return formatted
 
 
-def generate_interview_pdf_report(username, role, domain, completed_on, questions, answers, scores, feedbacks, overall_avg, badge, difficulty="Medium"):
+def generate_interview_pdf_report(username, role, domain, completed_on, questions, answers, scores, feedbacks, overall_avg, badge, difficulty="Medium", interview_id=None):
     """
-    Generate PDF report for interview using xhtml2pdf
+    Generate PDF report for interview using xhtml2pdf.
 
-    FIXED: Now shows full answers (up to 2000 chars) instead of truncating at 500
-    FIXED: Added follow-up questions for Hard difficulty interviews
+    ARCHITECTURE FIX: When interview_id is provided, fetches ALL Q&A data exclusively
+    from the interview_questions DB table (the single source of truth).
+    Never regenerates follow-up questions. Preserves original order via timestamp/question_order.
+    Falls back to passed-in arrays only when interview_id is unavailable (legacy).
     """
     try:
         from xhtml2pdf import pisa
         from io import BytesIO
+
+        # ── SINGLE SOURCE OF TRUTH: fetch from DB when interview_id is available ──
+        db_rows = []
+        if interview_id:
+            db_rows = get_interview_questions_from_db(interview_id)
 
         # Build XHTML content
         xhtml = f"""
@@ -9803,12 +9958,14 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
                 h2 {{ color: #0099cc; margin-top: 20px; }}
                 .header {{ background: #f0f0f0; padding: 15px; border-radius: 8px; margin-bottom: 20px; }}
                 .question-block {{ margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; page-break-inside: avoid; }}
+                .followup-block {{ margin: 10px 0 20px 30px; padding: 15px; border: 1px solid #ffc107; border-radius: 8px; background: #fffdf0; page-break-inside: avoid; }}
                 .score {{ font-weight: bold; color: #00c3ff; }}
                 .feedback {{ color: #666; margin-top: 10px; padding: 10px; background: #f9f9f9; border-left: 3px solid #00c3ff; }}
                 .feedback ul {{ margin: 5px 0 0 0; padding-left: 20px; }}
                 .feedback li {{ margin: 8px 0; line-height: 1.5; }}
                 .summary {{ background: #fffacd; padding: 15px; border-radius: 8px; margin: 20px 0; }}
                 .answer-text {{ white-space: pre-wrap; word-wrap: break-word; margin: 10px 0; }}
+                .followup-label {{ color: #b8860b; font-weight: bold; font-size: 13px; margin-bottom: 6px; }}
             </style>
         </head>
         <body>
@@ -9824,63 +9981,129 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
                 <p class="score">Average Score: {overall_avg:.1f}/10</p>
                 <p><strong>Badge Earned:</strong> {badge}</p>
             </div>
-            <h2>Detailed Q&A Review</h2>
+            <h2>Detailed Q&amp;A Review</h2>
         """
 
-        # CRITICAL FIX: Add each question/answer/score/feedback with FULL answer (no truncation)
-        for i, (q, a, score_dict, f) in enumerate(zip(questions, answers, scores, feedbacks), 1):
-            # Ensure score_dict is a dictionary
-            if isinstance(score_dict, dict):
-                avg_q_score = (score_dict.get('knowledge', 5) + score_dict.get('communication', 5) + score_dict.get('relevance', 5)) / 3
-            else:
-                # Fallback if score_dict is not a dict
-                avg_q_score = 5.0
-                score_dict = {'knowledge': 5, 'communication': 5, 'relevance': 5}
+        if db_rows:
+            # ── DB-backed path: use ONLY stored data, never regenerate ──
+            # Separate main questions and follow-ups
+            main_questions = [r for r in db_rows if not r["is_follow_up"]]
+            followup_map = {}  # parent_question_id -> list of follow-up rows
+            for r in db_rows:
+                if r["is_follow_up"] and r["parent_question_id"] is not None:
+                    followup_map.setdefault(r["parent_question_id"], []).append(r)
 
-            # Escape HTML special characters to prevent rendering issues
-            q_escaped = q.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            a_escaped = a.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-
-            # Handle feedback as string (convert list to paragraphs if needed)
-            if isinstance(f, list):
-                f_text = "\n\n".join(f)
-            else:
-                f_text = str(f)
-
-            # Format feedback into bullet points
             import re
-            sentences = re.split(r'(?<=\.)\s+', f_text.strip())
-            sentences = [sent.strip() for sent in sentences if len(sent.strip()) > 0]
-            bullet_feedback = "<b>💡 Improvement Tips:</b><ul>"
-            for sent in sentences:
-                sent_escaped = sent.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                bullet_feedback += f"<li>{sent_escaped}</li>"
-            bullet_feedback += "</ul>"
-            f_escaped = bullet_feedback
+            for idx, row in enumerate(main_questions, 1):
+                q_escaped = row["question_text"].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                a_escaped = row["answer_text"].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
-            # SHOW FULL ANSWER - NO TRUNCATION IN PDF
-            answer_display = a_escaped
+                score_dict = row["score_breakdown"] or {}
+                if isinstance(score_dict, dict) and score_dict:
+                    avg_q_score = (score_dict.get('knowledge', 5) + score_dict.get('communication', 5) + score_dict.get('relevance', 5)) / 3
+                else:
+                    avg_q_score = 5.0
+                    score_dict = {'knowledge': 5, 'communication': 5, 'relevance': 5}
 
-            # Get follow-up question if exists (for Hard difficulty)
-            followup_text = ""
-            if difficulty == "Hard" and isinstance(score_dict, dict) and score_dict.get('followup'):
-                followup_escaped = score_dict['followup'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-                followup_text = f"""<div style="margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 5px;">
-                    <strong>Follow-up Question (for Hard interviews):</strong><br/>
-                    {followup_escaped}
-                </div>"""
+                feedback_raw = score_dict.get("feedback", "") if isinstance(score_dict, dict) else ""
+                if isinstance(feedback_raw, list):
+                    feedback_raw = "\n\n".join(feedback_raw)
+                sentences = re.split(r'(?<=\.)\s+', str(feedback_raw).strip())
+                sentences = [s.strip() for s in sentences if len(s.strip()) > 0]
+                bullet_feedback = "<b>💡 Improvement Tips:</b><ul>"
+                for sent in sentences:
+                    sent_esc = sent.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    bullet_feedback += f"<li>{sent_esc}</li>"
+                bullet_feedback += "</ul>"
 
-            xhtml += f"""
+                xhtml += f"""
+            <div class="question-block">
+                <h3>Question {idx}</h3>
+                <p><strong>Q:</strong> {q_escaped}</p>
+                <div class="answer-text"><strong>Your Answer:</strong><br/>{a_escaped}</div>
+                <p class="score">Knowledge: {score_dict.get('knowledge', 0)}/10 | Communication: {score_dict.get('communication', 0)}/10 | Relevance: {score_dict.get('relevance', 0)}/10</p>
+                <p class="score">Question Score: {avg_q_score:.1f}/10</p>
+                <div class="feedback">{bullet_feedback}</div>
+            </div>
+                """
+
+                # Nest follow-up questions under this main question
+                for fu in followup_map.get(row["id"], []):
+                    fu_q_esc = fu["question_text"].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    fu_a_esc = fu["answer_text"].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    fu_score = fu["score_breakdown"] or {}
+                    if isinstance(fu_score, dict) and fu_score:
+                        fu_avg = (fu_score.get('knowledge', 5) + fu_score.get('communication', 5) + fu_score.get('relevance', 5)) / 3
+                    else:
+                        fu_avg = 5.0
+                        fu_score = {'knowledge': 5, 'communication': 5, 'relevance': 5}
+
+                    fu_feedback_raw = fu_score.get("feedback", "") if isinstance(fu_score, dict) else ""
+                    if isinstance(fu_feedback_raw, list):
+                        fu_feedback_raw = "\n\n".join(fu_feedback_raw)
+                    fu_sentences = re.split(r'(?<=\.)\s+', str(fu_feedback_raw).strip())
+                    fu_sentences = [s.strip() for s in fu_sentences if len(s.strip()) > 0]
+                    fu_bullets = "<b>💡 Improvement Tips:</b><ul>"
+                    for s in fu_sentences:
+                        s_esc = s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                        fu_bullets += f"<li>{s_esc}</li>"
+                    fu_bullets += "</ul>"
+
+                    xhtml += f"""
+            <div class="followup-block">
+                <div class="followup-label">↳ Follow-Up Question (Hard Mode)</div>
+                <p><strong>Q:</strong> {fu_q_esc}</p>
+                <div class="answer-text"><strong>Your Answer:</strong><br/>{fu_a_esc}</div>
+                <p class="score">Knowledge: {fu_score.get('knowledge', 0)}/10 | Communication: {fu_score.get('communication', 0)}/10 | Relevance: {fu_score.get('relevance', 0)}/10</p>
+                <p class="score">Follow-Up Score: {fu_avg:.1f}/10</p>
+                <div class="feedback">{fu_bullets}</div>
+            </div>
+                    """
+        else:
+            # ── Legacy fallback: use passed-in arrays (no interview_id) ──
+            import re
+            for i, (q, a, score_dict, f) in enumerate(zip(questions, answers, scores, feedbacks), 1):
+                if isinstance(score_dict, dict):
+                    avg_q_score = (score_dict.get('knowledge', 5) + score_dict.get('communication', 5) + score_dict.get('relevance', 5)) / 3
+                else:
+                    avg_q_score = 5.0
+                    score_dict = {'knowledge': 5, 'communication': 5, 'relevance': 5}
+
+                q_escaped = q.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                a_escaped = a.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+                if isinstance(f, list):
+                    f_text = "\n\n".join(f)
+                else:
+                    f_text = str(f)
+
+                sentences = re.split(r'(?<=\.)\s+', f_text.strip())
+                sentences = [sent.strip() for sent in sentences if len(sent.strip()) > 0]
+                bullet_feedback = "<b>💡 Improvement Tips:</b><ul>"
+                for sent in sentences:
+                    sent_escaped = sent.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    bullet_feedback += f"<li>{sent_escaped}</li>"
+                bullet_feedback += "</ul>"
+
+                followup_text = ""
+                if difficulty == "Hard" and isinstance(score_dict, dict) and score_dict.get('followup'):
+                    followup_escaped = score_dict['followup'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                    followup_text = f"""<div style="margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 5px;">
+                        <strong>Follow-up Question (for Hard interviews):</strong><br/>
+                        {followup_escaped}
+                    </div>"""
+
+                xhtml += f"""
             <div class="question-block">
                 <h3>Question {i}</h3>
                 <p><strong>Q:</strong> {q_escaped}</p>
-                <div class="answer-text"><strong>Your Answer:</strong><br/>{answer_display}</div>
+                <div class="answer-text"><strong>Your Answer:</strong><br/>{a_escaped}</div>
                 <p class="score">Knowledge: {score_dict.get('knowledge', 0)}/10 | Communication: {score_dict.get('communication', 0)}/10 | Relevance: {score_dict.get('relevance', 0)}/10</p>
                 <p class="score">Question Score: {avg_q_score:.1f}/10</p>
-                <div class="feedback">{f_escaped}</div>
+                <div class="feedback">{bullet_feedback}</div>
                 {followup_text}
             </div>
-            """
+                """
 
         xhtml += """
         </body>
@@ -9903,6 +10126,7 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
         return None
 
 
+
 import streamlit as st
 import plotly.graph_objects as go
 from courses import COURSES_BY_CATEGORY, RESUME_VIDEOS, INTERVIEW_VIDEOS, get_courses_for_role
@@ -9916,6 +10140,654 @@ import json
 import time
 import re
 import streamlit as st
+
+# =============================================================================
+# ARCHITECTURAL FIX 1: DOMAIN AUTHORITY LAYER
+# =============================================================================
+# Problem: Resume context dominates LLM prompts, causing Full Stack resumes to
+# produce Full Stack questions even when "Data Analyst" is selected.
+# Solution: Strip and suppress resume content that contradicts the selected domain,
+# then inject domain-specific mandatory keywords into every question generation prompt.
+
+DOMAIN_AUTHORITY_CONFIG = {
+    "Data Science & Analytics": {
+        "aliases": ["data analyst", "data science", "analytics", "business intelligence", "bi", "ml", "machine learning"],
+        "mandatory_topics": ["pandas", "SQL", "statistical analysis", "data visualization", "EDA", "hypothesis testing", "regression", "data cleaning"],
+        "forbidden_resume_keywords": ["react", "angular", "vue", "node.js", "express", "django", "flask", "spring", "frontend", "css", "html", "mobile app"],
+        "context_override": "This is a Data Science & Analytics interview. Focus EXCLUSIVELY on data analysis, statistics, SQL, Python data libraries (pandas/numpy/matplotlib), machine learning fundamentals, and business intelligence tools.",
+    },
+    "Full Stack Development": {
+        "aliases": ["full stack", "fullstack", "web developer", "mern", "mean"],
+        "mandatory_topics": ["frontend", "backend", "REST APIs", "databases", "authentication", "deployment", "React/Angular/Vue", "Node.js/Django/Spring"],
+        "forbidden_resume_keywords": ["tensorflow", "pytorch", "sklearn", "regression", "clustering", "NLP", "deep learning model"],
+        "context_override": "This is a Full Stack Development interview. Focus on frontend frameworks, backend APIs, databases, authentication, CI/CD, and web architecture.",
+    },
+    "Backend Development": {
+        "aliases": ["backend", "server-side", "api developer", "java developer", "python developer"],
+        "mandatory_topics": ["REST APIs", "databases", "system design", "microservices", "caching", "message queues", "authentication", "scalability"],
+        "forbidden_resume_keywords": ["react", "css", "html", "angular", "vue", "figma", "photoshop", "frontend"],
+        "context_override": "This is a Backend Development interview. Focus on API design, server-side logic, databases, microservices, caching strategies, and system scalability.",
+    },
+    "Frontend Development": {
+        "aliases": ["frontend", "ui developer", "react developer", "angular developer"],
+        "mandatory_topics": ["JavaScript", "React/Angular/Vue", "CSS", "responsive design", "state management", "performance optimization", "accessibility", "browser APIs"],
+        "forbidden_resume_keywords": ["kubernetes", "docker-compose", "terraform", "CI/CD pipeline", "microservices", "kafka"],
+        "context_override": "This is a Frontend Development interview. Focus on UI frameworks, JavaScript, CSS, browser performance, accessibility, and client-side architecture.",
+    },
+    "Machine Learning & AI": {
+        "aliases": ["machine learning", "ml engineer", "ai engineer", "deep learning", "nlp engineer"],
+        "mandatory_topics": ["model training", "feature engineering", "model evaluation", "neural networks", "overfitting", "hyperparameter tuning", "ML pipelines", "deployment"],
+        "forbidden_resume_keywords": ["react", "angular", "vue", "node.js", "express", "spring boot", "mobile"],
+        "context_override": "This is a Machine Learning & AI interview. Focus on model architecture, training pipelines, evaluation metrics, feature engineering, ML system design, and model deployment.",
+    },
+    "DevOps & Cloud": {
+        "aliases": ["devops", "cloud engineer", "platform engineer", "sre", "site reliability"],
+        "mandatory_topics": ["CI/CD", "Docker", "Kubernetes", "infrastructure as code", "monitoring", "cloud platforms", "incident response", "scaling strategies"],
+        "forbidden_resume_keywords": ["react", "angular", "pandas", "sklearn", "tableau", "power bi"],
+        "context_override": "This is a DevOps & Cloud interview. Focus on CI/CD pipelines, containerization, orchestration, cloud infrastructure, monitoring, and reliability engineering.",
+    },
+    "Cybersecurity": {
+        "aliases": ["cybersecurity", "security engineer", "pen tester", "information security"],
+        "mandatory_topics": ["threat modeling", "OWASP", "penetration testing", "encryption", "authentication", "incident response", "network security", "vulnerability assessment"],
+        "forbidden_resume_keywords": ["react", "pandas", "sklearn", "mobile app", "ui design"],
+        "context_override": "This is a Cybersecurity interview. Focus on security principles, threat vectors, defensive/offensive techniques, compliance, and security architecture.",
+    },
+    "UI/UX Design": {
+        "aliases": ["ui designer", "ux designer", "product designer", "interaction designer"],
+        "mandatory_topics": ["user research", "wireframing", "prototyping", "usability testing", "design systems", "information architecture", "accessibility", "figma"],
+        "forbidden_resume_keywords": ["tensorflow", "docker", "kubernetes", "SQL queries", "backend API"],
+        "context_override": "This is a UI/UX Design interview. Focus on design process, user research methods, wireframing, prototyping tools, usability testing, and design systems.",
+    },
+    "Project Management": {
+        "aliases": ["project manager", "product manager", "scrum master", "agile coach"],
+        "mandatory_topics": ["project planning", "stakeholder management", "agile/scrum", "risk management", "roadmapping", "KPIs", "cross-functional coordination", "prioritization"],
+        "forbidden_resume_keywords": ["react", "tensorflow", "docker", "SQL joins", "API development"],
+        "context_override": "This is a Project/Product Management interview. Focus on planning methodologies, stakeholder communication, risk mitigation, prioritization frameworks, and delivery metrics.",
+    },
+}
+
+# Generic fallback for domains not explicitly configured
+_DEFAULT_DOMAIN_CONFIG = {
+    "mandatory_topics": [],
+    "forbidden_resume_keywords": [],
+    "context_override": "",
+}
+
+
+def get_domain_config(domain: str) -> dict:
+    """Return domain config by exact name or alias match."""
+    if domain in DOMAIN_AUTHORITY_CONFIG:
+        return DOMAIN_AUTHORITY_CONFIG[domain]
+    domain_lower = domain.lower()
+    for key, cfg in DOMAIN_AUTHORITY_CONFIG.items():
+        if any(alias in domain_lower for alias in cfg.get("aliases", [])):
+            return cfg
+    return _DEFAULT_DOMAIN_CONFIG
+
+
+def filter_resume_for_domain(resume_context: dict, selected_domain: str) -> dict:
+    """
+    DOMAIN AUTHORITY LAYER — Core Function.
+
+    Strips resume skills/technologies that are IRRELEVANT to the selected domain
+    and flags that domain override is active. This prevents a Full Stack resume
+    from contaminating a Data Analyst interview prompt.
+
+    Returns a modified resume_context dict safe to pass to question generators.
+    """
+    cfg = get_domain_config(selected_domain)
+    forbidden = [kw.lower() for kw in cfg.get("forbidden_resume_keywords", [])]
+
+    if not forbidden:
+        # No filtering needed for this domain
+        return resume_context
+
+    def clean_list(items: list) -> list:
+        cleaned = []
+        for item in items:
+            item_lower = item.lower()
+            if not any(f in item_lower for f in forbidden):
+                cleaned.append(item)
+        return cleaned
+
+    filtered = {
+        "skills": clean_list(resume_context.get("skills", [])),
+        "technologies": clean_list(resume_context.get("technologies", [])),
+        # Keep projects/experience but append a domain caveat so LLM understands the interview scope
+        "projects": resume_context.get("projects", []),
+        "experience": resume_context.get("experience", []),
+        "_domain_override": True,
+        "_domain_name": selected_domain,
+    }
+
+    # If filtering removed everything, add a note so LLM doesn't get empty context
+    if not filtered["skills"]:
+        filtered["skills"] = [f"Candidate background may differ from {selected_domain} domain"]
+    if not filtered["technologies"]:
+        filtered["technologies"] = [f"Domain: {selected_domain}"]
+
+    return filtered
+
+
+def build_domain_authority_block(selected_domain: str, selected_role: str) -> str:
+    """
+    Returns a strong domain-authority instruction block to prepend to ALL
+    question-generation prompts. Forces LLM to stay domain-aligned regardless
+    of resume content.
+    """
+    cfg = get_domain_config(selected_domain)
+    override = cfg.get("context_override", "")
+    mandatory = cfg.get("mandatory_topics", [])
+
+    block = f"""
+⚠️ DOMAIN AUTHORITY OVERRIDE — HIGHEST PRIORITY ⚠️
+The candidate has SELECTED to be interviewed as: {selected_role} in {selected_domain}.
+Even if the resume shows different experience, ALL questions MUST be about {selected_domain}.
+{override}
+
+MANDATORY TOPIC POOL (draw from these for every question):
+{', '.join(mandatory) if mandatory else selected_domain + ' core concepts'}
+
+STRICT RULE: Do NOT ask about technologies or concepts outside {selected_domain}.
+If resume content conflicts with the selected domain, IGNORE the resume content.
+"""
+    return block.strip()
+
+
+# =============================================================================
+# ARCHITECTURAL FIX 2: STRUCTURED DIFFICULTY ENFORCER
+# =============================================================================
+# Problem: Easy/Medium/Hard produce stylistically different questions but not
+# structurally different ones. They all look similar in depth.
+# Solution: Define a strict question-type contract per difficulty level, enforced
+# at the prompt level with explicit templates and forbidden patterns.
+
+DIFFICULTY_CONTRACTS = {
+    "Easy": {
+        "label": "Conceptual / Definition",
+        "description": "Only conceptual or definition-based questions. NO architecture, NO tradeoffs, NO scaling, NO failure scenarios.",
+        "allowed_types": [
+            "What is X? Define it in your own words.",
+            "Explain the purpose/role of X.",
+            "What is the difference between X and Y? (basic comparison only)",
+            "Give an example of when you would use X.",
+            "What are the key characteristics of X?",
+        ],
+        "forbidden_patterns": [
+            "design a system", "scale to", "tradeoff", "failure", "optimize for",
+            "architecture", "production outage", "handle 10x", "migrate from",
+        ],
+        "scoring_note": "Give credit for basic conceptual understanding. Do not penalize for missing implementation details.",
+        "followup_allowed": False,
+        "cognitive_load": "LOW — definitions, basic concepts, surface-level understanding only",
+    },
+    "Medium": {
+        "label": "Scenario / Decision-Making",
+        "description": "Scenario-based questions requiring decision-making or describing implementation steps. May include basic tradeoffs.",
+        "allowed_types": [
+            "You are building X for a startup. How would you approach it?",
+            "Your team needs to choose between X and Y. What factors matter?",
+            "Walk me through how you would implement X.",
+            "A junior developer asks you to explain X — what do you say?",
+            "How have you used X in a real project? What worked, what didn't?",
+        ],
+        "forbidden_patterns": [
+            "design for 1 million users", "production outage with 100k requests/sec",
+            "failure simulation", "multi-region failover",
+        ],
+        "scoring_note": "Expect scenario framing, decision logic, and basic tradeoffs. Penalize vague or purely definitional answers.",
+        "followup_allowed": True,
+        "cognitive_load": "MEDIUM — scenario framing, decision logic, implementation thinking",
+    },
+    "Hard": {
+        "label": "System Design / Tradeoffs / Failure Simulation",
+        "description": "Deep technical questions on system design, scaling, tradeoffs, failure modes, and edge cases. High cognitive pressure.",
+        "allowed_types": [
+            "Design X to handle Y million requests/day. Walk through every layer.",
+            "Your system X is failing under load. Diagnose and fix it.",
+            "Compare approach A vs B for X at scale. Include tradeoffs, failure modes, costs.",
+            "You're migrating from X to Y with zero downtime. What's your plan?",
+            "What are the edge cases in X? How would you handle each?",
+        ],
+        "forbidden_patterns": [],
+        "scoring_note": "Strictly evaluate system thinking, depth, tradeoff awareness, and edge case coverage. Partial credit only for incomplete answers.",
+        "followup_allowed": True,
+        "cognitive_load": "HIGH — system design, failure simulation, tradeoffs, edge cases, metrics",
+    },
+}
+
+
+def get_difficulty_instruction_block(difficulty: str) -> str:
+    """
+    Returns a structured difficulty instruction block that forces the LLM
+    to generate questions of the correct TYPE, not just tone.
+    """
+    contract = DIFFICULTY_CONTRACTS.get(difficulty, DIFFICULTY_CONTRACTS["Medium"])
+
+    allowed = "\n".join(f"  - {t}" for t in contract["allowed_types"])
+    forbidden = contract["forbidden_patterns"]
+    forbidden_str = (
+        "\nFORBIDDEN in this difficulty level (do NOT include): " + ", ".join(forbidden)
+        if forbidden else ""
+    )
+
+    block = f"""
+DIFFICULTY LEVEL: {difficulty} — {contract['label']}
+Cognitive Load: {contract['cognitive_load']}
+{contract['description']}
+
+ALLOWED QUESTION PATTERNS (use these as structural templates):
+{allowed}
+{forbidden_str}
+
+Scoring context: {contract['scoring_note']}
+"""
+    return block.strip()
+
+
+# =============================================================================
+# ARCHITECTURAL FIX 3: SMART ESCALATION ENGINE
+# =============================================================================
+# Problem: Escalation layer doesn't increase dynamically, weakness detection is
+# keyword-based, and Hard mode doesn't increase cognitive pressure per follow-up.
+# Solution: Layer-based escalation map with LLM-scored weakness analysis that
+# selects strategy from a deterministic mapping of score + answer quality signals.
+
+ESCALATION_LAYER_MAP = {
+    1: {
+        "name": "Clarification",
+        "instruction": "Ask the candidate to clarify or expand on a specific part of their answer that was vague or ambiguous.",
+        "trigger": "Used when the answer lacks depth or contains unclear statements.",
+        "cognitive_pressure": "LOW",
+    },
+    2: {
+        "name": "Metrics",
+        "instruction": "Ask the candidate to justify their answer with specific numbers, benchmarks, or measurable outcomes. Push for concrete data.",
+        "trigger": "Used when the answer is conceptually correct but lacks evidence or quantification.",
+        "cognitive_pressure": "MEDIUM",
+    },
+    3: {
+        "name": "Tradeoff",
+        "instruction": "Challenge the candidate with a direct tradeoff: their approach vs. an alternative. Ask them to defend their choice with clear pros/cons.",
+        "trigger": "Used when no tradeoffs were mentioned or the answer seems too one-sided.",
+        "cognitive_pressure": "MEDIUM-HIGH",
+    },
+    4: {
+        "name": "Scalability",
+        "instruction": "Inject a scale constraint (10x traffic, 100x data volume, global users) and ask how their approach holds up. Push for architectural changes.",
+        "trigger": "Used after tradeoffs are discussed or to pressure-test their design thinking.",
+        "cognitive_pressure": "HIGH",
+    },
+    5: {
+        "name": "Failure Simulation",
+        "instruction": "Simulate a production failure related to their approach. Describe a realistic incident and ask them to diagnose, mitigate, and prevent it.",
+        "trigger": "Maximum pressure — only at layer 5. Tests crisis thinking and system ownership.",
+        "cognitive_pressure": "MAXIMUM",
+    },
+}
+
+# Strategy → Layer mapping (which layer best fits each strategy)
+STRATEGY_TO_LAYER = {
+    "Clarification": 1,
+    "Metric Justification": 2,
+    "Tradeoff Challenge": 3,
+    "Alternative Design Comparison": 3,
+    "Scalability Challenge": 4,
+    "Constraint Injection": 4,
+    "Failure Simulation": 5,
+    "Security Consideration": 5,
+    "Depth Probe": 1,
+    "Edge Case Scenario": 3,
+    "Architecture Breakdown": 4,
+}
+
+
+def analyze_answer_weaknesses_smart(answer_text: str, scoring: dict, escalation_layer: int = 1) -> dict:
+    """
+    UPGRADED Weakness Analyzer — replaces keyword-matching with score-driven
+    multi-signal strategy selection.
+
+    Signal priority (in order):
+    1. Score deltas between knowledge/communication/relevance
+    2. Answer length and structural quality signals
+    3. Current escalation layer (forces progression through layers 1→5)
+    4. Keyword presence as secondary signals (not sole determinant)
+
+    Returns:
+        weaknesses (list): detected weakness signals
+        strategy (str): selected follow-up strategy
+        next_layer (int): escalation layer for this follow-up
+        reasoning (str): human-readable explanation of strategy choice
+    """
+    knowledge = scoring.get("knowledge", 5)
+    communication = scoring.get("communication", 5)
+    relevance = scoring.get("relevance", 5)
+    avg_score = (knowledge + communication + relevance) / 3
+    word_count = len(answer_text.split())
+    answer_lower = answer_text.lower()
+
+    weaknesses = []
+    reasoning = ""
+
+    # === Score-based signals (primary) ===
+    if relevance < 4:
+        weaknesses.append("off_topic")
+    if knowledge < 4:
+        weaknesses.append("weak_knowledge")
+    if communication < 5:
+        weaknesses.append("weak_communication")
+    if word_count < 40:
+        weaknesses.append("too_brief")
+    if avg_score >= 7.5:
+        weaknesses.append("strong_answer")  # Good answer — escalate harder
+
+    # === Structural signals (secondary) ===
+    has_metrics = any(kw in answer_lower for kw in [
+        "%", "percent", "ms", "milliseconds", "seconds", "users", "requests",
+        "throughput", "latency", "uptime", "million", "thousand", "tps", "rps", "gb", "tb"
+    ])
+    has_tradeoff = any(kw in answer_lower for kw in [
+        "tradeoff", "trade-off", "versus", "vs ", "compared to", "alternative",
+        "however", "but the downside", "pros and cons", "on the other hand"
+    ])
+    has_example = any(kw in answer_lower for kw in [
+        "for example", "in my project", "we built", "at my", "when i", "i implemented",
+        "for instance", "specifically", "in production"
+    ])
+    has_failure = any(kw in answer_lower for kw in [
+        "failure", "outage", "bottleneck", "failed", "bug", "incident", "crash", "timeout"
+    ])
+
+    if not has_metrics:
+        weaknesses.append("no_metrics")
+    if not has_tradeoff:
+        weaknesses.append("no_tradeoff")
+    if not has_example:
+        weaknesses.append("no_concrete_example")
+
+    # === Layer-forced strategy progression ===
+    # Escalation layer ALWAYS moves forward regardless of answer quality.
+    # Strategy is chosen by combining layer position with weakest signal.
+    next_layer = min(5, escalation_layer)  # current layer determines this follow-up's type
+
+    layer_info = ESCALATION_LAYER_MAP[next_layer]
+
+    # Within the layer, pick the best-fitting strategy based on weakness signals
+    if next_layer == 1:
+        if "too_brief" in weaknesses or "weak_communication" in weaknesses:
+            strategy = "Clarification"
+        else:
+            strategy = "Depth Probe"
+        reasoning = f"Layer 1 (Clarification): Answer was {'too brief' if 'too_brief' in weaknesses else 'unclear in places'}."
+
+    elif next_layer == 2:
+        strategy = "Metric Justification"
+        reasoning = "Layer 2 (Metrics): Pushing for quantifiable evidence — numbers, benchmarks, or success criteria."
+
+    elif next_layer == 3:
+        if "no_tradeoff" in weaknesses:
+            strategy = "Tradeoff Challenge"
+            reasoning = "Layer 3 (Tradeoff): No tradeoffs mentioned — forcing comparison with alternative approach."
+        else:
+            strategy = "Edge Case Scenario"
+            reasoning = "Layer 3 (Tradeoff): Tradeoffs present — challenging with edge case to deepen analysis."
+
+    elif next_layer == 4:
+        if "strong_answer" in weaknesses:
+            strategy = "Architecture Breakdown"
+            reasoning = "Layer 4 (Scalability): Strong answer — forcing architectural decomposition under scale."
+        else:
+            strategy = "Scalability Challenge"
+            reasoning = "Layer 4 (Scalability): Testing how their solution holds up under 10x load."
+
+    elif next_layer == 5:
+        if has_failure:
+            strategy = "Security Consideration"
+            reasoning = "Layer 5 (Failure): Candidate mentioned failures — pivoting to security implications."
+        else:
+            strategy = "Failure Simulation"
+            reasoning = "Layer 5 (Failure): Maximum pressure — simulating a production incident."
+
+    else:
+        strategy = "Depth Probe"
+        reasoning = "Default: probing for deeper explanation."
+
+    depth_score = min(10.0, max(0.0, avg_score))
+
+    return {
+        "weaknesses": weaknesses,
+        "strategy": strategy,
+        "next_layer": next_layer,
+        "reasoning": reasoning,
+        "depth_score": depth_score,
+        "layer_name": layer_info["name"],
+        "cognitive_pressure": layer_info["cognitive_pressure"],
+    }
+
+
+def generate_adaptive_followup_v2(
+    question: str, answer: str, strategy: str,
+    escalation_layer: int, role: str, domain: str,
+    difficulty: str = "Hard"
+) -> str:
+    """
+    UPGRADED adaptive follow-up generator.
+
+    Key improvements over v1:
+    - Uses ESCALATION_LAYER_MAP for precise per-layer instructions
+    - Injects domain authority block into follow-up prompts
+    - Adds cognitive pressure signal matching the difficulty
+    - Hard mode adds explicit pressure framing ("In a live production system...")
+    """
+    from llm_manager import call_llm
+
+    layer_info = ESCALATION_LAYER_MAP.get(escalation_layer, ESCALATION_LAYER_MAP[3])
+    domain_block = build_domain_authority_block(domain, role)
+
+    strategy_instructions = {
+        "Clarification": "Ask the candidate to clarify or expand on one specific ambiguous statement they made.",
+        "Depth Probe": "Ask them to explain the internal mechanism step-by-step — how does it actually work under the hood?",
+        "Metric Justification": "Ask them to back up their answer with specific numbers: latency, throughput, error rates, or success metrics.",
+        "Tradeoff Challenge": f"Present an alternative approach to what they described and ask: why their approach over this alternative? Force specific tradeoffs.",
+        "Edge Case Scenario": "Describe a specific edge case their solution might not handle. Ask how they would detect and fix it.",
+        "Scalability Challenge": f"Inject a scale constraint: 'Your system now needs to handle 10x the load. Which part breaks first and how do you fix it?'",
+        "Constraint Injection": "Add a realistic real-world constraint (budget, latency SLA, legacy system dependency) and ask how they adapt their approach.",
+        "Failure Simulation": f"Describe a production incident: their system just failed at peak traffic. Walk through diagnosis, immediate mitigation, and long-term fix.",
+        "Security Consideration": "Ask about the specific attack vectors or security risks in their described approach and how they would mitigate each.",
+        "Architecture Breakdown": "Ask them to diagram (verbally) the full architecture — every component, data flow, and where failures can occur.",
+        "Alternative Design Comparison": "Ask them to propose a completely different architecture for the same problem and compare both on cost, complexity, and reliability.",
+    }
+
+    strategy_instruction = strategy_instructions.get(strategy, "Ask a deeper technical question that increases cognitive load.")
+
+    # Hard mode adds explicit pressure framing
+    pressure_framing = ""
+    if difficulty == "Hard":
+        pressure_framing = f"""
+COGNITIVE PRESSURE LEVEL: {layer_info['cognitive_pressure']}
+Frame this as a REAL scenario: "In a live production system serving millions of users..."
+Do not accept vague answers — if they hedge, the follow-up should make that clear.
+"""
+
+    prompt = f"""You are a senior technical interviewer for {role} at a top-tier tech company ({domain} domain).
+
+{domain_block}
+
+The candidate just answered this question:
+ORIGINAL QUESTION: {question}
+CANDIDATE ANSWER: {answer[:600]}
+
+ESCALATION LAYER: {escalation_layer}/5 — {layer_info['name']}
+Layer objective: {layer_info['instruction']}
+
+STRATEGY: {strategy}
+Strategy instruction: {strategy_instruction}
+{pressure_framing}
+
+Generate EXACTLY ONE follow-up question that:
+1. Directly references something specific from their answer (quote or paraphrase it)
+2. Applies the {layer_info['name']} escalation objective
+3. Is harder and more specific than the original question
+4. Is 1-2 sentences maximum
+5. Does NOT repeat what was already asked
+
+Output ONLY the follow-up question. No numbering, no labels, no explanations.
+
+Follow-up question:"""
+
+    try:
+        return call_llm(prompt, session=st.session_state).strip()
+    except Exception:
+        return f"You mentioned {answer.split()[:5] if answer else ['your approach']}. How would this hold up under 10x traffic load, and which component would fail first?"
+
+
+# =============================================================================
+# DOMAIN-AWARE QUESTION GENERATORS (upgraded wrappers)
+# =============================================================================
+
+def generate_resume_based_questions_domain_aware(
+    resume_context: dict, role: str, domain: str,
+    difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced"
+) -> list:
+    """
+    Drop-in replacement for generate_resume_based_questions_enhanced.
+    Applies Domain Authority Layer + Structured Difficulty Enforcement.
+    """
+    from llm_manager import call_llm
+
+    # FIX 1: Apply domain filter to resume context
+    filtered_context = filter_resume_for_domain(resume_context, domain)
+
+    skills = filtered_context.get("skills", [])
+    projects = filtered_context.get("projects", [])
+    experience = filtered_context.get("experience", [])
+    technologies = filtered_context.get("technologies", [])
+
+    # FIX 1: Domain authority block
+    domain_block = build_domain_authority_block(domain, role)
+
+    # FIX 2: Structured difficulty enforcement
+    difficulty_block = get_difficulty_instruction_block(difficulty)
+
+    # Weakness bias instruction
+    bias_map = {
+        "technical depth": "Prioritize questions that expose gaps in technical depth — ask about internals, edge cases, and implementation specifics.",
+        "explanation clarity": "Prioritize questions that require the candidate to explain complex concepts step-by-step.",
+        "answer precision": "Prioritize questions that require very specific, targeted answers directly tied to their resume.",
+        "balanced": "",
+    }
+    bias_instruction = bias_map.get(weakness_bias, "")
+
+    prompt = f"""You are a senior technical interviewer.
+
+{domain_block}
+
+{difficulty_block}
+
+RESUME CONTEXT (filtered for domain relevance):
+- Skills: {', '.join(skills[:5]) if skills else 'None relevant to ' + domain}
+- Projects: {', '.join(projects[:3]) if projects else 'None specified'}
+- Experience: {', '.join(experience[:3]) if experience else 'None specified'}
+- Technologies: {', '.join(technologies[:5]) if technologies else 'None relevant to ' + domain}
+
+{bias_instruction}
+
+Generate EXACTLY {num_questions} interview questions. Each question MUST:
+1. Be about {domain} — not the candidate's previous domain if it differs
+2. Reference their resume only if resume content is relevant to {domain}
+3. Match the difficulty type specified above (structural enforcement, not just tone)
+4. Be a single, clear question (1-2 sentences)
+
+Output ONLY the questions, one per line, no numbering or prefixes.
+
+Questions:"""
+
+    try:
+        response = call_llm(prompt, session=st.session_state)
+        raw = [q.strip() for q in response.split("\n") if q.strip()]
+        cleaned = []
+        for q in raw:
+            q = re.sub(r'^[\d\)\.\-•\*]+\s*', '', q).strip()
+            if len(q) > 15:
+                cleaned.append(q)
+            if len(cleaned) >= num_questions:
+                break
+
+        # Fallback fill
+        while len(cleaned) < num_questions:
+            contract = DIFFICULTY_CONTRACTS.get(difficulty, DIFFICULTY_CONTRACTS["Medium"])
+            diff_label = contract["label"]
+            cleaned.append(
+                f"[{diff_label}] Walk me through a key concept in {domain} that you've applied practically."
+            )
+        return cleaned[:num_questions]
+
+    except Exception:
+        return [f"Explain a core {domain} concept you've worked with recently."] * num_questions
+
+
+def generate_domain_questions_with_llm(
+    domain: str, role: str, interview_type: str,
+    num_questions: int, difficulty: str = "Medium"
+) -> list:
+    """
+    Domain-authority-enforced replacement for generate_interview_questions_with_llm.
+    Ensures generic questions also respect the selected domain and difficulty contract.
+    """
+    from llm_manager import call_llm
+
+    domain_block = build_domain_authority_block(domain, role)
+    difficulty_block = get_difficulty_instruction_block(difficulty)
+
+    prompt = f"""You are an expert interviewer at a top-tier tech company.
+
+{domain_block}
+
+{difficulty_block}
+
+Generate EXACTLY {num_questions} unique {interview_type} interview questions for a {role} candidate.
+
+RULES:
+- Every question MUST be about {domain} — no exceptions
+- Match the exact difficulty type defined above (not just tone)
+- Avoid duplicates and generic filler questions
+- Keep each question concise: 1-2 sentences maximum
+- Output ONLY the questions, one per line
+- NO numbering, bullets, prefixes, or explanatory text
+
+Generate {num_questions} questions now:"""
+
+    try:
+        response = call_llm(prompt, session=st.session_state)
+        raw = [q.strip() for q in response.split('\n') if q.strip()]
+        cleaned = []
+        for q in raw:
+            clean_q = re.sub(r'^[\d\)\.\-•\*]+\s*', '', q).strip()
+            clean_q = re.sub(r'^Question\s*\d*\s*:?\s*', '', clean_q, flags=re.IGNORECASE).strip()
+            if clean_q and len(clean_q) > 15:
+                cleaned.append(clean_q)
+            if len(cleaned) >= num_questions:
+                break
+
+        # Fallback with difficulty-appropriate templates
+        while len(cleaned) < num_questions:
+            contract = DIFFICULTY_CONTRACTS.get(difficulty, DIFFICULTY_CONTRACTS["Medium"])
+            templates = contract["allowed_types"]
+            import random
+            template = random.choice(templates) if templates else "Explain a core concept."
+            cleaned.append(f"For {domain} ({role}): {template.replace('X', domain)}")
+
+        return cleaned[:num_questions]
+
+    except Exception:
+        # Structured fallback questions per difficulty
+        if difficulty == "Easy":
+            return [f"What is the purpose of {domain} and why is it important?" for _ in range(num_questions)]
+        elif difficulty == "Medium":
+            return [f"Describe a scenario where you applied {domain} concepts to solve a real problem." for _ in range(num_questions)]
+        else:
+            return [f"Design a scalable {domain} system. Walk through every architectural decision and tradeoff." for _ in range(num_questions)]
+
 
 # ======================================================
 # RESUME TEXT EXTRACTION (pdfplumber + OCR fallback)
@@ -10143,6 +11015,200 @@ def show_resume_scanning_animation():
 
     status.empty()
     progress.empty()
+
+
+
+# =============================================================================
+# PART 1-9: UPGRADED ENGINE FUNCTIONS
+# =============================================================================
+
+HARD_FOLLOWUP_STRATEGIES = [
+    "Depth Probe",
+    "Tradeoff Challenge",
+    "Edge Case Scenario",
+    "Scalability Challenge",
+    "Constraint Injection",
+    "Failure Simulation",
+    "Security Consideration",
+    "Architecture Breakdown",
+    "Metric Justification",
+    "Alternative Design Comparison",
+]
+
+DIFFICULTY_MULTIPLIERS = {"Easy": 1.0, "Medium": 1.1, "Hard": 1.25}
+
+
+def analyze_answer_weaknesses(answer_text: str, scoring: dict) -> dict:
+    """
+    UPGRADED (Fix 3): Delegates to analyze_answer_weaknesses_smart.
+    Backward-compatible — existing callers continue to work.
+    Escalation layer is read from session_state to drive layer progression.
+    """
+    try:
+        current_layer = st.session_state.get("escalation_layer", 1)
+    except Exception:
+        current_layer = 1
+    result = analyze_answer_weaknesses_smart(answer_text, scoring, escalation_layer=current_layer)
+    # Backward-compat keys
+    result["follow_up_count"] = getattr(st.session_state, "follow_up_count", 0) if hasattr(st, "session_state") else 0
+    return result
+
+
+def generate_adaptive_followup(question: str, answer: str, strategy: str, escalation_layer: int, role: str, domain: str) -> str:
+    """
+    UPGRADED (Fix 3): Delegates to generate_adaptive_followup_v2.
+    Backward-compatible wrapper — all existing callers work unchanged.
+    """
+    diff = getattr(st.session_state, "interview_difficulty", "Hard") if hasattr(st, "session_state") else "Hard"
+    return generate_adaptive_followup_v2(
+        question=question, answer=answer, strategy=strategy,
+        escalation_layer=escalation_layer, role=role, domain=domain, difficulty=diff
+    )
+
+
+def get_user_weakness_history(username: str) -> dict:
+    """
+    PART 5: Weakness Memory Engine.
+    Query past 5 interviews and detect recurring weak skill.
+    Returns dict with weakest_skill and bias recommendation.
+    """
+    import sqlite3
+    try:
+        conn = sqlite3.connect('resume_data.db')
+        import pandas as pd
+        df = pd.read_sql_query(
+            "SELECT knowledge_avg, communication_avg, relevance_avg FROM interview_results WHERE username=? ORDER BY id DESC LIMIT 5",
+            conn, params=(username,)
+        )
+        conn.close()
+
+        if df.empty or len(df) < 2:
+            return {"weakest_skill": None, "bias": "balanced"}
+
+        avgs = {
+            "knowledge": df["knowledge_avg"].mean(),
+            "communication": df["communication_avg"].mean(),
+            "relevance": df["relevance_avg"].mean(),
+        }
+        weakest = min(avgs, key=avgs.get)
+        bias_map = {
+            "knowledge": "technical depth",
+            "communication": "explanation clarity",
+            "relevance": "answer precision",
+        }
+        return {"weakest_skill": weakest, "bias": bias_map.get(weakest, "balanced"), "averages": avgs}
+    except Exception:
+        return {"weakest_skill": None, "bias": "balanced"}
+
+
+def compute_weighted_score(raw_avg: float, difficulty: str) -> float:
+    """PART 3: Apply difficulty multiplier to raw average score."""
+    multiplier = DIFFICULTY_MULTIPLIERS.get(difficulty, 1.0)
+    return round(min(10.0, raw_avg * multiplier), 2)
+
+
+def compute_trend_slope(scores: list) -> float:
+    """PART 6: Compute linear regression slope over score list."""
+    n = len(scores)
+    if n < 2:
+        return 0.0
+    try:
+        x = list(range(n))
+        x_mean = sum(x) / n
+        y_mean = sum(scores) / n
+        numerator = sum((x[i] - x_mean) * (scores[i] - y_mean) for i in range(n))
+        denominator = sum((x[i] - x_mean) ** 2 for i in range(n))
+        return numerator / denominator if denominator != 0 else 0.0
+    except Exception:
+        return 0.0
+
+
+def classify_behavior(avg_duration_mins, score_std, hard_delta) -> str:
+    """PART 6: Behavioral classification based on performance patterns."""
+    if avg_duration_mins is not None and avg_duration_mins < 8:
+        return "⚡ Rushed"
+    elif avg_duration_mins is not None and avg_duration_mins > 40:
+        return "🤔 Overthinking"
+    elif score_std < 0.8 and hard_delta is not None and hard_delta > -1:
+        return "🎯 Adaptive Learner"
+    else:
+        return "⚖️ Balanced"
+
+
+def generate_resume_based_questions_enhanced(resume_context: dict, role: str, domain: str, difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced") -> list:
+    """
+    PART 7: Enhanced resume intelligence — asks architecture, decisions, tradeoffs, outcomes, and scale.
+    """
+    from llm_manager import call_llm
+
+    skills = resume_context.get("skills", [])
+    projects = resume_context.get("projects", [])
+    experience = resume_context.get("experience", [])
+    technologies = resume_context.get("technologies", [])
+
+    bias_instruction = ""
+    if weakness_bias == "explanation clarity":
+        bias_instruction = "Focus on questions that require the candidate to explain complex concepts clearly, describe their reasoning process, and articulate decisions step-by-step."
+    elif weakness_bias == "technical depth":
+        bias_instruction = "Focus on questions that require deep technical knowledge, architecture reasoning, and internal mechanism understanding."
+    elif weakness_bias == "answer precision":
+        bias_instruction = "Focus on questions that require precise, targeted answers directly relevant to the role and their stated experience."
+
+    difficulty_map = {
+        "Easy": "Ask about what they built and what technologies they used. Keep it conceptual.",
+        "Medium": "Ask about specific decisions made, tradeoffs considered, and real-world challenges faced.",
+        "Hard": "Ask deep questions about architecture choices, scalability design, measurable outcomes, failure handling, and how they'd redesign it today."
+    }
+
+    prompt = f"""You are a senior technical interviewer for {role} in {domain}.
+
+Generate EXACTLY {num_questions} interview questions based on the candidate's actual resume.
+
+RESUME CONTEXT:
+- Skills: {', '.join(skills[:5])}
+- Projects: {', '.join(projects[:3])}
+- Experience: {', '.join(experience[:3])}
+- Technologies: {', '.join(technologies[:5])}
+
+DIFFICULTY: {difficulty}
+{difficulty_map.get(difficulty, '')}
+
+{bias_instruction}
+
+For each question, MUST cover at least one of:
+1. Architecture breakdown or design rationale
+2. Decision reasoning (why they chose X over Y)
+3. Tradeoffs explicitly made
+4. Measurable outcomes or success metrics
+5. Scaling challenges or failure scenarios
+
+RULES:
+- Reference specific resume content directly
+- No generic questions
+- One question per line
+- No numbering, bullets, or prefixes
+
+Generate {num_questions} questions:"""
+
+    try:
+        response = call_llm(prompt, session=st.session_state)
+        raw = [q.strip() for q in response.split("\n") if q.strip()]
+        cleaned = []
+        for q in raw:
+            q = re.sub(r'^[\d\)\.\-•\*]+\s*', '', q).strip()
+            if len(q) > 15:
+                cleaned.append(q)
+            if len(cleaned) >= num_questions:
+                break
+        while len(cleaned) < num_questions:
+            cleaned.append(f"Walk me through your most technically challenging project and the specific decisions you made.")
+        return cleaned[:num_questions]
+    except Exception:
+        return [
+            "Walk me through the architecture of your most complex project and the decisions you made.",
+            "What tradeoffs did you face and how did you justify your technology choices?",
+            "How would you scale your largest project to handle 10x the load?"
+        ]
 
 
 with tab4:
@@ -10589,7 +11655,7 @@ with tab4:
 
     page = st.radio(
         label="Select Learning Option",
-        options=["Courses by Role", "Resume Videos", "Interview Videos",  "AI Interview Coach 🤖"],
+        options=["Courses by Role", "Resume Videos", "Interview Videos", "AI Interview Coach 🤖", "My Progress 📊"],
         horizontal=True,
         key="page_selection",
         label_visibility="collapsed"
@@ -11556,6 +12622,9 @@ Generate exactly {num_questions} questions now:
                 st.session_state.resume_context = None
                 st.session_state.dynamic_interview_started = False
                 st.session_state.dynamic_interview_completed = False
+                st.session_state.interview_result_saved = False
+                st.session_state.interview_final_duration_seconds = None
+                st.session_state.interview_actual_start_time = None
                 st.rerun()
 
         # Only show domain/role selection if resume is uploaded
@@ -11615,22 +12684,41 @@ Generate exactly {num_questions} questions now:
                 st.session_state.interview_role = selected_role
                 st.session_state.dynamic_interview_started = False
                 st.session_state.dynamic_interview_completed = False
+                st.session_state.interview_result_saved = False
+                st.session_state.interview_final_duration_seconds = None
+                st.session_state.interview_actual_start_time = None
             if 'question_timer_start' not in st.session_state:
                 st.session_state.question_timer_start = None
             if 'timer_seconds' not in st.session_state:
                 st.session_state.timer_seconds = 120
             if 'interview_difficulty' not in st.session_state:
                 st.session_state.interview_difficulty = "Medium"
+            if 'interview_mode' not in st.session_state:
+                st.session_state.interview_mode = "mixed"
             if 'original_num_questions' not in st.session_state:
                 st.session_state.original_num_questions = 6
             if 'resume_based_questions' not in st.session_state:
                 st.session_state.resume_based_questions = []
             if 'generic_questions' not in st.session_state:
                 st.session_state.generic_questions = []
+            if 'current_interview_id' not in st.session_state:
+                st.session_state.current_interview_id = None
+            # Track DB row ids for parent_question_id linkage: list of row ids per question answered
+            if 'question_db_ids' not in st.session_state:
+                st.session_state.question_db_ids = []
 
             # Start interview setup
             if not st.session_state.dynamic_interview_started:
                 st.markdown(f"### Practice interview for: {selected_role}")
+
+                # PART 5: Show weakness memory insight
+                _username_wm = st.session_state.get("username", "Guest")
+                _wm = get_user_weakness_history(_username_wm)
+                if _wm.get("weakest_skill"):
+                    _wm_avgs = _wm.get("averages", {})
+                    _wm_skill = _wm["weakest_skill"].title()
+                    _wm_score = _wm_avgs.get(_wm["weakest_skill"], 0)
+                    st.info(f"🧠 **Weakness Memory:** Based on your last 5 interviews, your weakest recurring skill is **{_wm_skill}** (avg: {_wm_score:.1f}/10). Questions will be biased toward improving this.")
 
                 col1, col2 = st.columns(2)
 
@@ -11657,18 +12745,51 @@ Generate exactly {num_questions} questions now:
                 with col4:
                     timer_seconds = st.slider("Time per question (seconds):", 60, 300, 120, step=30)
 
+                # ── DOMAIN AUTHORITY: Show mismatch warning if resume ≠ selected domain ──
+                if st.session_state.get("resume_context"):
+                    _rc = st.session_state.resume_context
+                    _resume_techs = " ".join(_rc.get("technologies", []) + _rc.get("skills", [])).lower()
+                    _domain_cfg = get_domain_config(selected_domain)
+                    _forbidden = _domain_cfg.get("forbidden_resume_keywords", [])
+                    _has_mismatch = any(kw.lower() in _resume_techs for kw in _forbidden)
+                    if _has_mismatch:
+                        st.info(
+                            f"⚠️ **Domain Override Active**: Your resume appears to have a different technical background. "
+                            f"Questions will be **strictly aligned to {selected_domain}** regardless of your resume content. "
+                            f"This simulates interviewing for a new domain."
+                        )
+
+                # ── DIFFICULTY CONTRACT: Show what each level means ──
+                _diff_contract = DIFFICULTY_CONTRACTS.get(interview_difficulty, {})
+                if _diff_contract:
+                    _diff_colors = {"Easy": "#69f0ae", "Medium": "#ffcc02", "Hard": "#f44336"}
+                    _dc = _diff_colors.get(interview_difficulty, "#aaa")
+                    st.markdown(
+                        f'<div style="background:rgba(0,195,255,0.07);border-left:4px solid {_dc};'
+                        f'padding:10px 14px;border-radius:0 8px 8px 0;margin:8px 0;">'
+                        f'<strong style="color:{_dc}">{interview_difficulty} Mode — {_diff_contract.get("label","")}</strong><br/>'
+                        f'<span style="color:#ccc;font-size:13px;">{_diff_contract.get("description","")}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+
                 if st.button("🚀 Start Mock Interview"):
                     with st.spinner("Generating personalized questions using AI..."):
                         # Generate resume-based questions
                         resume_based_qs = []
                         if st.session_state.resume_context:
                             with st.spinner("Creating resume-based questions..."):
-                                resume_based_qs = generate_resume_based_questions(
+                                # PART 5: Get user weakness for bias
+                                _username_for_bias = st.session_state.get("username", "Guest")
+                                _weakness_data = get_user_weakness_history(_username_for_bias)
+                                _bias = _weakness_data.get("bias", "balanced")
+                                resume_based_qs = generate_resume_based_questions_domain_aware(
                                     st.session_state.resume_context,
                                     selected_role,
                                     selected_domain,
                                     interview_difficulty,
-                                    num_questions=2
+                                    num_questions=2,
+                                    weakness_bias=_bias
                                 )
 
                         # Generate generic questions
@@ -11676,7 +12797,7 @@ Generate exactly {num_questions} questions now:
                         remaining_questions = num_questions - len(resume_based_qs)
                         if remaining_questions > 0:
                             with st.spinner("Creating generic interview questions..."):
-                                generic_qs = generate_interview_questions_with_llm(
+                                generic_qs = generate_domain_questions_with_llm(
                                     selected_domain,
                                     selected_role,
                                     interview_type,
@@ -11690,6 +12811,9 @@ Generate exactly {num_questions} questions now:
 
                         if all_questions:
                             # Reset ALL interview state variables properly
+                            import uuid
+                            st.session_state.current_interview_id = str(uuid.uuid4())
+                            st.session_state.question_db_ids = []
                             st.session_state.dynamic_interview_questions = all_questions
                             st.session_state.resume_based_questions = resume_based_qs
                             st.session_state.generic_questions = generic_qs
@@ -11700,12 +12824,18 @@ Generate exactly {num_questions} questions now:
                             st.session_state.dynamic_interview_feedbacks = []
                             st.session_state.dynamic_interview_completed = False
                             st.session_state.dynamic_interview_started = True
+                            st.session_state.interview_actual_start_time = time.time()
                             st.session_state.dynamic_answer_submitted = False
                             st.session_state.current_interview_question_text = all_questions[0]
                             st.session_state.question_timer_start = time.time()
                             st.session_state.timer_seconds = timer_seconds
                             st.session_state.interview_difficulty = interview_difficulty
+                            st.session_state.interview_mode = interview_type
                             st.session_state.interview_phase = "resume" if resume_based_qs else "generic"
+                            # PART 4: Escalation ladder tracking
+                            st.session_state.escalation_layer = 1
+                            st.session_state.follow_up_count = 0
+                            st.session_state.follow_up_strategy = "Depth Probe"
 
                             # Show resume scanning animation if resume questions exist
                             if resume_based_qs:
@@ -11801,6 +12931,15 @@ Generate exactly {num_questions} questions now:
                             st.session_state.dynamic_answer_submitted = False
                             st.session_state.current_interview_question_text = ""
                             st.session_state.question_timer_start = None
+                            st.session_state.interview_result_saved = False
+                            st.session_state.interview_final_duration_seconds = None
+                            st.session_state.interview_actual_start_time = None
+                            st.session_state.pending_followup_display = ""
+                            st.session_state.pending_followup_strategy = ""
+                            st.session_state.escalation_layer = 1
+                            st.session_state.follow_up_count = 0
+                            st.session_state.current_interview_id = None
+                            st.session_state.question_db_ids = []
                             # Force regeneration
                             st.rerun()
 
@@ -11815,37 +12954,107 @@ Generate exactly {num_questions} questions now:
                         help="Maximum 2000 characters"
                     )
 
+                    # ── SINGLE helper: evaluate + inject follow-up (called from both submit paths) ──
+                    def _process_submission(ans_text, q_text, q_idx, n_answered):
+                        """
+                        Evaluate the answer, store results, and inject the follow-up question
+                        into the question list.  The exact same follow-up text is stored in
+                        session_state.pending_followup_display so the preview shown to the user
+                        is always identical to the question that will appear next.
+
+                        ARCHITECTURE FIX: Every answered question is immediately saved to the
+                        interview_questions DB table so the PDF can use it as single source of truth.
+                        """
+                        diff = st.session_state.interview_difficulty
+                        eval_res = evaluate_interview_answer_for_scores(
+                            ans_text, q_text, diff,
+                            role=selected_role, domain=selected_domain
+                        )
+
+                        st.session_state.dynamic_interview_answers.append(ans_text)
+                        st.session_state.dynamic_interview_scores.append(eval_res)
+                        st.session_state.dynamic_interview_feedbacks.append(eval_res["feedback"])
+                        st.session_state.dynamic_answer_submitted = True
+                        st.session_state.pending_followup_display = ""   # reset
+                        st.session_state.pending_followup_strategy = ""
+
+                        # ── IMMEDIATELY save to DB (single source of truth for PDF) ──
+                        interview_id = st.session_state.get('current_interview_id')
+                        parent_db_id = None
+                        is_fu = False
+                        # Determine if this is a follow-up: index beyond original questions
+                        original_count = len(st.session_state.get('resume_based_questions', [])) + len(st.session_state.get('generic_questions', []))
+                        if q_idx >= original_count and len(st.session_state.question_db_ids) > 0:
+                            # It's a follow-up — find the parent: the main question that triggered it
+                            # The parent is the last main question before this follow-up
+                            # We store follow-ups linked to the most recent main question db id
+                            parent_db_id = st.session_state.question_db_ids[-1]
+                            is_fu = True
+
+                        db_row_id = -1
+                        if interview_id:
+                            score_to_save = dict(eval_res)
+                            db_row_id = save_interview_question(
+                                interview_id=interview_id,
+                                question_text=q_text,
+                                answer_text=ans_text,
+                                difficulty=diff,
+                                is_follow_up=is_fu,
+                                parent_question_id=parent_db_id,
+                                score_breakdown=score_to_save,
+                                question_order=q_idx,
+                            )
+                        # Track db row id - only for main questions (used as parent for follow-ups)
+                        if not is_fu and db_row_id != -1:
+                            st.session_state.question_db_ids.append(db_row_id)
+
+                        can_add_followup = n_answered < st.session_state.original_num_questions - 1
+
+                        if diff == "Hard" and can_add_followup:
+                            # ── Hard mode: use adaptive engine (single source of truth) ──
+                            weakness_data = analyze_answer_weaknesses(ans_text, eval_res)
+                            strategy = weakness_data["strategy"]
+                            layer = getattr(st.session_state, 'escalation_layer', 1)
+                            followup_q = generate_adaptive_followup(
+                                q_text, ans_text, strategy, layer, selected_role, selected_domain
+                            )
+                            followup_q = followup_q.strip() if followup_q else ""
+                            if followup_q:
+                                st.session_state.dynamic_interview_questions.insert(
+                                    q_idx + 1, followup_q
+                                )
+                                st.session_state.follow_up_count = getattr(st.session_state, 'follow_up_count', 0) + 1
+                                st.session_state.escalation_layer = min(5, layer + 1)
+                                st.session_state.follow_up_strategy = strategy
+                                # ★ Store SAME text for preview ★
+                                st.session_state.pending_followup_display = followup_q
+                                st.session_state.pending_followup_strategy = strategy
+
+                        elif diff in ("Easy", "Medium") and can_add_followup:
+                            # ── Easy/Medium: only inject if LLM returned a valid followup ──
+                            # The evaluation prompt does NOT ask for a follow-up for Easy/Medium,
+                            # so eval_res["followup"] is always "".  We deliberately do NOT inject
+                            # anything — this prevents mismatched questions.
+                            pass   # No follow-up for Easy/Medium
+
+                        return eval_res
+
+                    # ── initialise session key on first load ──
+                    if 'pending_followup_display' not in st.session_state:
+                        st.session_state.pending_followup_display = ""
+                    if 'pending_followup_strategy' not in st.session_state:
+                        st.session_state.pending_followup_strategy = ""
+
                     # Auto-submit logic when timer expires
                     if remaining_time <= 0 and not st.session_state.dynamic_answer_submitted:
                         if not answer.strip():
                             answer = "⚠️ No Answer"
-
-                        # Evaluate answer using enhanced evaluation with role/domain context
                         with st.spinner("Evaluating your answer..."):
-                            eval_result = evaluate_interview_answer_for_scores(
-                                answer,
-                                question,
-                                st.session_state.interview_difficulty,
-                                role=selected_role,
-                                domain=selected_domain
+                            _process_submission(
+                                answer, question,
+                                st.session_state.current_dynamic_interview_question,
+                                questions_answered
                             )
-
-                        # FIXED: Store answer, scores, and feedback - ensuring all are tracked properly
-                        st.session_state.dynamic_interview_answers.append(answer)
-                        st.session_state.dynamic_interview_scores.append(eval_result)
-                        st.session_state.dynamic_interview_feedbacks.append(eval_result["feedback"])
-                        st.session_state.dynamic_answer_submitted = True
-
-                        # FIXED: Handle follow-up for Hard difficulty without breaking indexing
-                        # Follow-ups are added but don't count toward original_num_questions
-                        if st.session_state.interview_difficulty == "Hard" and eval_result.get("followup") and eval_result["followup"].strip():
-                            # Only add follow-up if we haven't reached the end
-                            if questions_answered < st.session_state.original_num_questions - 1:
-                                st.session_state.dynamic_interview_questions.insert(
-                                    st.session_state.current_dynamic_interview_question + 1,
-                                    eval_result["followup"]
-                                )
-
                         st.warning("⏰ Time's up! Answer auto-submitted.")
                         st.rerun()
 
@@ -11854,31 +13063,12 @@ Generate exactly {num_questions} questions now:
                         if st.button("Submit Answer & Get Feedback"):
                             if answer.strip():
                                 with st.spinner("Evaluating your answer..."):
-                                    # Evaluate answer using enhanced evaluation with role/domain context
-                                    eval_result = evaluate_interview_answer_for_scores(
-                                        answer,
-                                        question,
-                                        st.session_state.interview_difficulty,
-                                        role=selected_role,
-                                        domain=selected_domain
+                                    _process_submission(
+                                        answer, question,
+                                        st.session_state.current_dynamic_interview_question,
+                                        questions_answered
                                     )
-
-                                    # FIXED: Store answer, scores, and feedback ensuring proper tracking
-                                    st.session_state.dynamic_interview_answers.append(answer)
-                                    st.session_state.dynamic_interview_scores.append(eval_result)
-                                    st.session_state.dynamic_interview_feedbacks.append(eval_result["feedback"])
-                                    st.session_state.dynamic_answer_submitted = True
-
-                                    # FIXED: Handle follow-up for Hard difficulty without breaking indexing
-                                    if st.session_state.interview_difficulty == "Hard" and eval_result.get("followup") and eval_result["followup"].strip():
-                                        # Only add follow-up if we haven't reached the end
-                                        if questions_answered < st.session_state.original_num_questions - 1:
-                                            st.session_state.dynamic_interview_questions.insert(
-                                                st.session_state.current_dynamic_interview_question + 1,
-                                                eval_result["followup"]
-                                            )
-
-                                    st.rerun()
+                                st.rerun()
                             else:
                                 st.warning("Please provide an answer before proceeding.")
 
@@ -11903,15 +13093,47 @@ Generate exactly {num_questions} questions now:
                         </div>
                         """, unsafe_allow_html=True)
 
-                        # Show follow-up question for Hard difficulty
-                        if st.session_state.interview_difficulty == "Hard" and current_score_dict.get("followup"):
-                            st.info(f"🔎 Follow-Up Question: {current_score_dict['followup']}")
+                        # ★ Show follow-up preview using SAME text that was injected ★
+                        _preview_fq = st.session_state.get('pending_followup_display', '')
+                        _preview_strategy = st.session_state.get('pending_followup_strategy', '')
+                        if st.session_state.interview_difficulty == "Hard" and _preview_fq:
+                            _esc_layer = st.session_state.get("escalation_layer", 1)
+                            _layer_info = ESCALATION_LAYER_MAP.get(_esc_layer, {})
+                            _layer_name = _layer_info.get("name", "")
+                            _pressure = _layer_info.get("cognitive_pressure", "")
+                            _pressure_colors = {
+                                "LOW": "#69f0ae", "MEDIUM": "#ffcc02",
+                                "MEDIUM-HIGH": "#ff9800", "HIGH": "#ff5722", "MAXIMUM": "#f44336"
+                            }
+                            _pc = _pressure_colors.get(_pressure, "#ffa500")
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(135deg, rgba(255,165,0,0.12), rgba(255,165,0,0.06));
+                                        border: 1px solid rgba(255,165,0,0.4); border-radius: 10px;
+                                        padding: 14px 18px; margin: 12px 0;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                    <span style="color: #ffa500; font-weight: 600;">
+                                        🔎 Follow-Up — {_preview_strategy}
+                                    </span>
+                                    <span style="color:{_pc};font-size:12px;font-weight:600;
+                                                 background:rgba(0,0,0,0.3);padding:2px 8px;border-radius:12px;">
+                                        Layer {_esc_layer}/5: {_layer_name} | Pressure: {_pressure}
+                                    </span>
+                                </div>
+                                <p style="color: #ffffff; margin: 0; font-size: 15px;">{_preview_fq}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
 
                         # Continue/Complete button
                         # CRITICAL FIX: Check if we've answered all original questions
                         if questions_answered >= st.session_state.original_num_questions:
                             # All questions answered, mark as complete
                             if st.button("Complete Interview 🏁"):
+                                # Capture exact duration at completion moment
+                                if st.session_state.get('interview_actual_start_time'):
+                                    st.session_state.interview_final_duration_seconds = int(time.time() - st.session_state.interview_actual_start_time)
+                                else:
+                                    st.session_state.interview_final_duration_seconds = None
+                                st.session_state.interview_result_saved = False
                                 st.session_state.dynamic_interview_completed = True
                                 st.rerun()
                         else:
@@ -11919,6 +13141,8 @@ Generate exactly {num_questions} questions now:
                             if st.button("Continue to Next Question ➡️"):
                                 st.session_state.current_dynamic_interview_question += 1
                                 st.session_state.dynamic_answer_submitted = False
+                                st.session_state.pending_followup_display = ""
+                                st.session_state.pending_followup_strategy = ""
                                 if st.session_state.current_dynamic_interview_question < len(st.session_state.dynamic_interview_questions):
                                     st.session_state.current_interview_question_text = st.session_state.dynamic_interview_questions[st.session_state.current_dynamic_interview_question]
                                 else:
@@ -11962,6 +13186,12 @@ Generate exactly {num_questions} questions now:
                         st.rerun()
                 else:
                     # CRITICAL FIX: All questions answered, move to completion automatically
+                    # Capture exact duration at auto-completion moment
+                    if st.session_state.get('interview_actual_start_time'):
+                        st.session_state.interview_final_duration_seconds = int(time.time() - st.session_state.interview_actual_start_time)
+                    else:
+                        st.session_state.interview_final_duration_seconds = None
+                    st.session_state.interview_result_saved = False
                     st.session_state.dynamic_interview_completed = True
                     st.success(f"✅ Completed all {st.session_state.original_num_questions} questions!")
                     time.sleep(1)
@@ -11978,6 +13208,12 @@ Generate exactly {num_questions} questions now:
                 avg_communication = sum(communication_scores) / len(communication_scores)
                 avg_relevance = sum(relevance_scores) / len(relevance_scores)
                 overall_avg = (avg_knowledge + avg_communication + avg_relevance) / 3
+
+                # PART 3: Compute weighted score using difficulty multiplier
+                _raw_avg = overall_avg
+                _weighted_avg = compute_weighted_score(_raw_avg, st.session_state.interview_difficulty)
+                _follow_up_count = getattr(st.session_state, 'follow_up_count', 0)
+                _depth_score = (avg_knowledge + avg_relevance) / 2
 
                 # Determine badge based on overall average
                 if overall_avg >= 8.5:
@@ -12002,6 +13238,8 @@ Generate exactly {num_questions} questions now:
                     </div>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Role: {selected_role} in {selected_domain}</p>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Difficulty: {st.session_state.interview_difficulty}</p>
+                    <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.2f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
+                    <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; margin: 4px 0;">Follow-up Probes: {_follow_up_count} | Depth Score: {_depth_score:.1f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -12101,12 +13339,25 @@ Generate exactly {num_questions} questions now:
                         formatted_feedback = format_feedback_text(feedback_text)
                         st.markdown(formatted_feedback, unsafe_allow_html=True)
 
-                # Save to database
+                # Save to database — guarded by flag so it only runs ONCE
                 username = st.session_state.get("username", "Guest")
                 feedback_summary = f"Strengths: {metrics_sorted[0][0]}, {metrics_sorted[1][0]}. Weaknesses: {metrics_sorted[-1][0]}, {metrics_sorted[-2][0]}."
 
-                if save_interview_result(username, selected_role, selected_domain, overall_avg, st.session_state.original_num_questions, feedback_summary):
-                    log_user_action(username, "completed_interview")
+                if not st.session_state.get('interview_result_saved', False):
+                    # Capture duration at the exact moment of first save, not on reruns
+                    _interview_duration = st.session_state.get('interview_final_duration_seconds', None)
+                    _interview_mode = st.session_state.get('interview_mode', None)
+                    # PART 6: Compute behavior class
+                    _dur_mins = (_interview_duration / 60.0) if _interview_duration else None
+                    _b_class = classify_behavior(_dur_mins, 0.0, None)
+                    if save_interview_result(username, selected_role, selected_domain, overall_avg, st.session_state.original_num_questions, feedback_summary,
+                                             knowledge_avg=avg_knowledge, communication_avg=avg_communication, relevance_avg=avg_relevance,
+                                             difficulty=st.session_state.interview_difficulty, duration_seconds=_interview_duration,
+                                             interview_mode=_interview_mode,
+                                             weighted_score=_weighted_avg, raw_avg_score=_raw_avg,
+                                             follow_up_count=_follow_up_count, depth_score=_depth_score, behavior_class=_b_class):
+                        st.session_state.interview_result_saved = True
+                        log_user_action(username, "completed_interview")
 
                 # Generate PDF report
                 st.markdown("---")
@@ -12133,7 +13384,8 @@ Generate exactly {num_questions} questions now:
                     st.session_state.dynamic_interview_feedbacks[:num_complete],
                     overall_avg,
                     badge,
-                    difficulty=st.session_state.interview_difficulty
+                    difficulty=st.session_state.interview_difficulty,
+                    interview_id=st.session_state.get('current_interview_id')
                 )
 
                 if pdf_bytes:
@@ -12176,11 +13428,1039 @@ Generate exactly {num_questions} questions now:
                     st.session_state.resume_based_questions = []
                     st.session_state.generic_questions = []
                     st.session_state.interview_phase = "resume"
+                    st.session_state.interview_result_saved = False
+                    st.session_state.interview_final_duration_seconds = None
+                    st.session_state.interview_actual_start_time = None
+                    st.session_state.interview_mode = "mixed"
+                    st.session_state.pending_followup_display = ""
+                    st.session_state.pending_followup_strategy = ""
+                    st.session_state.escalation_layer = 1
+                    st.session_state.follow_up_count = 0
+                    st.session_state.current_interview_id = None
+                    st.session_state.question_db_ids = []
                     st.rerun()
         else:
             st.info("Please select both a career domain and target role to start the interview practice.")
+    # Section 5: My Progress 📊
+    elif page == "My Progress 📊":
+        import sqlite3
+        import pandas as pd
+        import numpy as np
+        import matplotlib.pyplot as plt
+        import matplotlib
+        matplotlib.use('Agg')
+        import plotly.graph_objects as go
+        import plotly.express as px
+        from plotly.subplots import make_subplots
 
+        # ── Dashboard CSS ──────────────────────────────────────────────────────
+        st.markdown("""
+        <style>
+        /* Metric cards */
+        .metric-card {
+            background: linear-gradient(135deg, rgba(0,195,255,0.10) 0%, rgba(0,195,255,0.04) 100%);
+            border: 1px solid rgba(0,195,255,0.25);
+            border-radius: 14px;
+            padding: 18px 20px;
+            margin: 6px 0;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(0,195,255,0.18);
+        }
+        .metric-card .metric-label {
+            color: rgba(255,255,255,0.55);
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 0 0 6px 0;
+        }
+        .metric-card .metric-value {
+            color: #00c3ff;
+            font-size: 28px;
+            font-weight: 700;
+            margin: 0;
+            line-height: 1.1;
+        }
+        .metric-card .metric-sub {
+            color: rgba(255,255,255,0.45);
+            font-size: 11px;
+            margin: 4px 0 0 0;
+        }
+        /* Score badges */
+        .badge-excellent { background:#1a3a2a; color:#00e676; border:1px solid #00e676; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-good      { background:#1a3020; color:#69f0ae; border:1px solid #69f0ae; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-average   { background:#2a2a10; color:#ffcc02; border:1px solid #ffcc02; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-weak      { background:#2a1a10; color:#ff9800; border:1px solid #ff9800; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-poor      { background:#2a1010; color:#f44336; border:1px solid #f44336; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        /* Highlighted best row */
+        .best-row { background: rgba(0,230,118,0.12) !important; }
+        /* Section divider */
+        .section-header {
+            font-size: 20px; font-weight: 700; color: #00c3ff;
+            border-left: 4px solid #00c3ff; padding-left: 12px;
+            margin: 24px 0 4px 0;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
+        st.subheader("📊 My Progress Dashboard")
+        st.markdown("Track how you're improving over time, spot your strengths, and find exactly what to work on next.")
+
+        username = st.session_state.get("username", "Guest")
+
+        # Ensure DB and columns exist
+        create_interview_database()
+
+        # Load data for current user only
+        try:
+            conn = sqlite3.connect('resume_data.db')
+            df = pd.read_sql_query(
+                "SELECT * FROM interview_results WHERE username = ? ORDER BY id ASC",
+                conn, params=(username,)
+            )
+            conn.close()
+        except Exception as e:
+            st.error(f"Error loading data: {e}")
+            df = pd.DataFrame()
+
+        if df.empty:
+            st.info("👋 You haven't completed any interviews yet. Head over to the **AI Interview Coach** tab, do your first practice session, and come back here to see your results!")
+        else:
+            # Ensure numeric types
+            for col in ['avg_score', 'knowledge_avg', 'communication_avg', 'relevance_avg', 'duration_seconds', 'total_questions', 'weighted_score', 'raw_avg_score', 'depth_score', 'follow_up_count']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+            if 'difficulty' not in df.columns:
+                df['difficulty'] = 'Unknown'
+            df['difficulty'] = df['difficulty'].fillna('Unknown')
+
+            # Backfill weighted_score if missing
+            if 'weighted_score' not in df.columns or df['weighted_score'].isna().all():
+                df['weighted_score'] = df['avg_score']
+            else:
+                df['weighted_score'] = df['weighted_score'].fillna(df['avg_score'])
+
+            # =====================================================
+            # SECTION A — EXECUTIVE SUMMARY METRICS
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🏆 Your Progress at a Glance")
+            st.caption("Here's a quick overview of everything you've accomplished so far.")
+
+            total_interviews = len(df)
+            highest_score = df['avg_score'].max()
+            lowest_score = df['avg_score'].min()
+            overall_avg = df['avg_score'].mean()
+            total_questions = int(df['total_questions'].fillna(0).sum()) if 'total_questions' in df.columns else 0
+
+            # Improvement %
+            if total_interviews >= 2:
+                try:
+                    first_score = float(df['avg_score'].dropna().iloc[0])
+                    latest_score = float(df['avg_score'].dropna().iloc[-1])
+                    improvement_pct = ((latest_score - first_score) / first_score) * 100 if first_score > 0 else 0.0
+                except Exception:
+                    improvement_pct = 0.0
+            else:
+                improvement_pct = 0.0
+
+            # Consistency score based on std deviation
+            score_std = df['avg_score'].std() if total_interviews > 1 else 0.0
+            if score_std < 0.5:
+                consistency_label = "🟢 Very Consistent"
+            elif score_std < 1.5:
+                consistency_label = "🟡 Fairly Consistent"
+            else:
+                consistency_label = "🔴 Varies a Lot"
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.markdown(f"""<div class="metric-card">
+                    <p class="metric-label">Interviews Completed</p>
+                    <p class="metric-value">{total_interviews}</p>
+                    <p class="metric-sub">Total sessions</p>
+                </div>""", unsafe_allow_html=True)
+            with col2:
+                best_val = f"{highest_score:.1f}/10" if not pd.isna(highest_score) else "N/A"
+                st.markdown(f"""<div class="metric-card">
+                    <p class="metric-label">Best Score Ever</p>
+                    <p class="metric-value">{best_val}</p>
+                    <p class="metric-sub">Personal best</p>
+                </div>""", unsafe_allow_html=True)
+            with col3:
+                low_val = f"{lowest_score:.1f}/10" if not pd.isna(lowest_score) else "N/A"
+                st.markdown(f"""<div class="metric-card">
+                    <p class="metric-label">Lowest Score</p>
+                    <p class="metric-value" style="color:#ff9800;">{low_val}</p>
+                    <p class="metric-sub">Room to grow</p>
+                </div>""", unsafe_allow_html=True)
+            with col4:
+                avg_val = f"{overall_avg:.2f}/10" if not pd.isna(overall_avg) else "N/A"
+                st.markdown(f"""<div class="metric-card">
+                    <p class="metric-label">Average Score</p>
+                    <p class="metric-value">{avg_val}</p>
+                    <p class="metric-sub">All-time average</p>
+                </div>""", unsafe_allow_html=True)
+
+            st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
+
+            col5, col6, col7 = st.columns(3)
+            with col5:
+                st.markdown(f"""<div class="metric-card">
+                    <p class="metric-label">Total Questions Answered</p>
+                    <p class="metric-value">{total_questions}</p>
+                    <p class="metric-sub">Real practice time</p>
+                </div>""", unsafe_allow_html=True)
+            with col6:
+                sign = "+" if improvement_pct >= 0 else ""
+                imp_color = "#00e676" if improvement_pct >= 0 else "#f44336"
+                st.markdown(f"""<div class="metric-card">
+                    <p class="metric-label">How Much You've Improved</p>
+                    <p class="metric-value" style="color:{imp_color};">{sign}{improvement_pct:.1f}%</p>
+                    <p class="metric-sub">vs. your first interview</p>
+                </div>""", unsafe_allow_html=True)
+            with col7:
+                cons_color = "#00e676" if "Very" in consistency_label else ("#ffcc02" if "Fairly" in consistency_label else "#f44336")
+                st.markdown(f"""<div class="metric-card">
+                    <p class="metric-label">Score Consistency</p>
+                    <p class="metric-value" style="color:{cons_color};font-size:18px;">{consistency_label}</p>
+                    <p class="metric-sub">Std dev: {score_std:.2f}</p>
+                </div>""", unsafe_allow_html=True)
+
+            # =====================================================
+            # SECTION B — SCORE TREND INTELLIGENCE
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 📈 Are You Getting Better Over Time?")
+            st.caption("This chart shows how your scores have changed across every interview you've done. The smoother line helps filter out one-off good or bad days.")
+
+            trend_df = df[['avg_score', 'weighted_score']].copy().reset_index(drop=True)
+            trend_df.index = trend_df.index + 1
+            trend_df.index.name = "Interview #"
+
+            # 3-point moving average
+            trend_df['Smoothed Performance Trend'] = trend_df['avg_score'].rolling(window=3, min_periods=1).mean()
+            trend_df = trend_df.rename(columns={
+                'avg_score': 'Your Score',
+                'weighted_score': 'Adjusted Score (Hard Interviews Count More)'
+            })
+
+            # ── Interactive Plotly trend chart ───────────────────────────────
+            _x_vals = list(trend_df.index)
+            _raw_scores = trend_df['Your Score'].tolist()
+            _adj_scores = trend_df['Adjusted Score (Hard Interviews Count More)'].tolist()
+            _smooth_scores = trend_df['Smoothed Performance Trend'].tolist()
+
+            # Find best and worst interview indices
+            _best_idx = int(np.argmax(_raw_scores))
+            _worst_idx = int(np.argmin(_raw_scores))
+
+            # Build difficulty labels for hover if available
+            _diff_labels = df['difficulty'].tolist() if 'difficulty' in df.columns else [''] * len(_x_vals)
+            _role_labels = df['role'].tolist() if 'role' in df.columns else [''] * len(_x_vals)
+            _date_labels = df['completed_on'].tolist() if 'completed_on' in df.columns else [''] * len(_x_vals)
+
+            _hover_text = [
+                f"<b>Interview #{x}</b><br>Score: {s:.1f}/10<br>Role: {r}<br>Difficulty: {d}<br>Date: {dt}"
+                for x, s, r, d, dt in zip(_x_vals, _raw_scores, _role_labels, _diff_labels, _date_labels)
+            ]
+
+            fig_trend = go.Figure()
+
+            # Adjusted score area fill
+            fig_trend.add_trace(go.Scatter(
+                x=_x_vals, y=_adj_scores,
+                name='Adjusted Score',
+                mode='lines',
+                line=dict(color='rgba(102,187,106,0.7)', width=1.5, dash='dot'),
+                fill='tozeroy',
+                fillcolor='rgba(102,187,106,0.05)',
+                hovertemplate='Interview #%{x}<br>Adjusted: %{y:.1f}/10<extra></extra>'
+            ))
+
+            # Raw score line
+            fig_trend.add_trace(go.Scatter(
+                x=_x_vals, y=_raw_scores,
+                name='Your Score',
+                mode='lines+markers',
+                line=dict(color='#00c3ff', width=2.5),
+                marker=dict(size=7, color='#00c3ff', line=dict(width=1.5, color='white')),
+                hovertext=_hover_text,
+                hoverinfo='text',
+            ))
+
+            # Smoothed trend
+            fig_trend.add_trace(go.Scatter(
+                x=_x_vals, y=_smooth_scores,
+                name='3-Interview Trend',
+                mode='lines',
+                line=dict(color='#ff9800', width=2, dash='dash'),
+                hovertemplate='Interview #%{x}<br>Trend: %{y:.1f}/10<extra></extra>'
+            ))
+
+            # Best interview marker
+            fig_trend.add_trace(go.Scatter(
+                x=[_x_vals[_best_idx]], y=[_raw_scores[_best_idx]],
+                name='🏆 Best',
+                mode='markers+text',
+                marker=dict(size=14, color='#00e676', symbol='star', line=dict(width=1.5, color='white')),
+                text=[f" Best: {_raw_scores[_best_idx]:.1f}"],
+                textposition='top right',
+                textfont=dict(color='#00e676', size=11),
+                hovertemplate=f'<b>🏆 Best Interview!</b><br>Score: {_raw_scores[_best_idx]:.1f}/10<extra></extra>'
+            ))
+
+            # Worst interview marker
+            fig_trend.add_trace(go.Scatter(
+                x=[_x_vals[_worst_idx]], y=[_raw_scores[_worst_idx]],
+                name='⚠️ Lowest',
+                mode='markers+text',
+                marker=dict(size=14, color='#f44336', symbol='x', line=dict(width=2, color='white')),
+                text=[f" Low: {_raw_scores[_worst_idx]:.1f}"],
+                textposition='bottom right',
+                textfont=dict(color='#f44336', size=11),
+                hovertemplate=f'<b>⚠️ Lowest Interview</b><br>Score: {_raw_scores[_worst_idx]:.1f}/10<extra></extra>'
+            ))
+
+            # Average reference line
+            fig_trend.add_hline(
+                y=float(np.mean(_raw_scores)),
+                line_dash='dot', line_color='rgba(255,255,255,0.25)',
+                annotation_text=f'  Avg: {float(np.mean(_raw_scores)):.1f}',
+                annotation_font_color='rgba(255,255,255,0.5)',
+                annotation_position='right'
+            )
+
+            fig_trend.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(15,20,25,0.8)',
+                font=dict(color='white', family='Inter, sans-serif'),
+                legend=dict(
+                    bgcolor='rgba(15,20,35,0.85)',
+                    bordercolor='rgba(0,195,255,0.3)',
+                    borderwidth=1,
+                    orientation='h',
+                    yanchor='bottom', y=1.02, xanchor='right', x=1
+                ),
+                xaxis=dict(
+                    title='Interview #',
+                    gridcolor='rgba(255,255,255,0.07)',
+                    tickmode='linear', dtick=1,
+                    showline=True, linecolor='rgba(0,195,255,0.3)'
+                ),
+                yaxis=dict(
+                    title='Score (/10)',
+                    range=[0, 10.5],
+                    gridcolor='rgba(255,255,255,0.07)',
+                    showline=True, linecolor='rgba(0,195,255,0.3)'
+                ),
+                hovermode='x unified',
+                margin=dict(l=10, r=10, t=30, b=10),
+                height=380,
+                transition_duration=500
+            )
+            st.plotly_chart(fig_trend, use_container_width=True)
+            st.caption("💡 **Adjusted Score** gives a little extra credit for completing harder interviews. **Smoothed Trend** is the average of your last 3 interviews — it shows your real direction without single-interview spikes.")
+
+            # Detect trend direction using linear regression slope
+            if total_interviews >= 3:
+                _scores_list = df['avg_score'].dropna().tolist()
+                _slope = compute_trend_slope(_scores_list)
+                if _slope > 0.15:
+                    trend_badge = "🟢 **You're Improving!** Your scores are going up across your recent interviews. Keep it up!"
+                elif _slope < -0.15:
+                    trend_badge = "🔴 **Scores Are Slipping.** Your recent interviews scored lower than earlier ones. Try reviewing feedback from your past sessions."
+                else:
+                    trend_badge = "🟡 **Holding Steady.** Your scores are staying about the same. Try harder difficulty levels to push your growth."
+                # Stagnation detection
+                if abs(_slope) < 0.05 and total_interviews >= 5:
+                    trend_badge += " — ⚠️ **You may be in a plateau.** Switch to Hard mode or try a new topic to break through."
+            else:
+                _slope = 0.0
+                trend_badge = "ℹ️ **Complete at least 3 interviews** to see your improvement trend here."
+            st.markdown(trend_badge)
+
+            # =====================================================
+            # SECTION C — DOMAIN & ROLE ANALYTICS
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🌐 Where Are You Strongest?")
+            st.caption("See which career areas and job roles you score highest in — and which ones need more practice.")
+
+            if 'domain' in df.columns:
+                col_l, col_r = st.columns(2)
+
+                domain_counts = df.groupby('domain').size().rename('Interviews')
+                domain_avg = df.groupby('domain')['avg_score'].mean().rename('Avg Score')
+
+                with col_l:
+                    st.markdown("**Interviews Done per Career Area**")
+                    _fig_dc = px.bar(
+                        x=domain_counts.index.tolist(), y=domain_counts.values.tolist(),
+                        labels={'x': 'Career Area', 'y': 'Interviews'},
+                        color=domain_counts.values.tolist(),
+                        color_continuous_scale=[[0,'rgba(0,195,255,0.4)'],[1,'#00c3ff']],
+                        text=domain_counts.values.tolist()
+                    )
+                    _fig_dc.update_traces(
+                        texttemplate='%{text}', textposition='outside',
+                        hovertemplate='<b>%{x}</b><br>Interviews: %{y}<extra></extra>'
+                    )
+                    _fig_dc.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
+                        font=dict(color='white'), coloraxis_showscale=False,
+                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                        yaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                        margin=dict(l=5,r=5,t=10,b=5), height=280
+                    )
+                    st.plotly_chart(_fig_dc, use_container_width=True)
+
+                with col_r:
+                    st.markdown("**Average Score per Career Area**")
+                    _fig_da = px.bar(
+                        x=domain_avg.index.tolist(), y=domain_avg.values.tolist(),
+                        labels={'x': 'Career Area', 'y': 'Avg Score'},
+                        color=domain_avg.values.tolist(),
+                        color_continuous_scale=[[0,'#f44336'],[0.5,'#ffcc02'],[1,'#00e676']],
+                        text=[f"{v:.1f}" for v in domain_avg.values.tolist()]
+                    )
+                    _fig_da.update_traces(
+                        texttemplate='%{text}', textposition='outside',
+                        hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
+                    )
+                    _fig_da.update_layout(
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
+                        font=dict(color='white'), coloraxis_showscale=False,
+                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                        yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
+                        margin=dict(l=5,r=5,t=10,b=5), height=280
+                    )
+                    st.plotly_chart(_fig_da, use_container_width=True)
+
+                # Strongest / Weakest Domain
+                if len(domain_avg) >= 1:
+                    strongest_domain = domain_avg.idxmax()
+                    weakest_domain = domain_avg.idxmin()
+                    st.markdown(f"🏆 **You shine in:** {strongest_domain} — avg score {domain_avg[strongest_domain]:.1f}/10")
+                    st.markdown(f"📌 **Room to grow in:** {weakest_domain} — avg score {domain_avg[weakest_domain]:.1f}/10. Spend more time practising here.")
+
+            # Role breakdown — bar chart + pie chart + styled table
+            if 'role' in df.columns:
+                role_perf = df.groupby('role').agg(
+                    Attempts=('avg_score', 'count'),
+                    Avg_Score=('avg_score', 'mean'),
+                    Best_Score=('avg_score', 'max'),
+                    Latest_Score=('avg_score', 'last')
+                ).reset_index()
+                role_perf.columns = ['Role', 'Times Practised', 'Avg Score', 'Best Score', 'Last Score']
+                role_perf = role_perf.round(2)
+
+                st.markdown("**Role Performance Analytics**")
+                col_rb1, col_rb2 = st.columns(2)
+
+                with col_rb1:
+                    # Interactive bar chart — Avg Score by Role
+                    _colors_bar = ['#00e676' if v == role_perf['Avg Score'].max() else '#00c3ff' for v in role_perf['Avg Score']]
+                    _fig_rb = go.Figure(go.Bar(
+                        x=role_perf['Role'], y=role_perf['Avg Score'],
+                        marker_color=_colors_bar,
+                        text=[f"{v:.1f}" for v in role_perf['Avg Score']],
+                        textposition='outside',
+                        hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
+                    ))
+                    _fig_rb.update_layout(
+                        title=dict(text='Avg Score by Role', font=dict(color='#00c3ff', size=14)),
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
+                        font=dict(color='white'),
+                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                        yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
+                        margin=dict(l=5,r=5,t=40,b=5), height=280
+                    )
+                    st.plotly_chart(_fig_rb, use_container_width=True)
+
+                with col_rb2:
+                    # Interactive pie chart — Interview distribution by role
+                    _fig_pie = go.Figure(go.Pie(
+                        labels=role_perf['Role'],
+                        values=role_perf['Times Practised'],
+                        hole=0.42,
+                        marker=dict(
+                            colors=px.colors.sequential.Blues_r[:len(role_perf)],
+                            line=dict(color='rgba(0,0,0,0.5)', width=1.5)
+                        ),
+                        textinfo='label+percent',
+                        textfont=dict(color='white', size=11),
+                        hovertemplate='<b>%{label}</b><br>Interviews: %{value}<br>Share: %{percent}<extra></extra>'
+                    ))
+                    _fig_pie.update_layout(
+                        title=dict(text='Interview Distribution by Role', font=dict(color='#00c3ff', size=14)),
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='white'),
+                        legend=dict(font=dict(color='white', size=10), bgcolor='rgba(0,0,0,0)'),
+                        margin=dict(l=5,r=5,t=40,b=5), height=280,
+                        annotations=[dict(text='Roles', x=0.5, y=0.5, font_size=13, showarrow=False, font_color='#aaa')]
+                    )
+                    st.plotly_chart(_fig_pie, use_container_width=True)
+
+                # Styled role table
+                st.markdown("**Your Scores by Job Role**")
+                _rp_styled = role_perf.copy()
+                def _score_badge(v):
+                    if v >= 8.5: return f'<span class="badge-excellent">{v:.2f}</span>'
+                    elif v >= 7.0: return f'<span class="badge-good">{v:.2f}</span>'
+                    elif v >= 5.5: return f'<span class="badge-average">{v:.2f}</span>'
+                    elif v >= 4.0: return f'<span class="badge-weak">{v:.2f}</span>'
+                    else: return f'<span class="badge-poor">{v:.2f}</span>'
+                _best_role_idx = role_perf['Avg Score'].idxmax()
+                _table_rows = ""
+                for i, row in role_perf.iterrows():
+                    _row_style = 'background:rgba(0,230,118,0.08);' if i == _best_role_idx else ''
+                    _crown = ' 🏆' if i == _best_role_idx else ''
+                    _table_rows += f"""<tr style="{_row_style}">
+                        <td style="padding:8px 12px;color:#fff;">{row['Role']}{_crown}</td>
+                        <td style="padding:8px 12px;color:#aaa;text-align:center;">{int(row['Times Practised'])}</td>
+                        <td style="padding:8px 12px;text-align:center;">{_score_badge(row['Avg Score'])}</td>
+                        <td style="padding:8px 12px;text-align:center;">{_score_badge(row['Best Score'])}</td>
+                        <td style="padding:8px 12px;text-align:center;">{_score_badge(row['Last Score'])}</td>
+                    </tr>"""
+                st.markdown(f"""
+                <div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(0,195,255,0.2);">
+                <table style="width:100%;border-collapse:collapse;background:rgba(15,20,25,0.8);">
+                  <thead>
+                    <tr style="border-bottom:1px solid rgba(0,195,255,0.3);">
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Role</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Times</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Avg Score</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Best</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Last</th>
+                    </tr>
+                  </thead>
+                  <tbody>{_table_rows}</tbody>
+                </table></div>
+                """, unsafe_allow_html=True)
+
+            # =====================================================
+            # SECTION D — DIFFICULTY PERFORMANCE
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🎯 How You Handle Different Difficulty Levels")
+            st.caption("Easy interviews build confidence. Medium tests your thinking. Hard interviews push your limits — and show real growth.")
+
+            if 'difficulty' in df.columns:
+                # Only show rows where difficulty is known
+                df_diff = df[df['difficulty'].notna() & (df['difficulty'] != 'Unknown') & (df['difficulty'] != '')]
+                if df_diff.empty:
+                    st.info("⚠️ No difficulty data yet. Complete a few more interviews and this section will fill up!")
+                else:
+                    diff_counts = df_diff.groupby('difficulty').size().rename('Attempts')
+                    diff_avg = df_diff.groupby('difficulty')['avg_score'].mean().rename('Avg Score')
+
+                    col_dl, col_dr = st.columns(2)
+                    # Difficulty color map
+                    _diff_colors = {'Easy': '#69f0ae', 'Medium': '#ffcc02', 'Hard': '#f44336'}
+                    with col_dl:
+                        st.markdown("**How Many Times You Tried Each Level**")
+                        _fig_dfc = go.Figure(go.Bar(
+                            x=diff_counts.index.tolist(), y=diff_counts.values.tolist(),
+                            marker_color=[_diff_colors.get(d, '#00c3ff') for d in diff_counts.index],
+                            text=diff_counts.values.tolist(), textposition='outside',
+                            hovertemplate='<b>%{x}</b><br>Attempts: %{y}<extra></extra>'
+                        ))
+                        _fig_dfc.update_layout(
+                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
+                            font=dict(color='white'),
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            yaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            margin=dict(l=5,r=5,t=10,b=5), height=250
+                        )
+                        st.plotly_chart(_fig_dfc, use_container_width=True)
+                    with col_dr:
+                        st.markdown("**Your Average Score at Each Level**")
+                        _fig_dfa = go.Figure(go.Bar(
+                            x=diff_avg.index.tolist(), y=diff_avg.values.tolist(),
+                            marker_color=[_diff_colors.get(d, '#00c3ff') for d in diff_avg.index],
+                            text=[f"{v:.1f}" for v in diff_avg.values], textposition='outside',
+                            hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
+                        ))
+                        _fig_dfa.update_layout(
+                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
+                            font=dict(color='white'),
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
+                            margin=dict(l=5,r=5,t=10,b=5), height=250
+                        )
+                        st.plotly_chart(_fig_dfa, use_container_width=True)
+
+                    # Analysis
+                    hard_count = int(diff_counts.get('Hard', 0))
+                    total_count = int(diff_counts.sum())
+                    if total_count > 0 and hard_count / total_count < 0.2:
+                        st.warning("⚠️ You haven't tried many Hard interviews yet. Pushing yourself to Hard level is one of the fastest ways to improve!")
+
+                    hard_avg = float(diff_avg['Hard']) if 'Hard' in diff_avg.index else None
+                    medium_avg = float(diff_avg['Medium']) if 'Medium' in diff_avg.index else None
+                    if hard_avg is not None and medium_avg is not None:
+                        if hard_avg >= medium_avg - 0.5:
+                            st.success("✅ You're holding up well even in Hard interviews — that's a great sign of real progress!")
+                        else:
+                            st.info("💡 Your Hard interview scores are a bit lower than Medium, which is totally normal. Keep practising Hard mode to close the gap.")
+
+            # =====================================================
+            # SECTION E — SKILL INTELLIGENCE (RADAR CHART)
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🕸️ Your Skill Strengths")
+            st.caption("This chart shows how you're performing across three key interview skills. The bigger the shape, the stronger you are overall.")
+
+            skill_cols = ['knowledge_avg', 'communication_avg', 'relevance_avg']
+            skill_labels = ['Knowledge', 'Communication', 'Relevance']
+
+            # Use actual columns if available, else fallback to avg_score
+            skill_avgs = []
+            for col in skill_cols:
+                if col in df.columns and df[col].notna().any():
+                    skill_avgs.append(df[col].mean())
+                else:
+                    skill_avgs.append(df['avg_score'].mean())
+
+            # Draw radar with matplotlib
+            categories = skill_labels + [skill_labels[0]]
+            values = skill_avgs + [skill_avgs[0]]
+            angles = np.linspace(0, 2 * np.pi, len(skill_labels), endpoint=False).tolist()
+            angles += angles[:1]
+
+            fig_radar, ax_radar = plt.subplots(figsize=(5, 5), subplot_kw=dict(polar=True))
+            fig_radar.patch.set_facecolor('#0f1419')
+            ax_radar.set_facecolor('#1a2332')
+            ax_radar.plot(angles, values, color='#00c3ff', linewidth=2)
+            ax_radar.fill(angles, values, color='#00c3ff', alpha=0.25)
+            ax_radar.set_xticks(angles[:-1])
+            ax_radar.set_xticklabels(skill_labels, color='white', size=12)
+            ax_radar.set_ylim(0, 10)
+            ax_radar.set_yticks([2, 4, 6, 8, 10])
+            ax_radar.set_yticklabels(['2', '4', '6', '8', '10'], color='gray', size=8)
+            ax_radar.tick_params(colors='white')
+            ax_radar.spines['polar'].set_color('#00c3ff')
+            ax_radar.grid(color='gray', alpha=0.3)
+            ax_radar.set_title("Skill Radar", color='#00c3ff', pad=20, size=14)
+
+            col_radar, col_skill_info = st.columns([1, 1])
+            with col_radar:
+                st.pyplot(fig_radar)
+            plt.close(fig_radar)
+
+            with col_skill_info:
+                weakest_skill_idx = skill_avgs.index(min(skill_avgs))
+                weakest_skill = skill_labels[weakest_skill_idx]
+                strongest_skill_idx = skill_avgs.index(max(skill_avgs))
+                strongest_skill = skill_labels[strongest_skill_idx]
+
+                st.markdown(f"🌟 **You're best at:** {strongest_skill} ({skill_avgs[strongest_skill_idx]:.1f}/10)")
+                st.markdown(f"📌 **Focus area:** {weakest_skill} ({skill_avgs[weakest_skill_idx]:.1f}/10) — this is where more practice will help the most")
+                st.markdown("")
+                for lbl, val in zip(skill_labels, skill_avgs):
+                    st.markdown(f"**{lbl}:** {val:.1f}/10")
+                    st.progress(val / 10.0)
+
+            # =====================================================
+            # SECTION F — BEHAVIORAL ANALYTICS
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🧠 Your Interview Style")
+            st.caption("This section looks at how you behave during interviews — how long you spend, how that affects your score, and what kind of interviewer you are.")
+
+            col_b1, col_b2, col_b3 = st.columns(3)
+
+            dur_available = 'duration_seconds' in df.columns and df['duration_seconds'].notna().any()
+            _dur_series = df['duration_seconds'].dropna() if dur_available else None
+            avg_duration_mins = (float(_dur_series.mean()) / 60.0) if (dur_available and len(_dur_series) > 0) else None
+            avg_score_per_q = float((df['avg_score'] / df['total_questions'].replace(0, 1)).mean()) if ('total_questions' in df.columns and df['total_questions'].notna().any()) else None
+
+            with col_b1:
+                if avg_duration_mins is not None:
+                    st.markdown(f"""<div class="metric-card">
+                        <p class="metric-label">Average Time Per Interview</p>
+                        <p class="metric-value">{avg_duration_mins:.1f}<span style="font-size:16px;color:#aaa"> min</span></p>
+                        <p class="metric-sub">Typical session length</p>
+                    </div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown("""<div class="metric-card">
+                        <p class="metric-label">Average Time Per Interview</p>
+                        <p class="metric-value" style="font-size:18px;color:#666;">N/A</p>
+                    </div>""", unsafe_allow_html=True)
+
+            with col_b2:
+                if avg_score_per_q is not None:
+                    st.markdown(f"""<div class="metric-card">
+                        <p class="metric-label">Score Per Question</p>
+                        <p class="metric-value">{avg_score_per_q:.2f}</p>
+                        <p class="metric-sub">Avg per individual question</p>
+                    </div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown("""<div class="metric-card">
+                        <p class="metric-label">Score Per Question</p>
+                        <p class="metric-value" style="font-size:18px;color:#666;">N/A</p>
+                    </div>""", unsafe_allow_html=True)
+
+            with col_b3:
+                # Score vs duration correlation — convert to human badge
+                if dur_available and len(df) >= 3:
+                    corr = df[['avg_score', 'duration_seconds']].dropna().corr().iloc[0, 1]
+                    if corr > 0.4:
+                        corr_badge = "⚡ Yes — more time = better"
+                    elif corr < -0.2:
+                        corr_badge = "🤔 No — time isn't helping"
+                    else:
+                        corr_badge = "⚖️ Not much difference"
+                    st.markdown(f"""<div class="metric-card">
+                        <p class="metric-label">Does More Time Help?</p>
+                        <p class="metric-value" style="font-size:16px;">{corr_badge}</p>
+                        <p class="metric-sub">Based on all your interviews</p>
+                    </div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown("""<div class="metric-card">
+                        <p class="metric-label">Does More Time Help?</p>
+                        <p class="metric-value" style="font-size:16px;color:#666;">Need 3+ interviews</p>
+                    </div>""", unsafe_allow_html=True)
+
+            # Candidate type classification
+            if dur_available and avg_duration_mins is not None:
+                if avg_duration_mins < 10:
+                    candidate_type = "⚡ **You tend to answer quickly.** That's great for pace, but try spending a bit more time structuring your answers — quality over speed!"
+                elif avg_duration_mins > 35:
+                    candidate_type = "🤔 **You take your time — sometimes too much.** Try to be more concise and direct. Interviewers appreciate clear, structured answers."
+                else:
+                    candidate_type = "⚖️ **Great balance!** You're pacing your interviews well — not too rushed, not too slow."
+                st.info(candidate_type)
+
+            # PART 6: Enhanced behavior classification using stored data
+            if 'behavior_class' in df.columns and df['behavior_class'].notna().any():
+                _bc_counts = df['behavior_class'].value_counts()
+                _dominant_class = _bc_counts.index[0] if len(_bc_counts) > 0 else None
+                if _dominant_class:
+                    st.markdown(f"**🎭 Your Typical Interview Style:** {_dominant_class}")
+
+            # Hard mode delta analysis
+            if 'difficulty' in df.columns and 'Hard' in df['difficulty'].values and 'Medium' in df['difficulty'].values:
+                _hard_avg_b = df[df['difficulty'] == 'Hard']['avg_score'].mean()
+                _med_avg_b = df[df['difficulty'] == 'Medium']['avg_score'].mean()
+                _hard_delta = _hard_avg_b - _med_avg_b
+                st.markdown("#### 💪 How You Perform in Hard Interviews")
+                st.caption("Hard interviews are more demanding — it's normal to score a little lower. Here's how you're doing.")
+                col_hd1, col_hd2 = st.columns(2)
+                with col_hd1:
+                    st.markdown(f"""<div class="metric-card">
+                        <p class="metric-label">Your Hard Interview Score</p>
+                        <p class="metric-value">{_hard_avg_b:.2f}<span style="font-size:16px;color:#aaa">/10</span></p>
+                        <p class="metric-sub">Average on Hard difficulty</p>
+                    </div>""", unsafe_allow_html=True)
+                with col_hd2:
+                    if _hard_delta >= 0:
+                        _delta_display = f"⬆️ {abs(_hard_delta):.1f} pts above Medium"
+                        _dc = "#00e676"
+                    elif _hard_delta >= -1.0:
+                        _delta_display = f"Slightly below Medium (–{abs(_hard_delta):.1f} pts)"
+                        _dc = "#ffcc02"
+                    else:
+                        _delta_display = f"Below Medium (–{abs(_hard_delta):.1f} pts)"
+                        _dc = "#f44336"
+                    st.markdown(f"""<div class="metric-card">
+                        <p class="metric-label">Compared to Medium</p>
+                        <p class="metric-value" style="color:{_dc};font-size:16px;">{_delta_display}</p>
+                        <p class="metric-sub">Hard vs Medium gap</p>
+                    </div>""", unsafe_allow_html=True)
+                if _hard_delta < -1.5:
+                    st.warning("⚠️ Hard interviews are noticeably tougher for you right now. That's okay — keep practising Hard mode and you'll build the muscle for it.")
+                elif _hard_delta >= -0.5:
+                    st.success("✅ You're doing great under pressure! Your Hard interview scores are close to your Medium ones — a real strength.")
+
+            # =====================================================
+            # SECTION G — CLASSIFICATION ENGINE
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 🎖️ Where Do You Stand Right Now?")
+            st.caption("Based on all your interviews, here's an honest picture of where you are today — and where you're headed.")
+
+            if not pd.isna(overall_avg):
+                if overall_avg < 5:
+                    classification = "🔵 Just Getting Started"
+                    cls_color = "#4fc3f7"
+                    cls_desc = "Every expert was once a beginner. Focus on understanding the basics and practise regularly — you'll improve fast!"
+                elif overall_avg < 6.5:
+                    classification = "🟡 Building Momentum"
+                    cls_color = "#ffcc02"
+                    cls_desc = "You're making real progress! Work on giving more detailed answers and communicating your ideas more clearly."
+                elif overall_avg < 7.5:
+                    classification = "🟠 Looking Strong"
+                    cls_color = "#ff9800"
+                    cls_desc = "Solid work! You're getting there. Keep sharpening your answers and push yourself with harder interview levels."
+                elif overall_avg < 8.5:
+                    classification = "🟢 Almost There!"
+                    cls_color = "#66bb6a"
+                    cls_desc = "You're performing at a high level. A little more polish and you'll be fully interview-ready!"
+                else:
+                    classification = "🏆 Interview Ready!"
+                    cls_color = "#00e676"
+                    cls_desc = "Outstanding! You're ready to walk into real interviews with confidence. Go get that job!"
+
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, rgba(0,195,255,0.1), rgba(0,195,255,0.05));
+                            border: 2px solid {cls_color}; border-radius: 12px; padding: 20px; text-align: center; margin: 10px 0;">
+                    <h2 style="color: {cls_color}; margin: 0;">{classification}</h2>
+                    <p style="color: #ffffff; margin: 10px 0 0 0;">{cls_desc}</p>
+                    <p style="color: #aaaaaa; margin: 5px 0 0 0;">Overall Average: {overall_avg:.2f}/10</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # =====================================================
+            # SECTION H — AI GENERATED PERFORMANCE SUMMARY
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 📝 Your Personal Progress Report")
+            st.caption("Here's a plain-English summary of everything your data is telling us about your interview journey so far.")
+
+            # Generate programmatic summary from real data
+            summary_parts = []
+
+            _domain_avg_safe = df.groupby('domain')['avg_score'].mean() if 'domain' in df.columns else None
+            if _domain_avg_safe is not None and len(_domain_avg_safe) >= 1:
+                _s_domain = _domain_avg_safe.idxmax()
+                _w_domain = _domain_avg_safe.idxmin()
+                summary_parts.append(f"You perform best in **{_s_domain}** — that's where your confidence and knowledge really shows, with an average score of {_domain_avg_safe[_s_domain]:.1f}/10.")
+                if len(_domain_avg_safe) > 1:
+                    summary_parts.append(f"**{_w_domain}** is the area that needs the most attention right now ({_domain_avg_safe[_w_domain]:.1f}/10). A little focused practice there will go a long way.")
+
+            summary_parts.append(f"Across all your interviews, **{strongest_skill}** is your strongest skill ({skill_avgs[strongest_skill_idx]:.1f}/10). **{weakest_skill}** is the skill to focus on next ({skill_avgs[weakest_skill_idx]:.1f}/10) — even small improvements here will lift your overall scores.")
+
+            # Trend direction — fully plain English, no slope values shown
+            if total_interviews >= 3:
+                _scores_for_summary = df['avg_score'].dropna().tolist()
+                _slope_summary = compute_trend_slope(_scores_for_summary)
+                if _slope_summary > 0.15:
+                    summary_parts.append("The great news? **Your scores are going up** across your recent interviews. Whatever you're doing, keep doing it — it's working!")
+                elif _slope_summary < -0.15:
+                    summary_parts.append("Your recent scores have dipped a little compared to earlier interviews. Don't worry — this is normal. Try revisiting the feedback from your past sessions and focus on one skill at a time.")
+                else:
+                    summary_parts.append("Your scores have been fairly steady. That's a stable foundation to build on. To move to the next level, try bumping up to a harder difficulty or exploring a new topic area.")
+
+            summary_parts.append(f"So far, you've completed **{total_interviews} interview{'s' if total_interviews != 1 else ''}** and answered **{total_questions} questions** in total — that's real practice time that adds up!")
+
+            # Weighted score — explained simply
+            _w_avg = df['weighted_score'].mean() if 'weighted_score' in df.columns else overall_avg
+            summary_parts.append(f"Your adjusted score — which gives a little extra credit for harder interviews — is **{_w_avg:.2f}/10**. Hard interviews count more because they're more demanding.")
+
+            if improvement_pct > 5:
+                summary_parts.append(f"Since your very first interview, you've improved by **{improvement_pct:.1f}%**. That's a meaningful jump — you should feel great about that progress!")
+            elif improvement_pct > 0:
+                summary_parts.append(f"You're up **{improvement_pct:.1f}%** since your first interview. You're moving in the right direction — keep the momentum going.")
+            elif improvement_pct < 0:
+                summary_parts.append(f"Your score has dipped **{abs(improvement_pct):.1f}%** since your first interview. A small setback is part of learning. Try revisiting easier difficulty levels to rebuild your confidence, then push back up.")
+
+            # Performance under pressure — plain English
+            if 'difficulty' in df.columns and 'Hard' in df['difficulty'].values:
+                _hard_avg_s = df[df['difficulty'] == 'Hard']['avg_score'].mean()
+                if _hard_avg_s < overall_avg - 1.0:
+                    summary_parts.append(f"Hard interviews are a challenge for you right now — you average {_hard_avg_s:.1f}/10 there, which is lower than your overall average. That's completely normal. The more you practise Hard mode, the more comfortable you'll get with tough questions.")
+                else:
+                    summary_parts.append(f"You're handling Hard interviews really well — averaging {_hard_avg_s:.1f}/10 even under pressure. That kind of resilience is exactly what real interviews reward.")
+
+            # Behavior class — explained naturally
+            if 'behavior_class' in df.columns and df['behavior_class'].notna().any():
+                _bc = df['behavior_class'].mode().iloc[0] if not df['behavior_class'].dropna().empty else None
+                _bc_descriptions = {
+                    "⚡ Rushed": "You tend to answer quickly. Slowing down a little and structuring your thoughts before speaking can really lift your scores.",
+                    "🤔 Overthinking": "You tend to take more time than needed. Practise giving focused, direct answers — interviewers love clarity.",
+                    "⚖️ Balanced": "You have a great natural rhythm in interviews — not too fast, not too slow. That's a real skill.",
+                    "🎯 Adaptive Learner": "You're adapting well as interviews get harder. That's a sign of someone who learns fast under pressure.",
+                }
+                if _bc:
+                    _bc_desc = _bc_descriptions.get(_bc, f"Your typical style is: {_bc}.")
+                    summary_parts.append(_bc_desc)
+
+            full_summary = " ".join(summary_parts)
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(0,195,255,0.08), rgba(0,195,255,0.03));
+                        border: 1px solid rgba(0,195,255,0.3); border-radius: 12px; padding: 20px; margin: 10px 0;">
+                <p style="color: #ffffff; font-size: 15px; line-height: 1.8; margin: 0;">{full_summary}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # =====================================================
+            # SECTION I — RECOMMENDATION ENGINE
+            # =====================================================
+            st.markdown("---")
+            st.markdown("### 💡 What You Should Do Next")
+            st.caption("These suggestions are personalised based on your actual interview history. Follow them and you'll see real improvement.")
+
+            recommendations = []
+
+            # Skill-based recommendations
+            if weakest_skill == "Communication":
+                recommendations.append("🗣️ **Work on explaining yourself more clearly.** Your communication scores are your lowest right now. Try practising with the STAR method: describe the Situation, your Task, the Action you took, and the Result. Even better — record yourself answering a question out loud and listen back.")
+            elif weakest_skill == "Knowledge":
+                recommendations.append("📚 **Deepen your technical knowledge.** Your knowledge scores suggest there are some topic gaps. Go back to basics in your target field, review common interview questions for your role, and spend time on real-world concepts like system design and best practices.")
+            elif weakest_skill == "Relevance":
+                recommendations.append("🎯 **Stay on-topic when you answer.** Your answers sometimes drift away from what was asked. Before you respond, mentally note the 2–3 key points that directly answer the question — then expand from there.")
+
+            # Difficulty-based recommendations
+            if 'difficulty' in df.columns:
+                _diff_vals = df['difficulty'].dropna().values
+                hard_avg_val = float(df[df['difficulty'] == 'Hard']['avg_score'].mean()) if 'Hard' in _diff_vals else None
+                medium_avg_val = float(df[df['difficulty'] == 'Medium']['avg_score'].mean()) if 'Medium' in _diff_vals else None
+                if hard_avg_val is not None and medium_avg_val is not None and hard_avg_val < medium_avg_val - 1.0:
+                    recommendations.append("💪 **Practise more Hard interviews.** There's a noticeable gap between your Medium and Hard scores. The best way to close it is to get comfortable with the discomfort — book a few Hard mode sessions and treat each one as a learning experience, not a test.")
+                hard_c = int((df['difficulty'] == 'Hard').sum())
+                if total_interviews >= 3 and hard_c == 0:
+                    recommendations.append("🔥 **Try your first Hard interview!** You haven't attempted Hard level yet. It's challenging, but one Hard interview teaches you more than three Easy ones. Give it a go — you're ready.")
+
+            # Stagnation detection
+            if total_interviews >= 5 and abs(improvement_pct) < 5:
+                recommendations.append("📖 **Your scores have plateaued — it's time to shake things up.** Try a structured 2-week plan: spend week one revisiting technical concepts, and week two on behavioural questions. Finish each week with a full mock interview to test yourself.")
+
+            # More interviews
+            if total_interviews < 3:
+                recommendations.append("📅 **Complete at least 5 interviews to unlock full insights.** Right now you don't have enough data for detailed trend analysis. The more you practise, the more personalised your recommendations become.")
+
+            if recommendations:
+                for rec in recommendations:
+                    st.markdown(f"""
+                    <div style="background: rgba(0,195,255,0.07); border-left: 4px solid #00c3ff;
+                                padding: 12px 16px; margin: 8px 0; border-radius: 0 8px 8px 0;">
+                        <p style="color: #ffffff; margin: 0;">{rec}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.success("🎉 You're on track! Keep practising consistently and the results will keep coming.")
+
+            # Raw data expander
+            # Mode breakdown if available
+            if 'interview_mode' in df.columns and df['interview_mode'].notna().any():
+                st.markdown("---")
+                st.markdown("### 🎮 Which Interview Type Do You Prefer?")
+                st.caption("See how you perform across technical, behavioural, and mixed interview formats.")
+                _mode_df = df[df['interview_mode'].notna() & (df['interview_mode'] != '')]
+                if not _mode_df.empty:
+                    col_m1, col_m2 = st.columns(2)
+                    with col_m1:
+                        st.markdown("**How Many Times You Tried Each Format**")
+                        _mode_cnt = _mode_df.groupby('interview_mode').size().rename('Times Tried')
+                        _fig_mc = go.Figure(go.Bar(
+                            x=_mode_cnt.index.tolist(), y=_mode_cnt.values.tolist(),
+                            marker_color='#00c3ff',
+                            text=_mode_cnt.values.tolist(), textposition='outside',
+                            hovertemplate='<b>%{x}</b><br>Times: %{y}<extra></extra>'
+                        ))
+                        _fig_mc.update_layout(
+                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
+                            font=dict(color='white'),
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            yaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            margin=dict(l=5,r=5,t=10,b=5), height=250
+                        )
+                        st.plotly_chart(_fig_mc, use_container_width=True)
+                    with col_m2:
+                        st.markdown("**Your Average Score by Format**")
+                        _mode_avg = _mode_df.groupby('interview_mode')['avg_score'].mean().rename('Avg Score')
+                        _fig_ma = go.Figure(go.Bar(
+                            x=_mode_avg.index.tolist(), y=_mode_avg.values.tolist(),
+                            marker_color=[f'rgba(0,195,255,{0.5 + 0.5*(v/10)})' for v in _mode_avg.values],
+                            text=[f"{v:.1f}" for v in _mode_avg.values], textposition='outside',
+                            hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
+                        ))
+                        _fig_ma.update_layout(
+                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
+                            font=dict(color='white'),
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
+                            margin=dict(l=5,r=5,t=10,b=5), height=250
+                        )
+                        st.plotly_chart(_fig_ma, use_container_width=True)
+
+            with st.expander("📋 See All Your Interview Records"):
+                # Exclude raw DB 'id' — inject a clean per-user sequential # instead
+                display_cols = [c for c in ['role', 'domain', 'avg_score', 'weighted_score', 'knowledge_avg', 'communication_avg',
+                                             'relevance_avg', 'difficulty', 'interview_mode', 'total_questions', 'duration_seconds',
+                                             'follow_up_count', 'depth_score', 'behavior_class', 'completed_on']
+                                if c in df.columns]
+                rename_map = {
+                    'avg_score': 'Score', 'weighted_score': 'Adjusted Score', 'knowledge_avg': 'Knowledge',
+                    'communication_avg': 'Communication', 'relevance_avg': 'Relevance',
+                    'difficulty': 'Level', 'interview_mode': 'Format',
+                    'total_questions': 'Questions', 'duration_seconds': 'Duration (s)',
+                    'completed_on': 'Date', 'role': 'Role', 'domain': 'Career Area',
+                    'follow_up_count': 'Follow-ups', 'depth_score': 'Depth', 'behavior_class': 'Style'
+                }
+                display_df = df[display_cols].rename(columns=rename_map)
+                # Per-user sequential numbering: always starts at 1 regardless of DB id
+                display_df.insert(0, '#', range(1, len(display_df) + 1))
+
+                # Build enhanced HTML table with score badges, trend arrows, best-row highlight
+                _score_col = 'Score'
+                _scores_list_disp = display_df[_score_col].tolist() if _score_col in display_df.columns else []
+                _best_score_val = max(_scores_list_disp) if _scores_list_disp else None
+
+                def _badge(v):
+                    if pd.isna(v): return '<span style="color:#666">N/A</span>'
+                    v = float(v)
+                    if v >= 8.5: return f'<span class="badge-excellent">{v:.1f}</span>'
+                    elif v >= 7.0: return f'<span class="badge-good">{v:.1f}</span>'
+                    elif v >= 5.5: return f'<span class="badge-average">{v:.1f}</span>'
+                    elif v >= 4.0: return f'<span class="badge-weak">{v:.1f}</span>'
+                    else: return f'<span class="badge-poor">{v:.1f}</span>'
+
+                def _trend_arrow(current, prev):
+                    if prev is None or pd.isna(prev): return ''
+                    delta = float(current) - float(prev)
+                    if delta > 0.3: return f'<span style="color:#00e676;font-size:14px;" title="+{delta:.1f}">▲</span>'
+                    elif delta < -0.3: return f'<span style="color:#f44336;font-size:14px;" title="{delta:.1f}">▼</span>'
+                    else: return f'<span style="color:#ffcc02;font-size:14px;" title="~{delta:.1f}">●</span>'
+
+                _th_style = "padding:9px 12px;color:#00c3ff;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid rgba(0,195,255,0.3);white-space:nowrap;"
+                _td_style = "padding:8px 12px;color:#e0e0e0;font-size:13px;white-space:nowrap;"
+
+                _headers = list(display_df.columns)
+                _header_row = "".join([f'<th style="{_th_style}">{h}</th>' for h in _headers]) + f'<th style="{_th_style}">Trend</th>'
+
+                _body_rows = ""
+                _prev_score = None
+                for i, row in display_df.iterrows():
+                    _cur_score = row.get('Score', None)
+                    _is_best = (not pd.isna(_cur_score) and not pd.isna(_best_score_val) and float(_cur_score) == float(_best_score_val))
+                    _row_bg = 'background:rgba(0,230,118,0.10);' if _is_best else ('background:rgba(255,255,255,0.02);' if i % 2 == 0 else '')
+                    _cells = ""
+                    for col_name in _headers:
+                        val = row[col_name]
+                        if col_name in ('Score', 'Adjusted Score', 'Knowledge', 'Communication', 'Relevance'):
+                            _cells += f'<td style="{_td_style}text-align:center;">{_badge(val)}</td>'
+                        elif col_name == 'Level':
+                            _lc = {'Easy':'#69f0ae','Medium':'#ffcc02','Hard':'#f44336'}.get(str(val), '#aaa')
+                            _cells += f'<td style="{_td_style}"><span style="color:{_lc};font-weight:600;">{val}</span></td>'
+                        elif col_name == '#':
+                            _crown = ' 🏆' if _is_best else ''
+                            _cells += f'<td style="{_td_style}font-weight:600;">{val}{_crown}</td>'
+                        else:
+                            _disp_val = str(val) if not pd.isna(val) else '—'
+                            _cells += f'<td style="{_td_style}">{_disp_val}</td>'
+                    _arrow = _trend_arrow(_cur_score, _prev_score) if not pd.isna(_cur_score) else ''
+                    _cells += f'<td style="{_td_style}text-align:center;">{_arrow}</td>'
+                    _body_rows += f'<tr style="{_row_bg}">{_cells}</tr>'
+                    if not pd.isna(_cur_score):
+                        _prev_score = _cur_score
+
+                st.markdown(f"""
+                <div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(0,195,255,0.2);margin-top:8px;">
+                <table style="width:100%;border-collapse:collapse;background:rgba(15,20,25,0.85);">
+                  <thead><tr>{_header_row}</tr></thead>
+                  <tbody>{_body_rows}</tbody>
+                </table></div>
+                <p style="color:rgba(255,255,255,0.4);font-size:11px;margin-top:6px;">
+                  🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
+                </p>
+                """, unsafe_allow_html=True)
 
 if tab5:
 	with tab5:
