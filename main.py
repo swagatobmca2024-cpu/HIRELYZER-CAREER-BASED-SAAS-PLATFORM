@@ -10903,17 +10903,106 @@ Follow-up question:"""
 # DOMAIN-AWARE QUESTION GENERATORS (upgraded wrappers)
 # =============================================================================
 
+def generate_anchor_first_question(anchor: dict, domain: str, role: str, difficulty: str) -> str:
+    """
+    Generate the FIRST question guaranteed to be resume-anchored, per difficulty tier.
+
+    Easy:  Conceptual question about the anchor skill from resume.
+           Template: "You mentioned using [skill] in [project]. What problem does [skill] solve,
+                      and can you walk me through a concrete example from your work?"
+
+    Medium: Scenario question about the anchor project.
+            Template: "In your [project], how would you approach [relevant challenge] — 
+                       walk me through your decision-making process and one key tradeoff."
+
+    Hard:  Deep technical challenge on anchor skill/project — focused on ONE axis.
+           Template: "Based on your experience with [technology] in [project], describe the
+                      most significant [tradeoff/failure/optimization] you faced and how you
+                      reasoned through it."
+    """
+    from llm_manager import call_llm
+
+    skill = anchor.get("skill", "your main technical skill")
+    project = anchor.get("project", "your main project")
+    technology = anchor.get("technology", "your primary technology")
+    context = anchor.get("context", f"worked on {project}")
+
+    tier_prompts = {
+        "Easy": f"""You are a technical interviewer. Generate ONE conceptual question anchored to this resume fact:
+- Candidate skill: {skill}
+- Their project: {project}
+- Context: {context}
+
+REQUIREMENT: The question MUST explicitly mention "{skill}" and reference "{project}".
+PATTERN: "You mentioned using {skill} in {project}. [conceptual question about what it does / why it exists / example use case]"
+The question should ask: what does {skill} solve? Or: walk me through how it works from your experience.
+Easy = concept clarity only. No architecture, no tradeoffs, no production scenarios.
+Answer scope: 3-5 paragraphs.
+
+Output ONLY the question, one sentence or two at most.""",
+
+        "Medium": f"""You are a technical interviewer. Generate ONE scenario question anchored to this resume fact:
+- Candidate project: {project}
+- Technology used: {technology}
+- Context: {context}
+
+REQUIREMENT: The question MUST explicitly reference "{project}" and create a realistic scenario around it.
+PATTERN: "In your {project}, [describe a realistic scenario with ONE constraint]. Walk me through your approach and the key decision you'd make."
+The scenario should add ONE new constraint or challenge to what they built — not ask them to redesign it.
+Medium = one decision + one justification. No full system design.
+Answer scope: 5-6 paragraphs.
+
+Output ONLY the question, 2-3 sentences at most.""",
+
+        "Hard": f"""You are a senior technical interviewer. Generate ONE focused hard question anchored to this resume fact:
+- Candidate technology: {technology}
+- Their project: {project}  
+- Context: {context}
+
+REQUIREMENT: Must reference "{technology}" explicitly. Pick EXACTLY ONE challenge axis:
+  (a) A specific tradeoff between two approaches relevant to how they used {technology}
+  (b) A failure mode or edge case in {technology} that their project might have faced
+  (c) An optimization under a specific constraint for their {project}
+
+PATTERN: "Based on your use of {technology} in {project}, [one focused technical challenge — tradeoff OR failure OR optimization, not all three]."
+Hard = senior-level reasoning on ONE axis. Text-answerable in 6-8 paragraphs. No whiteboard.
+Do NOT combine tradeoff + failure + scaling in one question.
+
+Output ONLY the question, 2-3 sentences at most.""",
+    }
+
+    prompt = tier_prompts.get(difficulty, tier_prompts["Medium"])
+
+    try:
+        q = call_llm(prompt, session=st.session_state).strip()
+        q = re.sub(r'^[\d\)\.\-•\*]+\s*', '', q).strip()
+        if len(q) > 20:
+            return q
+    except Exception:
+        pass
+
+    # Hard fallback: build from template directly
+    fallbacks = {
+        "Easy": f"You mentioned using {skill} in {project}. What problem does {skill} solve, and can you walk me through a concrete example from your experience with it?",
+        "Medium": f"In your {project} where you used {technology}, how would you handle a situation where {technology} starts causing performance issues? Walk me through your diagnosis and the one key decision you'd make.",
+        "Hard": f"Based on your experience with {technology} in {project}, describe the most significant tradeoff you faced between two technical approaches. What data or signals drove your decision, and what limitation did you consciously accept?",
+    }
+    return fallbacks.get(difficulty, fallbacks["Medium"])
+
+
 def generate_resume_based_questions_domain_aware(
     resume_context: dict, role: str, domain: str,
     difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced"
 ) -> list:
     """
-    Drop-in replacement for generate_resume_based_questions_enhanced.
-    Applies Domain Authority Layer + Structured Difficulty Enforcement.
+    UPGRADED: Guarantees the FIRST question is always explicitly resume-anchored
+    using per-tier templates (Easy=conceptual, Medium=scenario, Hard=deep technical).
+    Subsequent questions use domain authority + difficulty enforcement.
+    Falls back to domain-based questions if resume is empty.
     """
     from llm_manager import call_llm
 
-    # FIX 1: Apply domain filter to resume context
+    # Apply domain filter to resume context
     filtered_context = filter_resume_for_domain(resume_context, domain)
 
     skills = filtered_context.get("skills", [])
@@ -10921,20 +11010,29 @@ def generate_resume_based_questions_domain_aware(
     experience = filtered_context.get("experience", [])
     technologies = filtered_context.get("technologies", [])
 
-    # FIX 1: Domain authority block
-    domain_block = build_domain_authority_block(domain, role)
+    has_resume = bool(skills or projects or technologies)
 
-    # FIX 2: Structured difficulty enforcement
+    # === QUESTION 1: Always resume-anchored (if resume exists) ===
+    anchor_question = None
+    if has_resume:
+        anchor = select_resume_anchor(filtered_context, domain)
+        anchor_question = generate_anchor_first_question(anchor, domain, role, difficulty)
+
+    # === QUESTIONS 2+: Domain-aware + difficulty-enforced ===
+    remaining = num_questions - (1 if anchor_question else 0)
+
+    domain_block = build_domain_authority_block(domain, role)
     difficulty_block = get_difficulty_instruction_block(difficulty)
 
-    # Weakness bias instruction
     bias_map = {
-        "technical depth": "Prioritize questions that expose gaps in technical depth — ask about internals, edge cases, and implementation specifics.",
+        "technical depth": "Prioritize questions that expose gaps in technical depth — internals, edge cases, implementation specifics.",
         "explanation clarity": "Prioritize questions that require the candidate to explain complex concepts step-by-step.",
-        "answer precision": "Prioritize questions that require very specific, targeted answers directly tied to their resume.",
+        "answer precision": "Prioritize questions that require very specific, targeted answers tied to their resume.",
         "balanced": "",
     }
     bias_instruction = bias_map.get(weakness_bias, "")
+
+    already_asked = f'\nDo NOT generate a question similar to: "{anchor_question}"' if anchor_question else ""
 
     prompt = f"""You are a senior technical interviewer.
 
@@ -10949,45 +11047,46 @@ RESUME CONTEXT (filtered for domain relevance):
 - Technologies: {', '.join(technologies[:5]) if technologies else 'None relevant to ' + domain}
 
 {bias_instruction}
+{already_asked}
 
-Generate EXACTLY {num_questions} interview questions. Each question MUST:
-1. Be about {domain} — not the candidate's previous domain if it differs
-2. Reference their resume only if resume content is relevant to {domain}
-3. Match the difficulty type specified above (structural enforcement, not just tone)
+Generate EXACTLY {remaining} interview questions. Each question MUST:
+1. Be about {domain} — domain alignment is mandatory
+2. Reference resume content when clearly relevant to {domain}
+3. Match the difficulty contract above (structural, not just tone)
 4. Be a single, clear question (1-2 sentences)
+5. Be distinct from any previously listed question
 
 Output ONLY the questions, one per line, no numbering or prefixes.
 
 Questions:"""
 
+    remaining_qs = []
     try:
         response = call_llm(prompt, session=st.session_state)
         raw = [q.strip() for q in response.split("\n") if q.strip()]
-        cleaned = []
         for q in raw:
             q = re.sub(r'^[\d\)\.\-•\*]+\s*', '', q).strip()
             if len(q) > 15:
-                cleaned.append(q)
-            if len(cleaned) >= num_questions:
+                remaining_qs.append(q)
+            if len(remaining_qs) >= remaining:
                 break
-
-        # Fallback fill
-        while len(cleaned) < num_questions:
-            contract = DIFFICULTY_CONTRACTS.get(difficulty, DIFFICULTY_CONTRACTS["Medium"])
-            diff_label = contract["label"]
-            fallbacks = contract.get("fallback_questions", [])
-            if fallbacks:
-                import random
-                fb = random.choice(fallbacks).replace("{domain}", domain).replace("{role}", role)
-                cleaned.append(fb)
-            else:
-                cleaned.append(
-                    f"[{diff_label}] Describe a specific challenge you faced with {domain} and how you resolved it."
-                )
-        return cleaned[:num_questions]
-
     except Exception:
-        return [f"Explain a core {domain} concept you've worked with recently."] * num_questions
+        pass
+
+    # Fallback fill for remaining slots
+    import random
+    while len(remaining_qs) < remaining:
+        contract = DIFFICULTY_CONTRACTS.get(difficulty, DIFFICULTY_CONTRACTS["Medium"])
+        fallbacks = contract.get("fallback_questions", [])
+        if fallbacks:
+            fb = random.choice(fallbacks).replace("{domain}", domain).replace("{role}", role)
+            remaining_qs.append(fb)
+        else:
+            remaining_qs.append(f"Describe a specific challenge you faced with {domain} and how you resolved it.")
+
+    # Combine: anchor first (guaranteed), then domain questions
+    all_questions = ([anchor_question] if anchor_question else []) + remaining_qs[:remaining]
+    return all_questions[:num_questions]
 
 
 def generate_domain_questions_with_llm(
@@ -11123,7 +11222,9 @@ def extract_resume_text_from_pdf(pdf_file):
 # ======================================================
 def analyze_resume_with_llm(resume_text):
     """
-    Analyze resume using LLM to extract INTERVIEW-RELEVANT structured information
+    Analyze resume using LLM to extract INTERVIEW-RELEVANT structured information.
+    UPGRADED: Also extracts primary_anchor (best skill+project pair for first-question anchoring)
+    and anchor_technology (most technically rich single technology for Hard-mode focus).
     """
 
     prompt = f"""
@@ -11150,7 +11251,13 @@ Return ONLY a valid JSON object with this exact structure:
   ],
   "technologies": [
     "Primary technologies actually used (not buzzwords)"
-  ]
+  ],
+  "primary_anchor": {{
+    "skill": "The single most interview-worthy skill from the resume",
+    "project": "The single most technically rich project that uses the anchor skill",
+    "technology": "The primary technology used in the anchor project",
+    "context": "One sentence: what the candidate built with this skill in this project"
+  }}
 }}
 
 STRICT RULES:
@@ -11160,11 +11267,10 @@ STRICT RULES:
 - Avoid generic terms like 'problem solving', 'communication'
 - Projects MUST mention tech used
 - Experience MUST show ownership or responsibility
-- Extract:
-  - 4–6 skills
-  - 2–4 projects
-  - 2–4 experience entries
-  - 4–6 technologies
+- primary_anchor.skill: pick the skill most likely to be asked about in a technical interview
+- primary_anchor.project: pick the project that best demonstrates the anchor skill
+- primary_anchor.context: be specific — mention what was built, not just "used X"
+- Extract: 4–6 skills, 2–4 projects, 2–4 experience entries, 4–6 technologies
 - Keep entries concise but specific
 - Output ONLY JSON (no markdown, no explanations)
 
@@ -11183,11 +11289,25 @@ JSON:
 
         resume_data = json.loads(response)
 
+        # Build primary anchor with fallback
+        raw_anchor = resume_data.get("primary_anchor", {})
+        skills_list = resume_data.get("skills", [])
+        projects_list = resume_data.get("projects", [])
+        tech_list = resume_data.get("technologies", [])
+
+        primary_anchor = {
+            "skill": raw_anchor.get("skill") or (skills_list[0] if skills_list else "core technical skills"),
+            "project": raw_anchor.get("project") or (projects_list[0] if projects_list else "your main project"),
+            "technology": raw_anchor.get("technology") or (tech_list[0] if tech_list else "your primary technology"),
+            "context": raw_anchor.get("context") or "worked on technical project",
+        }
+
         return {
-            "skills": resume_data.get("skills", [])[:6],
-            "projects": resume_data.get("projects", [])[:4],
+            "skills": skills_list[:6],
+            "projects": projects_list[:4],
             "experience": resume_data.get("experience", [])[:4],
-            "technologies": resume_data.get("technologies", [])[:6]
+            "technologies": tech_list[:6],
+            "primary_anchor": primary_anchor,
         }
 
     except Exception:
@@ -11196,8 +11316,35 @@ JSON:
             "skills": ["Basic Programming Knowledge"],
             "projects": ["Personal Technical Project"],
             "experience": ["General Technical Experience"],
-            "technologies": ["General Tech Stack"]
+            "technologies": ["General Tech Stack"],
+            "primary_anchor": {
+                "skill": "programming",
+                "project": "personal technical project",
+                "technology": "general tech stack",
+                "context": "built technical solutions",
+            },
         }
+
+
+def select_resume_anchor(resume_context: dict, domain: str) -> dict:
+    """
+    Returns the best resume anchor for question generation.
+    Prefers domain-relevant skills/projects; falls back to primary_anchor.
+    Returns dict: { skill, project, technology, context }
+    """
+    anchor = resume_context.get("primary_anchor", {})
+    if anchor and anchor.get("skill") and anchor.get("project"):
+        return anchor
+    # Fallback: build from lists
+    skills = resume_context.get("skills", [])
+    projects = resume_context.get("projects", [])
+    techs = resume_context.get("technologies", [])
+    return {
+        "skill": skills[0] if skills else "your technical skills",
+        "project": projects[0] if projects else "your main project",
+        "technology": techs[0] if techs else "your primary technology",
+        "context": f"worked on {projects[0] if projects else 'technical projects'}",
+    }
 
 
 # ======================================================
@@ -11335,6 +11482,135 @@ def analyze_answer_weaknesses(answer_text: str, scoring: dict) -> dict:
     return result
 
 
+def generate_depth_followup(
+    question: str,
+    answer: str,
+    scoring: dict,
+    role: str,
+    domain: str,
+    difficulty: str = "Medium",
+) -> str:
+    """
+    PROBLEM 2 FIX: Depth-based follow-up that ALWAYS:
+    1. Stays on the SAME topic as the original question
+    2. Explicitly references something from the candidate's answer
+    3. Targets a specific missing depth dimension (metrics / tradeoffs / failure / optimisation)
+    4. Escalates gradually — never jumps to a new topic
+
+    Used for ALL difficulty tiers (Easy, Medium, Hard).
+    For Hard, delegates to generate_adaptive_followup_v2 for pressure-layer logic.
+    """
+    from llm_manager import call_llm
+
+    # Identify which depth dimension is missing (priority order)
+    answer_lower = answer.lower()
+    has_metrics = any(kw in answer_lower for kw in [
+        "%", "percent", "ms", "milliseconds", "seconds", "million", "thousand",
+        "throughput", "latency", "tps", "rps", "gb", "tb", "users", "requests"
+    ])
+    has_tradeoff = any(kw in answer_lower for kw in [
+        "tradeoff", "trade-off", "versus", " vs ", "compared to", "alternative",
+        "however", "but", "pros and cons", "on the other hand", "downside", "limitation"
+    ])
+    has_example = any(kw in answer_lower for kw in [
+        "for example", "in my project", "we built", "at my", "when i", "i implemented",
+        "for instance", "specifically", "in production", "i used", "we used"
+    ])
+    has_failure = any(kw in answer_lower for kw in [
+        "failure", "outage", "bottleneck", "failed", "bug", "incident", "crash", "error", "issue"
+    ])
+
+    knowledge = scoring.get("knowledge", 5)
+    communication = scoring.get("communication", 5)
+    avg = (knowledge + communication + scoring.get("relevance", 5)) / 3
+
+    # Determine what's missing and craft targeted follow-up
+    if not has_example and knowledge < 7:
+        depth_target = "concrete_example"
+        depth_instruction = (
+            "Ask for a concrete real-world example of ONE specific claim they made. "
+            "Quote or paraphrase exactly what they said. Ask: 'Can you give a specific "
+            "instance from your own experience where this played out?'"
+        )
+    elif not has_metrics and avg >= 5:
+        depth_target = "metrics"
+        depth_instruction = (
+            "Ask them to quantify ONE specific claim. Reference the exact claim from their answer. "
+            "E.g. 'You mentioned this approach is efficient — what specific metric or benchmark "
+            "would you use to validate that, and what threshold would you consider a success?'"
+        )
+    elif not has_tradeoff and avg >= 6:
+        depth_target = "tradeoff"
+        depth_instruction = (
+            "Present ONE specific alternative to the approach they described. "
+            "Ask: what does their approach do better, and what does it give up? "
+            "Keep it to exactly these two options — not a full landscape survey."
+        )
+    elif not has_failure and avg >= 6:
+        depth_target = "failure"
+        depth_instruction = (
+            "Ask about ONE specific way their described approach could fail or produce incorrect results. "
+            "How would they detect it? What's the mitigation? One failure mode, not a full audit."
+        )
+    else:
+        depth_target = "optimization"
+        depth_instruction = (
+            "Ask them to improve ONE specific aspect of what they described. "
+            "What would they do differently if they had more time, a tighter constraint, "
+            "or 10x the load? One change, not a redesign."
+        )
+
+    # Extract a short excerpt from the answer to anchor the follow-up
+    words = answer.strip().split()
+    answer_excerpt = " ".join(words[:15]) + ("..." if len(words) > 15 else "")
+
+    domain_block = build_domain_authority_block(domain, role)
+
+    prompt = f"""You are a senior technical interviewer for {role} in {domain}.
+
+{domain_block}
+
+The candidate just answered this question:
+ORIGINAL QUESTION: {question}
+CANDIDATE'S ANSWER (first ~15 words): "{answer_excerpt}"
+FULL ANSWER LENGTH: {len(words)} words
+
+DEPTH TARGET: {depth_target}
+INSTRUCTION: {depth_instruction}
+
+CRITICAL RULES:
+1. The follow-up MUST stay on the EXACT same topic as the original question — no topic switching
+2. The follow-up MUST directly reference something the candidate said (quote or clearly paraphrase it)
+3. The follow-up targets ONLY {depth_target} — do not combine multiple depth targets
+4. Must be answerable in {{"Easy": "3-5", "Medium": "4-6", "Hard": "4-6"}}.get("{difficulty}", "4-6") paragraphs of text
+5. Be 1-3 sentences — precise, direct, no multi-part prompts
+6. Do NOT introduce a completely new concept or domain area
+
+Output ONLY the follow-up question, no labels or explanations.
+
+Follow-up question:"""
+
+    try:
+        q = call_llm(prompt, session=st.session_state).strip()
+        q = re.sub(r'^[\d\)\.\-•\*]+\s*', '', q).strip()
+        if len(q) > 20:
+            return q
+    except Exception:
+        pass
+
+    # Targeted fallback based on depth_target
+    fallback_map = {
+        "concrete_example": f'You mentioned "{answer_excerpt}" — can you give a specific real-world example from your experience where this happened?',
+        "metrics": f'You described an approach in your answer — what specific metric would you use to measure whether it was actually working well, and what threshold would you set?',
+        "tradeoff": f'You described one approach — what is the most significant thing you give up with this choice compared to the obvious alternative?',
+        "failure": f'Based on what you described, what is the one failure mode you would be most concerned about, and how would you detect it before it caused user impact?',
+        "optimization": f'If you had to improve the approach you described by 30% on the most important dimension, what is the single change you would make first and why?',
+    }
+    return fallback_map.get(depth_target, fallback_map["metrics"])
+
+
+
+
 def generate_adaptive_followup(question: str, answer: str, strategy: str, escalation_layer: int, role: str, domain: str) -> str:
     """
     UPGRADED (Fix 3): Delegates to generate_adaptive_followup_v2.
@@ -11347,7 +11623,6 @@ def generate_adaptive_followup(question: str, answer: str, strategy: str, escala
     )
 
 
-def get_user_weakness_history(username: str) -> dict:
     """
     PART 5: Weakness Memory Engine.
     Query past 5 interviews and detect recurring weak skill.
@@ -13022,14 +13297,22 @@ Generate {num_questions} questions now:
                 st.session_state.dynamic_answer_submitted = False
             if 'current_interview_question_text' not in st.session_state:
                 st.session_state.current_interview_question_text = ""
-            if 'interview_domain' not in st.session_state or st.session_state.interview_domain != selected_domain:
-                st.session_state.interview_domain = selected_domain
-                st.session_state.interview_role = selected_role
-                st.session_state.dynamic_interview_started = False
-                st.session_state.dynamic_interview_completed = False
-                st.session_state.interview_result_saved = False
-                st.session_state.interview_final_duration_seconds = None
-                st.session_state.interview_actual_start_time = None
+            if 'interview_domain' not in st.session_state or \
+               st.session_state.interview_domain != selected_domain or \
+               st.session_state.get('interview_role') != selected_role:
+                # Only reset if NOT mid-interview to avoid flicker on accidental selectbox change
+                _mid_interview = (
+                    st.session_state.get('dynamic_interview_started', False) and
+                    not st.session_state.get('dynamic_interview_completed', False)
+                )
+                if not _mid_interview:
+                    st.session_state.interview_domain = selected_domain
+                    st.session_state.interview_role = selected_role
+                    st.session_state.dynamic_interview_started = False
+                    st.session_state.dynamic_interview_completed = False
+                    st.session_state.interview_result_saved = False
+                    st.session_state.interview_final_duration_seconds = None
+                    st.session_state.interview_actual_start_time = None
             if 'question_timer_start' not in st.session_state:
                 st.session_state.question_timer_start = None
             if 'timer_seconds' not in st.session_state:
@@ -13270,7 +13553,7 @@ Generate {num_questions} questions now:
                     # Add refresh button for regenerating all interview questions
                     col1, col2 = st.columns([3, 1])
                     with col2:
-                        if st.button("🔄 Refresh Interview"):
+                        if st.button("🔄 Refresh Interview", key="refresh_interview_btn"):
                             # Clear all interview state
                             st.session_state.dynamic_interview_questions = []
                             st.session_state.current_dynamic_interview_question = 0
@@ -13294,16 +13577,10 @@ Generate {num_questions} questions now:
                             # Force regeneration
                             st.rerun()
 
-                    # Answer input with character limit
-                    answer_key = f"dynamic_interview_answer_{st.session_state.current_dynamic_interview_question}"
-                    answer = st.text_area(
-                        "Your answer:",
-                        placeholder="Type your detailed answer here... (Use STAR method: Situation, Task, Action, Result)",
-                        height=150,
-                        max_chars=2000,
-                        key=answer_key,
-                        help="Maximum 2000 characters"
-                    )
+                    # ── PROBLEM 3 FIX: Use st.form to prevent keystroke-triggered reruns ──
+                    # The form wraps the textarea + submit button so the script only reruns
+                    # when the user explicitly clicks "Submit Answer", not on every character typed.
+                    answer_form_key = f"answer_form_{st.session_state.current_dynamic_interview_question}"
 
                     # ── SINGLE helper: evaluate + inject follow-up (called from both submit paths) ──
                     def _process_submission(ans_text, q_text, q_idx, n_answered):
@@ -13382,11 +13659,25 @@ Generate {num_questions} questions now:
                                 st.session_state.pending_followup_strategy = strategy
 
                         elif diff in ("Easy", "Medium") and can_add_followup:
-                            # ── Easy/Medium: only inject if LLM returned a valid followup ──
-                            # The evaluation prompt does NOT ask for a follow-up for Easy/Medium,
-                            # so eval_res["followup"] is always "".  We deliberately do NOT inject
-                            # anything — this prevents mismatched questions.
-                            pass   # No follow-up for Easy/Medium
+                            # ── Easy/Medium: inject ONE depth-based follow-up ──
+                            # The follow-up stays on the SAME topic, references the answer,
+                            # and targets the most important missing depth dimension.
+                            avg_score = (eval_res.get("knowledge", 5) + eval_res.get("communication", 5) + eval_res.get("relevance", 5)) / 3
+                            # Only inject follow-up if score is medium or above (not for zero/junk answers)
+                            if avg_score >= 3:
+                                followup_q = generate_depth_followup(
+                                    q_text, ans_text, eval_res,
+                                    role=selected_role, domain=selected_domain, difficulty=diff
+                                )
+                                followup_q = followup_q.strip() if followup_q else ""
+                                if followup_q:
+                                    st.session_state.dynamic_interview_questions.insert(
+                                        q_idx + 1, followup_q
+                                    )
+                                    st.session_state.follow_up_count = getattr(st.session_state, 'follow_up_count', 0) + 1
+                                    st.session_state.follow_up_strategy = "Depth Probe"
+                                    st.session_state.pending_followup_display = followup_q
+                                    st.session_state.pending_followup_strategy = "Depth Probe"
 
                         return eval_res
 
@@ -13396,23 +13687,36 @@ Generate {num_questions} questions now:
                     if 'pending_followup_strategy' not in st.session_state:
                         st.session_state.pending_followup_strategy = ""
 
-                    # Auto-submit logic when timer expires
+                    # Auto-submit logic when timer expires (reads saved draft, no stale `answer` var)
                     if remaining_time <= 0 and not st.session_state.dynamic_answer_submitted:
-                        if not answer.strip():
-                            answer = "⚠️ No Answer"
+                        auto_answer = st.session_state.get(f"_answer_draft_{st.session_state.current_dynamic_interview_question}", "")
+                        if not auto_answer.strip():
+                            auto_answer = "⚠️ No Answer"
                         with st.spinner("Evaluating your answer..."):
                             _process_submission(
-                                answer, question,
+                                auto_answer, question,
                                 st.session_state.current_dynamic_interview_question,
                                 questions_answered
                             )
                         st.warning("⏰ Time's up! Answer auto-submitted.")
                         st.rerun()
 
-                    # Submit answer button
+                    # ── Answer input: use st.form so typing doesn't cause full page reruns ──
                     if not st.session_state.dynamic_answer_submitted and remaining_time > 0:
-                        if st.button("Submit Answer & Get Feedback"):
+                        with st.form(key=answer_form_key, clear_on_submit=False):
+                            answer = st.text_area(
+                                "Your answer:",
+                                placeholder="Type your detailed answer here... (Use STAR method: Situation, Task, Action, Result)",
+                                height=150,
+                                max_chars=2000,
+                                help="Maximum 2000 characters"
+                            )
+                            submit_clicked = st.form_submit_button("Submit Answer & Get Feedback 🚀")
+
+                        if submit_clicked:
                             if answer.strip():
+                                # Save draft for timer expiry safety
+                                st.session_state[f"_answer_draft_{st.session_state.current_dynamic_interview_question}"] = answer
                                 with st.spinner("Evaluating your answer..."):
                                     _process_submission(
                                         answer, question,
@@ -13421,7 +13725,7 @@ Generate {num_questions} questions now:
                                     )
                                 st.rerun()
                             else:
-                                st.warning("Please provide an answer before proceeding.")
+                                st.warning("Please provide an answer before submitting.")
 
                     # Show feedback after answer submitted
                     if st.session_state.dynamic_answer_submitted:
@@ -13447,32 +13751,46 @@ Generate {num_questions} questions now:
                         # ★ Show follow-up preview using SAME text that was injected ★
                         _preview_fq = st.session_state.get('pending_followup_display', '')
                         _preview_strategy = st.session_state.get('pending_followup_strategy', '')
-                        if st.session_state.interview_difficulty == "Hard" and _preview_fq:
-                            _esc_layer = st.session_state.get("escalation_layer", 1)
-                            _layer_info = ESCALATION_LAYER_MAP.get(_esc_layer, {})
-                            _layer_name = _layer_info.get("name", "")
-                            _pressure = _layer_info.get("cognitive_pressure", "")
-                            _pressure_colors = {
-                                "LOW": "#69f0ae", "MEDIUM": "#ffcc02",
-                                "MEDIUM-HIGH": "#ff9800", "HIGH": "#ff5722", "MAXIMUM": "#f44336"
-                            }
-                            _pc = _pressure_colors.get(_pressure, "#ffa500")
-                            st.markdown(f"""
-                            <div style="background: linear-gradient(135deg, rgba(255,165,0,0.12), rgba(255,165,0,0.06));
-                                        border: 1px solid rgba(255,165,0,0.4); border-radius: 10px;
-                                        padding: 14px 18px; margin: 12px 0;">
-                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                                    <span style="color: #ffa500; font-weight: 600;">
-                                        🔎 Follow-Up — {_preview_strategy}
-                                    </span>
-                                    <span style="color:{_pc};font-size:12px;font-weight:600;
-                                                 background:rgba(0,0,0,0.3);padding:2px 8px;border-radius:12px;">
-                                        Layer {_esc_layer}/5: {_layer_name} | Pressure: {_pressure}
-                                    </span>
+                        _cur_diff = st.session_state.interview_difficulty
+                        if _preview_fq:
+                            if _cur_diff == "Hard":
+                                _esc_layer = st.session_state.get("escalation_layer", 1)
+                                _layer_info = ESCALATION_LAYER_MAP.get(_esc_layer, {})
+                                _layer_name = _layer_info.get("name", "")
+                                _pressure = _layer_info.get("cognitive_pressure", "")
+                                _pressure_colors = {
+                                    "LOW": "#69f0ae", "MEDIUM": "#ffcc02",
+                                    "MEDIUM-HIGH": "#ff9800", "HIGH": "#ff5722", "MAXIMUM": "#f44336"
+                                }
+                                _pc = _pressure_colors.get(_pressure, "#ffa500")
+                                st.markdown(f"""
+                                <div style="background: linear-gradient(135deg, rgba(255,165,0,0.12), rgba(255,165,0,0.06));
+                                            border: 1px solid rgba(255,165,0,0.4); border-radius: 10px;
+                                            padding: 14px 18px; margin: 12px 0;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                        <span style="color: #ffa500; font-weight: 600;">
+                                            🔎 Follow-Up — {_preview_strategy}
+                                        </span>
+                                        <span style="color:{_pc};font-size:12px;font-weight:600;
+                                                     background:rgba(0,0,0,0.3);padding:2px 8px;border-radius:12px;">
+                                            Layer {_esc_layer}/5: {_layer_name} | Pressure: {_pressure}
+                                        </span>
+                                    </div>
+                                    <p style="color: #ffffff; margin: 0; font-size: 15px;">{_preview_fq}</p>
                                 </div>
-                                <p style="color: #ffffff; margin: 0; font-size: 15px;">{_preview_fq}</p>
-                            </div>
-                            """, unsafe_allow_html=True)
+                                """, unsafe_allow_html=True)
+                            else:
+                                # Easy / Medium follow-up preview
+                                st.markdown(f"""
+                                <div style="background: linear-gradient(135deg, rgba(0,195,255,0.10), rgba(0,195,255,0.05));
+                                            border: 1px solid rgba(0,195,255,0.3); border-radius: 10px;
+                                            padding: 14px 18px; margin: 12px 0;">
+                                    <span style="color: #00c3ff; font-weight: 600; font-size: 14px;">
+                                        🔍 Depth Follow-Up Coming Next
+                                    </span>
+                                    <p style="color: #ffffff; margin: 8px 0 0 0; font-size: 15px;">{_preview_fq}</p>
+                                </div>
+                                """, unsafe_allow_html=True)
 
                         # Continue/Complete button
                         # CRITICAL FIX: Check if we've answered all original questions
@@ -13531,10 +13849,17 @@ Generate {num_questions} questions now:
                                     if i < num_to_show - 1:  # Don't add separator after last item
                                         st.markdown("---")
 
-                    # Auto-refresh for timer
+                    # Auto-refresh for timer — only when answer not yet submitted.
+                    # We use a longer interval (5s) to reduce flicker while still updating the display.
+                    # The timer is a visual aid; the actual expiry check happens on the next rerun.
                     if remaining_time > 0 and not st.session_state.dynamic_answer_submitted:
-                        time.sleep(1)
-                        st.rerun()
+                        # Only sleep+rerun every 5 seconds to dramatically reduce flicker
+                        _last_refresh = st.session_state.get("_last_timer_refresh", 0)
+                        _now = time.time()
+                        if _now - _last_refresh >= 5:
+                            st.session_state["_last_timer_refresh"] = _now
+                            time.sleep(0.1)
+                            st.rerun()
                 else:
                     # CRITICAL FIX: All questions answered, move to completion automatically
                     # Capture exact duration at auto-completion moment
@@ -14812,7 +15137,6 @@ Generate {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
-
 
 
 if tab5:
