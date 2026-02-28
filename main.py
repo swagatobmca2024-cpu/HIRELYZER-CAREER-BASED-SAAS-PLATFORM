@@ -10519,6 +10519,7 @@ DIFFICULTY_CONTRACTS = {
             "Award 8-10 for answers that: isolate the core challenge clearly, reason with technical specifics "
             "(not just buzzwords), make a justified decision, and acknowledge one concrete risk or edge case. "
             "Award 5-7 for correct but high-level answers that skip quantification or justification. "
+
             "Award 0-4 for answers that treat the question like an Easy/Medium or give purely theoretical responses. "
             "A strong Hard answer reads like a well-structured Slack thread from a senior engineer explaining "
             "a decision to their team — not a conference talk or architecture document."
@@ -10540,6 +10541,178 @@ DIFFICULTY_CONTRACTS = {
         ],
     },
 }
+
+
+# =============================================================================
+# PROBLEM 1 FIX: RESUME ANCHOR LAYER
+# =============================================================================
+# Extracts the single best skill/project/technology anchor from the resume
+# context and uses it to generate a strictly resume-anchored first question
+# per difficulty tier.
+
+def extract_resume_anchor(resume_context: dict, domain: str, difficulty: str) -> dict:
+    """
+    Select the single best anchor from the resume for the given domain + difficulty.
+
+    Returns:
+        anchor_type: "skill" | "project" | "technology"
+        anchor_value: the specific skill/project/technology string
+        anchor_source: human-readable description for prompt injection
+    """
+    from llm_manager import call_llm
+
+    skills = resume_context.get("skills", [])
+    projects = resume_context.get("projects", [])
+    technologies = resume_context.get("technologies", [])
+    experience = resume_context.get("experience", [])
+
+    # Domain authority: filter out forbidden keywords
+    cfg = get_domain_config(domain)
+    forbidden = [kw.lower() for kw in cfg.get("forbidden_resume_keywords", [])]
+
+    def domain_relevant(items):
+        return [i for i in items if not any(f in i.lower() for f in forbidden)]
+
+    rel_skills = domain_relevant(skills)
+    rel_projects = domain_relevant(projects)
+    rel_tech = domain_relevant(technologies)
+
+    # Preference per difficulty:
+    # Easy -> skill (conceptual question about a skill they claim)
+    # Medium -> project (scenario grounded in their own work)
+    # Hard -> technology/project (deep technical challenge on something they built with)
+    if difficulty == "Easy":
+        candidates = rel_skills or rel_tech or rel_projects
+        anchor_type = "skill" if rel_skills else ("technology" if rel_tech else "project")
+    elif difficulty == "Medium":
+        candidates = rel_projects or rel_skills or rel_tech
+        anchor_type = "project" if rel_projects else ("skill" if rel_skills else "technology")
+    else:  # Hard
+        candidates = rel_tech or rel_projects or rel_skills
+        anchor_type = "technology" if rel_tech else ("project" if rel_projects else "skill")
+
+    if not candidates:
+        return {"anchor_type": None, "anchor_value": None, "anchor_source": None}
+
+    # Pick the first (highest-priority) candidate
+    anchor_value = candidates[0]
+
+    anchor_source_map = {
+        "skill": f"a skill you listed on your resume: '{anchor_value}'",
+        "project": f"a project you mentioned on your resume: '{anchor_value}'",
+        "technology": f"a technology you listed on your resume: '{anchor_value}'",
+    }
+
+    return {
+        "anchor_type": anchor_type,
+        "anchor_value": anchor_value,
+        "anchor_source": anchor_source_map.get(anchor_type, anchor_value),
+    }
+
+
+def generate_resume_anchored_first_question(
+    resume_context: dict, domain: str, role: str, difficulty: str
+) -> str:
+    """
+    Generate a single, deeply resume-anchored first question.
+
+    Easy:   "You mentioned [skill] — what problem does it solve? Give a real example."
+    Medium: "In your [project], how would you handle [specific scenario]?"
+    Hard:   "You worked with [tech] in [project] — walk me through the hardest technical
+             challenge that technology caused and how you reasoned through it."
+
+    Falls back to domain-based generation if resume is empty.
+    """
+    from llm_manager import call_llm
+    import streamlit as st
+
+    anchor = extract_resume_anchor(resume_context, domain, difficulty)
+
+    if not anchor["anchor_value"]:
+        # No usable resume content → fall back to domain generation
+        fallback_map = {
+            "Easy": f"What is the core responsibility of a {role} and what concept do you consider most fundamental to {domain}?",
+            "Medium": f"Describe a realistic scenario in {domain} where you had to make a key implementation decision. What drove your choice?",
+            "Hard": f"What is the most significant technical tradeoff you'd expect to encounter as a {role} in {domain}, and how would you reason through it?",
+        }
+        return fallback_map.get(difficulty, f"Explain a key concept in {domain} relevant to the {role} role.")
+
+    domain_block = build_domain_authority_block(domain, role)
+    difficulty_block = get_difficulty_instruction_block(difficulty)
+
+    # Tier-specific anchor prompt templates
+    anchor_templates = {
+        "Easy": f"""Generate ONE concept-clarity question anchored to {anchor['anchor_source']}.
+
+REQUIRED PATTERN:
+"You mentioned {anchor['anchor_value']} — [ask what problem it solves / what it is / why it exists / when you'd use it]. Give a real-world example."
+
+The question MUST:
+1. Explicitly reference '{anchor['anchor_value']}' by name
+2. Ask the candidate to explain WHAT it is or WHY it exists
+3. Request a real-world example they've seen or used
+4. Be answerable in 3-5 paragraphs — no implementation depth, no tradeoffs""",
+
+        "Medium": f"""Generate ONE scenario question anchored to {anchor['anchor_source']}.
+
+REQUIRED PATTERN:
+"In your {anchor['anchor_value']} [work/project/experience], [describe a realistic constraint or challenge]. How would you approach [specific decision]?"
+
+The question MUST:
+1. Explicitly reference '{anchor['anchor_value']}' from their resume
+2. Ground the scenario in that specific work/project/technology
+3. Present ONE concrete constraint or decision point
+4. Be answerable in 5-6 paragraphs — no full system redesign""",
+
+        "Hard": f"""Generate ONE focused technical depth question anchored to {anchor['anchor_source']}.
+
+REQUIRED PATTERN:
+"You worked with {anchor['anchor_value']} — [describe ONE specific technical challenge: tradeoff, failure mode, or optimisation constraint]. Walk through your reasoning."
+
+The question MUST:
+1. Explicitly reference '{anchor['anchor_value']}' from their resume
+2. Target ONE challenge axis: tradeoff OR failure handling OR optimisation
+3. Require senior-level reasoning about that specific technology/project
+4. Be answerable in 6-8 paragraphs — NOT a full system design""",
+    }
+
+    anchor_prompt = anchor_templates.get(difficulty, anchor_templates["Medium"])
+
+    prompt = f"""You are a senior technical interviewer.
+
+{domain_block}
+
+{difficulty_block}
+
+RESUME ANCHOR INSTRUCTION:
+{anchor_prompt}
+
+Generate EXACTLY ONE question. Output ONLY the question text — no labels, numbering, or explanation.
+
+Question:"""
+
+    try:
+        result = call_llm(prompt, session=st.session_state).strip()
+        import re
+        result = re.sub(r'^[\d\)\.\-•\*]+\s*', '', result).strip()
+        result = re.sub(r'^Question\s*\d*\s*:?\s*', '', result, flags=re.IGNORECASE).strip()
+        if result and len(result) > 20:
+            return result
+    except Exception:
+        pass
+
+    # Hardcoded anchor fallbacks
+    fallback_anchored = {
+        "Easy": f"You mentioned {anchor['anchor_value']} on your resume — can you explain what problem it solves and give a concrete example of where you've used it?",
+        "Medium": f"Based on your experience with {anchor['anchor_value']}, describe a specific implementation challenge you faced and the key decision you made to resolve it.",
+        "Hard": f"You listed {anchor['anchor_value']} on your resume — what is the most significant technical tradeoff or failure mode associated with it that you've encountered or anticipated, and how did you reason through it?",
+    }
+    return fallback_anchored.get(difficulty, f"Tell me about your experience with {anchor['anchor_value']} and the most technically interesting problem it helped you solve.")
+
+
+# =============================================================================
+# END PROBLEM 1 FIX
+# =============================================================================
 
 
 def get_difficulty_instruction_block(difficulty: str) -> str:
@@ -10770,19 +10943,99 @@ def analyze_answer_weaknesses_smart(answer_text: str, scoring: dict, escalation_
     }
 
 
+def detect_depth_gaps(answer: str, scoring: dict) -> dict:
+    """
+    PROBLEM 2 FIX: Detect what specific depth dimension is missing from the answer.
+
+    Returns:
+        missing_metrics: bool — answer lacks numbers/benchmarks
+        missing_tradeoff: bool — answer never compared two approaches
+        missing_failure: bool — answer ignores edge cases/failure handling
+        missing_optimisation: bool — answer doesn't mention performance/efficiency
+        missing_example: bool — answer is purely theoretical
+        answer_topic: str — brief description of what the answer was about (for topic-lock)
+        depth_priority: str — which gap is most important to probe first
+    """
+    answer_lower = answer.lower()
+    words = answer.split()
+
+    missing_metrics = not any(kw in answer_lower for kw in [
+        "%", "percent", " ms", "milliseconds", "seconds", " rps", " tps", " qps",
+        "latency", "throughput", "uptime", "million", "thousand", "gb", "mb",
+        "benchmark", "measure", "metric", "baseline", "sla", "p99", "p95",
+    ])
+
+    missing_tradeoff = not any(kw in answer_lower for kw in [
+        "tradeoff", "trade-off", "versus", " vs ", "compared to", "alternative",
+        "however", "downside", "upside", "pros", "cons", "on the other hand",
+        "instead", "better when", "worse when", "disadvantage", "advantage",
+    ])
+
+    missing_failure = not any(kw in answer_lower for kw in [
+        "failure", "fail", "outage", "error", "exception", "crash", "timeout",
+        "edge case", "corner case", "when it breaks", "what if", "retry",
+        "fallback", "circuit breaker", "dead letter", "rollback",
+    ])
+
+    missing_optimisation = not any(kw in answer_lower for kw in [
+        "optimis", "optimiz", "cache", "index", "batch", "async", "parallel",
+        "reduce latency", "improve performance", "bottleneck", "profil", "lazy",
+        "eager", "pool", "queue", "debounce", "throttle",
+    ])
+
+    missing_example = not any(kw in answer_lower for kw in [
+        "for example", "for instance", "specifically", "in my", "at my",
+        "we built", "i implemented", "when i", "in production", "in our",
+        "we used", "i used", "i worked",
+    ])
+
+    knowledge = scoring.get("knowledge", 5)
+    communication = scoring.get("communication", 5)
+    relevance = scoring.get("relevance", 5)
+
+    # Priority: what gap has the highest interview signal value?
+    if missing_metrics and knowledge >= 6:
+        depth_priority = "metrics"  # They know it but didn't quantify
+    elif missing_tradeoff and knowledge >= 5:
+        depth_priority = "tradeoff"  # Good answer but one-sided
+    elif missing_failure:
+        depth_priority = "failure"  # Missed defensive thinking
+    elif missing_optimisation and knowledge >= 6:
+        depth_priority = "optimisation"
+    elif missing_example:
+        depth_priority = "example"  # Too abstract
+    else:
+        depth_priority = "depth"  # General depth probe
+
+    # Extract the topic (first meaningful noun phrase from original answer)
+    topic_words = [w for w in words[:30] if len(w) > 3 and w.isalpha()]
+    answer_topic = " ".join(topic_words[:5]) if topic_words else "the approach described"
+
+    return {
+        "missing_metrics": missing_metrics,
+        "missing_tradeoff": missing_tradeoff,
+        "missing_failure": missing_failure,
+        "missing_optimisation": missing_optimisation,
+        "missing_example": missing_example,
+        "depth_priority": depth_priority,
+        "answer_topic": answer_topic,
+    }
+
+
 def generate_adaptive_followup_v2(
     question: str, answer: str, strategy: str,
     escalation_layer: int, role: str, domain: str,
     difficulty: str = "Hard"
 ) -> str:
     """
-    UPGRADED adaptive follow-up generator.
+    PROBLEM 2 FIX: Depth-based, topic-locked adaptive follow-up generator.
 
-    Key improvements over v1:
-    - Uses ESCALATION_LAYER_MAP for precise per-layer instructions
-    - Injects domain authority block into follow-up prompts
-    - Adds cognitive pressure signal matching the difficulty
-    - Hard mode adds explicit pressure framing ("In a live production system...")
+    Key rules:
+    1. Follow-up MUST stay on the SAME topic as the original question/answer.
+    2. Follow-up MUST reference something specific the candidate said.
+    3. Follow-up MUST target a detected depth gap (metrics/tradeoff/failure/optimisation).
+    4. Topic switching is NEVER allowed.
+    5. Escalation increases gradually within the same topic.
     """
     from llm_manager import call_llm
 
@@ -10848,55 +11101,104 @@ def generate_adaptive_followup_v2(
 
     strategy_instruction = strategy_instructions.get(strategy, "Ask a deeper technical question that increases cognitive load.")
 
-    # Hard mode: add cognitive pressure but keep it text-answerable.
-    # We do NOT ask for full system redesigns. One axis. One focused challenge.
-    pressure_framing = ""
-    if difficulty == "Hard":
-        pressure_framing = f"""
-COGNITIVE PRESSURE LEVEL: {layer_info["cognitive_pressure"]}
-TEXT-SCOPE ENFORCEMENT: This follow-up must be answerable in 4-6 paragraphs.
-Focus on ONE specific gap from their answer — not a full redesign.
-Frame with a concrete, realistic scenario (not "millions of users" at scale).
-Examples of valid Hard follow-up framings:
-  - "You mentioned X — what happens when Y occurs? Walk me through your response."
-  - "How would you validate that your approach actually solves the problem? What metric matters most?"
-  - "What's the one failure mode in your described approach that you'd lose sleep over?"
-Do NOT ask them to redesign the whole system or address every possible failure.
-"""
+    # PROBLEM 2 FIX: Detect depth gaps to target the follow-up precisely
+    from llm_manager import call_llm as _call_llm_fu
+    depth_gaps = detect_depth_gaps(answer, {})
+
+    depth_gap_str = ""
+    gap_priority = depth_gaps.get("depth_priority", "depth")
+    gap_instructions = {
+        "metrics": (
+            "The candidate did NOT provide any metrics, numbers, or benchmarks. "
+            "Ask them to quantify ONE specific claim they made — what number, threshold, or measurement would validate it?"
+        ),
+        "tradeoff": (
+            "The candidate did NOT discuss any tradeoffs or compare alternatives. "
+            "Ask them to defend their approach against ONE specific alternative — what does their choice gain and what does it give up?"
+        ),
+        "failure": (
+            "The candidate did NOT mention failure handling, edge cases, or defensive design. "
+            "Ask them: what is the ONE specific failure mode in what they described, and how would they detect and handle it?"
+        ),
+        "optimisation": (
+            "The candidate did NOT address performance or efficiency. "
+            "Ask: what is the highest-leverage optimisation they'd make to their described approach, and what would they measure to validate it?"
+        ),
+        "example": (
+            "The candidate gave a theoretical answer without a concrete example. "
+            "Ask them to ground their answer in a specific real scenario or experience from their work."
+        ),
+        "depth": (
+            "Ask them to go one level deeper on a specific part of their answer — "
+            "what is the mechanism or implementation detail behind the key claim they made?"
+        ),
+    }
+    depth_gap_str = gap_instructions.get(gap_priority, gap_instructions["depth"])
+
+    # Cognitive pressure increases with escalation layer
+    pressure_framing = f"COGNITIVE PRESSURE LEVEL: {layer_info['cognitive_pressure']}"
 
     prompt = f"""You are a senior technical interviewer for {role} in {domain}.
 
 {domain_block}
 
-The candidate just answered this question:
-ORIGINAL QUESTION: {question}
-CANDIDATE ANSWER: {answer[:600]}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROBLEM 2 RULE — TOPIC LOCK (CRITICAL):
+The follow-up question MUST stay on the EXACT SAME TOPIC as the original question.
+DO NOT introduce a new concept, new technology, or new scenario.
+DO NOT switch topics even if the answer was weak.
+The follow-up probes DEEPER into what the candidate already said, not sideways.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ORIGINAL QUESTION (the topic you must stay on):
+{question}
+
+CANDIDATE'S ANSWER (reference this directly):
+{answer[:700]}
+
+DEPTH GAP DETECTED — TARGET THIS:
+{depth_gap_str}
 
 ESCALATION LAYER: {escalation_layer}/5 — {layer_info["name"]}
-Layer objective: {layer_info["instruction"]}
-
+{pressure_framing}
 STRATEGY: {strategy}
 Strategy instruction: {strategy_instruction}
-{pressure_framing}
 
-Generate EXACTLY ONE follow-up question. It MUST:
-1. Reference ONE specific thing from their answer (name or paraphrase it directly)
-2. Target ONE gap, ONE failure mode, ONE metric, or ONE decision point — not everything at once
-3. Be answerable in 4-6 paragraphs of text — no whiteboard, no full system redesign
-4. Be harder and more targeted than the original question
-5. Be 1-3 sentences — concise, precise, not a multi-part essay prompt
-6. NOT contain instructions like "design a complete system", "walk through every layer",
-   or "handle all possible failure modes"
+FOLLOW-UP GENERATION RULES:
+1. START the question by referencing something SPECIFIC the candidate said
+   (quote or paraphrase a phrase, claim, or decision from their answer)
+2. Probe the detected depth gap — {gap_priority}
+3. Stay on the SAME topic — NO topic switching
+4. Be answerable in 4-6 paragraphs — no whiteboard, no full system redesign
+5. Choose ONE of these gap-specific frames:
+   - "You mentioned [X] — what metric would tell you it's actually working?"
+   - "You described [X] — how would you handle [specific failure mode] in that approach?"
+   - "You chose [X] over alternatives — what is the ONE specific tradeoff you accepted?"
+   - "You explained [X] — what's the one edge case or input that would break this?"
+6. Keep it 1-3 sentences. Precise and targeted.
 
-Output ONLY the follow-up question. No numbering, labels, or explanations.
+Output ONLY the follow-up question. No labels, numbering, or explanations.
 
 Follow-up question:"""
 
     try:
-        return call_llm(prompt, session=st.session_state).strip()
+        result = call_llm(prompt, session=st.session_state).strip()
+        if result:
+            return result
     except Exception:
-        first_words = " ".join(answer.split()[:6]) if answer and answer.split() else "your described approach"
-        return f'You mentioned "{first_words}..." — what is the ONE failure mode in that approach you would be most concerned about, and how would you detect it before it caused user impact?'
+        pass
+
+    # Topic-locked fallback with specific reference to answer
+    first_claim = " ".join(answer.split()[:8]) if answer.split() else "your described approach"
+    fallback_map = {
+        "metrics": f'You mentioned "{first_claim}..." — what specific metric or threshold would tell you this approach is actually performing as expected?',
+        "tradeoff": f'You described "{first_claim}..." — what is the ONE specific thing you give up with this approach compared to the most obvious alternative?',
+        "failure": f'Based on what you described about "{first_claim}..." — what is the one failure mode that keeps you up at night, and how would you detect it before users notice?',
+        "optimisation": f'You outlined "{first_claim}..." — if you needed to reduce its latency by 40%, what is the first thing you\'d change and what would you measure to validate the improvement?',
+        "example": f'You explained "{first_claim}..." in theory — can you walk me through a specific real scenario where this played out, and what the actual outcome was?',
+        "depth": f'You mentioned "{first_claim}..." — can you go one level deeper on exactly HOW that works internally? What is the mechanism behind it?',
+    }
+    return fallback_map.get(gap_priority, fallback_map["depth"])
 
 
 # =============================================================================
@@ -10910,8 +11212,20 @@ def generate_resume_based_questions_domain_aware(
     """
     Drop-in replacement for generate_resume_based_questions_enhanced.
     Applies Domain Authority Layer + Structured Difficulty Enforcement.
+
+    PROBLEM 1 FIX: The FIRST question is ALWAYS resume-anchored using the
+    generate_resume_anchored_first_question() function. Remaining questions
+    are generated with resume context but may be more general.
     """
     from llm_manager import call_llm
+
+    # PROBLEM 1 FIX: Always generate resume-anchored first question
+    anchored_first_q = generate_resume_anchored_first_question(
+        resume_context, domain, role, difficulty
+    )
+
+    if num_questions == 1:
+        return [anchored_first_q]
 
     # FIX 1: Apply domain filter to resume context
     filtered_context = filter_resume_for_domain(resume_context, domain)
@@ -10936,6 +11250,8 @@ def generate_resume_based_questions_domain_aware(
     }
     bias_instruction = bias_map.get(weakness_bias, "")
 
+    remaining = num_questions - 1  # First question already generated above
+
     prompt = f"""You are a senior technical interviewer.
 
 {domain_block}
@@ -10950,11 +11266,12 @@ RESUME CONTEXT (filtered for domain relevance):
 
 {bias_instruction}
 
-Generate EXACTLY {num_questions} interview questions. Each question MUST:
+Generate EXACTLY {remaining} interview questions. Each question MUST:
 1. Be about {domain} — not the candidate's previous domain if it differs
 2. Reference their resume only if resume content is relevant to {domain}
 3. Match the difficulty type specified above (structural enforcement, not just tone)
 4. Be a single, clear question (1-2 sentences)
+5. Be DIFFERENT from this already-generated first question: "{anchored_first_q[:120]}..."
 
 Output ONLY the questions, one per line, no numbering or prefixes.
 
@@ -10968,11 +11285,11 @@ Questions:"""
             q = re.sub(r'^[\d\)\.\-•\*]+\s*', '', q).strip()
             if len(q) > 15:
                 cleaned.append(q)
-            if len(cleaned) >= num_questions:
+            if len(cleaned) >= remaining:
                 break
 
         # Fallback fill
-        while len(cleaned) < num_questions:
+        while len(cleaned) < remaining:
             contract = DIFFICULTY_CONTRACTS.get(difficulty, DIFFICULTY_CONTRACTS["Medium"])
             diff_label = contract["label"]
             fallbacks = contract.get("fallback_questions", [])
@@ -10984,10 +11301,12 @@ Questions:"""
                 cleaned.append(
                     f"[{diff_label}] Describe a specific challenge you faced with {domain} and how you resolved it."
                 )
-        return cleaned[:num_questions]
+
+        # PROBLEM 1: Prepend the anchored first question
+        return [anchored_first_q] + cleaned[:remaining]
 
     except Exception:
-        return [f"Explain a core {domain} concept you've worked with recently."] * num_questions
+        return [anchored_first_q] + [f"Explain a core {domain} concept you've worked with recently."] * (num_questions - 1)
 
 
 def generate_domain_questions_with_llm(
@@ -12951,8 +13270,6 @@ Generate {num_questions} questions now:
                         st.session_state.resume_questions_answered = 0
 
                         st.success("✅ Resume uploaded and analyzed successfully!")
-                        
-                        time.sleep(1)
                         st.rerun()
                     else:
                         st.error("Could not extract text from resume. Please ensure it's a valid PDF.")
@@ -12975,28 +13292,53 @@ Generate {num_questions} questions now:
             st.markdown("---")
             st.markdown("<h3 style='color: #00c3ff;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
 
-            # Domain and Role selection
+            # PROBLEM 3 FIX: Use session state to persist domain/role without rerun on each change
+            if 'selected_domain_confirmed' not in st.session_state:
+                st.session_state.selected_domain_confirmed = list(COURSES_BY_CATEGORY.keys())[0]
+            if 'selected_role_confirmed' not in st.session_state:
+                _default_roles = list(COURSES_BY_CATEGORY[st.session_state.selected_domain_confirmed].keys())
+                st.session_state.selected_role_confirmed = _default_roles[0] if _default_roles else None
+
             st.markdown('<div class="role-selector">', unsafe_allow_html=True)
-
-            col1, col2 = st.columns(2)
-            with col1:
-                selected_domain = st.selectbox(
-                    "Select Career Domain",
-                    options=list(COURSES_BY_CATEGORY.keys()),
-                    key="interview_domain_selection"
-                )
-
-            with col2:
-                if selected_domain:
-                    roles = list(COURSES_BY_CATEGORY[selected_domain].keys())
-                    selected_role = st.selectbox(
-                        "Select Target Role",
-                        options=roles,
-                        key="interview_role_selection"
+            with st.form("domain_role_form", clear_on_submit=False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    _domain_opts = list(COURSES_BY_CATEGORY.keys())
+                    _domain_idx = _domain_opts.index(st.session_state.selected_domain_confirmed) if st.session_state.selected_domain_confirmed in _domain_opts else 0
+                    _form_domain = st.selectbox(
+                        "Select Career Domain",
+                        options=_domain_opts,
+                        index=_domain_idx,
+                        key="interview_domain_form_select"
                     )
-                else:
-                    selected_role = None
+                with col2:
+                    _role_opts = list(COURSES_BY_CATEGORY.get(_form_domain, {}).keys())
+                    _role_idx = _role_opts.index(st.session_state.selected_role_confirmed) if st.session_state.selected_role_confirmed in _role_opts else 0
+                    _form_role = st.selectbox(
+                        "Select Target Role",
+                        options=_role_opts,
+                        index=max(0, _role_idx),
+                        key="interview_role_form_select"
+                    )
+                _confirm_role = st.form_submit_button("✅ Confirm Role Selection")
 
+            if _confirm_role:
+                st.session_state.selected_domain_confirmed = _form_domain
+                st.session_state.selected_role_confirmed = _form_role
+                # Reset interview if domain/role changed
+                if (st.session_state.get('interview_domain') != _form_domain or
+                        st.session_state.get('interview_role') != _form_role):
+                    st.session_state.dynamic_interview_started = False
+                    st.session_state.dynamic_interview_completed = False
+                    st.session_state.interview_result_saved = False
+                    st.session_state.interview_final_duration_seconds = None
+                    st.session_state.interview_actual_start_time = None
+                st.rerun()
+
+            selected_domain = st.session_state.selected_domain_confirmed
+            selected_role = st.session_state.selected_role_confirmed
+            if selected_domain and selected_role:
+                st.info(f"🎯 Selected: **{selected_role}** in **{selected_domain}**")
             st.markdown('</div>', unsafe_allow_html=True)
         else:
             selected_domain = None
@@ -13022,14 +13364,11 @@ Generate {num_questions} questions now:
                 st.session_state.dynamic_answer_submitted = False
             if 'current_interview_question_text' not in st.session_state:
                 st.session_state.current_interview_question_text = ""
-            if 'interview_domain' not in st.session_state or st.session_state.interview_domain != selected_domain:
+            # Track domain/role without resetting on every rerun
+            # (domain reset is now handled by the domain_role_form submit above)
+            if 'interview_domain' not in st.session_state:
                 st.session_state.interview_domain = selected_domain
                 st.session_state.interview_role = selected_role
-                st.session_state.dynamic_interview_started = False
-                st.session_state.dynamic_interview_completed = False
-                st.session_state.interview_result_saved = False
-                st.session_state.interview_final_duration_seconds = None
-                st.session_state.interview_actual_start_time = None
             if 'question_timer_start' not in st.session_state:
                 st.session_state.question_timer_start = None
             if 'timer_seconds' not in st.session_state:
@@ -13063,68 +13402,73 @@ Generate {num_questions} questions now:
                     _wm_score = _wm_avgs.get(_wm["weakest_skill"], 0)
                     st.info(f"🧠 **Weakness Memory:** Based on your last 5 interviews, your weakest recurring skill is **{_wm_skill}** (avg: {_wm_score:.1f}/10). Questions will be biased toward improving this.")
 
-                col1, col2 = st.columns(2)
+                # PROBLEM 3 FIX: Wrap all setup widgets in st.form to prevent
+                # per-widget rerun flicker. Only reruns on form submit.
+                with st.form("interview_setup_form", clear_on_submit=False):
+                    col1, col2 = st.columns(2)
 
-                with col1:
-                    interview_type = st.selectbox(
-                        "Interview Type",
-                        options=["technical", "behavioral", "mixed"],
-                        format_func=lambda x: x.title() + (" (Technical + Behavioral)" if x == "mixed" else ""),
-                        key="dynamic_interview_type_select"
-                    )
-
-                with col2:
-                    interview_difficulty = st.selectbox(
-                        "Interview Difficulty",
-                        options=["Easy", "Medium", "Hard"],
-                        key="interview_difficulty_select",
-                        index=1
-                    )
-
-                col3, col4 = st.columns(2)
-                with col3:
-                    num_questions = st.slider("Number of questions:", 5, 10, 6)
-
-                with col4:
-                    timer_seconds = st.slider("Time per question (seconds):", 60, 300, 120, step=30)
-
-                # ── DOMAIN AUTHORITY: Show mismatch warning if resume ≠ selected domain ──
-                if st.session_state.get("resume_context"):
-                    _rc = st.session_state.resume_context
-                    _resume_techs = " ".join(_rc.get("technologies", []) + _rc.get("skills", [])).lower()
-                    _domain_cfg = get_domain_config(selected_domain)
-                    _forbidden = _domain_cfg.get("forbidden_resume_keywords", [])
-                    _has_mismatch = any(kw.lower() in _resume_techs for kw in _forbidden)
-                    if _has_mismatch:
-                        st.info(
-                            f"⚠️ **Domain Override Active**: Your resume appears to have a different technical background. "
-                            f"Questions will be **strictly aligned to {selected_domain}** regardless of your resume content. "
-                            f"This simulates interviewing for a new domain."
+                    with col1:
+                        interview_type = st.selectbox(
+                            "Interview Type",
+                            options=["technical", "behavioral", "mixed"],
+                            format_func=lambda x: x.title() + (" (Technical + Behavioral)" if x == "mixed" else ""),
+                            key="dynamic_interview_type_select"
                         )
 
-                # ── DIFFICULTY CONTRACT: Show what each level means ──
-                _diff_contract = DIFFICULTY_CONTRACTS.get(interview_difficulty, {})
-                if _diff_contract:
-                    _diff_colors = {"Easy": "#69f0ae", "Medium": "#ffcc02", "Hard": "#f44336"}
-                    _diff_icons = {"Easy": "📗", "Medium": "📙", "Hard": "📕"}
-                    _dc = _diff_colors.get(interview_difficulty, "#aaa")
-                    _di = _diff_icons.get(interview_difficulty, "📋")
-                    _scope = _diff_contract.get("answer_scope", "")
-                    _cog = _diff_contract.get("cognitive_load_detail", _diff_contract.get("cognitive_load", ""))
-                    _desc = _diff_contract.get("description", "")
-                    st.markdown(
-                        f'<div style="background:rgba(0,195,255,0.07);border-left:4px solid {_dc};'
-                        f'padding:12px 16px;border-radius:0 8px 8px 0;margin:8px 0;">'
-                        f'<strong style="color:{_dc};font-size:15px;">{_di} {interview_difficulty} Mode — {_diff_contract.get("label","")}</strong><br/>'
-                        f'<span style="color:#ddd;font-size:13px;">{_desc}</span><br/>'
-                        f'<span style="color:#aaa;font-size:12px;margin-top:4px;display:block;">'
-                        f'Expected answer scope: <strong style="color:{_dc}">{_scope}</strong> &nbsp;|&nbsp; {_cog}'
-                        f'</span>'
-                        f'</div>',
-                        unsafe_allow_html=True
-                    )
+                    with col2:
+                        interview_difficulty = st.selectbox(
+                            "Interview Difficulty",
+                            options=["Easy", "Medium", "Hard"],
+                            key="interview_difficulty_select",
+                            index=1
+                        )
 
-                if st.button("🚀 Start Mock Interview"):
+                    col3, col4 = st.columns(2)
+                    with col3:
+                        num_questions = st.slider("Number of questions:", 5, 10, 6, key="num_questions_slider")
+
+                    with col4:
+                        timer_seconds = st.slider("Time per question (seconds):", 60, 300, 120, step=30, key="timer_seconds_slider")
+
+                    # ── DOMAIN AUTHORITY: Show mismatch warning if resume ≠ selected domain ──
+                    if st.session_state.get("resume_context"):
+                        _rc = st.session_state.resume_context
+                        _resume_techs = " ".join(_rc.get("technologies", []) + _rc.get("skills", [])).lower()
+                        _domain_cfg = get_domain_config(selected_domain)
+                        _forbidden = _domain_cfg.get("forbidden_resume_keywords", [])
+                        _has_mismatch = any(kw.lower() in _resume_techs for kw in _forbidden)
+                        if _has_mismatch:
+                            st.info(
+                                f"⚠️ **Domain Override Active**: Your resume appears to have a different technical background. "
+                                f"Questions will be **strictly aligned to {selected_domain}** regardless of your resume content. "
+                                f"This simulates interviewing for a new domain."
+                            )
+
+                    # ── DIFFICULTY CONTRACT: Show what each level means ──
+                    _diff_contract = DIFFICULTY_CONTRACTS.get(interview_difficulty, {})
+                    if _diff_contract:
+                        _diff_colors = {"Easy": "#69f0ae", "Medium": "#ffcc02", "Hard": "#f44336"}
+                        _diff_icons = {"Easy": "📗", "Medium": "📙", "Hard": "📕"}
+                        _dc = _diff_colors.get(interview_difficulty, "#aaa")
+                        _di = _diff_icons.get(interview_difficulty, "📋")
+                        _scope = _diff_contract.get("answer_scope", "")
+                        _cog = _diff_contract.get("cognitive_load_detail", _diff_contract.get("cognitive_load", ""))
+                        _desc = _diff_contract.get("description", "")
+                        st.markdown(
+                            f'<div style="background:rgba(0,195,255,0.07);border-left:4px solid {_dc};'
+                            f'padding:12px 16px;border-radius:0 8px 8px 0;margin:8px 0;">'
+                            f'<strong style="color:{_dc};font-size:15px;">{_di} {interview_difficulty} Mode — {_diff_contract.get("label","")}</strong><br/>'
+                            f'<span style="color:#ddd;font-size:13px;">{_desc}</span><br/>'
+                            f'<span style="color:#aaa;font-size:12px;margin-top:4px;display:block;">'
+                            f'Expected answer scope: <strong style="color:{_dc}">{_scope}</strong> &nbsp;|&nbsp; {_cog}'
+                            f'</span>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+
+                    start_submitted = st.form_submit_button("🚀 Start Mock Interview")
+
+                if start_submitted:
                     with st.spinner("Generating personalized questions using AI..."):
                         # Generate resume-based questions
                         resume_based_qs = []
@@ -13194,7 +13538,6 @@ Generate {num_questions} questions now:
                                 show_resume_scanning_animation()
 
                             st.success("Questions generated! Starting your mock interview...")
-                            time.sleep(1)
                             st.rerun()
                         else:
                             st.error("Failed to generate questions. Please try again.")
@@ -13398,20 +13741,37 @@ Generate {num_questions} questions now:
 
                     # Auto-submit logic when timer expires
                     if remaining_time <= 0 and not st.session_state.dynamic_answer_submitted:
-                        if not answer.strip():
-                            answer = "⚠️ No Answer"
+                        # Retrieve whatever was typed (may be empty)
+                        _auto_ans = st.session_state.get(
+                            f"dynamic_interview_answer_{st.session_state.current_dynamic_interview_question}", ""
+                        )
+                        if not _auto_ans.strip():
+                            _auto_ans = "⚠️ No Answer"
                         with st.spinner("Evaluating your answer..."):
                             _process_submission(
-                                answer, question,
+                                _auto_ans, question,
                                 st.session_state.current_dynamic_interview_question,
                                 questions_answered
                             )
                         st.warning("⏰ Time's up! Answer auto-submitted.")
                         st.rerun()
 
-                    # Submit answer button
+                    # PROBLEM 3 FIX: Wrap answer input in st.form to prevent per-keystroke reruns
                     if not st.session_state.dynamic_answer_submitted and remaining_time > 0:
-                        if st.button("Submit Answer & Get Feedback"):
+                        answer_form_key = f"answer_form_{st.session_state.current_dynamic_interview_question}"
+                        with st.form(answer_form_key, clear_on_submit=False):
+                            answer_key = f"dynamic_interview_answer_{st.session_state.current_dynamic_interview_question}"
+                            answer = st.text_area(
+                                "Your answer:",
+                                placeholder="Type your detailed answer here... (Use STAR method: Situation, Task, Action, Result)",
+                                height=150,
+                                max_chars=2000,
+                                key=answer_key,
+                                help="Maximum 2000 characters"
+                            )
+                            answer_submitted = st.form_submit_button("✅ Submit Answer & Get Feedback")
+
+                        if answer_submitted:
                             if answer.strip():
                                 with st.spinner("Evaluating your answer..."):
                                     _process_submission(
@@ -13422,6 +13782,11 @@ Generate {num_questions} questions now:
                                 st.rerun()
                             else:
                                 st.warning("Please provide an answer before proceeding.")
+                    elif not st.session_state.dynamic_answer_submitted:
+                        # Timer expired but form is still needed for text reference
+                        answer = st.session_state.get(
+                            f"dynamic_interview_answer_{st.session_state.current_dynamic_interview_question}", ""
+                        )
 
                     # Show feedback after answer submitted
                     if st.session_state.dynamic_answer_submitted:
@@ -13531,9 +13896,15 @@ Generate {num_questions} questions now:
                                     if i < num_to_show - 1:  # Don't add separator after last item
                                         st.markdown("---")
 
-                    # Auto-refresh for timer
+                    # PROBLEM 3 FIX: Timer auto-refresh
+                    # Only rerun for the timer when answer hasn't been submitted.
+                    # Use a short sleep to avoid hammering the server.
+                    # The timer display above already computed remaining_time.
                     if remaining_time > 0 and not st.session_state.dynamic_answer_submitted:
-                        time.sleep(1)
+                        # Store timer placeholder in session so we don't flicker the whole page
+                        # Use st.empty() for the timer display above (handled in display block)
+                        # Trigger rerun after 2 seconds instead of 1 to halve flicker frequency
+                        time.sleep(2)
                         st.rerun()
                 else:
                     # CRITICAL FIX: All questions answered, move to completion automatically
