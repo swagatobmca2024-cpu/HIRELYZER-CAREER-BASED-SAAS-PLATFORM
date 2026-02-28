@@ -9525,25 +9525,66 @@ def evaluate_interview_answer_for_scores(answer: str, question: str, difficulty:
         }
 
     # Difficulty-based evaluation guidance
+    # TEXT-INTERVIEW-OPTIMISED difficulty guidance.
+    # Hard is senior-level but scoped to ONE focused challenge — not whiteboard mega-design.
     difficulty_guidance = {
         "Easy": {
-            "tone": "encouraging and forgiving",
-            "expectations": "basic understanding and general concepts",
-            "scoring": "Give partial credit for effort. Score 5-10 for reasonable attempts, 3-4 for weak but present answers, 0-2 for irrelevant/junk.",
-            "feedback_style": "positive and encouraging with gentle improvement tips"
+            "tone": "encouraging and patient",
+            "expectations": (
+                "Concept clarity and accurate definitions. The candidate should explain WHAT something is, "
+                "WHY it exists, and give a simple real-world example. No implementation depth required."
+            ),
+            "scoring": (
+                "5-10 for clear definitions with a correct example. "
+                "3-4 for partially correct or vague answers that show some understanding. "
+                "0-2 for wrong definitions or no answer."
+            ),
+            "feedback_style": (
+                "Encouraging. Praise correct parts. Point out the one or two missing elements "
+                "with a simple suggestion. Keep feedback under 3 paragraphs."
+            ),
+            "answer_scope": "3-5 structured paragraphs",
         },
         "Medium": {
-            "tone": "balanced and realistic",
-            "expectations": "scenario-based thinking, some technical depth, and practical examples",
-            "scoring": "Score 6-10 for good answers, 3-5 for incomplete/basic answers, 0-2 for poor/irrelevant.",
-            "feedback_style": "constructive and specific with clear improvement areas"
+            "tone": "balanced and scenario-focused",
+            "expectations": (
+                "Scenario reasoning with ONE practical constraint. The candidate should describe their "
+                "approach, make ONE explicit decision or tradeoff, and briefly justify it with a real example. "
+                "No multi-layer system design required."
+            ),
+            "scoring": (
+                "7-10 for answers that frame the scenario, make a clear decision, and justify it with reasoning. "
+                "4-6 for answers that address the scenario but miss the decision logic or give only conceptual responses. "
+                "0-3 for answers that treat it like an Easy question (pure definition) or are off-topic."
+            ),
+            "feedback_style": (
+                "Constructive. Acknowledge the scenario framing they used, then identify the ONE key "
+                "reasoning step they missed. Give a concrete direction for improvement in 4-5 paragraphs."
+            ),
+            "answer_scope": "5-6 structured paragraphs",
         },
         "Hard": {
-            "tone": "strict and technical",
-            "expectations": "deep technical knowledge, system design thinking, edge cases, and comprehensive understanding",
-            "scoring": "Score 7-10 for excellent answers, 4-6 for adequate but incomplete, 0-3 for weak/incorrect.",
-            "feedback_style": "concise and technical with precise critique"
-        }
+            "tone": "precise and technically demanding",
+            "expectations": (
+                "Deep technical reasoning on ONE focused challenge — either a tradeoff analysis, a failure handling "
+                "scenario, or an optimisation under constraint. NOT a full system design. "
+                "The candidate should: state their reasoning framework, analyse the core challenge, "
+                "explain their decision with specific technical justification, and mention one edge case or risk. "
+                "Answerable in 6-8 paragraphs — no whiteboard required."
+            ),
+            "scoring": (
+                "8-10 for answers that isolate the core challenge, reason through it with technical specifics, "
+                "make a justified decision, and acknowledge a risk or edge case. "
+                "5-7 for answers that address the challenge but stay too high-level or skip justification. "
+                "0-4 for vague, off-topic, or purely conceptual answers."
+            ),
+            "feedback_style": (
+                "Precise and senior-level. Identify exactly WHERE the reasoning stopped — was it before the tradeoff, "
+                "before the edge case, or before quantification? Give one concrete example of what a strong answer "
+                "would have added. 5-6 focused paragraphs."
+            ),
+            "answer_scope": "6-8 structured paragraphs",
+        },
     }
 
     guidance = difficulty_guidance.get(difficulty, difficulty_guidance["Medium"])
@@ -9558,35 +9599,38 @@ QUESTION: {question}
 CANDIDATE'S ANSWER: {answer}
 DIFFICULTY LEVEL: {difficulty}
 
-EVALUATION APPROACH ({guidance['tone']}):
-Expected: {guidance['expectations']}
-Scoring: {guidance['scoring']}
-Feedback Style: {guidance['feedback_style']}
+EVALUATION APPROACH — {difficulty.upper()} MODE ({guidance['tone']}):
+What to expect: {guidance['expectations']}
+Scoring guide: {guidance['scoring']}
+Feedback style: {guidance['feedback_style']}
+Expected answer scope: {guidance['answer_scope']}
 
 STEP-BY-STEP EVALUATION PROCESS:
 
-STEP 1 - EXTRACT KEY CONCEPTS FROM THE QUESTION:
-List 3-5 technical concepts, keywords, or expected topics the question is asking about.
+STEP 1 — IDENTIFY THE QUESTION'S CORE CHALLENGE:
+State in one sentence what this question is actually testing (concept recall / scenario reasoning / focused technical analysis).
+List 3-5 key concepts or reasoning moves a strong answer must include.
 
-STEP 2 - ANALYZE THE ANSWER:
-✅ STRENGTHS: What did the candidate do well? Which concepts did they cover? What was clear or correct?
-⚠️ GAPS/IMPROVEMENTS: What's missing? What's incorrect? What could be clearer?
+STEP 2 — ANALYSE THE CANDIDATE'S ANSWER:
+✅ WHAT THEY GOT RIGHT: Which key concepts did they cover? What reasoning was correct or well-expressed?
+⚠️ WHAT IS MISSING OR WEAK: Which expected concepts or reasoning steps are absent, shallow, or wrong?
+🔴 SCOPE CHECK: Did the answer stay within the question's scope, or did it over-engineer / under-explain?
 
-STEP 3 - SCORE THE ANSWER (1-10 scale):
-- Knowledge: Technical correctness, depth, and completeness (did they cover key concepts?)
-- Communication: Clarity, structure, and articulation (was it easy to follow?)
-- Relevance: How directly does this answer the question? Is it on-topic?
+STEP 3 — SCORE ON 3 DIMENSIONS (1-10 each):
+- Knowledge: Correctness and depth of technical content for THIS difficulty tier.
+- Communication: Clarity, logical structure, and how easy it is to follow the reasoning.
+- Relevance: How directly the answer addresses the specific question asked — not adjacent topics.
 
-STEP 4 - GENERATE DETAILED FEEDBACK (2-4 comprehensive paragraphs):
-Provide detailed, flowing feedback that covers:
-- Specific strengths: What they did well, which concepts they covered correctly, and what was clear
-- Specific gaps or areas for improvement: What key concepts or details they missed, what could be more accurate
-- Actionable recommendations: Concrete suggestions for improvement with examples
-- Overall assessment: A brief summary of their understanding level
+STEP 4 — WRITE FEEDBACK ({guidance['answer_scope']} equivalent):
+Write {{"Easy": "2-3", "Medium": "3-4", "Hard": "4-5"}}.get(difficulty, "3-4") flowing paragraphs that:
+1. Start with what the candidate did well (be specific — quote or paraphrase their answer)
+2. Identify the ONE or TWO most important gaps for this difficulty level
+3. Give a concrete, actionable suggestion — what would a stronger answer have included?
+4. For Hard: note whether the answer stayed text-answerable and focused, or drifted into vague system design
 
-Write feedback as natural, flowing paragraphs (not bullet points). Make it detailed, specific to their answer, and constructive.
+Do NOT write bullet points. Write as a knowledgeable interviewer giving verbal feedback.
 
-{"STEP 5 - FOLLOW-UP QUESTION: Generate ONE probing follow-up question that digs deeper based on their answer. Consider using one of these strategies: Depth Probe, Tradeoff Challenge, Edge Case Scenario, Scalability Challenge, Constraint Injection, Failure Simulation, Security Consideration, Architecture Breakdown, Metric Justification, or Alternative Design Comparison. Choose the strategy that targets the biggest weakness in their answer." if difficulty == "Hard" else ""}
+{"STEP 5 — FOLLOW-UP: Generate ONE tightly scoped follow-up question. It must: (a) directly reference something in their answer, (b) probe ONE specific gap identified above, (c) be answerable in 4-6 paragraphs of text — not a whiteboard exercise. Choose from: Metric Justification, Tradeoff Challenge, Edge Case Scenario, Failure Handling, Constraint Injection, or Depth Probe." if difficulty == "Hard" else ""}
 
 OUTPUT FORMAT (strict JSON):
 {{
@@ -10141,6 +10185,1210 @@ import time
 import re
 import streamlit as st
 
+# =============================================================================
+# ARCHITECTURAL FIX 1: DOMAIN AUTHORITY LAYER
+# =============================================================================
+# Problem: Resume context dominates LLM prompts, causing Full Stack resumes to
+# produce Full Stack questions even when "Data Analyst" is selected.
+# Solution: Strip and suppress resume content that contradicts the selected domain,
+# then inject domain-specific mandatory keywords into every question generation prompt.
+
+DOMAIN_AUTHORITY_CONFIG = {
+    "Data Science & Analytics": {
+        "aliases": ["data analyst", "data science", "analytics", "business intelligence", "bi", "ml", "machine learning"],
+        "mandatory_topics": ["pandas", "SQL", "statistical analysis", "data visualization", "EDA", "hypothesis testing", "regression", "data cleaning"],
+        "forbidden_resume_keywords": ["react", "angular", "vue", "node.js", "express", "django", "flask", "spring", "frontend", "css", "html", "mobile app"],
+        "context_override": "This is a Data Science & Analytics interview. Focus EXCLUSIVELY on data analysis, statistics, SQL, Python data libraries (pandas/numpy/matplotlib), machine learning fundamentals, and business intelligence tools.",
+    },
+    "Full Stack Development": {
+        "aliases": ["full stack", "fullstack", "web developer", "mern", "mean"],
+        "mandatory_topics": ["frontend", "backend", "REST APIs", "databases", "authentication", "deployment", "React/Angular/Vue", "Node.js/Django/Spring"],
+        "forbidden_resume_keywords": ["tensorflow", "pytorch", "sklearn", "regression", "clustering", "NLP", "deep learning model"],
+        "context_override": "This is a Full Stack Development interview. Focus on frontend frameworks, backend APIs, databases, authentication, CI/CD, and web architecture.",
+    },
+    "Backend Development": {
+        "aliases": ["backend", "server-side", "api developer", "java developer", "python developer"],
+        "mandatory_topics": ["REST APIs", "databases", "system design", "microservices", "caching", "message queues", "authentication", "scalability"],
+        "forbidden_resume_keywords": ["react", "css", "html", "angular", "vue", "figma", "photoshop", "frontend"],
+        "context_override": "This is a Backend Development interview. Focus on API design, server-side logic, databases, microservices, caching strategies, and system scalability.",
+    },
+    "Frontend Development": {
+        "aliases": ["frontend", "ui developer", "react developer", "angular developer"],
+        "mandatory_topics": ["JavaScript", "React/Angular/Vue", "CSS", "responsive design", "state management", "performance optimization", "accessibility", "browser APIs"],
+        "forbidden_resume_keywords": ["kubernetes", "docker-compose", "terraform", "CI/CD pipeline", "microservices", "kafka"],
+        "context_override": "This is a Frontend Development interview. Focus on UI frameworks, JavaScript, CSS, browser performance, accessibility, and client-side architecture.",
+    },
+    "Machine Learning & AI": {
+        "aliases": ["machine learning", "ml engineer", "ai engineer", "deep learning", "nlp engineer"],
+        "mandatory_topics": ["model training", "feature engineering", "model evaluation", "neural networks", "overfitting", "hyperparameter tuning", "ML pipelines", "deployment"],
+        "forbidden_resume_keywords": ["react", "angular", "vue", "node.js", "express", "spring boot", "mobile"],
+        "context_override": "This is a Machine Learning & AI interview. Focus on model architecture, training pipelines, evaluation metrics, feature engineering, ML system design, and model deployment.",
+    },
+    "DevOps & Cloud": {
+        "aliases": ["devops", "cloud engineer", "platform engineer", "sre", "site reliability"],
+        "mandatory_topics": ["CI/CD", "Docker", "Kubernetes", "infrastructure as code", "monitoring", "cloud platforms", "incident response", "scaling strategies"],
+        "forbidden_resume_keywords": ["react", "angular", "pandas", "sklearn", "tableau", "power bi"],
+        "context_override": "This is a DevOps & Cloud interview. Focus on CI/CD pipelines, containerization, orchestration, cloud infrastructure, monitoring, and reliability engineering.",
+    },
+    "Cybersecurity": {
+        "aliases": ["cybersecurity", "security engineer", "pen tester", "information security"],
+        "mandatory_topics": ["threat modeling", "OWASP", "penetration testing", "encryption", "authentication", "incident response", "network security", "vulnerability assessment"],
+        "forbidden_resume_keywords": ["react", "pandas", "sklearn", "mobile app", "ui design"],
+        "context_override": "This is a Cybersecurity interview. Focus on security principles, threat vectors, defensive/offensive techniques, compliance, and security architecture.",
+    },
+    "UI/UX Design": {
+        "aliases": ["ui designer", "ux designer", "product designer", "interaction designer"],
+        "mandatory_topics": ["user research", "wireframing", "prototyping", "usability testing", "design systems", "information architecture", "accessibility", "figma"],
+        "forbidden_resume_keywords": ["tensorflow", "docker", "kubernetes", "SQL queries", "backend API"],
+        "context_override": "This is a UI/UX Design interview. Focus on design process, user research methods, wireframing, prototyping tools, usability testing, and design systems.",
+    },
+    "Project Management": {
+        "aliases": ["project manager", "product manager", "scrum master", "agile coach"],
+        "mandatory_topics": ["project planning", "stakeholder management", "agile/scrum", "risk management", "roadmapping", "KPIs", "cross-functional coordination", "prioritization"],
+        "forbidden_resume_keywords": ["react", "tensorflow", "docker", "SQL joins", "API development"],
+        "context_override": "This is a Project/Product Management interview. Focus on planning methodologies, stakeholder communication, risk mitigation, prioritization frameworks, and delivery metrics.",
+    },
+}
+
+# Generic fallback for domains not explicitly configured
+_DEFAULT_DOMAIN_CONFIG = {
+    "mandatory_topics": [],
+    "forbidden_resume_keywords": [],
+    "context_override": "",
+}
+
+
+def get_domain_config(domain: str) -> dict:
+    """Return domain config by exact name or alias match."""
+    if domain in DOMAIN_AUTHORITY_CONFIG:
+        return DOMAIN_AUTHORITY_CONFIG[domain]
+    domain_lower = domain.lower()
+    for key, cfg in DOMAIN_AUTHORITY_CONFIG.items():
+        if any(alias in domain_lower for alias in cfg.get("aliases", [])):
+            return cfg
+    return _DEFAULT_DOMAIN_CONFIG
+
+
+def filter_resume_for_domain(resume_context: dict, selected_domain: str) -> dict:
+    """
+    DOMAIN AUTHORITY LAYER — Core Function.
+
+    Strips resume skills/technologies that are IRRELEVANT to the selected domain
+    and flags that domain override is active. This prevents a Full Stack resume
+    from contaminating a Data Analyst interview prompt.
+
+    Returns a modified resume_context dict safe to pass to question generators.
+    """
+    cfg = get_domain_config(selected_domain)
+    forbidden = [kw.lower() for kw in cfg.get("forbidden_resume_keywords", [])]
+
+    if not forbidden:
+        # No filtering needed for this domain
+        return resume_context
+
+    def clean_list(items: list) -> list:
+        cleaned = []
+        for item in items:
+            item_lower = item.lower()
+            if not any(f in item_lower for f in forbidden):
+                cleaned.append(item)
+        return cleaned
+
+    filtered = {
+        "skills": clean_list(resume_context.get("skills", [])),
+        "technologies": clean_list(resume_context.get("technologies", [])),
+        # Keep projects/experience but append a domain caveat so LLM understands the interview scope
+        "projects": resume_context.get("projects", []),
+        "experience": resume_context.get("experience", []),
+        "_domain_override": True,
+        "_domain_name": selected_domain,
+    }
+
+    # If filtering removed everything, add a note so LLM doesn't get empty context
+    if not filtered["skills"]:
+        filtered["skills"] = [f"Candidate background may differ from {selected_domain} domain"]
+    if not filtered["technologies"]:
+        filtered["technologies"] = [f"Domain: {selected_domain}"]
+
+    return filtered
+
+
+def build_domain_authority_block(selected_domain: str, selected_role: str) -> str:
+    """
+    Returns a strong domain-authority instruction block to prepend to ALL
+    question-generation prompts. Forces LLM to stay domain-aligned regardless
+    of resume content.
+    """
+    cfg = get_domain_config(selected_domain)
+    override = cfg.get("context_override", "")
+    mandatory = cfg.get("mandatory_topics", [])
+
+    block = f"""
+⚠️ DOMAIN AUTHORITY OVERRIDE — HIGHEST PRIORITY ⚠️
+The candidate has SELECTED to be interviewed as: {selected_role} in {selected_domain}.
+Even if the resume shows different experience, ALL questions MUST be about {selected_domain}.
+{override}
+
+MANDATORY TOPIC POOL (draw from these for every question):
+{', '.join(mandatory) if mandatory else selected_domain + ' core concepts'}
+
+STRICT RULE: Do NOT ask about technologies or concepts outside {selected_domain}.
+If resume content conflicts with the selected domain, IGNORE the resume content.
+"""
+    return block.strip()
+
+
+# =============================================================================
+# ARCHITECTURAL FIX 2: STRUCTURED DIFFICULTY ENFORCER
+# =============================================================================
+# Problem: Easy/Medium/Hard produce stylistically different questions but not
+# structurally different ones. They all look similar in depth.
+# Solution: Define a strict question-type contract per difficulty level, enforced
+# at the prompt level with explicit templates and forbidden patterns.
+
+# =============================================================================
+# TEXT-INTERVIEW-OPTIMISED DIFFICULTY CONTRACTS
+# =============================================================================
+# Core design principle: every question must be answerable in 3-8 structured
+# paragraphs of text. Hard is senior-level but scoped to ONE focused challenge.
+# No whiteboard mega-design prompts. No combining scaling + tradeoff + failure
+# + architecture in a single question. One core challenge per question.
+# =============================================================================
+
+DIFFICULTY_CONTRACTS = {
+    "Easy": {
+        # ── What it tests ──────────────────────────────────────────────────────
+        "label": "Concept Clarity",
+        "description": (
+            "Concept clarity questions only. The candidate explains WHAT something is, "
+            "WHY it exists, and gives a grounded real-world example. "
+            "No architecture, no scaling, no tradeoffs, no production scenarios."
+        ),
+        "answer_scope": "3-5 paragraphs",
+
+        # ── Question structural templates ──────────────────────────────────────
+        # LLM must pick ONE of these patterns and fill in the domain-specific topic.
+        # Templates are written at the question-generation level — they set structure,
+        # not just tone.
+        "question_templates": [
+            "What is [concept] and why does it exist? Give a concrete example of where you would use it.",
+            "Explain the difference between [concept A] and [concept B]. When would you choose one over the other?",
+            "Walk me through how [concept] works at a high level. What problem does it solve?",
+            "What are the core properties or guarantees of [concept]? Why do those properties matter in practice?",
+            "Describe a situation where [concept] would be the right tool and one where it would be the wrong choice.",
+        ],
+
+        # ── Hard constraints — these must NEVER appear in Easy questions ────────
+        "forbidden_patterns": [
+            "design a system", "design an architecture", "at scale", "1 million",
+            "production outage", "failure scenario", "optimize for latency",
+            "handle 10x", "migrate from", "distributed", "multi-region",
+            "zero downtime", "fault tolerance", "SLA", "tradeoff between",
+            "compare and contrast in a production context",
+        ],
+
+        # ── Scoring calibration ────────────────────────────────────────────────
+        "scoring_note": (
+            "Award full marks for a clear, correct definition with one real-world example. "
+            "Do NOT penalise for missing implementation detail — that belongs to Medium/Hard. "
+            "Deduct marks for wrong definitions or examples that show misunderstanding."
+        ),
+        "followup_allowed": False,
+        "cognitive_load": "LOW",
+        "cognitive_load_detail": "Definition → Example → One simple comparison. No design decisions.",
+
+        # ── Fallback questions (used when LLM fails) ──────────────────────────
+        "fallback_questions": [
+            "What is [topic] and why is it important in {domain}?",
+            "Explain the difference between two core concepts in {domain} that are often confused.",
+            "Give an example of when you would use [concept] in a real project.",
+        ],
+    },
+
+    "Medium": {
+        # ── What it tests ──────────────────────────────────────────────────────
+        "label": "Scenario Reasoning",
+        "description": (
+            "Scenario-based questions with ONE practical constraint or decision point. "
+            "The candidate must describe their approach, make one explicit decision or tradeoff, "
+            "and briefly justify it. No multi-layer system design. No combined scaling + failure + architecture."
+        ),
+        "answer_scope": "5-6 paragraphs",
+
+        # ── Question structural templates ──────────────────────────────────────
+        "question_templates": [
+            "You're implementing [feature/component] for a small production service. "
+            "Walk through your approach and explain the ONE key decision you'd make and why.",
+
+            "Your team is choosing between [option A] and [option B] for [use case]. "
+            "What factors would you evaluate, and which would you recommend for this context?",
+
+            "You've been asked to add [capability] to an existing codebase without breaking current behaviour. "
+            "Describe your implementation strategy and one challenge you'd anticipate.",
+
+            "A junior engineer on your team is confused about when to use [concept]. "
+            "How would you explain it, and what example would you use to make it concrete?",
+
+            "You notice [specific problem/smell] in a codebase you've just joined. "
+            "What's your diagnosis, and what's the first concrete step you'd take to address it?",
+        ],
+
+        # ── Hard constraints ───────────────────────────────────────────────────
+        "forbidden_patterns": [
+            "design a system from scratch", "handle 1 million concurrent users",
+            "multi-region active-active", "full microservices migration",
+            "design the entire architecture", "production outage at peak traffic",
+            "compare all possible approaches", "list every tradeoff",
+        ],
+
+        # ── Scoring calibration ────────────────────────────────────────────────
+        "scoring_note": (
+            "Award high marks for scenario framing + one clear decision + concrete justification. "
+            "Penalise answers that stay purely definitional (no scenario engagement) or that jump to "
+            "full system design without scoping to the constraint given. "
+            "A good Medium answer reads like a thoughtful Slack message from a mid-level engineer."
+        ),
+        "followup_allowed": True,
+        "cognitive_load": "MEDIUM",
+        "cognitive_load_detail": "Scenario → ONE decision → Justification → One risk or alternative considered.",
+
+        "fallback_questions": [
+            "Describe a specific implementation challenge you faced with {domain} and how you resolved it.",
+            "How would you approach adding [feature] to an existing {role} project without breaking existing behaviour?",
+            "A teammate proposes using [technology] for [use case]. What questions would you ask before agreeing?",
+        ],
+    },
+
+    "Hard": {
+        # ── What it tests ──────────────────────────────────────────────────────
+        "label": "Focused Technical Depth",
+        "description": (
+            "Deep technical reasoning on ONE focused high-impact challenge. "
+            "Pick EXACTLY ONE of: tradeoff analysis, failure handling, or optimisation under constraint. "
+            "Do NOT combine all three in one question. "
+            "The candidate must reason at a senior level but the question must remain "
+            "text-answerable in 6-8 paragraphs — no whiteboard, no full system diagram."
+        ),
+        "answer_scope": "6-8 paragraphs",
+
+        # ── Question structural templates (one per challenge type) ─────────────
+        # Each template is intentionally NARROW — one challenge, one decision axis.
+        "question_templates": [
+            # Tradeoff Analysis (one axis only)
+            "You need to choose between [approach A] and [approach B] for [specific use case]. "
+            "Both are technically valid. Walk through your decision framework: what data or signals "
+            "would drive your choice, and what would you accept as a known limitation of your decision?",
+
+            # Failure Handling (one failure mode only)
+            "Your [component/service] starts returning elevated error rates under normal load — "
+            "no obvious upstream failures. Walk through your diagnostic process step by step: "
+            "what would you check first, what signals would you look for, and how would you isolate the cause?",
+
+            # Optimisation under a single constraint
+            "You're asked to reduce [specific metric: latency / cost / memory] for [component] "
+            "by 40% without changing its external interface. What's your investigation process, "
+            "what are the two or three highest-leverage changes you'd consider, and what would you measure to validate success?",
+
+            # Edge case / correctness challenge
+            "Describe a non-obvious edge case or failure mode in [concept/system component] "
+            "that a developer might miss during implementation. How would you detect it, "
+            "handle it gracefully, and prevent it from recurring?",
+
+            # Depth probe on a specific technical decision
+            "You've used [technology/pattern] in production. What is the single most important "
+            "limitation or risk of that choice that most engineers underestimate? "
+            "How did you mitigate it, or how would you mitigate it if given the chance?",
+        ],
+
+        # ── Hard constraints — what must NEVER appear in Hard questions ─────────
+        "forbidden_patterns": [
+            # These turn a Hard question into an unanswerable whiteboard session
+            "design a complete system", "design the entire architecture",
+            "design and implement X from scratch handling Y million users",
+            "walk through every layer of the stack",
+            "describe all possible failure modes", "list every tradeoff",
+            "design for global scale with multi-region active-active",
+            "design + implement + monitor + scale + secure",
+            # Scope combiners — pick ONE axis, not all
+            "tradeoff AND failure AND scaling AND security",
+            "compare all alternatives AND handle failures AND optimize",
+        ],
+
+        # ── Scoring calibration ────────────────────────────────────────────────
+        "scoring_note": (
+            "Award 8-10 for answers that: isolate the core challenge clearly, reason with technical specifics "
+            "(not just buzzwords), make a justified decision, and acknowledge one concrete risk or edge case. "
+            "Award 5-7 for correct but high-level answers that skip quantification or justification. "
+
+            "Award 0-4 for answers that treat the question like an Easy/Medium or give purely theoretical responses. "
+            "A strong Hard answer reads like a well-structured Slack thread from a senior engineer explaining "
+            "a decision to their team — not a conference talk or architecture document."
+        ),
+        "followup_allowed": True,
+        "cognitive_load": "HIGH",
+        "cognitive_load_detail": (
+            "ONE challenge axis → Reasoning framework → Technical specifics → Justified decision → "
+            "ONE edge case or risk. Answerable in text. No diagram needed."
+        ),
+
+        "fallback_questions": [
+            "Describe the most counterintuitive technical tradeoff you've encountered in {domain}. "
+            "What made it hard, and how did you ultimately decide?",
+            "Walk through how you would diagnose an unexpected performance regression "
+            "in a {domain} system you own. What would you check and in what order?",
+            "What is the single most dangerous assumption developers make when using "
+            "[core technology in {domain}], and how would you guard against it?",
+        ],
+    },
+}
+
+
+# =============================================================================
+# PROBLEM 1 FIX: RESUME ANCHOR LAYER
+# =============================================================================
+# Extracts the single best skill/project/technology anchor from the resume
+# context and uses it to generate a strictly resume-anchored first question
+# per difficulty tier.
+
+def extract_resume_anchor(resume_context: dict, domain: str, difficulty: str) -> dict:
+    """
+    Select the single best anchor from the resume for the given domain + difficulty.
+
+    Returns:
+        anchor_type: "skill" | "project" | "technology"
+        anchor_value: the specific skill/project/technology string
+        anchor_source: human-readable description for prompt injection
+    """
+    from llm_manager import call_llm
+
+    skills = resume_context.get("skills", [])
+    projects = resume_context.get("projects", [])
+    technologies = resume_context.get("technologies", [])
+    experience = resume_context.get("experience", [])
+
+    # Domain authority: filter out forbidden keywords
+    cfg = get_domain_config(domain)
+    forbidden = [kw.lower() for kw in cfg.get("forbidden_resume_keywords", [])]
+
+    def domain_relevant(items):
+        return [i for i in items if not any(f in i.lower() for f in forbidden)]
+
+    rel_skills = domain_relevant(skills)
+    rel_projects = domain_relevant(projects)
+    rel_tech = domain_relevant(technologies)
+
+    # Preference per difficulty:
+    # Easy -> skill (conceptual question about a skill they claim)
+    # Medium -> project (scenario grounded in their own work)
+    # Hard -> technology/project (deep technical challenge on something they built with)
+    if difficulty == "Easy":
+        candidates = rel_skills or rel_tech or rel_projects
+        anchor_type = "skill" if rel_skills else ("technology" if rel_tech else "project")
+    elif difficulty == "Medium":
+        candidates = rel_projects or rel_skills or rel_tech
+        anchor_type = "project" if rel_projects else ("skill" if rel_skills else "technology")
+    else:  # Hard
+        candidates = rel_tech or rel_projects or rel_skills
+        anchor_type = "technology" if rel_tech else ("project" if rel_projects else "skill")
+
+    if not candidates:
+        return {"anchor_type": None, "anchor_value": None, "anchor_source": None}
+
+    # Pick the first (highest-priority) candidate
+    anchor_value = candidates[0]
+
+    anchor_source_map = {
+        "skill": f"a skill you listed on your resume: '{anchor_value}'",
+        "project": f"a project you mentioned on your resume: '{anchor_value}'",
+        "technology": f"a technology you listed on your resume: '{anchor_value}'",
+    }
+
+    return {
+        "anchor_type": anchor_type,
+        "anchor_value": anchor_value,
+        "anchor_source": anchor_source_map.get(anchor_type, anchor_value),
+    }
+
+
+def generate_resume_anchored_first_question(
+    resume_context: dict, domain: str, role: str, difficulty: str
+) -> str:
+    """
+    Generate a single, deeply resume-anchored first question.
+
+    Easy:   "You mentioned [skill] — what problem does it solve? Give a real example."
+    Medium: "In your [project], how would you handle [specific scenario]?"
+    Hard:   "You worked with [tech] in [project] — walk me through the hardest technical
+             challenge that technology caused and how you reasoned through it."
+
+    Falls back to domain-based generation if resume is empty.
+    """
+    from llm_manager import call_llm
+    import streamlit as st
+
+    anchor = extract_resume_anchor(resume_context, domain, difficulty)
+
+    if not anchor["anchor_value"]:
+        # No usable resume content → fall back to domain generation
+        fallback_map = {
+            "Easy": f"What is the core responsibility of a {role} and what concept do you consider most fundamental to {domain}?",
+            "Medium": f"Describe a realistic scenario in {domain} where you had to make a key implementation decision. What drove your choice?",
+            "Hard": f"What is the most significant technical tradeoff you'd expect to encounter as a {role} in {domain}, and how would you reason through it?",
+        }
+        return fallback_map.get(difficulty, f"Explain a key concept in {domain} relevant to the {role} role.")
+
+    domain_block = build_domain_authority_block(domain, role)
+    difficulty_block = get_difficulty_instruction_block(difficulty)
+
+    # Tier-specific anchor prompt templates
+    anchor_templates = {
+        "Easy": f"""Generate ONE concept-clarity question anchored to {anchor['anchor_source']}.
+
+REQUIRED PATTERN:
+"You mentioned {anchor['anchor_value']} — [ask what problem it solves / what it is / why it exists / when you'd use it]. Give a real-world example."
+
+The question MUST:
+1. Explicitly reference '{anchor['anchor_value']}' by name
+2. Ask the candidate to explain WHAT it is or WHY it exists
+3. Request a real-world example they've seen or used
+4. Be answerable in 3-5 paragraphs — no implementation depth, no tradeoffs""",
+
+        "Medium": f"""Generate ONE scenario question anchored to {anchor['anchor_source']}.
+
+REQUIRED PATTERN:
+"In your {anchor['anchor_value']} [work/project/experience], [describe a realistic constraint or challenge]. How would you approach [specific decision]?"
+
+The question MUST:
+1. Explicitly reference '{anchor['anchor_value']}' from their resume
+2. Ground the scenario in that specific work/project/technology
+3. Present ONE concrete constraint or decision point
+4. Be answerable in 5-6 paragraphs — no full system redesign""",
+
+        "Hard": f"""Generate ONE focused technical depth question anchored to {anchor['anchor_source']}.
+
+REQUIRED PATTERN:
+"You worked with {anchor['anchor_value']} — [describe ONE specific technical challenge: tradeoff, failure mode, or optimisation constraint]. Walk through your reasoning."
+
+The question MUST:
+1. Explicitly reference '{anchor['anchor_value']}' from their resume
+2. Target ONE challenge axis: tradeoff OR failure handling OR optimisation
+3. Require senior-level reasoning about that specific technology/project
+4. Be answerable in 6-8 paragraphs — NOT a full system design""",
+    }
+
+    anchor_prompt = anchor_templates.get(difficulty, anchor_templates["Medium"])
+
+    prompt = f"""You are a senior technical interviewer.
+
+{domain_block}
+
+{difficulty_block}
+
+RESUME ANCHOR INSTRUCTION:
+{anchor_prompt}
+
+Generate EXACTLY ONE question. Output ONLY the question text — no labels, numbering, or explanation.
+
+Question:"""
+
+    try:
+        result = call_llm(prompt, session=st.session_state).strip()
+        import re
+        result = re.sub(r'^[\d\)\.\-•\*]+\s*', '', result).strip()
+        result = re.sub(r'^Question\s*\d*\s*:?\s*', '', result, flags=re.IGNORECASE).strip()
+        if result and len(result) > 20:
+            return result
+    except Exception:
+        pass
+
+    # Hardcoded anchor fallbacks
+    fallback_anchored = {
+        "Easy": f"You mentioned {anchor['anchor_value']} on your resume — can you explain what problem it solves and give a concrete example of where you've used it?",
+        "Medium": f"Based on your experience with {anchor['anchor_value']}, describe a specific implementation challenge you faced and the key decision you made to resolve it.",
+        "Hard": f"You listed {anchor['anchor_value']} on your resume — what is the most significant technical tradeoff or failure mode associated with it that you've encountered or anticipated, and how did you reason through it?",
+    }
+    return fallback_anchored.get(difficulty, f"Tell me about your experience with {anchor['anchor_value']} and the most technically interesting problem it helped you solve.")
+
+
+# =============================================================================
+# END PROBLEM 1 FIX
+# =============================================================================
+
+
+def get_difficulty_instruction_block(difficulty: str) -> str:
+    """
+    Returns a structured, text-interview-optimised difficulty instruction block.
+
+    This block is injected into EVERY question-generation prompt. It enforces:
+    - The correct question TYPE (not just tone)
+    - Structural templates the LLM must follow
+    - Hard forbidden patterns that prevent mega system-design questions
+    - Scope reminders so Hard questions stay text-answerable (6-8 paragraphs)
+    """
+    contract = DIFFICULTY_CONTRACTS.get(difficulty, DIFFICULTY_CONTRACTS["Medium"])
+
+    templates = "\n".join(f"  TEMPLATE {i+1}: {t}" for i, t in enumerate(contract["question_templates"]))
+    forbidden = contract.get("forbidden_patterns", [])
+    forbidden_str = (
+        "\n⛔ THESE PATTERNS ARE FORBIDDEN — never generate questions that contain:\n"
+        + "\n".join(f"  - {p}" for p in forbidden)
+        if forbidden else ""
+    )
+
+    scope_reminder = ""
+    if difficulty == "Hard":
+        scope_reminder = """
+⚠️  TEXT-INTERVIEW SCOPE RULE FOR HARD:
+The question must be answerable in 6-8 paragraphs of text.
+Pick EXACTLY ONE challenge axis: tradeoff OR failure handling OR optimisation OR edge case.
+Do NOT combine multiple axes (e.g. "design + scale + handle failures + secure" = INVALID).
+A well-formed Hard question targets one decision, one failure mode, or one constraint.
+"""
+
+    block = f"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DIFFICULTY CONTRACT: {difficulty.upper()} — {contract["label"]}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+What this level tests: {contract["description"]}
+
+Cognitive load: {contract["cognitive_load"]} — {contract["cognitive_load_detail"]}
+Expected answer scope: {contract["answer_scope"]}
+
+STRUCTURAL TEMPLATES — choose the ONE template that best fits the topic:
+{templates}
+{forbidden_str}
+{scope_reminder}
+Scoring context: {contract["scoring_note"]}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+    return block.strip()
+
+
+# =============================================================================
+# ARCHITECTURAL FIX 3: SMART ESCALATION ENGINE
+# =============================================================================
+# Problem: Escalation layer doesn't increase dynamically, weakness detection is
+# keyword-based, and Hard mode doesn't increase cognitive pressure per follow-up.
+# Solution: Layer-based escalation map with LLM-scored weakness analysis that
+# selects strategy from a deterministic mapping of score + answer quality signals.
+
+ESCALATION_LAYER_MAP = {
+    1: {
+        "name": "Clarification",
+        "instruction": "Ask the candidate to clarify or expand on a specific part of their answer that was vague or ambiguous.",
+        "trigger": "Used when the answer lacks depth or contains unclear statements.",
+        "cognitive_pressure": "LOW",
+    },
+    2: {
+        "name": "Metrics",
+        "instruction": "Ask the candidate to justify their answer with specific numbers, benchmarks, or measurable outcomes. Push for concrete data.",
+        "trigger": "Used when the answer is conceptually correct but lacks evidence or quantification.",
+        "cognitive_pressure": "MEDIUM",
+    },
+    3: {
+        "name": "Tradeoff",
+        "instruction": "Challenge the candidate with a direct tradeoff: their approach vs. an alternative. Ask them to defend their choice with clear pros/cons.",
+        "trigger": "Used when no tradeoffs were mentioned or the answer seems too one-sided.",
+        "cognitive_pressure": "MEDIUM-HIGH",
+    },
+    4: {
+        "name": "Scalability",
+        "instruction": "Inject a scale constraint (10x traffic, 100x data volume, global users) and ask how their approach holds up. Push for architectural changes.",
+        "trigger": "Used after tradeoffs are discussed or to pressure-test their design thinking.",
+        "cognitive_pressure": "HIGH",
+    },
+    5: {
+        "name": "Failure Simulation",
+        "instruction": "Simulate a production failure related to their approach. Describe a realistic incident and ask them to diagnose, mitigate, and prevent it.",
+        "trigger": "Maximum pressure — only at layer 5. Tests crisis thinking and system ownership.",
+        "cognitive_pressure": "MAXIMUM",
+    },
+}
+
+# Strategy → Layer mapping (which layer best fits each strategy)
+STRATEGY_TO_LAYER = {
+    "Clarification": 1,
+    "Metric Justification": 2,
+    "Tradeoff Challenge": 3,
+    "Alternative Design Comparison": 3,
+    "Scalability Challenge": 4,
+    "Constraint Injection": 4,
+    "Failure Simulation": 5,
+    "Security Consideration": 5,
+    "Depth Probe": 1,
+    "Edge Case Scenario": 3,
+    "Architecture Breakdown": 4,
+}
+
+
+def analyze_answer_weaknesses_smart(answer_text: str, scoring: dict, escalation_layer: int = 1) -> dict:
+    """
+    UPGRADED Weakness Analyzer — replaces keyword-matching with score-driven
+    multi-signal strategy selection.
+
+    Signal priority (in order):
+    1. Score deltas between knowledge/communication/relevance
+    2. Answer length and structural quality signals
+    3. Current escalation layer (forces progression through layers 1→5)
+    4. Keyword presence as secondary signals (not sole determinant)
+
+    Returns:
+        weaknesses (list): detected weakness signals
+        strategy (str): selected follow-up strategy
+        next_layer (int): escalation layer for this follow-up
+        reasoning (str): human-readable explanation of strategy choice
+    """
+    knowledge = scoring.get("knowledge", 5)
+    communication = scoring.get("communication", 5)
+    relevance = scoring.get("relevance", 5)
+    avg_score = (knowledge + communication + relevance) / 3
+    word_count = len(answer_text.split())
+    answer_lower = answer_text.lower()
+
+    weaknesses = []
+    reasoning = ""
+
+    # === Score-based signals (primary) ===
+    if relevance < 4:
+        weaknesses.append("off_topic")
+    if knowledge < 4:
+        weaknesses.append("weak_knowledge")
+    if communication < 5:
+        weaknesses.append("weak_communication")
+    if word_count < 40:
+        weaknesses.append("too_brief")
+    if avg_score >= 7.5:
+        weaknesses.append("strong_answer")  # Good answer — escalate harder
+
+    # === Structural signals (secondary) ===
+    has_metrics = any(kw in answer_lower for kw in [
+        "%", "percent", "ms", "milliseconds", "seconds", "users", "requests",
+        "throughput", "latency", "uptime", "million", "thousand", "tps", "rps", "gb", "tb"
+    ])
+    has_tradeoff = any(kw in answer_lower for kw in [
+        "tradeoff", "trade-off", "versus", "vs ", "compared to", "alternative",
+        "however", "but the downside", "pros and cons", "on the other hand"
+    ])
+    has_example = any(kw in answer_lower for kw in [
+        "for example", "in my project", "we built", "at my", "when i", "i implemented",
+        "for instance", "specifically", "in production"
+    ])
+    has_failure = any(kw in answer_lower for kw in [
+        "failure", "outage", "bottleneck", "failed", "bug", "incident", "crash", "timeout"
+    ])
+
+    if not has_metrics:
+        weaknesses.append("no_metrics")
+    if not has_tradeoff:
+        weaknesses.append("no_tradeoff")
+    if not has_example:
+        weaknesses.append("no_concrete_example")
+
+    # === Layer-forced strategy progression ===
+    # Escalation layer ALWAYS moves forward regardless of answer quality.
+    # Strategy is chosen by combining layer position with weakest signal.
+    next_layer = min(5, escalation_layer)  # current layer determines this follow-up's type
+
+    layer_info = ESCALATION_LAYER_MAP[next_layer]
+
+    # Within the layer, pick the best-fitting strategy based on weakness signals
+    if next_layer == 1:
+        if "too_brief" in weaknesses or "weak_communication" in weaknesses:
+            strategy = "Clarification"
+        else:
+            strategy = "Depth Probe"
+        reasoning = f"Layer 1 (Clarification): Answer was {'too brief' if 'too_brief' in weaknesses else 'unclear in places'}."
+
+    elif next_layer == 2:
+        strategy = "Metric Justification"
+        reasoning = "Layer 2 (Metrics): Pushing for quantifiable evidence — numbers, benchmarks, or success criteria."
+
+    elif next_layer == 3:
+        if "no_tradeoff" in weaknesses:
+            strategy = "Tradeoff Challenge"
+            reasoning = "Layer 3 (Tradeoff): No tradeoffs mentioned — forcing comparison with alternative approach."
+        else:
+            strategy = "Edge Case Scenario"
+            reasoning = "Layer 3 (Tradeoff): Tradeoffs present — challenging with edge case to deepen analysis."
+
+    elif next_layer == 4:
+        if "strong_answer" in weaknesses:
+            strategy = "Architecture Breakdown"
+            reasoning = "Layer 4 (Scalability): Strong answer — forcing architectural decomposition under scale."
+        else:
+            strategy = "Scalability Challenge"
+            reasoning = "Layer 4 (Scalability): Testing how their solution holds up under 10x load."
+
+    elif next_layer == 5:
+        if has_failure:
+            strategy = "Security Consideration"
+            reasoning = "Layer 5 (Failure): Candidate mentioned failures — pivoting to security implications."
+        else:
+            strategy = "Failure Simulation"
+            reasoning = "Layer 5 (Failure): Maximum pressure — simulating a production incident."
+
+    else:
+        strategy = "Depth Probe"
+        reasoning = "Default: probing for deeper explanation."
+
+    depth_score = min(10.0, max(0.0, avg_score))
+
+    return {
+        "weaknesses": weaknesses,
+        "strategy": strategy,
+        "next_layer": next_layer,
+        "reasoning": reasoning,
+        "depth_score": depth_score,
+        "layer_name": layer_info["name"],
+        "cognitive_pressure": layer_info["cognitive_pressure"],
+    }
+
+
+def detect_depth_gaps(answer: str, scoring: dict) -> dict:
+    """
+    PROBLEM 2 FIX: Detect what specific depth dimension is missing from the answer.
+
+    Returns:
+        missing_metrics: bool — answer lacks numbers/benchmarks
+        missing_tradeoff: bool — answer never compared two approaches
+        missing_failure: bool — answer ignores edge cases/failure handling
+        missing_optimisation: bool — answer doesn't mention performance/efficiency
+        missing_example: bool — answer is purely theoretical
+        answer_topic: str — brief description of what the answer was about (for topic-lock)
+        depth_priority: str — which gap is most important to probe first
+    """
+    answer_lower = answer.lower()
+    words = answer.split()
+
+    missing_metrics = not any(kw in answer_lower for kw in [
+        "%", "percent", " ms", "milliseconds", "seconds", " rps", " tps", " qps",
+        "latency", "throughput", "uptime", "million", "thousand", "gb", "mb",
+        "benchmark", "measure", "metric", "baseline", "sla", "p99", "p95",
+    ])
+
+    missing_tradeoff = not any(kw in answer_lower for kw in [
+        "tradeoff", "trade-off", "versus", " vs ", "compared to", "alternative",
+        "however", "downside", "upside", "pros", "cons", "on the other hand",
+        "instead", "better when", "worse when", "disadvantage", "advantage",
+    ])
+
+    missing_failure = not any(kw in answer_lower for kw in [
+        "failure", "fail", "outage", "error", "exception", "crash", "timeout",
+        "edge case", "corner case", "when it breaks", "what if", "retry",
+        "fallback", "circuit breaker", "dead letter", "rollback",
+    ])
+
+    missing_optimisation = not any(kw in answer_lower for kw in [
+        "optimis", "optimiz", "cache", "index", "batch", "async", "parallel",
+        "reduce latency", "improve performance", "bottleneck", "profil", "lazy",
+        "eager", "pool", "queue", "debounce", "throttle",
+    ])
+
+    missing_example = not any(kw in answer_lower for kw in [
+        "for example", "for instance", "specifically", "in my", "at my",
+        "we built", "i implemented", "when i", "in production", "in our",
+        "we used", "i used", "i worked",
+    ])
+
+    knowledge = scoring.get("knowledge", 5)
+    communication = scoring.get("communication", 5)
+    relevance = scoring.get("relevance", 5)
+
+    # Priority: what gap has the highest interview signal value?
+    if missing_metrics and knowledge >= 6:
+        depth_priority = "metrics"  # They know it but didn't quantify
+    elif missing_tradeoff and knowledge >= 5:
+        depth_priority = "tradeoff"  # Good answer but one-sided
+    elif missing_failure:
+        depth_priority = "failure"  # Missed defensive thinking
+    elif missing_optimisation and knowledge >= 6:
+        depth_priority = "optimisation"
+    elif missing_example:
+        depth_priority = "example"  # Too abstract
+    else:
+        depth_priority = "depth"  # General depth probe
+
+    # Extract the topic (first meaningful noun phrase from original answer)
+    topic_words = [w for w in words[:30] if len(w) > 3 and w.isalpha()]
+    answer_topic = " ".join(topic_words[:5]) if topic_words else "the approach described"
+
+    return {
+        "missing_metrics": missing_metrics,
+        "missing_tradeoff": missing_tradeoff,
+        "missing_failure": missing_failure,
+        "missing_optimisation": missing_optimisation,
+        "missing_example": missing_example,
+        "depth_priority": depth_priority,
+        "answer_topic": answer_topic,
+    }
+
+
+def generate_adaptive_followup_v2(
+    question: str, answer: str, strategy: str,
+    escalation_layer: int, role: str, domain: str,
+    difficulty: str = "Hard"
+) -> str:
+    """
+    PROBLEM 2 FIX: Depth-based, topic-locked adaptive follow-up generator.
+
+    Key rules:
+    1. Follow-up MUST stay on the SAME topic as the original question/answer.
+    2. Follow-up MUST reference something specific the candidate said.
+    3. Follow-up MUST target a detected depth gap (metrics/tradeoff/failure/optimisation).
+    4. Topic switching is NEVER allowed.
+    5. Escalation increases gradually within the same topic.
+    """
+    from llm_manager import call_llm
+
+    layer_info = ESCALATION_LAYER_MAP.get(escalation_layer, ESCALATION_LAYER_MAP[3])
+    domain_block = build_domain_authority_block(domain, role)
+
+    # Text-interview-optimised strategy instructions.
+    # Each follow-up must be answerable in 4-6 paragraphs. No whiteboard scope.
+    strategy_instructions = {
+        "Clarification": (
+            "Ask the candidate to clarify ONE specific statement that was ambiguous or vague. "
+            "Reference the exact phrase or claim from their answer."
+        ),
+        "Depth Probe": (
+            "Ask them to explain HOW one specific part of their answer works internally. "
+            "Target the mechanism behind ONE claim they made — not the whole answer."
+        ),
+        "Metric Justification": (
+            "Ask them to support ONE specific claim in their answer with concrete numbers or signals. "
+            "e.g. 'You mentioned this approach is faster — what metric would you use to validate that, "
+            "and what threshold would you consider acceptable?'"
+        ),
+        "Tradeoff Challenge": (
+            "Present ONE specific alternative to the approach they described and ask them to compare: "
+            "what does their approach do better, and what does it sacrifice? "
+            "Keep the comparison to these two options only — not a full landscape review."
+        ),
+        "Edge Case Scenario": (
+            "Describe ONE specific edge case or unusual input condition their solution might not handle gracefully. "
+            "Ask: how would they detect it at runtime, and how would they handle it without breaking normal flow?"
+        ),
+        "Scalability Challenge": (
+            "Inject a single scale constraint — for example, 10x the current load — and ask which ONE component "
+            "in their described approach would be the first to break, and what they'd change first. "
+            "This is NOT a full re-architecture question."
+        ),
+        "Constraint Injection": (
+            "Add one realistic constraint they didn't mention — e.g. a latency SLA, a budget cap, "
+            "or a dependency on a legacy system — and ask how they'd adapt their described approach. "
+            "One constraint. One adaptation. Text-answerable."
+        ),
+        "Failure Simulation": (
+            "Describe ONE specific failure mode relevant to what they described — "
+            "e.g. the component they mentioned starts returning errors under normal load. "
+            "Ask: what are the first three things they'd check, and what would a successful mitigation look like?"
+        ),
+        "Security Consideration": (
+            "Ask about ONE specific security risk in the approach they described. "
+            "e.g. 'You mentioned storing X — what's the highest-risk way that could be exploited, "
+            "and what's the simplest effective mitigation?'"
+        ),
+        "Architecture Breakdown": (
+            "Ask them to walk through ONE specific data flow or interaction in their described approach — "
+            "not the full architecture. e.g. 'Walk me through exactly what happens from the point "
+            "the request hits [component] to when the response is returned.'"
+        ),
+        "Alternative Design Comparison": (
+            "Ask them to propose ONE alternative approach to what they described — "
+            "just one, not a full survey — and compare the two specifically on reliability and complexity. "
+            "Text-answerable: 4-6 paragraphs."
+        ),
+    }
+
+    strategy_instruction = strategy_instructions.get(strategy, "Ask a deeper technical question that increases cognitive load.")
+
+    # PROBLEM 2 FIX: Detect depth gaps to target the follow-up precisely
+    from llm_manager import call_llm as _call_llm_fu
+    depth_gaps = detect_depth_gaps(answer, {})
+
+    depth_gap_str = ""
+    gap_priority = depth_gaps.get("depth_priority", "depth")
+    gap_instructions = {
+        "metrics": (
+            "The candidate did NOT provide any metrics, numbers, or benchmarks. "
+            "Ask them to quantify ONE specific claim they made — what number, threshold, or measurement would validate it?"
+        ),
+        "tradeoff": (
+            "The candidate did NOT discuss any tradeoffs or compare alternatives. "
+            "Ask them to defend their approach against ONE specific alternative — what does their choice gain and what does it give up?"
+        ),
+        "failure": (
+            "The candidate did NOT mention failure handling, edge cases, or defensive design. "
+            "Ask them: what is the ONE specific failure mode in what they described, and how would they detect and handle it?"
+        ),
+        "optimisation": (
+            "The candidate did NOT address performance or efficiency. "
+            "Ask: what is the highest-leverage optimisation they'd make to their described approach, and what would they measure to validate it?"
+        ),
+        "example": (
+            "The candidate gave a theoretical answer without a concrete example. "
+            "Ask them to ground their answer in a specific real scenario or experience from their work."
+        ),
+        "depth": (
+            "Ask them to go one level deeper on a specific part of their answer — "
+            "what is the mechanism or implementation detail behind the key claim they made?"
+        ),
+    }
+    depth_gap_str = gap_instructions.get(gap_priority, gap_instructions["depth"])
+
+    # Cognitive pressure increases with escalation layer
+    pressure_framing = f"COGNITIVE PRESSURE LEVEL: {layer_info['cognitive_pressure']}"
+
+    prompt = f"""You are a senior technical interviewer for {role} in {domain}.
+
+{domain_block}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PROBLEM 2 RULE — TOPIC LOCK (CRITICAL):
+The follow-up question MUST stay on the EXACT SAME TOPIC as the original question.
+DO NOT introduce a new concept, new technology, or new scenario.
+DO NOT switch topics even if the answer was weak.
+The follow-up probes DEEPER into what the candidate already said, not sideways.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ORIGINAL QUESTION (the topic you must stay on):
+{question}
+
+CANDIDATE'S ANSWER (reference this directly):
+{answer[:700]}
+
+DEPTH GAP DETECTED — TARGET THIS:
+{depth_gap_str}
+
+ESCALATION LAYER: {escalation_layer}/5 — {layer_info["name"]}
+{pressure_framing}
+STRATEGY: {strategy}
+Strategy instruction: {strategy_instruction}
+
+FOLLOW-UP GENERATION RULES:
+1. START the question by referencing something SPECIFIC the candidate said
+   (quote or paraphrase a phrase, claim, or decision from their answer)
+2. Probe the detected depth gap — {gap_priority}
+3. Stay on the SAME topic — NO topic switching
+4. Be answerable in 4-6 paragraphs — no whiteboard, no full system redesign
+5. Choose ONE of these gap-specific frames:
+   - "You mentioned [X] — what metric would tell you it's actually working?"
+   - "You described [X] — how would you handle [specific failure mode] in that approach?"
+   - "You chose [X] over alternatives — what is the ONE specific tradeoff you accepted?"
+   - "You explained [X] — what's the one edge case or input that would break this?"
+6. Keep it 1-3 sentences. Precise and targeted.
+
+Output ONLY the follow-up question. No labels, numbering, or explanations.
+
+Follow-up question:"""
+
+    try:
+        result = call_llm(prompt, session=st.session_state).strip()
+        if result:
+            return result
+    except Exception:
+        pass
+
+    # Topic-locked fallback with specific reference to answer
+    first_claim = " ".join(answer.split()[:8]) if answer.split() else "your described approach"
+    fallback_map = {
+        "metrics": f'You mentioned "{first_claim}..." — what specific metric or threshold would tell you this approach is actually performing as expected?',
+        "tradeoff": f'You described "{first_claim}..." — what is the ONE specific thing you give up with this approach compared to the most obvious alternative?',
+        "failure": f'Based on what you described about "{first_claim}..." — what is the one failure mode that keeps you up at night, and how would you detect it before users notice?',
+        "optimisation": f'You outlined "{first_claim}..." — if you needed to reduce its latency by 40%, what is the first thing you\'d change and what would you measure to validate the improvement?',
+        "example": f'You explained "{first_claim}..." in theory — can you walk me through a specific real scenario where this played out, and what the actual outcome was?',
+        "depth": f'You mentioned "{first_claim}..." — can you go one level deeper on exactly HOW that works internally? What is the mechanism behind it?',
+    }
+    return fallback_map.get(gap_priority, fallback_map["depth"])
+
+
+# =============================================================================
+# DOMAIN-AWARE QUESTION GENERATORS (upgraded wrappers)
+# =============================================================================
+
+def generate_resume_based_questions_domain_aware(
+    resume_context: dict, role: str, domain: str,
+    difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced"
+) -> list:
+    """
+    Drop-in replacement for generate_resume_based_questions_enhanced.
+    Applies Domain Authority Layer + Structured Difficulty Enforcement.
+
+    PROBLEM 1 FIX: The FIRST question is ALWAYS resume-anchored using the
+    generate_resume_anchored_first_question() function. Remaining questions
+    are generated with resume context but may be more general.
+    """
+    from llm_manager import call_llm
+
+    # PROBLEM 1 FIX: Always generate resume-anchored first question
+    anchored_first_q = generate_resume_anchored_first_question(
+        resume_context, domain, role, difficulty
+    )
+
+    if num_questions == 1:
+        return [anchored_first_q]
+
+    # FIX 1: Apply domain filter to resume context
+    filtered_context = filter_resume_for_domain(resume_context, domain)
+
+    skills = filtered_context.get("skills", [])
+    projects = filtered_context.get("projects", [])
+    experience = filtered_context.get("experience", [])
+    technologies = filtered_context.get("technologies", [])
+
+    # FIX 1: Domain authority block
+    domain_block = build_domain_authority_block(domain, role)
+
+    # FIX 2: Structured difficulty enforcement
+    difficulty_block = get_difficulty_instruction_block(difficulty)
+
+    # Weakness bias instruction
+    bias_map = {
+        "technical depth": "Prioritize questions that expose gaps in technical depth — ask about internals, edge cases, and implementation specifics.",
+        "explanation clarity": "Prioritize questions that require the candidate to explain complex concepts step-by-step.",
+        "answer precision": "Prioritize questions that require very specific, targeted answers directly tied to their resume.",
+        "balanced": "",
+    }
+    bias_instruction = bias_map.get(weakness_bias, "")
+
+    remaining = num_questions - 1  # First question already generated above
+
+    prompt = f"""You are a senior technical interviewer.
+
+{domain_block}
+
+{difficulty_block}
+
+RESUME CONTEXT (filtered for domain relevance):
+- Skills: {', '.join(skills[:5]) if skills else 'None relevant to ' + domain}
+- Projects: {', '.join(projects[:3]) if projects else 'None specified'}
+- Experience: {', '.join(experience[:3]) if experience else 'None specified'}
+- Technologies: {', '.join(technologies[:5]) if technologies else 'None relevant to ' + domain}
+
+{bias_instruction}
+
+Generate EXACTLY {remaining} interview questions. Each question MUST:
+1. Be about {domain} — not the candidate's previous domain if it differs
+2. Reference their resume only if resume content is relevant to {domain}
+3. Match the difficulty type specified above (structural enforcement, not just tone)
+4. Be a single, clear question (1-2 sentences)
+5. Be DIFFERENT from this already-generated first question: "{anchored_first_q[:120]}..."
+
+Output ONLY the questions, one per line, no numbering or prefixes.
+
+Questions:"""
+
+    try:
+        response = call_llm(prompt, session=st.session_state)
+        raw = [q.strip() for q in response.split("\n") if q.strip()]
+        cleaned = []
+        for q in raw:
+            q = re.sub(r'^[\d\)\.\-•\*]+\s*', '', q).strip()
+            if len(q) > 15:
+                cleaned.append(q)
+            if len(cleaned) >= remaining:
+                break
+
+        # Fallback fill
+        while len(cleaned) < remaining:
+            contract = DIFFICULTY_CONTRACTS.get(difficulty, DIFFICULTY_CONTRACTS["Medium"])
+            diff_label = contract["label"]
+            fallbacks = contract.get("fallback_questions", [])
+            if fallbacks:
+                import random
+                fb = random.choice(fallbacks).replace("{domain}", domain).replace("{role}", role)
+                cleaned.append(fb)
+            else:
+                cleaned.append(
+                    f"[{diff_label}] Describe a specific challenge you faced with {domain} and how you resolved it."
+                )
+
+        # PROBLEM 1: Prepend the anchored first question
+        return [anchored_first_q] + cleaned[:remaining]
+
+    except Exception:
+        return [anchored_first_q] + [f"Explain a core {domain} concept you've worked with recently."] * (num_questions - 1)
+
+
+def generate_domain_questions_with_llm(
+    domain: str, role: str, interview_type: str,
+    num_questions: int, difficulty: str = "Medium"
+) -> list:
+    """
+    Domain-authority-enforced replacement for generate_interview_questions_with_llm.
+    Ensures generic questions also respect the selected domain and difficulty contract.
+    """
+    from llm_manager import call_llm
+
+    domain_block = build_domain_authority_block(domain, role)
+    difficulty_block = get_difficulty_instruction_block(difficulty)
+
+    prompt = f"""You are an expert interviewer at a top-tier tech company.
+
+{domain_block}
+
+{difficulty_block}
+
+Generate EXACTLY {num_questions} unique {interview_type} interview questions for a {role} candidate.
+
+RULES:
+- Every question MUST be about {domain} — no exceptions
+- Match the exact difficulty type defined above (not just tone)
+- Avoid duplicates and generic filler questions
+- Keep each question concise: 1-2 sentences maximum
+- Output ONLY the questions, one per line
+- NO numbering, bullets, prefixes, or explanatory text
+
+Generate {num_questions} questions now:"""
+
+    try:
+        response = call_llm(prompt, session=st.session_state)
+        raw = [q.strip() for q in response.split('\n') if q.strip()]
+        cleaned = []
+        for q in raw:
+            clean_q = re.sub(r'^[\d\)\.\-•\*]+\s*', '', q).strip()
+            clean_q = re.sub(r'^Question\s*\d*\s*:?\s*', '', clean_q, flags=re.IGNORECASE).strip()
+            if clean_q and len(clean_q) > 15:
+                cleaned.append(clean_q)
+            if len(cleaned) >= num_questions:
+                break
+
+        # Fallback with difficulty-appropriate templates
+        while len(cleaned) < num_questions:
+            contract = DIFFICULTY_CONTRACTS.get(difficulty, DIFFICULTY_CONTRACTS["Medium"])
+            fallbacks = contract.get("fallback_questions", [])
+            import random
+            if fallbacks:
+                fb = random.choice(fallbacks).replace("{domain}", domain).replace("{role}", role)
+                cleaned.append(fb)
+            else:
+                templates = contract.get("question_templates", [])
+                template = random.choice(templates) if templates else "Explain a core {domain} concept."
+                cleaned.append(template.replace("{domain}", domain).replace("{role}", role).replace("[concept]", domain))
+
+        return cleaned[:num_questions]
+
+    except Exception:
+        # Text-answerable fallback questions per difficulty
+        import random
+        contract = DIFFICULTY_CONTRACTS.get(difficulty, DIFFICULTY_CONTRACTS["Medium"])
+        fallbacks = contract.get("fallback_questions", [])
+        if fallbacks:
+            return [
+                random.choice(fallbacks).replace("{domain}", domain).replace("{role}", role)
+                for _ in range(num_questions)
+            ]
+        if difficulty == "Easy":
+            return [f"What is {domain} and why is it important? Give a real-world example." for _ in range(num_questions)]
+        elif difficulty == "Medium":
+            return [f"Describe a specific implementation decision you made in {domain} and why you made it." for _ in range(num_questions)]
+        else:
+            return [
+                f"Describe the most significant tradeoff you've encountered in {domain}. "
+                f"What were the two options and what drove your final decision?"
+                for _ in range(num_questions)
+            ]
+
+
 # ======================================================
 # RESUME TEXT EXTRACTION (pdfplumber + OCR fallback)
 # ======================================================
@@ -10392,120 +11640,30 @@ DIFFICULTY_MULTIPLIERS = {"Easy": 1.0, "Medium": 1.1, "Hard": 1.25}
 
 def analyze_answer_weaknesses(answer_text: str, scoring: dict) -> dict:
     """
-    PART 2: Adaptive follow-up strategy engine.
-    Detect weaknesses and select appropriate follow-up strategy.
-    Returns dict with detected weaknesses and selected strategy.
+    UPGRADED (Fix 3): Delegates to analyze_answer_weaknesses_smart.
+    Backward-compatible — existing callers continue to work.
+    Escalation layer is read from session_state to drive layer progression.
     """
-    weaknesses = []
-    answer_lower = answer_text.lower()
-    word_count = len(answer_text.split())
-
-    knowledge = scoring.get("knowledge", 5)
-    communication = scoring.get("communication", 5)
-    relevance = scoring.get("relevance", 5)
-
-    # Detect missing elements
-    tradeoff_keywords = ["tradeoff", "trade-off", "versus", "vs", "compared", "alternative", "however", "but", "downside", "pros and cons"]
-    if not any(kw in answer_lower for kw in tradeoff_keywords):
-        weaknesses.append("no_tradeoff")
-
-    project_keywords = ["project", "built", "implemented", "worked on", "experience", "at my", "in my", "when i", "i developed"]
-    if not any(kw in answer_lower for kw in project_keywords):
-        weaknesses.append("no_project_reference")
-
-    metric_keywords = ["%", "percent", "ms", "seconds", "users", "requests", "throughput", "latency", "availability", "uptime", "scale", "million", "thousand"]
-    if not any(kw in answer_lower for kw in metric_keywords):
-        weaknesses.append("no_metrics")
-
-    if knowledge < 5:
-        weaknesses.append("weak_knowledge")
-    if communication < 5:
-        weaknesses.append("weak_communication")
-    if relevance < 5:
-        weaknesses.append("weak_relevance")
-    if word_count < 50:
-        weaknesses.append("superficial_explanation")
-
-    # Select strategy based on primary weakness
-    strategy = "Depth Probe"  # default
-    if "no_tradeoff" in weaknesses:
-        strategy = "Tradeoff Challenge"
-    elif "no_metrics" in weaknesses:
-        strategy = "Metric Justification"
-    elif "no_project_reference" in weaknesses:
-        strategy = "Architecture Breakdown"
-    elif "superficial_explanation" in weaknesses:
-        strategy = "Depth Probe"
-    elif "weak_knowledge" in weaknesses:
-        strategy = "Edge Case Scenario"
-    elif "weak_communication" in weaknesses:
-        strategy = "Alternative Design Comparison"
-    elif len(weaknesses) == 0:
-        # Answer was good, escalate with harder challenge
-        import random
-        strategy = random.choice(["Scalability Challenge", "Failure Simulation", "Security Consideration", "Constraint Injection"])
-
-    return {
-        "weaknesses": weaknesses,
-        "strategy": strategy,
-        "follow_up_count": 0,
-        "depth_score": min(10, max(0, (knowledge + communication + relevance) / 3)),
-    }
+    try:
+        current_layer = st.session_state.get("escalation_layer", 1)
+    except Exception:
+        current_layer = 1
+    result = analyze_answer_weaknesses_smart(answer_text, scoring, escalation_layer=current_layer)
+    # Backward-compat keys
+    result["follow_up_count"] = getattr(st.session_state, "follow_up_count", 0) if hasattr(st, "session_state") else 0
+    return result
 
 
 def generate_adaptive_followup(question: str, answer: str, strategy: str, escalation_layer: int, role: str, domain: str) -> str:
     """
-    PART 4: Generate escalating follow-up question based on strategy and layer.
-    Escalation layers 1-5 increase cognitive load progressively.
+    UPGRADED (Fix 3): Delegates to generate_adaptive_followup_v2.
+    Backward-compatible wrapper — all existing callers work unchanged.
     """
-    from llm_manager import call_llm
-
-    layer_desc = {
-        1: "Ask about the internal workings or mechanism behind their answer.",
-        2: "Challenge them with a tradeoff or alternative approach comparison.",
-        3: "Probe with a real-world project mapping or example requirement.",
-        4: "Inject a constraint (e.g., 10x scale, limited budget, legacy system) and ask how they'd adapt.",
-        5: "Simulate a failure or security breach scenario related to their approach and ask for resolution.",
-    }
-    layer_instruction = layer_desc.get(escalation_layer, layer_desc[2])
-
-    strategy_instructions = {
-        "Depth Probe": "Ask them to explain HOW it works internally, step by step.",
-        "Tradeoff Challenge": "Ask them to compare their approach with an alternative and justify their choice with specific tradeoffs.",
-        "Edge Case Scenario": "Present an edge case or unexpected condition and ask how their solution handles it.",
-        "Scalability Challenge": "Ask how their approach would handle 100x traffic or 10x data volume.",
-        "Constraint Injection": "Add a realistic constraint (e.g., no database, offline mode, 50ms SLA) and ask how they'd adapt.",
-        "Failure Simulation": "Describe a production failure scenario and ask how they'd diagnose and fix it.",
-        "Security Consideration": "Ask about the security implications or attack vectors related to their approach.",
-        "Architecture Breakdown": "Ask them to draw out the architecture components and explain data flow.",
-        "Metric Justification": "Ask them to provide specific metrics or success criteria they'd use to validate their solution.",
-        "Alternative Design Comparison": "Ask them to propose a completely different design and compare both approaches.",
-    }
-    strategy_instruction = strategy_instructions.get(strategy, "Ask a deeper technical follow-up question.")
-
-    prompt = f"""You are a senior technical interviewer conducting a {domain} interview for {role}.
-
-The candidate answered this question:
-ORIGINAL QUESTION: {question}
-CANDIDATE ANSWER: {answer[:500]}
-
-Generate ONE follow-up question using this strategy: {strategy}
-Strategy instruction: {strategy_instruction}
-Escalation layer: {escalation_layer}/5 — {layer_instruction}
-
-Rules:
-- The question must directly reference something from their answer
-- It should increase cognitive load compared to the original question
-- Keep it to 1-2 sentences maximum
-- Do NOT add numbering or prefixes
-- Output only the question itself
-
-Follow-up question:"""
-
-    try:
-        return call_llm(prompt, session=st.session_state).strip()
-    except Exception:
-        return f"Can you walk me through how you would handle this at 10x scale, including specific failure points and mitigations?"
+    diff = getattr(st.session_state, "interview_difficulty", "Hard") if hasattr(st, "session_state") else "Hard"
+    return generate_adaptive_followup_v2(
+        question=question, answer=answer, strategy=strategy,
+        escalation_layer=escalation_layer, role=role, domain=domain, difficulty=diff
+    )
 
 
 def get_user_weakness_history(username: str) -> dict:
@@ -10596,10 +11754,27 @@ def generate_resume_based_questions_enhanced(resume_context: dict, role: str, do
     elif weakness_bias == "answer precision":
         bias_instruction = "Focus on questions that require precise, targeted answers directly relevant to the role and their stated experience."
 
+    # TEXT-INTERVIEW-OPTIMISED difficulty guidance for resume-based questions.
+    # Hard: one focused challenge per question — NOT "design entire system + tradeoffs + scale".
     difficulty_map = {
-        "Easy": "Ask about what they built and what technologies they used. Keep it conceptual.",
-        "Medium": "Ask about specific decisions made, tradeoffs considered, and real-world challenges faced.",
-        "Hard": "Ask deep questions about architecture choices, scalability design, measurable outcomes, failure handling, and how they'd redesign it today."
+        "Easy": (
+            "Ask about concepts, tools, or technologies visible in their resume. "
+            "Questions must be answerable by explaining WHAT something is and giving ONE example. "
+            "No architecture, no scaling, no tradeoff decisions."
+        ),
+        "Medium": (
+            "Ask about a specific decision, implementation approach, or challenge from their resume. "
+            "Frame it as a small scenario with ONE constraint. "
+            "The candidate should explain their approach and justify ONE key choice. "
+            "No multi-layer design, no full-system architecture."
+        ),
+        "Hard": (
+            "Ask about a focused technical challenge from their resume. Pick EXACTLY ONE axis: "
+            "either (a) a tradeoff between two specific approaches they may have faced, "
+            "or (b) a failure or edge case relevant to what they built, "
+            "or (c) an optimisation under a specific constraint. "
+            "Do NOT combine all three. The question must be answerable in 6-8 text paragraphs."
+        ),
     }
 
     prompt = f"""You are a senior technical interviewer for {role} in {domain}.
@@ -10612,23 +11787,17 @@ RESUME CONTEXT:
 - Experience: {', '.join(experience[:3])}
 - Technologies: {', '.join(technologies[:5])}
 
-DIFFICULTY: {difficulty}
+DIFFICULTY GUIDANCE: {difficulty}
 {difficulty_map.get(difficulty, '')}
 
 {bias_instruction}
 
-For each question, MUST cover at least one of:
-1. Architecture breakdown or design rationale
-2. Decision reasoning (why they chose X over Y)
-3. Tradeoffs explicitly made
-4. Measurable outcomes or success metrics
-5. Scaling challenges or failure scenarios
-
-RULES:
-- Reference specific resume content directly
-- No generic questions
-- One question per line
-- No numbering, bullets, or prefixes
+QUESTION FOCUS RULES:
+- Each question must reference ONE specific item from the resume context above
+- Each question must test exactly ONE of: concept understanding / decision reasoning / implementation approach / focused tradeoff / single failure mode
+- Do NOT combine multiple challenge axes in one question
+- Hard questions must be text-answerable (6-8 paragraphs) — no whiteboard system design
+- One question per line, no numbering or prefixes
 
 Generate {num_questions} questions:"""
 
@@ -11557,17 +12726,39 @@ with tab4:
                 f"What are your career goals as a {role}?"
             ]
         elif difficulty == "Hard":
+            # Text-answerable Hard fallbacks — one challenge axis per question.
             base_questions = [
-                f"Design a scalable system architecture for a {role} project handling millions of users.",
-                f"Explain the trade-offs between different approaches in {domain} and when to use each.",
-                f"How would you troubleshoot a critical production issue in a {role} context?",
-                f"Describe your approach to mentoring junior team members as a {role}.",
-                f"What are the biggest technical challenges facing {role} professionals today?",
-                f"How would you architect a distributed system for {domain}?",
-                f"Explain how you would optimize performance in a complex {role} project.",
-                f"What advanced techniques do you use in {domain}?",
-                f"Describe a time you made a critical technical decision as a {role}.",
-                f"How do you approach system design for high availability in {domain}?"
+                f"Describe the most significant technical tradeoff you've encountered as a {role}. "
+                f"What were the two options, what data drove your decision, and what limitation did you accept?",
+
+                f"Walk through how you would diagnose an unexpected latency spike in a {domain} system you own. "
+                f"What signals would you look for first, and what would be your isolation process?",
+
+                f"What is the single most dangerous assumption developers make when working in {domain}, "
+                f"and how would you build a guardrail against it?",
+
+                f"You're asked to reduce the memory footprint of a {role} component by 30% "
+                f"without changing its public interface. Describe your investigation process and the "
+                f"two or three changes you'd prioritise.",
+
+                f"Describe a non-obvious edge case in {domain} that is easy to miss in code review. "
+                f"How would you detect it, handle it, and prevent its recurrence?",
+
+                f"You need to choose between two technically valid approaches to implement "
+                f"[a core {domain} feature]. What framework do you use to make that call, "
+                f"and what would make you revisit the decision later?",
+
+                f"A {domain} service you maintain starts failing intermittently under normal load. "
+                f"There are no upstream alerts. Walk through your debugging approach step by step.",
+
+                f"What optimisation would have the highest impact on the reliability of a typical {domain} system? "
+                f"Justify your choice with specific reasoning, not just general best practices.",
+
+                f"Describe one {domain} pattern or technology that is frequently misused in production. "
+                f"What is the misuse pattern, and how do you recognise it in a codebase?",
+
+                f"You've inherited a {domain} codebase with no tests and unclear ownership. "
+                f"What is the first concrete technical action you take, and why that over other options?",
             ]
         else:  # Medium
             base_questions = [
@@ -11592,35 +12783,54 @@ with tab4:
         FIXED: Now difficulty is passed into LLM prompt and affects question complexity
         """
         # Define difficulty-specific instructions
+        # TEXT-INTERVIEW-OPTIMISED difficulty specifications.
+        # Every level is scoped so the candidate can answer in structured paragraphs — no whiteboard.
         difficulty_instructions = {
-            "Easy": "Generate BASIC and INTRODUCTORY level questions. Focus on fundamental concepts, definitions, and simple scenarios. Questions should be suitable for entry-level candidates or those new to the field.",
-            "Medium": "Generate SCENARIO-BASED and MODERATELY TECHNICAL questions. Include situational questions that require practical thinking and intermediate technical knowledge. Suitable for candidates with some experience.",
-            "Hard": "Generate DEEP TECHNICAL, SYSTEM DESIGN, and COMPLEX PROBLEM-SOLVING questions. Include architecture decisions, trade-offs, scalability concerns, and advanced concepts. Suitable for senior-level candidates."
+            "Easy": (
+                "Generate CONCEPT CLARITY questions only. "
+                "Each question asks the candidate to define or explain ONE concept, "
+                "state why it exists, and give a real-world example of where they'd use it. "
+                "Questions must be answerable in 3-5 paragraphs. "
+                "FORBIDDEN: system design, scaling, tradeoffs, production failures, architecture."
+            ),
+            "Medium": (
+                "Generate SCENARIO REASONING questions. "
+                "Each question presents a small, realistic scenario with ONE constraint or decision point. "
+                "The candidate must describe their approach and justify ONE key implementation choice. "
+                "Questions must be answerable in 5-6 paragraphs. "
+                "FORBIDDEN: full system design, multi-layer architecture, handling 1M+ users, "
+                "combined scaling + tradeoff + failure in one question."
+            ),
+            "Hard": (
+                "Generate FOCUSED TECHNICAL DEPTH questions targeting ONE challenge axis. "
+                "Choose EXACTLY ONE of: (a) a specific tradeoff between two concrete approaches, "
+                "(b) diagnosing and handling one specific failure mode, "
+                "or (c) optimising one metric under one constraint. "
+                "Questions must be answerable in 6-8 text paragraphs — no diagram, no whiteboard. "
+                "FORBIDDEN: 'design the entire system', 'walk through every layer', "
+                "'handle X million users AND secure it AND handle failures AND optimise'. "
+                "One axis. One decision. Senior depth, text-answerable scope."
+            ),
         }
 
-        prompt = f"""You are an expert interviewer.
+        prompt = f"""You are an expert technical interviewer building a text-based interview simulator.
 
 Generate EXACTLY {num_questions} unique {interview_type} interview questions
 for the role of {role} in {domain}.
 
-DIFFICULTY LEVEL: {difficulty}
+DIFFICULTY CONTRACT: {difficulty}
 {difficulty_instructions.get(difficulty, difficulty_instructions["Medium"])}
 
-CRITICAL REQUIREMENTS:
-- Generate EXACTLY {num_questions} questions - no more, no less
-- Keep each question concise (1-2 sentences max)
-- Avoid duplicates
-- Match the difficulty level specified above
+GENERATION RULES:
+- EXACTLY {num_questions} questions — no more, no less
+- Each question must be self-contained (1-3 sentences), answerable in text paragraphs
+- Each question must focus on ONE concept, ONE scenario, or ONE challenge axis
+- For Hard: do NOT combine design + scale + failure + tradeoff in one question
+- Avoid duplicates and generic filler
 - Output ONLY the questions, one per line
-- DO NOT add numbering, bullet points, or any prefixes
-- DO NOT add any introductory text or explanations
+- NO numbering, NO bullet points, NO prefixes, NO introductory text
 
-Output format example:
-What is your experience with cloud technologies?
-How would you handle a system outage?
-Describe your approach to code reviews.
-
-Generate exactly {num_questions} questions now:
+Generate {num_questions} questions now:
 """
 
         try:
@@ -11669,12 +12879,22 @@ Generate exactly {num_questions} questions now:
                     f"Why do you want to work as a {role}?"
                 ]
             elif difficulty == "Hard":
+                # Text-answerable Hard fallbacks — one challenge axis each.
                 fallback_questions = [
-                    f"Design a scalable system architecture for a {role} project handling millions of users.",
-                    f"Explain the trade-offs between different approaches in {domain} and when to use each.",
-                    f"How would you troubleshoot a critical production issue in a {role} context?",
-                    f"Describe your approach to mentoring junior team members as a {role}.",
-                    f"What are the biggest technical challenges facing {role} professionals today?"
+                    f"Describe the most significant tradeoff you've faced in {domain}. "
+                    f"What were the options, and what drove your final decision?",
+
+                    f"Walk through how you would diagnose an unexpected performance regression "
+                    f"in a {domain} system you own. What would you check first?",
+
+                    f"What is one non-obvious edge case in {domain} that developers frequently "
+                    f"miss? How would you detect and handle it?",
+
+                    f"You are asked to reduce latency for a {role} component by 40% "
+                    f"without changing its interface. Describe your investigation and top two changes.",
+
+                    f"Describe a {domain} pattern or tool that is often misused in production. "
+                    f"How do you recognise the misuse, and what would you do instead?",
                 ]
             else:  # Medium
                 fallback_questions = [
@@ -12050,8 +13270,6 @@ Generate exactly {num_questions} questions now:
                         st.session_state.resume_questions_answered = 0
 
                         st.success("✅ Resume uploaded and analyzed successfully!")
-                        
-                        time.sleep(1)
                         st.rerun()
                     else:
                         st.error("Could not extract text from resume. Please ensure it's a valid PDF.")
@@ -12074,28 +13292,53 @@ Generate exactly {num_questions} questions now:
             st.markdown("---")
             st.markdown("<h3 style='color: #00c3ff;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
 
-            # Domain and Role selection
+            # PROBLEM 3 FIX: Use session state to persist domain/role without rerun on each change
+            if 'selected_domain_confirmed' not in st.session_state:
+                st.session_state.selected_domain_confirmed = list(COURSES_BY_CATEGORY.keys())[0]
+            if 'selected_role_confirmed' not in st.session_state:
+                _default_roles = list(COURSES_BY_CATEGORY[st.session_state.selected_domain_confirmed].keys())
+                st.session_state.selected_role_confirmed = _default_roles[0] if _default_roles else None
+
             st.markdown('<div class="role-selector">', unsafe_allow_html=True)
-
-            col1, col2 = st.columns(2)
-            with col1:
-                selected_domain = st.selectbox(
-                    "Select Career Domain",
-                    options=list(COURSES_BY_CATEGORY.keys()),
-                    key="interview_domain_selection"
-                )
-
-            with col2:
-                if selected_domain:
-                    roles = list(COURSES_BY_CATEGORY[selected_domain].keys())
-                    selected_role = st.selectbox(
-                        "Select Target Role",
-                        options=roles,
-                        key="interview_role_selection"
+            with st.form("domain_role_form", clear_on_submit=False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    _domain_opts = list(COURSES_BY_CATEGORY.keys())
+                    _domain_idx = _domain_opts.index(st.session_state.selected_domain_confirmed) if st.session_state.selected_domain_confirmed in _domain_opts else 0
+                    _form_domain = st.selectbox(
+                        "Select Career Domain",
+                        options=_domain_opts,
+                        index=_domain_idx,
+                        key="interview_domain_form_select"
                     )
-                else:
-                    selected_role = None
+                with col2:
+                    _role_opts = list(COURSES_BY_CATEGORY.get(_form_domain, {}).keys())
+                    _role_idx = _role_opts.index(st.session_state.selected_role_confirmed) if st.session_state.selected_role_confirmed in _role_opts else 0
+                    _form_role = st.selectbox(
+                        "Select Target Role",
+                        options=_role_opts,
+                        index=max(0, _role_idx),
+                        key="interview_role_form_select"
+                    )
+                _confirm_role = st.form_submit_button("✅ Confirm Role Selection")
 
+            if _confirm_role:
+                st.session_state.selected_domain_confirmed = _form_domain
+                st.session_state.selected_role_confirmed = _form_role
+                # Reset interview if domain/role changed
+                if (st.session_state.get('interview_domain') != _form_domain or
+                        st.session_state.get('interview_role') != _form_role):
+                    st.session_state.dynamic_interview_started = False
+                    st.session_state.dynamic_interview_completed = False
+                    st.session_state.interview_result_saved = False
+                    st.session_state.interview_final_duration_seconds = None
+                    st.session_state.interview_actual_start_time = None
+                st.rerun()
+
+            selected_domain = st.session_state.selected_domain_confirmed
+            selected_role = st.session_state.selected_role_confirmed
+            if selected_domain and selected_role:
+                st.info(f"🎯 Selected: **{selected_role}** in **{selected_domain}**")
             st.markdown('</div>', unsafe_allow_html=True)
         else:
             selected_domain = None
@@ -12121,14 +13364,11 @@ Generate exactly {num_questions} questions now:
                 st.session_state.dynamic_answer_submitted = False
             if 'current_interview_question_text' not in st.session_state:
                 st.session_state.current_interview_question_text = ""
-            if 'interview_domain' not in st.session_state or st.session_state.interview_domain != selected_domain:
+            # Track domain/role without resetting on every rerun
+            # (domain reset is now handled by the domain_role_form submit above)
+            if 'interview_domain' not in st.session_state:
                 st.session_state.interview_domain = selected_domain
                 st.session_state.interview_role = selected_role
-                st.session_state.dynamic_interview_started = False
-                st.session_state.dynamic_interview_completed = False
-                st.session_state.interview_result_saved = False
-                st.session_state.interview_final_duration_seconds = None
-                st.session_state.interview_actual_start_time = None
             if 'question_timer_start' not in st.session_state:
                 st.session_state.question_timer_start = None
             if 'timer_seconds' not in st.session_state:
@@ -12162,32 +13402,73 @@ Generate exactly {num_questions} questions now:
                     _wm_score = _wm_avgs.get(_wm["weakest_skill"], 0)
                     st.info(f"🧠 **Weakness Memory:** Based on your last 5 interviews, your weakest recurring skill is **{_wm_skill}** (avg: {_wm_score:.1f}/10). Questions will be biased toward improving this.")
 
-                col1, col2 = st.columns(2)
+                # PROBLEM 3 FIX: Wrap all setup widgets in st.form to prevent
+                # per-widget rerun flicker. Only reruns on form submit.
+                with st.form("interview_setup_form", clear_on_submit=False):
+                    col1, col2 = st.columns(2)
 
-                with col1:
-                    interview_type = st.selectbox(
-                        "Interview Type",
-                        options=["technical", "behavioral", "mixed"],
-                        format_func=lambda x: x.title() + (" (Technical + Behavioral)" if x == "mixed" else ""),
-                        key="dynamic_interview_type_select"
-                    )
+                    with col1:
+                        interview_type = st.selectbox(
+                            "Interview Type",
+                            options=["technical", "behavioral", "mixed"],
+                            format_func=lambda x: x.title() + (" (Technical + Behavioral)" if x == "mixed" else ""),
+                            key="dynamic_interview_type_select"
+                        )
 
-                with col2:
-                    interview_difficulty = st.selectbox(
-                        "Interview Difficulty",
-                        options=["Easy", "Medium", "Hard"],
-                        key="interview_difficulty_select",
-                        index=1
-                    )
+                    with col2:
+                        interview_difficulty = st.selectbox(
+                            "Interview Difficulty",
+                            options=["Easy", "Medium", "Hard"],
+                            key="interview_difficulty_select",
+                            index=1
+                        )
 
-                col3, col4 = st.columns(2)
-                with col3:
-                    num_questions = st.slider("Number of questions:", 5, 10, 6)
+                    col3, col4 = st.columns(2)
+                    with col3:
+                        num_questions = st.slider("Number of questions:", 5, 10, 6, key="num_questions_slider")
 
-                with col4:
-                    timer_seconds = st.slider("Time per question (seconds):", 60, 300, 120, step=30)
+                    with col4:
+                        timer_seconds = st.slider("Time per question (seconds):", 60, 300, 120, step=30, key="timer_seconds_slider")
 
-                if st.button("🚀 Start Mock Interview"):
+                    # ── DOMAIN AUTHORITY: Show mismatch warning if resume ≠ selected domain ──
+                    if st.session_state.get("resume_context"):
+                        _rc = st.session_state.resume_context
+                        _resume_techs = " ".join(_rc.get("technologies", []) + _rc.get("skills", [])).lower()
+                        _domain_cfg = get_domain_config(selected_domain)
+                        _forbidden = _domain_cfg.get("forbidden_resume_keywords", [])
+                        _has_mismatch = any(kw.lower() in _resume_techs for kw in _forbidden)
+                        if _has_mismatch:
+                            st.info(
+                                f"⚠️ **Domain Override Active**: Your resume appears to have a different technical background. "
+                                f"Questions will be **strictly aligned to {selected_domain}** regardless of your resume content. "
+                                f"This simulates interviewing for a new domain."
+                            )
+
+                    # ── DIFFICULTY CONTRACT: Show what each level means ──
+                    _diff_contract = DIFFICULTY_CONTRACTS.get(interview_difficulty, {})
+                    if _diff_contract:
+                        _diff_colors = {"Easy": "#69f0ae", "Medium": "#ffcc02", "Hard": "#f44336"}
+                        _diff_icons = {"Easy": "📗", "Medium": "📙", "Hard": "📕"}
+                        _dc = _diff_colors.get(interview_difficulty, "#aaa")
+                        _di = _diff_icons.get(interview_difficulty, "📋")
+                        _scope = _diff_contract.get("answer_scope", "")
+                        _cog = _diff_contract.get("cognitive_load_detail", _diff_contract.get("cognitive_load", ""))
+                        _desc = _diff_contract.get("description", "")
+                        st.markdown(
+                            f'<div style="background:rgba(0,195,255,0.07);border-left:4px solid {_dc};'
+                            f'padding:12px 16px;border-radius:0 8px 8px 0;margin:8px 0;">'
+                            f'<strong style="color:{_dc};font-size:15px;">{_di} {interview_difficulty} Mode — {_diff_contract.get("label","")}</strong><br/>'
+                            f'<span style="color:#ddd;font-size:13px;">{_desc}</span><br/>'
+                            f'<span style="color:#aaa;font-size:12px;margin-top:4px;display:block;">'
+                            f'Expected answer scope: <strong style="color:{_dc}">{_scope}</strong> &nbsp;|&nbsp; {_cog}'
+                            f'</span>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+
+                    start_submitted = st.form_submit_button("🚀 Start Mock Interview")
+
+                if start_submitted:
                     with st.spinner("Generating personalized questions using AI..."):
                         # Generate resume-based questions
                         resume_based_qs = []
@@ -12197,7 +13478,7 @@ Generate exactly {num_questions} questions now:
                                 _username_for_bias = st.session_state.get("username", "Guest")
                                 _weakness_data = get_user_weakness_history(_username_for_bias)
                                 _bias = _weakness_data.get("bias", "balanced")
-                                resume_based_qs = generate_resume_based_questions_enhanced(
+                                resume_based_qs = generate_resume_based_questions_domain_aware(
                                     st.session_state.resume_context,
                                     selected_role,
                                     selected_domain,
@@ -12211,7 +13492,7 @@ Generate exactly {num_questions} questions now:
                         remaining_questions = num_questions - len(resume_based_qs)
                         if remaining_questions > 0:
                             with st.spinner("Creating generic interview questions..."):
-                                generic_qs = generate_interview_questions_with_llm(
+                                generic_qs = generate_domain_questions_with_llm(
                                     selected_domain,
                                     selected_role,
                                     interview_type,
@@ -12257,7 +13538,6 @@ Generate exactly {num_questions} questions now:
                                 show_resume_scanning_animation()
 
                             st.success("Questions generated! Starting your mock interview...")
-                            time.sleep(1)
                             st.rerun()
                         else:
                             st.error("Failed to generate questions. Please try again.")
@@ -12461,20 +13741,37 @@ Generate exactly {num_questions} questions now:
 
                     # Auto-submit logic when timer expires
                     if remaining_time <= 0 and not st.session_state.dynamic_answer_submitted:
-                        if not answer.strip():
-                            answer = "⚠️ No Answer"
+                        # Retrieve whatever was typed (may be empty)
+                        _auto_ans = st.session_state.get(
+                            f"dynamic_interview_answer_{st.session_state.current_dynamic_interview_question}", ""
+                        )
+                        if not _auto_ans.strip():
+                            _auto_ans = "⚠️ No Answer"
                         with st.spinner("Evaluating your answer..."):
                             _process_submission(
-                                answer, question,
+                                _auto_ans, question,
                                 st.session_state.current_dynamic_interview_question,
                                 questions_answered
                             )
                         st.warning("⏰ Time's up! Answer auto-submitted.")
                         st.rerun()
 
-                    # Submit answer button
+                    # PROBLEM 3 FIX: Wrap answer input in st.form to prevent per-keystroke reruns
                     if not st.session_state.dynamic_answer_submitted and remaining_time > 0:
-                        if st.button("Submit Answer & Get Feedback"):
+                        answer_form_key = f"answer_form_{st.session_state.current_dynamic_interview_question}"
+                        with st.form(answer_form_key, clear_on_submit=False):
+                            answer_key = f"dynamic_interview_answer_{st.session_state.current_dynamic_interview_question}"
+                            answer = st.text_area(
+                                "Your answer:",
+                                placeholder="Type your detailed answer here... (Use STAR method: Situation, Task, Action, Result)",
+                                height=150,
+                                max_chars=2000,
+                                key=answer_key,
+                                help="Maximum 2000 characters"
+                            )
+                            answer_submitted = st.form_submit_button("✅ Submit Answer & Get Feedback")
+
+                        if answer_submitted:
                             if answer.strip():
                                 with st.spinner("Evaluating your answer..."):
                                     _process_submission(
@@ -12485,6 +13782,11 @@ Generate exactly {num_questions} questions now:
                                 st.rerun()
                             else:
                                 st.warning("Please provide an answer before proceeding.")
+                    elif not st.session_state.dynamic_answer_submitted:
+                        # Timer expired but form is still needed for text reference
+                        answer = st.session_state.get(
+                            f"dynamic_interview_answer_{st.session_state.current_dynamic_interview_question}", ""
+                        )
 
                     # Show feedback after answer submitted
                     if st.session_state.dynamic_answer_submitted:
@@ -12511,13 +13813,28 @@ Generate exactly {num_questions} questions now:
                         _preview_fq = st.session_state.get('pending_followup_display', '')
                         _preview_strategy = st.session_state.get('pending_followup_strategy', '')
                         if st.session_state.interview_difficulty == "Hard" and _preview_fq:
+                            _esc_layer = st.session_state.get("escalation_layer", 1)
+                            _layer_info = ESCALATION_LAYER_MAP.get(_esc_layer, {})
+                            _layer_name = _layer_info.get("name", "")
+                            _pressure = _layer_info.get("cognitive_pressure", "")
+                            _pressure_colors = {
+                                "LOW": "#69f0ae", "MEDIUM": "#ffcc02",
+                                "MEDIUM-HIGH": "#ff9800", "HIGH": "#ff5722", "MAXIMUM": "#f44336"
+                            }
+                            _pc = _pressure_colors.get(_pressure, "#ffa500")
                             st.markdown(f"""
                             <div style="background: linear-gradient(135deg, rgba(255,165,0,0.12), rgba(255,165,0,0.06));
                                         border: 1px solid rgba(255,165,0,0.4); border-radius: 10px;
-                                        padding: 14px 18px; margin: 12px 0; text-align: center;">
-                                <p style="color: #ffa500; font-weight: 600; margin: 0 0 6px 0;">
-                                    🔎 Follow-Up Question [{_preview_strategy}]
-                                </p>
+                                        padding: 14px 18px; margin: 12px 0;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                    <span style="color: #ffa500; font-weight: 600;">
+                                        🔎 Follow-Up — {_preview_strategy}
+                                    </span>
+                                    <span style="color:{_pc};font-size:12px;font-weight:600;
+                                                 background:rgba(0,0,0,0.3);padding:2px 8px;border-radius:12px;">
+                                        Layer {_esc_layer}/5: {_layer_name} | Pressure: {_pressure}
+                                    </span>
+                                </div>
                                 <p style="color: #ffffff; margin: 0; font-size: 15px;">{_preview_fq}</p>
                             </div>
                             """, unsafe_allow_html=True)
@@ -12579,9 +13896,15 @@ Generate exactly {num_questions} questions now:
                                     if i < num_to_show - 1:  # Don't add separator after last item
                                         st.markdown("---")
 
-                    # Auto-refresh for timer
+                    # PROBLEM 3 FIX: Timer auto-refresh
+                    # Only rerun for the timer when answer hasn't been submitted.
+                    # Use a short sleep to avoid hammering the server.
+                    # The timer display above already computed remaining_time.
                     if remaining_time > 0 and not st.session_state.dynamic_answer_submitted:
-                        time.sleep(1)
+                        # Store timer placeholder in session so we don't flicker the whole page
+                        # Use st.empty() for the timer display above (handled in display block)
+                        # Trigger rerun after 2 seconds instead of 1 to halve flicker frequency
+                        time.sleep(2)
                         st.rerun()
                 else:
                     # CRITICAL FIX: All questions answered, move to completion automatically
@@ -13780,7 +15103,8 @@ Generate exactly {num_questions} questions now:
                         st.plotly_chart(_fig_ma, use_container_width=True)
 
             with st.expander("📋 See All Your Interview Records"):
-                display_cols = [c for c in ['id', 'role', 'domain', 'avg_score', 'weighted_score', 'knowledge_avg', 'communication_avg',
+                # Exclude raw DB 'id' — inject a clean per-user sequential # instead
+                display_cols = [c for c in ['role', 'domain', 'avg_score', 'weighted_score', 'knowledge_avg', 'communication_avg',
                                              'relevance_avg', 'difficulty', 'interview_mode', 'total_questions', 'duration_seconds',
                                              'follow_up_count', 'depth_score', 'behavior_class', 'completed_on']
                                 if c in df.columns]
@@ -13789,10 +15113,12 @@ Generate exactly {num_questions} questions now:
                     'communication_avg': 'Communication', 'relevance_avg': 'Relevance',
                     'difficulty': 'Level', 'interview_mode': 'Format',
                     'total_questions': 'Questions', 'duration_seconds': 'Duration (s)',
-                    'completed_on': 'Date', 'role': 'Role', 'domain': 'Career Area', 'id': '#',
+                    'completed_on': 'Date', 'role': 'Role', 'domain': 'Career Area',
                     'follow_up_count': 'Follow-ups', 'depth_score': 'Depth', 'behavior_class': 'Style'
                 }
                 display_df = df[display_cols].rename(columns=rename_map)
+                # Per-user sequential numbering: always starts at 1 regardless of DB id
+                display_df.insert(0, '#', range(1, len(display_df) + 1))
 
                 # Build enhanced HTML table with score badges, trend arrows, best-row highlight
                 _score_col = 'Score'
@@ -13857,7 +15183,6 @@ Generate exactly {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
-
 
 
 
