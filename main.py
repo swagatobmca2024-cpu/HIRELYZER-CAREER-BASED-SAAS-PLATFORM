@@ -6321,188 +6321,83 @@ with tab2:
 
     st.markdown("<hr style='border-top: 2px solid rgba(0,200,255,0.4);'>", unsafe_allow_html=True)
 
-    # ---------- Anti-Flicker + Smooth Transition + Smart Spell Check ----------
+    # ---------- Anti-Flicker / Smooth Rerun CSS ----------
     st.markdown("""
         <style>
-        /* Prevent white flash / flicker on Streamlit reruns */
-        [data-testid="stApp"] {
-            transition: opacity 0.12s ease-in-out !important;
+        /* Prevent white flash and blinking on Streamlit reruns */
+        [data-testid="stAppViewContainer"],
+        [data-testid="stVerticalBlock"],
+        [data-testid="stForm"],
+        [data-testid="stSidebar"],
+        section.main > div {
+            transition: opacity 0.15s ease-in-out !important;
         }
-        /* Smooth content fade instead of hard blink */
-        [data-testid="stMainBlockContainer"] > div {
-            animation: smoothFadeIn 0.18s ease-in-out;
+
+        /* Suppress the brief layout jump when widgets remount */
+        iframe, [data-testid="stIFrame"] {
+            transition: none !important;
         }
-        @keyframes smoothFadeIn {
+
+        /* Prevent scrollbar flicker */
+        html {
+            overflow-y: scroll !important;
+            scrollbar-gutter: stable !important;
+        }
+
+        /* Smooth button press — no jump */
+        button[kind="formSubmit"],
+        button[kind="secondary"],
+        .stButton > button {
+            transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease !important;
+        }
+        .stButton > button:active {
+            transform: scale(0.98) !important;
+        }
+
+        /* Prevent input field flicker on focus/blur */
+        input, textarea, select {
+            transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+        }
+
+        /* Prevent expander flicker */
+        details summary {
+            transition: background 0.2s ease !important;
+        }
+
+        /* Prevent layout shift during widget remounts */
+        [data-testid="stVerticalBlock"] > div {
+            min-height: 0 !important;
+        }
+
+        /* Smooth fade-in for newly rendered blocks */
+        @keyframes fadeInBlock {
             from { opacity: 0.6; }
             to   { opacity: 1; }
         }
-        /* Remove default white background flash on rerun */
-        [data-testid="stAppViewContainer"] {
-            background-attachment: fixed !important;
-        }
-        /* Spell-check suggestion popup */
-        .spell-suggestion-box {
-            position: absolute;
-            background: rgba(10,20,40,0.92);
-            border: 1px solid rgba(0,200,255,0.6);
-            border-radius: 10px;
-            padding: 6px 10px;
-            color: #4da6ff;
-            font-size: 13px;
-            z-index: 99999;
-            box-shadow: 0 4px 20px rgba(0,200,255,0.3);
-            cursor: pointer;
-            backdrop-filter: blur(12px);
-            pointer-events: auto;
-            white-space: nowrap;
-        }
-        .spell-suggestion-box:hover {
-            background: rgba(0,200,255,0.18);
-        }
-        /* Smooth button press - no flicker */
-        div.stButton > button, div.stFormSubmitButton > button {
-            transition: all 0.25s ease-in-out !important;
-        }
-        div.stFormSubmitButton > button:active {
-            transform: scale(0.96) !important;
-            opacity: 0.85 !important;
-        }
-        /* Prevent layout shift on form submit */
-        [data-testid="stForm"] {
-            transition: opacity 0.15s ease !important;
+        [data-testid="stVerticalBlock"] {
+            animation: fadeInBlock 0.12s ease-out !important;
         }
         </style>
 
         <script>
-        // Smart Spell Check with auto-suggestion for all text inputs
         (function() {
-            // Common misspellings dictionary for instant fix suggestions
-            const corrections = {
-                "teh":"the","adn":"and","taht":"that","wiht":"with","thier":"their",
-                "recieve":"receive","seperate":"separate","occured":"occurred",
-                "untill":"until","enviroment":"environment","experiance":"experience",
-                "managment":"management","developement":"development","knowlege":"knowledge",
-                "skilss":"skills","languege":"language","intrests":"interests","sumary":"summary",
-                "proffesional":"professional","acomplishments":"accomplishments",
-                "responsibilites":"responsibilities","achivements":"achievements",
-                "comunication":"communication","orgainzation":"organization",
-                "colabration":"collaboration","anaysis":"analysis","proect":"project",
-                "tecnology":"technology","programing":"programming","sofware":"software",
-                "databse":"database","manger":"manager","engeneer":"engineer",
-                "analst":"analyst","desiner":"designer","marketting":"marketing",
-                "finanace":"finance","acounting":"accounting","custmer":"customer",
-                "prodcut":"product","busines":"business","leardership":"leadership",
-                "teamwork":"teamwork","creatve":"creative","solutin":"solution"
-            };
-
-            let suggestionBox = null;
-            let currentInput = null;
-            let currentWord = null;
-
-            function removeSuggestion() {
-                if (suggestionBox) {
-                    suggestionBox.remove();
-                    suggestionBox = null;
-                }
-            }
-
-            function showSuggestion(input, word, suggestion, wordStart, wordEnd) {
-                removeSuggestion();
-                currentInput = input;
-                currentWord = word;
-
-                const rect = input.getBoundingClientRect();
-                suggestionBox = document.createElement('div');
-                suggestionBox.className = 'spell-suggestion-box';
-                suggestionBox.textContent = '✨ Did you mean: "' + suggestion + '"? (Click to fix)';
-                suggestionBox.style.top = (rect.bottom + window.scrollY + 4) + 'px';
-                suggestionBox.style.left = (rect.left + window.scrollX) + 'px';
-
-                suggestionBox.addEventListener('mousedown', function(e) {
-                    e.preventDefault();
-                    // Replace the misspelled word
-                    const val = input.value;
-                    const newVal = val.substring(0, wordStart) + suggestion + val.substring(wordEnd);
-                    // Use native input value setter to trigger React's onChange
-                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                        window.HTMLTextAreaElement.prototype, 'value'
-                    ) || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
-                    if (nativeInputValueSetter && nativeInputValueSetter.set) {
-                        nativeInputValueSetter.set.call(input, newVal);
-                    } else {
-                        input.value = newVal;
-                    }
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
-                    removeSuggestion();
-                });
-
-                document.body.appendChild(suggestionBox);
-            }
-
-            function checkSpelling(input) {
-                const val = input.value;
-                const pos = input.selectionStart;
-                // Find the word at cursor
-                let start = pos - 1;
-                while (start >= 0 && /\\S/.test(val[start])) start--;
-                start++;
-                let end = pos;
-                while (end < val.length && /\\S/.test(val[end])) end++;
-                const word = val.substring(start, end).toLowerCase().replace(/[^a-z]/g, '');
-                if (word.length > 2 && corrections[word]) {
-                    showSuggestion(input, word, corrections[word], start, end);
-                } else {
-                    removeSuggestion();
-                }
-            }
-
-            function attachSpellCheck(input) {
-                // Enable browser's native spell check
-                input.setAttribute('spellcheck', 'true');
-                input.setAttribute('autocorrect', 'on');
-                input.setAttribute('autocapitalize', 'sentences');
-                // Listen for space/enter as word-boundary triggers
-                input.addEventListener('input', function(e) {
-                    const val = input.value;
-                    const pos = (input.selectionStart || 0);
-                    if (pos > 0 && (val[pos-1] === ' ' || val[pos-1] === '\\n')) {
-                        // Check the word that just ended
-                        let start = pos - 2;
-                        while (start >= 0 && /\\S/.test(val[start])) start--;
-                        start++;
-                        const word = val.substring(start, pos-1).toLowerCase().replace(/[^a-z]/g, '');
-                        if (word.length > 2 && corrections[word]) {
-                            showSuggestion(input, word, corrections[word], start, pos-1);
-                            // Auto-dismiss after 3s if not clicked
-                            setTimeout(removeSuggestion, 3000);
+            var lastScrollY = 0;
+            var ticking = false;
+            var observer = new MutationObserver(function() {
+                if (!ticking) {
+                    requestAnimationFrame(function() {
+                        if (Math.abs(window.scrollY - lastScrollY) > 200) {
+                            window.scrollTo({ top: lastScrollY, behavior: 'instant' });
                         }
-                    }
-                }, false);
-                input.addEventListener('blur', removeSuggestion, false);
-            }
-
-            function scanAndAttach() {
-                const inputs = document.querySelectorAll(
-                    'input[type="text"]:not([data-spellattached]), textarea:not([data-spellattached])'
-                );
-                inputs.forEach(function(inp) {
-                    inp.setAttribute('data-spellattached', '1');
-                    attachSpellCheck(inp);
-                });
-            }
-
-            // Run on load and whenever Streamlit re-renders
-            document.addEventListener('DOMContentLoaded', scanAndAttach);
-            const observer = new MutationObserver(function() { scanAndAttach(); });
-            observer.observe(document.body, { childList: true, subtree: true });
-
-            // Dismiss on outside click
-            document.addEventListener('click', function(e) {
-                if (suggestionBox && !suggestionBox.contains(e.target)) {
-                    removeSuggestion();
+                        ticking = false;
+                    });
+                    ticking = true;
                 }
             });
+            observer.observe(document.body, { childList: true, subtree: false });
+            window.addEventListener('scroll', function() {
+                lastScrollY = window.scrollY;
+            }, { passive: true });
         })();
         </script>
     """, unsafe_allow_html=True)
@@ -6599,8 +6494,23 @@ with tab2:
         </style>
     """, unsafe_allow_html=True)
 
-    # 🎨 Template Selection - stored in session_state to avoid triggering reruns when changed
-    st.session_state.setdefault("selected_template_value", "Default (Professional)")
+    # 🎨 Template Selection
+    st.markdown("### 🎨 Choose Resume Template")
+    selected_template = st.selectbox(
+        "🎨 Choose Resume Template",
+        [
+            "Default (Professional)",
+            "Modern Minimal",
+            "Elegant Sidebar",
+            "Classic Clean (Single Column)",
+            "Executive (Single Column)",
+            "Timeline (Single Column)",
+            "Corporate Blue (Two Column)",
+            "Creative Green (Two Column)",
+            "Warm Terracotta (Two Column)",
+        ],
+        key="template_selector"
+    )
 
     # 📸 Upload profile photo
     uploaded_image = st.file_uploader("Upload a Profile Image", type=["png", "jpg", "jpeg"], key="profile_img_upload")
@@ -6760,30 +6670,6 @@ with tab2:
                 cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""), key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
                 cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
                 cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-
-        st.markdown("### 🎨 <u>Choose Resume Template</u>", unsafe_allow_html=True)
-        selected_template = st.selectbox(
-            "🎨 Template Style",
-            [
-                "Default (Professional)",
-                "Modern Minimal",
-                "Elegant Sidebar",
-                "Classic Clean (Single Column)",
-                "Executive (Single Column)",
-                "Timeline (Single Column)",
-                "Corporate Blue (Two Column)",
-                "Creative Green (Two Column)",
-                "Warm Terracotta (Two Column)",
-            ],
-            index=[
-                "Default (Professional)", "Modern Minimal", "Elegant Sidebar",
-                "Classic Clean (Single Column)", "Executive (Single Column)",
-                "Timeline (Single Column)", "Corporate Blue (Two Column)",
-                "Creative Green (Two Column)", "Warm Terracotta (Two Column)",
-            ].index(st.session_state.get("selected_template_value", "Default (Professional)")),
-            key="template_selector_inside_form"
-        )
-        st.session_state["selected_template_value"] = selected_template
 
         btn_col1, btn_col2 = st.columns([1, 1])
         with btn_col1:
