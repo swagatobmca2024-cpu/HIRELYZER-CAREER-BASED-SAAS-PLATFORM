@@ -7306,6 +7306,72 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
+JOB_TITLES = [
+    "Software Engineering",
+    "Full Stack Development",
+    "Frontend Development",
+    "Backend Development",
+    "Mobile Development",
+    "Game Development",
+    "Data Science",
+    "AI / Machine Learning",
+    "Data Engineering",
+    "Business Intelligence",
+    "Analytics Engineering",
+    "Cloud Engineering",
+    "DevOps / Infrastructure",
+    "Site Reliability Engineering",
+    "System Architecture",
+    "Platform Engineering",
+    "Cybersecurity",
+    "Application Security",
+    "Network Security",
+    "Ethical Hacking",
+    "Product Management",
+    "Project Management",
+    "Agile Coaching",
+    "Business Analysis",
+    "Technical Program Management",
+    "UI/UX Design",
+    "Product Design",
+    "Interaction Design",
+    "Blockchain Development",
+    "IoT Development",
+    "AR / VR Development",
+    "Embedded Systems",
+    "Database Management",
+    "Networking",
+    "Quality Assurance / Testing",
+    "Fintech",
+    "Healthcare Tech",
+    "EdTech",
+    "E-commerce",
+    "Digital Marketing",
+    "Technical Sales",
+    "Technical Writing"
+]
+
+LOCATIONS = [
+    "Bangalore",
+    "Hyderabad",
+    "Mumbai",
+    "Delhi NCR",
+    "Pune",
+    "Chennai",
+    "Kolkata",
+    "Ahmedabad",
+    "Jaipur",
+    "Chandigarh",
+    "Coimbatore",
+    "Indore",
+    "Bhubaneswar",
+    "Noida",
+    "Gurgaon",
+    "Thiruvananthapuram",
+    "Visakhapatnam",
+    "Remote (India)"
+]
+
 FEATURED_COMPANIES = {
     "tech": [
         {
@@ -8202,30 +8268,50 @@ with tab3:
 
     if search_mode == "External Platforms":
         # External Platforms Section
-        col1, col2 = st.columns(2)
-
-        with col1:
-            job_role = st.text_input("💼 Job Title / Skills", placeholder="e.g., Data Scientist", key="external_role")
-            experience_level = st.selectbox(
-                "📈 Experience Level",
-                ["", "Internship", "Entry Level", "Associate", "Mid-Senior Level", "Director", "Executive"],
-                key="external_exp"
+        with st.form("external_search_form", clear_on_submit=False):
+            job_role = st.selectbox(
+                "💼 Job Domain",
+                JOB_TITLES,
+                index=None,
+                placeholder="Select Job Domain",
+                key="external_role"
             )
 
-        with col2:
-            location = st.text_input("📍 Location", placeholder="e.g., Bangalore, India", key="external_loc")
-            job_type = st.selectbox(
-                "📋 Job Type",
-                ["", "Full-time", "Part-time", "Contract", "Temporary", "Volunteer", "Internship"],
-                key="external_type"
+            location = st.selectbox(
+                "📍 Location",
+                LOCATIONS,
+                index=None,
+                placeholder="Select Location",
+                key="external_location"
             )
 
-        foundit_experience = st.text_input("🔢 FoundIt Experience (Years)", placeholder="e.g., 1", key="external_foundit")
+            col1, col2 = st.columns(2)
+            with col1:
+                experience_level = st.selectbox(
+                    "📈 Experience Level",
+                    ["", "Internship", "Entry Level", "Associate", "Mid-Senior Level", "Director", "Executive"],
+                    key="external_exp"
+                )
+            with col2:
+                job_type = st.selectbox(
+                    "📋 Job Type",
+                    ["", "Full-time", "Part-time", "Contract", "Temporary", "Volunteer", "Internship"],
+                    key="external_type"
+                )
 
-        search_clicked = st.button("🔎 Search External Jobs", key="search_external")
+            foundit_experience = st.text_input("🔢 FoundIt Experience (Years)", placeholder="e.g., 1", key="external_foundit")
 
-        if search_clicked:
-            if job_role.strip() and location.strip():
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                search_clicked = st.form_submit_button("🔍 Search Jobs")
+            with col_btn2:
+                clear_clicked = st.form_submit_button("🧹 Clear Form")
+
+        if clear_clicked:
+            st.session_state.external_role = None
+            st.session_state.external_location = None
+
+        if search_clicked and job_role and location:
                 # Call search_jobs function for external platforms
                 results = search_jobs(job_role, location, experience_level, job_type, foundit_experience)
 
@@ -8275,49 +8361,63 @@ with tab3:
                         description="Open this platform to view full details."
                     )
                     st.components.v1.html(job_card_html, height=card_height, scrolling=False)
-            else:
-                st.warning("⚠️ Please enter both the Job Title and Location to perform the search.")
+        elif search_clicked:
+            st.warning("⚠️ Please select both a Job Domain and Location to perform the search.")
 
     else:
         # RapidAPI Jobs Section
-        col1, col2 = st.columns(2)
-
-        with col1:
-            rapid_job_role = st.text_input("💼 Job Title / Skills", placeholder="e.g., Python Developer", key="rapid_role")
-
-        with col2:
-            rapid_location = st.text_input("📍 Location", placeholder="e.g., Mumbai", key="rapid_loc")
-
-        # Number of results
-        num_results = st.slider("📊 Number of Jobs to Fetch", min_value=5, max_value=50, value=10, step=5, key="rapid_num_results")
-
-        # Advanced Filters
-        with st.expander("🔧 Advanced Filters"):
-            date_posted = st.selectbox(
-                "📅 Date Posted",
-                ["all", "today", "3days", "week", "month"],
-                key="rapid_date"
-            )
-            rapid_job_type = st.selectbox(
-                "📋 Job Type",
-                ["", "Full-time", "Part-time", "Contract", "Internship"],
-                key="rapid_type"
-            )
-            remote_only = st.checkbox("🏠 Remote Only", key="rapid_remote")
-            radius = st.number_input("📏 Radius (km)", min_value=0, max_value=200, value=50, key="rapid_radius")
-            job_requirements = st.multiselect(
-                "📝 Job Requirements",
-                ["under_3_years_experience", "more_than_3_years_experience", "no_experience", "no_degree"],
-                key="rapid_req"
+        with st.form("rapid_search_form", clear_on_submit=False):
+            rapid_job_role = st.selectbox(
+                "💼 Job Domain",
+                JOB_TITLES,
+                index=None,
+                placeholder="Select Job Domain",
+                key="rapid_role"
             )
 
-        search_rapid_clicked = st.button("🔎 Search Rapid Jobs", key="search_rapid")
+            rapid_location = st.selectbox(
+                "📍 Location",
+                LOCATIONS,
+                index=None,
+                placeholder="Select Location",
+                key="rapid_location"
+            )
 
-        if search_rapid_clicked:
-            if rapid_job_role.strip() and rapid_location.strip():
+            # Number of results
+            num_results = st.slider("📊 Number of Jobs to Fetch", min_value=5, max_value=50, value=10, step=5, key="rapid_num_results")
 
-             with st.spinner("⚡ Fetching live jobs from RapidAPI..."):
-            # Call fetch_live_jobs with parameters
+            # Advanced Filters
+            with st.expander("🔧 Advanced Filters"):
+                date_posted = st.selectbox(
+                    "📅 Date Posted",
+                    ["all", "today", "3days", "week", "month"],
+                    key="rapid_date"
+                )
+                rapid_job_type = st.selectbox(
+                    "📋 Job Type",
+                    ["", "Full-time", "Part-time", "Contract", "Internship"],
+                    key="rapid_type"
+                )
+                remote_only = st.checkbox("🏠 Remote Only", key="rapid_remote")
+                radius = st.number_input("📏 Radius (km)", min_value=0, max_value=200, value=50, key="rapid_radius")
+                job_requirements = st.multiselect(
+                    "📝 Job Requirements",
+                    ["under_3_years_experience", "more_than_3_years_experience", "no_experience", "no_degree"],
+                    key="rapid_req"
+                )
+
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                rapid_search_clicked = st.form_submit_button("⚡ Search Live Jobs")
+            with col_btn2:
+                rapid_clear_clicked = st.form_submit_button("🧹 Clear Form")
+
+        if rapid_clear_clicked:
+            st.session_state.rapid_role = None
+            st.session_state.rapid_location = None
+
+        if rapid_search_clicked and rapid_job_role and rapid_location:
+            with st.spinner("⚡ Fetching live jobs from RapidAPI..."):
                 results = fetch_live_jobs(
                     rapid_job_role,
                     rapid_location,
@@ -8326,51 +8426,51 @@ with tab3:
                     results=num_results
                 )
 
-        # Save search results if user is logged in
-                if hasattr(st.session_state, 'username') and st.session_state.username:
-                    formatted_results = []
-                    for job in results:
-                        formatted_results.append({
-                            "platform": "RapidAPI (Live)",
-                            "apply_link": job.get("job_apply_link", "#")
-                       })
-                    save_job_search(
-                st.session_state.username,
-                rapid_job_role,
-                rapid_location,
-                formatted_results
+            # Save search results if user is logged in
+            if hasattr(st.session_state, 'username') and st.session_state.username:
+                formatted_results = []
+                for job in results:
+                    formatted_results.append({
+                        "platform": "RapidAPI (Live)",
+                        "apply_link": job.get("job_apply_link", "#")
+                    })
+                save_job_search(
+                    st.session_state.username,
+                    rapid_job_role,
+                    rapid_location,
+                    formatted_results
                 )
 
-                st.markdown("## 🎯 RapidAPI Job Results")
+            st.markdown("## 🎯 RapidAPI Job Results")
 
 
-                if results:
-                    for job in results:
-                        # Clean all job fields
-                        job_title = clean_html(job.get("job_title", "N/A"))
-                        job_company = clean_html(job.get("employer_name", "Unknown"))
-                        job_location = f"{job.get('job_city','')}, {job.get('job_country','')}"
-                        job_salary = f"{job.get('job_min_salary','None')} - {job.get('job_max_salary','None')} {job.get('job_salary_currency','')}"
-                        job_type = job.get("job_employment_type", "N/A")
-                        job_mode = "Remote" if job.get("job_is_remote") else "On-site"
-                        job_publisher = clean_html(job.get("job_publisher", "N/A"))
-                        job_description = clean_html(job.get("job_description", ""))[:250] + "..."
+            if results:
+                for job in results:
+                    # Clean all job fields
+                    job_title = clean_html(job.get("job_title", "N/A"))
+                    job_company = clean_html(job.get("employer_name", "Unknown"))
+                    job_location = f"{job.get('job_city','')}, {job.get('job_country','')}"
+                    job_salary = f"{job.get('job_min_salary','None')} - {job.get('job_max_salary','None')} {job.get('job_salary_currency','')}"
+                    job_type = job.get("job_employment_type", "N/A")
+                    job_mode = "Remote" if job.get("job_is_remote") else "On-site"
+                    job_publisher = clean_html(job.get("job_publisher", "N/A"))
+                    job_description = clean_html(job.get("job_description", ""))[:250] + "..."
 
-                        # Format date
-                        formatted_date = "N/A"
-                        if job.get("job_posted_at_datetime_utc") and job["job_posted_at_datetime_utc"] != "N/A":
-                            try:
-                                date_obj = datetime.datetime.fromisoformat(job["job_posted_at_datetime_utc"].replace('Z', '+00:00'))
-                                formatted_date = date_obj.strftime("%b %d, %Y")
-                            except:
-                                formatted_date = job["job_posted_at_datetime_utc"]
+                    # Format date
+                    formatted_date = "N/A"
+                    if job.get("job_posted_at_datetime_utc") and job["job_posted_at_datetime_utc"] != "N/A":
+                        try:
+                            date_obj = datetime.datetime.fromisoformat(job["job_posted_at_datetime_utc"].replace('Z', '+00:00'))
+                            formatted_date = date_obj.strftime("%b %d, %Y")
+                        except:
+                            formatted_date = job["job_posted_at_datetime_utc"]
 
-                        # Colors
-                        btn_color = "#00ff88"
-                        platform_gradient = "linear-gradient(135deg, #00ff88 0%, #00cc6f 100%)"
+                    # Colors
+                    btn_color = "#00ff88"
+                    platform_gradient = "linear-gradient(135deg, #00ff88 0%, #00cc6f 100%)"
 
-                        # Custom HTML card
-                        job_card_html = f"""
+                    # Custom HTML card
+                    job_card_html = f"""
 <div class="job-result-card" style="
     background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
     padding: 25px;
@@ -8433,14 +8533,12 @@ with tab3:
     </a>
 </div>
 """
-                        
-                        st.components.v1.html(job_card_html, height=450, scrolling=False)
+                    st.components.v1.html(job_card_html, height=450, scrolling=False)
 
-
-                else:
-                    st.info("No jobs found. Try adjusting your search criteria.")
             else:
-                st.warning("⚠️ Please enter both the Job Title and Location to perform the search.")
+                st.info("No jobs found. Try adjusting your search criteria.")
+        elif rapid_search_clicked:
+            st.warning("⚠️ Please select both a Job Domain and Location to perform the search.")
 
     # Display saved job searches if user is logged in
     if hasattr(st.session_state, 'username') and st.session_state.username:
