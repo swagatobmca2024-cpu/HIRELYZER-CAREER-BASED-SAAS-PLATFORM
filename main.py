@@ -8144,7 +8144,9 @@ def add_hyperlink(paragraph, url, text, color="0000FF", underline=True):
 init_job_search_db()
 
 # Your existing tab3 code with enhanced CSS styling
-with tab3:
+
+@st.fragment
+def _job_search_interactive():
     st.markdown("<h1 style='text-align: center; color: #ffffff; margin-bottom: 30px;'>🟦 Job Search Hub</h1>", unsafe_allow_html=True)
 
     # Initialize session state for search mode
@@ -8262,10 +8264,24 @@ with tab3:
         key="mode_radio",
         label_visibility="collapsed"
     )
+    _prev_mode = st.session_state.get("_prev_search_mode", st.session_state.search_mode)
     if _selected_mode == "🌐 External Platforms":
         st.session_state.search_mode = "External Platforms"
+        # Clear RapidAPI inputs when switching to External
+        if _prev_mode == "RapidAPI Jobs":
+            st.session_state.rapid_role_val = None
+            st.session_state.rapid_loc_val  = None
     else:
         st.session_state.search_mode = "RapidAPI Jobs"
+        # Clear External inputs when switching to RapidAPI
+        if _prev_mode == "External Platforms":
+            st.session_state.ext_role_val    = None
+            st.session_state.ext_loc_val     = None
+            st.session_state.ext_exp_val     = ""
+            st.session_state.ext_type_val    = ""
+            st.session_state.ext_foundit_val = ""
+            st.session_state["_ext_clear_count"] = st.session_state.get("_ext_clear_count", 0) + 1
+    st.session_state._prev_search_mode = st.session_state.search_mode
 
     search_mode = st.session_state.search_mode
 
@@ -8281,6 +8297,8 @@ with tab3:
             st.session_state.ext_type_val = ""
         if "ext_foundit_val" not in st.session_state:
             st.session_state.ext_foundit_val = ""
+        if "_ext_clear_count" not in st.session_state:
+            st.session_state["_ext_clear_count"] = 0
 
         # Compute index from shadow values
         _ext_role_idx  = JOB_TITLES.index(st.session_state.ext_role_val) if st.session_state.ext_role_val in JOB_TITLES else None
@@ -8289,16 +8307,16 @@ with tab3:
         _ext_type_list = ["", "Full-time", "Part-time", "Contract", "Temporary", "Volunteer", "Internship"]
         _ext_exp_idx   = _ext_exp_list.index(st.session_state.ext_exp_val)   if st.session_state.ext_exp_val   in _ext_exp_list   else 0
         _ext_type_idx  = _ext_type_list.index(st.session_state.ext_type_val) if st.session_state.ext_type_val  in _ext_type_list  else 0
+        _ext_c = st.session_state["_ext_clear_count"]
 
-        # External Platforms Section — collapsible expander
         with st.expander("🌐 External Job Search — LinkedIn, Naukri, FoundIt", expanded=True):
-            with st.form("external_search_form", clear_on_submit=False):
+            with st.form(f"external_search_form_{_ext_c}", clear_on_submit=False):
                 job_role = st.selectbox(
                     "💼 Job Domain",
                     JOB_TITLES,
                     index=_ext_role_idx,
                     placeholder="Select Job Domain",
-                    key="external_role"
+                    key=f"external_role_{_ext_c}"
                 )
 
                 location = st.selectbox(
@@ -8306,7 +8324,7 @@ with tab3:
                     LOCATIONS,
                     index=_ext_loc_idx,
                     placeholder="Select Location",
-                    key="external_location"
+                    key=f"external_location_{_ext_c}"
                 )
 
                 col1, col2 = st.columns(2)
@@ -8315,21 +8333,21 @@ with tab3:
                         "📈 Experience Level",
                         _ext_exp_list,
                         index=_ext_exp_idx,
-                        key="external_exp"
+                        key=f"external_exp_{_ext_c}"
                     )
                 with col2:
                     job_type = st.selectbox(
                         "📋 Job Type",
                         _ext_type_list,
                         index=_ext_type_idx,
-                        key="external_type"
+                        key=f"external_type_{_ext_c}"
                     )
 
                 foundit_experience = st.text_input(
                     "🔢 FoundIt Experience (Years)",
                     value=st.session_state.ext_foundit_val,
                     placeholder="e.g., 1",
-                    key="external_foundit"
+                    key=f"external_foundit_{_ext_c}"
                 )
 
                 col_btn1, col_btn2 = st.columns(2)
@@ -8338,14 +8356,15 @@ with tab3:
                 with col_btn2:
                     clear_clicked = st.form_submit_button("🧹 Clear Form")
 
-        # Handle clear — update shadow keys only (never touch widget keys)
+        # Handle clear — reset shadow keys + bump clear counter to re-render widgets fresh
         if clear_clicked:
             st.session_state.ext_role_val    = None
             st.session_state.ext_loc_val     = None
             st.session_state.ext_exp_val     = ""
             st.session_state.ext_type_val    = ""
             st.session_state.ext_foundit_val = ""
-            st.rerun()
+            st.session_state["_ext_clear_count"] = st.session_state.get("_ext_clear_count", 0) + 1
+            st.rerun(scope="fragment")
 
         # Sync shadow keys from widget values on search
         if search_clicked:
@@ -8419,19 +8438,22 @@ with tab3:
             st.session_state.rapid_role_val = None
         if "rapid_loc_val" not in st.session_state:
             st.session_state.rapid_loc_val = None
+        if "_rapid_clear_count" not in st.session_state:
+            st.session_state["_rapid_clear_count"] = 0
 
         _rapid_role_idx = JOB_TITLES.index(st.session_state.rapid_role_val) if st.session_state.rapid_role_val in JOB_TITLES else None
         _rapid_loc_idx  = LOCATIONS.index(st.session_state.rapid_loc_val)   if st.session_state.rapid_loc_val  in LOCATIONS  else None
+        _rapid_c = st.session_state["_rapid_clear_count"]
 
         # RapidAPI Jobs Section — collapsible expander
         with st.expander("⚡ RapidAPI Live Job Search", expanded=True):
-            with st.form("rapid_search_form", clear_on_submit=False):
+            with st.form(f"rapid_search_form_{_rapid_c}", clear_on_submit=False):
                 rapid_job_role = st.selectbox(
                     "💼 Job Domain",
                     JOB_TITLES,
                     index=_rapid_role_idx,
                     placeholder="Select Job Domain",
-                    key="rapid_role"
+                    key=f"rapid_role_{_rapid_c}"
                 )
 
                 rapid_location = st.selectbox(
@@ -8439,7 +8461,7 @@ with tab3:
                     LOCATIONS,
                     index=_rapid_loc_idx,
                     placeholder="Select Location",
-                    key="rapid_location"
+                    key=f"rapid_location_{_rapid_c}"
                 )
 
                 # Number of results
@@ -8471,11 +8493,12 @@ with tab3:
                 with col_btn2:
                     rapid_clear_clicked = st.form_submit_button("🧹 Clear Form")
 
-        # Handle clear — update shadow keys only
+        # Handle clear — reset shadow keys + bump clear counter to re-render widgets fresh
         if rapid_clear_clicked:
             st.session_state.rapid_role_val = None
             st.session_state.rapid_loc_val  = None
-            st.rerun()
+            st.session_state["_rapid_clear_count"] = st.session_state.get("_rapid_clear_count", 0) + 1
+            st.rerun(scope="fragment")
 
         # Sync shadow keys on search
         if rapid_search_clicked:
@@ -8747,7 +8770,7 @@ with tab3:
                         # Delete button
                         if st.button("🗑", key=f"delete_{search['id']}", help="Delete this search"):
                             delete_saved_job_search(search['id'])
-                            st.rerun()
+                            st.rerun(scope="fragment")
             else:
                 # No results for the current filter
                 st.markdown(f"""
@@ -9535,6 +9558,9 @@ with tab3:
     </style>
     """, unsafe_allow_html=True)
 
+
+with tab3:
+    _job_search_interactive()
     # ---------- Company Lookup by Domain ----------
 
 
