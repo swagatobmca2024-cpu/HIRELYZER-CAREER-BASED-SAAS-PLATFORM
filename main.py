@@ -8054,8 +8054,16 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
         "Temporary": "T", "Volunteer": "V", "Internship": "I"
     }
 
-    # LinkedIn URL
-    linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={role_encoded}&location={loc_encoded}"
+    # LinkedIn URL (always scoped to India to prevent geo-ambiguity)
+    # e.g. "Delhi NCR" → "Delhi NCR, India" so LinkedIn doesn't resolve to Delhi, Ohio
+    # "Remote (India)" already contains "india" so it is left as-is
+    if "india" not in location.strip().lower():
+        linkedin_location = f"{location.strip()}, India"
+    else:
+        linkedin_location = location.strip()
+    linkedin_loc_encoded = urllib.parse.quote_plus(linkedin_location)
+
+    linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={role_encoded}&location={linkedin_loc_encoded}"
     if experience_level in linkedin_exp_map:
         linkedin_url += f"&f_E={linkedin_exp_map[experience_level]}"
     if job_type in job_type_map:
