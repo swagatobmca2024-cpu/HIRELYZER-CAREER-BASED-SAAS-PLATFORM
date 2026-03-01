@@ -8261,6 +8261,42 @@ def _job_search_interactive():
 
     st.markdown(toggle_html, unsafe_allow_html=True)
 
+    # Center + balance the horizontal radio buttons
+    st.markdown("""
+    <style>
+    /* Outer radio wrapper — full width, flex centered */
+    div[data-testid="stRadio"] {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+    }
+    /* The inner flex row that holds the options */
+    div[data-testid="stRadio"] > div {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: center !important;
+        gap: 24px !important;
+        width: 100% !important;
+        max-width: 520px !important;
+    }
+    /* Each individual option pill — equal width */
+    div[data-testid="stRadio"] > div > label {
+        flex: 1 1 0 !important;
+        justify-content: center !important;
+        text-align: center !important;
+        border: 2px solid rgba(255,255,255,0.15) !important;
+        border-radius: 12px !important;
+        padding: 10px 16px !important;
+        background: rgba(40,40,40,0.9) !important;
+        transition: border-color 0.2s ease, background 0.2s ease !important;
+    }
+    div[data-testid="stRadio"] > div > label:hover {
+        border-color: rgba(255,255,255,0.35) !important;
+        background: rgba(55,55,55,0.95) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # Blink-free mode toggle using st.radio (no st.rerun needed)
     _mode_options = ["🌐 External Platforms", "⚡ RapidAPI Jobs"]
     _mode_default  = 0 if st.session_state.search_mode == "External Platforms" else 1
