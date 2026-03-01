@@ -9405,29 +9405,6 @@ def _job_search_interactive():
         font-family: 'Inter', sans-serif;
     }
 
-    /* Mode Radio Button: spread left and right */
-    div[data-testid="stRadio"][data-key="mode_radio"] > div,
-    div[data-testid="stRadio"]:has(label[data-baseweb="radio"]) > div {
-        display: flex !important;
-        justify-content: space-between !important;
-        width: 100% !important;
-    }
-    div[data-testid="stRadio"] > div[role="radiogroup"] {
-        display: flex !important;
-        justify-content: space-between !important;
-        width: 100% !important;
-        gap: 0 !important;
-    }
-    div[data-testid="stRadio"] > div[role="radiogroup"] > label {
-        flex: 1 !important;
-    }
-    div[data-testid="stRadio"] > div[role="radiogroup"] > label:first-child {
-        justify-content: flex-start !important;
-    }
-    div[data-testid="stRadio"] > div[role="radiogroup"] > label:last-child {
-        justify-content: flex-end !important;
-    }
-
     /* Advanced Glow Animation */
     @keyframes glow {
         0% {
