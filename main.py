@@ -8251,18 +8251,21 @@ with tab3:
 
     st.markdown(toggle_html, unsafe_allow_html=True)
 
-    # Create clickable buttons (hidden but functional)
-    col_btn1, col_btn2 = st.columns(2)
-
-    with col_btn1:
-        if st.button("Switch to External Platforms", key="btn_external"):
-            st.session_state.search_mode = "External Platforms"
-            st.rerun()
-
-    with col_btn2:
-        if st.button("Switch to RapidAPI Jobs", key="btn_rapid"):
-            st.session_state.search_mode = "RapidAPI Jobs"
-            st.rerun()
+    # Blink-free mode toggle using st.radio (no st.rerun needed)
+    _mode_options = ["🌐 External Platforms", "⚡ RapidAPI Jobs"]
+    _mode_default  = 0 if st.session_state.search_mode == "External Platforms" else 1
+    _selected_mode = st.radio(
+        "Switch search mode",
+        _mode_options,
+        index=_mode_default,
+        horizontal=True,
+        key="mode_radio",
+        label_visibility="collapsed"
+    )
+    if _selected_mode == "🌐 External Platforms":
+        st.session_state.search_mode = "External Platforms"
+    else:
+        st.session_state.search_mode = "RapidAPI Jobs"
 
     search_mode = st.session_state.search_mode
 
@@ -8959,19 +8962,20 @@ with tab3:
                 )
                 top_roles.columns = ['Role', 'Count']
                 top_roles = top_roles.sort_values('Count')
+                _ROLE_COLORS = ['#00c4cc', '#7c4dff', '#34d399', '#fbbf24', '#f87171']
+                _role_bar_colors = [_ROLE_COLORS[i % len(_ROLE_COLORS)] for i in range(len(top_roles))]
                 if roles_orient == "↔ Horizontal":
                     fig_roles = go.Figure(go.Bar(
                         x=top_roles['Count'],
                         y=top_roles['Role'],
                         orientation='h',
                         marker=dict(
-                            color=top_roles['Count'],
-                            colorscale=[[0, '#004d52'], [0.5, '#00a0a8'], [1, '#00c4cc']],
-                            line=dict(color='rgba(0,196,204,0.4)', width=1),
+                            color=_role_bar_colors,
+                            line=dict(color='rgba(255,255,255,0.15)', width=1),
                         ),
                         text=top_roles['Count'],
                         textposition='outside',
-                        textfont=dict(color='#00c4cc', size=12, family='Inter'),
+                        textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
                     ))
                     fig_roles.update_layout(
@@ -8986,13 +8990,12 @@ with tab3:
                         y=top_roles['Count'],
                         orientation='v',
                         marker=dict(
-                            color=top_roles['Count'],
-                            colorscale=[[0, '#004d52'], [0.5, '#00a0a8'], [1, '#00c4cc']],
-                            line=dict(color='rgba(0,196,204,0.4)', width=1),
+                            color=_role_bar_colors,
+                            line=dict(color='rgba(255,255,255,0.15)', width=1),
                         ),
                         text=top_roles['Count'],
                         textposition='outside',
-                        textfont=dict(color='#00c4cc', size=12, family='Inter'),
+                        textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
                     ))
                     fig_roles.update_layout(
@@ -9018,19 +9021,20 @@ with tab3:
                 )
                 top_locs.columns = ['Location', 'Count']
                 top_locs = top_locs.sort_values('Count')
+                _LOC_COLORS = ['#7c4dff', '#f87171', '#fbbf24', '#34d399', '#00c4cc']
+                _loc_bar_colors = [_LOC_COLORS[i % len(_LOC_COLORS)] for i in range(len(top_locs))]
                 if locs_orient == "↔ Horizontal":
                     fig_locs = go.Figure(go.Bar(
                         x=top_locs['Count'],
                         y=top_locs['Location'],
                         orientation='h',
                         marker=dict(
-                            color=top_locs['Count'],
-                            colorscale=[[0, '#1e0052'], [0.5, '#5c29c0'], [1, '#7c4dff']],
-                            line=dict(color='rgba(124,77,255,0.4)', width=1),
+                            color=_loc_bar_colors,
+                            line=dict(color='rgba(255,255,255,0.15)', width=1),
                         ),
                         text=top_locs['Count'],
                         textposition='outside',
-                        textfont=dict(color='#7c4dff', size=12, family='Inter'),
+                        textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
                     ))
                     fig_locs.update_layout(
@@ -9045,13 +9049,12 @@ with tab3:
                         y=top_locs['Count'],
                         orientation='v',
                         marker=dict(
-                            color=top_locs['Count'],
-                            colorscale=[[0, '#1e0052'], [0.5, '#5c29c0'], [1, '#7c4dff']],
-                            line=dict(color='rgba(124,77,255,0.4)', width=1),
+                            color=_loc_bar_colors,
+                            line=dict(color='rgba(255,255,255,0.15)', width=1),
                         ),
                         text=top_locs['Count'],
                         textposition='outside',
-                        textfont=dict(color='#7c4dff', size=12, family='Inter'),
+                        textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
                     ))
                     fig_locs.update_layout(
@@ -9079,19 +9082,29 @@ with tab3:
                     .reset_index(name='Count')
                     .sort_values('Count', ascending=False)
                 )
+                _PLAT_COLOR_MAP = {
+                    'rapidapi (live)': '#00ff88',
+                    'linkedin':        '#0e76a8',
+                    'naukri':          '#ff5722',
+                    'foundit (monster)': '#7c4dff',
+                }
+                _PLAT_FALLBACKS = ['#fbbf24', '#f87171', '#00c4cc', '#34d399', '#a78bfa']
+                def _plat_color(name, idx):
+                    return _PLAT_COLOR_MAP.get(name.lower(), _PLAT_FALLBACKS[idx % len(_PLAT_FALLBACKS)])
+
                 if plat_orient == "↕ Vertical":
+                    _pv_colors = [_plat_color(p, i) for i, p in enumerate(plat_dist['platform'])]
                     fig_plat = go.Figure(go.Bar(
                         x=plat_dist['platform'],
                         y=plat_dist['Count'],
                         orientation='v',
                         marker=dict(
-                            color=plat_dist['Count'],
-                            colorscale=[[0,'#3d2e00'],[0.5,'#c0900e'],[1,'#fbbf24']],
-                            line=dict(color='rgba(251,191,36,0.4)', width=1),
+                            color=_pv_colors,
+                            line=dict(color='rgba(255,255,255,0.15)', width=1),
                         ),
                         text=plat_dist['Count'],
                         textposition='outside',
-                        textfont=dict(color='#fbbf24', size=11, family='Inter'),
+                        textfont=dict(color='#ffffff', size=11, family='Inter'),
                         hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
                     ))
                     fig_plat.update_layout(
@@ -9102,18 +9115,18 @@ with tab3:
                     )
                 else:
                     plat_dist_h = plat_dist.sort_values('Count')
+                    _ph_colors = [_plat_color(p, i) for i, p in enumerate(plat_dist_h['platform'])]
                     fig_plat = go.Figure(go.Bar(
                         x=plat_dist_h['Count'],
                         y=plat_dist_h['platform'],
                         orientation='h',
                         marker=dict(
-                            color=plat_dist_h['Count'],
-                            colorscale=[[0,'#3d2e00'],[0.5,'#c0900e'],[1,'#fbbf24']],
-                            line=dict(color='rgba(251,191,36,0.4)', width=1),
+                            color=_ph_colors,
+                            line=dict(color='rgba(255,255,255,0.15)', width=1),
                         ),
                         text=plat_dist_h['Count'],
                         textposition='outside',
-                        textfont=dict(color='#fbbf24', size=11, family='Inter'),
+                        textfont=dict(color='#ffffff', size=11, family='Inter'),
                         hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
                     ))
                     fig_plat.update_layout(
