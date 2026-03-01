@@ -8267,49 +8267,95 @@ with tab3:
     search_mode = st.session_state.search_mode
 
     if search_mode == "External Platforms":
-        # External Platforms Section
-        with st.form("external_search_form", clear_on_submit=False):
-            job_role = st.selectbox(
-                "💼 Job Domain",
-                JOB_TITLES,
-                index=None,
-                placeholder="Select Job Domain",
-                key="external_role"
-            )
+        # Shadow keys for clear — never set widget keys directly
+        if "ext_role_val" not in st.session_state:
+            st.session_state.ext_role_val = None
+        if "ext_loc_val" not in st.session_state:
+            st.session_state.ext_loc_val = None
+        if "ext_exp_val" not in st.session_state:
+            st.session_state.ext_exp_val = ""
+        if "ext_type_val" not in st.session_state:
+            st.session_state.ext_type_val = ""
+        if "ext_foundit_val" not in st.session_state:
+            st.session_state.ext_foundit_val = ""
 
-            location = st.selectbox(
-                "📍 Location",
-                LOCATIONS,
-                index=None,
-                placeholder="Select Location",
-                key="external_location"
-            )
+        # Compute index from shadow values
+        _ext_role_idx  = JOB_TITLES.index(st.session_state.ext_role_val) if st.session_state.ext_role_val in JOB_TITLES else None
+        _ext_loc_idx   = LOCATIONS.index(st.session_state.ext_loc_val)   if st.session_state.ext_loc_val  in LOCATIONS  else None
+        _ext_exp_list  = ["", "Internship", "Entry Level", "Associate", "Mid-Senior Level", "Director", "Executive"]
+        _ext_type_list = ["", "Full-time", "Part-time", "Contract", "Temporary", "Volunteer", "Internship"]
+        _ext_exp_idx   = _ext_exp_list.index(st.session_state.ext_exp_val)   if st.session_state.ext_exp_val   in _ext_exp_list   else 0
+        _ext_type_idx  = _ext_type_list.index(st.session_state.ext_type_val) if st.session_state.ext_type_val  in _ext_type_list  else 0
 
-            col1, col2 = st.columns(2)
-            with col1:
-                experience_level = st.selectbox(
-                    "📈 Experience Level",
-                    ["", "Internship", "Entry Level", "Associate", "Mid-Senior Level", "Director", "Executive"],
-                    key="external_exp"
+        # External Platforms Section — collapsible expander
+        with st.expander("🌐 External Job Search — LinkedIn, Naukri, FoundIt", expanded=True):
+            with st.form("external_search_form", clear_on_submit=False):
+                job_role = st.selectbox(
+                    "💼 Job Domain",
+                    JOB_TITLES,
+                    index=_ext_role_idx,
+                    placeholder="Select Job Domain",
+                    key="external_role"
                 )
-            with col2:
-                job_type = st.selectbox(
-                    "📋 Job Type",
-                    ["", "Full-time", "Part-time", "Contract", "Temporary", "Volunteer", "Internship"],
-                    key="external_type"
+
+                location = st.selectbox(
+                    "📍 Location",
+                    LOCATIONS,
+                    index=_ext_loc_idx,
+                    placeholder="Select Location",
+                    key="external_location"
                 )
 
-            foundit_experience = st.text_input("🔢 FoundIt Experience (Years)", placeholder="e.g., 1", key="external_foundit")
+                col1, col2 = st.columns(2)
+                with col1:
+                    experience_level = st.selectbox(
+                        "📈 Experience Level",
+                        _ext_exp_list,
+                        index=_ext_exp_idx,
+                        key="external_exp"
+                    )
+                with col2:
+                    job_type = st.selectbox(
+                        "📋 Job Type",
+                        _ext_type_list,
+                        index=_ext_type_idx,
+                        key="external_type"
+                    )
 
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
-                search_clicked = st.form_submit_button("🔍 Search Jobs")
-            with col_btn2:
-                clear_clicked = st.form_submit_button("🧹 Clear Form")
+                foundit_experience = st.text_input(
+                    "🔢 FoundIt Experience (Years)",
+                    value=st.session_state.ext_foundit_val,
+                    placeholder="e.g., 1",
+                    key="external_foundit"
+                )
 
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    search_clicked = st.form_submit_button("🔍 Search Jobs")
+                with col_btn2:
+                    clear_clicked = st.form_submit_button("🧹 Clear Form")
+
+        # Handle clear — update shadow keys only (never touch widget keys)
         if clear_clicked:
-            st.session_state.external_role = None
-            st.session_state.external_location = None
+            st.session_state.ext_role_val    = None
+            st.session_state.ext_loc_val     = None
+            st.session_state.ext_exp_val     = ""
+            st.session_state.ext_type_val    = ""
+            st.session_state.ext_foundit_val = ""
+            st.rerun()
+
+        # Sync shadow keys from widget values on search
+        if search_clicked:
+            st.session_state.ext_role_val    = job_role
+            st.session_state.ext_loc_val     = location
+            st.session_state.ext_exp_val     = experience_level
+            st.session_state.ext_type_val    = job_type
+            st.session_state.ext_foundit_val = foundit_experience
+
+        if search_clicked and not job_role:
+            st.warning("⚠️ Please select a Job Domain to search.")
+        elif search_clicked and not location:
+            st.warning("⚠️ Please select a Location to search.")
 
         if search_clicked and job_role and location:
                 # Call search_jobs function for external platforms
@@ -8365,56 +8411,78 @@ with tab3:
             st.warning("⚠️ Please select both a Job Domain and Location to perform the search.")
 
     else:
-        # RapidAPI Jobs Section
-        with st.form("rapid_search_form", clear_on_submit=False):
-            rapid_job_role = st.selectbox(
-                "💼 Job Domain",
-                JOB_TITLES,
-                index=None,
-                placeholder="Select Job Domain",
-                key="rapid_role"
-            )
+        # Shadow keys for RapidAPI clear
+        if "rapid_role_val" not in st.session_state:
+            st.session_state.rapid_role_val = None
+        if "rapid_loc_val" not in st.session_state:
+            st.session_state.rapid_loc_val = None
 
-            rapid_location = st.selectbox(
-                "📍 Location",
-                LOCATIONS,
-                index=None,
-                placeholder="Select Location",
-                key="rapid_location"
-            )
+        _rapid_role_idx = JOB_TITLES.index(st.session_state.rapid_role_val) if st.session_state.rapid_role_val in JOB_TITLES else None
+        _rapid_loc_idx  = LOCATIONS.index(st.session_state.rapid_loc_val)   if st.session_state.rapid_loc_val  in LOCATIONS  else None
 
-            # Number of results
-            num_results = st.slider("📊 Number of Jobs to Fetch", min_value=5, max_value=50, value=10, step=5, key="rapid_num_results")
-
-            # Advanced Filters
-            with st.expander("🔧 Advanced Filters"):
-                date_posted = st.selectbox(
-                    "📅 Date Posted",
-                    ["all", "today", "3days", "week", "month"],
-                    key="rapid_date"
-                )
-                rapid_job_type = st.selectbox(
-                    "📋 Job Type",
-                    ["", "Full-time", "Part-time", "Contract", "Internship"],
-                    key="rapid_type"
-                )
-                remote_only = st.checkbox("🏠 Remote Only", key="rapid_remote")
-                radius = st.number_input("📏 Radius (km)", min_value=0, max_value=200, value=50, key="rapid_radius")
-                job_requirements = st.multiselect(
-                    "📝 Job Requirements",
-                    ["under_3_years_experience", "more_than_3_years_experience", "no_experience", "no_degree"],
-                    key="rapid_req"
+        # RapidAPI Jobs Section — collapsible expander
+        with st.expander("⚡ RapidAPI Live Job Search", expanded=True):
+            with st.form("rapid_search_form", clear_on_submit=False):
+                rapid_job_role = st.selectbox(
+                    "💼 Job Domain",
+                    JOB_TITLES,
+                    index=_rapid_role_idx,
+                    placeholder="Select Job Domain",
+                    key="rapid_role"
                 )
 
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
-                rapid_search_clicked = st.form_submit_button("⚡ Search Live Jobs")
-            with col_btn2:
-                rapid_clear_clicked = st.form_submit_button("🧹 Clear Form")
+                rapid_location = st.selectbox(
+                    "📍 Location",
+                    LOCATIONS,
+                    index=_rapid_loc_idx,
+                    placeholder="Select Location",
+                    key="rapid_location"
+                )
 
+                # Number of results
+                num_results = st.slider("📊 Number of Jobs to Fetch", min_value=5, max_value=50, value=10, step=5, key="rapid_num_results")
+
+                # Advanced Filters
+                with st.expander("🔧 Advanced Filters"):
+                    date_posted = st.selectbox(
+                        "📅 Date Posted",
+                        ["all", "today", "3days", "week", "month"],
+                        key="rapid_date"
+                    )
+                    rapid_job_type = st.selectbox(
+                        "📋 Job Type",
+                        ["", "Full-time", "Part-time", "Contract", "Internship"],
+                        key="rapid_type"
+                    )
+                    remote_only = st.checkbox("🏠 Remote Only", key="rapid_remote")
+                    radius = st.number_input("📏 Radius (km)", min_value=0, max_value=200, value=50, key="rapid_radius")
+                    job_requirements = st.multiselect(
+                        "📝 Job Requirements",
+                        ["under_3_years_experience", "more_than_3_years_experience", "no_experience", "no_degree"],
+                        key="rapid_req"
+                    )
+
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    rapid_search_clicked = st.form_submit_button("⚡ Search Live Jobs")
+                with col_btn2:
+                    rapid_clear_clicked = st.form_submit_button("🧹 Clear Form")
+
+        # Handle clear — update shadow keys only
         if rapid_clear_clicked:
-            st.session_state.rapid_role = None
-            st.session_state.rapid_location = None
+            st.session_state.rapid_role_val = None
+            st.session_state.rapid_loc_val  = None
+            st.rerun()
+
+        # Sync shadow keys on search
+        if rapid_search_clicked:
+            st.session_state.rapid_role_val = rapid_job_role
+            st.session_state.rapid_loc_val  = rapid_location
+
+        if rapid_search_clicked and not rapid_job_role:
+            st.warning("⚠️ Please select a Job Domain to search.")
+        elif rapid_search_clicked and not rapid_location:
+            st.warning("⚠️ Please select a Location to search.")
 
         if rapid_search_clicked and rapid_job_role and rapid_location:
             with st.spinner("⚡ Fetching live jobs from RapidAPI..."):
