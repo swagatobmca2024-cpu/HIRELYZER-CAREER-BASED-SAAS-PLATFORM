@@ -8242,71 +8242,95 @@ def _job_search_interactive():
     if 'search_mode' not in st.session_state:
         st.session_state.search_mode = "External Platforms"
 
-    # ── Pill-style toggle: two Streamlit buttons, no st.rerun() needed ──────────
-    # Because this function is wrapped in @st.fragment, clicking a button only
-    # reruns the fragment — no full-page flicker.
-
+    # ── Pill-style toggle switch (no st.rerun — @st.fragment handles reruns) ────
     is_external = st.session_state.search_mode == "External Platforms"
 
-    # Global button styles: pill shape, equal width, smooth active gradient
-    st.markdown("""
+    # Derive active styles for each button based on current mode
+    ext_bg    = "linear-gradient(135deg,#2196F3 0%,#1976D2 100%)" if is_external     else "rgba(40,40,40,0.95)"
+    rap_bg    = "linear-gradient(135deg,#00C853 0%,#009624 100%)" if not is_external  else "rgba(40,40,40,0.95)"
+    ext_color = "#ffffff"                                          if is_external     else "rgba(255,255,255,0.4)"
+    rap_color = "#ffffff"                                          if not is_external  else "rgba(255,255,255,0.4)"
+    ext_bdr   = "#1565C0"                                          if is_external     else "rgba(255,255,255,0.15)"
+    rap_bdr   = "#007A1F"                                          if not is_external  else "rgba(255,255,255,0.15)"
+    ext_circ  = "#ffffff"                                          if is_external     else "transparent"
+    rap_circ  = "#ffffff"                                          if not is_external  else "transparent"
+    ext_cbdr  = "#ffffff"                                          if is_external     else "rgba(255,255,255,0.4)"
+    rap_cbdr  = "#ffffff"                                          if not is_external  else "rgba(255,255,255,0.4)"
+
+    badge_text = "🌐 External Platforms Mode Active" if is_external else "⚡ RapidAPI Jobs Mode Active"
+    badge_grad = "linear-gradient(135deg,#2196F3 0%,#1976D2 100%)" if is_external else "linear-gradient(135deg,#00C853 0%,#009624 100%)"
+
+    st.markdown(f"""
     <style>
-    /* Make both toggle columns equal width and flush */
-    div.toggle-row > div[data-testid="column"] {
-        padding: 0 !important;
-    }
-    /* Base button style */
-    div.toggle-row div[data-testid="stButton"] > button {
-        width: 100% !important;
+    /* ── Toggle pill buttons ── */
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]
+        div[data-testid="stButton"] > button {{
         border-radius: 0 !important;
-        font-size: 15px !important;
+        font-size: 14px !important;
         font-weight: 600 !important;
-        padding: 14px 12px !important;
-        border: 1.5px solid rgba(255,255,255,0.15) !important;
-        background: rgba(40,40,40,0.95) !important;
-        color: rgba(255,255,255,0.45) !important;
-        transition: background 0.25s ease, color 0.25s ease !important;
-        white-space: nowrap !important;
-    }
-    /* Left pill cap */
-    div.toggle-row div[data-testid="column"]:first-child div[data-testid="stButton"] > button {
+        padding: 16px 10px !important;
+        transition: all 0.25s ease !important;
+        white-space: normal !important;
+        line-height: 1.3 !important;
+        min-height: 64px !important;
+    }}
+    /* Left cap */
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child
+        div[data-testid="stButton"] > button {{
         border-radius: 16px 0 0 16px !important;
         border-right: none !important;
-    }
-    /* Right pill cap */
-    div.toggle-row div[data-testid="column"]:last-child div[data-testid="stButton"] > button {
+        background: {ext_bg} !important;
+        color: {ext_color} !important;
+        border: 1.5px solid {ext_bdr} !important;
+        border-right: none !important;
+    }}
+    /* Right cap */
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child
+        div[data-testid="stButton"] > button {{
         border-radius: 0 16px 16px 0 !important;
         border-left: none !important;
-    }
-    /* Hover for inactive buttons */
-    div.toggle-row div[data-testid="stButton"] > button:hover {
-        background: rgba(60,60,60,0.95) !important;
-        color: rgba(255,255,255,0.75) !important;
-    }
+        background: {rap_bg} !important;
+        color: {rap_color} !important;
+        border: 1.5px solid {rap_bdr} !important;
+        border-left: none !important;
+    }}
+    /* Remove Streamlit column gap so pill is seamless */
+    div[data-testid="stHorizontalBlock"] {{
+        gap: 0 !important;
+    }}
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }}
     </style>
+
+    <div style="display:flex; justify-content:center; margin-bottom:8px;">
+        <div style="width:66%; display:flex;">
+            <!-- visual-only circles sit above the real Streamlit buttons below -->
+        </div>
+    </div>
     """, unsafe_allow_html=True)
 
-    # Centered 3-col layout: spacer | toggle | spacer
-    _, toggle_col, _ = st.columns([1, 4, 1])
-    with toggle_col:
-        st.markdown('<div class="toggle-row">', unsafe_allow_html=True)
-        col_ext, col_rap = st.columns(2)
-        with col_ext:
+    # Centered toggle — 3-col trick: blank | pill | blank
+    _sp1, _tog, _sp2 = st.columns([1, 3, 1])
+    with _tog:
+        _col_ext, _col_rap = st.columns(2)
+        with _col_ext:
             ext_clicked = st.button(
-                "🌐 External Platforms (LinkedIn, Naukri, FoundIt)",
-                key="btn_toggle_external",
+                f"● 🌐 External Platforms (LinkedIn, Naukri, FoundIt)",
+                key="btn_toggle_ext",
                 use_container_width=True,
             )
-        with col_rap:
+        with _col_rap:
             rap_clicked = st.button(
-                "⚡ RapidAPI Jobs (India Only)",
-                key="btn_toggle_rapid",
+                f"○ ⚡ RapidAPI Jobs (India Only)",
+                key="btn_toggle_rap",
                 use_container_width=True,
             )
-        st.markdown('</div>', unsafe_allow_html=True)
 
-    # Handle clicks — update session state, clear stale inputs
+    # Handle click — update mode and clear stale inputs
     if ext_clicked and not is_external:
+        st.session_state.get("rapid_role_val", None)
         st.session_state.rapid_role_val = None
         st.session_state.rapid_loc_val  = None
         st.session_state.search_mode    = "External Platforms"
@@ -8322,25 +8346,16 @@ def _job_search_interactive():
         st.session_state.search_mode = "RapidAPI Jobs"
         is_external = False
 
-    # Active-state highlight + badge — always in sync with is_external
-    badge_text  = "🌐 External Platforms Mode Active" if is_external else "⚡ RapidAPI Jobs Mode Active"
-    badge_grad  = "linear-gradient(135deg,#2196F3 0%,#1976D2 100%)" if is_external else "linear-gradient(135deg,#00E676 0%,#00C853 100%)"
-    ext_active  = "background:linear-gradient(135deg,#2196F3 0%,#1976D2 100%) !important;color:#fff !important;border-color:#1565C0 !important;" if is_external else ""
-    rap_active  = "background:linear-gradient(135deg,#00E676 0%,#00C853 100%) !important;color:#111 !important;border-color:#00A040 !important;" if not is_external else ""
+    # Re-derive badge after potential state change
+    badge_text = "🌐 External Platforms Mode Active" if is_external else "⚡ RapidAPI Jobs Mode Active"
+    badge_grad = "linear-gradient(135deg,#2196F3 0%,#1976D2 100%)" if is_external else "linear-gradient(135deg,#00C853 0%,#009624 100%)"
 
     st.markdown(f"""
-    <style>
-    div.toggle-row div[data-testid="column"]:first-child div[data-testid="stButton"] > button {{
-        {ext_active}
-    }}
-    div.toggle-row div[data-testid="column"]:last-child div[data-testid="stButton"] > button {{
-        {rap_active}
-    }}
-    </style>
-    <div style="text-align:center; margin:16px 0 28px;">
-        <span style="display:inline-block; padding:10px 28px; border-radius:20px;
+    <div style="text-align:center; margin:18px 0 28px;">
+        <span style="display:inline-block; padding:10px 30px; border-radius:20px;
                      background:{badge_grad}; color:#fff; font-weight:600;
-                     font-size:14px; letter-spacing:0.3px; box-shadow:0 4px 14px rgba(0,0,0,0.3);">
+                     font-size:14px; letter-spacing:0.3px;
+                     box-shadow:0 4px 16px rgba(0,0,0,0.35);">
             {badge_text}
         </span>
     </div>
@@ -9680,7 +9695,6 @@ with tab3:
             <p style="position: relative; z-index: 2;">💵 Salary Range: <span style="color: #34d399; font-weight: 600;">{role['range']}</span></p>
         </div>
         """, unsafe_allow_html=True)
-
 def evaluate_interview_answer(answer: str, question: str = None):
     """
     Uses an LLM to strictly evaluate an interview answer.
