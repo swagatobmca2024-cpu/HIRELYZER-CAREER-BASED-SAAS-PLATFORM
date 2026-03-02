@@ -13884,7 +13884,7 @@ Generate {num_questions} questions now:
                     </div>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Role: {selected_role} in {selected_domain}</p>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Difficulty: {st.session_state.interview_difficulty}</p>
-                    <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.2f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
+                    <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.1f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
                     <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; margin: 4px 0;">Follow-up Probes: {_follow_up_count} | Depth Score: {_depth_score:.1f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -14245,7 +14245,7 @@ Generate {num_questions} questions now:
                     <p class="metric-sub">Room to grow</p>
                 </div>""", unsafe_allow_html=True)
             with col4:
-                avg_val = f"{overall_avg:.2f}/10" if not pd.isna(overall_avg) else "N/A"
+                avg_val = f"{overall_avg:.1f}/10" if not pd.isna(overall_avg) else "N/A"
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Average Score</p>
                     <p class="metric-value">{avg_val}</p>
@@ -14274,7 +14274,7 @@ Generate {num_questions} questions now:
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Score Consistency</p>
                     <p class="metric-value" style="color:{cons_color};font-size:18px;">{consistency_label}</p>
-                    <p class="metric-sub">Std dev: {score_std:.2f}</p>
+                    <p class="metric-sub">Std dev: {score_std:.1f}</p>
                 </div>""", unsafe_allow_html=True)
 
             # =====================================================
@@ -14556,11 +14556,11 @@ Generate {num_questions} questions now:
                 st.markdown("**Your Scores by Job Role**")
                 _rp_styled = role_perf.copy()
                 def _score_badge(v):
-                    if v >= 8.5: return f'<span class="badge-excellent">{v:.2f}</span>'
-                    elif v >= 7.0: return f'<span class="badge-good">{v:.2f}</span>'
-                    elif v >= 5.5: return f'<span class="badge-average">{v:.2f}</span>'
-                    elif v >= 4.0: return f'<span class="badge-weak">{v:.2f}</span>'
-                    else: return f'<span class="badge-poor">{v:.2f}</span>'
+                    if v >= 8.5: return f'<span class="badge-excellent">{v:.1f}</span>'
+                    elif v >= 7.0: return f'<span class="badge-good">{v:.1f}</span>'
+                    elif v >= 5.5: return f'<span class="badge-average">{v:.1f}</span>'
+                    elif v >= 4.0: return f'<span class="badge-weak">{v:.1f}</span>'
+                    else: return f'<span class="badge-poor">{v:.1f}</span>'
                 _best_role_idx = role_perf['Avg Score'].idxmax()
                 _table_rows = ""
                 for i, row in role_perf.iterrows():
@@ -14743,7 +14743,7 @@ Generate {num_questions} questions now:
                 if avg_score_per_q is not None:
                     st.markdown(f"""<div class="metric-card">
                         <p class="metric-label">Score Per Question</p>
-                        <p class="metric-value">{avg_score_per_q:.2f}</p>
+                        <p class="metric-value">{avg_score_per_q:.1f}</p>
                         <p class="metric-sub">Avg per individual question</p>
                     </div>""", unsafe_allow_html=True)
                 else:
@@ -14801,7 +14801,7 @@ Generate {num_questions} questions now:
                 with col_hd1:
                     st.markdown(f"""<div class="metric-card">
                         <p class="metric-label">Your Hard Interview Score</p>
-                        <p class="metric-value">{_hard_avg_b:.2f}<span style="font-size:16px;color:#aaa">/10</span></p>
+                        <p class="metric-value">{_hard_avg_b:.1f}<span style="font-size:16px;color:#aaa">/10</span></p>
                         <p class="metric-sub">Average on Hard difficulty</p>
                     </div>""", unsafe_allow_html=True)
                 with col_hd2:
@@ -14858,7 +14858,7 @@ Generate {num_questions} questions now:
                             border: 2px solid {cls_color}; border-radius: 12px; padding: 20px; text-align: center; margin: 10px 0;">
                     <h2 style="color: {cls_color}; margin: 0;">{classification}</h2>
                     <p style="color: #ffffff; margin: 10px 0 0 0;">{cls_desc}</p>
-                    <p style="color: #aaaaaa; margin: 5px 0 0 0;">Overall Average: {overall_avg:.2f}/10</p>
+                    <p style="color: #aaaaaa; margin: 5px 0 0 0;">Overall Average: {overall_avg:.1f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -15107,7 +15107,6 @@ Generate {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
-
 
 
 
