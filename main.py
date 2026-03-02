@@ -9072,14 +9072,17 @@ def _job_search_interactive():
                         ),
                         text=top_roles['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
                     ))
                     fig_roles.update_layout(
                         **_PLOTLY_BASE, height=260, showlegend=False,
                         xaxis_title=None, yaxis_title=None,
-                        xaxis=dict(**_XAXIS, showgrid=True),
-                        yaxis=dict(**_YAXIS, showgrid=False),
+                        margin=dict(l=10, r=40, t=35, b=10),
+                        xaxis=dict(**_XAXIS, showgrid=True, automargin=True,
+                                   range=[0, top_roles['Count'].max() * 1.18]),
+                        yaxis=dict(**_YAXIS, showgrid=False, automargin=True),
                     )
                 else:
                     fig_roles = go.Figure(go.Bar(
@@ -9092,14 +9095,17 @@ def _job_search_interactive():
                         ),
                         text=top_roles['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
                     ))
                     fig_roles.update_layout(
-                        **_PLOTLY_BASE, height=260, showlegend=False,
+                        **_PLOTLY_BASE, height=280, showlegend=False,
                         xaxis_title=None, yaxis_title=None,
-                        xaxis=dict(**_XAXIS, tickangle=-25),
-                        yaxis=dict(**_YAXIS, showgrid=True),
+                        margin=dict(l=10, r=10, t=45, b=10),
+                        xaxis=dict(**_XAXIS, tickangle=-25, automargin=True),
+                        yaxis=dict(**_YAXIS, showgrid=True, automargin=True,
+                                   range=[0, top_roles['Count'].max() * 1.18]),
                     )
                 st.plotly_chart(fig_roles, use_container_width=True, config={
                     "displayModeBar": True,
@@ -9131,14 +9137,17 @@ def _job_search_interactive():
                         ),
                         text=top_locs['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
                     ))
                     fig_locs.update_layout(
                         **_PLOTLY_BASE, height=260, showlegend=False,
                         xaxis_title=None, yaxis_title=None,
-                        xaxis=dict(**_XAXIS, showgrid=True),
-                        yaxis=dict(**_YAXIS, showgrid=False),
+                        margin=dict(l=10, r=40, t=35, b=10),
+                        xaxis=dict(**_XAXIS, showgrid=True, automargin=True,
+                                   range=[0, top_locs['Count'].max() * 1.18]),
+                        yaxis=dict(**_YAXIS, showgrid=False, automargin=True),
                     )
                 else:
                     fig_locs = go.Figure(go.Bar(
@@ -9151,14 +9160,17 @@ def _job_search_interactive():
                         ),
                         text=top_locs['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
                     ))
                     fig_locs.update_layout(
-                        **_PLOTLY_BASE, height=260, showlegend=False,
+                        **_PLOTLY_BASE, height=280, showlegend=False,
                         xaxis_title=None, yaxis_title=None,
-                        xaxis=dict(**_XAXIS, tickangle=-25),
-                        yaxis=dict(**_YAXIS, showgrid=True),
+                        margin=dict(l=10, r=10, t=45, b=10),
+                        xaxis=dict(**_XAXIS, tickangle=-25, automargin=True),
+                        yaxis=dict(**_YAXIS, showgrid=True, automargin=True,
+                                   range=[0, top_locs['Count'].max() * 1.18]),
                     )
                 st.plotly_chart(fig_locs, use_container_width=True, config={
                     "displayModeBar": True,
@@ -9201,13 +9213,16 @@ def _job_search_interactive():
                         ),
                         text=plat_dist['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=11, family='Inter'),
                         hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
                     ))
                     fig_plat.update_layout(
-                        **_PLOTLY_BASE, height=270, showlegend=False,
-                        xaxis=dict(**_XAXIS, tickangle=-25),
-                        yaxis=dict(**_YAXIS),
+                        **_PLOTLY_BASE, height=290, showlegend=False,
+                        margin=dict(l=10, r=10, t=45, b=10),
+                        xaxis=dict(**_XAXIS, tickangle=-25, automargin=True),
+                        yaxis=dict(**_YAXIS, automargin=True,
+                                   range=[0, plat_dist['Count'].max() * 1.2]),
                         bargap=0.3,
                     )
                 else:
@@ -9223,13 +9238,16 @@ def _job_search_interactive():
                         ),
                         text=plat_dist_h['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=11, family='Inter'),
                         hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
                     ))
                     fig_plat.update_layout(
-                        **_PLOTLY_BASE, height=270, showlegend=False,
-                        xaxis=dict(**_XAXIS, showgrid=True),
-                        yaxis=dict(**_YAXIS, showgrid=False),
+                        **_PLOTLY_BASE, height=290, showlegend=False,
+                        margin=dict(l=10, r=44, t=35, b=10),
+                        xaxis=dict(**_XAXIS, showgrid=True, automargin=True,
+                                   range=[0, plat_dist_h['Count'].max() * 1.2]),
+                        yaxis=dict(**_YAXIS, showgrid=False, automargin=True),
                         bargap=0.3,
                     )
                 st.plotly_chart(fig_plat, use_container_width=True, config={
@@ -9306,6 +9324,7 @@ def _job_search_interactive():
                     text=[str(v) if v > 0 else '' for v in hour_dist['Searches']],
                     textposition='outside',
                     textfont=dict(color='#f87171', size=10, family='Inter'),
+                    cliponaxis=False,
                     hovertemplate='<b>%{x} IST</b><br>Searches: %{y}<extra></extra>',
                 ))
                 # Annotation for peak
@@ -9320,9 +9339,11 @@ def _job_search_interactive():
                         bordercolor='#f87171', borderwidth=1, borderpad=5, yshift=10,
                     )
                 fig_hour.update_layout(
-                    **_PLOTLY_BASE, height=290, showlegend=False, bargap=0.15,
-                    xaxis=dict(**{**_XAXIS, "tickfont": dict(size=10, color="#999"), "tickangle": -45}),
-                    yaxis=dict(**_YAXIS),
+                    **_PLOTLY_BASE, height=310, showlegend=False, bargap=0.15,
+                    margin=dict(l=10, r=10, t=55, b=10),
+                    xaxis=dict(**{**_XAXIS, "tickfont": dict(size=10, color="#999"), "tickangle": -45, "automargin": True}),
+                    yaxis=dict(**_YAXIS, automargin=True,
+                               range=[0, max(hour_dist['Searches'].max() * 1.22, 1)]),
                 )
             else:
                 fig_hour = go.Figure(go.Bar(
@@ -9335,6 +9356,7 @@ def _job_search_interactive():
                     text=[str(v) if v > 0 else '' for v in hour_dist['Searches']],
                     textposition='outside',
                     textfont=dict(color='#f87171', size=10, family='Inter'),
+                    cliponaxis=False,
                     hovertemplate='<b>%{y} IST</b><br>Searches: %{x}<extra></extra>',
                 ))
                 if hour_dist['Searches'].max() > 0:
@@ -9349,8 +9371,10 @@ def _job_search_interactive():
                     )
                 fig_hour.update_layout(
                     **_PLOTLY_BASE, height=600, showlegend=False, bargap=0.15,
-                    xaxis=dict(**_XAXIS, showgrid=True),
-                    yaxis=dict(**{**_YAXIS, "tickfont": dict(size=10, color="#999")}),
+                    margin=dict(l=10, r=44, t=35, b=10),
+                    xaxis=dict(**_XAXIS, showgrid=True, automargin=True,
+                               range=[0, max(hour_dist['Searches'].max() * 1.2, 1)]),
+                    yaxis=dict(**{**_YAXIS, "tickfont": dict(size=10, color="#999"), "automargin": True}),
                 )
             st.plotly_chart(fig_hour, use_container_width=True, config={
                 "displayModeBar": True,
