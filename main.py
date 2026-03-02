@@ -14454,14 +14454,16 @@ Generate {num_questions} questions now:
                     )
                     _fig_dc.update_traces(
                         texttemplate='%{text}', textposition='outside',
+                        cliponaxis=False,
                         hovertemplate='<b>%{x}</b><br>Interviews: %{y}<extra></extra>'
                     )
+                    _dc_max = int(domain_counts.max()) if len(domain_counts) > 0 else 1
                     _fig_dc.update_layout(
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                         font=dict(color='white'), coloraxis_showscale=False,
-                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
-                        yaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
-                        margin=dict(l=5,r=5,t=10,b=5), height=280
+                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
+                        yaxis=dict(gridcolor='rgba(255,255,255,0.06)', range=[0, _dc_max * 1.3]),
+                        margin=dict(l=10, r=10, t=40, b=60), height=300
                     )
                     st.plotly_chart(_fig_dc, use_container_width=True)
 
@@ -14476,14 +14478,15 @@ Generate {num_questions} questions now:
                     )
                     _fig_da.update_traces(
                         texttemplate='%{text}', textposition='outside',
+                        cliponaxis=False,
                         hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                     )
                     _fig_da.update_layout(
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                         font=dict(color='white'), coloraxis_showscale=False,
-                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
-                        yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
-                        margin=dict(l=5,r=5,t=10,b=5), height=280
+                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
+                        yaxis=dict(range=[0, 11.5], gridcolor='rgba(255,255,255,0.06)'),
+                        margin=dict(l=10, r=10, t=40, b=60), height=300
                     )
                     st.plotly_chart(_fig_da, use_container_width=True)
 
@@ -14518,13 +14521,14 @@ Generate {num_questions} questions now:
                         textposition='outside',
                         hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                     ))
+                    _fig_rb.update_traces(cliponaxis=False)
                     _fig_rb.update_layout(
                         title=dict(text='Avg Score by Role', font=dict(color='#00c3ff', size=14)),
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                         font=dict(color='white'),
-                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
-                        yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
-                        margin=dict(l=5,r=5,t=40,b=5), height=280
+                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
+                        yaxis=dict(range=[0, 11.5], gridcolor='rgba(255,255,255,0.06)'),
+                        margin=dict(l=10, r=10, t=40, b=60), height=300
                     )
                     st.plotly_chart(_fig_rb, use_container_width=True)
 
@@ -14616,12 +14620,14 @@ Generate {num_questions} questions now:
                             text=diff_counts.values.tolist(), textposition='outside',
                             hovertemplate='<b>%{x}</b><br>Attempts: %{y}<extra></extra>'
                         ))
+                        _dfc_max = int(diff_counts.max()) if len(diff_counts) > 0 else 1
+                        _fig_dfc.update_traces(cliponaxis=False)
                         _fig_dfc.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                             font=dict(color='white'),
-                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
-                            yaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
-                            margin=dict(l=5,r=5,t=10,b=5), height=250
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
+                            yaxis=dict(gridcolor='rgba(255,255,255,0.06)', range=[0, _dfc_max * 1.3]),
+                            margin=dict(l=10, r=10, t=40, b=50), height=280
                         )
                         st.plotly_chart(_fig_dfc, use_container_width=True)
                     with col_dr:
@@ -14632,12 +14638,13 @@ Generate {num_questions} questions now:
                             text=[f"{v:.1f}" for v in diff_avg.values], textposition='outside',
                             hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                         ))
+                        _fig_dfa.update_traces(cliponaxis=False)
                         _fig_dfa.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                             font=dict(color='white'),
-                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
-                            yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
-                            margin=dict(l=5,r=5,t=10,b=5), height=250
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
+                            yaxis=dict(range=[0, 11.5], gridcolor='rgba(255,255,255,0.06)'),
+                            margin=dict(l=10, r=10, t=40, b=50), height=280
                         )
                         st.plotly_chart(_fig_dfa, use_container_width=True)
 
@@ -15000,12 +15007,14 @@ Generate {num_questions} questions now:
                             text=_mode_cnt.values.tolist(), textposition='outside',
                             hovertemplate='<b>%{x}</b><br>Times: %{y}<extra></extra>'
                         ))
+                        _mc_max = int(_mode_cnt.max()) if len(_mode_cnt) > 0 else 1
+                        _fig_mc.update_traces(cliponaxis=False)
                         _fig_mc.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                             font=dict(color='white'),
-                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
-                            yaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
-                            margin=dict(l=5,r=5,t=10,b=5), height=250
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
+                            yaxis=dict(gridcolor='rgba(255,255,255,0.06)', range=[0, _mc_max * 1.3]),
+                            margin=dict(l=10, r=10, t=40, b=50), height=280
                         )
                         st.plotly_chart(_fig_mc, use_container_width=True)
                     with col_m2:
@@ -15017,12 +15026,13 @@ Generate {num_questions} questions now:
                             text=[f"{v:.1f}" for v in _mode_avg.values], textposition='outside',
                             hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                         ))
+                        _fig_ma.update_traces(cliponaxis=False)
                         _fig_ma.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                             font=dict(color='white'),
-                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
-                            yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
-                            margin=dict(l=5,r=5,t=10,b=5), height=250
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
+                            yaxis=dict(range=[0, 11.5], gridcolor='rgba(255,255,255,0.06)'),
+                            margin=dict(l=10, r=10, t=40, b=50), height=280
                         )
                         st.plotly_chart(_fig_ma, use_container_width=True)
 
@@ -15107,7 +15117,6 @@ Generate {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
-
 
 
 
