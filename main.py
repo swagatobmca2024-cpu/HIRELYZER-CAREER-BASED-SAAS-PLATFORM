@@ -8242,109 +8242,12 @@ def _job_search_interactive():
     if 'search_mode' not in st.session_state:
         st.session_state.search_mode = "External Platforms"
 
-    # Modern Toggle Switch with Circular Indicator
-    is_external = st.session_state.search_mode == "External Platforms"
-
-    toggle_html = f"""
-    <style>
-    .toggle-switch-container {{
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        margin-bottom: 30px;
-        gap: 0;
-    }}
-    .toggle-option {{
-        background: rgba(40, 40, 40, 0.95);
-        padding: 18px 35px;
-        color: rgba(255, 255, 255, 0.4);
-        font-size: 15px;
-        font-weight: 600;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        transition: all 0.3s ease;
-        cursor: pointer;
-        position: relative;
-    }}
-    .toggle-option.left {{
-        border-radius: 16px 0 0 16px;
-        border-right: none;
-    }}
-    .toggle-option.right {{
-        border-radius: 0 16px 16px 0;
-        border-left: none;
-    }}
-    .toggle-option.active {{
-        color: #ffffff;
-    }}
-    .toggle-option.active.external {{
-        background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
-        border-color: #1976D2;
-    }}
-    .toggle-option.active.rapid {{
-        background: linear-gradient(135deg, #00E676 0%, #00C853 100%);
-        border-color: #00C853;
-    }}
-    .toggle-circle {{
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        border: 2px solid rgba(255, 255, 255, 0.4);
-        background: transparent;
-        transition: all 0.3s ease;
-    }}
-    .toggle-option.active .toggle-circle {{
-        background: #ffffff;
-        border-color: #ffffff;
-    }}
-    .toggle-option:hover:not(.active) {{
-        background: rgba(55, 55, 55, 0.95);
-        color: rgba(255, 255, 255, 0.7);
-    }}
-    .active-badge {{
-        text-align: center;
-        padding: 15px;
-        margin-bottom: 25px;
-    }}
-    .badge {{
-        background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
-        padding: 10px 25px;
-        border-radius: 20px;
-        color: white;
-        font-weight: 600;
-        font-size: 14px;
-        display: inline-block;
-    }}
-    .badge.rapid {{
-        background: linear-gradient(135deg, #00E676 0%, #00C853 100%);
-    }}
-    </style>
-
-    <div class="toggle-switch-container">
-        <div class="toggle-option left {'active external' if is_external else ''}" id="toggle-external">
-            <div class="toggle-circle"></div>
-            <span>🌐 External Platforms (LinkedIn, Naukri, FoundIt)</span>
-        </div>
-        <div class="toggle-option right {'active rapid' if not is_external else ''}" id="toggle-rapid">
-            <div class="toggle-circle"></div>
-            <span>⚡ RapidAPI Jobs (India Only)</span>
-        </div>
-    </div>
-
-    <div class="active-badge">
-        <span class="badge {'rapid' if not is_external else ''}">
-            {'🌐 External Platforms Mode Active' if is_external else '⚡ RapidAPI Jobs Mode Active'}
-        </span>
-    </div>
-    """
-
-    st.markdown(toggle_html, unsafe_allow_html=True)
-
-    # Blink-free mode toggle using st.radio (no st.rerun needed)
+    # ── Step 1: Process the radio FIRST so search_mode is correct before rendering HTML ──
     _mode_options = ["🌐 External Platforms", "⚡ RapidAPI Jobs"]
     _mode_default  = 0 if st.session_state.search_mode == "External Platforms" else 1
+    _prev_mode = st.session_state.get("_prev_search_mode", st.session_state.search_mode)
+
+    # Render radio hidden — the pill toggle HTML (below) drives it via JS clicks
     _selected_mode = st.radio(
         "Switch search mode",
         _mode_options,
@@ -8353,7 +8256,7 @@ def _job_search_interactive():
         key="mode_radio",
         label_visibility="collapsed"
     )
-    _prev_mode = st.session_state.get("_prev_search_mode", st.session_state.search_mode)
+
     if _selected_mode == "🌐 External Platforms":
         st.session_state.search_mode = "External Platforms"
         # Clear RapidAPI inputs when switching to External
@@ -8373,6 +8276,136 @@ def _job_search_interactive():
     st.session_state._prev_search_mode = st.session_state.search_mode
 
     search_mode = st.session_state.search_mode
+
+    # ── Step 2: Render the pill-style toggle AFTER updating search_mode so badge is always correct ──
+    is_external = search_mode == "External Platforms"
+
+    # Hide the native Streamlit radio widget; the pill buttons below are the real UI
+    st.markdown("""
+    <style>
+    div[data-testid="stRadio"] { display: none !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    toggle_html = f"""
+    <style>
+    .toggle-switch-container {{
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 30px;
+        gap: 0;
+    }}
+    .toggle-option {{
+        background: rgba(40, 40, 40, 0.95);
+        padding: 18px 0;
+        width: 280px;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 15px;
+        font-weight: 600;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+        user-select: none;
+    }}
+    .toggle-option.left {{
+        border-radius: 16px 0 0 16px;
+        border-right: none;
+    }}
+    .toggle-option.right {{
+        border-radius: 0 16px 16px 0;
+        border-left: none;
+    }}
+    .toggle-option.active {{
+        color: #ffffff;
+    }}
+    .toggle-option.active.external {{
+        background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+        border-color: #1976D2;
+    }}
+    .toggle-option.active.rapid {{
+        background: linear-gradient(135deg, #00E676 0%, #00C853 100%);
+        border-color: #00C853;
+        color: #003020;
+    }}
+    .toggle-circle {{
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.4);
+        background: transparent;
+        flex-shrink: 0;
+        transition: all 0.3s ease;
+    }}
+    .toggle-option.active .toggle-circle {{
+        background: #ffffff;
+        border-color: #ffffff;
+    }}
+    .toggle-option.active.rapid .toggle-circle {{
+        background: #003020;
+        border-color: #003020;
+    }}
+    .toggle-option:hover:not(.active) {{
+        background: rgba(55, 55, 55, 0.95);
+        color: rgba(255, 255, 255, 0.7);
+    }}
+    .active-badge {{
+        text-align: center;
+        padding: 10px;
+        margin-bottom: 25px;
+    }}
+    .badge-pill {{
+        padding: 10px 28px;
+        border-radius: 20px;
+        color: white;
+        font-weight: 600;
+        font-size: 14px;
+        display: inline-block;
+    }}
+    .badge-pill.external {{
+        background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+    }}
+    .badge-pill.rapid {{
+        background: linear-gradient(135deg, #00E676 0%, #00C853 100%);
+        color: #003020;
+    }}
+    </style>
+
+    <div class="toggle-switch-container">
+        <div class="toggle-option left {'active external' if is_external else ''}"
+             id="pill-external"
+             onclick="
+               var radios = window.parent.document.querySelectorAll('div[data-testid=stRadio] input[type=radio]');
+               if(radios.length > 0) {{ radios[0].click(); }}
+             ">
+            <div class="toggle-circle"></div>
+            <span>🌐 External Platforms</span>
+        </div>
+        <div class="toggle-option right {'active rapid' if not is_external else ''}"
+             id="pill-rapid"
+             onclick="
+               var radios = window.parent.document.querySelectorAll('div[data-testid=stRadio] input[type=radio]');
+               if(radios.length > 1) {{ radios[1].click(); }}
+             ">
+            <div class="toggle-circle"></div>
+            <span>⚡ RapidAPI Jobs</span>
+        </div>
+    </div>
+
+    <div class="active-badge">
+        <span class="badge-pill {'external' if is_external else 'rapid'}">
+            {'🌐 External Platforms Mode Active' if is_external else '⚡ RapidAPI Jobs Mode Active'}
+        </span>
+    </div>
+    """
+
+    st.markdown(toggle_html, unsafe_allow_html=True)
 
     if search_mode == "External Platforms":
         # Shadow keys for clear — never set widget keys directly
@@ -9706,7 +9739,6 @@ with tab3:
             <p style="position: relative; z-index: 2;">💵 Salary Range: <span style="color: #34d399; font-weight: 600;">{role['range']}</span></p>
         </div>
         """, unsafe_allow_html=True)
-
 
 def evaluate_interview_answer(answer: str, question: str = None):
     """
