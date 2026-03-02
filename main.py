@@ -8244,105 +8244,108 @@ def _job_search_interactive():
 
     is_external = st.session_state.search_mode == "External Platforms"
 
-    # ── Pill-style toggle: two st.button() calls styled with CSS ──
-    # st.button is in the main Streamlit DOM so CSS can target it directly — no iframe sandbox issues.
-    st.markdown("""
+    badge_color  = "linear-gradient(135deg,#2196F3,#1565C0)" if is_external else "linear-gradient(135deg,#00E676,#00A550)"
+    badge_tcolor = "#ffffff" if is_external else "#002a18"
+    badge_text   = "🌐  External Platforms Mode Active" if is_external else "⚡  RapidAPI Jobs Mode Active"
+
+    ext_bg      = "linear-gradient(135deg,#2196F3,#1565C0)" if is_external     else "rgba(35,35,35,0.95)"
+    rapid_bg    = "linear-gradient(135deg,#00E676,#00A550)"  if not is_external else "rgba(35,35,35,0.95)"
+    ext_color   = "#ffffff"  if is_external     else "rgba(255,255,255,0.45)"
+    rapid_color = "#002a18"  if not is_external else "rgba(255,255,255,0.45)"
+    ext_shadow  = "0 4px 20px rgba(33,150,243,0.5)"  if is_external     else "none"
+    rapid_shadow= "0 4px 20px rgba(0,200,100,0.45)"  if not is_external else "none"
+
+    # ── Badge first ──
+    st.markdown(f"""
     <style>
-    /* Wrapper that holds the two toggle buttons side-by-side */
-    div[data-testid="stHorizontalBlock"].toggle-row {
-        justify-content: center;
-    }
-
-    /* ---- shared pill-button base ---- */
-    div.toggle-col button {
-        width: 100% !important;
-        padding: 16px 10px !important;
-        font-size: 15px !important;
-        font-weight: 700 !important;
-        border-radius: 0 !important;
-        border: 1px solid rgba(255,255,255,0.15) !important;
-        background: rgba(40,40,40,0.95) !important;
-        color: rgba(255,255,255,0.45) !important;
-        transition: all 0.25s ease !important;
-        cursor: pointer !important;
-        box-shadow: none !important;
-        letter-spacing: 0.3px;
-    }
-    div.toggle-col button:hover {
-        background: rgba(60,60,60,0.95) !important;
-        color: rgba(255,255,255,0.75) !important;
-    }
-
-    /* Left pill — rounded left corners */
-    div.toggle-col-left button {
-        border-radius: 16px 0 0 16px !important;
-        border-right: none !important;
-    }
-    /* Right pill — rounded right corners */
-    div.toggle-col-right button {
-        border-radius: 0 16px 16px 0 !important;
-        border-left: none !important;
-    }
-
-    /* ---- ACTIVE states ---- */
-    div.toggle-col-left-active button {
-        border-radius: 16px 0 0 16px !important;
-        border-right: none !important;
-        background: linear-gradient(135deg, #2196F3 0%, #1565C0 100%) !important;
-        border-color: #1565C0 !important;
-        color: #ffffff !important;
-        box-shadow: 0 4px 18px rgba(33,150,243,0.45) !important;
-    }
-    div.toggle-col-right-active button {
-        border-radius: 0 16px 16px 0 !important;
-        border-left: none !important;
-        background: linear-gradient(135deg, #00E676 0%, #00A550 100%) !important;
-        border-color: #00A550 !important;
-        color: #002a18 !important;
-        box-shadow: 0 4px 18px rgba(0,230,118,0.4) !important;
-    }
-
-    /* Badge below the toggle */
-    .mode-badge-wrap { text-align: center; margin: 2px 0 22px 0; }
-    .mode-badge {
-        display: inline-block;
-        padding: 9px 28px;
-        border-radius: 20px;
-        font-weight: 700;
-        font-size: 14px;
-        letter-spacing: 0.3px;
-    }
-    .mode-badge.external {
-        background: linear-gradient(135deg, #2196F3 0%, #1565C0 100%);
-        color: #fff;
-    }
-    .mode-badge.rapid {
-        background: linear-gradient(135deg, #00E676 0%, #00A550 100%);
-        color: #002a18;
-    }
+    .mode-badge-wrap {{ text-align:center; margin:0 0 10px 0; }}
+    .mode-badge {{
+        display:inline-block; padding:9px 28px; border-radius:20px;
+        font-weight:700; font-size:14px; letter-spacing:.3px;
+        background:{badge_color}; color:{badge_tcolor};
+    }}
     </style>
+    <div class="mode-badge-wrap"><span class="mode-badge">{badge_text}</span></div>
     """, unsafe_allow_html=True)
 
-    # Left col class depends on whether External is active
-    left_cls  = "toggle-col toggle-col-left-active"  if is_external  else "toggle-col toggle-col-left"
-    right_cls = "toggle-col toggle-col-right-active" if not is_external else "toggle-col toggle-col-right"
+    # ── Pill toggle: components.html renders the styled visual AND handles clicks ──
+    # On click it calls window.parent.postMessage. A companion <script> injected by
+    # components.html itself (same iframe) fires the message, and we catch it via
+    # a polling mechanism that sets sessionStorage, which a Streamlit button re-checks.
+    # SIMPLEST working pattern: put both visual div AND a real <button> inside the iframe;
+    # clicking the styled div triggers a form submit that postMessages to parent.
+    # Parent catches it → clicks the relevant hidden real Streamlit button.
+    #
+    # BUT: st.markdown strips <script>. So instead we use components.html for EVERYTHING:
+    # visual pill + JS that directly clicks Streamlit buttons in the parent DOM.
+    # This works because components.html uses allow-same-origin in its sandbox.
 
-    col_left, col_right = st.columns(2)
+    import streamlit.components.v1 as components
+    components.html(f"""<!DOCTYPE html>
+<html>
+<head>
+<style>
+  *{{margin:0;padding:0;box-sizing:border-box;}}
+  body{{background:transparent;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:2px 0 6px;}}
+  .toggle{{display:flex;justify-content:center;}}
+  .btn{{
+    width:260px;padding:15px 10px;font-size:15px;font-weight:700;
+    letter-spacing:.3px;border:1px solid rgba(255,255,255,0.13);
+    display:flex;align-items:center;justify-content:center;gap:9px;
+    cursor:pointer;user-select:none;transition:filter .18s ease;
+  }}
+  .btn:hover{{filter:brightness(1.14);}}
+  .btn-left{{border-radius:50px 0 0 50px;border-right:none;
+    background:{ext_bg};color:{ext_color};box-shadow:{ext_shadow};}}
+  .btn-right{{border-radius:0 50px 50px 0;border-left:none;
+    background:{rapid_bg};color:{rapid_color};box-shadow:{rapid_shadow};}}
+  .dot{{width:12px;height:12px;border-radius:50%;border:2px solid currentColor;flex-shrink:0;}}
+  .active .dot{{background:currentColor;}}
+</style>
+</head>
+<body>
+  <div class="toggle">
+    <div class="btn btn-left {'active' if is_external else ''}" id="btn-ext">
+      <span class="dot"></span><span>🌐  External Platforms</span>
+    </div>
+    <div class="btn btn-right {'active' if not is_external else ''}" id="btn-rapid">
+      <span class="dot"></span><span>⚡  RapidAPI Jobs</span>
+    </div>
+  </div>
+  <script>
+    function clickParentButton(labelFragment) {{
+      // Walk the parent document for Streamlit buttons matching the label
+      var parentDoc = window.parent.document;
+      var buttons = parentDoc.querySelectorAll('button');
+      for (var i = 0; i < buttons.length; i++) {{
+        if (buttons[i].innerText && buttons[i].innerText.indexOf(labelFragment) !== -1) {{
+          buttons[i].click();
+          return;
+        }}
+      }}
+    }}
+    document.getElementById('btn-ext').addEventListener('click', function() {{
+      clickParentButton('External Platforms Mode');
+    }});
+    document.getElementById('btn-rapid').addEventListener('click', function() {{
+      clickParentButton('RapidAPI Jobs Mode');
+    }});
+  </script>
+</body>
+</html>""", height=65)
 
-    with col_left:
-        st.markdown(f'<div class="{left_cls}">', unsafe_allow_html=True)
-        if st.button("🌐  External Platforms", key="btn_mode_external", use_container_width=True):
+    # ── The real Streamlit buttons — styled small but visible and always functional ──
+    # components.html JS clicks these; user can also click them directly as fallback.
+    col_l, col_r = st.columns(2)
+    with col_l:
+        if st.button("🌐 External Platforms Mode", key="btn_mode_external", use_container_width=True):
             if st.session_state.search_mode != "External Platforms":
                 st.session_state.rapid_role_val = None
                 st.session_state.rapid_loc_val  = None
             st.session_state.search_mode = "External Platforms"
-            st.session_state._prev_search_mode = "External Platforms"
             st.rerun(scope="fragment")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_right:
-        st.markdown(f'<div class="{right_cls}">', unsafe_allow_html=True)
-        if st.button("⚡  RapidAPI Jobs", key="btn_mode_rapid", use_container_width=True):
+    with col_r:
+        if st.button("⚡ RapidAPI Jobs Mode", key="btn_mode_rapid", use_container_width=True):
             if st.session_state.search_mode != "RapidAPI Jobs":
                 st.session_state.ext_role_val    = None
                 st.session_state.ext_loc_val     = None
@@ -8351,18 +8354,9 @@ def _job_search_interactive():
                 st.session_state.ext_foundit_val = ""
                 st.session_state["_ext_clear_count"] = st.session_state.get("_ext_clear_count", 0) + 1
             st.session_state.search_mode = "RapidAPI Jobs"
-            st.session_state._prev_search_mode = "RapidAPI Jobs"
             st.rerun(scope="fragment")
-        st.markdown('</div>', unsafe_allow_html=True)
 
-    # Badge — always reflects the current mode correctly
-    badge_cls  = "external" if is_external else "rapid"
-    badge_text = "🌐  External Platforms Mode Active" if is_external else "⚡  RapidAPI Jobs Mode Active"
-    st.markdown(
-        f'<div class="mode-badge-wrap"><span class="mode-badge {badge_cls}">{badge_text}</span></div>',
-        unsafe_allow_html=True,
-    )
-
+    st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
     search_mode = st.session_state.search_mode
 
     if search_mode == "External Platforms":
