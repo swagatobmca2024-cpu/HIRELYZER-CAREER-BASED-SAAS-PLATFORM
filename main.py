@@ -8242,121 +8242,136 @@ def _job_search_interactive():
     if 'search_mode' not in st.session_state:
         st.session_state.search_mode = "External Platforms"
 
+    # Modern Toggle Switch with Circular Indicator
     is_external = st.session_state.search_mode == "External Platforms"
 
-    badge_color  = "linear-gradient(135deg,#2196F3,#1565C0)" if is_external else "linear-gradient(135deg,#00E676,#00A550)"
-    badge_tcolor = "#ffffff" if is_external else "#002a18"
-    badge_text   = "🌐  External Platforms Mode Active" if is_external else "⚡  RapidAPI Jobs Mode Active"
-
-    ext_bg      = "linear-gradient(135deg,#2196F3,#1565C0)" if is_external     else "rgba(35,35,35,0.95)"
-    rapid_bg    = "linear-gradient(135deg,#00E676,#00A550)"  if not is_external else "rgba(35,35,35,0.95)"
-    ext_color   = "#ffffff"  if is_external     else "rgba(255,255,255,0.45)"
-    rapid_color = "#002a18"  if not is_external else "rgba(255,255,255,0.45)"
-    ext_shadow  = "0 4px 20px rgba(33,150,243,0.5)"  if is_external     else "none"
-    rapid_shadow= "0 4px 20px rgba(0,200,100,0.45)"  if not is_external else "none"
-
-    # ── Badge first ──
-    st.markdown(f"""
+    toggle_html = f"""
     <style>
-    .mode-badge-wrap {{ text-align:center; margin:0 0 10px 0; }}
-    .mode-badge {{
-        display:inline-block; padding:9px 28px; border-radius:20px;
-        font-weight:700; font-size:14px; letter-spacing:.3px;
-        background:{badge_color}; color:{badge_tcolor};
+    .toggle-switch-container {{
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 30px;
+        gap: 0;
+    }}
+    .toggle-option {{
+        background: rgba(40, 40, 40, 0.95);
+        padding: 18px 35px;
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 15px;
+        font-weight: 600;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+    }}
+    .toggle-option.left {{
+        border-radius: 16px 0 0 16px;
+        border-right: none;
+    }}
+    .toggle-option.right {{
+        border-radius: 0 16px 16px 0;
+        border-left: none;
+    }}
+    .toggle-option.active {{
+        color: #ffffff;
+    }}
+    .toggle-option.active.external {{
+        background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+        border-color: #1976D2;
+    }}
+    .toggle-option.active.rapid {{
+        background: linear-gradient(135deg, #00E676 0%, #00C853 100%);
+        border-color: #00C853;
+    }}
+    .toggle-circle {{
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.4);
+        background: transparent;
+        transition: all 0.3s ease;
+    }}
+    .toggle-option.active .toggle-circle {{
+        background: #ffffff;
+        border-color: #ffffff;
+    }}
+    .toggle-option:hover:not(.active) {{
+        background: rgba(55, 55, 55, 0.95);
+        color: rgba(255, 255, 255, 0.7);
+    }}
+    .active-badge {{
+        text-align: center;
+        padding: 15px;
+        margin-bottom: 25px;
+    }}
+    .badge {{
+        background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
+        padding: 10px 25px;
+        border-radius: 20px;
+        color: white;
+        font-weight: 600;
+        font-size: 14px;
+        display: inline-block;
+    }}
+    .badge.rapid {{
+        background: linear-gradient(135deg, #00E676 0%, #00C853 100%);
     }}
     </style>
-    <div class="mode-badge-wrap"><span class="mode-badge">{badge_text}</span></div>
-    """, unsafe_allow_html=True)
 
-    # ── Pill toggle: components.html renders the styled visual AND handles clicks ──
-    # On click it calls window.parent.postMessage. A companion <script> injected by
-    # components.html itself (same iframe) fires the message, and we catch it via
-    # a polling mechanism that sets sessionStorage, which a Streamlit button re-checks.
-    # SIMPLEST working pattern: put both visual div AND a real <button> inside the iframe;
-    # clicking the styled div triggers a form submit that postMessages to parent.
-    # Parent catches it → clicks the relevant hidden real Streamlit button.
-    #
-    # BUT: st.markdown strips <script>. So instead we use components.html for EVERYTHING:
-    # visual pill + JS that directly clicks Streamlit buttons in the parent DOM.
-    # This works because components.html uses allow-same-origin in its sandbox.
-
-    import streamlit.components.v1 as components
-    components.html(f"""<!DOCTYPE html>
-<html>
-<head>
-<style>
-  *{{margin:0;padding:0;box-sizing:border-box;}}
-  body{{background:transparent;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:2px 0 6px;}}
-  .toggle{{display:flex;justify-content:center;}}
-  .btn{{
-    width:260px;padding:15px 10px;font-size:15px;font-weight:700;
-    letter-spacing:.3px;border:1px solid rgba(255,255,255,0.13);
-    display:flex;align-items:center;justify-content:center;gap:9px;
-    cursor:pointer;user-select:none;transition:filter .18s ease;
-  }}
-  .btn:hover{{filter:brightness(1.14);}}
-  .btn-left{{border-radius:50px 0 0 50px;border-right:none;
-    background:{ext_bg};color:{ext_color};box-shadow:{ext_shadow};}}
-  .btn-right{{border-radius:0 50px 50px 0;border-left:none;
-    background:{rapid_bg};color:{rapid_color};box-shadow:{rapid_shadow};}}
-  .dot{{width:12px;height:12px;border-radius:50%;border:2px solid currentColor;flex-shrink:0;}}
-  .active .dot{{background:currentColor;}}
-</style>
-</head>
-<body>
-  <div class="toggle">
-    <div class="btn btn-left {'active' if is_external else ''}" id="btn-ext">
-      <span class="dot"></span><span>🌐  External Platforms</span>
+    <div class="toggle-switch-container">
+        <div class="toggle-option left {'active external' if is_external else ''}" id="toggle-external">
+            <div class="toggle-circle"></div>
+            <span>🌐 External Platforms (LinkedIn, Naukri, FoundIt)</span>
+        </div>
+        <div class="toggle-option right {'active rapid' if not is_external else ''}" id="toggle-rapid">
+            <div class="toggle-circle"></div>
+            <span>⚡ RapidAPI Jobs (India Only)</span>
+        </div>
     </div>
-    <div class="btn btn-right {'active' if not is_external else ''}" id="btn-rapid">
-      <span class="dot"></span><span>⚡  RapidAPI Jobs</span>
+
+    <div class="active-badge">
+        <span class="badge {'rapid' if not is_external else ''}">
+            {'🌐 External Platforms Mode Active' if is_external else '⚡ RapidAPI Jobs Mode Active'}
+        </span>
     </div>
-  </div>
-  <script>
-    function clickParentButton(labelFragment) {{
-      // Walk the parent document for Streamlit buttons matching the label
-      var parentDoc = window.parent.document;
-      var buttons = parentDoc.querySelectorAll('button');
-      for (var i = 0; i < buttons.length; i++) {{
-        if (buttons[i].innerText && buttons[i].innerText.indexOf(labelFragment) !== -1) {{
-          buttons[i].click();
-          return;
-        }}
-      }}
-    }}
-    document.getElementById('btn-ext').addEventListener('click', function() {{
-      clickParentButton('External Platforms Mode');
-    }});
-    document.getElementById('btn-rapid').addEventListener('click', function() {{
-      clickParentButton('RapidAPI Jobs Mode');
-    }});
-  </script>
-</body>
-</html>""", height=65)
+    """
 
-    # ── The real Streamlit buttons — styled small but visible and always functional ──
-    # components.html JS clicks these; user can also click them directly as fallback.
-    col_l, col_r = st.columns(2)
-    with col_l:
-        if st.button("🌐 External Platforms Mode", key="btn_mode_external", use_container_width=True):
-            if st.session_state.search_mode != "External Platforms":
-                st.session_state.rapid_role_val = None
-                st.session_state.rapid_loc_val  = None
-            st.session_state.search_mode = "External Platforms"
-            st.rerun(scope="fragment")
-    with col_r:
-        if st.button("⚡ RapidAPI Jobs Mode", key="btn_mode_rapid", use_container_width=True):
-            if st.session_state.search_mode != "RapidAPI Jobs":
-                st.session_state.ext_role_val    = None
-                st.session_state.ext_loc_val     = None
-                st.session_state.ext_exp_val     = ""
-                st.session_state.ext_type_val    = ""
-                st.session_state.ext_foundit_val = ""
-                st.session_state["_ext_clear_count"] = st.session_state.get("_ext_clear_count", 0) + 1
-            st.session_state.search_mode = "RapidAPI Jobs"
-            st.rerun(scope="fragment")
+    st.markdown(toggle_html, unsafe_allow_html=True)
 
-    st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
+    # Blink-free mode toggle using st.radio (no st.rerun needed)
+    _mode_options = ["🌐 External Platforms", "⚡ RapidAPI Jobs"]
+    _mode_default  = 0 if st.session_state.search_mode == "External Platforms" else 1
+    _selected_mode = st.radio(
+        "Switch search mode",
+        _mode_options,
+        index=_mode_default,
+        horizontal=True,
+        key="mode_radio",
+        label_visibility="collapsed"
+    )
+    _prev_mode = st.session_state.get("_prev_search_mode", st.session_state.search_mode)
+    if _selected_mode == "🌐 External Platforms":
+        st.session_state.search_mode = "External Platforms"
+        # Clear RapidAPI inputs when switching to External
+        if _prev_mode == "RapidAPI Jobs":
+            st.session_state.rapid_role_val = None
+            st.session_state.rapid_loc_val  = None
+    else:
+        st.session_state.search_mode = "RapidAPI Jobs"
+        # Clear External inputs when switching to RapidAPI
+        if _prev_mode == "External Platforms":
+            st.session_state.ext_role_val    = None
+            st.session_state.ext_loc_val     = None
+            st.session_state.ext_exp_val     = ""
+            st.session_state.ext_type_val    = ""
+            st.session_state.ext_foundit_val = ""
+            st.session_state["_ext_clear_count"] = st.session_state.get("_ext_clear_count", 0) + 1
+    st.session_state._prev_search_mode = st.session_state.search_mode
+
     search_mode = st.session_state.search_mode
 
     if search_mode == "External Platforms":
@@ -8888,7 +8903,7 @@ def _job_search_interactive():
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(15,15,26,0.6)",
         font=dict(family="Inter, sans-serif", color="#cccccc", size=12),
-        margin=dict(l=10, r=10, t=35, b=10),
+        margin=dict(l=10, r=40, t=45, b=10),
     )
     _XAXIS = dict(
         gridcolor="rgba(255,255,255,0.06)",
@@ -9019,7 +9034,7 @@ def _job_search_interactive():
                 '>
                     <div style='font-size:26px; margin-bottom:6px;'>{icon}</div>
                     <div style='color:{accent}; font-size:11px; font-weight:600; letter-spacing:1px; text-transform:uppercase; margin-bottom:4px;'>{label}</div>
-                    <div style='color:#ffffff; font-size:26px; font-weight:800; line-height:1; margin-bottom:4px; word-break:break-word;'>{value}</div>
+                    <div style='color:#ffffff; font-size:clamp(18px, 3vw, 26px); font-weight:800; line-height:1.2; margin-bottom:4px; word-break:break-word; overflow-wrap:break-word;'>{value}</div>
                     <div style='color:#555; font-size:11px;'>{sub}</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -9072,13 +9087,15 @@ def _job_search_interactive():
                         ),
                         text=top_roles['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
                     ))
+                    _roles_xmax = top_roles['Count'].max() * 1.25 if not top_roles.empty else 1
                     fig_roles.update_layout(
                         **_PLOTLY_BASE, height=260, showlegend=False,
                         xaxis_title=None, yaxis_title=None,
-                        xaxis=dict(**_XAXIS, showgrid=True),
+                        xaxis=dict(**_XAXIS, showgrid=True, range=[0, _roles_xmax]),
                         yaxis=dict(**_YAXIS, showgrid=False),
                     )
                 else:
@@ -9092,14 +9109,16 @@ def _job_search_interactive():
                         ),
                         text=top_roles['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
                     ))
+                    _roles_ymax = top_roles['Count'].max() * 1.25 if not top_roles.empty else 1
                     fig_roles.update_layout(
                         **_PLOTLY_BASE, height=260, showlegend=False,
                         xaxis_title=None, yaxis_title=None,
                         xaxis=dict(**_XAXIS, tickangle=-25),
-                        yaxis=dict(**_YAXIS, showgrid=True),
+                        yaxis=dict(**_YAXIS, showgrid=True, range=[0, _roles_ymax]),
                     )
                 st.plotly_chart(fig_roles, use_container_width=True, config={
                     "displayModeBar": True,
@@ -9131,13 +9150,15 @@ def _job_search_interactive():
                         ),
                         text=top_locs['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
                     ))
+                    _locs_xmax = top_locs['Count'].max() * 1.25 if not top_locs.empty else 1
                     fig_locs.update_layout(
                         **_PLOTLY_BASE, height=260, showlegend=False,
                         xaxis_title=None, yaxis_title=None,
-                        xaxis=dict(**_XAXIS, showgrid=True),
+                        xaxis=dict(**_XAXIS, showgrid=True, range=[0, _locs_xmax]),
                         yaxis=dict(**_YAXIS, showgrid=False),
                     )
                 else:
@@ -9151,14 +9172,16 @@ def _job_search_interactive():
                         ),
                         text=top_locs['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=12, family='Inter'),
                         hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
                     ))
+                    _locs_ymax = top_locs['Count'].max() * 1.25 if not top_locs.empty else 1
                     fig_locs.update_layout(
                         **_PLOTLY_BASE, height=260, showlegend=False,
                         xaxis_title=None, yaxis_title=None,
                         xaxis=dict(**_XAXIS, tickangle=-25),
-                        yaxis=dict(**_YAXIS, showgrid=True),
+                        yaxis=dict(**_YAXIS, showgrid=True, range=[0, _locs_ymax]),
                     )
                 st.plotly_chart(fig_locs, use_container_width=True, config={
                     "displayModeBar": True,
@@ -9201,13 +9224,15 @@ def _job_search_interactive():
                         ),
                         text=plat_dist['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=11, family='Inter'),
                         hovertemplate='<b>%{x}</b><br>Searches: %{y}<extra></extra>',
                     ))
+                    _plat_ymax = plat_dist['Count'].max() * 1.25 if not plat_dist.empty else 1
                     fig_plat.update_layout(
                         **_PLOTLY_BASE, height=270, showlegend=False,
                         xaxis=dict(**_XAXIS, tickangle=-25),
-                        yaxis=dict(**_YAXIS),
+                        yaxis=dict(**_YAXIS, range=[0, _plat_ymax]),
                         bargap=0.3,
                     )
                 else:
@@ -9223,12 +9248,14 @@ def _job_search_interactive():
                         ),
                         text=plat_dist_h['Count'],
                         textposition='outside',
+                        cliponaxis=False,
                         textfont=dict(color='#ffffff', size=11, family='Inter'),
                         hovertemplate='<b>%{y}</b><br>Searches: %{x}<extra></extra>',
                     ))
+                    _plat_xmax = plat_dist_h['Count'].max() * 1.25 if not plat_dist_h.empty else 1
                     fig_plat.update_layout(
                         **_PLOTLY_BASE, height=270, showlegend=False,
-                        xaxis=dict(**_XAXIS, showgrid=True),
+                        xaxis=dict(**_XAXIS, showgrid=True, range=[0, _plat_xmax]),
                         yaxis=dict(**_YAXIS, showgrid=False),
                         bargap=0.3,
                     )
