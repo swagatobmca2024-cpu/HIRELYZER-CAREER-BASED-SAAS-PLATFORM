@@ -8242,99 +8242,101 @@ def _job_search_interactive():
     if 'search_mode' not in st.session_state:
         st.session_state.search_mode = "External Platforms"
 
-    # ── Pill-style toggle switch (no st.rerun — @st.fragment handles reruns) ────
+    # ── Toggle switch ─────────────────────────────────────────────────────────
+    # @st.fragment means button clicks only rerun this fragment — no page flicker.
     is_external = st.session_state.search_mode == "External Platforms"
 
-    # Derive active styles for each button based on current mode
-    ext_bg    = "linear-gradient(135deg,#2196F3 0%,#1976D2 100%)" if is_external     else "rgba(40,40,40,0.95)"
-    rap_bg    = "linear-gradient(135deg,#00C853 0%,#009624 100%)" if not is_external  else "rgba(40,40,40,0.95)"
-    ext_color = "#ffffff"                                          if is_external     else "rgba(255,255,255,0.4)"
-    rap_color = "#ffffff"                                          if not is_external  else "rgba(255,255,255,0.4)"
-    ext_bdr   = "#1565C0"                                          if is_external     else "rgba(255,255,255,0.15)"
-    rap_bdr   = "#007A1F"                                          if not is_external  else "rgba(255,255,255,0.15)"
-    ext_circ  = "#ffffff"                                          if is_external     else "transparent"
-    rap_circ  = "#ffffff"                                          if not is_external  else "transparent"
-    ext_cbdr  = "#ffffff"                                          if is_external     else "rgba(255,255,255,0.4)"
-    rap_cbdr  = "#ffffff"                                          if not is_external  else "rgba(255,255,255,0.4)"
-
+    # ── 1. Badge ABOVE the buttons ────────────────────────────────────────────
     badge_text = "🌐 External Platforms Mode Active" if is_external else "⚡ RapidAPI Jobs Mode Active"
-    badge_grad = "linear-gradient(135deg,#2196F3 0%,#1976D2 100%)" if is_external else "linear-gradient(135deg,#00C853 0%,#009624 100%)"
+    badge_grad = "linear-gradient(135deg,#2196F3 0%,#1976D2 100%)" if is_external \
+                 else "linear-gradient(135deg,#00C853 0%,#009624 100%)"
+
+    st.markdown(f"""
+    <div style="text-align:center; margin:10px 0 20px;">
+        <span style="display:inline-block; padding:10px 30px; border-radius:20px;
+                     background:{badge_grad}; color:#fff; font-weight:600;
+                     font-size:14px; letter-spacing:0.3px;
+                     box-shadow:0 4px 16px rgba(0,0,0,0.35);">
+            {badge_text}
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── 2. CSS for the pill buttons ───────────────────────────────────────────
+    # Active state colours computed server-side so they're always in sync.
+    ext_bg  = "linear-gradient(135deg,#2196F3 0%,#1976D2 100%)" if is_external     else "#1e1e1e"
+    rap_bg  = "linear-gradient(135deg,#00C853 0%,#009624 100%)" if not is_external  else "#1e1e1e"
+    ext_col = "#ffffff"                                          if is_external     else "rgba(255,255,255,0.45)"
+    rap_col = "#ffffff"                                          if not is_external  else "rgba(255,255,255,0.45)"
+    ext_bdr = "#1565C0"                                          if is_external     else "rgba(255,255,255,0.18)"
+    rap_bdr = "#007A1F"                                          if not is_external  else "rgba(255,255,255,0.18)"
 
     st.markdown(f"""
     <style>
-    /* ── Toggle pill buttons ── */
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]
-        div[data-testid="stButton"] > button {{
-        border-radius: 0 !important;
-        font-size: 14px !important;
-        font-weight: 600 !important;
-        padding: 16px 10px !important;
-        transition: all 0.25s ease !important;
-        white-space: normal !important;
-        line-height: 1.3 !important;
-        min-height: 64px !important;
-    }}
-    /* Left cap */
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child
-        div[data-testid="stButton"] > button {{
-        border-radius: 16px 0 0 16px !important;
-        border-right: none !important;
-        background: {ext_bg} !important;
-        color: {ext_color} !important;
-        border: 1.5px solid {ext_bdr} !important;
-        border-right: none !important;
-    }}
-    /* Right cap */
-    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child
-        div[data-testid="stButton"] > button {{
-        border-radius: 0 16px 16px 0 !important;
-        border-left: none !important;
-        background: {rap_bg} !important;
-        color: {rap_color} !important;
-        border: 1.5px solid {rap_bdr} !important;
-        border-left: none !important;
-    }}
-    /* Remove Streamlit column gap so pill is seamless */
+    /* Remove gap between the two columns so pill is seamless */
     div[data-testid="stHorizontalBlock"] {{
         gap: 0 !important;
     }}
     div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
-        padding-left: 0 !important;
-        padding-right: 0 !important;
+        padding: 0 !important;
+    }}
+    /* Both buttons: equal fixed height, centred text, no wrap */
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]
+        div[data-testid="stButton"] > button {{
+        width: 100% !important;
+        height: 60px !important;
+        border-radius: 0 !important;
+        font-size: 14px !important;
+        font-weight: 600 !important;
+        padding: 0 16px !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        transition: opacity 0.2s ease !important;
+    }}
+    /* LEFT button — rounded left cap, External style */
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child
+        div[data-testid="stButton"] > button {{
+        border-radius: 16px 0 0 16px !important;
+        border: 1.5px solid {ext_bdr} !important;
+        border-right: none !important;
+        background: {ext_bg} !important;
+        color: {ext_col} !important;
+    }}
+    /* RIGHT button — rounded right cap, RapidAPI style */
+    div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child
+        div[data-testid="stButton"] > button {{
+        border-radius: 0 16px 16px 0 !important;
+        border: 1.5px solid {rap_bdr} !important;
+        border-left: none !important;
+        background: {rap_bg} !important;
+        color: {rap_col} !important;
     }}
     </style>
-
-    <div style="display:flex; justify-content:center; margin-bottom:8px;">
-        <div style="width:66%; display:flex;">
-            <!-- visual-only circles sit above the real Streamlit buttons below -->
-        </div>
-    </div>
     """, unsafe_allow_html=True)
 
-    # Centered toggle — 3-col trick: blank | pill | blank
-    _sp1, _tog, _sp2 = st.columns([1, 3, 1])
+    # ── 3. Render the two buttons (centred via spacer columns) ────────────────
+    _sp1, _tog, _sp2 = st.columns([1, 4, 1])
     with _tog:
         _col_ext, _col_rap = st.columns(2)
         with _col_ext:
             ext_clicked = st.button(
-                f"● 🌐 External Platforms (LinkedIn, Naukri, FoundIt)",
+                "● 🌐 External Platforms (LinkedIn, Naukri, FoundIt)",
                 key="btn_toggle_ext",
                 use_container_width=True,
             )
         with _col_rap:
             rap_clicked = st.button(
-                f"○ ⚡ RapidAPI Jobs (India Only)",
+                "○ ⚡ RapidAPI Jobs (India Only)",
                 key="btn_toggle_rap",
                 use_container_width=True,
             )
 
-    # Handle click — update mode and clear stale inputs
+    # ── 4. Handle clicks — swap mode & clear stale inputs ────────────────────
     if ext_clicked and not is_external:
-        st.session_state.get("rapid_role_val", None)
         st.session_state.rapid_role_val = None
         st.session_state.rapid_loc_val  = None
         st.session_state.search_mode    = "External Platforms"
-        is_external = True
 
     elif rap_clicked and is_external:
         st.session_state.ext_role_val    = None
@@ -8344,22 +8346,6 @@ def _job_search_interactive():
         st.session_state.ext_foundit_val = ""
         st.session_state["_ext_clear_count"] = st.session_state.get("_ext_clear_count", 0) + 1
         st.session_state.search_mode = "RapidAPI Jobs"
-        is_external = False
-
-    # Re-derive badge after potential state change
-    badge_text = "🌐 External Platforms Mode Active" if is_external else "⚡ RapidAPI Jobs Mode Active"
-    badge_grad = "linear-gradient(135deg,#2196F3 0%,#1976D2 100%)" if is_external else "linear-gradient(135deg,#00C853 0%,#009624 100%)"
-
-    st.markdown(f"""
-    <div style="text-align:center; margin:18px 0 28px;">
-        <span style="display:inline-block; padding:10px 30px; border-radius:20px;
-                     background:{badge_grad}; color:#fff; font-weight:600;
-                     font-size:14px; letter-spacing:0.3px;
-                     box-shadow:0 4px 16px rgba(0,0,0,0.35);">
-            {badge_text}
-        </span>
-    </div>
-    """, unsafe_allow_html=True)
 
     search_mode = st.session_state.search_mode
 
