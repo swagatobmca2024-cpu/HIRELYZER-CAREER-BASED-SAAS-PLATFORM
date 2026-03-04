@@ -11200,8 +11200,7 @@ Follow-up question:"""
 
 def generate_resume_based_questions_domain_aware(
     resume_context: dict, role: str, domain: str,
-    difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced",
-    interview_type: str = "technical"
+    difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced"
 ) -> list:
     """
     Drop-in replacement for generate_resume_based_questions_enhanced.
@@ -11232,28 +11231,11 @@ def generate_resume_based_questions_domain_aware(
     }
     bias_instruction = bias_map.get(weakness_bias, "")
 
-    import random
-    interview_type_block = (
-        "⚙️ This is a TECHNICAL interview. Focus on technical depth, implementation details, tradeoffs, and reasoning."
-        if interview_type.lower() == "technical"
-        else "💬 This is a BEHAVIORAL interview. Focus on past experiences, teamwork, challenges, leadership, decision-making, and communication."
-    )
-
-    variation_hint = random.choice([
-        "Focus more on algorithms and data structures relevant to this resume.",
-        "Include one question about troubleshooting or debugging.",
-        "Add one question about collaboration or decision-making under pressure.",
-        "Include one scenario-based question referencing tools or skills from the resume.",
-        "Add one reflective question about learning or adapting to new technologies."
-    ])
-
     prompt = f"""You are a senior technical interviewer.
 
 {domain_block}
 
 {difficulty_block}
-
-{interview_type_block}
 
 RESUME CONTEXT (filtered for domain relevance):
 - Skills: {', '.join(skills[:5]) if skills else 'None relevant to ' + domain}
@@ -11270,8 +11252,6 @@ Generate EXACTLY {num_questions} interview questions. Each question MUST:
 4. Be a single, clear question (1-2 sentences)
 
 Output ONLY the questions, one per line, no numbering or prefixes.
-
-{variation_hint}
 
 Questions:"""
 
@@ -13266,9 +13246,6 @@ Generate {num_questions} questions now:
                         st.session_state.resume_questions_answered = 0
 
                         st.success("✅ Resume uploaded and analyzed successfully!")
-                        
-                        time.sleep(1)
-                        st.rerun()
                     else:
                         st.error("Could not extract text from resume. Please ensure it's a valid PDF.")
         else:
@@ -13337,14 +13314,18 @@ Generate {num_questions} questions now:
                 st.session_state.dynamic_answer_submitted = False
             if 'current_interview_question_text' not in st.session_state:
                 st.session_state.current_interview_question_text = ""
-            if 'interview_domain' not in st.session_state or st.session_state.interview_domain != selected_domain:
-                st.session_state.interview_domain = selected_domain
-                st.session_state.interview_role = selected_role
-                st.session_state.dynamic_interview_started = False
-                st.session_state.dynamic_interview_completed = False
-                st.session_state.interview_result_saved = False
-                st.session_state.interview_final_duration_seconds = None
-                st.session_state.interview_actual_start_time = None
+            if ('interview_domain' not in st.session_state
+                    or st.session_state.interview_domain != selected_domain
+                    or st.session_state.get('interview_role') != selected_role):
+                # Only reset if the interview hasn't started — avoid wiping in-progress state
+                if not st.session_state.get('dynamic_interview_started', False):
+                    st.session_state.interview_domain = selected_domain
+                    st.session_state.interview_role = selected_role
+                    st.session_state.dynamic_interview_started = False
+                    st.session_state.dynamic_interview_completed = False
+                    st.session_state.interview_result_saved = False
+                    st.session_state.interview_final_duration_seconds = None
+                    st.session_state.interview_actual_start_time = None
             if 'question_timer_start' not in st.session_state:
                 st.session_state.question_timer_start = None
             if 'timer_seconds' not in st.session_state:
@@ -13455,8 +13436,7 @@ Generate {num_questions} questions now:
                                     selected_domain,
                                     interview_difficulty,
                                     num_questions=2,
-                                    weakness_bias=_bias,
-                                    interview_type=interview_type
+                                    weakness_bias=_bias
                                 )
 
                         # Generate generic questions
@@ -13510,7 +13490,6 @@ Generate {num_questions} questions now:
                                 show_resume_scanning_animation()
 
                             st.success("Questions generated! Starting your mock interview...")
-                            time.sleep(1)
                             st.rerun()
                         else:
                             st.error("Failed to generate questions. Please try again.")
@@ -13553,22 +13532,46 @@ Generate {num_questions} questions now:
                     elapsed_time = time.time() - st.session_state.question_timer_start
                     remaining_time = max(0, st.session_state.timer_seconds - elapsed_time)
 
-                    # Display timer
-                    timer_minutes = int(remaining_time // 60)
-                    timer_seconds_display = int(remaining_time % 60)
-                    timer_urgent_class = "timer-urgent" if remaining_time <= 30 else ""
+                    # Display timer using client-side JS countdown — no server rerun needed
+                    timer_minutes_init = int(remaining_time // 60)
+                    timer_seconds_init = int(remaining_time % 60)
+                    timer_total_init = int(remaining_time)
+                    total_secs = st.session_state.timer_seconds
 
                     st.markdown(f"""
-                    <div class="timer-container">
-                        <div class="timer-display {timer_urgent_class}">
-                            ⏰ Time Remaining: {timer_minutes:02d}:{timer_seconds_display:02d}
+                    <div class="timer-container" id="timer-outer">
+                        <div class="timer-display" id="js-timer-display">
+                            ⏰ Time Remaining: <span id="js-timer-text">{timer_minutes_init:02d}:{timer_seconds_init:02d}</span>
                         </div>
                     </div>
+                    <script>
+                    (function() {{
+                        var remaining = {timer_total_init};
+                        var total = {total_secs};
+                        var el = document.getElementById('js-timer-text');
+                        var outer = document.getElementById('js-timer-outer') || document.getElementById('timer-outer');
+                        var display = document.getElementById('js-timer-display');
+                        if (!el) return;
+                        var tick = setInterval(function() {{
+                            if (remaining <= 0) {{
+                                clearInterval(tick);
+                                el.textContent = '00:00';
+                                if (display) display.classList.add('timer-urgent');
+                                return;
+                            }}
+                            remaining -= 1;
+                            var m = Math.floor(remaining / 60);
+                            var s = remaining % 60;
+                            el.textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+                            if (remaining <= 30 && display) display.classList.add('timer-urgent');
+                        }}, 1000);
+                    }})();
+                    </script>
                     """, unsafe_allow_html=True)
 
-                    # Timer progress bar
+                    # Timer progress bar (static snapshot — updates on next natural rerun)
                     progress_value = (st.session_state.timer_seconds - remaining_time) / st.session_state.timer_seconds
-                    st.progress(progress_value)
+                    st.progress(min(1.0, progress_value))
 
                     # Question display with phase indicator
                     phase_badge = "📄 Resume-Based Question" if current_index <= num_resume_qs else "💼 Generic Interview Question"
@@ -13712,7 +13715,7 @@ Generate {num_questions} questions now:
                     if 'pending_followup_strategy' not in st.session_state:
                         st.session_state.pending_followup_strategy = ""
 
-                    # Auto-submit logic when timer expires
+                    # Auto-submit logic when timer expires (checked once per natural render, no loop)
                     if remaining_time <= 0 and not st.session_state.dynamic_answer_submitted:
                         if not answer.strip():
                             answer = "⚠️ No Answer"
@@ -13847,10 +13850,7 @@ Generate {num_questions} questions now:
                                     if i < num_to_show - 1:  # Don't add separator after last item
                                         st.markdown("---")
 
-                    # Auto-refresh for timer
-                    if remaining_time > 0 and not st.session_state.dynamic_answer_submitted:
-                        time.sleep(1)
-                        st.rerun()
+                    # Note: timer refresh is handled client-side via JS — no server rerun needed here
                 else:
                     # CRITICAL FIX: All questions answered, move to completion automatically
                     # Capture exact duration at auto-completion moment
@@ -13861,7 +13861,6 @@ Generate {num_questions} questions now:
                     st.session_state.interview_result_saved = False
                     st.session_state.dynamic_interview_completed = True
                     st.success(f"✅ Completed all {st.session_state.original_num_questions} questions!")
-                    time.sleep(1)
                     st.rerun()
             
             # UNIFIED: Interview completed + Course Recommendations + DB + PDF
@@ -15128,7 +15127,6 @@ Generate {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
-
 
 
 
