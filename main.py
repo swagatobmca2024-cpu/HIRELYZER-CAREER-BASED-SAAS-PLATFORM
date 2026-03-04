@@ -11200,12 +11200,14 @@ Follow-up question:"""
 
 def generate_resume_based_questions_domain_aware(
     resume_context: dict, role: str, domain: str,
-    difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced"
+    difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced",
+    interview_type: str = "technical"
 ) -> list:
     """
     Drop-in replacement for generate_resume_based_questions_enhanced.
     Applies Domain Authority Layer + Structured Difficulty Enforcement.
     """
+    import random
     from llm_manager import call_llm
 
     # FIX 1: Apply domain filter to resume context
@@ -11231,11 +11233,29 @@ def generate_resume_based_questions_domain_aware(
     }
     bias_instruction = bias_map.get(weakness_bias, "")
 
+    # Interview type block: drives question focus for technical vs behavioral
+    interview_type_block = (
+        "⚙️ This is a TECHNICAL interview. Focus on technical depth, implementation details, tradeoffs, and reasoning."
+        if interview_type.lower() == "technical"
+        else "💬 This is a BEHAVIORAL interview. Focus on past experiences, teamwork, challenges, leadership, decision-making, and communication."
+    )
+
+    # Lightweight topic variation bias to reduce question repetition across calls
+    variation_hint = random.choice([
+        "Focus more on algorithms and data structures relevant to this resume.",
+        "Include one question about troubleshooting or debugging.",
+        "Add one question about collaboration or decision-making under pressure.",
+        "Include one scenario-based question referencing tools or skills from the resume.",
+        "Add one reflective question about learning or adapting to new technologies."
+    ])
+
     prompt = f"""You are a senior technical interviewer.
 
 {domain_block}
 
 {difficulty_block}
+
+{interview_type_block}
 
 RESUME CONTEXT (filtered for domain relevance):
 - Skills: {', '.join(skills[:5]) if skills else 'None relevant to ' + domain}
@@ -11252,6 +11272,8 @@ Generate EXACTLY {num_questions} interview questions. Each question MUST:
 4. Be a single, clear question (1-2 sentences)
 
 Output ONLY the questions, one per line, no numbering or prefixes.
+
+{variation_hint}
 
 Questions:"""
 
@@ -13435,7 +13457,8 @@ Generate {num_questions} questions now:
                                     selected_domain,
                                     interview_difficulty,
                                     num_questions=2,
-                                    weakness_bias=_bias
+                                    weakness_bias=_bias,
+                                    interview_type=interview_type
                                 )
 
                         # Generate generic questions
@@ -13884,7 +13907,7 @@ Generate {num_questions} questions now:
                     </div>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Role: {selected_role} in {selected_domain}</p>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Difficulty: {st.session_state.interview_difficulty}</p>
-                    <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.1f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
+                    <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.2f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
                     <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; margin: 4px 0;">Follow-up Probes: {_follow_up_count} | Depth Score: {_depth_score:.1f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -14245,7 +14268,7 @@ Generate {num_questions} questions now:
                     <p class="metric-sub">Room to grow</p>
                 </div>""", unsafe_allow_html=True)
             with col4:
-                avg_val = f"{overall_avg:.1f}/10" if not pd.isna(overall_avg) else "N/A"
+                avg_val = f"{overall_avg:.2f}/10" if not pd.isna(overall_avg) else "N/A"
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Average Score</p>
                     <p class="metric-value">{avg_val}</p>
@@ -14274,7 +14297,7 @@ Generate {num_questions} questions now:
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Score Consistency</p>
                     <p class="metric-value" style="color:{cons_color};font-size:18px;">{consistency_label}</p>
-                    <p class="metric-sub">Std dev: {score_std:.1f}</p>
+                    <p class="metric-sub">Std dev: {score_std:.2f}</p>
                 </div>""", unsafe_allow_html=True)
 
             # =====================================================
@@ -14454,16 +14477,14 @@ Generate {num_questions} questions now:
                     )
                     _fig_dc.update_traces(
                         texttemplate='%{text}', textposition='outside',
-                        cliponaxis=False,
                         hovertemplate='<b>%{x}</b><br>Interviews: %{y}<extra></extra>'
                     )
-                    _dc_max = int(domain_counts.max()) if len(domain_counts) > 0 else 1
                     _fig_dc.update_layout(
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                         font=dict(color='white'), coloraxis_showscale=False,
-                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
-                        yaxis=dict(gridcolor='rgba(255,255,255,0.06)', range=[0, _dc_max * 1.3]),
-                        margin=dict(l=10, r=10, t=40, b=60), height=300
+                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                        yaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                        margin=dict(l=5,r=5,t=10,b=5), height=280
                     )
                     st.plotly_chart(_fig_dc, use_container_width=True)
 
@@ -14478,15 +14499,14 @@ Generate {num_questions} questions now:
                     )
                     _fig_da.update_traces(
                         texttemplate='%{text}', textposition='outside',
-                        cliponaxis=False,
                         hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                     )
                     _fig_da.update_layout(
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                         font=dict(color='white'), coloraxis_showscale=False,
-                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
-                        yaxis=dict(range=[0, 11.5], gridcolor='rgba(255,255,255,0.06)'),
-                        margin=dict(l=10, r=10, t=40, b=60), height=300
+                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                        yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
+                        margin=dict(l=5,r=5,t=10,b=5), height=280
                     )
                     st.plotly_chart(_fig_da, use_container_width=True)
 
@@ -14521,14 +14541,13 @@ Generate {num_questions} questions now:
                         textposition='outside',
                         hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                     ))
-                    _fig_rb.update_traces(cliponaxis=False)
                     _fig_rb.update_layout(
                         title=dict(text='Avg Score by Role', font=dict(color='#00c3ff', size=14)),
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                         font=dict(color='white'),
-                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
-                        yaxis=dict(range=[0, 11.5], gridcolor='rgba(255,255,255,0.06)'),
-                        margin=dict(l=10, r=10, t=40, b=60), height=300
+                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                        yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
+                        margin=dict(l=5,r=5,t=40,b=5), height=280
                     )
                     st.plotly_chart(_fig_rb, use_container_width=True)
 
@@ -14560,11 +14579,11 @@ Generate {num_questions} questions now:
                 st.markdown("**Your Scores by Job Role**")
                 _rp_styled = role_perf.copy()
                 def _score_badge(v):
-                    if v >= 8.5: return f'<span class="badge-excellent">{v:.1f}</span>'
-                    elif v >= 7.0: return f'<span class="badge-good">{v:.1f}</span>'
-                    elif v >= 5.5: return f'<span class="badge-average">{v:.1f}</span>'
-                    elif v >= 4.0: return f'<span class="badge-weak">{v:.1f}</span>'
-                    else: return f'<span class="badge-poor">{v:.1f}</span>'
+                    if v >= 8.5: return f'<span class="badge-excellent">{v:.2f}</span>'
+                    elif v >= 7.0: return f'<span class="badge-good">{v:.2f}</span>'
+                    elif v >= 5.5: return f'<span class="badge-average">{v:.2f}</span>'
+                    elif v >= 4.0: return f'<span class="badge-weak">{v:.2f}</span>'
+                    else: return f'<span class="badge-poor">{v:.2f}</span>'
                 _best_role_idx = role_perf['Avg Score'].idxmax()
                 _table_rows = ""
                 for i, row in role_perf.iterrows():
@@ -14620,14 +14639,12 @@ Generate {num_questions} questions now:
                             text=diff_counts.values.tolist(), textposition='outside',
                             hovertemplate='<b>%{x}</b><br>Attempts: %{y}<extra></extra>'
                         ))
-                        _dfc_max = int(diff_counts.max()) if len(diff_counts) > 0 else 1
-                        _fig_dfc.update_traces(cliponaxis=False)
                         _fig_dfc.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                             font=dict(color='white'),
-                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
-                            yaxis=dict(gridcolor='rgba(255,255,255,0.06)', range=[0, _dfc_max * 1.3]),
-                            margin=dict(l=10, r=10, t=40, b=50), height=280
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            yaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            margin=dict(l=5,r=5,t=10,b=5), height=250
                         )
                         st.plotly_chart(_fig_dfc, use_container_width=True)
                     with col_dr:
@@ -14638,13 +14655,12 @@ Generate {num_questions} questions now:
                             text=[f"{v:.1f}" for v in diff_avg.values], textposition='outside',
                             hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                         ))
-                        _fig_dfa.update_traces(cliponaxis=False)
                         _fig_dfa.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                             font=dict(color='white'),
-                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
-                            yaxis=dict(range=[0, 11.5], gridcolor='rgba(255,255,255,0.06)'),
-                            margin=dict(l=10, r=10, t=40, b=50), height=280
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
+                            margin=dict(l=5,r=5,t=10,b=5), height=250
                         )
                         st.plotly_chart(_fig_dfa, use_container_width=True)
 
@@ -14750,7 +14766,7 @@ Generate {num_questions} questions now:
                 if avg_score_per_q is not None:
                     st.markdown(f"""<div class="metric-card">
                         <p class="metric-label">Score Per Question</p>
-                        <p class="metric-value">{avg_score_per_q:.1f}</p>
+                        <p class="metric-value">{avg_score_per_q:.2f}</p>
                         <p class="metric-sub">Avg per individual question</p>
                     </div>""", unsafe_allow_html=True)
                 else:
@@ -14808,7 +14824,7 @@ Generate {num_questions} questions now:
                 with col_hd1:
                     st.markdown(f"""<div class="metric-card">
                         <p class="metric-label">Your Hard Interview Score</p>
-                        <p class="metric-value">{_hard_avg_b:.1f}<span style="font-size:16px;color:#aaa">/10</span></p>
+                        <p class="metric-value">{_hard_avg_b:.2f}<span style="font-size:16px;color:#aaa">/10</span></p>
                         <p class="metric-sub">Average on Hard difficulty</p>
                     </div>""", unsafe_allow_html=True)
                 with col_hd2:
@@ -14865,7 +14881,7 @@ Generate {num_questions} questions now:
                             border: 2px solid {cls_color}; border-radius: 12px; padding: 20px; text-align: center; margin: 10px 0;">
                     <h2 style="color: {cls_color}; margin: 0;">{classification}</h2>
                     <p style="color: #ffffff; margin: 10px 0 0 0;">{cls_desc}</p>
-                    <p style="color: #aaaaaa; margin: 5px 0 0 0;">Overall Average: {overall_avg:.1f}/10</p>
+                    <p style="color: #aaaaaa; margin: 5px 0 0 0;">Overall Average: {overall_avg:.2f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -15007,14 +15023,12 @@ Generate {num_questions} questions now:
                             text=_mode_cnt.values.tolist(), textposition='outside',
                             hovertemplate='<b>%{x}</b><br>Times: %{y}<extra></extra>'
                         ))
-                        _mc_max = int(_mode_cnt.max()) if len(_mode_cnt) > 0 else 1
-                        _fig_mc.update_traces(cliponaxis=False)
                         _fig_mc.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                             font=dict(color='white'),
-                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
-                            yaxis=dict(gridcolor='rgba(255,255,255,0.06)', range=[0, _mc_max * 1.3]),
-                            margin=dict(l=10, r=10, t=40, b=50), height=280
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            yaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            margin=dict(l=5,r=5,t=10,b=5), height=250
                         )
                         st.plotly_chart(_fig_mc, use_container_width=True)
                     with col_m2:
@@ -15026,13 +15040,12 @@ Generate {num_questions} questions now:
                             text=[f"{v:.1f}" for v in _mode_avg.values], textposition='outside',
                             hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                         ))
-                        _fig_ma.update_traces(cliponaxis=False)
                         _fig_ma.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                             font=dict(color='white'),
-                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
-                            yaxis=dict(range=[0, 11.5], gridcolor='rgba(255,255,255,0.06)'),
-                            margin=dict(l=10, r=10, t=40, b=50), height=280
+                            xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                            yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
+                            margin=dict(l=5,r=5,t=10,b=5), height=250
                         )
                         st.plotly_chart(_fig_ma, use_container_width=True)
 
