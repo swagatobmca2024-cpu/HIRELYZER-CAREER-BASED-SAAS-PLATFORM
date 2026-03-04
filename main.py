@@ -11200,14 +11200,12 @@ Follow-up question:"""
 
 def generate_resume_based_questions_domain_aware(
     resume_context: dict, role: str, domain: str,
-    difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced",
-    interview_type: str = "technical"
+    difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced"
 ) -> list:
     """
     Drop-in replacement for generate_resume_based_questions_enhanced.
     Applies Domain Authority Layer + Structured Difficulty Enforcement.
     """
-    import random
     from llm_manager import call_llm
 
     # FIX 1: Apply domain filter to resume context
@@ -11233,29 +11231,11 @@ def generate_resume_based_questions_domain_aware(
     }
     bias_instruction = bias_map.get(weakness_bias, "")
 
-    # Interview type block: drives question focus for technical vs behavioral
-    interview_type_block = (
-        "⚙️ This is a TECHNICAL interview. Focus on technical depth, implementation details, tradeoffs, and reasoning."
-        if interview_type.lower() == "technical"
-        else "💬 This is a BEHAVIORAL interview. Focus on past experiences, teamwork, challenges, leadership, decision-making, and communication."
-    )
-
-    # Lightweight topic variation bias to reduce question repetition across calls
-    variation_hint = random.choice([
-        "Focus more on algorithms and data structures relevant to this resume.",
-        "Include one question about troubleshooting or debugging.",
-        "Add one question about collaboration or decision-making under pressure.",
-        "Include one scenario-based question referencing tools or skills from the resume.",
-        "Add one reflective question about learning or adapting to new technologies."
-    ])
-
     prompt = f"""You are a senior technical interviewer.
 
 {domain_block}
 
 {difficulty_block}
-
-{interview_type_block}
 
 RESUME CONTEXT (filtered for domain relevance):
 - Skills: {', '.join(skills[:5]) if skills else 'None relevant to ' + domain}
@@ -11272,8 +11252,6 @@ Generate EXACTLY {num_questions} interview questions. Each question MUST:
 4. Be a single, clear question (1-2 sentences)
 
 Output ONLY the questions, one per line, no numbering or prefixes.
-
-{variation_hint}
 
 Questions:"""
 
@@ -13239,6 +13217,15 @@ Generate {num_questions} questions now:
             st.session_state.interview_phase = "resume"
         if 'resume_questions_answered' not in st.session_state:
             st.session_state.resume_questions_answered = 0
+        # Flicker-prevention guards: stable references that survive re-renders
+        if 'parsed_resume' not in st.session_state:
+            st.session_state.parsed_resume = None
+        if 'domain_selected' not in st.session_state:
+            st.session_state.domain_selected = None
+        if 'role_selected' not in st.session_state:
+            st.session_state.role_selected = None
+        if 'interview_started' not in st.session_state:
+            st.session_state.interview_started = False
 
         # RESUME UPLOAD SECTION (MANDATORY)
         st.markdown("---")
@@ -13252,27 +13239,40 @@ Generate {num_questions} questions now:
             )
 
             if uploaded_resume:
-                with st.spinner("Processing your resume..."):
-                    # Extract text from PDF
-                    resume_text = extract_resume_text_from_pdf(uploaded_resume)
+                # Only parse if this is a genuinely new file (different name or not yet parsed)
+                _new_file_name = uploaded_resume.name
+                if (st.session_state.parsed_resume is None
+                        or st.session_state.parsed_resume.get("_source_file") != _new_file_name):
+                    with st.spinner("Processing your resume..."):
+                        # Extract text from PDF
+                        resume_text = extract_resume_text_from_pdf(uploaded_resume)
 
-                    if resume_text and len(resume_text.strip()) > 50:
-                        # Analyze resume
-                        with st.spinner("Analyzing your resume with AI..."):
-                            resume_context = analyze_resume_with_llm(resume_text)
+                        if resume_text and len(resume_text.strip()) > 50:
+                            # Analyze resume
+                            with st.spinner("Analyzing your resume with AI..."):
+                                resume_context = analyze_resume_with_llm(resume_text)
 
-                        # Store in session
-                        st.session_state.resume_file = uploaded_resume.name
-                        st.session_state.resume_context = resume_context
-                        st.session_state.interview_phase = "resume"
-                        st.session_state.resume_questions_answered = 0
+                            # Tag the parsed result with its source filename so we can
+                            # detect same-file re-uploads without re-running the LLM.
+                            resume_context["_source_file"] = _new_file_name
 
-                        st.success("✅ Resume uploaded and analyzed successfully!")
-                        
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("Could not extract text from resume. Please ensure it's a valid PDF.")
+                            # Store in session
+                            st.session_state.resume_file = _new_file_name
+                            st.session_state.resume_context = resume_context
+                            st.session_state.parsed_resume = resume_context
+                            st.session_state.interview_phase = "resume"
+                            st.session_state.resume_questions_answered = 0
+                            # Reset domain/role/started so setup form shows fresh
+                            st.session_state.domain_selected = None
+                            st.session_state.role_selected = None
+                            st.session_state.interview_started = False
+
+                            st.success("✅ Resume uploaded and analyzed successfully!")
+
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("Could not extract text from resume. Please ensure it's a valid PDF.")
         else:
             st.success(f"✅ Resume loaded: {st.session_state.resume_file}")
             
@@ -13280,6 +13280,10 @@ Generate {num_questions} questions now:
             if st.button("🔄 Upload Different Resume"):
                 st.session_state.resume_file = None
                 st.session_state.resume_context = None
+                st.session_state.parsed_resume = None
+                st.session_state.domain_selected = None
+                st.session_state.role_selected = None
+                st.session_state.interview_started = False
                 st.session_state.dynamic_interview_started = False
                 st.session_state.dynamic_interview_completed = False
                 st.session_state.interview_result_saved = False
@@ -13295,22 +13299,56 @@ Generate {num_questions} questions now:
             # Domain and Role selection
             st.markdown('<div class="role-selector">', unsafe_allow_html=True)
 
+            _domain_options = list(COURSES_BY_CATEGORY.keys())
+            # Resolve current index from stable session state so selectbox doesn't jump on re-render
+            _domain_index = 0
+            if st.session_state.domain_selected in _domain_options:
+                _domain_index = _domain_options.index(st.session_state.domain_selected)
+
             col1, col2 = st.columns(2)
             with col1:
                 selected_domain = st.selectbox(
                     "Select Career Domain",
-                    options=list(COURSES_BY_CATEGORY.keys()),
+                    options=_domain_options,
+                    index=_domain_index,
                     key="interview_domain_selection"
                 )
+
+            # Detect domain change: update state and do a single clean rerun,
+            # avoiding cascading side-effects during the same render pass.
+            if st.session_state.domain_selected != selected_domain:
+                st.session_state.domain_selected = selected_domain
+                st.session_state.role_selected = None
+                st.session_state.interview_started = False
+                st.session_state.dynamic_interview_started = False
+                st.session_state.dynamic_interview_completed = False
+                st.session_state.interview_result_saved = False
+                st.session_state.interview_final_duration_seconds = None
+                st.session_state.interview_actual_start_time = None
+                st.rerun()
 
             with col2:
                 if selected_domain:
                     roles = list(COURSES_BY_CATEGORY[selected_domain].keys())
+                    _role_index = 0
+                    if st.session_state.role_selected in roles:
+                        _role_index = roles.index(st.session_state.role_selected)
                     selected_role = st.selectbox(
                         "Select Target Role",
                         options=roles,
+                        index=_role_index,
                         key="interview_role_selection"
                     )
+                    # Detect role change: persist to session state without side-effects
+                    if st.session_state.role_selected != selected_role:
+                        st.session_state.role_selected = selected_role
+                        st.session_state.interview_started = False
+                        st.session_state.dynamic_interview_started = False
+                        st.session_state.dynamic_interview_completed = False
+                        st.session_state.interview_result_saved = False
+                        st.session_state.interview_final_duration_seconds = None
+                        st.session_state.interview_actual_start_time = None
+                        st.rerun()
                 else:
                     selected_role = None
 
@@ -13320,7 +13358,9 @@ Generate {num_questions} questions now:
             selected_role = None
         
         if selected_domain and selected_role:
-            # Initialize interview state
+            # Initialize interview state — all guards are pure "not in" checks,
+            # no conditional side-effect mutations here (those happen in the
+            # selectbox change-detection blocks above).
             if 'dynamic_interview_questions' not in st.session_state:
                 st.session_state.dynamic_interview_questions = []
             if 'current_dynamic_interview_question' not in st.session_state:
@@ -13339,14 +13379,12 @@ Generate {num_questions} questions now:
                 st.session_state.dynamic_answer_submitted = False
             if 'current_interview_question_text' not in st.session_state:
                 st.session_state.current_interview_question_text = ""
-            if 'interview_domain' not in st.session_state or st.session_state.interview_domain != selected_domain:
+            # Sync interview_domain / interview_role tracking vars (read-only mirror,
+            # no state resets here — those are handled in the selectbox blocks above).
+            if 'interview_domain' not in st.session_state:
                 st.session_state.interview_domain = selected_domain
+            if 'interview_role' not in st.session_state:
                 st.session_state.interview_role = selected_role
-                st.session_state.dynamic_interview_started = False
-                st.session_state.dynamic_interview_completed = False
-                st.session_state.interview_result_saved = False
-                st.session_state.interview_final_duration_seconds = None
-                st.session_state.interview_actual_start_time = None
             if 'question_timer_start' not in st.session_state:
                 st.session_state.question_timer_start = None
             if 'timer_seconds' not in st.session_state:
@@ -13383,27 +13421,53 @@ Generate {num_questions} questions now:
                 col1, col2 = st.columns(2)
 
                 with col1:
+                    _type_opts = ["technical", "behavioral", "mixed"]
+                    _type_index = 0
+                    _saved_type = st.session_state.get("_setup_interview_type", "technical")
+                    if _saved_type in _type_opts:
+                        _type_index = _type_opts.index(_saved_type)
                     interview_type = st.selectbox(
                         "Interview Type",
-                        options=["technical", "behavioral", "mixed"],
+                        options=_type_opts,
+                        index=_type_index,
                         format_func=lambda x: x.title() + (" (Technical + Behavioral)" if x == "mixed" else ""),
                         key="dynamic_interview_type_select"
                     )
+                    # Persist selection without triggering any interview reset
+                    st.session_state["_setup_interview_type"] = interview_type
 
                 with col2:
+                    _diff_opts = ["Easy", "Medium", "Hard"]
+                    _diff_index = 1
+                    _saved_diff = st.session_state.get("_setup_interview_difficulty", "Medium")
+                    if _saved_diff in _diff_opts:
+                        _diff_index = _diff_opts.index(_saved_diff)
                     interview_difficulty = st.selectbox(
                         "Interview Difficulty",
-                        options=["Easy", "Medium", "Hard"],
-                        key="interview_difficulty_select",
-                        index=1
+                        options=_diff_opts,
+                        index=_diff_index,
+                        key="interview_difficulty_select"
                     )
+                    # Persist selection without triggering any interview reset
+                    st.session_state["_setup_interview_difficulty"] = interview_difficulty
 
                 col3, col4 = st.columns(2)
                 with col3:
-                    num_questions = st.slider("Number of questions:", 5, 10, 6)
+                    num_questions = st.slider(
+                        "Number of questions:", 5, 10,
+                        st.session_state.get("_setup_num_questions", 6),
+                        key="setup_num_questions_slider"
+                    )
+                    st.session_state["_setup_num_questions"] = num_questions
 
                 with col4:
-                    timer_seconds = st.slider("Time per question (seconds):", 60, 300, 120, step=30)
+                    timer_seconds = st.slider(
+                        "Time per question (seconds):", 60, 300,
+                        st.session_state.get("_setup_timer_seconds", 120),
+                        step=30,
+                        key="setup_timer_seconds_slider"
+                    )
+                    st.session_state["_setup_timer_seconds"] = timer_seconds
 
                 # ── DOMAIN AUTHORITY: Show mismatch warning if resume ≠ selected domain ──
                 if st.session_state.get("resume_context"):
@@ -13457,8 +13521,7 @@ Generate {num_questions} questions now:
                                     selected_domain,
                                     interview_difficulty,
                                     num_questions=2,
-                                    weakness_bias=_bias,
-                                    interview_type=interview_type
+                                    weakness_bias=_bias
                                 )
 
                         # Generate generic questions
@@ -13493,6 +13556,9 @@ Generate {num_questions} questions now:
                             st.session_state.dynamic_interview_feedbacks = []
                             st.session_state.dynamic_interview_completed = False
                             st.session_state.dynamic_interview_started = True
+                            st.session_state.interview_started = True
+                            st.session_state.interview_domain = selected_domain
+                            st.session_state.interview_role = selected_role
                             st.session_state.interview_actual_start_time = time.time()
                             st.session_state.dynamic_answer_submitted = False
                             st.session_state.current_interview_question_text = all_questions[0]
@@ -13597,6 +13663,7 @@ Generate {num_questions} questions now:
                             st.session_state.dynamic_interview_feedbacks = []
                             st.session_state.dynamic_interview_completed = False
                             st.session_state.dynamic_interview_started = False
+                            st.session_state.interview_started = False
                             st.session_state.dynamic_answer_submitted = False
                             st.session_state.current_interview_question_text = ""
                             st.session_state.question_timer_start = None
@@ -14083,6 +14150,7 @@ Generate {num_questions} questions now:
                     # Reset all interview-related session state variables
                     st.session_state.dynamic_interview_started = False
                     st.session_state.dynamic_interview_completed = False
+                    st.session_state.interview_started = False
                     st.session_state.dynamic_interview_questions = []
                     st.session_state.current_dynamic_interview_question = 0
                     st.session_state.dynamic_interview_answers = []
@@ -15130,7 +15198,6 @@ Generate {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
-
 
 
 
