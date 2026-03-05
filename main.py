@@ -15192,7 +15192,6 @@ Generate {num_questions} questions now:
 
 
 
-
 if tab5:
 	with tab5:
 		import sqlite3
