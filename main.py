@@ -9981,6 +9981,34 @@ Provide ONLY the JSON output, no additional text."""
         if not feedback or len(feedback.strip()) < 50:
             feedback = "Your answer shows some understanding, but could benefit from more technical depth and specific examples. Consider structuring your response more clearly and providing concrete details from your experience. Focus on addressing all aspects of the question comprehensively."
 
+        # ── POST-PROCESSING CALIBRATION ──────────────────────────────────────────
+        # Safeguard 1: keyword overlap check — clamp knowledge/relevance if answer
+        # contains almost none of the question's key terms
+        key_terms = [kw.lower() for kw in question.split() if len(kw) > 3]
+        match_count = sum(1 for t in key_terms if t in answer.lower())
+        if key_terms and match_count < max(2, len(key_terms) // 10):
+            knowledge = min(knowledge, 3)
+            relevance = min(relevance, 3)
+
+        # Safeguard 2: off-topic or low-relevance signal from LLM
+        if "off-topic" in feedback.lower() or relevance < 4:
+            knowledge = min(knowledge, 4)
+            relevance = min(relevance, 4)
+
+        # Safeguard 3: if average would be >4 but relevance is very low, enforce ceiling
+        raw_avg = (knowledge + communication + relevance) / 3
+        if relevance <= 2 and raw_avg > 4.0:
+            # Wrong/irrelevant answers: all scores clamped to ≤ 2
+            knowledge = min(knowledge, 2)
+            communication = min(communication, 2)
+            relevance = min(relevance, 2)
+        elif relevance < 4 and raw_avg > 5.0:
+            # Generic/partially relevant: clamp average ≤ 5
+            excess = raw_avg - 5.0
+            knowledge = max(0, min(knowledge, knowledge - int(excess * 1.5 + 0.5)))
+            relevance = max(0, min(relevance, relevance - 1))
+        # ─────────────────────────────────────────────────────────────────────────
+
         # Extract follow-up question
         followup = result.get("followup", "") if difficulty == "Hard" else ""
 
@@ -10014,10 +10042,33 @@ Provide ONLY the JSON output, no additional text."""
                 else:
                     feedback = "Answer evaluated but formatting unclear. Provide more structured responses with clear examples and explanations."
 
+            # Apply same post-processing calibration to fallback path
+            knowledge = max(0, min(10, knowledge))
+            communication = max(0, min(10, communication))
+            relevance = max(0, min(10, relevance))
+
+            key_terms_fb = [kw.lower() for kw in question.split() if len(kw) > 3]
+            match_count_fb = sum(1 for t in key_terms_fb if t in answer.lower())
+            if key_terms_fb and match_count_fb < max(2, len(key_terms_fb) // 10):
+                knowledge = min(knowledge, 3)
+                relevance = min(relevance, 3)
+            if "off-topic" in feedback.lower() if isinstance(feedback, str) else False or relevance < 4:
+                knowledge = min(knowledge, 4)
+                relevance = min(relevance, 4)
+            raw_avg_fb = (knowledge + communication + relevance) / 3
+            if relevance <= 2 and raw_avg_fb > 4.0:
+                knowledge = min(knowledge, 2)
+                communication = min(communication, 2)
+                relevance = min(relevance, 2)
+            elif relevance < 4 and raw_avg_fb > 5.0:
+                excess_fb = raw_avg_fb - 5.0
+                knowledge = max(0, min(knowledge, knowledge - int(excess_fb * 1.5 + 0.5)))
+                relevance = max(0, min(relevance, relevance - 1))
+
             return {
-                "knowledge": max(0, min(10, knowledge)),
-                "communication": max(0, min(10, communication)),
-                "relevance": max(0, min(10, relevance)),
+                "knowledge": knowledge,
+                "communication": communication,
+                "relevance": relevance,
                 "feedback": feedback if isinstance(feedback, str) else "\n\n".join(feedback[:5]),
                 "followup": ""
             }
@@ -11200,12 +11251,15 @@ Follow-up question:"""
 
 def generate_resume_based_questions_domain_aware(
     resume_context: dict, role: str, domain: str,
-    difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced"
+    difficulty: str, num_questions: int = 3, weakness_bias: str = "balanced",
+    interview_type: str = "technical"
 ) -> list:
     """
     Drop-in replacement for generate_resume_based_questions_enhanced.
     Applies Domain Authority Layer + Structured Difficulty Enforcement.
+    Supports interview_type ("technical" or "behavioral") for distinct question styles.
     """
+    import random
     from llm_manager import call_llm
 
     # FIX 1: Apply domain filter to resume context
@@ -11222,6 +11276,22 @@ def generate_resume_based_questions_domain_aware(
     # FIX 2: Structured difficulty enforcement
     difficulty_block = get_difficulty_instruction_block(difficulty)
 
+    # Interview type block — drives Technical vs Behavioral question framing
+    interview_type_block = (
+        "⚙️ This is a TECHNICAL interview. Focus on technical depth, implementation details, tradeoffs, and reasoning."
+        if interview_type.lower() == "technical"
+        else "💬 This is a BEHAVIORAL interview. Focus on past experiences, teamwork, challenges, leadership, decision-making, and communication."
+    )
+
+    # Topic variation hint — reduces repetition across resume uploads
+    variation_hint = random.choice([
+        "Focus more on algorithms and data structures relevant to this resume.",
+        "Include one question about troubleshooting or debugging a real issue.",
+        "Add one question about collaboration or decision-making under pressure.",
+        "Include one scenario-based question referencing tools or skills from the resume.",
+        "Add one reflective question about learning or adapting to new technologies.",
+    ])
+
     # Weakness bias instruction
     bias_map = {
         "technical depth": "Prioritize questions that expose gaps in technical depth — ask about internals, edge cases, and implementation specifics.",
@@ -11232,6 +11302,8 @@ def generate_resume_based_questions_domain_aware(
     bias_instruction = bias_map.get(weakness_bias, "")
 
     prompt = f"""You are a senior technical interviewer.
+
+{interview_type_block}
 
 {domain_block}
 
@@ -11250,8 +11322,11 @@ Generate EXACTLY {num_questions} interview questions. Each question MUST:
 2. Reference their resume only if resume content is relevant to {domain}
 3. Match the difficulty type specified above (structural enforcement, not just tone)
 4. Be a single, clear question (1-2 sentences)
+5. Reflect the interview type above — technical questions probe implementation/tradeoffs; behavioral questions probe experience/judgment
 
 Output ONLY the questions, one per line, no numbering or prefixes.
+
+{variation_hint}
 
 Questions:"""
 
@@ -11645,21 +11720,25 @@ def generate_adaptive_followup(question: str, answer: str, strategy: str, escala
 def get_user_weakness_history(username: str) -> dict:
     """
     PART 5: Weakness Memory Engine.
-    Query past 5 interviews and detect recurring weak skill.
+    Query ALL past interviews for total count and detect recurring weak skill.
+    Uses all interviews for avg score computation and shows true total count.
     Returns dict with weakest_skill and bias recommendation.
     """
     import sqlite3
     try:
         conn = sqlite3.connect('resume_data.db')
         import pandas as pd
+        # Fetch ALL interviews (no LIMIT) so count and averages reflect full history
         df = pd.read_sql_query(
-            "SELECT knowledge_avg, communication_avg, relevance_avg FROM interview_results WHERE username=? ORDER BY id DESC LIMIT 5",
+            "SELECT knowledge_avg, communication_avg, relevance_avg FROM interview_results WHERE username=? ORDER BY id DESC",
             conn, params=(username,)
         )
         conn.close()
 
-        if df.empty or len(df) < 2:
+        if df.empty or len(df) < 1:
             return {"weakest_skill": None, "bias": "balanced"}
+
+        total_count = len(df)
 
         avgs = {
             "knowledge": df["knowledge_avg"].mean(),
@@ -11672,7 +11751,7 @@ def get_user_weakness_history(username: str) -> dict:
             "communication": "explanation clarity",
             "relevance": "answer precision",
         }
-        return {"weakest_skill": weakest, "bias": bias_map.get(weakest, "balanced"), "averages": avgs}
+        return {"weakest_skill": weakest, "bias": bias_map.get(weakest, "balanced"), "averages": avgs, "interview_count": total_count}
     except Exception:
         return {"weakest_skill": None, "bias": "balanced"}
 
@@ -13356,7 +13435,9 @@ Generate {num_questions} questions now:
                     _wm_avgs = _wm.get("averages", {})
                     _wm_skill = _wm["weakest_skill"].title()
                     _wm_score = _wm_avgs.get(_wm["weakest_skill"], 0)
-                    st.info(f"🧠 **Weakness Memory:** Based on your last 5 interviews, your weakest recurring skill is **{_wm_skill}** (avg: {_wm_score:.1f}/10). Questions will be biased toward improving this.")
+                    _wm_count = _wm.get("interview_count", 0)
+                    _wm_label = f"last {_wm_count} interview{'s' if _wm_count != 1 else ''}"
+                    st.info(f"🧠 **Weakness Memory:** Based on your {_wm_label}, your weakest recurring skill is **{_wm_skill}** (avg: {_wm_score:.1f}/10). Questions will be biased toward improving this.")
 
                 col1, col2 = st.columns(2)
 
@@ -13435,7 +13516,8 @@ Generate {num_questions} questions now:
                                     selected_domain,
                                     interview_difficulty,
                                     num_questions=2,
-                                    weakness_bias=_bias
+                                    weakness_bias=_bias,
+                                    interview_type=interview_type
                                 )
 
                         # Generate generic questions
@@ -13884,7 +13966,7 @@ Generate {num_questions} questions now:
                     </div>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Role: {selected_role} in {selected_domain}</p>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Difficulty: {st.session_state.interview_difficulty}</p>
-                    <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.1f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
+                    <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.2f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
                     <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; margin: 4px 0;">Follow-up Probes: {_follow_up_count} | Depth Score: {_depth_score:.1f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -14245,7 +14327,7 @@ Generate {num_questions} questions now:
                     <p class="metric-sub">Room to grow</p>
                 </div>""", unsafe_allow_html=True)
             with col4:
-                avg_val = f"{overall_avg:.1f}/10" if not pd.isna(overall_avg) else "N/A"
+                avg_val = f"{overall_avg:.2f}/10" if not pd.isna(overall_avg) else "N/A"
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Average Score</p>
                     <p class="metric-value">{avg_val}</p>
@@ -14274,7 +14356,7 @@ Generate {num_questions} questions now:
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Score Consistency</p>
                     <p class="metric-value" style="color:{cons_color};font-size:18px;">{consistency_label}</p>
-                    <p class="metric-sub">Std dev: {score_std:.1f}</p>
+                    <p class="metric-sub">Std dev: {score_std:.2f}</p>
                 </div>""", unsafe_allow_html=True)
 
             # =====================================================
@@ -14556,11 +14638,11 @@ Generate {num_questions} questions now:
                 st.markdown("**Your Scores by Job Role**")
                 _rp_styled = role_perf.copy()
                 def _score_badge(v):
-                    if v >= 8.5: return f'<span class="badge-excellent">{v:.1f}</span>'
-                    elif v >= 7.0: return f'<span class="badge-good">{v:.1f}</span>'
-                    elif v >= 5.5: return f'<span class="badge-average">{v:.1f}</span>'
-                    elif v >= 4.0: return f'<span class="badge-weak">{v:.1f}</span>'
-                    else: return f'<span class="badge-poor">{v:.1f}</span>'
+                    if v >= 8.5: return f'<span class="badge-excellent">{v:.2f}</span>'
+                    elif v >= 7.0: return f'<span class="badge-good">{v:.2f}</span>'
+                    elif v >= 5.5: return f'<span class="badge-average">{v:.2f}</span>'
+                    elif v >= 4.0: return f'<span class="badge-weak">{v:.2f}</span>'
+                    else: return f'<span class="badge-poor">{v:.2f}</span>'
                 _best_role_idx = role_perf['Avg Score'].idxmax()
                 _table_rows = ""
                 for i, row in role_perf.iterrows():
@@ -14743,7 +14825,7 @@ Generate {num_questions} questions now:
                 if avg_score_per_q is not None:
                     st.markdown(f"""<div class="metric-card">
                         <p class="metric-label">Score Per Question</p>
-                        <p class="metric-value">{avg_score_per_q:.1f}</p>
+                        <p class="metric-value">{avg_score_per_q:.2f}</p>
                         <p class="metric-sub">Avg per individual question</p>
                     </div>""", unsafe_allow_html=True)
                 else:
@@ -14801,7 +14883,7 @@ Generate {num_questions} questions now:
                 with col_hd1:
                     st.markdown(f"""<div class="metric-card">
                         <p class="metric-label">Your Hard Interview Score</p>
-                        <p class="metric-value">{_hard_avg_b:.1f}<span style="font-size:16px;color:#aaa">/10</span></p>
+                        <p class="metric-value">{_hard_avg_b:.2f}<span style="font-size:16px;color:#aaa">/10</span></p>
                         <p class="metric-sub">Average on Hard difficulty</p>
                     </div>""", unsafe_allow_html=True)
                 with col_hd2:
@@ -14858,7 +14940,7 @@ Generate {num_questions} questions now:
                             border: 2px solid {cls_color}; border-radius: 12px; padding: 20px; text-align: center; margin: 10px 0;">
                     <h2 style="color: {cls_color}; margin: 0;">{classification}</h2>
                     <p style="color: #ffffff; margin: 10px 0 0 0;">{cls_desc}</p>
-                    <p style="color: #aaaaaa; margin: 5px 0 0 0;">Overall Average: {overall_avg:.1f}/10</p>
+                    <p style="color: #aaaaaa; margin: 5px 0 0 0;">Overall Average: {overall_avg:.2f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
 
