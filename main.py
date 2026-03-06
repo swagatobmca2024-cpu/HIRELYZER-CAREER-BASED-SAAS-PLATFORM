@@ -1322,236 +1322,300 @@ if not st.session_state.authenticated:
     # -------- Sidebar --------
     with st.sidebar:
         st.markdown("""
-        <div style="
-            padding: 16px 4px 20px;
+        <style>
+        /* ── Sidebar pre-login brand block ── */
+        .sb-brand {
+            padding: 10px 2px 18px;
             border-bottom: 1px solid rgba(255,255,255,0.07);
-            margin-bottom: 16px;
-        ">
-            <div style="
-                font-family: var(--font-sans, -apple-system, sans-serif);
-                font-size: 1.1rem;
-                font-weight: 700;
-                letter-spacing: -0.02em;
-                color: #f0f4f8;
-                line-height: 1.2;
-            ">HIRELYZER</div>
-            <div style="
-                font-size: 0.72rem;
-                font-weight: 600;
-                letter-spacing: 0.1em;
-                text-transform: uppercase;
-                color: #38bdf8;
-                margin-top: 3px;
-            ">AI Resume Intelligence</div>
-        </div>
-        <p style="
+            margin-bottom: 14px;
+        }
+        .sb-brand-name {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-family: var(--font-sans, -apple-system, sans-serif);
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            color: #f0f4f8;
+        }
+        .sb-brand-name .diamond { color: #38bdf8; font-size: 0.85rem; }
+        .sb-brand-sub {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.13em;
+            text-transform: uppercase;
+            color: #475569;
+            margin-top: 4px;
+            font-family: var(--font-sans, -apple-system, sans-serif);
+        }
+        .sb-tagline {
             color: #64748b;
             font-size: 0.8rem;
-            line-height: 1.55;
+            line-height: 1.6;
             font-family: var(--font-sans, -apple-system, sans-serif);
-            margin-bottom: 16px;
-        ">Transform your career with AI-powered resume analysis, job matching, and smart insights.</p>
+            margin: 0 0 18px;
+        }
+        /* ── Sidebar feature cards ── */
+        .sb-feature-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 14px;
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            transition: border-color 0.2s ease, background 0.2s ease;
+            font-family: var(--font-sans, -apple-system, sans-serif);
+        }
+        .sb-feature-card:hover {
+            background: rgba(56,189,248,0.05);
+            border-color: rgba(56,189,248,0.18);
+        }
+        .sb-feature-icon {
+            font-size: 1.5rem;
+            margin-bottom: 6px;
+            display: block;
+        }
+        .sb-feature-title {
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: #38bdf8;
+            margin-bottom: 4px;
+            letter-spacing: -0.01em;
+        }
+        .sb-feature-desc {
+            font-size: 0.775rem;
+            color: #64748b;
+            line-height: 1.5;
+            margin: 0;
+        }
+        </style>
+
+        <div class="sb-brand">
+            <div class="sb-brand-name">
+                <span class="diamond">✦</span> HIRELYZER
+            </div>
+            <div class="sb-brand-sub">AI Resume Intelligence</div>
+        </div>
+        <p class="sb-tagline">Transform your career with AI-powered resume analysis, ethical bias detection, and smart job insights.</p>
         """, unsafe_allow_html=True)
 
         features = [
-            ("https://img.icons8.com/fluency/48/resume.png", "Resume Analyzer", "Get feedback, scores, and tips powered by AI along with the biased words detection and rewriting the resume in an inclusive way."),
-            ("https://img.icons8.com/fluency/48/resume-website.png", "Resume Builder", "Build modern, eye-catching resumes easily."),
-            ("https://img.icons8.com/fluency/48/job.png", "Job Search", "Find tailored job matches."),
-            ("https://img.icons8.com/fluency/48/classroom.png", "Course Suggestions", "Get upskilling recommendations based on your goals."),
-            ("https://img.icons8.com/fluency/48/combo-chart.png", "Interactive Dashboard", "Visualize trends, scores, and analytics."),
+            ("🔍", "Resume Analyzer", "AI scoring, bias detection & inclusive rewriting"),
+            ("📄", "Resume Builder", "Build modern, ATS-optimized resumes"),
+            ("💼", "Job Search", "Tailored job matches for your profile"),
+            ("🎓", "Course Suggestions", "Upskilling recommendations based on your goals"),
+            ("📊", "Interactive Dashboard", "Visualize trends, scores, and analytics"),
         ]
 
         for icon, title, desc in features:
             st.markdown(f"""
-            <div class="feature-card">
-                <img src="{icon}" width="40"/>
-                <h3>{title}</h3>
-                <p>{desc}</p>
+            <div class="sb-feature-card">
+                <span class="sb-feature-icon">{icon}</span>
+                <div class="sb-feature-title">{title}</div>
+                <p class="sb-feature-desc">{desc}</p>
             </div>
             """, unsafe_allow_html=True)
 
-    # -------- Animated Cards --------
-    image_url = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
-
-    st.markdown(f"""
-    <style>
-    .animated-cards {{
-      margin-top: 30px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 300px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 240px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-    @keyframes splitCards {{
-      0% {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left {{ --x-offset: -80px; --rot: -5deg; }}
-    .card-center {{ --x-offset: 0px; --rot: 0deg; }}
-    .card-right {{ --x-offset: 80px; --rot: 5deg; }}
-    </style>
-    <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
-    </div>
-    """, unsafe_allow_html=True)
-
-    # -------- Counter Section (Updated Layout & Style with glassmorphism and shimmer) --------
-
-    # Fetch counters
-    total_users = get_total_registered_users()
-    active_logins = get_logins_today()
-    stats = get_database_stats()
-
-# Replace static 15 with dynamic count
+    # -------- Hero Section --------
+    # Fetch live counters
+    total_users    = get_total_registered_users()
+    active_logins  = get_logins_today()
+    stats          = get_database_stats()
     resumes_uploaded = stats.get("total_candidates", 0)
-
-    active_domains = stats.get("unique_domains", 0)
-
-
-    glassmorphism_counter_style = ""  # Styles now handled by global CSS
-
-    st.markdown(glassmorphism_counter_style, unsafe_allow_html=True)
+    active_domains   = stats.get("unique_domains", 0)
 
     st.markdown(f"""
-    <div class="counter-grid">
-        <div class="counter-box">
-            <div class="counter-number">{total_users}</div>
-            <div class="counter-label">Total Users</div>
+    <style>
+    /* ══════════════════════════════════════
+       HERO — pre-login landing section
+       ══════════════════════════════════════ */
+    .hero-wrap {{
+        background: linear-gradient(160deg,
+            rgba(10,16,28,0.97) 0%,
+            rgba(6,10,18,0.99) 60%,
+            rgba(14,20,36,0.95) 100%);
+        border: 1px solid rgba(56,189,248,0.10);
+        border-radius: 24px;
+        padding: 52px 40px 44px;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 28px;
+        box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+    }}
+    /* subtle radial glow top-left */
+    .hero-wrap::before {{
+        content: '';
+        position: absolute;
+        top: -80px; left: -60px;
+        width: 420px; height: 320px;
+        background: radial-gradient(ellipse, rgba(56,189,248,0.07) 0%, transparent 65%);
+        pointer-events: none;
+    }}
+    /* subtle radial glow bottom-right */
+    .hero-wrap::after {{
+        content: '';
+        position: absolute;
+        bottom: -60px; right: -40px;
+        width: 360px; height: 260px;
+        background: radial-gradient(ellipse, rgba(129,140,248,0.06) 0%, transparent 65%);
+        pointer-events: none;
+    }}
+
+    /* ── Status pill ── */
+    .hero-pill {{
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 20px;
+        border-radius: 99px;
+        background: rgba(30,42,58,0.85);
+        border: 1px solid rgba(56,189,248,0.22);
+        font-family: var(--font-sans, -apple-system, sans-serif);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #94a3b8;
+        margin-bottom: 36px;
+        position: relative;
+        z-index: 2;
+    }}
+    .hero-pill .dot {{
+        width: 7px; height: 7px;
+        border-radius: 50%;
+        background: #22c55e;
+        box-shadow: 0 0 6px #22c55e;
+        flex-shrink: 0;
+        animation: heroPulse 2s ease-in-out infinite;
+    }}
+    @keyframes heroPulse {{
+        0%,100% {{ opacity: 1; box-shadow: 0 0 6px #22c55e; }}
+        50%      {{ opacity: 0.6; box-shadow: 0 0 12px #22c55e; }}
+    }}
+
+    /* ── Hero headline ── */
+    .hero-h1 {{
+        font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif);
+        font-size: clamp(2rem, 4.5vw, 3rem);
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        line-height: 1.12;
+        color: #38bdf8;
+        margin: 0 0 18px;
+        position: relative;
+        z-index: 2;
+        animation: fadeSlideUp 0.7s cubic-bezier(0.22,1,0.36,1) forwards;
+    }}
+
+    /* ── Hero sub-headline ── */
+    .hero-sub {{
+        font-family: var(--font-sans, -apple-system, sans-serif);
+        font-size: 1rem;
+        color: #64748b;
+        line-height: 1.65;
+        max-width: 520px;
+        margin: 0 auto 44px;
+        position: relative;
+        z-index: 2;
+    }}
+
+    /* ── Stat counters row ── */
+    .hero-stats {{
+        display: flex;
+        justify-content: center;
+        gap: 0;
+        position: relative;
+        z-index: 2;
+        flex-wrap: wrap;
+    }}
+    .hero-stat {{
+        flex: 1 1 120px;
+        padding: 0 24px;
+        border-right: 1px solid rgba(255,255,255,0.06);
+        text-align: center;
+    }}
+    .hero-stat:last-child {{ border-right: none; }}
+    .hero-stat-num {{
+        font-family: var(--font-sans, -apple-system, sans-serif);
+        font-size: 2rem;
+        font-weight: 800;
+        color: #38bdf8;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        margin-bottom: 6px;
+    }}
+    .hero-stat-label {{
+        font-family: var(--font-sans, -apple-system, sans-serif);
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.11em;
+        text-transform: uppercase;
+        color: #334155;
+    }}
+
+    /* ══════════════════════════════════════
+       LOGIN CARD — updated header style
+       ══════════════════════════════════════ */
+    .login-heading {{
+        font-family: var(--font-sans, -apple-system, sans-serif);
+        font-size: 1.3rem;
+        font-weight: 800;
+        letter-spacing: -0.025em;
+        text-align: center;
+        color: #f0f4f8;
+        margin-bottom: 22px;
+        position: relative;
+        z-index: 2;
+    }}
+    .login-heading span {{ color: #38bdf8; }}
+    </style>
+
+    <div class="hero-wrap">
+        <!-- Status pill -->
+        <div style="display:flex; justify-content:center; margin-bottom:36px; position:relative; z-index:2;">
+            <div class="hero-pill">
+                <span class="dot"></span>
+                AI-POWERED &nbsp;·&nbsp; ETHICAL &nbsp;·&nbsp; ACCURATE
+            </div>
         </div>
-        <div class="counter-box">
-            <div class="counter-number">{active_domains}</div>
-            <div class="counter-label">Active Domains</div>
-        </div>
-        <div class="counter-box">
-            <div class="counter-number">{resumes_uploaded}</div>
-            <div class="counter-label">Resumes Uploaded</div>
-        </div>
-        <div class="counter-box">
-            <div class="counter-number">{active_logins}</div>
-            <div class="counter-label">Active Sessions</div>
+
+        <!-- Headline -->
+        <h1 class="hero-h1">Analyze Resumes with<br>Intelligent Precision</h1>
+
+        <!-- Sub-headline -->
+        <p class="hero-sub">
+            HIRELYZER combines ATS scoring, gender-bias detection, and AI
+            rewriting to surface the best candidates — fairly.
+        </p>
+
+        <!-- Stats -->
+        <div class="hero-stats">
+            <div class="hero-stat">
+                <div class="hero-stat-num">{total_users}</div>
+                <div class="hero-stat-label">Total Users</div>
+            </div>
+            <div class="hero-stat">
+                <div class="hero-stat-num">{active_domains}</div>
+                <div class="hero-stat-label">Active Domains</div>
+            </div>
+            <div class="hero-stat">
+                <div class="hero-stat-num">{resumes_uploaded}</div>
+                <div class="hero-stat-label">Resumes Analyzed</div>
+            </div>
+            <div class="hero-stat">
+                <div class="hero-stat-num">{active_logins}</div>
+                <div class="hero-stat-label">Sessions Today</div>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-if not st.session_state.get("authenticated", False):
-
-    # ✅ Futuristic silhouette
-    image_url = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
-
-    # ✅ Inject glassmorphism CSS with shimmer effects
-    st.markdown(f"""
+    # ── Notification / slide-message CSS (preserved from original) ──
+    st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
-
-    @keyframes shimmer {{
-        0% {{ background-position: -200% 0; }}
-        100% {{ background-position: 200% 0; }}
-    }}
-
-    @keyframes glassShimmer {{
-        0% {{ transform: translateX(-100%) skewX(-15deg); }}
-        100% {{ transform: translateX(200%) skewX(-15deg); }}
-    }}
-
-    /* ===== Card Shuffle Animation ===== */
-    .animated-cards {{
-      margin-top: 40px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 260px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 220px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-      filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-
-    @keyframes splitCards {{
-      0%   {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left   {{ --x-offset: -80px; --rot: -4deg; }}
-    .card-center {{ --x-offset: 0px;  --rot: 0deg;  }}
-    .card-right  {{ --x-offset: 80px;  --rot: 4deg;  }}
-
-    /* ===== Glassmorphism Login Card ===== */
-    .login-card {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.1) 0%,
-        rgba(30, 144, 255, 0.05) 50%,
-        rgba(0, 191, 255, 0.1) 100%);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(0, 191, 255, 0.2);
-      border-radius: 20px;
-      padding: 25px;
-      box-shadow:
-        0 8px 32px rgba(0, 191, 255, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      font-family: 'Orbitron', sans-serif;
-      color: white;
-      margin-top: 20px;
-      opacity: 0;
-      transform: translateX(-120%);
-      animation: slideInLeft 1.2s ease-out forwards;
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .login-card::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(0, 191, 255, 0.2),
-        transparent
-      );
-      animation: glassShimmer 3s infinite;
-    }}
-
-    @keyframes slideInLeft {{
-      0%   {{ transform: translateX(-120%); opacity: 0; }}
-      100% {{ transform: translateX(0); opacity: 1; }}
-    }}
-
-    .login-card h2 {{
-      text-align: center;
-      font-size: 1.6rem;
-      text-shadow: 0 0 15px rgba(0, 191, 255, 0.5);
-      margin-bottom: 15px;
-      position: relative;
-      z-index: 2;
-    }}
-    .login-card h2 span {{ color: #00BFFF; }}
-
     /* ===== Enhanced Message Cards with Consistent Layout ===== */
-    .slide-message {{
+    .slide-message {
       position: relative;
       overflow: hidden;
       margin: 16px 0;
@@ -1573,268 +1637,93 @@ if not st.session_state.get("authenticated", False):
       max-width: 100%;
       box-sizing: border-box;
       line-height: 1.5;
-      font-family: 'Orbitron', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       min-height: 50px;
-    }}
-
-    .slide-message:hover {{
+    }
+    .slide-message:hover {
       transform: translateY(-3px) scale(1.01);
-      box-shadow:
-        0 8px 30px rgba(0, 0, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    }}
-
-    .slide-message::before {{
+      box-shadow: 0 8px 30px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.15);
+    }
+    .slide-message::before {
       content: '';
       position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.1),
-        transparent
-      );
+      top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
       transition: left 0.5s;
-    }}
-
-    .slide-message:hover::before {{
-      left: 100%;
-    }}
-
-    .slide-message svg {{
-      width: 22px;
-      height: 22px;
-      flex-shrink: 0;
-      filter: drop-shadow(0 0 6px currentColor);
-      z-index: 2;
-    }}
-
-    .slide-message-text {{
-      flex: 1;
-      z-index: 2;
-      position: relative;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-      white-space: normal;
-    }}
-
-    .success-msg {{
-      background: linear-gradient(135deg,
-        rgba(0, 255, 127, 0.20) 0%,
-        rgba(0, 255, 127, 0.08) 100%);
-      border: 2px solid rgba(0, 255, 127, 0.4);
-      color: #00FF7F;
-      text-shadow: 0 0 12px rgba(0, 255, 127, 0.4);
-    }}
-
-    .error-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.20) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-      color: #FF6347;
-      text-shadow: 0 0 12px rgba(255, 99, 71, 0.4);
-    }}
-
-    .info-msg {{
-      background: linear-gradient(135deg,
-        rgba(30, 144, 255, 0.20) 0%,
-        rgba(30, 144, 255, 0.08) 100%);
-      border: 2px solid rgba(30, 144, 255, 0.4);
-      color: #1E90FF;
-      text-shadow: 0 0 12px rgba(30, 144, 255, 0.4);
-    }}
-
-    .warn-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.20) 0%,
-        rgba(255, 215, 0, 0.08) 100%);
-      border: 2px solid rgba(255, 215, 0, 0.4);
-      color: #FFD700;
-      text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
-    }}
-
-    @keyframes slideIn {{
-      0%   {{
-        transform: translateX(-50px);
-        opacity: 0;
-      }}
-      100% {{
-        transform: translateX(0);
-        opacity: 1;
-      }}
-    }}
-
-    /* ===== Improved Timer Display ===== */
-    .timer-display {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.18) 0%,
-        rgba(255, 165, 0, 0.08) 100%);
+    }
+    .slide-message:hover::before { left: 100%; }
+    .slide-message svg { width:22px; height:22px; flex-shrink:0; filter:drop-shadow(0 0 6px currentColor); z-index:2; }
+    .slide-message-text { flex:1; z-index:2; position:relative; word-wrap:break-word; overflow-wrap:break-word; white-space:normal; }
+    .success-msg {
+      background: linear-gradient(135deg, rgba(0,255,127,0.20) 0%, rgba(0,255,127,0.08) 100%);
+      border: 2px solid rgba(0,255,127,0.4); color: #00FF7F;
+      text-shadow: 0 0 12px rgba(0,255,127,0.4);
+    }
+    .error-msg {
+      background: linear-gradient(135deg, rgba(255,99,71,0.20) 0%, rgba(255,99,71,0.08) 100%);
+      border: 2px solid rgba(255,99,71,0.4); color: #FF6347;
+      text-shadow: 0 0 12px rgba(255,99,71,0.4);
+    }
+    .info-msg {
+      background: linear-gradient(135deg, rgba(30,144,255,0.20) 0%, rgba(30,144,255,0.08) 100%);
+      border: 2px solid rgba(30,144,255,0.4); color: #1E90FF;
+      text-shadow: 0 0 12px rgba(30,144,255,0.4);
+    }
+    .warn-msg {
+      background: linear-gradient(135deg, rgba(255,215,0,0.20) 0%, rgba(255,215,0,0.08) 100%);
+      border: 2px solid rgba(255,215,0,0.4); color: #FFD700;
+      text-shadow: 0 0 12px rgba(255,215,0,0.4);
+    }
+    @keyframes slideIn {
+      0%   { transform: translateX(-50px); opacity: 0; }
+      100% { transform: translateX(0);     opacity: 1; }
+    }
+    /* ===== Timer Display ===== */
+    .timer-display {
+      background: linear-gradient(135deg, rgba(255,215,0,0.18) 0%, rgba(255,165,0,0.08) 100%);
       backdrop-filter: blur(15px);
       -webkit-backdrop-filter: blur(15px);
-      border: 2px solid rgba(255, 215, 0, 0.4);
+      border: 2px solid rgba(255,215,0,0.4);
       border-radius: 14px;
       padding: 16px 24px;
       margin: 20px 0;
       text-align: center;
-      box-shadow:
-        0 4px 20px rgba(255, 215, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .timer-display::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 215, 0, 0.2),
-        transparent
-      );
-      animation: glassShimmer 3s infinite;
-    }}
-
-    .timer-display:hover {{
-      box-shadow:
-        0 8px 30px rgba(255, 215, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-      transform: translateY(-3px);
-    }}
-
-    .timer-text {{
-      color: #FFD700;
-      font-size: 1.15em;
-      font-weight: bold;
-      font-family: 'Orbitron', sans-serif;
-      text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
-      position: relative;
-      z-index: 2;
-    }}
-
-    .timer-expired {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.18) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-    }}
-
-    .timer-expired .timer-text {{
-      color: #FF6347;
-      text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
-    }}
-
-    /* ===== Glassmorphism Buttons ===== */
-    .stButton>button {{
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.2) 0%, 
-        rgba(30, 144, 255, 0.1) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      color: white;
-      border: 1px solid rgba(0, 191, 255, 0.3);
-      border-radius: 12px;
-      font-family: 'Orbitron', sans-serif;
-      font-weight: bold;
-      padding: 8px 20px;
-      box-shadow: 
-        0 4px 16px rgba(0, 191, 255, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      box-shadow: 0 4px 20px rgba(255,215,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1);
       transition: all 0.3s ease;
       position: relative;
       overflow: hidden;
-    }}
-    
-    .stButton>button::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.2),
-        transparent
-      );
-      transition: left 0.5s;
-    }}
-    
-    .stButton>button:hover {{
-      transform: translateY(-2px);
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.3) 0%, 
-        rgba(30, 144, 255, 0.15) 100%);
-      border: 1px solid rgba(0, 191, 255, 0.5);
-      box-shadow: 
-        0 8px 25px rgba(0, 191, 255, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    }}
-    
-    .stButton>button:hover::before {{
-      left: 100%;
-    }}
-
-    /* ===== Glassmorphism Input Fields ===== */
-    .stTextInput input {{
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.08) 0%, 
-        rgba(30, 144, 255, 0.04) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      border: 1px solid rgba(0, 191, 255, 0.2);
-      border-radius: 10px;
-      padding: 10px;
-      color: #E0F7FF;
-      font-family: 'Orbitron', sans-serif;
-      box-shadow: 
-        0 4px 16px rgba(0, 191, 255, 0.05),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-      transition: all 0.3s ease-in-out;
-    }}
-    .stTextInput input:focus {{
-      outline: none !important;
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.12) 0%, 
-        rgba(30, 144, 255, 0.06) 100%);
-      border: 1px solid rgba(0, 191, 255, 0.4);
-      box-shadow: 
-        0 8px 25px rgba(0, 191, 255, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transform: translateY(-1px);
-    }}
-    .stTextInput label {{
-      font-family: 'Orbitron', sans-serif;
-      color: #00BFFF !important;
-      text-shadow: 0 0 10px rgba(0, 191, 255, 0.3);
-    }}
+    }
+    .timer-display:hover {
+      box-shadow: 0 8px 30px rgba(255,215,0,0.25), inset 0 1px 0 rgba(255,255,255,0.15);
+      transform: translateY(-3px);
+    }
+    .timer-text {
+      color: #FFD700;
+      font-size: 1.15em;
+      font-weight: bold;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+      text-shadow: 0 0 18px rgba(255,215,0,0.5);
+      position: relative;
+      z-index: 2;
+    }
+    .timer-expired {
+      background: linear-gradient(135deg, rgba(255,99,71,0.18) 0%, rgba(255,99,71,0.08) 100%);
+      border: 2px solid rgba(255,99,71,0.4);
+    }
+    .timer-expired .timer-text {
+      color: #FF6347;
+      text-shadow: 0 0 18px rgba(255,99,71,0.5);
+    }
     </style>
-
-    <!-- Animated Cards -->
-    <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
-    </div>
     """, unsafe_allow_html=True)
-
     # -------- Login/Register Layout --------
     left, center, right = st.columns([1, 2, 1])
 
     with center:
         st.markdown(
-            "<div class='login-card'><h2 style='text-align:center;'>🔐 Login to <span style='color:#00BFFF;'>HIRELYZER</span></h2>",
+            "<div class='login-card'><div class='login-heading'>Sign in to <span>HIRELYZER</span></div>",
             unsafe_allow_html=True,
         )
 
@@ -1845,7 +1734,7 @@ if not st.session_state.get("authenticated", False):
             # Show login or forgot password flow based on reset_stage
             if st.session_state.reset_stage == "none":
                 # Normal Login UI
-                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Login to Your Account</h3>", unsafe_allow_html=True)
+                st.markdown("<p style='text-align:center; color:#64748b; font-size:0.85rem; margin-bottom:8px;'>Welcome back — enter your credentials below.</p>", unsafe_allow_html=True)
 
                 user = st.text_input("👤 Username or Email", key="login_user")
                 pwd = st.text_input("🔑 Password", type="password", key="login_pass")
