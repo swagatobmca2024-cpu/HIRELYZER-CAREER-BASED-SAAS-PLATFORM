@@ -11544,57 +11544,476 @@ import streamlit as st
 DOMAIN_AUTHORITY_CONFIG = {
     "Data Science & Analytics": {
         "aliases": ["data analyst", "data science", "analytics", "business intelligence", "bi", "ml", "machine learning"],
-        "mandatory_topics": ["pandas", "SQL", "statistical analysis", "data visualization", "EDA", "hypothesis testing", "regression", "data cleaning"],
-        "forbidden_resume_keywords": ["react", "angular", "vue", "node.js", "express", "django", "flask", "spring", "frontend", "css", "html", "mobile app"],
-        "context_override": "This is a Data Science & Analytics interview. Focus EXCLUSIVELY on data analysis, statistics, SQL, Python data libraries (pandas/numpy/matplotlib), machine learning fundamentals, and business intelligence tools.",
+        "mandatory_topics": [
+            # Core Python data stack
+            "pandas", "NumPy", "SciPy", "Matplotlib", "Seaborn", "Plotly",
+            # SQL & querying
+            "SQL", "window functions", "CTEs", "query optimization", "joins", "GROUP BY aggregations",
+            # Statistical foundations
+            "descriptive statistics", "inferential statistics", "hypothesis testing", "p-values",
+            "confidence intervals", "A/B testing", "statistical significance", "effect size",
+            "probability distributions", "Bayesian reasoning",
+            # EDA & data quality
+            "exploratory data analysis", "data cleaning", "missing value imputation",
+            "outlier detection", "data profiling", "feature distributions",
+            # Classical ML
+            "linear regression", "logistic regression", "decision trees", "random forests",
+            "gradient boosting", "XGBoost", "LightGBM", "k-means clustering", "PCA",
+            "bias-variance tradeoff", "cross-validation", "regularization (L1/L2)",
+            # Model evaluation
+            "precision", "recall", "F1 score", "ROC-AUC", "confusion matrix",
+            "RMSE", "MAE", "R-squared", "lift curves",
+            # BI & visualization
+            "Tableau", "Power BI", "Looker", "dashboard design", "data storytelling",
+            "KPI definition", "metric frameworks", "cohort analysis",
+            # Data pipelines
+            "ETL pipelines", "data warehousing", "OLAP vs OLTP", "star schema",
+            "dbt", "Apache Airflow", "data lineage",
+            # Advanced / modern
+            "time series forecasting", "ARIMA", "Prophet", "feature engineering",
+            "dimensionality reduction", "class imbalance handling", "SMOTE",
+        ],
+        "forbidden_resume_keywords": [
+            "react", "angular", "vue", "next.js", "nuxt", "svelte",
+            "node.js", "express", "fastify", "django", "flask", "spring boot",
+            "frontend", "css", "html", "tailwind", "bootstrap", "figma",
+            "mobile app", "swift", "kotlin", "flutter", "react native",
+            "graphql", "REST API design", "OAuth", "JWT authentication",
+        ],
+        "context_override": (
+            "This is a Data Science & Analytics interview. Focus EXCLUSIVELY on data analysis, "
+            "statistical reasoning, SQL, Python data libraries (pandas/numpy/scikit-learn), "
+            "model evaluation, data visualization, A/B testing, EDA, and business intelligence tools. "
+            "Probe for depth on statistical rigour, evaluation metric selection, and data storytelling — "
+            "not just tool familiarity."
+        ),
     },
+
     "Full Stack Development": {
-        "aliases": ["full stack", "fullstack", "web developer", "mern", "mean"],
-        "mandatory_topics": ["frontend", "backend", "REST APIs", "databases", "authentication", "deployment", "React/Angular/Vue", "Node.js/Django/Spring"],
-        "forbidden_resume_keywords": ["tensorflow", "pytorch", "sklearn", "regression", "clustering", "NLP", "deep learning model"],
-        "context_override": "This is a Full Stack Development interview. Focus on frontend frameworks, backend APIs, databases, authentication, CI/CD, and web architecture.",
+        "aliases": ["full stack", "fullstack", "web developer", "mern", "mean", "full-stack engineer"],
+        "mandatory_topics": [
+            # Frontend
+            "React", "Vue.js", "Angular", "Next.js", "TypeScript", "JavaScript (ES6+)",
+            "state management", "Redux", "Zustand", "Pinia", "component lifecycle",
+            "virtual DOM", "server-side rendering", "static site generation",
+            "CSS-in-JS", "Tailwind CSS", "responsive design", "accessibility (WCAG)",
+            "browser performance", "lazy loading", "code splitting", "web vitals",
+            # Backend
+            "Node.js", "Express", "NestJS", "Django", "FastAPI", "Spring Boot",
+            "REST API design", "GraphQL", "API versioning", "rate limiting",
+            "middleware patterns", "input validation", "error handling",
+            # Databases
+            "PostgreSQL", "MySQL", "MongoDB", "Redis", "database indexing",
+            "query optimization", "ORM (Prisma/Sequelize/SQLAlchemy)", "N+1 problem",
+            "transactions and ACID", "database migrations",
+            # Auth & security
+            "JWT", "OAuth 2.0", "session management", "CORS", "CSRF", "XSS", "SQL injection",
+            "HTTPS", "secrets management", "RBAC",
+            # DevOps basics
+            "Docker", "CI/CD", "environment variables", "12-factor app",
+            "Nginx", "reverse proxy", "load balancing basics",
+            # Testing
+            "unit testing", "integration testing", "Jest", "React Testing Library",
+            "end-to-end testing", "Cypress", "Playwright", "test coverage",
+            # Architecture
+            "monolith vs microservices", "BFF pattern", "caching strategies",
+            "WebSockets", "real-time updates", "message queues basics",
+        ],
+        "forbidden_resume_keywords": [
+            "tensorflow", "pytorch", "sklearn", "scikit-learn", "pandas",
+            "regression model", "clustering", "NLP pipeline", "deep learning model",
+            "Kubernetes operator", "Terraform modules", "Ansible playbooks",
+            "pen testing", "SIEM", "SOC analyst",
+        ],
+        "context_override": (
+            "This is a Full Stack Development interview. Cover the entire request lifecycle: "
+            "browser → frontend framework → API layer → database → response. "
+            "Focus on React/Next.js or Vue, Node.js or Django backends, PostgreSQL/MongoDB, "
+            "authentication patterns, caching, testing strategies, and deployment pipelines. "
+            "Probe for real decisions: state management choices, API contract design, N+1 fixes, "
+            "and security hardening — not just stack enumeration."
+        ),
     },
+
     "Backend Development": {
-        "aliases": ["backend", "server-side", "api developer", "java developer", "python developer"],
-        "mandatory_topics": ["REST APIs", "databases", "system design", "microservices", "caching", "message queues", "authentication", "scalability"],
-        "forbidden_resume_keywords": ["react", "css", "html", "angular", "vue", "figma", "photoshop", "frontend"],
-        "context_override": "This is a Backend Development interview. Focus on API design, server-side logic, databases, microservices, caching strategies, and system scalability.",
+        "aliases": ["backend", "server-side", "api developer", "java developer", "python developer",
+                    "golang developer", "backend engineer", "software engineer backend"],
+        "mandatory_topics": [
+            # API design
+            "REST API design principles", "GraphQL", "gRPC", "API versioning",
+            "idempotency", "pagination", "rate limiting", "API gateway",
+            "OpenAPI / Swagger documentation",
+            # Databases
+            "PostgreSQL", "MySQL", "database indexing", "query execution plans",
+            "EXPLAIN ANALYZE", "N+1 problem", "connection pooling",
+            "transactions", "ACID properties", "isolation levels", "deadlocks",
+            "database migrations", "schema design", "normalization",
+            "Redis", "caching patterns (cache-aside, write-through)", "cache invalidation",
+            # System design
+            "horizontal vs vertical scaling", "load balancing", "reverse proxy",
+            "microservices", "service mesh", "event-driven architecture",
+            "message queues (RabbitMQ, Kafka, SQS)", "pub/sub patterns",
+            "circuit breaker", "bulkhead pattern", "retry with backoff",
+            "CAP theorem", "eventual consistency", "distributed transactions",
+            # Auth & security
+            "JWT", "OAuth 2.0", "OpenID Connect", "RBAC", "ABAC",
+            "password hashing (bcrypt/argon2)", "secrets management",
+            "input validation", "SQL injection", "OWASP Top 10 for APIs",
+            # Performance
+            "async programming", "concurrency models", "thread pools",
+            "profiling", "bottleneck identification", "background jobs",
+            "batch processing", "streaming",
+            # Testing
+            "unit testing", "integration testing", "contract testing",
+            "mocking dependencies", "test isolation", "CI test pipelines",
+            # Languages & runtimes
+            "Python (asyncio/FastAPI/Django)", "Node.js (event loop)",
+            "Java (Spring Boot, JVM tuning)", "Go (goroutines, channels)",
+        ],
+        "forbidden_resume_keywords": [
+            "react", "css", "html", "angular", "vue", "next.js", "tailwind",
+            "figma", "photoshop", "sketch", "frontend", "ui design",
+            "pandas", "sklearn", "tensorflow", "pytorch",
+            "mobile app", "swift", "kotlin", "flutter",
+        ],
+        "context_override": (
+            "This is a Backend Development interview. Focus on server-side engineering: "
+            "REST/GraphQL/gRPC API design, relational and NoSQL databases (including indexing, "
+            "transactions, and query optimisation), caching strategies, message queues, "
+            "distributed system patterns, authentication/authorisation, and backend testing. "
+            "Push candidates to explain WHY they made design decisions, not just WHAT they used."
+        ),
     },
+
     "Frontend Development": {
-        "aliases": ["frontend", "ui developer", "react developer", "angular developer"],
-        "mandatory_topics": ["JavaScript", "React/Angular/Vue", "CSS", "responsive design", "state management", "performance optimization", "accessibility", "browser APIs"],
-        "forbidden_resume_keywords": ["kubernetes", "docker-compose", "terraform", "CI/CD pipeline", "microservices", "kafka"],
-        "context_override": "This is a Frontend Development interview. Focus on UI frameworks, JavaScript, CSS, browser performance, accessibility, and client-side architecture.",
+        "aliases": ["frontend", "ui developer", "react developer", "angular developer",
+                    "vue developer", "frontend engineer", "web ui engineer"],
+        "mandatory_topics": [
+            # Core JavaScript
+            "JavaScript (ES6+)", "TypeScript", "closures", "event loop", "async/await",
+            "Promises", "prototypal inheritance", "hoisting", "debounce/throttle",
+            "Web APIs (Fetch, localStorage, IntersectionObserver)",
+            # Frameworks
+            "React (hooks, context, reconciliation)", "Vue.js (Options API vs Composition API)",
+            "Angular (dependency injection, change detection)",
+            "Next.js (SSR vs SSG vs ISR)", "Nuxt.js",
+            # State management
+            "Redux (flux architecture)", "Redux Toolkit", "Zustand", "Recoil",
+            "React Query / TanStack Query", "SWR", "Pinia",
+            # CSS & styling
+            "CSS specificity", "flexbox", "CSS Grid", "responsive design",
+            "CSS-in-JS (styled-components, Emotion)", "Tailwind CSS",
+            "CSS custom properties", "animations and transitions",
+            # Performance
+            "Core Web Vitals (LCP, CLS, FID/INP)", "code splitting",
+            "lazy loading", "tree shaking", "bundle analysis (Webpack, Vite)",
+            "image optimisation", "caching strategies (HTTP cache, service workers)",
+            "virtual DOM and reconciliation", "memoization (useMemo, useCallback, React.memo)",
+            # Testing
+            "Jest", "React Testing Library", "Vitest",
+            "end-to-end testing (Cypress, Playwright)",
+            "snapshot testing", "accessibility testing",
+            # Accessibility
+            "WCAG 2.1 guidelines", "ARIA attributes", "keyboard navigation",
+            "screen reader compatibility", "semantic HTML",
+            # Architecture
+            "micro-frontends", "module federation", "design systems",
+            "component composition patterns", "render props vs HOC vs hooks",
+            "Storybook", "monorepo (Nx, Turborepo)",
+            # Security
+            "XSS prevention", "CSP headers", "CSRF in SPAs", "sanitisation",
+        ],
+        "forbidden_resume_keywords": [
+            "kubernetes", "docker-compose", "terraform", "ansible",
+            "CI/CD pipeline design", "microservices orchestration", "kafka",
+            "grpc", "tensorflow", "pytorch", "pandas", "sklearn",
+            "SQL joins", "database schema design", "backend API design",
+            "pen testing", "SIEM", "firewall rules",
+        ],
+        "context_override": (
+            "This is a Frontend Development interview. Focus on deep JavaScript/TypeScript knowledge, "
+            "React or Vue framework internals (reconciliation, hooks, reactivity), state management "
+            "tradeoffs, Core Web Vitals and performance optimisation, CSS layout and architecture, "
+            "accessibility standards, testing strategies, and client-side security. "
+            "Go beyond tool lists — probe for understanding of browser behaviour, "
+            "render performance, and component design decisions."
+        ),
     },
+
     "Machine Learning & AI": {
-        "aliases": ["machine learning", "ml engineer", "ai engineer", "deep learning", "nlp engineer"],
-        "mandatory_topics": ["model training", "feature engineering", "model evaluation", "neural networks", "overfitting", "hyperparameter tuning", "ML pipelines", "deployment"],
-        "forbidden_resume_keywords": ["react", "angular", "vue", "node.js", "express", "spring boot", "mobile"],
-        "context_override": "This is a Machine Learning & AI interview. Focus on model architecture, training pipelines, evaluation metrics, feature engineering, ML system design, and model deployment.",
+        "aliases": ["machine learning", "ml engineer", "ai engineer", "deep learning",
+                    "nlp engineer", "computer vision engineer", "mlops engineer", "ai researcher"],
+        "mandatory_topics": [
+            # Foundations
+            "supervised vs unsupervised vs reinforcement learning",
+            "bias-variance tradeoff", "overfitting", "underfitting", "regularisation (L1/L2/dropout)",
+            "cross-validation (k-fold, stratified)", "train/val/test split strategy",
+            "data leakage", "target encoding pitfalls",
+            # Feature engineering
+            "feature selection (mutual information, SHAP)", "feature scaling (standardisation, normalisation)",
+            "handling missing values", "categorical encoding (one-hot, ordinal, target)",
+            "dimensionality reduction (PCA, t-SNE, UMAP)", "class imbalance (SMOTE, cost-sensitive learning)",
+            # Classical ML
+            "linear/logistic regression", "decision trees and ensemble methods",
+            "random forests", "gradient boosting (XGBoost, LightGBM, CatBoost)",
+            "SVMs", "k-means clustering", "DBSCAN",
+            # Deep learning
+            "neural network architecture", "backpropagation", "gradient descent variants (Adam, SGD)",
+            "batch normalisation", "dropout", "learning rate scheduling",
+            "CNNs (convolution, pooling)", "RNNs / LSTMs", "attention mechanism",
+            "Transformer architecture", "transfer learning", "fine-tuning",
+            "BERT, GPT, and LLM fundamentals",
+            # Evaluation metrics
+            "precision, recall, F1", "ROC-AUC, PR-AUC", "NDCG", "MAP",
+            "RMSE, MAE, MAPE", "calibration", "offline vs online evaluation",
+            # MLOps
+            "ML pipelines (Kubeflow, MLflow, SageMaker Pipelines)",
+            "experiment tracking (MLflow, Weights & Biases)",
+            "model versioning", "model registry", "feature stores",
+            "data drift detection", "model monitoring in production",
+            "A/B testing for ML models", "shadow deployment", "canary deployment",
+            # Deployment
+            "model serialisation (ONNX, pickle, TorchScript)",
+            "serving (TensorFlow Serving, Triton, FastAPI)", "batch vs real-time inference",
+            "latency-throughput tradeoffs", "model quantisation", "pruning", "distillation",
+            # LLM-specific
+            "prompt engineering", "RAG (retrieval-augmented generation)",
+            "vector databases (Pinecone, Weaviate, FAISS)", "embedding models",
+            "LLM fine-tuning (LoRA, PEFT)", "hallucination mitigation",
+            "LLM evaluation (BERTScore, RAGAS)", "token context windows",
+        ],
+        "forbidden_resume_keywords": [
+            "react", "angular", "vue", "next.js", "tailwind",
+            "node.js", "express", "spring boot", "django REST framework",
+            "frontend", "css", "html", "figma", "mobile app",
+            "swift", "kotlin", "flutter", "react native",
+        ],
+        "context_override": (
+            "This is a Machine Learning & AI interview. Cover the full ML lifecycle: "
+            "problem framing, data preparation, feature engineering, model selection and evaluation, "
+            "production deployment, and monitoring. For senior roles, probe on MLOps maturity, "
+            "LLM engineering, and system design for ML (feature stores, serving infrastructure). "
+            "Demand technical depth — evaluation metric justification, tradeoff reasoning, "
+            "and real failure scenarios, not just algorithm definitions."
+        ),
     },
+
     "DevOps & Cloud": {
-        "aliases": ["devops", "cloud engineer", "platform engineer", "sre", "site reliability"],
-        "mandatory_topics": ["CI/CD", "Docker", "Kubernetes", "infrastructure as code", "monitoring", "cloud platforms", "incident response", "scaling strategies"],
-        "forbidden_resume_keywords": ["react", "angular", "pandas", "sklearn", "tableau", "power bi"],
-        "context_override": "This is a DevOps & Cloud interview. Focus on CI/CD pipelines, containerization, orchestration, cloud infrastructure, monitoring, and reliability engineering.",
+        "aliases": ["devops", "cloud engineer", "platform engineer", "sre", "site reliability",
+                    "infrastructure engineer", "cloud architect", "devsecops"],
+        "mandatory_topics": [
+            # CI/CD
+            "CI/CD pipeline design (GitHub Actions, GitLab CI, Jenkins, CircleCI)",
+            "pipeline stages (build, test, security scan, deploy)",
+            "artifact management", "deployment strategies (blue-green, canary, rolling)",
+            "feature flags", "rollback strategies", "trunk-based development",
+            # Containers & orchestration
+            "Docker (images, layers, multi-stage builds, registry)",
+            "Kubernetes (pods, deployments, services, ingress, namespaces)",
+            "Kubernetes resource requests/limits", "HPA and VPA",
+            "Helm charts", "operators", "StatefulSets", "PersistentVolumes",
+            "service mesh (Istio, Linkerd)", "container security scanning",
+            # Infrastructure as Code
+            "Terraform (state management, modules, workspaces)",
+            "Ansible", "Pulumi", "CloudFormation / CDK",
+            "GitOps (ArgoCD, Flux)", "drift detection",
+            # Cloud platforms
+            "AWS (EC2, ECS/EKS, Lambda, S3, RDS, CloudFront, IAM, VPC, Route53)",
+            "Azure (AKS, App Service, Azure Functions, Blob Storage, AAD)",
+            "GCP (GKE, Cloud Run, Cloud Functions, BigQuery, IAM, VPC)",
+            "multi-cloud and hybrid cloud patterns",
+            "cloud cost optimisation (reserved instances, spot/preemptible, rightsizing)",
+            # Observability
+            "metrics (Prometheus, CloudWatch, Datadog)", "logging (ELK stack, Loki, CloudWatch Logs)",
+            "tracing (Jaeger, Zipkin, AWS X-Ray, OpenTelemetry)",
+            "alerting (PagerDuty, OpsGenie)", "SLOs, SLAs, SLIs, error budgets",
+            "on-call practices", "incident management (runbooks, postmortems)",
+            # Networking
+            "DNS", "load balancers (ALB, NLB, HAProxy)", "CDN",
+            "VPC design (subnets, NACLs, security groups)", "VPN and Direct Connect",
+            "service discovery", "network policies in Kubernetes",
+            # Security & compliance
+            "IAM least privilege", "secrets management (Vault, AWS Secrets Manager)",
+            "SAST/DAST in pipelines", "image vulnerability scanning (Trivy, Snyk)",
+            "CIS benchmarks", "SOC2/PCI compliance automation",
+            # Reliability
+            "chaos engineering", "fault injection", "disaster recovery",
+            "RTO and RPO", "backup strategies", "multi-region failover",
+        ],
+        "forbidden_resume_keywords": [
+            "react", "angular", "vue", "next.js", "tailwind", "figma",
+            "pandas", "sklearn", "tensorflow", "pytorch",
+            "mobile app", "swift", "kotlin", "flutter",
+            "SEO optimisation", "UI component library",
+        ],
+        "context_override": (
+            "This is a DevOps & Cloud interview. Cover CI/CD pipeline design, container orchestration "
+            "(Kubernetes internals and production operations), Infrastructure as Code (Terraform/GitOps), "
+            "cloud platform services (AWS/GCP/Azure), observability (metrics/logs/traces/SLOs), "
+            "networking, and cloud security. Probe for real operational experience: "
+            "incident response war stories, cost optimisation decisions, and reliability engineering "
+            "— not just tool enumerations."
+        ),
     },
+
     "Cybersecurity": {
-        "aliases": ["cybersecurity", "security engineer", "pen tester", "information security"],
-        "mandatory_topics": ["threat modeling", "OWASP", "penetration testing", "encryption", "authentication", "incident response", "network security", "vulnerability assessment"],
-        "forbidden_resume_keywords": ["react", "pandas", "sklearn", "mobile app", "ui design"],
-        "context_override": "This is a Cybersecurity interview. Focus on security principles, threat vectors, defensive/offensive techniques, compliance, and security architecture.",
+        "aliases": ["cybersecurity", "security engineer", "pen tester", "information security",
+                    "appsec", "application security", "cloud security", "devsecops engineer",
+                    "soc analyst", "threat intelligence"],
+        "mandatory_topics": [
+            # Fundamentals
+            "CIA triad (confidentiality, integrity, availability)",
+            "defence in depth", "principle of least privilege", "zero trust architecture",
+            "threat modelling (STRIDE, PASTA, attack trees)",
+            "risk assessment and risk scoring (CVSS)", "security controls taxonomy",
+            # Application security
+            "OWASP Top 10 (SQLi, XSS, SSRF, IDOR, broken auth, etc.)",
+            "input validation and output encoding", "parameterised queries",
+            "authentication flows (OAuth 2.0, OIDC, SAML)", "JWT security pitfalls",
+            "session management", "CSRF", "clickjacking", "security headers (CSP, HSTS)",
+            "API security (rate limiting, auth, mass assignment)",
+            "SAST and DAST", "software composition analysis (SCA)", "secret scanning",
+            # Network security
+            "TCP/IP fundamentals", "TLS/SSL (handshake, certificate chains, HSTS)",
+            "firewalls and WAFs", "IDS/IPS", "VPN and Zero Trust Network Access",
+            "DNS security (DNSSEC, DNS poisoning)", "DDoS mitigation",
+            "network segmentation and micro-segmentation",
+            # Penetration testing
+            "OWASP Testing Guide", "recon and OSINT", "exploitation frameworks (Metasploit)",
+            "web app pen testing (Burp Suite)", "privilege escalation techniques",
+            "post-exploitation and lateral movement", "reporting and severity classification",
+            # Cloud security
+            "IAM misconfiguration", "S3 bucket exposure", "AWS security best practices",
+            "cloud security posture management (CSPM)", "container security",
+            "secrets management (Vault, AWS Secrets Manager)", "CWPP",
+            # Incident response
+            "incident response lifecycle (preparation, detection, containment, eradication, recovery)",
+            "digital forensics basics", "log analysis and SIEM (Splunk, Microsoft Sentinel, Chronicle)",
+            "threat hunting", "IoCs and IoAs", "MITRE ATT&CK framework",
+            # Cryptography
+            "symmetric vs asymmetric encryption", "AES, RSA, ECC",
+            "hashing (SHA-256, bcrypt, argon2)", "PKI and certificate management",
+            "key management", "TLS configuration best practices",
+            # Compliance & governance
+            "GDPR", "SOC 2", "ISO 27001", "PCI-DSS", "HIPAA",
+            "security policies and standards", "vulnerability management lifecycle",
+        ],
+        "forbidden_resume_keywords": [
+            "react", "angular", "vue", "pandas", "sklearn",
+            "mobile app", "ui design", "figma", "photoshop",
+            "CSS animations", "frontend state management",
+        ],
+        "context_override": (
+            "This is a Cybersecurity interview. Cover application security (OWASP Top 10, "
+            "auth flows, API security), network security, penetration testing methodology, "
+            "cloud security, incident response, and cryptography fundamentals. "
+            "Probe for offensive AND defensive mindset: threat modelling, exploit chaining, "
+            "detection engineering, and security architecture decisions — not just tool familiarity."
+        ),
     },
+
     "UI/UX Design": {
-        "aliases": ["ui designer", "ux designer", "product designer", "interaction designer"],
-        "mandatory_topics": ["user research", "wireframing", "prototyping", "usability testing", "design systems", "information architecture", "accessibility", "figma"],
-        "forbidden_resume_keywords": ["tensorflow", "docker", "kubernetes", "SQL queries", "backend API"],
-        "context_override": "This is a UI/UX Design interview. Focus on design process, user research methods, wireframing, prototyping tools, usability testing, and design systems.",
+        "aliases": ["ui designer", "ux designer", "product designer", "interaction designer",
+                    "ux researcher", "design lead", "experience designer"],
+        "mandatory_topics": [
+            # Research methods
+            "user interviews", "contextual inquiry", "diary studies",
+            "surveys (quantitative vs qualitative)", "usability testing (moderated/unmoderated)",
+            "card sorting", "tree testing", "A/B testing for UX",
+            "affinity mapping", "persona development", "jobs-to-be-done framework",
+            # Information architecture & flows
+            "information architecture", "site maps", "user flows", "task flows",
+            "mental models", "navigation patterns", "progressive disclosure",
+            # Wireframing & prototyping
+            "low-fidelity wireframes", "high-fidelity mockups",
+            "interactive prototyping (Figma, Axure, ProtoPie)",
+            "design handoff (Figma Dev Mode, Zeplin)",
+            "micro-interactions and animation principles",
+            # Design systems
+            "design tokens", "component libraries", "atomic design",
+            "responsive and adaptive design", "platform guidelines (HIG, Material Design)",
+            "version control for design (Figma branching, Abstract)",
+            # Visual design
+            "typography hierarchy", "colour theory and accessible colour contrast (WCAG AA/AAA)",
+            "gestalt principles", "visual hierarchy and layout grids",
+            "icon design", "illustration style consistency",
+            # Accessibility
+            "WCAG 2.1 / 2.2 guidelines", "ARIA roles and labels",
+            "keyboard navigation design", "screen reader compatibility",
+            "colour blindness considerations", "inclusive design principles",
+            # Metrics & measurement
+            "usability metrics (task completion, error rate, time-on-task)",
+            "NPS and CSAT", "System Usability Scale (SUS)",
+            "funnel analysis", "heatmaps and session recordings",
+            "design iteration cycles", "OKRs tied to UX outcomes",
+            # Collaboration
+            "design critique facilitation", "stakeholder alignment",
+            "design sprints", "cross-functional collaboration with engineering",
+            "documenting design decisions and rationale",
+        ],
+        "forbidden_resume_keywords": [
+            "tensorflow", "docker", "kubernetes", "SQL queries",
+            "backend API design", "microservices", "CI/CD pipelines",
+            "server infrastructure", "network security", "penetration testing",
+        ],
+        "context_override": (
+            "This is a UI/UX Design interview. Cover the full design process from research "
+            "(user interviews, usability testing) through information architecture, wireframing, "
+            "high-fidelity prototyping, design systems, and accessibility. "
+            "Probe for research rigour, design decision justification, stakeholder communication, "
+            "and how the candidate measures design impact — not just tool proficiency."
+        ),
     },
+
     "Project Management": {
-        "aliases": ["project manager", "product manager", "scrum master", "agile coach"],
-        "mandatory_topics": ["project planning", "stakeholder management", "agile/scrum", "risk management", "roadmapping", "KPIs", "cross-functional coordination", "prioritization"],
-        "forbidden_resume_keywords": ["react", "tensorflow", "docker", "SQL joins", "API development"],
-        "context_override": "This is a Project/Product Management interview. Focus on planning methodologies, stakeholder communication, risk mitigation, prioritization frameworks, and delivery metrics.",
+        "aliases": ["project manager", "product manager", "scrum master", "agile coach",
+                    "program manager", "technical program manager", "delivery manager"],
+        "mandatory_topics": [
+            # Methodologies
+            "Agile (Scrum, Kanban, SAFe, LeSS)", "Waterfall and hybrid approaches",
+            "sprint planning", "backlog refinement", "sprint retrospectives",
+            "definition of done vs definition of ready", "velocity and story points",
+            "epic, story, task hierarchy", "release planning",
+            # Product management
+            "product vision and strategy", "product roadmapping (now/next/later, theme-based)",
+            "OKRs and KPI definition", "prioritisation frameworks (RICE, MoSCoW, Kano, WSJF)",
+            "product discovery", "opportunity sizing", "market research",
+            "customer journey mapping", "user story writing",
+            "go-to-market planning", "launch checklists",
+            # Stakeholder management
+            "stakeholder mapping", "RACI matrix", "executive communication",
+            "managing up vs managing down", "conflict resolution",
+            "requirements gathering and sign-off", "change management",
+            # Risk & delivery
+            "risk identification and RAID log", "risk mitigation strategies",
+            "dependency mapping", "critical path analysis",
+            "scope creep management", "escalation paths",
+            "delivery metrics (cycle time, lead time, throughput)",
+            # Technical program management
+            "technical debt management", "cross-team dependency management",
+            "technical roadmap alignment", "engineering capacity planning",
+            "incident retrospectives", "architecture decision records (ADRs)",
+            # Data & metrics
+            "funnel metrics", "retention metrics", "activation, engagement, churn",
+            "hypothesis-driven development", "experiment design",
+            "dashboard creation", "reporting to leadership",
+            # Tools
+            "Jira", "Linear", "Confluence", "Notion", "Asana",
+            "Miro / FigJam for workshops", "ProductBoard", "Amplitude / Mixpanel",
+        ],
+        "forbidden_resume_keywords": [
+            "react", "tensorflow", "docker", "SQL joins", "API development",
+            "frontend CSS", "kubernetes", "penetration testing",
+            "SIEM tools", "malware analysis",
+        ],
+        "context_override": (
+            "This is a Project/Product Management interview. Cover planning methodologies (Agile/Scrum), "
+            "prioritisation frameworks (RICE, MoSCoW, WSJF), stakeholder communication, risk management, "
+            "product discovery and roadmapping, delivery metrics, and data-driven decision making. "
+            "For PM roles, probe for customer empathy and impact measurement. "
+            "For TPM roles, probe for technical dependency management and engineering collaboration. "
+            "Demand specific examples — STAR method, not generic process descriptions."
+        ),
     },
 }
 
@@ -12660,7 +13079,7 @@ def show_resume_scanning_animation():
 
     for text, value in steps:
         status.markdown(
-            f"<h4 style='text-align:center;color:#00c3ff'>{text}</h4>",
+            f"<p style='text-align:center;color:var(--accent-cyan,#38bdf8);font-size:0.9rem;font-weight:600;'>{text}</p>",
             unsafe_allow_html=True
         )
         progress.progress(value)
@@ -12880,437 +13299,549 @@ Generate {num_questions} questions:"""
 
 
 with tab4:
-    # Inject CSS styles (keeping existing styles)
+    # ── Premium Apple-style Design System ─────────────────────────────────
     st.markdown("""
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        
-        * {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
 
-        .header-box {
-            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 25%, #2d3561 50%, #3f4787 75%, #5158ae 100%);
-            border: 2px solid transparent;
-            background-clip: padding-box;
-            position: relative;
-            padding: 25px;
-            border-radius: 20px;
-            text-align: center;
-            margin-bottom: 35px;
-            box-shadow: 
-                0 8px 32px rgba(0, 195, 255, 0.15),
-                0 4px 16px rgba(0, 195, 255, 0.1),
-                inset 0 1px 0 rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            overflow: hidden;
-        }
+    /* ══════════════════════════════════════
+       CSS VARIABLES — Single source of truth
+       ══════════════════════════════════════ */
+    :root {
+        --bg-base:        #07090f;
+        --bg-surface:     #0d1117;
+        --bg-elevated:    #141922;
+        --bg-hover:       #1a2130;
+        --border-subtle:  rgba(255,255,255,0.07);
+        --border-accent:  rgba(56,189,248,0.22);
+        --accent-cyan:    #38bdf8;
+        --accent-violet:  #818cf8;
+        --accent-emerald: #34d399;
+        --accent-amber:   #fbbf24;
+        --accent-rose:    #fb7185;
+        --text-primary:   #f0f4f8;
+        --text-secondary: #94a3b8;
+        --text-muted:     #475569;
+        --radius-sm:      8px;
+        --radius-md:      12px;
+        --radius-lg:      16px;
+        --radius-xl:      22px;
+        --shadow-card:    0 1px 3px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.32);
+        --font-sans:      'DM Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+        --font-mono:      'DM Mono', 'SF Mono', monospace;
+        --ease-out:       cubic-bezier(0.22,1,0.36,1);
+    }
 
-        .header-box::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(45deg, #00c3ff, #0066cc, #00c3ff, #0066cc);
-            background-size: 400% 400%;
-            animation: gradientShift 8s ease infinite;
-            z-index: -1;
-            border-radius: 20px;
-            padding: 2px;
-            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            mask-composite: exclude;
-        }
+    *, *::before, *::after {
+        font-family: var(--font-sans) !important;
+        box-sizing: border-box;
+    }
 
-        @keyframes gradientShift {
-            0%, 100% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-        }
+    /* ══════════════════════════════════════
+       PAGE HEADER BOX
+       ══════════════════════════════════════ */
+    .t4-header {
+        background: linear-gradient(160deg, rgba(13,17,23,0.98) 0%, rgba(7,9,15,1) 100%);
+        border: 1px solid var(--border-accent);
+        border-radius: var(--radius-xl);
+        padding: 36px 40px;
+        text-align: center;
+        margin-bottom: 28px;
+        position: relative;
+        overflow: hidden;
+        box-shadow: var(--shadow-card), 0 0 60px rgba(56,189,248,0.05);
+    }
+    .t4-header::before {
+        content: '';
+        position: absolute;
+        top: -80px; left: 50%; transform: translateX(-50%);
+        width: 600px; height: 200px;
+        background: radial-gradient(ellipse, rgba(56,189,248,0.08) 0%, transparent 70%);
+        pointer-events: none;
+    }
+    .t4-header h2 {
+        font-size: 1.9rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0 0 6px;
+        letter-spacing: -0.04em;
+    }
+    .t4-header p {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin: 0;
+    }
 
-        .header-box h2 {
-            font-size: 32px;
-            color: #ffffff;
-            margin: 0;
-            font-weight: 700;
-            text-shadow: 
-                0 0 20px rgba(0, 195, 255, 0.5),
-                0 2px 4px rgba(0, 0, 0, 0.3);
-            letter-spacing: -0.5px;
-        }
+    /* ══════════════════════════════════════
+       NAV PILL (replaces glow-header label)
+       ══════════════════════════════════════ */
+    .t4-nav-label {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        text-align: center;
+        margin: 4px 0 14px;
+    }
 
-        .glow-header {
-            font-size: 24px;
-            text-align: center;
-            color: #00c3ff;
-            text-shadow: 
-                0 0 20px rgba(0, 195, 255, 0.8),
-                0 0 40px rgba(0, 195, 255, 0.4);
-            margin: 20px 0 15px 0;
-            font-weight: 600;
-            letter-spacing: -0.3px;
-            animation: pulse 3s ease-in-out infinite;
-        }
+    /* ══════════════════════════════════════
+       SECTION LABEL
+       ══════════════════════════════════════ */
+    .t4-section-label {
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        border-bottom: 1px solid var(--border-subtle);
+        padding-bottom: 8px;
+        margin: 28px 0 16px;
+    }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.9; transform: scale(1.02); }
-        }
+    /* ══════════════════════════════════════
+       GLASS CARD — base
+       ══════════════════════════════════════ */
+    .t4-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 20px 24px;
+        margin: 10px 0;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    }
+    .t4-card::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(255,255,255,0.025) 0%, transparent 55%);
+        pointer-events: none;
+        border-radius: inherit;
+    }
+    .t4-card:hover {
+        border-color: var(--border-accent);
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-card), 0 0 32px rgba(56,189,248,0.08);
+    }
 
-        .stRadio > div {
-            flex-direction: row !important;
-            justify-content: center !important;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
+    /* ══════════════════════════════════════
+       COURSE TILE
+       ══════════════════════════════════════ */
+    .course-tile {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 22px 24px;
+        margin: 12px 0;
+        transition: border-color 0.22s ease, transform 0.22s ease, box-shadow 0.22s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .course-tile::after {
+        content: '';
+        position: absolute;
+        top: 0; left: -100%;
+        width: 60%; height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(56,189,248,0.04), transparent);
+        transition: left 0.5s ease;
+    }
+    .course-tile:hover { border-color: var(--border-accent); transform: translateY(-4px); box-shadow: 0 12px 36px rgba(0,0,0,0.3); }
+    .course-tile:hover::after { left: 150%; }
 
-        .stRadio label {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            border: 2px solid #00c3ff;
-            color: #00c3ff;
-            padding: 14px 24px;
-            margin: 6px;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            font-weight: 500;
-            min-width: 190px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 
-                0 4px 15px rgba(0, 195, 255, 0.1),
-                inset 0 1px 0 rgba(255, 255, 255, 0.1);
-        }
+    .course-title {
+        font-size: 0.975rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+        letter-spacing: -0.01em;
+    }
+    .course-description {
+        font-size: 0.835rem;
+        color: var(--text-secondary);
+        margin-bottom: 14px;
+        line-height: 1.6;
+    }
+    .difficulty-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 99px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-bottom: 14px;
+    }
+    .difficulty-beginner    { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.28); }
+    .difficulty-intermediate { background: rgba(251,191,36,0.12);  color: #fbbf24; border: 1px solid rgba(251,191,36,0.28); }
+    .difficulty-advanced     { background: rgba(251,113,133,0.12); color: #fb7185; border: 1px solid rgba(251,113,133,0.28); }
 
-        .stRadio label::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(0, 195, 255, 0.2), transparent);
-            transition: left 0.5s;
-        }
+    .course-link-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(56,189,248,0.1);
+        color: var(--accent-cyan);
+        border: 1px solid rgba(56,189,248,0.25);
+        padding: 7px 16px;
+        border-radius: var(--radius-sm);
+        font-size: 0.82rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    }
+    .course-link-btn:hover {
+        background: rgba(56,189,248,0.18);
+        border-color: rgba(56,189,248,0.45);
+        transform: translateX(3px);
+        text-decoration: none;
+        color: var(--accent-cyan);
+    }
 
-        .stRadio label:hover {
-            background: linear-gradient(135deg, #00c3ff15 0%, #00c3ff25 100%);
-            transform: translateY(-2px);
-            box-shadow: 
-                0 8px 25px rgba(0, 195, 255, 0.2),
-                inset 0 1px 0 rgba(255, 255, 255, 0.2);
-        }
+    /* ══════════════════════════════════════
+       QUIZ / QUESTION CARD
+       ══════════════════════════════════════ */
+    .quiz-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 26px 28px;
+        margin: 14px 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .quiz-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; bottom: 0;
+        width: 3px;
+        background: linear-gradient(180deg, var(--accent-cyan) 0%, var(--accent-violet) 100%);
+        border-radius: 0 0 0 var(--radius-lg);
+    }
 
-        .stRadio label:hover::before {
-            left: 100%;
-        }
+    /* ══════════════════════════════════════
+       PROGRESS / INTERVIEW STATUS BAR
+       ══════════════════════════════════════ */
+    .t4-progress-bar {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 14px 20px;
+        margin: 18px 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .t4-progress-bar .pb-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+    .t4-progress-bar .pb-value {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--accent-cyan);
+        margin-left: auto;
+    }
 
-        .stRadio input:checked + div > label {
-            background: linear-gradient(135deg, #00c3ff 0%, #0099cc 100%);
-            color: #000000;
-            font-weight: 600;
-            transform: scale(1.05);
-            box-shadow: 
-                0 8px 30px rgba(0, 195, 255, 0.4),
-                inset 0 1px 0 rgba(255, 255, 255, 0.3);
-        }
+    /* ══════════════════════════════════════
+       TIMER
+       ══════════════════════════════════════ */
+    .timer-container {
+        background: rgba(251,191,36,0.06);
+        border: 1px solid rgba(251,191,36,0.22);
+        border-radius: var(--radius-md);
+        padding: 13px 20px;
+        margin: 12px 0;
+        text-align: center;
+    }
+    .timer-display {
+        font-family: var(--font-mono) !important;
+        font-size: 1.3rem;
+        font-weight: 500;
+        color: var(--accent-amber);
+        letter-spacing: 0.05em;
+    }
+    .timer-urgent {
+        color: var(--accent-rose) !important;
+        animation: timerPulse 0.8s ease-in-out infinite;
+    }
+    @keyframes timerPulse {
+        0%,100% { opacity: 1; }
+        50%      { opacity: 0.55; }
+    }
 
-        .card {
-            background: linear-gradient(135deg, #0f1419 0%, #1a2332 25%, #253447 50%, #30455c 75%, #3b5671 100%);
-            border: 2px solid transparent;
-            border-radius: 16px;
-            padding: 20px 25px;
-            margin: 12px 0;
-            position: relative;
-            overflow: hidden;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 
-                0 4px 20px rgba(0, 195, 255, 0.1),
-                inset 0 1px 0 rgba(255, 255, 255, 0.05);
-        }
+    /* ══════════════════════════════════════
+       FEEDBACK CARD (post-answer)
+       ══════════════════════════════════════ */
+    .t4-feedback-card {
+        background: rgba(56,189,248,0.04);
+        border: 1px solid rgba(56,189,248,0.18);
+        border-radius: var(--radius-lg);
+        padding: 20px 24px;
+        margin: 16px 0;
+    }
+    .t4-feedback-card .fb-header {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--accent-cyan);
+        margin-bottom: 12px;
+    }
+    .t4-score-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+    .t4-score-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid var(--border-subtle);
+        border-radius: 99px;
+        padding: 4px 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+    .t4-score-pill span { color: var(--accent-cyan); font-weight: 700; }
 
-        .card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(45deg, #00c3ff, #0066cc);
-            z-index: -1;
-            border-radius: 16px;
-            padding: 2px;
-            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            mask-composite: exclude;
-            opacity: 0.8;
-        }
+    /* ══════════════════════════════════════
+       FOLLOWUP CARD (Hard mode)
+       ══════════════════════════════════════ */
+    .t4-followup-card {
+        background: rgba(251,191,36,0.05);
+        border: 1px solid rgba(251,191,36,0.22);
+        border-left: 3px solid var(--accent-amber);
+        border-radius: var(--radius-md);
+        padding: 16px 20px;
+        margin: 12px 0;
+    }
+    .t4-followup-card .fq-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+    }
+    .t4-followup-card .fq-title {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--accent-amber);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+    .t4-pressure-pill {
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 3px 9px;
+        border-radius: 99px;
+        background: rgba(0,0,0,0.3);
+        letter-spacing: 0.05em;
+    }
+    .t4-followup-card p {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        margin: 0;
+        line-height: 1.65;
+    }
 
-        .card::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-            transition: left 0.6s;
-        }
+    /* ══════════════════════════════════════
+       RESULTS / BADGE CONTAINER
+       ══════════════════════════════════════ */
+    .badge-container {
+        background: linear-gradient(160deg, rgba(13,17,23,0.98) 0%, rgba(7,9,15,1) 100%);
+        border: 1px solid var(--border-accent);
+        border-radius: var(--radius-xl);
+        padding: 40px 36px;
+        text-align: center;
+        margin: 20px 0;
+        position: relative;
+        overflow: hidden;
+    }
+    .badge-container::before {
+        content: '';
+        position: absolute;
+        top: -60px; left: 50%; transform: translateX(-50%);
+        width: 400px; height: 180px;
+        background: radial-gradient(ellipse, rgba(56,189,248,0.09) 0%, transparent 70%);
+        pointer-events: none;
+    }
+    .score-display {
+        font-size: 4.5rem;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        color: var(--accent-cyan);
+        line-height: 1;
+        margin: 16px 0 8px;
+    }
 
-        .card:hover {
-            transform: translateY(-4px) scale(1.02);
-            box-shadow: 
-                0 12px 40px rgba(0, 195, 255, 0.25),
-                0 8px 20px rgba(0, 195, 255, 0.15),
-                inset 0 1px 0 rgba(255, 255, 255, 0.1);
-        }
+    /* ══════════════════════════════════════
+       ROLE SELECTOR WRAPPER
+       ══════════════════════════════════════ */
+    .role-selector {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 20px 24px;
+        margin: 14px 0;
+    }
 
-        .card:hover::after {
-            left: 100%;
-        }
+    /* ══════════════════════════════════════
+       RADAR / CHART CONTAINER
+       ══════════════════════════════════════ */
+    .radar-container {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 20px 24px;
+        margin: 18px 0;
+    }
 
-        .card a {
-            color: #00c3ff;
-            font-weight: 600;
-            font-size: 16px;
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s ease;
-            text-shadow: 0 0 10px rgba(0, 195, 255, 0.3);
-        }
+    /* ══════════════════════════════════════
+       MY PROGRESS — METRIC CARDS
+       ══════════════════════════════════════ */
+    .metric-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 18px 20px;
+        margin: 6px 0;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .metric-card:hover {
+        border-color: var(--border-accent);
+        transform: translateY(-3px);
+    }
+    .metric-card .metric-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--text-muted);
+        margin: 0 0 8px;
+    }
+    .metric-card .metric-value {
+        font-size: 1.75rem;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        color: var(--accent-cyan);
+        margin: 0;
+        line-height: 1;
+    }
+    .metric-card .metric-sub {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin: 5px 0 0;
+    }
 
-        .card a:hover {
-            color: #ffffff;
-            text-decoration: none;
-            text-shadow: 
-                0 0 15px rgba(255, 255, 255, 0.5),
-                0 0 30px rgba(0, 195, 255, 0.3);
-            transform: translateX(4px);
-        }
+    /* Score badges */
+    .badge-excellent { background:rgba(0,230,118,0.1);  color:#00e676; border:1px solid rgba(0,230,118,0.3);  border-radius:6px; padding:3px 10px; font-weight:700; font-size:12px; }
+    .badge-good      { background:rgba(105,240,174,0.1); color:#69f0ae; border:1px solid rgba(105,240,174,0.3); border-radius:6px; padding:3px 10px; font-weight:700; font-size:12px; }
+    .badge-average   { background:rgba(255,204,2,0.1);   color:#ffcc02; border:1px solid rgba(255,204,2,0.3);   border-radius:6px; padding:3px 10px; font-weight:700; font-size:12px; }
+    .badge-weak      { background:rgba(255,152,0,0.1);   color:#ff9800; border:1px solid rgba(255,152,0,0.3);   border-radius:6px; padding:3px 10px; font-weight:700; font-size:12px; }
+    .badge-poor      { background:rgba(244,67,54,0.1);   color:#f44336; border:1px solid rgba(244,67,54,0.3);   border-radius:6px; padding:3px 10px; font-weight:700; font-size:12px; }
+    .best-row { background: rgba(0,230,118,0.08) !important; }
 
-        /* Enhanced selectbox styling */
-        .stSelectbox > div > div {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            border: 2px solid #00c3ff;
-            border-radius: 10px;
-            color: #00c3ff;
-        }
+    .section-header {
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        border-left: 3px solid var(--accent-cyan);
+        padding-left: 10px;
+        margin: 28px 0 6px;
+    }
 
-        .stSelectbox > div > div:hover {
-            box-shadow: 0 0 15px rgba(0, 195, 255, 0.3);
-        }
+    /* ══════════════════════════════════════
+       LEARNING PATH HEADER
+       ══════════════════════════════════════ */
+    .learning-path-container {
+        text-align: center;
+        margin: 22px 0 14px;
+        padding: 13px 20px;
+        background: rgba(56,189,248,0.04);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-accent);
+    }
+    .learning-path-text {
+        font-size: 0.88rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-cyan);
+    }
 
-        /* Enhanced subheader styling */
-        .stApp h3 {
-            color: #00c3ff;
-            text-shadow: 0 0 10px rgba(0, 195, 255, 0.5);
-            font-weight: 600;
-            margin-bottom: 20px;
-        }
+    /* ══════════════════════════════════════
+       STREAMLIT OVERRIDES
+       ══════════════════════════════════════ */
+    div[data-testid="stMarkdownContainer"] p { color: var(--text-secondary) !important; line-height: 1.65 !important; }
+    div[data-testid="stMarkdownContainer"] strong { color: var(--text-primary) !important; }
 
-        /* Learning path container */
-        .learning-path-container {
-            text-align: center;
-            margin: 30px 0 20px 0;
-            padding: 15px;
-            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
-            border-radius: 12px;
-            border: 1px solid rgba(0, 195, 255, 0.2);
-        }
+    /* Radio nav pills */
+    .stRadio > div { flex-direction: row !important; justify-content: center !important; gap: 8px; flex-wrap: wrap; }
+    .stRadio label {
+        background: var(--bg-elevated) !important;
+        border: 1px solid var(--border-subtle) !important;
+        color: var(--text-secondary) !important;
+        padding: 9px 18px !important;
+        border-radius: var(--radius-sm) !important;
+        font-size: 0.82rem !important;
+        font-weight: 500 !important;
+        transition: border-color 0.2s ease, color 0.2s ease !important;
+        min-width: 0 !important;
+        cursor: pointer;
+    }
+    .stRadio label:hover { border-color: var(--border-accent) !important; color: var(--accent-cyan) !important; }
 
-        .learning-path-text {
-            color: #00c3ff;
-            font-weight: 600;
-            font-size: 20px;
-            text-shadow: 0 0 15px rgba(0, 195, 255, 0.6);
-            letter-spacing: -0.3px;
-        }
+    /* Selectbox */
+    .stSelectbox > div > div {
+        background: var(--bg-elevated) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: var(--radius-sm) !important;
+        color: var(--text-secondary) !important;
+    }
+    .stSelectbox > div > div:hover { border-color: var(--border-accent) !important; }
 
-        /* Video container enhancements */
-        .stVideo {
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-            transition: transform 0.3s ease;
-        }
+    /* Text area */
+    .stTextArea textarea {
+        background: var(--bg-elevated) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: var(--radius-sm) !important;
+        color: var(--text-primary) !important;
+        font-size: 0.9rem !important;
+        line-height: 1.65 !important;
+        transition: border-color 0.2s ease !important;
+    }
+    .stTextArea textarea:focus { border-color: var(--border-accent) !important; box-shadow: 0 0 0 3px rgba(56,189,248,0.1) !important; }
 
-        .stVideo:hover {
-            transform: scale(1.02);
-        }
+    /* Alerts */
+    .stAlert {
+        background: rgba(56,189,248,0.05) !important;
+        border: 1px solid rgba(56,189,248,0.2) !important;
+        border-radius: var(--radius-md) !important;
+    }
 
-        /* Info message styling */
-        .stAlert {
-            background: linear-gradient(135deg, rgba(0, 195, 255, 0.1) 0%, rgba(0, 195, 255, 0.05) 100%);
-            border: 1px solid rgba(0, 195, 255, 0.3);
-            border-radius: 10px;
-        }
-
-        /* New styles for quiz and interview sections */
-        .quiz-card {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            border: 2px solid #00c3ff;
-            border-radius: 15px;
-            padding: 20px;
-            margin: 15px 0;
-            box-shadow: 0 4px 20px rgba(0, 195, 255, 0.15);
-        }
-
-        .badge-container {
-            text-align: center;
-            padding: 30px;
-            background: linear-gradient(135deg, rgba(0, 195, 255, 0.12) 0%, rgba(0, 195, 255, 0.06) 100%);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border-radius: 16px;
-            border: 1px solid rgba(0, 195, 255, 0.25);
-            margin: 20px 0;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-        }
-
-        .score-display {
-            font-size: 64px;
-            font-weight: bold;
-            color: #00d4ff;
-            text-shadow: 0 0 30px rgba(0, 212, 255, 0.6);
-            letter-spacing: 2px;
-        }
-
-        .role-selector {
-            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
-            border: 1px solid rgba(0, 195, 255, 0.2);
-            border-radius: 12px;
-            padding: 20px;
-            margin: 15px 0;
-        }
-
-        /* Course tile styling */
-        .course-tile {
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            border: 2px solid #00c3ff;
-            border-radius: 15px;
-            padding: 20px;
-            margin: 15px 0;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .course-tile:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0, 195, 255, 0.3);
-        }
-
-        .course-title {
-            color: #00c3ff;
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 10px;
-        }
-
-        .course-description {
-            color: #ffffff;
-            font-size: 14px;
-            margin-bottom: 15px;
-            line-height: 1.4;
-        }
-
-        .difficulty-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 500;
-            margin-bottom: 15px;
-        }
-
-        .difficulty-beginner {
-            background: linear-gradient(135deg, #4CAF50, #45a049);
-            color: white;
-        }
-
-        .difficulty-intermediate {
-            background: linear-gradient(135deg, #FF9800, #f57c00);
-            color: white;
-        }
-
-        .difficulty-advanced {
-            background: linear-gradient(135deg, #f44336, #d32f2f);
-            color: white;
-        }
-
-        .course-link-btn {
-            background: linear-gradient(135deg, #00c3ff, #0099cc);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 500;
-            display: inline-block;
-            transition: all 0.3s ease;
-        }
-
-        .course-link-btn:hover {
-            background: linear-gradient(135deg, #0099cc, #007acc);
-            transform: translateX(2px);
-            text-decoration: none;
-            color: white;
-        }
-
-        /* Radar chart container */
-        .radar-container {
-            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
-            border: 1px solid rgba(0, 195, 255, 0.2);
-            border-radius: 15px;
-            padding: 20px;
-            margin: 20px 0;
-        }
-
-        /* Timer styling */
-        .timer-container {
-            background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);
-            border: 1px solid rgba(255, 193, 7, 0.3);
-            border-radius: 12px;
-            padding: 15px;
-            margin: 15px 0;
-            text-align: center;
-        }
-
-        .timer-display {
-            font-size: 24px;
-            font-weight: bold;
-            color: #ffd700;
-            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-        }
-
-        .timer-urgent {
-            color: #ff4444;
-            text-shadow: 0 0 15px rgba(255, 68, 68, 0.8);
-            animation: pulse 1s ease-in-out infinite;
-        }
-        </style>
+    /* Subheaders */
+    .stApp h3 { color: var(--text-primary) !important; font-weight: 700 !important; letter-spacing: -0.02em !important; }
+    .stApp h2 { color: var(--text-primary) !important; font-weight: 700 !important; letter-spacing: -0.03em !important; }
+    </style>
     """, unsafe_allow_html=True)
 
-    # Header (keeping existing)
+    # Header
     st.markdown("""
-        <div class="header-box">
-            <h2>📚 Recommended Learning Hub</h2>
+        <div class="t4-header">
+            <h2>📚 Learning Hub</h2>
+            <p>Courses, interview prep, and AI coaching — all in one place</p>
         </div>
     """, unsafe_allow_html=True)
 
-    # Subheader (keeping existing)
-    st.markdown('<div class="glow-header">🎓 Explore Career Resources</div>', unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#ccc; font-size: 16px; margin-bottom: 25px;'>Curated courses and videos for your career growth, resume tips, and interview success.</p>", unsafe_allow_html=True)
-
-    # Learning path label (keeping existing)
-    st.markdown("""
-        <div class="learning-path-container">
-            <span class="learning-path-text">
-                🧭 Choose Your Learning Path
-            </span>
-        </div>
-    """, unsafe_allow_html=True)
+    # Nav label
+    st.markdown('<p class="t4-nav-label">🧭 Choose Your Learning Path</p>', unsafe_allow_html=True)
 
     # Updated Radio buttons with new options
     st.markdown("""
@@ -14062,7 +14593,7 @@ Generate {num_questions} questions now:
         # Display each difficulty group
         for difficulty in ["Beginner", "Intermediate", "Advanced"]:
             if difficulty_groups[difficulty]:
-                st.markdown(f"### 🎯 {difficulty} Level")
+                st.markdown(f"<p class='t4-section-label'>{difficulty} Level</p>", unsafe_allow_html=True)
                 for title, url, description in difficulty_groups[difficulty]:
                     st.markdown(f"""
                         <div class="course-tile">
@@ -14080,7 +14611,7 @@ Generate {num_questions} questions now:
 
     # Section 1: UPDATED Courses by Role with Index-based Difficulty
     if page == "Courses by Role":
-        st.subheader("🎯 Courses by Career Role")
+        st.markdown('<p class="t4-section-label">Courses by Career Role</p>', unsafe_allow_html=True)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -14247,7 +14778,7 @@ Generate {num_questions} questions now:
 
     # Section 2: Resume Videos (unchanged)
     elif page == "Resume Videos":
-        st.subheader("📄 Resume Writing Videos")
+        st.markdown('<p class="t4-section-label">Resume Writing Videos</p>'  , unsafe_allow_html=True)
         categories = list(RESUME_VIDEOS.keys())
         selected_cat = st.selectbox(
             "Select Resume Video Category",
@@ -14265,7 +14796,7 @@ Generate {num_questions} questions now:
 
     # Section 3: Interview Videos (unchanged)
     elif page == "Interview Videos":
-        st.subheader("🗣️ Interview Preparation Videos")
+        st.markdown('<p class="t4-section-label">Interview Preparation Videos</p>', unsafe_allow_html=True)
         categories = list(INTERVIEW_VIDEOS.keys())
         selected_cat = st.selectbox(
             "Select Interview Video Category",
@@ -14283,8 +14814,8 @@ Generate {num_questions} questions now:
 
     # Section 4: UPDATED AI Interview Coach 🤖 with Resume-Based Interviewing
     elif page == "AI Interview Coach 🤖":
-        st.subheader("🤖 AI Interview Coach")
-        st.markdown("Upload your resume and practice role-specific interview questions with AI-powered feedback!")
+        st.markdown('<p class="t4-section-label">AI Interview Coach</p>', unsafe_allow_html=True)
+        st.markdown("<p style='color:var(--text-secondary);font-size:0.9rem;margin-bottom:4px;'>Upload your resume and practice role-specific interview questions with AI-powered feedback.</p>", unsafe_allow_html=True)
 
         # Create database table if not exists
         create_interview_database()
@@ -14301,7 +14832,7 @@ Generate {num_questions} questions now:
 
         # RESUME UPLOAD SECTION (MANDATORY)
         st.markdown("---")
-        st.markdown("<h3 style='color: #00c3ff;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
+        st.markdown("<p class='t4-section-label'>Step 1 — Upload Your Resume</p>", unsafe_allow_html=True)
 
         if st.session_state.resume_file is None:
             uploaded_resume = st.file_uploader(
@@ -14349,7 +14880,7 @@ Generate {num_questions} questions now:
         # Only show domain/role selection if resume is uploaded
         if st.session_state.resume_file is not None:
             st.markdown("---")
-            st.markdown("<h3 style='color: #00c3ff;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
+            st.markdown("<p class='t4-section-label'>Step 2 — Select Target Role</p>", unsafe_allow_html=True)
 
             # Domain and Role selection
             st.markdown('<div class="role-selector">', unsafe_allow_html=True)
@@ -14428,7 +14959,7 @@ Generate {num_questions} questions now:
 
             # Start interview setup
             if not st.session_state.dynamic_interview_started:
-                st.markdown(f"### Practice interview for: {selected_role}")
+                st.markdown(f"<p class='t4-section-label'>Practice Interview — {selected_role}</p>", unsafe_allow_html=True)
 
                 # PART 5: Show weakness memory insight
                 _username_wm = st.session_state.get("username", "Guest")
@@ -14472,13 +15003,112 @@ Generate {num_questions} questions now:
                     _resume_techs = " ".join(_rc.get("technologies", []) + _rc.get("skills", [])).lower()
                     _domain_cfg = get_domain_config(selected_domain)
                     _forbidden = _domain_cfg.get("forbidden_resume_keywords", [])
+                    _mandatory = _domain_cfg.get("mandatory_topics", [])
                     _has_mismatch = any(kw.lower() in _resume_techs for kw in _forbidden)
+                    _matched_forbidden = [kw for kw in _forbidden if kw.lower() in _resume_techs]
+
+                    # Always show domain scope card; escalate to warning if mismatch detected
+                    _scope_preview = ", ".join(_mandatory[:6]) + ("…" if len(_mandatory) > 6 else "")
+                    _context_note = _domain_cfg.get("context_override", "")
+
                     if _has_mismatch:
-                        st.info(
-                            f"⚠️ **Domain Override Active**: Your resume appears to have a different technical background. "
-                            f"Questions will be **strictly aligned to {selected_domain}** regardless of your resume content. "
-                            f"This simulates interviewing for a new domain."
+                        # Identify which resume skills are being suppressed
+                        _suppressed = list(dict.fromkeys(
+                            kw for kw in _matched_forbidden
+                            if any(kw.lower() in s.lower() for s in (_rc.get("technologies", []) + _rc.get("skills", [])))
+                        ))[:4]
+                        _suppressed_str = (
+                            "".join(
+                                f'<span style="background:rgba(244,67,54,0.15);color:#ef9a9a;'
+                                f'border:1px solid rgba(244,67,54,0.3);border-radius:4px;'
+                                f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
+                                f'{kw}</span>'
+                                for kw in _suppressed
+                            )
+                            if _suppressed else
+                            '<span style="color:#aaa;font-size:12px;">none detected in top skills</span>'
                         )
+                        _domain_pills = "".join(
+                            f'<span style="background:rgba(0,195,255,0.12);color:#00c3ff;'
+                            f'border:1px solid rgba(0,195,255,0.25);border-radius:4px;'
+                            f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
+                            f'{t}</span>'
+                            for t in _mandatory[:8]
+                        )
+                        st.markdown(f"""
+                        <div style="background:linear-gradient(135deg,rgba(255,152,0,0.08) 0%,rgba(255,87,34,0.06) 100%);
+                                    border:1px solid rgba(255,152,0,0.35);border-left:4px solid #ff9800;
+                                    border-radius:10px;padding:16px 20px;margin:10px 0;">
+                            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                                <span style="font-size:20px;">🔄</span>
+                                <div>
+                                    <strong style="color:#ffb74d;font-size:15px;">Domain Override Active</strong>
+                                    <span style="color:#aaa;font-size:12px;margin-left:8px;">
+                                        Career pivot simulation enabled
+                                    </span>
+                                </div>
+                            </div>
+                            <p style="color:#e0e0e0;font-size:13px;margin:0 0 10px 0;line-height:1.6;">
+                                Your resume contains skills outside <strong style="color:#ffb74d;">{selected_domain}</strong>.
+                                All questions will be strictly scoped to your <em>target domain</em>, regardless of your
+                                existing background. This mirrors what a real interviewer would focus on when you apply
+                                to a new domain.
+                            </p>
+                            <div style="margin-bottom:10px;">
+                                <span style="color:#ef9a9a;font-size:11px;font-weight:600;text-transform:uppercase;
+                                            letter-spacing:0.06em;">Resume skills excluded from question scope:</span><br/>
+                                <div style="margin-top:5px;">{_suppressed_str}</div>
+                            </div>
+                            <div>
+                                <span style="color:#00c3ff;font-size:11px;font-weight:600;text-transform:uppercase;
+                                            letter-spacing:0.06em;">Questions will draw from these topics:</span><br/>
+                                <div style="margin-top:5px;">{_domain_pills}
+                                    <span style="color:#aaa;font-size:11px;margin-left:4px;">
+                                        + {max(0, len(_mandatory) - 8)} more domain topics
+                                    </span>
+                                </div>
+                            </div>
+                            <p style="color:#aaa;font-size:11px;margin:10px 0 0 0;font-style:italic;">
+                                💡 Treat this as authentic interview prep for breaking into {selected_domain}.
+                                Focus on fundamentals, not your existing stack.
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        # Resume aligns with domain — show a positive confirmation card
+                        _domain_pills = "".join(
+                            f'<span style="background:rgba(0,195,255,0.1);color:#00c3ff;'
+                            f'border:1px solid rgba(0,195,255,0.2);border-radius:4px;'
+                            f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
+                            f'{t}</span>'
+                            for t in _mandatory[:8]
+                        )
+                        st.markdown(f"""
+                        <div style="background:rgba(0,195,255,0.05);border:1px solid rgba(0,195,255,0.2);
+                                    border-left:4px solid #00c3ff;border-radius:10px;
+                                    padding:14px 18px;margin:10px 0;">
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                                <span style="font-size:18px;">✅</span>
+                                <strong style="color:#00c3ff;font-size:14px;">
+                                    Domain Aligned — {selected_domain}
+                                </strong>
+                            </div>
+                            <p style="color:#ccc;font-size:12px;margin:0 0 8px 0;line-height:1.5;">
+                                Your resume aligns with the selected domain. Questions will leverage your
+                                background and probe for <strong style="color:#e0e0e0;">depth and decision-making</strong>,
+                                not just familiarity.
+                            </p>
+                            <div>
+                                <span style="color:#aaa;font-size:11px;font-weight:600;text-transform:uppercase;
+                                            letter-spacing:0.06em;">Key topics in scope:</span><br/>
+                                <div style="margin-top:5px;">{_domain_pills}
+                                    <span style="color:#666;font-size:11px;margin-left:4px;">
+                                        + {max(0, len(_mandatory) - 8)} more
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
 
                 # ── DIFFICULTY CONTRACT: Show what each level means ──
                 _diff_contract = DIFFICULTY_CONTRACTS.get(interview_difficulty, {})
@@ -14591,17 +15221,10 @@ Generate {num_questions} questions now:
 
                 # Display progress with correct counts in glassmorphism box
                 st.markdown(f"""
-                <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.08) 0%, rgba(0, 195, 255, 0.04) 100%);
-                            backdrop-filter: blur(10px);
-                            -webkit-backdrop-filter: blur(10px);
-                            border: 1px solid rgba(0, 195, 255, 0.2);
-                            border-radius: 12px;
-                            padding: 16px 24px;
-                            margin: 20px 0;
-                            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);">
-                    <p style="color: #ffffff; font-size: 16px; margin: 0; font-weight: 500;">
-                        📊 Progress: Answered {questions_answered}/{st.session_state.original_num_questions} questions | Phase: {current_phase}
-                    </p>
+                <div class="t4-progress-bar">
+                    <span class="pb-label">📊 Progress</span>
+                    <span style="color:var(--text-muted);font-size:0.8rem;">{current_phase}</span>
+                    <span class="pb-value">{questions_answered} / {st.session_state.original_num_questions} answered</span>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -14637,12 +15260,18 @@ Generate {num_questions} questions now:
                     phase_badge = "📄 Resume-Based Question" if current_index <= num_resume_qs else "💼 Generic Interview Question"
                     st.markdown(f"""
                     <div class="quiz-card">
-                        <h3 style="color: #00c3ff;">Question {questions_answered + 1} of {st.session_state.original_num_questions}</h3>
-                        <div style="background: rgba(0, 195, 255, 0.15); padding: 8px 12px; border-radius: 6px; margin: 10px 0; display: inline-block;">
-                            <span style="color: #00c3ff; font-weight: 600;">{phase_badge}</span>
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                            <span style="font-size:0.72rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-cyan);">
+                                Question {questions_answered + 1} of {st.session_state.original_num_questions}
+                            </span>
+                            <span style="background:rgba(56,189,248,0.1);color:var(--accent-cyan);border:1px solid rgba(56,189,248,0.2);border-radius:99px;padding:4px 12px;font-size:0.72rem;font-weight:600;">
+                                {phase_badge}
+                            </span>
                         </div>
-                        <h4 style="color: #ffffff; margin: 15px 0;">Role: {selected_role} | Difficulty: {st.session_state.interview_difficulty}</h4>
-                        <p style="font-size: 18px; color: #ffffff; margin: 15px 0;">{question}</p>
+                        <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 12px;font-weight:500;">
+                            {selected_role} &nbsp;·&nbsp; {st.session_state.interview_difficulty}
+                        </p>
+                        <p style="font-size:1.05rem;color:var(--text-primary);margin:0;line-height:1.7;font-weight:500;">{question}</p>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -14812,12 +15441,15 @@ Generate {num_questions} questions now:
                         formatted_feedback = format_feedback_text(feedback_text)
 
                         st.markdown(f"""
-                        <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.1) 0%, rgba(0, 195, 255, 0.05) 100%);
-                                    border: 1px solid rgba(0, 195, 255, 0.3); border-radius: 10px; padding: 15px; margin: 15px 0;">
-                            <h4 style="color: #00c3ff;">Immediate Feedback:</h4>
-                            <p style="color: #ffffff;">📊 Knowledge: {current_score_dict["knowledge"]}/10 | Communication: {current_score_dict["communication"]}/10 | Relevance: {current_score_dict["relevance"]}/10</p>
-                            <p style="color: #ffffff;">⭐ Question Score: {avg_q_score:.1f}/10</p>
-                            <div style="color: #ffffff; margin-top: 10px;">
+                        <div class="t4-feedback-card">
+                            <p class="fb-header">Feedback</p>
+                            <div class="t4-score-pills">
+                                <div class="t4-score-pill">📘 Knowledge <span>{current_score_dict["knowledge"]}/10</span></div>
+                                <div class="t4-score-pill">🗣 Communication <span>{current_score_dict["communication"]}/10</span></div>
+                                <div class="t4-score-pill">🎯 Relevance <span>{current_score_dict["relevance"]}/10</span></div>
+                                <div class="t4-score-pill">⭐ Score <span>{avg_q_score:.1f}/10</span></div>
+                            </div>
+                            <div style="color:var(--text-secondary);font-size:0.875rem;line-height:1.7;">
                                 {formatted_feedback}
                             </div>
                         </div>
@@ -14837,19 +15469,14 @@ Generate {num_questions} questions now:
                             }
                             _pc = _pressure_colors.get(_pressure, "#ffa500")
                             st.markdown(f"""
-                            <div style="background: linear-gradient(135deg, rgba(255,165,0,0.12), rgba(255,165,0,0.06));
-                                        border: 1px solid rgba(255,165,0,0.4); border-radius: 10px;
-                                        padding: 14px 18px; margin: 12px 0;">
-                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                                    <span style="color: #ffa500; font-weight: 600;">
-                                        🔎 Follow-Up — {_preview_strategy}
-                                    </span>
-                                    <span style="color:{_pc};font-size:12px;font-weight:600;
-                                                 background:rgba(0,0,0,0.3);padding:2px 8px;border-radius:12px;">
-                                        Layer {_esc_layer}/5: {_layer_name} | Pressure: {_pressure}
+                            <div class="t4-followup-card">
+                                <div class="fq-header">
+                                    <span class="fq-title">🔎 Follow-Up — {_preview_strategy}</span>
+                                    <span class="t4-pressure-pill" style="color:{_pc};">
+                                        Layer {_esc_layer}/5: {_layer_name} · {_pressure}
                                     </span>
                                 </div>
-                                <p style="color: #ffffff; margin: 0; font-size: 15px;">{_preview_fq}</p>
+                                <p>{_preview_fq}</p>
                             </div>
                             """, unsafe_allow_html=True)
 
@@ -14882,9 +15509,8 @@ Generate {num_questions} questions now:
                                 st.session_state.question_timer_start = time.time()
                                 st.rerun()
 
-                    # Progress bar for interview completion
                     interview_progress = questions_answered / st.session_state.original_num_questions
-                    st.markdown("### Interview Progress")
+                    st.markdown('<p class="t4-section-label">Interview Progress</p>', unsafe_allow_html=True)
                     st.progress(interview_progress)
 
                     # CRITICAL FIX: Review Previous Answers - show all properly
@@ -14961,21 +15587,29 @@ Generate {num_questions} questions now:
 
                 st.markdown(f"""
                 <div class="badge-container">
-                    <h2 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">🎉 Mock Interview Complete!</h2>
-                    <div style="margin: 30px 0;">
-                        <div class="score-display">{overall_avg:.1f}/10</div>
-                        <h3 style="color: #ffffff; margin: 15px 0; font-size: 24px; font-weight: 500;">{badge_emoji} {badge}</h3>
+                    <p style="font-size:0.72rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px;">Mock Interview Complete</p>
+                    <h2 style="margin:0 0 20px;color:var(--text-primary);font-size:1.6rem;font-weight:700;letter-spacing:-0.03em;">🎉 Results</h2>
+                    <div class="score-display">{overall_avg:.1f}<span style="font-size:1.6rem;color:var(--text-muted);font-weight:400;">/10</span></div>
+                    <h3 style="color:var(--text-primary);margin:12px 0 20px;font-size:1.3rem;font-weight:600;">{badge_emoji} {badge}</h3>
+                    <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:8px;">
+                        <span style="background:rgba(255,255,255,0.05);border:1px solid var(--border-subtle);border-radius:99px;padding:5px 14px;font-size:0.82rem;color:var(--text-secondary);">
+                            {selected_role} in {selected_domain}
+                        </span>
+                        <span style="background:rgba(255,255,255,0.05);border:1px solid var(--border-subtle);border-radius:99px;padding:5px 14px;font-size:0.82rem;color:var(--text-secondary);">
+                            {st.session_state.interview_difficulty} difficulty
+                        </span>
+                        <span style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:99px;padding:5px 14px;font-size:0.82rem;color:var(--accent-cyan);">
+                            ⚡ Weighted: {_weighted_avg:.2f}/10 ×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)}
+                        </span>
+                        <span style="background:rgba(255,255,255,0.05);border:1px solid var(--border-subtle);border-radius:99px;padding:5px 14px;font-size:0.82rem;color:var(--text-secondary);">
+                            Follow-ups: {_follow_up_count} · Depth: {_depth_score:.1f}/10
+                        </span>
                     </div>
-                    <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Role: {selected_role} in {selected_domain}</p>
-                    <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Difficulty: {st.session_state.interview_difficulty}</p>
-                    <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.2f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
-                    <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; margin: 4px 0;">Follow-up Probes: {_follow_up_count} | Depth Score: {_depth_score:.1f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
 
-                # Create radar chart for skills
                 st.markdown('<div class="radar-container">', unsafe_allow_html=True)
-                st.subheader("📊 Performance Radar Chart")
+                st.markdown('<p class="t4-section-label">Performance Radar</p>', unsafe_allow_html=True)
 
                 radar_data = {
                     "Communication": avg_communication,
@@ -15023,7 +15657,7 @@ Generate {num_questions} questions now:
                 st.markdown('</div>', unsafe_allow_html=True)
 
                 # Strengths and Weaknesses
-                st.subheader("💡 Performance Analysis")
+                st.markdown('<p class="t4-section-label">Performance Analysis</p>', unsafe_allow_html=True)
                 col1, col2 = st.columns(2)
 
                 metrics = [("Communication", avg_communication), ("Knowledge", avg_knowledge), ("Confidence", avg_relevance)]
@@ -15039,9 +15673,8 @@ Generate {num_questions} questions now:
                     for name, score in metrics_sorted[-2:]:
                         st.markdown(f"- {name}: {score:.1f}/10")
 
-                # FIXED: Show detailed Q&A results with full answers and proper matching
                 st.markdown("---")
-                st.subheader("📋 Detailed Q&A Review:")
+                st.markdown('<p class="t4-section-label">Detailed Q&A Review</p>', unsafe_allow_html=True)
 
                 # Ensure we only show as many Q&A pairs as we have complete data for
                 num_complete_qa = min(
@@ -15091,7 +15724,7 @@ Generate {num_questions} questions now:
 
                 # Generate PDF report
                 st.markdown("---")
-                st.subheader("📄 Download Interview Report")
+                st.markdown('<p class="t4-section-label">Download Interview Report</p>', unsafe_allow_html=True)
 
                 completed_on = get_ist_time()
 
@@ -15128,10 +15761,9 @@ Generate {num_questions} questions now:
                 else:
                     st.warning("PDF generation failed. You can still review your results above.")
 
-                # UNIFIED: Display recommended courses by difficulty
                 st.markdown("---")
-                st.subheader("📚 Recommended Courses for Your Career Growth")
-                st.markdown(f"Based on your interview practice for **{selected_role}** in **{selected_domain}**, here are our course recommendations organized by difficulty level:")
+                st.markdown('<p class="t4-section-label">Recommended Courses for Your Growth</p>', unsafe_allow_html=True)
+                st.markdown(f"<p style='color:var(--text-secondary);font-size:0.875rem;margin-bottom:14px;'>Based on your practice for <strong style='color:var(--text-primary);'>{selected_role}</strong> in <strong style='color:var(--text-primary);'>{selected_domain}</strong>.</p>", unsafe_allow_html=True)
 
                 courses = get_courses_for_role(selected_domain, selected_role)
                 if courses:
@@ -15183,61 +15815,15 @@ Generate {num_questions} questions now:
         import plotly.express as px
         from plotly.subplots import make_subplots
 
-        # ── Dashboard CSS ──────────────────────────────────────────────────────
+        # ── My Progress extra CSS (inherits the main design system above) ──
         st.markdown("""
         <style>
-        /* Metric cards */
-        .metric-card {
-            background: linear-gradient(135deg, rgba(0,195,255,0.10) 0%, rgba(0,195,255,0.04) 100%);
-            border: 1px solid rgba(0,195,255,0.25);
-            border-radius: 14px;
-            padding: 18px 20px;
-            margin: 6px 0;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        .metric-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 24px rgba(0,195,255,0.18);
-        }
-        .metric-card .metric-label {
-            color: rgba(255,255,255,0.55);
-            font-size: 12px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin: 0 0 6px 0;
-        }
-        .metric-card .metric-value {
-            color: #00c3ff;
-            font-size: 28px;
-            font-weight: 700;
-            margin: 0;
-            line-height: 1.1;
-        }
-        .metric-card .metric-sub {
-            color: rgba(255,255,255,0.45);
-            font-size: 11px;
-            margin: 4px 0 0 0;
-        }
-        /* Score badges */
-        .badge-excellent { background:#1a3a2a; color:#00e676; border:1px solid #00e676; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
-        .badge-good      { background:#1a3020; color:#69f0ae; border:1px solid #69f0ae; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
-        .badge-average   { background:#2a2a10; color:#ffcc02; border:1px solid #ffcc02; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
-        .badge-weak      { background:#2a1a10; color:#ff9800; border:1px solid #ff9800; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
-        .badge-poor      { background:#2a1010; color:#f44336; border:1px solid #f44336; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
-        /* Highlighted best row */
-        .best-row { background: rgba(0,230,118,0.12) !important; }
-        /* Section divider */
-        .section-header {
-            font-size: 20px; font-weight: 700; color: #00c3ff;
-            border-left: 4px solid #00c3ff; padding-left: 12px;
-            margin: 24px 0 4px 0;
-        }
+        /* Additional My Progress overrides */
         </style>
         """, unsafe_allow_html=True)
 
-        st.subheader("📊 My Progress Dashboard")
-        st.markdown("Track how you're improving over time, spot your strengths, and find exactly what to work on next.")
+        st.markdown('<p class="t4-section-label">My Progress Dashboard</p>', unsafe_allow_html=True)
+        st.markdown("<p style='color:var(--text-secondary);font-size:0.9rem;margin-bottom:20px;'>Track your improvement over time, spot your strengths, and find exactly what to work on next.</p>", unsafe_allow_html=True)
 
         username = st.session_state.get("username", "Guest")
 
@@ -15278,8 +15864,8 @@ Generate {num_questions} questions now:
             # SECTION A — EXECUTIVE SUMMARY METRICS
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🏆 Your Progress at a Glance")
-            st.caption("Here's a quick overview of everything you've accomplished so far.")
+            st.markdown('<p class="section-header">Your Progress at a Glance</p>', unsafe_allow_html=True)
+            st.caption("A quick overview of everything you've accomplished so far.")
 
             total_interviews = len(df)
             highest_score = df['avg_score'].max()
@@ -15365,8 +15951,8 @@ Generate {num_questions} questions now:
             # SECTION B — SCORE TREND INTELLIGENCE
             # =====================================================
             st.markdown("---")
-            st.markdown("### 📈 Are You Getting Better Over Time?")
-            st.caption("This chart shows how your scores have changed across every interview you've done. The smoother line helps filter out one-off good or bad days.")
+            st.markdown('<p class="section-header">Are You Getting Better Over Time?</p>', unsafe_allow_html=True)
+            st.caption("Your scores across every interview. The smoother line filters out single-session spikes.")
 
             trend_df = df[['avg_score', 'weighted_score']].copy().reset_index(drop=True)
             trend_df.index = trend_df.index + 1
@@ -15518,8 +16104,8 @@ Generate {num_questions} questions now:
             # SECTION C — DOMAIN & ROLE ANALYTICS
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🌐 Where Are You Strongest?")
-            st.caption("See which career areas and job roles you score highest in — and which ones need more practice.")
+            st.markdown('<p class="section-header">Where Are You Strongest?</p>', unsafe_allow_html=True)
+            st.caption("Which career areas and roles you score highest in — and which need more practice.")
 
             if 'domain' in df.columns:
                 col_l, col_r = st.columns(2)
@@ -15677,7 +16263,7 @@ Generate {num_questions} questions now:
             # SECTION D — DIFFICULTY PERFORMANCE
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🎯 How You Handle Different Difficulty Levels")
+            st.markdown('<p class="section-header">How You Handle Different Difficulty Levels</p>', unsafe_allow_html=True)
             st.caption("Easy interviews build confidence. Medium tests your thinking. Hard interviews push your limits — and show real growth.")
 
             if 'difficulty' in df.columns:
@@ -15743,7 +16329,7 @@ Generate {num_questions} questions now:
             # SECTION E — SKILL INTELLIGENCE (RADAR CHART)
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🕸️ Your Skill Strengths")
+            st.markdown('<p class="section-header">Your Skill Strengths</p>', unsafe_allow_html=True)
             st.caption("This chart shows how you're performing across three key interview skills. The bigger the shape, the stronger you are overall.")
 
             skill_cols = ['knowledge_avg', 'communication_avg', 'relevance_avg']
@@ -15800,7 +16386,7 @@ Generate {num_questions} questions now:
             # SECTION F — BEHAVIORAL ANALYTICS
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🧠 Your Interview Style")
+            st.markdown('<p class="section-header">Your Interview Style</p>', unsafe_allow_html=True)
             st.caption("This section looks at how you behave during interviews — how long you spend, how that affects your score, and what kind of interviewer you are.")
 
             col_b1, col_b2, col_b3 = st.columns(3)
@@ -15879,7 +16465,7 @@ Generate {num_questions} questions now:
                 _hard_avg_b = df[df['difficulty'] == 'Hard']['avg_score'].mean()
                 _med_avg_b = df[df['difficulty'] == 'Medium']['avg_score'].mean()
                 _hard_delta = _hard_avg_b - _med_avg_b
-                st.markdown("#### 💪 How You Perform in Hard Interviews")
+                st.markdown('<p class="section-header">How You Perform in Hard Interviews</p>', unsafe_allow_html=True)
                 st.caption("Hard interviews are more demanding — it's normal to score a little lower. Here's how you're doing.")
                 col_hd1, col_hd2 = st.columns(2)
                 with col_hd1:
@@ -15912,7 +16498,7 @@ Generate {num_questions} questions now:
             # SECTION G — CLASSIFICATION ENGINE
             # =====================================================
             st.markdown("---")
-            st.markdown("### 🎖️ Where Do You Stand Right Now?")
+            st.markdown('<p class="section-header">Where Do You Stand Right Now?</p>', unsafe_allow_html=True)
             st.caption("Based on all your interviews, here's an honest picture of where you are today — and where you're headed.")
 
             if not pd.isna(overall_avg):
@@ -15950,7 +16536,7 @@ Generate {num_questions} questions now:
             # SECTION H — AI GENERATED PERFORMANCE SUMMARY
             # =====================================================
             st.markdown("---")
-            st.markdown("### 📝 Your Personal Progress Report")
+            st.markdown('<p class="section-header">Your Personal Progress Report</p>', unsafe_allow_html=True)
             st.caption("Here's a plain-English summary of everything your data is telling us about your interview journey so far.")
 
             # Generate programmatic summary from real data
@@ -16023,7 +16609,7 @@ Generate {num_questions} questions now:
             # SECTION I — RECOMMENDATION ENGINE
             # =====================================================
             st.markdown("---")
-            st.markdown("### 💡 What You Should Do Next")
+            st.markdown('<p class="section-header">What You Should Do Next</p>', unsafe_allow_html=True)
             st.caption("These suggestions are personalised based on your actual interview history. Follow them and you'll see real improvement.")
 
             recommendations = []
@@ -16070,7 +16656,7 @@ Generate {num_questions} questions now:
             # Mode breakdown if available
             if 'interview_mode' in df.columns and df['interview_mode'].notna().any():
                 st.markdown("---")
-                st.markdown("### 🎮 Which Interview Type Do You Prefer?")
+                st.markdown('<p class="section-header">Which Interview Type Do You Prefer?</p>', unsafe_allow_html=True)
                 st.caption("See how you perform across technical, behavioural, and mixed interview formats.")
                 _mode_df = df[df['interview_mode'].notna() & (df['interview_mode'] != '')]
                 if not _mode_df.empty:
@@ -16191,8 +16777,6 @@ Generate {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
-
-
 
 if tab5:
 	with tab5:
