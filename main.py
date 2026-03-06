@@ -3732,24 +3732,119 @@ with tab1:
         st.dataframe(df[overview_cols], use_container_width=True)
 
         st.markdown("<div class='section-heading'>📊 Visual Analysis</div>", unsafe_allow_html=True)
-        chart_tab1, chart_tab2 = st.tabs(["📉 Bias Score Chart", "⚖ Gender-Coded Words"])
+
+        # ── shared dark Altair theme ──────────────────────────────────────────
+        _dark = {
+            "view":   {"stroke": "transparent", "fill": "#0d1220"},
+            "background": "#0d1220",
+            "axis": {
+                "domainColor": "#1e2a3a", "gridColor": "#1e2a3a",
+                "labelColor": "#64748b", "titleColor": "#94a3b8",
+                "labelFontSize": 11, "titleFontSize": 12,
+                "labelFont": "Outfit, sans-serif", "titleFont": "Outfit, sans-serif"
+            },
+            "legend": {
+                "labelColor": "#94a3b8", "titleColor": "#94a3b8",
+                "labelFont": "Outfit, sans-serif", "titleFont": "Outfit, sans-serif",
+                "labelFontSize": 11
+            },
+            "title": {
+                "color": "#f0f4f8", "fontSize": 13, "fontWeight": "600",
+                "font": "Outfit, sans-serif", "anchor": "start",
+                "offset": 12
+            }
+        }
+
+        chart_tab1, chart_tab2 = st.tabs(["📉 Bias Score", "⚖️ Gender-Coded Words"])
+
         with chart_tab1:
-            st.subheader("Bias Score Comparison Across Resumes")
-            st.bar_chart(df.set_index("Resume Name")[["Bias Score (0 = Fair, 1 = Biased)"]])
+            # Compact Altair horizontal bar chart — replaces st.bar_chart
+            _bias_df = df[["Resume Name", "Bias Score (0 = Fair, 1 = Biased)"]].copy()
+            _bias_df.columns = ["Resume", "Bias Score"]
+            _bias_df["Color"] = _bias_df["Bias Score"].apply(
+                lambda v: "#f87171" if v > 0.6 else ("#fbbf24" if v > 0.3 else "#34d399")
+            )
+            _bias_chart = (
+                alt.Chart(_bias_df)
+                .mark_bar(cornerRadiusEnd=4, size=22)
+                .encode(
+                    y=alt.Y("Resume:N", sort="-x",
+                            axis=alt.Axis(labelLimit=160, labelFontSize=11)),
+                    x=alt.X("Bias Score:Q",
+                            scale=alt.Scale(domain=[0, 1]),
+                            axis=alt.Axis(format=".1f", tickCount=6)),
+                    color=alt.Color("Color:N", scale=None, legend=None),
+                    tooltip=[
+                        alt.Tooltip("Resume:N", title="Resume"),
+                        alt.Tooltip("Bias Score:Q", title="Bias Score", format=".2f"),
+                    ],
+                )
+                .properties(
+                    title="Bias Score — 0 = Fair · 1 = Biased",
+                    height=max(120, len(_bias_df) * 44),
+                    width="container",
+                )
+                .configure(**_dark)
+            )
+            st.altair_chart(_bias_chart, use_container_width=True)
+
+            # Legend pills
+            st.markdown("""
+            <div style="display:flex;gap:16px;margin-top:4px;flex-wrap:wrap;">
+                <span style="font-size:0.75rem;color:#34d399;display:flex;align-items:center;gap:5px;">
+                    <span style="width:10px;height:10px;border-radius:2px;background:#34d399;display:inline-block;"></span>Fair (≤ 0.3)
+                </span>
+                <span style="font-size:0.75rem;color:#fbbf24;display:flex;align-items:center;gap:5px;">
+                    <span style="width:10px;height:10px;border-radius:2px;background:#fbbf24;display:inline-block;"></span>Moderate (0.3–0.6)
+                </span>
+                <span style="font-size:0.75rem;color:#f87171;display:flex;align-items:center;gap:5px;">
+                    <span style="width:10px;height:10px;border-radius:2px;background:#f87171;display:inline-block;"></span>High Bias (&gt; 0.6)
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+
         with chart_tab2:
-            st.subheader("Masculine vs Feminine Word Usage")
-            fig, ax = plt.subplots(figsize=(10, 5))
-            index = np.arange(len(df))
-            bar_width = 0.35
-            ax.bar(index, df["Masculine Words Count"], bar_width, label="Masculine", color="#3498db")
-            ax.bar(index + bar_width, df["Feminine Words Count"], bar_width, label="Feminine", color="#e74c3c")
-            ax.set_xlabel("Resumes", fontsize=12)
-            ax.set_ylabel("Word Count", fontsize=12)
-            ax.set_title("Gender-Coded Word Usage per Resume", fontsize=14)
-            ax.set_xticks(index + bar_width / 2)
-            ax.set_xticklabels(df["Resume Name"], rotation=45, ha='right')
-            ax.legend()
-            st.pyplot(fig)
+            # Grouped Altair bar — replaces matplotlib
+            _gender_rows = []
+            for _, row in df.iterrows():
+                _gender_rows.append({"Resume": row["Resume Name"], "Type": "Masculine", "Count": row["Masculine Words Count"]})
+                _gender_rows.append({"Resume": row["Resume Name"], "Type": "Feminine",  "Count": row["Feminine Words Count"]})
+            _gender_df = pd.DataFrame(_gender_rows)
+
+            _gender_chart = (
+                alt.Chart(_gender_df)
+                .mark_bar(cornerRadiusEnd=4)
+                .encode(
+                    x=alt.X("Type:N", axis=alt.Axis(title=None, labelAngle=0), scale=alt.Scale(paddingInner=0.15)),
+                    y=alt.Y("Count:Q", axis=alt.Axis(title="Word Count")),
+                    color=alt.Color(
+                        "Type:N",
+                        scale=alt.Scale(domain=["Masculine", "Feminine"], range=["#3b9edd", "#f87171"]),
+                        legend=alt.Legend(orient="top-right", direction="horizontal"),
+                    ),
+                    column=alt.Column(
+                        "Resume:N",
+                        header=alt.Header(
+                            labelColor="#94a3b8", labelFont="Outfit, sans-serif",
+                            labelFontSize=10, titleColor="#94a3b8"
+                        ),
+                        spacing=12,
+                    ),
+                    tooltip=[
+                        alt.Tooltip("Resume:N", title="Resume"),
+                        alt.Tooltip("Type:N",   title="Category"),
+                        alt.Tooltip("Count:Q",  title="Word Count"),
+                    ],
+                )
+                .properties(
+                    title="Gender-Coded Word Count per Resume",
+                    height=220,
+                )
+                .configure(**_dark)
+                .configure_facet(spacing=12)
+                .configure_view(stroke="transparent")
+            )
+            st.altair_chart(_gender_chart, use_container_width=True)
 
         st.markdown("<div class='section-heading'>📝 Detailed Resume Reports</div>", unsafe_allow_html=True)
         for resume in resume_data:
@@ -3787,29 +3882,69 @@ with tab1:
                     st.markdown("<div class='section-heading'>📋 ATS Evaluation Report</div>", unsafe_allow_html=True)
                     st.markdown(resume["ATS Report"], unsafe_allow_html=True)
 
-                # ATS Chart
+                # ATS Score Breakdown Chart — compact dark horizontal bars
                 st.markdown("<div class='section-heading'>📊 Score Breakdown</div>", unsafe_allow_html=True)
-                ats_df = pd.DataFrame({
-                    'Component': ['Education', 'Experience', 'Skills', 'Language', 'Keywords'],
-                    'Score': [
-                        resume.get("Education Score", 0),
-                        resume.get("Experience Score", 0),
-                        resume.get("Skills Score", 0),
-                        resume.get("Language Score", 0),
-                        resume.get("Keyword Score", 0)
+
+                _max_map = {"Education": edu_weight, "Experience": exp_weight,
+                            "Skills": skills_weight, "Language": lang_weight, "Keywords": keyword_weight}
+                _ats_rows = [
+                    {"Component": c,
+                     "Score": resume.get(k, 0),
+                     "Max": _max_map[c],
+                     "Pct": round(resume.get(k, 0) / max(_max_map[c], 1) * 100, 1)}
+                    for c, k in [
+                        ("Education", "Education Score"), ("Experience", "Experience Score"),
+                        ("Skills", "Skills Score"), ("Language", "Language Score"),
+                        ("Keywords", "Keyword Score"),
                     ]
-                })
-                ats_chart = alt.Chart(ats_df).mark_bar().encode(
-                    x=alt.X('Component', sort=None),
-                    y=alt.Y('Score', scale=alt.Scale(domain=[0, 50])),
-                    color='Component',
-                    tooltip=['Component', 'Score']
-                ).properties(
-                    title="ATS Evaluation Breakdown",
-                    width=600,
-                    height=300
+                ]
+                _ats_df2 = pd.DataFrame(_ats_rows)
+                _ats_df2["Color"] = _ats_df2["Pct"].apply(
+                    lambda p: "#34d399" if p >= 75 else ("#fbbf24" if p >= 50 else "#f87171")
                 )
-                st.altair_chart(ats_chart, use_container_width=True)
+
+                _col_chart, _col_nums = st.columns([3, 1])
+                with _col_chart:
+                    _ats_chart2 = (
+                        alt.Chart(_ats_df2)
+                        .mark_bar(cornerRadiusEnd=5, size=18)
+                        .encode(
+                            y=alt.Y("Component:N", sort=None,
+                                    axis=alt.Axis(labelFontSize=11, labelLimit=100)),
+                            x=alt.X("Pct:Q",
+                                    scale=alt.Scale(domain=[0, 100]),
+                                    axis=alt.Axis(title="% of Max", tickCount=5, format="d")),
+                            color=alt.Color("Color:N", scale=None, legend=None),
+                            tooltip=[
+                                alt.Tooltip("Component:N", title="Section"),
+                                alt.Tooltip("Score:Q",     title="Score"),
+                                alt.Tooltip("Max:Q",       title="Max"),
+                                alt.Tooltip("Pct:Q",       title="% of Max", format=".1f"),
+                            ],
+                        )
+                        .properties(height=180, width="container")
+                        .configure(
+                            background="#0d1220",
+                            view={"stroke": "transparent", "fill": "#0d1220"},
+                            axis={
+                                "domainColor": "#1e2a3a", "gridColor": "#1e2a3a",
+                                "labelColor": "#94a3b8", "titleColor": "#94a3b8",
+                                "labelFontSize": 11, "labelFont": "Outfit, sans-serif",
+                            },
+                        )
+                    )
+                    st.altair_chart(_ats_chart2, use_container_width=True)
+
+                with _col_nums:
+                    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+                    for row in _ats_rows:
+                        _color = "#34d399" if row["Pct"] >= 75 else ("#fbbf24" if row["Pct"] >= 50 else "#f87171")
+                        st.markdown(f"""
+                        <div style="padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+                            <div style="font-size:0.7rem;color:#4a5568;text-transform:uppercase;letter-spacing:.06em;">{row['Component']}</div>
+                            <div style="font-size:1rem;font-weight:700;color:{_color};">{row['Score']}<span style="font-size:0.72rem;color:#4a5568;font-weight:400;"> / {row['Max']}</span></div>
+                        </div>
+                        """, unsafe_allow_html=True)
 
                 # 🔷 Detailed ATS Analysis Cards
                 st.markdown("<div class='section-heading'>🔍 Detailed Analysis</div>", unsafe_allow_html=True)
