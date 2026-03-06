@@ -403,78 +403,708 @@ if "last_validated_password" not in st.session_state:
 # ------------------- CSS Styling -------------------
 st.markdown("""
 <style>
-body, .main {
-    background-color: #0d1117;
-    color: white;
+/* ============================================================
+   HIRELYZER — Premium Apple-Style Design System
+   Font: SF Pro Display / System stack
+   Theme: Dark obsidian + electric blue + platinum
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+    --font-primary: 'Outfit', -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+
+    /* Core palette */
+    --bg-base:       #070b14;
+    --bg-surface:    #0d1220;
+    --bg-card:       #111827;
+    --bg-raised:     #161e2e;
+
+    /* Glass layers */
+    --glass-1: rgba(255,255,255,0.03);
+    --glass-2: rgba(255,255,255,0.06);
+    --glass-border: rgba(255,255,255,0.08);
+    --glass-border-bright: rgba(99,179,237,0.25);
+
+    /* Accent system */
+    --accent:        #3b9edd;
+    --accent-bright: #60c0ff;
+    --accent-glow:   rgba(59,158,221,0.35);
+    --accent-subtle: rgba(59,158,221,0.10);
+
+    /* Status */
+    --success: #34d399;
+    --success-bg: rgba(52,211,153,0.10);
+    --warning: #fbbf24;
+    --warning-bg: rgba(251,191,36,0.10);
+    --error:   #f87171;
+    --error-bg: rgba(248,113,113,0.10);
+    --info:    #60c0ff;
+    --info-bg: rgba(96,192,255,0.10);
+
+    /* Text hierarchy */
+    --text-primary:   #f0f4f8;
+    --text-secondary: #94a3b8;
+    --text-muted:     #4a5568;
+    --text-accent:    #60c0ff;
+
+    /* Spacing */
+    --radius-sm:  8px;
+    --radius-md:  14px;
+    --radius-lg:  20px;
+    --radius-xl:  28px;
+
+    /* Shadows */
+    --shadow-sm:  0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-md:  0 4px 16px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+    --shadow-lg:  0 8px 32px rgba(0,0,0,0.6), 0 4px 8px rgba(0,0,0,0.4);
+    --shadow-glow: 0 0 24px var(--accent-glow);
 }
 
-/* Smooth fade animation for notifications */
+/* ─── Global Reset ─── */
+html, body, [class*="css"], .main, .block-container {
+    font-family: var(--font-primary) !important;
+    background-color: var(--bg-base) !important;
+    color: var(--text-primary) !important;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Remove Streamlit default padding */
+.block-container {
+    padding-top: 1.5rem !important;
+    padding-bottom: 4rem !important;
+    max-width: 1200px !important;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-bright); }
+
+/* ─── Streamlit Alerts / Notifications ─── */
 div.stAlert {
-    border-radius: 12px;
-    padding: 10px 14px;
-    animation: fadein 0.3s, fadeout 0.3s 2.7s;
-    text-align: center;
+    border-radius: var(--radius-md) !important;
+    padding: 12px 16px !important;
+    font-family: var(--font-primary) !important;
+    font-size: 0.875rem !important;
+    animation: fadeSlideIn 0.35s ease;
+    border: 1px solid var(--glass-border) !important;
+    backdrop-filter: blur(12px) !important;
 }
-@keyframes fadein { from {opacity: 0;} to {opacity: 1;} }
-@keyframes fadeout { from {opacity: 1;} to {opacity: 0;} }
+@keyframes fadeSlideIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes fadein  { from {opacity:0;} to {opacity:1;} }
+@keyframes fadeout { from {opacity:1;} to {opacity:0;} }
 
+/* ─── Premium Glassmorphism Card ─── */
+.glass-card {
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.07);
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s ease, border-color 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+.glass-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+    transition: left 0.6s ease;
+    pointer-events: none;
+}
+.glass-card:hover::before { left: 140%; }
+.glass-card:hover {
+    border-color: var(--glass-border-bright);
+    box-shadow: var(--shadow-lg), var(--shadow-glow), inset 0 1px 0 rgba(255,255,255,0.10);
+    transform: translateY(-3px);
+}
+
+/* ─── Login Card (override) ─── */
 .login-card {
-    background: #161b22;
-    padding: 30px;
-    border-radius: 20px;
-    box-shadow: 0 0 25px rgba(0,0,0,0.3);
-    transition: all 0.4s ease;
+    background: linear-gradient(135deg, rgba(13,18,32,0.95) 0%, rgba(17,24,39,0.90) 100%);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--glass-border-bright);
+    border-radius: var(--radius-xl);
+    padding: 36px 32px;
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
+    transition: all 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    position: relative;
+    overflow: hidden;
+    animation: cardRise 0.7s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+.login-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-xl);
+    background: radial-gradient(ellipse at 30% 0%, rgba(59,158,221,0.06), transparent 60%);
+    pointer-events: none;
 }
 .login-card:hover {
-    transform: translateY(-6px) scale(1.01);
-    box-shadow: 0 0 45px rgba(0,255,255,0.25);
+    border-color: rgba(96,192,255,0.40);
+    box-shadow: var(--shadow-lg), 0 0 48px rgba(59,158,221,0.20);
+    transform: translateY(-4px);
 }
-.stTextInput > div > input {
-    background-color: #0d1117;
-    color: white;
-    border: 1px solid #30363d;
-    border-radius: 10px;
-    padding: 0.6em;
+@keyframes cardRise {
+    from { opacity:0; transform:translateY(24px) scale(0.97); }
+    to   { opacity:1; transform:translateY(0)    scale(1); }
 }
-.stTextInput > div > input:hover {
-    border: 1px solid #00BFFF;
-    box-shadow: 0 0 8px rgba(0,191,255,0.2);
-}
-.stTextInput > label {
-    color: #c9d1d9;
-}
-.stButton > button {
-    background-color: #238636;
-    color: white;
-    border-radius: 10px;
-    padding: 0.6em 1.5em;
-    border: none;
-    font-weight: bold;
-}
-.stButton > button:hover {
-    background-color: #2ea043;
-    box-shadow: 0 0 10px rgba(46,160,67,0.4);
-    transform: scale(1.02);
-}
+
+/* ─── Feature Card (sidebar) ─── */
 .feature-card {
-    background: radial-gradient(circle at top left, #1f2937, #111827);
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0 0 20px rgba(0,255,255,0.1);
-    text-align: center;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    color: #fff;
-    margin-bottom: 20px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 12px;
+    transition: all 0.28s ease;
+    cursor: default;
 }
 .feature-card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 0 30px rgba(0,255,255,0.4);
+    border-color: var(--glass-border-bright);
+    background: rgba(59,158,221,0.06);
+    transform: translateX(4px);
+    box-shadow: var(--shadow-sm);
 }
 .feature-card h3 {
-    color: #00BFFF;
+    color: var(--text-accent) !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    margin: 8px 0 4px !important;
 }
 .feature-card p {
-    color: #c9d1d9;
+    color: var(--text-secondary) !important;
+    font-size: 0.78rem !important;
+    line-height: 1.5 !important;
+    margin: 0 !important;
+}
+
+/* ─── Inputs ─── */
+.stTextInput > div > input,
+.stTextArea > div > textarea,
+.stSelectbox > div > div {
+    background: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: var(--radius-md) !important;
+    font-family: var(--font-primary) !important;
+    font-size: 0.9rem !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+.stTextInput > div > input:focus,
+.stTextArea > div > textarea:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px var(--accent-subtle), var(--shadow-sm) !important;
+    outline: none !important;
+}
+.stTextInput > div > input:hover,
+.stTextArea > div > textarea:hover {
+    border-color: rgba(96,192,255,0.30) !important;
+}
+.stTextInput > label,
+.stTextArea > label,
+.stSelectbox > label,
+.stSlider > label {
+    color: var(--text-secondary) !important;
+    font-size: 0.82rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.02em !important;
+    text-transform: uppercase !important;
+}
+
+/* ─── Buttons ─── */
+.stButton > button {
+    background: linear-gradient(135deg, rgba(59,158,221,0.18) 0%, rgba(59,158,221,0.08) 100%) !important;
+    color: var(--text-accent) !important;
+    border: 1px solid rgba(96,192,255,0.30) !important;
+    border-radius: var(--radius-md) !important;
+    font-family: var(--font-primary) !important;
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.04em !important;
+    padding: 10px 24px !important;
+    transition: all 0.25s ease !important;
+    position: relative !important;
+    overflow: hidden !important;
+    text-transform: uppercase !important;
+}
+.stButton > button::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.08), transparent);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+.stButton > button:hover::before { opacity: 1; }
+.stButton > button:hover {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 20px var(--accent-glow), var(--shadow-sm) !important;
+    transform: translateY(-2px) !important;
+    color: #fff !important;
+}
+.stButton > button:active {
+    transform: translateY(0) !important;
+    box-shadow: none !important;
+}
+
+/* ─── Download Buttons ─── */
+.stDownloadButton > button {
+    background: linear-gradient(135deg, rgba(52,211,153,0.15) 0%, rgba(52,211,153,0.06) 100%) !important;
+    color: var(--success) !important;
+    border: 1px solid rgba(52,211,153,0.30) !important;
+    border-radius: var(--radius-md) !important;
+    font-family: var(--font-primary) !important;
+    font-size: 0.83rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.03em !important;
+    transition: all 0.25s ease !important;
+}
+.stDownloadButton > button:hover {
+    border-color: var(--success) !important;
+    box-shadow: 0 0 20px rgba(52,211,153,0.30) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* ─── Sliders ─── */
+.stSlider > div > div > div {
+    background: var(--accent) !important;
+}
+.stSlider > div > div > div > div {
+    background: var(--accent-bright) !important;
+    border: 2px solid var(--bg-base) !important;
+    box-shadow: var(--shadow-glow) !important;
+}
+
+/* ─── Metrics ─── */
+[data-testid="metric-container"] {
+    background: var(--glass-1) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: var(--radius-md) !important;
+    padding: 16px 20px !important;
+    transition: all 0.25s ease !important;
+}
+[data-testid="metric-container"]:hover {
+    border-color: var(--glass-border-bright) !important;
+    background: var(--accent-subtle) !important;
+    box-shadow: var(--shadow-sm) !important;
+}
+[data-testid="metric-container"] label {
+    color: var(--text-secondary) !important;
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+}
+[data-testid="metric-container"] [data-testid="metric-value"] {
+    color: var(--text-primary) !important;
+    font-size: 1.6rem !important;
+    font-weight: 700 !important;
+}
+
+/* ─── Tabs ─── */
+.stTabs [data-baseweb="tab-list"] {
+    background: var(--bg-surface) !important;
+    border-radius: var(--radius-md) !important;
+    padding: 4px !important;
+    gap: 2px !important;
+    border: 1px solid var(--glass-border) !important;
+}
+.stTabs [data-baseweb="tab"] {
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+    border-radius: 10px !important;
+    font-family: var(--font-primary) !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    padding: 8px 18px !important;
+    transition: all 0.2s ease !important;
+    border: none !important;
+}
+.stTabs [aria-selected="true"] {
+    background: var(--accent-subtle) !important;
+    color: var(--accent-bright) !important;
+    border: 1px solid var(--glass-border-bright) !important;
+    font-weight: 600 !important;
+}
+.stTabs [data-baseweb="tab-highlight"] {
+    background: none !important;
+}
+
+/* ─── Expanders ─── */
+.streamlit-expanderHeader {
+    background: var(--glass-1) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: var(--radius-md) !important;
+    color: var(--text-primary) !important;
+    font-family: var(--font-primary) !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+}
+.streamlit-expanderHeader:hover {
+    background: var(--accent-subtle) !important;
+    border-color: var(--glass-border-bright) !important;
+    color: var(--text-accent) !important;
+}
+.streamlit-expanderContent {
+    background: var(--glass-1) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-top: none !important;
+    border-radius: 0 0 var(--radius-md) var(--radius-md) !important;
+}
+
+/* ─── DataFrames ─── */
+.stDataFrame, [data-testid="stDataFrame"] {
+    border-radius: var(--radius-md) !important;
+    overflow: hidden !important;
+    border: 1px solid var(--glass-border) !important;
+}
+
+/* ─── Sidebar ─── */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%) !important;
+    border-right: 1px solid var(--glass-border) !important;
+}
+[data-testid="stSidebar"] .block-container {
+    padding: 1.5rem 1rem !important;
+}
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span {
+    color: var(--text-secondary) !important;
+}
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+    color: var(--text-accent) !important;
+}
+
+/* ─── Notification Messages (slide-in style) ─── */
+.slide-message {
+    position: relative;
+    overflow: hidden;
+    margin: 10px 0;
+    padding: 12px 18px;
+    border-radius: var(--radius-md);
+    font-family: var(--font-primary);
+    font-weight: 500;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    animation: slideIn 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+.slide-message svg {
+    width: 18px; height: 18px;
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 4px currentColor);
+    z-index: 2;
+}
+.slide-message-text { flex: 1; z-index: 2; word-wrap: break-word; }
+.success-msg { background: var(--success-bg); border: 1px solid rgba(52,211,153,0.30); color: var(--success); }
+.error-msg   { background: var(--error-bg);   border: 1px solid rgba(248,113,113,0.30); color: var(--error);   }
+.warn-msg    { background: var(--warning-bg); border: 1px solid rgba(251,191,36,0.30);  color: var(--warning); }
+.info-msg    { background: var(--info-bg);    border: 1px solid rgba(96,192,255,0.30);  color: var(--info);    }
+@keyframes slideIn {
+    from { transform: translateX(-24px); opacity:0; }
+    to   { transform: translateX(0);     opacity:1; }
+}
+
+/* ─── Counter Grid (pre-login stats) ─── */
+.counter-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    padding: 20px 0;
+    max-width: 520px;
+    margin: 0 auto;
+}
+.counter-box {
+    background: linear-gradient(135deg, rgba(59,158,221,0.08) 0%, rgba(59,158,221,0.03) 100%);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(59,158,221,0.15);
+    border-radius: var(--radius-lg);
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    animation: floatUp 4s ease-in-out infinite;
+    position: relative;
+    overflow: hidden;
+}
+.counter-box::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(59,158,221,0.08), transparent);
+    animation: shimmer 3s infinite;
+}
+@keyframes shimmer { 0% {left:-100%;} 100% {left:200%;} }
+@keyframes floatUp {
+    0%,100% { transform: translateY(0); }
+    50%      { transform: translateY(-4px); }
+}
+.counter-box:nth-child(2) { animation-delay: 0.6s; }
+.counter-box:nth-child(3) { animation-delay: 1.2s; }
+.counter-box:nth-child(4) { animation-delay: 1.8s; }
+.counter-box:hover {
+    border-color: rgba(96,192,255,0.35);
+    background: rgba(59,158,221,0.12);
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: var(--shadow-md), var(--shadow-glow);
+}
+.counter-number {
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--accent-bright);
+    letter-spacing: -0.02em;
+    text-shadow: 0 0 20px var(--accent-glow);
+    position: relative; z-index: 2;
+}
+.counter-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 6px;
+    position: relative; z-index: 2;
+}
+
+/* ─── Timer Display ─── */
+.timer-display {
+    background: linear-gradient(135deg, var(--warning-bg) 0%, rgba(251,191,36,0.04) 100%);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(251,191,36,0.25);
+    border-radius: var(--radius-md);
+    padding: 14px 22px;
+    margin: 16px 0;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+.timer-text {
+    color: var(--warning);
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    text-shadow: 0 0 12px rgba(251,191,36,0.40);
+}
+.timer-expired {
+    background: linear-gradient(135deg, var(--error-bg) 0%, rgba(248,113,113,0.04) 100%);
+    border-color: rgba(248,113,113,0.25);
+}
+.timer-expired .timer-text {
+    color: var(--error);
+    text-shadow: 0 0 12px rgba(248,113,113,0.40);
+}
+
+/* ─── Chat Messages ─── */
+.stChatMessage {
+    background: var(--glass-1) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: var(--radius-md) !important;
+    padding: 14px !important;
+    font-family: var(--font-primary) !important;
+    transition: border-color 0.2s ease !important;
+}
+.stChatMessage:hover {
+    border-color: var(--glass-border-bright) !important;
+}
+
+/* ─── File Uploader ─── */
+.stFileUploader > div > div {
+    background: var(--glass-1) !important;
+    border: 2px dashed var(--glass-border) !important;
+    border-radius: var(--radius-lg) !important;
+    transition: all 0.25s ease !important;
+}
+.stFileUploader > div > div:hover {
+    border-color: var(--accent) !important;
+    background: var(--accent-subtle) !important;
+    box-shadow: var(--shadow-glow) !important;
+}
+
+/* ─── Section Analysis Cards ─── */
+.analysis-section-header {
+    background: linear-gradient(135deg, rgba(59,158,221,0.15) 0%, rgba(59,158,221,0.06) 100%);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 10px 16px;
+    margin-bottom: 0;
+    font-weight: 600;
+    color: var(--text-accent);
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
+}
+.analysis-section-body {
+    background: var(--glass-1);
+    border: 1px solid var(--glass-border);
+    border-top: none;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    padding: 14px 16px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.65;
+    margin-bottom: 12px;
+}
+
+/* ─── Score Badge ─── */
+.score-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent-subtle);
+    border: 1px solid var(--glass-border-bright);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--accent-bright);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* ─── Dashboard Banner ─── */
+.dashboard-banner {
+    width: 100%;
+    padding: 20px 28px;
+    background: linear-gradient(135deg, rgba(59,158,221,0.10) 0%, rgba(17,24,39,0.95) 60%, rgba(59,158,221,0.05) 100%);
+    border: 1px solid var(--glass-border-bright);
+    border-radius: var(--radius-xl);
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+}
+.dashboard-banner::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -10%;
+    width: 40%; height: 200%;
+    background: radial-gradient(ellipse, rgba(59,158,221,0.08), transparent);
+    pointer-events: none;
+}
+.dashboard-title {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.03em;
+    margin: 0;
+    line-height: 1.2;
+}
+.dashboard-title span { color: var(--accent-bright); }
+.dashboard-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 6px 0 0;
+    font-weight: 400;
+}
+
+/* ─── Scrolling Ticker ─── */
+.ticker-wrap {
+    width: 100%;
+    overflow: hidden;
+    background: var(--glass-1);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 8px 0;
+    margin-bottom: 24px;
+}
+.ticker-text {
+    display: inline-block;
+    white-space: nowrap;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-accent);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    animation: ticker 20s linear infinite;
+    padding-left: 100%;
+}
+@keyframes ticker {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-100%); }
+}
+
+/* ─── Section Heading ─── */
+.section-heading {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 24px 0 14px;
+}
+.section-heading::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--glass-border);
+    border-radius: 1px;
+}
+
+/* ─── Welcome Bar (post-login) ─── */
+.welcome-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    background: linear-gradient(135deg, rgba(59,158,221,0.08) 0%, rgba(17,24,39,0.98) 100%);
+    border: 1px solid var(--glass-border-bright);
+    border-radius: var(--radius-lg);
+    margin-bottom: 20px;
+}
+.welcome-user {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.welcome-user span { color: var(--accent-bright); }
+.welcome-tag {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    background: var(--glass-1);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+}
+
+/* ─── Admin Dashboard ─── */
+.admin-panel {
+    background: linear-gradient(135deg, rgba(251,191,36,0.06) 0%, rgba(17,24,39,0.98) 100%);
+    border: 1px solid rgba(251,191,36,0.20);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin: 20px 0;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+    .counter-grid { grid-template-columns: repeat(2, 1fr); }
+    .dashboard-title { font-size: 1.2rem; }
+    .welcome-bar { flex-direction: column; gap: 10px; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -486,587 +1116,177 @@ if not st.session_state.authenticated:
 
     # -------- Sidebar --------
     with st.sidebar:
-        st.markdown("<h1 style='color:#00BFFF;'>Smart Resume AI</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='color:#c9d1d9;'>Transform your career with AI-powered resume analysis, job matching, and smart insights.</p>", unsafe_allow_html=True)
+        st.markdown("""
+        <div style="padding: 8px 0 20px;">
+            <div style="font-size:1.3rem; font-weight:800; color:#60c0ff; letter-spacing:-0.02em;">
+                ✦ HIRELYZER
+            </div>
+            <div style="font-size:0.72rem; color:#4a5568; text-transform:uppercase; letter-spacing:0.10em; margin-top:2px;">
+                AI Resume Intelligence
+            </div>
+        </div>
+        <div style="height:1px; background: rgba(255,255,255,0.06); margin-bottom:20px;"></div>
+        <p style="color:#64748b; font-size:0.8rem; line-height:1.6; margin-bottom:20px;">
+            Transform your career with AI-powered resume analysis, ethical bias detection, and smart job insights.
+        </p>
+        """, unsafe_allow_html=True)
 
         features = [
-            ("https://img.icons8.com/fluency/48/resume.png", "Resume Analyzer", "Get feedback, scores, and tips powered by AI along with the biased words detection and rewriting the resume in an inclusive way."),
-            ("https://img.icons8.com/fluency/48/resume-website.png", "Resume Builder", "Build modern, eye-catching resumes easily."),
-            ("https://img.icons8.com/fluency/48/job.png", "Job Search", "Find tailored job matches."),
-            ("https://img.icons8.com/fluency/48/classroom.png", "Course Suggestions", "Get upskilling recommendations based on your goals."),
-            ("https://img.icons8.com/fluency/48/combo-chart.png", "Interactive Dashboard", "Visualize trends, scores, and analytics."),
+            ("🔍", "Resume Analyzer", "AI scoring, bias detection & inclusive rewriting"),
+            ("🏗️", "Resume Builder", "Build modern, ATS-optimized resumes"),
+            ("💼", "Job Search", "Tailored job matches for your profile"),
+            ("📚", "Course Suggestions", "Upskilling paths based on your gaps"),
+            ("📊", "Analytics Dashboard", "Visualize scores, trends & insights"),
         ]
 
         for icon, title, desc in features:
             st.markdown(f"""
             <div class="feature-card">
-                <img src="{icon}" width="40"/>
+                <span style="font-size:1.2rem;">{icon}</span>
                 <h3>{title}</h3>
                 <p>{desc}</p>
             </div>
             """, unsafe_allow_html=True)
 
-    # -------- Animated Cards --------
-    image_url = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
-
-    st.markdown(f"""
+    # -------- Hero Section --------
+    st.markdown("""
     <style>
-    .animated-cards {{
-      margin-top: 30px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 300px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 240px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-    @keyframes splitCards {{
-      0% {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left {{ --x-offset: -80px; --rot: -5deg; }}
-    .card-center {{ --x-offset: 0px; --rot: 0deg; }}
-    .card-right {{ --x-offset: 80px; --rot: 5deg; }}
+    @keyframes heroFade { from {opacity:0; transform:translateY(20px);} to {opacity:1; transform:translateY(0);} }
+    @keyframes orb1 { 0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(30px,-20px) scale(1.08);} }
+    @keyframes orb2 { 0%,100%{transform:translate(0,0) scale(1);} 50%{transform:translate(-20px,30px) scale(1.05);} }
+    .hero-section {
+        position: relative;
+        text-align: center;
+        padding: 48px 24px 36px;
+        overflow: hidden;
+        border-radius: 24px;
+        background: linear-gradient(135deg, rgba(7,11,20,0.98) 0%, rgba(13,18,32,0.95) 100%);
+        border: 1px solid rgba(255,255,255,0.06);
+        margin-bottom: 28px;
+        animation: heroFade 0.8s ease forwards;
+    }
+    .hero-orb-1 {
+        position: absolute; top: -40px; left: -40px;
+        width: 200px; height: 200px;
+        background: radial-gradient(circle, rgba(59,158,221,0.15), transparent 70%);
+        border-radius: 50%;
+        animation: orb1 8s ease-in-out infinite;
+        pointer-events: none;
+    }
+    .hero-orb-2 {
+        position: absolute; bottom: -30px; right: -30px;
+        width: 160px; height: 160px;
+        background: radial-gradient(circle, rgba(96,192,255,0.10), transparent 70%);
+        border-radius: 50%;
+        animation: orb2 10s ease-in-out infinite;
+        pointer-events: none;
+    }
+    .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(59,158,221,0.10);
+        border: 1px solid rgba(96,192,255,0.20);
+        border-radius: 999px;
+        padding: 4px 14px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #60c0ff;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 20px;
+    }
+    .hero-badge::before { content:'●'; font-size:0.55rem; color:#34d399; }
+    .hero-headline {
+        font-size: clamp(1.8rem, 4vw, 2.8rem);
+        font-weight: 800;
+        color: #f0f4f8;
+        letter-spacing: -0.04em;
+        line-height: 1.15;
+        margin: 0 auto 12px;
+        max-width: 640px;
+    }
+    .hero-headline span { color: #60c0ff; }
+    .hero-sub {
+        font-size: 0.9rem;
+        color: #64748b;
+        max-width: 480px;
+        margin: 0 auto 28px;
+        line-height: 1.65;
+        font-weight: 400;
+    }
+    .hero-stats {
+        display: flex;
+        justify-content: center;
+        gap: 40px;
+        flex-wrap: wrap;
+    }
+    .hero-stat-item { text-align: center; }
+    .hero-stat-num {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #60c0ff;
+        letter-spacing: -0.03em;
+        display: block;
+    }
+    .hero-stat-label {
+        font-size: 0.72rem;
+        color: #4a5568;
+        text-transform: uppercase;
+        letter-spacing: 0.07em;
+        font-weight: 500;
+    }
     </style>
-    <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
-    </div>
     """, unsafe_allow_html=True)
 
-    # -------- Counter Section (Updated Layout & Style with glassmorphism and shimmer) --------
-
-    # Fetch counters
+    # -------- Fetch counters & render Hero --------
     total_users = get_total_registered_users()
     active_logins = get_logins_today()
     stats = get_database_stats()
 
 # Replace static 15 with dynamic count
     resumes_uploaded = stats.get("total_candidates", 0)
-
     active_domains = stats.get("unique_domains", 0)
 
-
-    glassmorphism_counter_style = """
-    <style>
-    @keyframes shimmer {
-        0% { background-position: -200% 0; }
-        100% { background-position: 200% 0; }
-    }
-    
-    @keyframes float {
-        0%, 100% { transform: translateY(0px); }
-        50% { transform: translateY(-5px); }
-    }
-
-    .counter-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 250px);
-        column-gap: 40px;
-        row-gap: 25px;
-        justify-content: center;
-        padding: 30px 10px;
-        max-width: 600px;
-        margin: 0 auto;
-    }
-
-    .counter-box {
-        background: linear-gradient(135deg, 
-            rgba(0, 191, 255, 0.1) 0%, 
-            rgba(30, 144, 255, 0.05) 50%, 
-            rgba(0, 191, 255, 0.1) 100%);
-        backdrop-filter: blur(15px);
-        -webkit-backdrop-filter: blur(15px);
-        border: 1px solid rgba(0, 191, 255, 0.2);
-        border-radius: 16px;
-        width: 100%;
-        height: 120px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        position: relative;
-        overflow: hidden;
-        transition: all 0.3s ease;
-        animation: float 3s ease-in-out infinite;
-    }
-
-    .counter-box::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(0, 191, 255, 0.3),
-            transparent
-        );
-        animation: shimmer 2s infinite;
-    }
-
-    .counter-box:hover {
-        transform: translateY(-8px) scale(1.02);
-        background: linear-gradient(135deg, 
-            rgba(0, 191, 255, 0.15) 0%, 
-            rgba(30, 144, 255, 0.08) 50%, 
-            rgba(0, 191, 255, 0.15) 100%);
-        border: 1px solid rgba(0, 191, 255, 0.4);
-        box-shadow: 
-            0 20px 40px rgba(0, 191, 255, 0.1),
-            inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    }
-
-    .counter-box:nth-child(1) { animation-delay: 0s; }
-    .counter-box:nth-child(2) { animation-delay: 0.5s; }
-    .counter-box:nth-child(3) { animation-delay: 1s; }
-    .counter-box:nth-child(4) { animation-delay: 1.5s; }
-
-    .counter-number {
-        font-size: 2.2em;
-        font-weight: bold;
-        color: #00BFFF;
-        margin: 0;
-        position: relative;
-        z-index: 2;
-        text-shadow: 0 0 20px rgba(0, 191, 255, 0.5);
-    }
-
-    .counter-label {
-        margin-top: 8px;
-        font-size: 1em;
-        color: #c9d1d9;
-        position: relative;
-        z-index: 2;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-    }
-    </style>
-    """
-
-    st.markdown(glassmorphism_counter_style, unsafe_allow_html=True)
-
     st.markdown(f"""
-    <div class="counter-grid">
-        <div class="counter-box">
-            <div class="counter-number">{total_users}</div>
-            <div class="counter-label">Total Users</div>
-        </div>
-        <div class="counter-box">
-            <div class="counter-number">{active_domains}</div>
-            <div class="counter-label">Active Domains</div>
-        </div>
-        <div class="counter-box">
-            <div class="counter-number">{resumes_uploaded}</div>
-            <div class="counter-label">Resumes Uploaded</div>
-        </div>
-        <div class="counter-box">
-            <div class="counter-number">{active_logins}</div>
-            <div class="counter-label">Active Sessions</div>
+    <div class="hero-section">
+        <div class="hero-orb-1"></div>
+        <div class="hero-orb-2"></div>
+        <div class="hero-badge">AI-Powered · Ethical · Accurate</div>
+        <h1 class="hero-headline">
+            Analyze Resumes with<br/><span>Intelligent Precision</span>
+        </h1>
+        <p class="hero-sub">
+            HIRELYZER combines ATS scoring, gender-bias detection, and AI rewriting to surface the best candidates — fairly.
+        </p>
+        <div class="hero-stats">
+            <div class="hero-stat-item">
+                <span class="hero-stat-num">{total_users}</span>
+                <span class="hero-stat-label">Total Users</span>
+            </div>
+            <div class="hero-stat-item">
+                <span class="hero-stat-num">{active_domains}</span>
+                <span class="hero-stat-label">Active Domains</span>
+            </div>
+            <div class="hero-stat-item">
+                <span class="hero-stat-num">{resumes_uploaded}</span>
+                <span class="hero-stat-label">Resumes Analyzed</span>
+            </div>
+            <div class="hero-stat-item">
+                <span class="hero-stat-num">{active_logins}</span>
+                <span class="hero-stat-label">Sessions Today</span>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
-
 if not st.session_state.get("authenticated", False):
-
-    # ✅ Futuristic silhouette
-    image_url = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
-
-    # ✅ Inject glassmorphism CSS with shimmer effects
-    st.markdown(f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
-
-    @keyframes shimmer {{
-        0% {{ background-position: -200% 0; }}
-        100% {{ background-position: 200% 0; }}
-    }}
-
-    @keyframes glassShimmer {{
-        0% {{ transform: translateX(-100%) skewX(-15deg); }}
-        100% {{ transform: translateX(200%) skewX(-15deg); }}
-    }}
-
-    /* ===== Card Shuffle Animation ===== */
-    .animated-cards {{
-      margin-top: 40px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 260px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 220px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-      filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-
-    @keyframes splitCards {{
-      0%   {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left   {{ --x-offset: -80px; --rot: -4deg; }}
-    .card-center {{ --x-offset: 0px;  --rot: 0deg;  }}
-    .card-right  {{ --x-offset: 80px;  --rot: 4deg;  }}
-
-    /* ===== Glassmorphism Login Card ===== */
-    .login-card {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.1) 0%,
-        rgba(30, 144, 255, 0.05) 50%,
-        rgba(0, 191, 255, 0.1) 100%);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(0, 191, 255, 0.2);
-      border-radius: 20px;
-      padding: 25px;
-      box-shadow:
-        0 8px 32px rgba(0, 191, 255, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      font-family: 'Orbitron', sans-serif;
-      color: white;
-      margin-top: 20px;
-      opacity: 0;
-      transform: translateX(-120%);
-      animation: slideInLeft 1.2s ease-out forwards;
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .login-card::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(0, 191, 255, 0.2),
-        transparent
-      );
-      animation: glassShimmer 3s infinite;
-    }}
-
-    @keyframes slideInLeft {{
-      0%   {{ transform: translateX(-120%); opacity: 0; }}
-      100% {{ transform: translateX(0); opacity: 1; }}
-    }}
-
-    .login-card h2 {{
-      text-align: center;
-      font-size: 1.6rem;
-      text-shadow: 0 0 15px rgba(0, 191, 255, 0.5);
-      margin-bottom: 15px;
-      position: relative;
-      z-index: 2;
-    }}
-    .login-card h2 span {{ color: #00BFFF; }}
-
-    /* ===== Enhanced Message Cards with Consistent Layout ===== */
-    .slide-message {{
-      position: relative;
-      overflow: hidden;
-      margin: 16px 0;
-      padding: 14px 20px;
-      border-radius: 14px;
-      font-weight: 600;
-      font-size: 0.95em;
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 12px;
-      animation: slideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      box-shadow:
-        0 4px 20px rgba(0, 0, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      line-height: 1.5;
-      font-family: 'Orbitron', sans-serif;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      min-height: 50px;
-    }}
-
-    .slide-message:hover {{
-      transform: translateY(-3px) scale(1.01);
-      box-shadow:
-        0 8px 30px rgba(0, 0, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    }}
-
-    .slide-message::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.1),
-        transparent
-      );
-      transition: left 0.5s;
-    }}
-
-    .slide-message:hover::before {{
-      left: 100%;
-    }}
-
-    .slide-message svg {{
-      width: 22px;
-      height: 22px;
-      flex-shrink: 0;
-      filter: drop-shadow(0 0 6px currentColor);
-      z-index: 2;
-    }}
-
-    .slide-message-text {{
-      flex: 1;
-      z-index: 2;
-      position: relative;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-      white-space: normal;
-    }}
-
-    .success-msg {{
-      background: linear-gradient(135deg,
-        rgba(0, 255, 127, 0.20) 0%,
-        rgba(0, 255, 127, 0.08) 100%);
-      border: 2px solid rgba(0, 255, 127, 0.4);
-      color: #00FF7F;
-      text-shadow: 0 0 12px rgba(0, 255, 127, 0.4);
-    }}
-
-    .error-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.20) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-      color: #FF6347;
-      text-shadow: 0 0 12px rgba(255, 99, 71, 0.4);
-    }}
-
-    .info-msg {{
-      background: linear-gradient(135deg,
-        rgba(30, 144, 255, 0.20) 0%,
-        rgba(30, 144, 255, 0.08) 100%);
-      border: 2px solid rgba(30, 144, 255, 0.4);
-      color: #1E90FF;
-      text-shadow: 0 0 12px rgba(30, 144, 255, 0.4);
-    }}
-
-    .warn-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.20) 0%,
-        rgba(255, 215, 0, 0.08) 100%);
-      border: 2px solid rgba(255, 215, 0, 0.4);
-      color: #FFD700;
-      text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
-    }}
-
-    @keyframes slideIn {{
-      0%   {{
-        transform: translateX(-50px);
-        opacity: 0;
-      }}
-      100% {{
-        transform: translateX(0);
-        opacity: 1;
-      }}
-    }}
-
-    /* ===== Improved Timer Display ===== */
-    .timer-display {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.18) 0%,
-        rgba(255, 165, 0, 0.08) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      border: 2px solid rgba(255, 215, 0, 0.4);
-      border-radius: 14px;
-      padding: 16px 24px;
-      margin: 20px 0;
-      text-align: center;
-      box-shadow:
-        0 4px 20px rgba(255, 215, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .timer-display::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 215, 0, 0.2),
-        transparent
-      );
-      animation: glassShimmer 3s infinite;
-    }}
-
-    .timer-display:hover {{
-      box-shadow:
-        0 8px 30px rgba(255, 215, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-      transform: translateY(-3px);
-    }}
-
-    .timer-text {{
-      color: #FFD700;
-      font-size: 1.15em;
-      font-weight: bold;
-      font-family: 'Orbitron', sans-serif;
-      text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
-      position: relative;
-      z-index: 2;
-    }}
-
-    .timer-expired {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.18) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-    }}
-
-    .timer-expired .timer-text {{
-      color: #FF6347;
-      text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
-    }}
-
-    /* ===== Glassmorphism Buttons ===== */
-    .stButton>button {{
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.2) 0%, 
-        rgba(30, 144, 255, 0.1) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      color: white;
-      border: 1px solid rgba(0, 191, 255, 0.3);
-      border-radius: 12px;
-      font-family: 'Orbitron', sans-serif;
-      font-weight: bold;
-      padding: 8px 20px;
-      box-shadow: 
-        0 4px 16px rgba(0, 191, 255, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }}
-    
-    .stButton>button::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.2),
-        transparent
-      );
-      transition: left 0.5s;
-    }}
-    
-    .stButton>button:hover {{
-      transform: translateY(-2px);
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.3) 0%, 
-        rgba(30, 144, 255, 0.15) 100%);
-      border: 1px solid rgba(0, 191, 255, 0.5);
-      box-shadow: 
-        0 8px 25px rgba(0, 191, 255, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    }}
-    
-    .stButton>button:hover::before {{
-      left: 100%;
-    }}
-
-    /* ===== Glassmorphism Input Fields ===== */
-    .stTextInput input {{
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.08) 0%, 
-        rgba(30, 144, 255, 0.04) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      border: 1px solid rgba(0, 191, 255, 0.2);
-      border-radius: 10px;
-      padding: 10px;
-      color: #E0F7FF;
-      font-family: 'Orbitron', sans-serif;
-      box-shadow: 
-        0 4px 16px rgba(0, 191, 255, 0.05),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-      transition: all 0.3s ease-in-out;
-    }}
-    .stTextInput input:focus {{
-      outline: none !important;
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.12) 0%, 
-        rgba(30, 144, 255, 0.06) 100%);
-      border: 1px solid rgba(0, 191, 255, 0.4);
-      box-shadow: 
-        0 8px 25px rgba(0, 191, 255, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transform: translateY(-1px);
-    }}
-    .stTextInput label {{
-      font-family: 'Orbitron', sans-serif;
-      color: #00BFFF !important;
-      text-shadow: 0 0 10px rgba(0, 191, 255, 0.3);
-    }}
-    </style>
-
-    <!-- Animated Cards -->
-    <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
-    </div>
-    """, unsafe_allow_html=True)
 
     # -------- Login/Register Layout --------
     left, center, right = st.columns([1, 2, 1])
 
     with center:
         st.markdown(
-            "<div class='login-card'><h2 style='text-align:center;'>🔐 Login to <span style='color:#00BFFF;'>HIRELYZER</span></h2>",
+            "<div class='login-card'><h2 style='text-align:center; font-size:1.4rem; font-weight:700; letter-spacing:-0.02em; color:#f0f4f8;'>Sign in to <span style='color:#60c0ff;'>HIRELYZER</span></h2>",
             unsafe_allow_html=True,
         )
 
@@ -1077,23 +1297,21 @@ if not st.session_state.get("authenticated", False):
             # Show login or forgot password flow based on reset_stage
             if st.session_state.reset_stage == "none":
                 # Normal Login UI
-                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Login to Your Account</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#60c0ff; text-align:center; font-size:1rem; font-weight:600; margin-bottom:16px;'>Welcome back</h3>", unsafe_allow_html=True)
 
-                user = st.text_input("👤 Username or Email", key="login_user")
-                pwd = st.text_input("🔑 Password", type="password", key="login_pass")
+                user = st.text_input("Username or Email", key="login_user")
+                pwd = st.text_input("Password", type="password", key="login_pass")
 
                 # Render notification area (reserves space)
                 render_notification("login")
 
-                if st.button("🚀 Login", key="login_btn", use_container_width=True):
+                if st.button("Sign In →", key="login_btn", use_container_width=True):
                     success, saved_key = verify_user(user.strip(), pwd.strip())
                     if success:
                         st.session_state.authenticated = True
-                        # username is already set in session by verify_user()
                         if saved_key:
                             st.session_state["user_groq_key"] = saved_key
                         log_user_action(st.session_state.username, "login")
-
                         notify("login", "success", "✅ Login successful!")
                         time.sleep(3.0)
                         st.rerun()
@@ -1112,8 +1330,8 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 1: Request Email
             # ============================================================
             elif st.session_state.reset_stage == "request_email":
-                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
-                st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your registered email to receive an OTP</p>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#60c0ff; text-align:center; font-size:1rem; font-weight:600;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#64748b; text-align:center; font-size:0.82rem;'>Enter your registered email to receive an OTP</p>", unsafe_allow_html=True)
 
                 email_input = st.text_input("📧 Email Address", key="reset_email_input")
 
@@ -1157,8 +1375,8 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 2: Verify OTP
             # ============================================================
             elif st.session_state.reset_stage == "verify_otp":
-                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📩 Verify OTP</h3>", unsafe_allow_html=True)
-                st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.reset_email}</strong></p>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#60c0ff; text-align:center; font-size:1rem; font-weight:600;'>📩 Verify OTP</h3>", unsafe_allow_html=True)
+                st.markdown(f"<p style='color:#64748b; text-align:center; font-size:0.82rem;'>Enter the 6-digit OTP sent to <strong>{st.session_state.reset_email}</strong></p>", unsafe_allow_html=True)
 
                 # Calculate elapsed and remaining time (server-side)
                 elapsed_time = time.time() - st.session_state.reset_otp_time
@@ -1227,8 +1445,8 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 3: Reset Password
             # ============================================================
             elif st.session_state.reset_stage == "reset_password":
-                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
-                st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your new password</p>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#60c0ff; text-align:center; font-size:1rem; font-weight:600;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#64748b; text-align:center; font-size:0.82rem;'>Enter your new password</p>", unsafe_allow_html=True)
 
                 new_password = st.text_input("🔑 New Password", type="password", key="new_password_input")
                 confirm_password = st.text_input("🔑 Confirm Password", type="password", key="confirm_password_input")
@@ -1275,8 +1493,8 @@ if not st.session_state.get("authenticated", False):
         with register_tab:
             # Check if OTP was sent and pending verification
             if 'pending_registration' in st.session_state:
-                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📧 Verify Your Email</h3>", unsafe_allow_html=True)
-                st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.pending_registration['email']}</strong></p>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#60c0ff; text-align:center; font-size:1rem; font-weight:600;'>📧 Verify Your Email</h3>", unsafe_allow_html=True)
+                st.markdown(f"<p style='color:#64748b; text-align:center; font-size:0.82rem;'>Enter the 6-digit OTP sent to <strong>{st.session_state.pending_registration['email']}</strong></p>", unsafe_allow_html=True)
 
                 # Calculate remaining time
                 from datetime import datetime
@@ -1355,7 +1573,7 @@ if not st.session_state.get("authenticated", False):
 
             else:
                 # Normal registration form
-                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#60c0ff; text-align:center; font-size:1rem; font-weight:600;'>🧾 Register New User</h3>", unsafe_allow_html=True)
 
                 # Email input with live validation
                 new_email = st.text_input("📧 Email", key="reg_email", placeholder="your@email.com")
@@ -1485,12 +1703,18 @@ if not st.session_state.get("authenticated", False):
 # ------------------- AFTER LOGIN -------------------
 if st.session_state.get("authenticated"):
     st.markdown(
-        f"<h2 style='color:#00BFFF;'>Welcome to HIRELYZER, <span style='color:white;'>{st.session_state.username}</span> 👋</h2>",
+        f"""<div class="welcome-bar">
+            <div>
+                <div class="welcome-user">Welcome back, <span>{st.session_state.username}</span> 👋</div>
+                <div style="font-size:0.75rem; color:#4a5568; margin-top:3px;">HIRELYZER · AI Resume Intelligence Platform</div>
+            </div>
+            <div class="welcome-tag">● Active Session</div>
+        </div>""",
         unsafe_allow_html=True,
     )
 
     # 🔓 LOGOUT BUTTON
-    if st.button("🚪 Logout"):
+    if st.button("Sign Out →"):
         log_user_action(st.session_state.get("username", "unknown"), "logout")
 
         # ✅ Clear all session keys safely
@@ -1501,7 +1725,12 @@ if st.session_state.get("authenticated"):
         st.rerun()  # Force rerun to prevent stale UI
 
     # 🔑 GROQ API KEY SECTION (SIDEBAR)
-    st.sidebar.markdown("### 🔑 Groq API Key")
+    st.sidebar.markdown("""
+    <div style="padding:12px 0 8px;">
+        <div style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.10em; color:#4a5568; font-weight:600; margin-bottom:6px;">API Configuration</div>
+        <div style="font-size:0.9rem; font-weight:600; color:#94a3b8;">Groq API Key</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ✅ Load saved key from DB
     saved_key = get_user_api_key(st.session_state.username)
@@ -1531,8 +1760,12 @@ if st.session_state.get("authenticated"):
         st.sidebar.success("✅ Cleared saved Groq API key. Now using shared admin key.")
 
 if st.session_state.username == "admin":
-    st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown("<h2 style='color:#00BFFF;'>📊 Admin Dashboard</h2>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="admin-panel">
+        <div style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.10em; color:#b45309; font-weight:600; margin-bottom:8px;">⚡ Admin Panel</div>
+        <div style="font-size:1.2rem; font-weight:700; color:#f0f4f8; letter-spacing:-0.02em;">Platform Overview</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Metrics row
     col1, col2 = st.columns(2)
@@ -1543,7 +1776,7 @@ if st.session_state.username == "admin":
 
     # Removed API key usage section (no longer tracked)
     # Activity log
-    st.markdown("<h3 style='color:#00BFFF;'>📋 Admin Activity Log</h3>", unsafe_allow_html=True)
+    st.markdown("<div class='section-heading'>📋 Activity Log</div>", unsafe_allow_html=True)
     logs = get_all_user_logs()
     if logs:
         st.dataframe(
@@ -1592,260 +1825,22 @@ tab1, tab2, tab3, tab4 = tabs[:4]
 tab5 = tabs[4] if len(tabs) > 4 else None
 with tab1:
     st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Orbitron', sans-serif;
-        background-color: #0b0c10;
-        color: #c5c6c7;
-        scroll-behavior: smooth;
-    }
-
-    /* ---------- SCROLLBAR ---------- */
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: #1f2833; }
-    ::-webkit-scrollbar-thumb { background: #00ffff; border-radius: 4px; }
-
-    /* ---------- BANNER ---------- */
-    .banner-container {
-        width: 100%;
-        height: 80px;
-        background: linear-gradient(90deg, #000428, #004e92);
-        border-bottom: 2px solid cyan;
-        overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        position: relative;
-        margin-bottom: 20px;
-        border-radius: 12px;
-        backdrop-filter: blur(14px);
-    }
-    .pulse-bar {
-        position: absolute;
-        display: flex;
-        align-items: center;
-        font-size: 22px;
-        font-weight: bold;
-        color: #00ffff;
-        white-space: nowrap;
-        animation: glideIn 12s linear infinite;
-        text-shadow: 0 0 10px #00ffff;
-    }
-    .pulse-bar .bar {
-        width: 10px;
-        height: 30px;
-        margin-right: 10px;
-        background: #00ffff;
-        box-shadow: 0 0 8px cyan;
-        animation: pulse 1s ease-in-out infinite;
-    }
-    @keyframes glideIn {
-        0% { left: -50%; opacity: 0; }
-        10% { opacity: 1; }
-        90% { opacity: 1; }
-        100% { left: 110%; opacity: 0; }
-    }
-    @keyframes pulse {
-        0%, 100% { height: 20px; background-color: #00ffff; }
-        50% { height: 40px; background-color: #ff00ff; }
-    }
-
-    /* ---------- HEADER ---------- */
-    .header {
-        font-size: 28px;
-        font-weight: bold;
-        text-align: center;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        padding: 20px 30px;  /* ✅ More spacing inside the bar */
-        color: #00ffff;
-        text-shadow: 0px 0px 10px #00ffff;
-        position: relative;
-        overflow: hidden;
-        border-radius: 14px;
-        background: rgba(10,20,40,0.35);
-        backdrop-filter: blur(14px);
-        border: 1px solid rgba(0,200,255,0.5);
-        box-shadow: 0 0 12px rgba(0,200,255,0.25);
-    }
-    .header::before {
-        content: "";
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: linear-gradient(
-            120deg,
-            rgba(255,255,255,0.18) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%
-        );
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .header:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- SHIMMER (COMMON) ---------- */
-    .shimmer::before {
-        content: "";
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: linear-gradient(
-            120deg,
-            rgba(255,255,255,0.15) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%
-        );
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .shimmer:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- FILE UPLOADER ---------- */
-    .stFileUploader > div > div {
-        border: 1px solid rgba(0,200,255,0.5);
-        border-radius: 14px;
-        background: rgba(10,20,40,0.35);
-        backdrop-filter: blur(14px);
-        color: #cce6ff;
-        box-shadow: 0 0 12px rgba(0,200,255,0.3);
-        position: relative;
-        overflow: hidden;
-    }
-    .stFileUploader > div > div::before {
-        content: "";
-        position: absolute; top: -50%; left: -50%;
-        width: 200%; height: 200%;
-        background: linear-gradient(120deg,
-            rgba(255,255,255,0.15) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%);
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .stFileUploader > div > div:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- BUTTONS ---------- */
-    .stButton > button {
-        position: relative;
-        overflow: hidden;
-        background: rgba(10,20,40,0.35);
-        border: 1px solid rgba(0,200,255,0.6);
-        color: #e6f7ff;
-        border-radius: 14px;
-        padding: 10px 20px;
-        font-size: 16px;
-        font-weight: 500;
-        text-transform: uppercase;
-        backdrop-filter: blur(16px);
-        box-shadow: 0 0 12px rgba(0,200,255,0.35),
-                    inset 0 0 20px rgba(0,200,255,0.05);
-        transition: all 0.3s ease-in-out;
-    }
-    .stButton > button::before {
-        content: "";
-        position: absolute; top: -50%; left: -50%;
-        width: 200%; height: 200%;
-        background: linear-gradient(120deg,
-            rgba(255,255,255,0.15) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%);
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .stButton > button:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- INPUTS ---------- */
-    .stTextInput > div > input,
-    .stTextArea > div > textarea {
-        position: relative;
-        overflow: hidden;
-        background: rgba(10,20,40,0.35);
-        border: 1px solid rgba(0,200,255,0.6);
-        border-radius: 14px;
-        color: #e6f7ff;
-        padding: 10px;
-        backdrop-filter: blur(16px);
-        box-shadow: 0 0 12px rgba(0,200,255,0.3),
-                    inset 0 0 15px rgba(0,200,255,0.05);
-        transition: all 0.3s ease-in-out;
-    }
-
-    /* ---------- CHAT MESSAGES ---------- */
-    .stChatMessage {
-        position: relative;
-        overflow: hidden;
-        font-size: 18px;
-        background: rgba(10,20,40,0.35);
-        border: 1px solid rgba(0,200,255,0.5);
-        border-radius: 14px;
-        padding: 14px;
-        color: #e6f7ff;
-        text-shadow: 0 0 6px rgba(0,200,255,0.7);
-        box-shadow: 0 0 12px rgba(0,200,255,0.3),
-                    inset 0 0 15px rgba(0,200,255,0.05);
-    }
-    .stChatMessage::before {
-        content: "";
-        position: absolute; top: -50%; left: -50%;
-        width: 200%; height: 200%;
-        background: linear-gradient(120deg,
-            rgba(255,255,255,0.15) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%);
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .stChatMessage:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- METRICS ---------- */
-    .stMetric {
-        position: relative;
-        overflow: hidden;
-        background-color: rgba(10,20,40,0.35);
-        border: 1px solid rgba(0,200,255,0.6);
-        border-radius: 14px;
-        padding: 15px;
-        box-shadow: 0 0 12px rgba(0,200,255,0.35),
-                    inset 0 0 20px rgba(0,200,255,0.05);
-        text-align: center;
-    }
-    .stMetric::before {
-        content: "";
-        position: absolute; top: -50%; left: -50%;
-        width: 200%; height: 200%;
-        background: linear-gradient(120deg,
-            rgba(255,255,255,0.15) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%);
-        transform: rotate(25deg);
-        transition: all 0.6s;
-    }
-    .stMetric:hover::before { left: 100%; top: 100%; }
-
-    /* ---------- MOBILE ---------- */
-    @media (max-width: 768px) {
-        .pulse-bar { font-size: 16px; }
-        .header { font-size: 20px; }
-    }
-    </style>
-
-    <!-- Banner -->
-    <div class="banner-container">
-        <div class="pulse-bar">
-            <div class="bar"></div>
-            <div>HIRELYZER - Elevate Your Resume Analysis</div>
+    <div class="dashboard-banner">
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div>
+                <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.12em; color:#3b9edd; font-weight:600; margin-bottom:5px;">✦ AI Resume Intelligence</div>
+                <h1 class="dashboard-title">HIRELYZER <span>Dashboard</span></h1>
+                <p class="dashboard-subtitle">Upload resumes · Score with ATS · Detect bias · Rewrite inclusively</p>
+            </div>
         </div>
     </div>
-
-    <!-- Header -->
-    <div class="header">💼 HIRELYZER - AI BASED ETHICAL RESUME ANALYZER</div>
+    <div class="ticker-wrap"><span class="ticker-text">
+        ✦ ATS Scoring &nbsp;&nbsp;·&nbsp;&nbsp; Gender Bias Detection &nbsp;&nbsp;·&nbsp;&nbsp; AI Resume Rewriting &nbsp;&nbsp;·&nbsp;&nbsp; 
+        Domain Matching &nbsp;&nbsp;·&nbsp;&nbsp; Keyword Analysis &nbsp;&nbsp;·&nbsp;&nbsp; Language Quality &nbsp;&nbsp;·&nbsp;&nbsp; 
+        Ethical AI &nbsp;&nbsp;·&nbsp;&nbsp; HIRELYZER — Making hiring fair &nbsp;&nbsp;·&nbsp;&nbsp;
+        ✦ ATS Scoring &nbsp;&nbsp;·&nbsp;&nbsp; Gender Bias Detection &nbsp;&nbsp;·&nbsp;&nbsp; AI Resume Rewriting &nbsp;&nbsp;·&nbsp;&nbsp; 
+        Domain Matching &nbsp;&nbsp;·&nbsp;&nbsp; Keyword Analysis &nbsp;&nbsp;·&nbsp;&nbsp; Language Quality &nbsp;&nbsp;·&nbsp;&nbsp;
+    </span></div>
     """, unsafe_allow_html=True)
 
 # Load environment variables
@@ -3003,7 +2998,12 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # ---------------- Sidebar Layout with Inline Images ----------------
-st.sidebar.markdown("### 🏷️ Job Information")
+st.sidebar.markdown("""
+<div style="padding:12px 0 8px;">
+    <div style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.10em; color:#4a5568; font-weight:600; margin-bottom:4px;">Configuration</div>
+    <div style="font-size:1rem; font-weight:700; color:#94a3b8;">Job Details</div>
+</div>
+""", unsafe_allow_html=True)
 
 # ---------------- Job Information Dropdown ----------------
 with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Enter Job Details", expanded=False):
@@ -3077,36 +3077,8 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
         )
 
 with tab1:
-    # 🎨 CSS for sliding success message
-    st.markdown("""
-    <style>
-    .slide-message {
-      position: relative;
-      overflow: hidden;
-      margin: 10px 0;
-      padding: 10px 15px;
-      border-radius: 10px;
-      font-weight: bold;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      animation: slideIn 0.8s ease forwards;
-    }
-    .slide-message svg {
-      width: 18px;
-      height: 18px;
-      flex-shrink: 0;
-    }
-    .success-msg { background: rgba(0,255,127,0.12); border-left: 5px solid #00FF7F; color:#00FF7F; }
-    .error-msg   { background: rgba(255,99,71,0.12);  border-left: 5px solid #FF6347; color:#FF6347; }
-    .warn-msg    { background: rgba(255,215,0,0.12); border-left: 5px solid #FFD700; color:#FFD700; }
-
-    @keyframes slideIn {
-      0%   { transform: translateX(100%); opacity: 0; }
-      100% { transform: translateX(0); opacity: 1; }
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    # Premium file upload section
+    st.markdown("<div class='section-heading'>📄 Upload Resumes</div>", unsafe_allow_html=True)
 
     uploaded_files = st.file_uploader(
         "📄 Upload PDF Resumes",
@@ -3733,7 +3705,7 @@ with tab1:
         avg_bias = round(np.mean([r.get("Bias Score (0 = Fair, 1 = Biased)", 0) for r in resume_data]), 2)
         total_resumes = len(resume_data)
 
-        st.markdown("### 📊 Summary Statistics")
+        st.markdown("<div class='section-heading'>📊 Summary Statistics</div>", unsafe_allow_html=True)
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("📄 Resumes Uploaded", total_resumes)
@@ -3744,7 +3716,7 @@ with tab1:
         with col4:
             st.metric("🔴 Total Feminine Words", total_fem)
 
-        st.markdown("### 🗂️ Resumes Overview")
+        st.markdown("<div class='section-heading'>🗂️ Resumes Overview</div>", unsafe_allow_html=True)
         df = pd.DataFrame(resume_data)
 
         # ✅ Add calculated count columns safely
@@ -3759,7 +3731,7 @@ with tab1:
 
         st.dataframe(df[overview_cols], use_container_width=True)
 
-        st.markdown("### 📊 Visual Analysis")
+        st.markdown("<div class='section-heading'>📊 Visual Analysis</div>", unsafe_allow_html=True)
         chart_tab1, chart_tab2 = st.tabs(["📉 Bias Score Chart", "⚖ Gender-Coded Words"])
         with chart_tab1:
             st.subheader("Bias Score Comparison Across Resumes")
@@ -3779,7 +3751,7 @@ with tab1:
             ax.legend()
             st.pyplot(fig)
 
-        st.markdown("### 📝 Detailed Resume Reports")
+        st.markdown("<div class='section-heading'>📝 Detailed Resume Reports</div>", unsafe_allow_html=True)
         for resume in resume_data:
             candidate_name = resume.get("Candidate Name", "Not Found")
             resume_name = resume.get("Resume Name", "Unknown")
@@ -3787,7 +3759,7 @@ with tab1:
             missing_skills = resume.get("Missing Skills", [])
 
             with st.expander(f"📄 {resume_name} | {candidate_name}"):
-                st.markdown(f"### 📊 ATS Evaluation for: **{candidate_name}**")
+                st.markdown(f"<div class='section-heading'>📊 ATS Evaluation — {candidate_name}</div>", unsafe_allow_html=True)
                 score_col1, score_col2, score_col3 = st.columns(3)
                 with score_col1:
                     st.metric("📈 Overall Match", f"{resume.get('ATS Match %', 'N/A')}%")
@@ -3807,16 +3779,16 @@ with tab1:
                     st.metric("🔍 Keyword Score", f"{resume.get('Keyword Score', 'N/A')} / {keyword_weight}")
 
                 # Fit summary
-                st.markdown("### 📝 Fit Summary")
+                st.markdown("<div class='section-heading'>📝 Fit Summary</div>", unsafe_allow_html=True)
                 st.write(resume.get('Final Thoughts', 'N/A'))
 
                 # ATS Report
                 if resume.get("ATS Report"):
-                    st.markdown("### 📋 ATS Evaluation Report")
+                    st.markdown("<div class='section-heading'>📋 ATS Evaluation Report</div>", unsafe_allow_html=True)
                     st.markdown(resume["ATS Report"], unsafe_allow_html=True)
 
                 # ATS Chart
-                st.markdown("### 📊 ATS Score Breakdown Chart")
+                st.markdown("<div class='section-heading'>📊 Score Breakdown</div>", unsafe_allow_html=True)
                 ats_df = pd.DataFrame({
                     'Component': ['Education', 'Experience', 'Skills', 'Language', 'Keywords'],
                     'Score': [
@@ -3840,7 +3812,7 @@ with tab1:
                 st.altair_chart(ats_chart, use_container_width=True)
 
                 # 🔷 Detailed ATS Analysis Cards
-                st.markdown("### 🔍 Detailed ATS Section Analyses")
+                st.markdown("<div class='section-heading'>🔍 Detailed Analysis</div>", unsafe_allow_html=True)
                 for section_title, key in [
                     ("🏫 Education Analysis", "Education Analysis"),
                     ("💼 Experience Analysis", "Experience Analysis"),
@@ -3855,18 +3827,14 @@ with tab1:
                         rest = parts[1].split("**", 1)
                         score_text = rest[0].strip()
                         remaining = rest[1].strip() if len(rest) > 1 else ""
-                        formatted_score = f"<div style='background:#4c1d95;color:white;padding:8px;border-radius:6px;margin-bottom:5px;'><b>Score:</b> {score_text}</div>"
+                        formatted_score = f"<div class='score-badge' style='margin-bottom:8px; display:inline-flex;'><b>Score:</b>&nbsp;{score_text}</div>"
                         analysis_html = formatted_score + f"<p>{remaining}</p>"
                     else:
                         analysis_html = f"<p>{analysis_content}</p>"
 
                     st.markdown(f"""
-<div style="background:#5b3cc4; color:white; padding:10px; border-radius:6px;">
-  <h3>{section_title}</h3>
-</div>
-<div style="background:#2d2d3a; color:white; padding:10px; border-radius:6px;">
-{analysis_html}
-</div>
+<div class='analysis-section-header'>{section_title}</div>
+<div class='analysis-section-body'>{analysis_html}</div>
 """, unsafe_allow_html=True)
 
                 st.divider()
