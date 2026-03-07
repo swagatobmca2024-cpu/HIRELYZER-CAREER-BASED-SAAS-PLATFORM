@@ -12153,6 +12153,105 @@ def get_domain_config(domain: str) -> dict:
     return _DEFAULT_DOMAIN_CONFIG
 
 
+def generate_key_topics(resume_context: dict, domain_config: dict, selected_role: str) -> list:
+    """
+    Generate a ranked, deduplicated list of up to 10 key topics in scope for the
+    interview, combining three sources in priority order:
+
+        1. Resume technologies  (most specific to the candidate)
+        2. Resume skills        (secondary candidate signal)
+        3. Domain mandatory_topics (domain-level fundamentals, fill remaining slots)
+
+    Parameters
+    ----------
+    resume_context : dict
+        Parsed resume data with keys: "technologies", "skills", "projects", "experience".
+        May be None or empty — function degrades gracefully to domain topics only.
+    domain_config : dict
+        Output of get_domain_config() for the selected domain.
+    selected_role : str
+        The sub-role chosen by the user (e.g. "Frontend Developer", "ML Engineer").
+        Used as a tiebreaker to surface more relevant domain topics when the resume
+        is sparse.
+
+    Returns
+    -------
+    list[str]
+        Between 1 and 10 topic strings, never empty.
+    """
+    MAX_TOPICS = 10
+
+    # ── Normalise inputs ──────────────────────────────────────────────────────
+    rc = resume_context or {}
+    domain_mandatory = domain_config.get("mandatory_topics", [])
+    forbidden = [kw.lower() for kw in domain_config.get("forbidden_resume_keywords", [])]
+
+    def _clean(items):
+        """Deduplicate, strip empties, remove items that are forbidden in this domain."""
+        seen = set()
+        out = []
+        for item in items:
+            norm = item.strip()
+            if not norm:
+                continue
+            # Drop resume items that conflict with the selected domain
+            if any(f in norm.lower() for f in forbidden):
+                continue
+            key = norm.lower()
+            if key not in seen:
+                seen.add(key)
+                out.append(norm)
+        return out
+
+    # ── Source 1: resume technologies ────────────────────────────────────────
+    resume_techs = _clean(rc.get("technologies", []))
+
+    # ── Source 2: resume skills ───────────────────────────────────────────────
+    # Exclude anything already captured from technologies
+    tech_keys = {t.lower() for t in resume_techs}
+    resume_skills = _clean(
+        [s for s in rc.get("skills", []) if s.strip().lower() not in tech_keys]
+    )
+
+    # ── Source 3: domain mandatory topics ────────────────────────────────────
+    # Prioritise mandatory topics whose text overlaps with the selected role name,
+    # so a "Frontend Developer" sees React/CSS before obscure backend topics.
+    role_lower = selected_role.lower()
+    role_keywords = set(role_lower.replace("-", " ").split())
+
+    def _role_relevance(topic: str) -> int:
+        """Higher = more relevant to the selected role."""
+        t_lower = topic.lower()
+        return sum(1 for kw in role_keywords if kw in t_lower)
+
+    already_seen = {t.lower() for t in resume_techs + resume_skills}
+    domain_topics_filtered = [
+        t for t in domain_mandatory if t.strip().lower() not in already_seen
+    ]
+    domain_topics_sorted = sorted(
+        domain_topics_filtered,
+        key=_role_relevance,
+        reverse=True
+    )
+
+    # ── Merge in priority order ───────────────────────────────────────────────
+    combined = resume_techs[:MAX_TOPICS]
+    remaining = MAX_TOPICS - len(combined)
+
+    if remaining > 0:
+        combined += resume_skills[:remaining]
+        remaining = MAX_TOPICS - len(combined)
+
+    if remaining > 0:
+        combined += domain_topics_sorted[:remaining]
+
+    # ── Guarantee non-empty list ──────────────────────────────────────────────
+    if not combined:
+        combined = domain_mandatory[:MAX_TOPICS] or [selected_role + " fundamentals"]
+
+    return combined[:MAX_TOPICS]
+
+
 def filter_resume_for_domain(resume_context: dict, selected_domain: str) -> dict:
     """
     DOMAIN AUTHORITY LAYER — Core Function.
@@ -15018,10 +15117,14 @@ Generate {num_questions} questions now:
                     _matched_forbidden = [kw for kw in _forbidden if kw.lower() in _resume_techs]
 
                     # Always show domain scope card; escalate to warning if mismatch detected
-                    _scope_preview = ", ".join(_mandatory[:6]) + ("…" if len(_mandatory) > 6 else "")
                     _context_note = _domain_cfg.get("context_override", "")
 
                     if _has_mismatch:
+                        # Domain override is active — topics come purely from domain config
+                        # (resume technologies are suppressed because they conflict with the
+                        # selected domain, so we pass an empty resume context to the function).
+                        _key_topics = generate_key_topics({}, _domain_cfg, selected_role)
+
                         # Identify which resume skills are being suppressed
                         _suppressed = list(dict.fromkeys(
                             kw for kw in _matched_forbidden
@@ -15043,7 +15146,7 @@ Generate {num_questions} questions now:
                             f'border:1px solid rgba(0,195,255,0.25);border-radius:4px;'
                             f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
                             f'{t}</span>'
-                            for t in _mandatory[:8]
+                            for t in _key_topics
                         )
                         st.markdown(f"""
                         <div style="background:linear-gradient(135deg,rgba(255,152,0,0.08) 0%,rgba(255,87,34,0.06) 100%);
@@ -15074,7 +15177,7 @@ Generate {num_questions} questions now:
                                             letter-spacing:0.06em;">Questions will draw from these topics:</span><br/>
                                 <div style="margin-top:5px;">{_domain_pills}
                                     <span style="color:#aaa;font-size:11px;margin-left:4px;">
-                                        + {max(0, len(_mandatory) - 8)} more domain topics
+                                        + {max(0, len(_mandatory) - len(_key_topics))} more domain topics
                                     </span>
                                 </div>
                             </div>
@@ -15085,13 +15188,14 @@ Generate {num_questions} questions now:
                         </div>
                         """, unsafe_allow_html=True)
                     else:
-                        # Resume aligns with domain — show a positive confirmation card
+                        # Resume aligns with domain — blend resume content with domain topics
+                        _key_topics = generate_key_topics(_rc, _domain_cfg, selected_role)
                         _domain_pills = "".join(
                             f'<span style="background:rgba(56,189,248,0.10);color:#38bdf8;'
                             f'border:1px solid rgba(0,195,255,0.2);border-radius:4px;'
                             f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
                             f'{t}</span>'
-                            for t in _mandatory[:8]
+                            for t in _key_topics
                         )
                         st.markdown(f"""
                         <div style="background:rgba(0,195,255,0.05);border:1px solid rgba(0,195,255,0.2);
@@ -15113,7 +15217,7 @@ Generate {num_questions} questions now:
                                             letter-spacing:0.06em;">Key topics in scope:</span><br/>
                                 <div style="margin-top:5px;">{_domain_pills}
                                     <span style="color:#666;font-size:11px;margin-left:4px;">
-                                        + {max(0, len(_mandatory) - 8)} more
+                                        + {max(0, len(_mandatory) - len(_key_topics))} more
                                     </span>
                                 </div>
                             </div>
