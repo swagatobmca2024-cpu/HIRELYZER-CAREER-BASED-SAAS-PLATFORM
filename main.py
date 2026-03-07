@@ -11637,476 +11637,57 @@ import streamlit as st
 DOMAIN_AUTHORITY_CONFIG = {
     "Data Science & Analytics": {
         "aliases": ["data analyst", "data science", "analytics", "business intelligence", "bi", "ml", "machine learning"],
-        "mandatory_topics": [
-            # Core Python data stack
-            "pandas", "NumPy", "SciPy", "Matplotlib", "Seaborn", "Plotly",
-            # SQL & querying
-            "SQL", "window functions", "CTEs", "query optimization", "joins", "GROUP BY aggregations",
-            # Statistical foundations
-            "descriptive statistics", "inferential statistics", "hypothesis testing", "p-values",
-            "confidence intervals", "A/B testing", "statistical significance", "effect size",
-            "probability distributions", "Bayesian reasoning",
-            # EDA & data quality
-            "exploratory data analysis", "data cleaning", "missing value imputation",
-            "outlier detection", "data profiling", "feature distributions",
-            # Classical ML
-            "linear regression", "logistic regression", "decision trees", "random forests",
-            "gradient boosting", "XGBoost", "LightGBM", "k-means clustering", "PCA",
-            "bias-variance tradeoff", "cross-validation", "regularization (L1/L2)",
-            # Model evaluation
-            "precision", "recall", "F1 score", "ROC-AUC", "confusion matrix",
-            "RMSE", "MAE", "R-squared", "lift curves",
-            # BI & visualization
-            "Tableau", "Power BI", "Looker", "dashboard design", "data storytelling",
-            "KPI definition", "metric frameworks", "cohort analysis",
-            # Data pipelines
-            "ETL pipelines", "data warehousing", "OLAP vs OLTP", "star schema",
-            "dbt", "Apache Airflow", "data lineage",
-            # Advanced / modern
-            "time series forecasting", "ARIMA", "Prophet", "feature engineering",
-            "dimensionality reduction", "class imbalance handling", "SMOTE",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "angular", "vue", "next.js", "nuxt", "svelte",
-            "node.js", "express", "fastify", "django", "flask", "spring boot",
-            "frontend", "css", "html", "tailwind", "bootstrap", "figma",
-            "mobile app", "swift", "kotlin", "flutter", "react native",
-            "graphql", "REST API design", "OAuth", "JWT authentication",
-        ],
-        "context_override": (
-            "This is a Data Science & Analytics interview. Focus EXCLUSIVELY on data analysis, "
-            "statistical reasoning, SQL, Python data libraries (pandas/numpy/scikit-learn), "
-            "model evaluation, data visualization, A/B testing, EDA, and business intelligence tools. "
-            "Probe for depth on statistical rigour, evaluation metric selection, and data storytelling — "
-            "not just tool familiarity."
-        ),
+        "mandatory_topics": ["pandas", "SQL", "statistical analysis", "data visualization", "EDA", "hypothesis testing", "regression", "data cleaning"],
+        "forbidden_resume_keywords": ["react", "angular", "vue", "node.js", "express", "django", "flask", "spring", "frontend", "css", "html", "mobile app"],
+        "context_override": "This is a Data Science & Analytics interview. Focus EXCLUSIVELY on data analysis, statistics, SQL, Python data libraries (pandas/numpy/matplotlib), machine learning fundamentals, and business intelligence tools.",
     },
-
     "Full Stack Development": {
-        "aliases": ["full stack", "fullstack", "web developer", "mern", "mean", "full-stack engineer"],
-        "mandatory_topics": [
-            # Frontend
-            "React", "Vue.js", "Angular", "Next.js", "TypeScript", "JavaScript (ES6+)",
-            "state management", "Redux", "Zustand", "Pinia", "component lifecycle",
-            "virtual DOM", "server-side rendering", "static site generation",
-            "CSS-in-JS", "Tailwind CSS", "responsive design", "accessibility (WCAG)",
-            "browser performance", "lazy loading", "code splitting", "web vitals",
-            # Backend
-            "Node.js", "Express", "NestJS", "Django", "FastAPI", "Spring Boot",
-            "REST API design", "GraphQL", "API versioning", "rate limiting",
-            "middleware patterns", "input validation", "error handling",
-            # Databases
-            "PostgreSQL", "MySQL", "MongoDB", "Redis", "database indexing",
-            "query optimization", "ORM (Prisma/Sequelize/SQLAlchemy)", "N+1 problem",
-            "transactions and ACID", "database migrations",
-            # Auth & security
-            "JWT", "OAuth 2.0", "session management", "CORS", "CSRF", "XSS", "SQL injection",
-            "HTTPS", "secrets management", "RBAC",
-            # DevOps basics
-            "Docker", "CI/CD", "environment variables", "12-factor app",
-            "Nginx", "reverse proxy", "load balancing basics",
-            # Testing
-            "unit testing", "integration testing", "Jest", "React Testing Library",
-            "end-to-end testing", "Cypress", "Playwright", "test coverage",
-            # Architecture
-            "monolith vs microservices", "BFF pattern", "caching strategies",
-            "WebSockets", "real-time updates", "message queues basics",
-        ],
-        "forbidden_resume_keywords": [
-            "tensorflow", "pytorch", "sklearn", "scikit-learn", "pandas",
-            "regression model", "clustering", "NLP pipeline", "deep learning model",
-            "Kubernetes operator", "Terraform modules", "Ansible playbooks",
-            "pen testing", "SIEM", "SOC analyst",
-        ],
-        "context_override": (
-            "This is a Full Stack Development interview. Cover the entire request lifecycle: "
-            "browser → frontend framework → API layer → database → response. "
-            "Focus on React/Next.js or Vue, Node.js or Django backends, PostgreSQL/MongoDB, "
-            "authentication patterns, caching, testing strategies, and deployment pipelines. "
-            "Probe for real decisions: state management choices, API contract design, N+1 fixes, "
-            "and security hardening — not just stack enumeration."
-        ),
+        "aliases": ["full stack", "fullstack", "web developer", "mern", "mean"],
+        "mandatory_topics": ["frontend", "backend", "REST APIs", "databases", "authentication", "deployment", "React/Angular/Vue", "Node.js/Django/Spring"],
+        "forbidden_resume_keywords": ["tensorflow", "pytorch", "sklearn", "regression", "clustering", "NLP", "deep learning model"],
+        "context_override": "This is a Full Stack Development interview. Focus on frontend frameworks, backend APIs, databases, authentication, CI/CD, and web architecture.",
     },
-
     "Backend Development": {
-        "aliases": ["backend", "server-side", "api developer", "java developer", "python developer",
-                    "golang developer", "backend engineer", "software engineer backend"],
-        "mandatory_topics": [
-            # API design
-            "REST API design principles", "GraphQL", "gRPC", "API versioning",
-            "idempotency", "pagination", "rate limiting", "API gateway",
-            "OpenAPI / Swagger documentation",
-            # Databases
-            "PostgreSQL", "MySQL", "database indexing", "query execution plans",
-            "EXPLAIN ANALYZE", "N+1 problem", "connection pooling",
-            "transactions", "ACID properties", "isolation levels", "deadlocks",
-            "database migrations", "schema design", "normalization",
-            "Redis", "caching patterns (cache-aside, write-through)", "cache invalidation",
-            # System design
-            "horizontal vs vertical scaling", "load balancing", "reverse proxy",
-            "microservices", "service mesh", "event-driven architecture",
-            "message queues (RabbitMQ, Kafka, SQS)", "pub/sub patterns",
-            "circuit breaker", "bulkhead pattern", "retry with backoff",
-            "CAP theorem", "eventual consistency", "distributed transactions",
-            # Auth & security
-            "JWT", "OAuth 2.0", "OpenID Connect", "RBAC", "ABAC",
-            "password hashing (bcrypt/argon2)", "secrets management",
-            "input validation", "SQL injection", "OWASP Top 10 for APIs",
-            # Performance
-            "async programming", "concurrency models", "thread pools",
-            "profiling", "bottleneck identification", "background jobs",
-            "batch processing", "streaming",
-            # Testing
-            "unit testing", "integration testing", "contract testing",
-            "mocking dependencies", "test isolation", "CI test pipelines",
-            # Languages & runtimes
-            "Python (asyncio/FastAPI/Django)", "Node.js (event loop)",
-            "Java (Spring Boot, JVM tuning)", "Go (goroutines, channels)",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "css", "html", "angular", "vue", "next.js", "tailwind",
-            "figma", "photoshop", "sketch", "frontend", "ui design",
-            "pandas", "sklearn", "tensorflow", "pytorch",
-            "mobile app", "swift", "kotlin", "flutter",
-        ],
-        "context_override": (
-            "This is a Backend Development interview. Focus on server-side engineering: "
-            "REST/GraphQL/gRPC API design, relational and NoSQL databases (including indexing, "
-            "transactions, and query optimisation), caching strategies, message queues, "
-            "distributed system patterns, authentication/authorisation, and backend testing. "
-            "Push candidates to explain WHY they made design decisions, not just WHAT they used."
-        ),
+        "aliases": ["backend", "server-side", "api developer", "java developer", "python developer"],
+        "mandatory_topics": ["REST APIs", "databases", "system design", "microservices", "caching", "message queues", "authentication", "scalability"],
+        "forbidden_resume_keywords": ["react", "css", "html", "angular", "vue", "figma", "photoshop", "frontend"],
+        "context_override": "This is a Backend Development interview. Focus on API design, server-side logic, databases, microservices, caching strategies, and system scalability.",
     },
-
     "Frontend Development": {
-        "aliases": ["frontend", "ui developer", "react developer", "angular developer",
-                    "vue developer", "frontend engineer", "web ui engineer"],
-        "mandatory_topics": [
-            # Core JavaScript
-            "JavaScript (ES6+)", "TypeScript", "closures", "event loop", "async/await",
-            "Promises", "prototypal inheritance", "hoisting", "debounce/throttle",
-            "Web APIs (Fetch, localStorage, IntersectionObserver)",
-            # Frameworks
-            "React (hooks, context, reconciliation)", "Vue.js (Options API vs Composition API)",
-            "Angular (dependency injection, change detection)",
-            "Next.js (SSR vs SSG vs ISR)", "Nuxt.js",
-            # State management
-            "Redux (flux architecture)", "Redux Toolkit", "Zustand", "Recoil",
-            "React Query / TanStack Query", "SWR", "Pinia",
-            # CSS & styling
-            "CSS specificity", "flexbox", "CSS Grid", "responsive design",
-            "CSS-in-JS (styled-components, Emotion)", "Tailwind CSS",
-            "CSS custom properties", "animations and transitions",
-            # Performance
-            "Core Web Vitals (LCP, CLS, FID/INP)", "code splitting",
-            "lazy loading", "tree shaking", "bundle analysis (Webpack, Vite)",
-            "image optimisation", "caching strategies (HTTP cache, service workers)",
-            "virtual DOM and reconciliation", "memoization (useMemo, useCallback, React.memo)",
-            # Testing
-            "Jest", "React Testing Library", "Vitest",
-            "end-to-end testing (Cypress, Playwright)",
-            "snapshot testing", "accessibility testing",
-            # Accessibility
-            "WCAG 2.1 guidelines", "ARIA attributes", "keyboard navigation",
-            "screen reader compatibility", "semantic HTML",
-            # Architecture
-            "micro-frontends", "module federation", "design systems",
-            "component composition patterns", "render props vs HOC vs hooks",
-            "Storybook", "monorepo (Nx, Turborepo)",
-            # Security
-            "XSS prevention", "CSP headers", "CSRF in SPAs", "sanitisation",
-        ],
-        "forbidden_resume_keywords": [
-            "kubernetes", "docker-compose", "terraform", "ansible",
-            "CI/CD pipeline design", "microservices orchestration", "kafka",
-            "grpc", "tensorflow", "pytorch", "pandas", "sklearn",
-            "SQL joins", "database schema design", "backend API design",
-            "pen testing", "SIEM", "firewall rules",
-        ],
-        "context_override": (
-            "This is a Frontend Development interview. Focus on deep JavaScript/TypeScript knowledge, "
-            "React or Vue framework internals (reconciliation, hooks, reactivity), state management "
-            "tradeoffs, Core Web Vitals and performance optimisation, CSS layout and architecture, "
-            "accessibility standards, testing strategies, and client-side security. "
-            "Go beyond tool lists — probe for understanding of browser behaviour, "
-            "render performance, and component design decisions."
-        ),
+        "aliases": ["frontend", "ui developer", "react developer", "angular developer"],
+        "mandatory_topics": ["JavaScript", "React/Angular/Vue", "CSS", "responsive design", "state management", "performance optimization", "accessibility", "browser APIs"],
+        "forbidden_resume_keywords": ["kubernetes", "docker-compose", "terraform", "CI/CD pipeline", "microservices", "kafka"],
+        "context_override": "This is a Frontend Development interview. Focus on UI frameworks, JavaScript, CSS, browser performance, accessibility, and client-side architecture.",
     },
-
     "Machine Learning & AI": {
-        "aliases": ["machine learning", "ml engineer", "ai engineer", "deep learning",
-                    "nlp engineer", "computer vision engineer", "mlops engineer", "ai researcher"],
-        "mandatory_topics": [
-            # Foundations
-            "supervised vs unsupervised vs reinforcement learning",
-            "bias-variance tradeoff", "overfitting", "underfitting", "regularisation (L1/L2/dropout)",
-            "cross-validation (k-fold, stratified)", "train/val/test split strategy",
-            "data leakage", "target encoding pitfalls",
-            # Feature engineering
-            "feature selection (mutual information, SHAP)", "feature scaling (standardisation, normalisation)",
-            "handling missing values", "categorical encoding (one-hot, ordinal, target)",
-            "dimensionality reduction (PCA, t-SNE, UMAP)", "class imbalance (SMOTE, cost-sensitive learning)",
-            # Classical ML
-            "linear/logistic regression", "decision trees and ensemble methods",
-            "random forests", "gradient boosting (XGBoost, LightGBM, CatBoost)",
-            "SVMs", "k-means clustering", "DBSCAN",
-            # Deep learning
-            "neural network architecture", "backpropagation", "gradient descent variants (Adam, SGD)",
-            "batch normalisation", "dropout", "learning rate scheduling",
-            "CNNs (convolution, pooling)", "RNNs / LSTMs", "attention mechanism",
-            "Transformer architecture", "transfer learning", "fine-tuning",
-            "BERT, GPT, and LLM fundamentals",
-            # Evaluation metrics
-            "precision, recall, F1", "ROC-AUC, PR-AUC", "NDCG", "MAP",
-            "RMSE, MAE, MAPE", "calibration", "offline vs online evaluation",
-            # MLOps
-            "ML pipelines (Kubeflow, MLflow, SageMaker Pipelines)",
-            "experiment tracking (MLflow, Weights & Biases)",
-            "model versioning", "model registry", "feature stores",
-            "data drift detection", "model monitoring in production",
-            "A/B testing for ML models", "shadow deployment", "canary deployment",
-            # Deployment
-            "model serialisation (ONNX, pickle, TorchScript)",
-            "serving (TensorFlow Serving, Triton, FastAPI)", "batch vs real-time inference",
-            "latency-throughput tradeoffs", "model quantisation", "pruning", "distillation",
-            # LLM-specific
-            "prompt engineering", "RAG (retrieval-augmented generation)",
-            "vector databases (Pinecone, Weaviate, FAISS)", "embedding models",
-            "LLM fine-tuning (LoRA, PEFT)", "hallucination mitigation",
-            "LLM evaluation (BERTScore, RAGAS)", "token context windows",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "angular", "vue", "next.js", "tailwind",
-            "node.js", "express", "spring boot", "django REST framework",
-            "frontend", "css", "html", "figma", "mobile app",
-            "swift", "kotlin", "flutter", "react native",
-        ],
-        "context_override": (
-            "This is a Machine Learning & AI interview. Cover the full ML lifecycle: "
-            "problem framing, data preparation, feature engineering, model selection and evaluation, "
-            "production deployment, and monitoring. For senior roles, probe on MLOps maturity, "
-            "LLM engineering, and system design for ML (feature stores, serving infrastructure). "
-            "Demand technical depth — evaluation metric justification, tradeoff reasoning, "
-            "and real failure scenarios, not just algorithm definitions."
-        ),
+        "aliases": ["machine learning", "ml engineer", "ai engineer", "deep learning", "nlp engineer"],
+        "mandatory_topics": ["model training", "feature engineering", "model evaluation", "neural networks", "overfitting", "hyperparameter tuning", "ML pipelines", "deployment"],
+        "forbidden_resume_keywords": ["react", "angular", "vue", "node.js", "express", "spring boot", "mobile"],
+        "context_override": "This is a Machine Learning & AI interview. Focus on model architecture, training pipelines, evaluation metrics, feature engineering, ML system design, and model deployment.",
     },
-
     "DevOps & Cloud": {
-        "aliases": ["devops", "cloud engineer", "platform engineer", "sre", "site reliability",
-                    "infrastructure engineer", "cloud architect", "devsecops"],
-        "mandatory_topics": [
-            # CI/CD
-            "CI/CD pipeline design (GitHub Actions, GitLab CI, Jenkins, CircleCI)",
-            "pipeline stages (build, test, security scan, deploy)",
-            "artifact management", "deployment strategies (blue-green, canary, rolling)",
-            "feature flags", "rollback strategies", "trunk-based development",
-            # Containers & orchestration
-            "Docker (images, layers, multi-stage builds, registry)",
-            "Kubernetes (pods, deployments, services, ingress, namespaces)",
-            "Kubernetes resource requests/limits", "HPA and VPA",
-            "Helm charts", "operators", "StatefulSets", "PersistentVolumes",
-            "service mesh (Istio, Linkerd)", "container security scanning",
-            # Infrastructure as Code
-            "Terraform (state management, modules, workspaces)",
-            "Ansible", "Pulumi", "CloudFormation / CDK",
-            "GitOps (ArgoCD, Flux)", "drift detection",
-            # Cloud platforms
-            "AWS (EC2, ECS/EKS, Lambda, S3, RDS, CloudFront, IAM, VPC, Route53)",
-            "Azure (AKS, App Service, Azure Functions, Blob Storage, AAD)",
-            "GCP (GKE, Cloud Run, Cloud Functions, BigQuery, IAM, VPC)",
-            "multi-cloud and hybrid cloud patterns",
-            "cloud cost optimisation (reserved instances, spot/preemptible, rightsizing)",
-            # Observability
-            "metrics (Prometheus, CloudWatch, Datadog)", "logging (ELK stack, Loki, CloudWatch Logs)",
-            "tracing (Jaeger, Zipkin, AWS X-Ray, OpenTelemetry)",
-            "alerting (PagerDuty, OpsGenie)", "SLOs, SLAs, SLIs, error budgets",
-            "on-call practices", "incident management (runbooks, postmortems)",
-            # Networking
-            "DNS", "load balancers (ALB, NLB, HAProxy)", "CDN",
-            "VPC design (subnets, NACLs, security groups)", "VPN and Direct Connect",
-            "service discovery", "network policies in Kubernetes",
-            # Security & compliance
-            "IAM least privilege", "secrets management (Vault, AWS Secrets Manager)",
-            "SAST/DAST in pipelines", "image vulnerability scanning (Trivy, Snyk)",
-            "CIS benchmarks", "SOC2/PCI compliance automation",
-            # Reliability
-            "chaos engineering", "fault injection", "disaster recovery",
-            "RTO and RPO", "backup strategies", "multi-region failover",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "angular", "vue", "next.js", "tailwind", "figma",
-            "pandas", "sklearn", "tensorflow", "pytorch",
-            "mobile app", "swift", "kotlin", "flutter",
-            "SEO optimisation", "UI component library",
-        ],
-        "context_override": (
-            "This is a DevOps & Cloud interview. Cover CI/CD pipeline design, container orchestration "
-            "(Kubernetes internals and production operations), Infrastructure as Code (Terraform/GitOps), "
-            "cloud platform services (AWS/GCP/Azure), observability (metrics/logs/traces/SLOs), "
-            "networking, and cloud security. Probe for real operational experience: "
-            "incident response war stories, cost optimisation decisions, and reliability engineering "
-            "— not just tool enumerations."
-        ),
+        "aliases": ["devops", "cloud engineer", "platform engineer", "sre", "site reliability"],
+        "mandatory_topics": ["CI/CD", "Docker", "Kubernetes", "infrastructure as code", "monitoring", "cloud platforms", "incident response", "scaling strategies"],
+        "forbidden_resume_keywords": ["react", "angular", "pandas", "sklearn", "tableau", "power bi"],
+        "context_override": "This is a DevOps & Cloud interview. Focus on CI/CD pipelines, containerization, orchestration, cloud infrastructure, monitoring, and reliability engineering.",
     },
-
     "Cybersecurity": {
-        "aliases": ["cybersecurity", "security engineer", "pen tester", "information security",
-                    "appsec", "application security", "cloud security", "devsecops engineer",
-                    "soc analyst", "threat intelligence"],
-        "mandatory_topics": [
-            # Fundamentals
-            "CIA triad (confidentiality, integrity, availability)",
-            "defence in depth", "principle of least privilege", "zero trust architecture",
-            "threat modelling (STRIDE, PASTA, attack trees)",
-            "risk assessment and risk scoring (CVSS)", "security controls taxonomy",
-            # Application security
-            "OWASP Top 10 (SQLi, XSS, SSRF, IDOR, broken auth, etc.)",
-            "input validation and output encoding", "parameterised queries",
-            "authentication flows (OAuth 2.0, OIDC, SAML)", "JWT security pitfalls",
-            "session management", "CSRF", "clickjacking", "security headers (CSP, HSTS)",
-            "API security (rate limiting, auth, mass assignment)",
-            "SAST and DAST", "software composition analysis (SCA)", "secret scanning",
-            # Network security
-            "TCP/IP fundamentals", "TLS/SSL (handshake, certificate chains, HSTS)",
-            "firewalls and WAFs", "IDS/IPS", "VPN and Zero Trust Network Access",
-            "DNS security (DNSSEC, DNS poisoning)", "DDoS mitigation",
-            "network segmentation and micro-segmentation",
-            # Penetration testing
-            "OWASP Testing Guide", "recon and OSINT", "exploitation frameworks (Metasploit)",
-            "web app pen testing (Burp Suite)", "privilege escalation techniques",
-            "post-exploitation and lateral movement", "reporting and severity classification",
-            # Cloud security
-            "IAM misconfiguration", "S3 bucket exposure", "AWS security best practices",
-            "cloud security posture management (CSPM)", "container security",
-            "secrets management (Vault, AWS Secrets Manager)", "CWPP",
-            # Incident response
-            "incident response lifecycle (preparation, detection, containment, eradication, recovery)",
-            "digital forensics basics", "log analysis and SIEM (Splunk, Microsoft Sentinel, Chronicle)",
-            "threat hunting", "IoCs and IoAs", "MITRE ATT&CK framework",
-            # Cryptography
-            "symmetric vs asymmetric encryption", "AES, RSA, ECC",
-            "hashing (SHA-256, bcrypt, argon2)", "PKI and certificate management",
-            "key management", "TLS configuration best practices",
-            # Compliance & governance
-            "GDPR", "SOC 2", "ISO 27001", "PCI-DSS", "HIPAA",
-            "security policies and standards", "vulnerability management lifecycle",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "angular", "vue", "pandas", "sklearn",
-            "mobile app", "ui design", "figma", "photoshop",
-            "CSS animations", "frontend state management",
-        ],
-        "context_override": (
-            "This is a Cybersecurity interview. Cover application security (OWASP Top 10, "
-            "auth flows, API security), network security, penetration testing methodology, "
-            "cloud security, incident response, and cryptography fundamentals. "
-            "Probe for offensive AND defensive mindset: threat modelling, exploit chaining, "
-            "detection engineering, and security architecture decisions — not just tool familiarity."
-        ),
+        "aliases": ["cybersecurity", "security engineer", "pen tester", "information security"],
+        "mandatory_topics": ["threat modeling", "OWASP", "penetration testing", "encryption", "authentication", "incident response", "network security", "vulnerability assessment"],
+        "forbidden_resume_keywords": ["react", "pandas", "sklearn", "mobile app", "ui design"],
+        "context_override": "This is a Cybersecurity interview. Focus on security principles, threat vectors, defensive/offensive techniques, compliance, and security architecture.",
     },
-
     "UI/UX Design": {
-        "aliases": ["ui designer", "ux designer", "product designer", "interaction designer",
-                    "ux researcher", "design lead", "experience designer"],
-        "mandatory_topics": [
-            # Research methods
-            "user interviews", "contextual inquiry", "diary studies",
-            "surveys (quantitative vs qualitative)", "usability testing (moderated/unmoderated)",
-            "card sorting", "tree testing", "A/B testing for UX",
-            "affinity mapping", "persona development", "jobs-to-be-done framework",
-            # Information architecture & flows
-            "information architecture", "site maps", "user flows", "task flows",
-            "mental models", "navigation patterns", "progressive disclosure",
-            # Wireframing & prototyping
-            "low-fidelity wireframes", "high-fidelity mockups",
-            "interactive prototyping (Figma, Axure, ProtoPie)",
-            "design handoff (Figma Dev Mode, Zeplin)",
-            "micro-interactions and animation principles",
-            # Design systems
-            "design tokens", "component libraries", "atomic design",
-            "responsive and adaptive design", "platform guidelines (HIG, Material Design)",
-            "version control for design (Figma branching, Abstract)",
-            # Visual design
-            "typography hierarchy", "colour theory and accessible colour contrast (WCAG AA/AAA)",
-            "gestalt principles", "visual hierarchy and layout grids",
-            "icon design", "illustration style consistency",
-            # Accessibility
-            "WCAG 2.1 / 2.2 guidelines", "ARIA roles and labels",
-            "keyboard navigation design", "screen reader compatibility",
-            "colour blindness considerations", "inclusive design principles",
-            # Metrics & measurement
-            "usability metrics (task completion, error rate, time-on-task)",
-            "NPS and CSAT", "System Usability Scale (SUS)",
-            "funnel analysis", "heatmaps and session recordings",
-            "design iteration cycles", "OKRs tied to UX outcomes",
-            # Collaboration
-            "design critique facilitation", "stakeholder alignment",
-            "design sprints", "cross-functional collaboration with engineering",
-            "documenting design decisions and rationale",
-        ],
-        "forbidden_resume_keywords": [
-            "tensorflow", "docker", "kubernetes", "SQL queries",
-            "backend API design", "microservices", "CI/CD pipelines",
-            "server infrastructure", "network security", "penetration testing",
-        ],
-        "context_override": (
-            "This is a UI/UX Design interview. Cover the full design process from research "
-            "(user interviews, usability testing) through information architecture, wireframing, "
-            "high-fidelity prototyping, design systems, and accessibility. "
-            "Probe for research rigour, design decision justification, stakeholder communication, "
-            "and how the candidate measures design impact — not just tool proficiency."
-        ),
+        "aliases": ["ui designer", "ux designer", "product designer", "interaction designer"],
+        "mandatory_topics": ["user research", "wireframing", "prototyping", "usability testing", "design systems", "information architecture", "accessibility", "figma"],
+        "forbidden_resume_keywords": ["tensorflow", "docker", "kubernetes", "SQL queries", "backend API"],
+        "context_override": "This is a UI/UX Design interview. Focus on design process, user research methods, wireframing, prototyping tools, usability testing, and design systems.",
     },
-
     "Project Management": {
-        "aliases": ["project manager", "product manager", "scrum master", "agile coach",
-                    "program manager", "technical program manager", "delivery manager"],
-        "mandatory_topics": [
-            # Methodologies
-            "Agile (Scrum, Kanban, SAFe, LeSS)", "Waterfall and hybrid approaches",
-            "sprint planning", "backlog refinement", "sprint retrospectives",
-            "definition of done vs definition of ready", "velocity and story points",
-            "epic, story, task hierarchy", "release planning",
-            # Product management
-            "product vision and strategy", "product roadmapping (now/next/later, theme-based)",
-            "OKRs and KPI definition", "prioritisation frameworks (RICE, MoSCoW, Kano, WSJF)",
-            "product discovery", "opportunity sizing", "market research",
-            "customer journey mapping", "user story writing",
-            "go-to-market planning", "launch checklists",
-            # Stakeholder management
-            "stakeholder mapping", "RACI matrix", "executive communication",
-            "managing up vs managing down", "conflict resolution",
-            "requirements gathering and sign-off", "change management",
-            # Risk & delivery
-            "risk identification and RAID log", "risk mitigation strategies",
-            "dependency mapping", "critical path analysis",
-            "scope creep management", "escalation paths",
-            "delivery metrics (cycle time, lead time, throughput)",
-            # Technical program management
-            "technical debt management", "cross-team dependency management",
-            "technical roadmap alignment", "engineering capacity planning",
-            "incident retrospectives", "architecture decision records (ADRs)",
-            # Data & metrics
-            "funnel metrics", "retention metrics", "activation, engagement, churn",
-            "hypothesis-driven development", "experiment design",
-            "dashboard creation", "reporting to leadership",
-            # Tools
-            "Jira", "Linear", "Confluence", "Notion", "Asana",
-            "Miro / FigJam for workshops", "ProductBoard", "Amplitude / Mixpanel",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "tensorflow", "docker", "SQL joins", "API development",
-            "frontend CSS", "kubernetes", "penetration testing",
-            "SIEM tools", "malware analysis",
-        ],
-        "context_override": (
-            "This is a Project/Product Management interview. Cover planning methodologies (Agile/Scrum), "
-            "prioritisation frameworks (RICE, MoSCoW, WSJF), stakeholder communication, risk management, "
-            "product discovery and roadmapping, delivery metrics, and data-driven decision making. "
-            "For PM roles, probe for customer empathy and impact measurement. "
-            "For TPM roles, probe for technical dependency management and engineering collaboration. "
-            "Demand specific examples — STAR method, not generic process descriptions."
-        ),
+        "aliases": ["project manager", "product manager", "scrum master", "agile coach"],
+        "mandatory_topics": ["project planning", "stakeholder management", "agile/scrum", "risk management", "roadmapping", "KPIs", "cross-functional coordination", "prioritization"],
+        "forbidden_resume_keywords": ["react", "tensorflow", "docker", "SQL joins", "API development"],
+        "context_override": "This is a Project/Product Management interview. Focus on planning methodologies, stakeholder communication, risk mitigation, prioritization frameworks, and delivery metrics.",
     },
 }
 
@@ -14984,112 +14565,13 @@ Generate {num_questions} questions now:
                     _resume_techs = " ".join(_rc.get("technologies", []) + _rc.get("skills", [])).lower()
                     _domain_cfg = get_domain_config(selected_domain)
                     _forbidden = _domain_cfg.get("forbidden_resume_keywords", [])
-                    _mandatory = _domain_cfg.get("mandatory_topics", [])
                     _has_mismatch = any(kw.lower() in _resume_techs for kw in _forbidden)
-                    _matched_forbidden = [kw for kw in _forbidden if kw.lower() in _resume_techs]
-
-                    # Always show domain scope card; escalate to warning if mismatch detected
-                    _scope_preview = ", ".join(_mandatory[:6]) + ("…" if len(_mandatory) > 6 else "")
-                    _context_note = _domain_cfg.get("context_override", "")
-
                     if _has_mismatch:
-                        # Identify which resume skills are being suppressed
-                        _suppressed = list(dict.fromkeys(
-                            kw for kw in _matched_forbidden
-                            if any(kw.lower() in s.lower() for s in (_rc.get("technologies", []) + _rc.get("skills", [])))
-                        ))[:4]
-                        _suppressed_str = (
-                            "".join(
-                                f'<span style="background:rgba(244,67,54,0.15);color:#ef9a9a;'
-                                f'border:1px solid rgba(244,67,54,0.3);border-radius:4px;'
-                                f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
-                                f'{kw}</span>'
-                                for kw in _suppressed
-                            )
-                            if _suppressed else
-                            '<span style="color:#aaa;font-size:12px;">none detected in top skills</span>'
+                        st.info(
+                            f"⚠️ **Domain Override Active**: Your resume appears to have a different technical background. "
+                            f"Questions will be **strictly aligned to {selected_domain}** regardless of your resume content. "
+                            f"This simulates interviewing for a new domain."
                         )
-                        _domain_pills = "".join(
-                            f'<span style="background:rgba(0,195,255,0.12);color:#00c3ff;'
-                            f'border:1px solid rgba(0,195,255,0.25);border-radius:4px;'
-                            f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
-                            f'{t}</span>'
-                            for t in _mandatory[:8]
-                        )
-                        st.markdown(f"""
-                        <div style="background:linear-gradient(135deg,rgba(255,152,0,0.08) 0%,rgba(255,87,34,0.06) 100%);
-                                    border:1px solid rgba(255,152,0,0.35);border-left:4px solid #ff9800;
-                                    border-radius:10px;padding:16px 20px;margin:10px 0;">
-                            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-                                <span style="font-size:20px;">🔄</span>
-                                <div>
-                                    <strong style="color:#ffb74d;font-size:15px;">Domain Override Active</strong>
-                                    <span style="color:#aaa;font-size:12px;margin-left:8px;">
-                                        Career pivot simulation enabled
-                                    </span>
-                                </div>
-                            </div>
-                            <p style="color:#e0e0e0;font-size:13px;margin:0 0 10px 0;line-height:1.6;">
-                                Your resume contains skills outside <strong style="color:#ffb74d;">{selected_domain}</strong>.
-                                All questions will be strictly scoped to your <em>target domain</em>, regardless of your
-                                existing background. This mirrors what a real interviewer would focus on when you apply
-                                to a new domain.
-                            </p>
-                            <div style="margin-bottom:10px;">
-                                <span style="color:#ef9a9a;font-size:11px;font-weight:600;text-transform:uppercase;
-                                            letter-spacing:0.06em;">Resume skills excluded from question scope:</span><br/>
-                                <div style="margin-top:5px;">{_suppressed_str}</div>
-                            </div>
-                            <div>
-                                <span style="color:#00c3ff;font-size:11px;font-weight:600;text-transform:uppercase;
-                                            letter-spacing:0.06em;">Questions will draw from these topics:</span><br/>
-                                <div style="margin-top:5px;">{_domain_pills}
-                                    <span style="color:#aaa;font-size:11px;margin-left:4px;">
-                                        + {max(0, len(_mandatory) - 8)} more domain topics
-                                    </span>
-                                </div>
-                            </div>
-                            <p style="color:#aaa;font-size:11px;margin:10px 0 0 0;font-style:italic;">
-                                💡 Treat this as authentic interview prep for breaking into {selected_domain}.
-                                Focus on fundamentals, not your existing stack.
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        # Resume aligns with domain — show a positive confirmation card
-                        _domain_pills = "".join(
-                            f'<span style="background:rgba(0,195,255,0.1);color:#00c3ff;'
-                            f'border:1px solid rgba(0,195,255,0.2);border-radius:4px;'
-                            f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
-                            f'{t}</span>'
-                            for t in _mandatory[:8]
-                        )
-                        st.markdown(f"""
-                        <div style="background:rgba(0,195,255,0.05);border:1px solid rgba(0,195,255,0.2);
-                                    border-left:4px solid #00c3ff;border-radius:10px;
-                                    padding:14px 18px;margin:10px 0;">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                                <span style="font-size:18px;">✅</span>
-                                <strong style="color:#00c3ff;font-size:14px;">
-                                    Domain Aligned — {selected_domain}
-                                </strong>
-                            </div>
-                            <p style="color:#ccc;font-size:12px;margin:0 0 8px 0;line-height:1.5;">
-                                Your resume aligns with the selected domain. Questions will leverage your
-                                background and probe for <strong style="color:#e0e0e0;">depth and decision-making</strong>,
-                                not just familiarity.
-                            </p>
-                            <div>
-                                <span style="color:#aaa;font-size:11px;font-weight:600;text-transform:uppercase;
-                                            letter-spacing:0.06em;">Key topics in scope:</span><br/>
-                                <div style="margin-top:5px;">{_domain_pills}
-                                    <span style="color:#666;font-size:11px;margin-left:4px;">
-                                        + {max(0, len(_mandatory) - 8)} more
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
 
                 # ── DIFFICULTY CONTRACT: Show what each level means ──
                 _diff_contract = DIFFICULTY_CONTRACTS.get(interview_difficulty, {})
