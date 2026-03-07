@@ -320,7 +320,7 @@ def display_timer(remaining_seconds, expired=False, key_suffix=""):
                 color: #FF6347;
                 font-size: 1.15em;
                 font-weight: bold;
-                font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+                font-family: 'Orbitron', sans-serif;
                 text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
             ">⏱️ OTP Expired</span>
         </div>
@@ -343,7 +343,7 @@ def display_timer(remaining_seconds, expired=False, key_suffix=""):
                 color: #FFD700;
                 font-size: 1.15em;
                 font-weight: bold;
-                font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+                font-family: 'Orbitron', sans-serif;
                 text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
             ">⏱️ Time Remaining: <span id='countdown-{key_suffix}'>{minutes:02d}:{seconds:02d}</span></span>
         </div>
@@ -360,7 +360,7 @@ def display_timer(remaining_seconds, expired=False, key_suffix=""):
                     if (timerEl) {{
                         timerEl.style.background = 'linear-gradient(135deg, rgba(255, 99, 71, 0.18) 0%, rgba(255, 99, 71, 0.08) 100%)';
                         timerEl.style.border = '2px solid rgba(255, 99, 71, 0.4)';
-                        timerEl.innerHTML = "<span style='color: #fb7185; font-size: 1rem; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, SF Pro Display, sans-serif;'>OTP Expired</span>";
+                        timerEl.innerHTML = "<span style='color: #FF6347; font-size: 1.15em; font-weight: bold; font-family: Orbitron, sans-serif; text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);'>⏱️ OTP Expired</span>";
                     }}
                 }} else {{
                     const mins = Math.floor(remaining / 60);
@@ -1453,9 +1453,20 @@ if not st.session_state.get("authenticated", False):
     response = requests.get(image_url)
     img_base64 = b64encode(response.content).decode()
 
-    # ✅ Inject refined Apple-style CSS (consistent with global theme)
+    # ✅ Inject glassmorphism CSS with shimmer effects
     st.markdown(f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
+
+    @keyframes shimmer {{
+        0% {{ background-position: -200% 0; }}
+        100% {{ background-position: 200% 0; }}
+    }}
+
+    @keyframes glassShimmer {{
+        0% {{ transform: translateX(-100%) skewX(-15deg); }}
+        100% {{ transform: translateX(200%) skewX(-15deg); }}
+    }}
 
     /* ===== Card Shuffle Animation ===== */
     .animated-cards {{
@@ -1470,7 +1481,7 @@ if not st.session_state.get("authenticated", False):
       width: 220px;
       animation: splitCards 2.5s ease-in-out infinite alternate;
       z-index: 1;
-      filter: drop-shadow(0 6px 18px rgba(79,163,227,0.15)) opacity(0.85);
+      filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
     }}
     .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
     .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
@@ -1483,6 +1494,331 @@ if not st.session_state.get("authenticated", False):
     .card-left   {{ --x-offset: -80px; --rot: -4deg; }}
     .card-center {{ --x-offset: 0px;  --rot: 0deg;  }}
     .card-right  {{ --x-offset: 80px;  --rot: 4deg;  }}
+
+    /* ===== Glassmorphism Login Card ===== */
+    .login-card {{
+      background: linear-gradient(135deg,
+        rgba(0, 191, 255, 0.1) 0%,
+        rgba(30, 144, 255, 0.05) 50%,
+        rgba(0, 191, 255, 0.1) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 191, 255, 0.2);
+      border-radius: 20px;
+      padding: 25px;
+      box-shadow:
+        0 8px 32px rgba(0, 191, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      font-family: 'Orbitron', sans-serif;
+      color: white;
+      margin-top: 20px;
+      opacity: 0;
+      transform: translateX(-120%);
+      animation: slideInLeft 1.2s ease-out forwards;
+      position: relative;
+      overflow: hidden;
+    }}
+
+    .login-card::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(0, 191, 255, 0.2),
+        transparent
+      );
+      animation: glassShimmer 3s infinite;
+    }}
+
+    @keyframes slideInLeft {{
+      0%   {{ transform: translateX(-120%); opacity: 0; }}
+      100% {{ transform: translateX(0); opacity: 1; }}
+    }}
+
+    .login-card h2 {{
+      text-align: center;
+      font-size: 1.6rem;
+      text-shadow: 0 0 15px rgba(0, 191, 255, 0.5);
+      margin-bottom: 15px;
+      position: relative;
+      z-index: 2;
+    }}
+    .login-card h2 span {{ color: #00BFFF; }}
+
+    /* ===== Enhanced Message Cards with Consistent Layout ===== */
+    .slide-message {{
+      position: relative;
+      overflow: hidden;
+      margin: 16px 0;
+      padding: 14px 20px;
+      border-radius: 14px;
+      font-weight: 600;
+      font-size: 0.95em;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 12px;
+      animation: slideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      line-height: 1.5;
+      font-family: 'Orbitron', sans-serif;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      min-height: 50px;
+    }}
+
+    .slide-message:hover {{
+      transform: translateY(-3px) scale(1.01);
+      box-shadow:
+        0 8px 30px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }}
+
+    .slide-message::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.1),
+        transparent
+      );
+      transition: left 0.5s;
+    }}
+
+    .slide-message:hover::before {{
+      left: 100%;
+    }}
+
+    .slide-message svg {{
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      filter: drop-shadow(0 0 6px currentColor);
+      z-index: 2;
+    }}
+
+    .slide-message-text {{
+      flex: 1;
+      z-index: 2;
+      position: relative;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      white-space: normal;
+    }}
+
+    .success-msg {{
+      background: linear-gradient(135deg,
+        rgba(0, 255, 127, 0.20) 0%,
+        rgba(0, 255, 127, 0.08) 100%);
+      border: 2px solid rgba(0, 255, 127, 0.4);
+      color: #00FF7F;
+      text-shadow: 0 0 12px rgba(0, 255, 127, 0.4);
+    }}
+
+    .error-msg {{
+      background: linear-gradient(135deg,
+        rgba(255, 99, 71, 0.20) 0%,
+        rgba(255, 99, 71, 0.08) 100%);
+      border: 2px solid rgba(255, 99, 71, 0.4);
+      color: #FF6347;
+      text-shadow: 0 0 12px rgba(255, 99, 71, 0.4);
+    }}
+
+    .info-msg {{
+      background: linear-gradient(135deg,
+        rgba(30, 144, 255, 0.20) 0%,
+        rgba(30, 144, 255, 0.08) 100%);
+      border: 2px solid rgba(30, 144, 255, 0.4);
+      color: #1E90FF;
+      text-shadow: 0 0 12px rgba(30, 144, 255, 0.4);
+    }}
+
+    .warn-msg {{
+      background: linear-gradient(135deg,
+        rgba(255, 215, 0, 0.20) 0%,
+        rgba(255, 215, 0, 0.08) 100%);
+      border: 2px solid rgba(255, 215, 0, 0.4);
+      color: #FFD700;
+      text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
+    }}
+
+    @keyframes slideIn {{
+      0%   {{
+        transform: translateX(-50px);
+        opacity: 0;
+      }}
+      100% {{
+        transform: translateX(0);
+        opacity: 1;
+      }}
+    }}
+
+    /* ===== Improved Timer Display ===== */
+    .timer-display {{
+      background: linear-gradient(135deg,
+        rgba(255, 215, 0, 0.18) 0%,
+        rgba(255, 165, 0, 0.08) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border: 2px solid rgba(255, 215, 0, 0.4);
+      border-radius: 14px;
+      padding: 16px 24px;
+      margin: 20px 0;
+      text-align: center;
+      box-shadow:
+        0 4px 20px rgba(255, 215, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }}
+
+    .timer-display::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 215, 0, 0.2),
+        transparent
+      );
+      animation: glassShimmer 3s infinite;
+    }}
+
+    .timer-display:hover {{
+      box-shadow:
+        0 8px 30px rgba(255, 215, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      transform: translateY(-3px);
+    }}
+
+    .timer-text {{
+      color: #FFD700;
+      font-size: 1.15em;
+      font-weight: bold;
+      font-family: 'Orbitron', sans-serif;
+      text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
+      position: relative;
+      z-index: 2;
+    }}
+
+    .timer-expired {{
+      background: linear-gradient(135deg,
+        rgba(255, 99, 71, 0.18) 0%,
+        rgba(255, 99, 71, 0.08) 100%);
+      border: 2px solid rgba(255, 99, 71, 0.4);
+    }}
+
+    .timer-expired .timer-text {{
+      color: #FF6347;
+      text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
+    }}
+
+    /* ===== Glassmorphism Buttons ===== */
+    .stButton>button {{
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.2) 0%, 
+        rgba(30, 144, 255, 0.1) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      color: white;
+      border: 1px solid rgba(0, 191, 255, 0.3);
+      border-radius: 12px;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: bold;
+      padding: 8px 20px;
+      box-shadow: 
+        0 4px 16px rgba(0, 191, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }}
+    
+    .stButton>button::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent
+      );
+      transition: left 0.5s;
+    }}
+    
+    .stButton>button:hover {{
+      transform: translateY(-2px);
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.3) 0%, 
+        rgba(30, 144, 255, 0.15) 100%);
+      border: 1px solid rgba(0, 191, 255, 0.5);
+      box-shadow: 
+        0 8px 25px rgba(0, 191, 255, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }}
+    
+    .stButton>button:hover::before {{
+      left: 100%;
+    }}
+
+    /* ===== Glassmorphism Input Fields ===== */
+    .stTextInput input {{
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.08) 0%, 
+        rgba(30, 144, 255, 0.04) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border: 1px solid rgba(0, 191, 255, 0.2);
+      border-radius: 10px;
+      padding: 10px;
+      color: #E0F7FF;
+      font-family: 'Orbitron', sans-serif;
+      box-shadow: 
+        0 4px 16px rgba(0, 191, 255, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transition: all 0.3s ease-in-out;
+    }}
+    .stTextInput input:focus {{
+      outline: none !important;
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.12) 0%, 
+        rgba(30, 144, 255, 0.06) 100%);
+      border: 1px solid rgba(0, 191, 255, 0.4);
+      box-shadow: 
+        0 8px 25px rgba(0, 191, 255, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transform: translateY(-1px);
+    }}
+    .stTextInput label {{
+      font-family: 'Orbitron', sans-serif;
+      color: #00BFFF !important;
+      text-shadow: 0 0 10px rgba(0, 191, 255, 0.3);
+    }}
     </style>
 
     <!-- Animated Cards -->
@@ -1498,7 +1834,7 @@ if not st.session_state.get("authenticated", False):
 
     with center:
         st.markdown(
-            "<div class='login-card'><h2 style='text-align:center; font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Display\",sans-serif; font-size:1.5rem; font-weight:700; letter-spacing:-0.02em; color:#e6edf3;'>Login to <span style='color:#4f8cff;'>HIRELYZER</span></h2>",
+            "<div class='login-card'><h2 style='text-align:center;'>🔐 Login to <span style='color:#00BFFF;'>HIRELYZER</span></h2>",
             unsafe_allow_html=True,
         )
 
@@ -1509,7 +1845,7 @@ if not st.session_state.get("authenticated", False):
             # Show login or forgot password flow based on reset_stage
             if st.session_state.reset_stage == "none":
                 # Normal Login UI
-                st.markdown("<h3 style='color:#4f8cff; text-align:center; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif; font-weight:600; letter-spacing:-0.01em;'>🔐 Login to Your Account</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Login to Your Account</h3>", unsafe_allow_html=True)
 
                 user = st.text_input("👤 Username or Email", key="login_user")
                 pwd = st.text_input("🔑 Password", type="password", key="login_pass")
@@ -1544,7 +1880,7 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 1: Request Email
             # ============================================================
             elif st.session_state.reset_stage == "request_email":
-                st.markdown("<h3 style='color:#4f8cff; text-align:center; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif; font-weight:600; letter-spacing:-0.01em;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your registered email to receive an OTP</p>", unsafe_allow_html=True)
 
                 email_input = st.text_input("📧 Email Address", key="reset_email_input")
@@ -1589,7 +1925,7 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 2: Verify OTP
             # ============================================================
             elif st.session_state.reset_stage == "verify_otp":
-                st.markdown("<h3 style='color:#4f8cff; text-align:center; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif; font-weight:600; letter-spacing:-0.01em;'>📩 Verify OTP</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📩 Verify OTP</h3>", unsafe_allow_html=True)
                 st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.reset_email}</strong></p>", unsafe_allow_html=True)
 
                 # Calculate elapsed and remaining time (server-side)
@@ -1659,7 +1995,7 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 3: Reset Password
             # ============================================================
             elif st.session_state.reset_stage == "reset_password":
-                st.markdown("<h3 style='color:#4f8cff; text-align:center; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif; font-weight:600; letter-spacing:-0.01em;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your new password</p>", unsafe_allow_html=True)
 
                 new_password = st.text_input("🔑 New Password", type="password", key="new_password_input")
@@ -1707,7 +2043,7 @@ if not st.session_state.get("authenticated", False):
         with register_tab:
             # Check if OTP was sent and pending verification
             if 'pending_registration' in st.session_state:
-                st.markdown("<h3 style='color:#4f8cff; text-align:center; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif; font-weight:600; letter-spacing:-0.01em;'>📧 Verify Your Email</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📧 Verify Your Email</h3>", unsafe_allow_html=True)
                 st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.pending_registration['email']}</strong></p>", unsafe_allow_html=True)
 
                 # Calculate remaining time
@@ -1787,7 +2123,7 @@ if not st.session_state.get("authenticated", False):
 
             else:
                 # Normal registration form
-                st.markdown("<h3 style='color:#4f8cff; text-align:center; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif; font-weight:600; letter-spacing:-0.01em;'>🧾 Register New User</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
 
                 # Email input with live validation
                 new_email = st.text_input("📧 Email", key="reg_email", placeholder="your@email.com")
@@ -2058,93 +2394,246 @@ tab5 = tabs[4] if len(tabs) > 4 else None
 with tab1:
     st.markdown("""
     <style>
-    /* ── Tab1 Dashboard — Apple refinements (global theme takes precedence) ── */
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
 
-    /* Banner: refined dark strip, no neon border */
+    html, body, [class*="css"] {
+        font-family: 'Orbitron', sans-serif;
+        background-color: #0b0c10;
+        color: #c5c6c7;
+        scroll-behavior: smooth;
+    }
+
+    /* ---------- SCROLLBAR ---------- */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #1f2833; }
+    ::-webkit-scrollbar-thumb { background: #00ffff; border-radius: 4px; }
+
+    /* ---------- BANNER ---------- */
     .banner-container {
         width: 100%;
-        height: 56px;
-        background: linear-gradient(90deg,
-            rgba(8,12,18,1) 0%,
-            rgba(14,20,32,0.92) 50%,
-            rgba(8,12,18,1) 100%);
-        border: 1px solid rgba(255,255,255,0.07);
-        border-radius: 12px;
+        height: 80px;
+        background: linear-gradient(90deg, #000428, #004e92);
+        border-bottom: 2px solid cyan;
         overflow: hidden;
         display: flex;
         align-items: center;
+        justify-content: flex-start;
         position: relative;
         margin-bottom: 20px;
-        backdrop-filter: blur(20px);
+        border-radius: 12px;
+        backdrop-filter: blur(14px);
     }
     .pulse-bar {
         position: absolute;
         display: flex;
         align-items: center;
-        font-size: 0.88rem;
-        font-weight: 600;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-        color: #9aa4af;
+        font-size: 22px;
+        font-weight: bold;
+        color: #00ffff;
         white-space: nowrap;
-        letter-spacing: 0.04em;
-        animation: glideIn 14s linear infinite;
+        animation: glideIn 12s linear infinite;
+        text-shadow: 0 0 10px #00ffff;
     }
     .pulse-bar .bar {
-        width: 3px;
-        height: 16px;
-        margin-right: 12px;
-        background: rgba(79,140,255,0.7);
-        border-radius: 2px;
-        animation: pulseBar 1.2s ease-in-out infinite;
+        width: 10px;
+        height: 30px;
+        margin-right: 10px;
+        background: #00ffff;
+        box-shadow: 0 0 8px cyan;
+        animation: pulse 1s ease-in-out infinite;
     }
-    @keyframes pulseBar {
-        0%, 100% { height: 12px; opacity: 0.6; }
-        50%       { height: 20px; opacity: 1; }
+    @keyframes glideIn {
+        0% { left: -50%; opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { left: 110%; opacity: 0; }
+    }
+    @keyframes pulse {
+        0%, 100% { height: 20px; background-color: #00ffff; }
+        50% { height: 40px; background-color: #ff00ff; }
     }
 
-    /* Header: clean glass card, no neon */
+    /* ---------- HEADER ---------- */
     .header {
-        font-size: 1.35rem;
-        font-weight: 700;
+        font-size: 28px;
+        font-weight: bold;
         text-align: center;
-        letter-spacing: -0.02em;
-        padding: 18px 28px;
-        color: #e6edf3;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        padding: 20px 30px;  /* ✅ More spacing inside the bar */
+        color: #00ffff;
+        text-shadow: 0px 0px 10px #00ffff;
         position: relative;
         overflow: hidden;
         border-radius: 14px;
-        background: linear-gradient(135deg, rgba(14,20,32,0.85) 0%, rgba(10,16,26,0.92) 100%);
-        backdrop-filter: blur(20px);
-        border: 1px solid rgba(79,140,255,0.14);
-        box-shadow: 0 4px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05);
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-        margin-bottom: 8px;
+        background: rgba(10,20,40,0.35);
+        backdrop-filter: blur(14px);
+        border: 1px solid rgba(0,200,255,0.5);
+        box-shadow: 0 0 12px rgba(0,200,255,0.25);
     }
-    .header span { color: #4f8cff; }
     .header::before {
-        content: '';
+        content: "";
         position: absolute;
-        top: 0; left: -100%;
-        width: 50%; height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(79,140,255,0.05), transparent);
-        transition: left 0.7s ease;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(
+            120deg,
+            rgba(255,255,255,0.18) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%
+        );
+        transform: rotate(25deg);
+        transition: all 0.6s;
     }
-    .header:hover::before { left: 150%; }
+    .header:hover::before { left: 100%; top: 100%; }
 
-    /* Chat messages: refined glass, no neon glow */
+    /* ---------- SHIMMER (COMMON) ---------- */
+    .shimmer::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(
+            120deg,
+            rgba(255,255,255,0.15) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%
+        );
+        transform: rotate(25deg);
+        transition: all 0.6s;
+    }
+    .shimmer:hover::before { left: 100%; top: 100%; }
+
+    /* ---------- FILE UPLOADER ---------- */
+    .stFileUploader > div > div {
+        border: 1px solid rgba(0,200,255,0.5);
+        border-radius: 14px;
+        background: rgba(10,20,40,0.35);
+        backdrop-filter: blur(14px);
+        color: #cce6ff;
+        box-shadow: 0 0 12px rgba(0,200,255,0.3);
+        position: relative;
+        overflow: hidden;
+    }
+    .stFileUploader > div > div::before {
+        content: "";
+        position: absolute; top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: linear-gradient(120deg,
+            rgba(255,255,255,0.15) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%);
+        transform: rotate(25deg);
+        transition: all 0.6s;
+    }
+    .stFileUploader > div > div:hover::before { left: 100%; top: 100%; }
+
+    /* ---------- BUTTONS ---------- */
+    .stButton > button {
+        position: relative;
+        overflow: hidden;
+        background: rgba(10,20,40,0.35);
+        border: 1px solid rgba(0,200,255,0.6);
+        color: #e6f7ff;
+        border-radius: 14px;
+        padding: 10px 20px;
+        font-size: 16px;
+        font-weight: 500;
+        text-transform: uppercase;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 0 12px rgba(0,200,255,0.35),
+                    inset 0 0 20px rgba(0,200,255,0.05);
+        transition: all 0.3s ease-in-out;
+    }
+    .stButton > button::before {
+        content: "";
+        position: absolute; top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: linear-gradient(120deg,
+            rgba(255,255,255,0.15) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%);
+        transform: rotate(25deg);
+        transition: all 0.6s;
+    }
+    .stButton > button:hover::before { left: 100%; top: 100%; }
+
+    /* ---------- INPUTS ---------- */
+    .stTextInput > div > input,
+    .stTextArea > div > textarea {
+        position: relative;
+        overflow: hidden;
+        background: rgba(10,20,40,0.35);
+        border: 1px solid rgba(0,200,255,0.6);
+        border-radius: 14px;
+        color: #e6f7ff;
+        padding: 10px;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 0 12px rgba(0,200,255,0.3),
+                    inset 0 0 15px rgba(0,200,255,0.05);
+        transition: all 0.3s ease-in-out;
+    }
+
+    /* ---------- CHAT MESSAGES ---------- */
     .stChatMessage {
-        background: rgba(255,255,255,0.04) !important;
-        border: 1px solid rgba(255,255,255,0.07) !important;
-        border-radius: 14px !important;
-        backdrop-filter: blur(16px) !important;
-        color: #e6edf3 !important;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif !important;
+        position: relative;
+        overflow: hidden;
+        font-size: 18px;
+        background: rgba(10,20,40,0.35);
+        border: 1px solid rgba(0,200,255,0.5);
+        border-radius: 14px;
+        padding: 14px;
+        color: #e6f7ff;
+        text-shadow: 0 0 6px rgba(0,200,255,0.7);
+        box-shadow: 0 0 12px rgba(0,200,255,0.3),
+                    inset 0 0 15px rgba(0,200,255,0.05);
     }
+    .stChatMessage::before {
+        content: "";
+        position: absolute; top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: linear-gradient(120deg,
+            rgba(255,255,255,0.15) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%);
+        transform: rotate(25deg);
+        transition: all 0.6s;
+    }
+    .stChatMessage:hover::before { left: 100%; top: 100%; }
 
-    /* Mobile */
+    /* ---------- METRICS ---------- */
+    .stMetric {
+        position: relative;
+        overflow: hidden;
+        background-color: rgba(10,20,40,0.35);
+        border: 1px solid rgba(0,200,255,0.6);
+        border-radius: 14px;
+        padding: 15px;
+        box-shadow: 0 0 12px rgba(0,200,255,0.35),
+                    inset 0 0 20px rgba(0,200,255,0.05);
+        text-align: center;
+    }
+    .stMetric::before {
+        content: "";
+        position: absolute; top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: linear-gradient(120deg,
+            rgba(255,255,255,0.15) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%);
+        transform: rotate(25deg);
+        transition: all 0.6s;
+    }
+    .stMetric:hover::before { left: 100%; top: 100%; }
+
+    /* ---------- MOBILE ---------- */
     @media (max-width: 768px) {
-        .pulse-bar { font-size: 0.78rem; }
-        .header { font-size: 1.05rem; }
+        .pulse-bar { font-size: 16px; }
+        .header { font-size: 20px; }
     }
     </style>
 
@@ -2152,12 +2641,12 @@ with tab1:
     <div class="banner-container">
         <div class="pulse-bar">
             <div class="bar"></div>
-            <div>HIRELYZER &mdash; Elevate Your Resume Analysis</div>
+            <div>HIRELYZER - Elevate Your Resume Analysis</div>
         </div>
     </div>
 
     <!-- Header -->
-    <div class="header">HIRELYZER &mdash; AI BASED ETHICAL RESUME ANALYZER</div>
+    <div class="header">💼 HIRELYZER - AI BASED ETHICAL RESUME ANALYZER</div>
     """, unsafe_allow_html=True)
 
 # Load environment variables
@@ -3481,7 +3970,7 @@ if uploaded_files and job_description:
             position: fixed;
             top: 0; left: 0;
             width: 100vw; height: 100vh;
-            background: linear-gradient(135deg, #080c12 0%, #0e1420 100%);
+            background: linear-gradient(135deg, #0b0c10 0%, #1a1c29 100%);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -3561,11 +4050,11 @@ if uploaded_files and job_description:
         
         .scanner-text {{
             margin-top: 30px;
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Orbitron', 'Segoe UI', sans-serif;
             font-weight: 600;
             font-size: 18px;
-            color: #4f8cff;
-            color: #9aa4af;
+            color: #00bfff;
+            text-shadow: 0 0 10px rgba(0,191,255,0.5);
             animation: textPulse 2s ease-in-out infinite;
         }}
         
@@ -3585,7 +4074,7 @@ if uploaded_files and job_description:
         
         .progress-fill {{
             height: 100%;
-            background: linear-gradient(90deg, #4f8cff, #3a6fd8);
+            background: linear-gradient(90deg, #00bfff, #1e90ff);
             border-radius: 2px;
             animation: progressFill 3s ease-in-out infinite;
             transform: translateX(-100%);
@@ -3748,7 +4237,7 @@ if uploaded_files and job_description:
             position: fixed;
             top: 0; left: 0;
             width: 100vw; height: 100vh;
-            background: linear-gradient(135deg, #080c12 0%, #0e1420 100%);
+            background: linear-gradient(135deg, #0b0c10 0%, #1a1c29 100%);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -3765,7 +4254,7 @@ if uploaded_files and job_description:
         .success-circle {
             width: 140px;
             height: 140px;
-            border: 1.5px solid rgba(79,140,255,0.35);
+            border: 3px solid #00bfff;
             border-radius: 50%;
             position: relative;
             display: flex;
@@ -3800,11 +4289,11 @@ if uploaded_files and job_description:
         
         .success-text {
             margin-top: 25px;
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Orbitron', 'Segoe UI', sans-serif;
             font-size: 20px;
             font-weight: 600;
-            color: #4f8cff;
-            color: #9aa4af;
+            color: #00bfff;
+            text-shadow: 0 0 10px rgba(0,191,255,0.5);
             animation: textSlideUp 0.8s ease-out 0.3s both;
         }
         
