@@ -10864,6 +10864,25 @@ def evaluate_interview_answer(answer: str, question: str = None):
     return score, feedback
 
 
+def format_score(score) -> str:
+    """
+    Uniform score formatter for all UI display.
+    Always returns a 2-decimal-place string (e.g. 6.47, 6.50, 6.00).
+    Returns 'N/A' for None / NaN values.
+    Raw database values are never modified — formatting is display-layer only.
+    """
+    import math
+    if score is None:
+        return "N/A"
+    try:
+        val = float(score)
+        if math.isnan(val):
+            return "N/A"
+        return f"{val:.2f}"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
 def evaluate_interview_answer_for_scores(answer: str, question: str, difficulty: str, role: str = "", domain: str = ""):
     """
     UPGRADED: Intelligent evaluation with chain-of-thought reasoning and structured feedback.
@@ -11389,6 +11408,11 @@ def save_interview_result(username: str, role: str, domain: str, avg_score: floa
               weighted_score, raw_avg_score, follow_up_count, depth_score, behavior_class))
         conn.commit()
         conn.close()
+        # Invalidate dashboard data cache so next visit shows fresh results
+        _dirty_key = f"_dashboard_dirty_{username}"
+        import streamlit as _st_cache
+        if hasattr(_st_cache, 'session_state'):
+            _st_cache.session_state[_dirty_key] = True
         return True
     except Exception as e:
         import streamlit as st
@@ -11463,7 +11487,7 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
             </div>
             <div class="summary">
                 <h2>Overall Performance</h2>
-                <p class="score">Average Score: {overall_avg:.1f}/10</p>
+                <p class="score">Average Score: {overall_avg:.2f}/10</p>
                 <p><strong>Badge Earned:</strong> {badge}</p>
             </div>
             <h2>Detailed Q&amp;A Review</h2>
@@ -11507,7 +11531,7 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
                 <p><strong>Q:</strong> {q_escaped}</p>
                 <div class="answer-text"><strong>Your Answer:</strong><br/>{a_escaped}</div>
                 <p class="score">Knowledge: {score_dict.get('knowledge', 0)}/10 | Communication: {score_dict.get('communication', 0)}/10 | Relevance: {score_dict.get('relevance', 0)}/10</p>
-                <p class="score">Question Score: {avg_q_score:.1f}/10</p>
+                <p class="score">Question Score: {avg_q_score:.2f}/10</p>
                 <div class="feedback">{bullet_feedback}</div>
             </div>
                 """
@@ -11540,7 +11564,7 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
                 <p><strong>Q:</strong> {fu_q_esc}</p>
                 <div class="answer-text"><strong>Your Answer:</strong><br/>{fu_a_esc}</div>
                 <p class="score">Knowledge: {fu_score.get('knowledge', 0)}/10 | Communication: {fu_score.get('communication', 0)}/10 | Relevance: {fu_score.get('relevance', 0)}/10</p>
-                <p class="score">Follow-Up Score: {fu_avg:.1f}/10</p>
+                <p class="score">Follow-Up Score: {fu_avg:.2f}/10</p>
                 <div class="feedback">{fu_bullets}</div>
             </div>
                     """
@@ -11584,7 +11608,7 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
                 <p><strong>Q:</strong> {q_escaped}</p>
                 <div class="answer-text"><strong>Your Answer:</strong><br/>{a_escaped}</div>
                 <p class="score">Knowledge: {score_dict.get('knowledge', 0)}/10 | Communication: {score_dict.get('communication', 0)}/10 | Relevance: {score_dict.get('relevance', 0)}/10</p>
-                <p class="score">Question Score: {avg_q_score:.1f}/10</p>
+                <p class="score">Question Score: {avg_q_score:.2f}/10</p>
                 <div class="feedback">{bullet_feedback}</div>
                 {followup_text}
             </div>
@@ -14956,7 +14980,7 @@ Generate {num_questions} questions now:
                     _wm_score = _wm_avgs.get(_wm["weakest_skill"], 0)
                     _wm_count = _wm.get("interview_count", 0)
                     _wm_label = f"last {_wm_count} interview{'s' if _wm_count != 1 else ''}"
-                    st.info(f"🧠 **Weakness Memory:** Based on your {_wm_label}, your weakest recurring skill is **{_wm_skill}** (avg: {_wm_score:.1f}/10). Questions will be biased toward improving this.")
+                    st.info(f"🧠 **Weakness Memory:** Based on your {_wm_label}, your weakest recurring skill is **{_wm_skill}** (avg: {_wm_score:.2f}/10). Questions will be biased toward improving this.")
 
                 col1, col2 = st.columns(2)
 
@@ -15432,7 +15456,7 @@ Generate {num_questions} questions now:
                                     border: 1px solid rgba(0, 195, 255, 0.3); border-radius: 10px; padding: 15px; margin: 15px 0;">
                             <h4 style="color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-weight:600;letter-spacing:-0.02em;">Immediate Feedback:</h4>
                             <p style="color: #ffffff;">📊 Knowledge: {current_score_dict["knowledge"]}/10 | Communication: {current_score_dict["communication"]}/10 | Relevance: {current_score_dict["relevance"]}/10</p>
-                            <p style="color: #ffffff;">⭐ Question Score: {avg_q_score:.1f}/10</p>
+                            <p style="color: #ffffff;">⭐ Question Score: {avg_q_score:.2f}/10</p>
                             <div style="color: #ffffff; margin-top: 10px;">
                                 {formatted_feedback}
                             </div>
@@ -15522,7 +15546,7 @@ Generate {num_questions} questions now:
 
                                     st.markdown(f"**Question {i+1}:** {prev_question}")
                                     st.markdown(f"**Your Answer:** {answer_preview}")
-                                    st.markdown(f"**Score:** {prev_avg:.1f}/10")
+                                    st.markdown(f"**Score:** {prev_avg:.2f}/10")
                                     if i < num_to_show - 1:  # Don't add separator after last item
                                         st.markdown("---")
 
@@ -15579,13 +15603,13 @@ Generate {num_questions} questions now:
                 <div class="badge-container">
                     <h2 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">🎉 Mock Interview Complete!</h2>
                     <div style="margin: 30px 0;">
-                        <div class="score-display">{overall_avg:.1f}/10</div>
+                        <div class="score-display">{overall_avg:.2f}/10</div>
                         <h3 style="color: #ffffff; margin: 15px 0; font-size: 24px; font-weight: 500;">{badge_emoji} {badge}</h3>
                     </div>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Role: {selected_role} in {selected_domain}</p>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Difficulty: {st.session_state.interview_difficulty}</p>
                     <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.2f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
-                    <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; margin: 4px 0;">Follow-up Probes: {_follow_up_count} | Depth Score: {_depth_score:.1f}/10</p>
+                    <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; margin: 4px 0;">Follow-up Probes: {_follow_up_count} | Depth Score: {_depth_score:.2f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -15648,12 +15672,12 @@ Generate {num_questions} questions now:
                 with col1:
                     st.markdown("**🌟 Strengths:**")
                     for name, score in metrics_sorted[:2]:
-                        st.markdown(f"- {name}: {score:.1f}/10")
+                        st.markdown(f"- {name}: {score:.2f}/10")
 
                 with col2:
                     st.markdown("**📈 Areas to Improve:**")
                     for name, score in metrics_sorted[-2:]:
-                        st.markdown(f"- {name}: {score:.1f}/10")
+                        st.markdown(f"- {name}: {score:.2f}/10")
 
                 # FIXED: Show detailed Q&A results with full answers and proper matching
                 st.markdown("---")
@@ -15675,7 +15699,7 @@ Generate {num_questions} questions now:
 
                     q_avg = (score_dict["knowledge"] + score_dict["communication"] + score_dict["relevance"]) / 3
 
-                    with st.expander(f"Question {i+1}: Score {q_avg:.1f}/10"):
+                    with st.expander(f"Question {i+1}: Score {q_avg:.2f}/10"):
                         st.write(f"**Question:** {question}")
                         st.write(f"**Your Answer:** {answer}")  # Show full answer
                         st.write(f"**Scores:** Knowledge: {score_dict['knowledge']}/10 | Communication: {score_dict['communication']}/10 | Relevance: {score_dict['relevance']}/10")
@@ -15867,17 +15891,34 @@ Generate {num_questions} questions now:
         # Ensure DB and columns exist
         create_interview_database()
 
-        # Load data for current user only
-        try:
-            conn = sqlite3.connect('resume_data.db')
-            df = pd.read_sql_query(
-                "SELECT * FROM interview_results WHERE username = ? ORDER BY id ASC",
-                conn, params=(username,)
-            )
-            conn.close()
-        except Exception as e:
-            st.error(f"Error loading data: {e}")
-            df = pd.DataFrame()
+        # ── Load dashboard data with session_state caching ──────────────────────
+        # Only re-query the DB when the user navigates to this page fresh, or when
+        # a new interview has been saved (signalled by clearing _dashboard_cache_key).
+        # This prevents a full DB round-trip (and visible flicker) on every widget
+        # interaction that triggers a Streamlit rerun.
+        _cache_key = f"_dashboard_df_{username}"
+        _cache_dirty_key = f"_dashboard_dirty_{username}"
+
+        if st.session_state.get(_cache_dirty_key, True) or _cache_key not in st.session_state:
+            try:
+                conn = sqlite3.connect('resume_data.db')
+                df = pd.read_sql_query(
+                    "SELECT * FROM interview_results WHERE username = ? ORDER BY id ASC",
+                    conn, params=(username,)
+                )
+                conn.close()
+            except Exception as e:
+                st.error(f"Error loading data: {e}")
+                df = pd.DataFrame()
+            st.session_state[_cache_key] = df
+            st.session_state[_cache_dirty_key] = False
+        else:
+            df = st.session_state[_cache_key]
+
+        # Refresh button — invalidates cache without a full page rerun
+        if st.button("🔄 Refresh Dashboard", key="_dashboard_refresh_btn"):
+            st.session_state[_cache_dirty_key] = True
+            st.rerun()
 
         if df.empty:
             st.info("👋 You haven't completed any interviews yet. Head over to the **AI Interview Coach** tab, do your first practice session, and come back here to see your results!")
@@ -15938,21 +15979,21 @@ Generate {num_questions} questions now:
                     <p class="metric-sub">Total sessions</p>
                 </div>""", unsafe_allow_html=True)
             with col2:
-                best_val = f"{highest_score:.1f}/10" if not pd.isna(highest_score) else "N/A"
+                best_val = f"{format_score(highest_score)}/10" if not pd.isna(highest_score) else "N/A"
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Best Score Ever</p>
                     <p class="metric-value">{best_val}</p>
                     <p class="metric-sub">Personal best</p>
                 </div>""", unsafe_allow_html=True)
             with col3:
-                low_val = f"{lowest_score:.1f}/10" if not pd.isna(lowest_score) else "N/A"
+                low_val = f"{format_score(lowest_score)}/10" if not pd.isna(lowest_score) else "N/A"
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Lowest Score</p>
                     <p class="metric-value" style="color:#ff9800;">{low_val}</p>
                     <p class="metric-sub">Room to grow</p>
                 </div>""", unsafe_allow_html=True)
             with col4:
-                avg_val = f"{overall_avg:.2f}/10" if not pd.isna(overall_avg) else "N/A"
+                avg_val = f"{format_score(overall_avg)}/10" if not pd.isna(overall_avg) else "N/A"
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Average Score</p>
                     <p class="metric-value">{avg_val}</p>
@@ -16018,7 +16059,7 @@ Generate {num_questions} questions now:
             _date_labels = df['completed_on'].tolist() if 'completed_on' in df.columns else [''] * len(_x_vals)
 
             _hover_text = [
-                f"<b>Interview #{x}</b><br>Score: {s:.1f}/10<br>Role: {r}<br>Difficulty: {d}<br>Date: {dt}"
+                f"<b>Interview #{x}</b><br>Score: {float(s):.2f}/10<br>Role: {r}<br>Difficulty: {d}<br>Date: {dt}"
                 for x, s, r, d, dt in zip(_x_vals, _raw_scores, _role_labels, _diff_labels, _date_labels)
             ]
 
@@ -16032,7 +16073,7 @@ Generate {num_questions} questions now:
                 line=dict(color='rgba(102,187,106,0.7)', width=1.5, dash='dot'),
                 fill='tozeroy',
                 fillcolor='rgba(102,187,106,0.05)',
-                hovertemplate='Interview #%{x}<br>Adjusted: %{y:.1f}/10<extra></extra>'
+                hovertemplate='Interview #%{x}<br>Adjusted: %{y:.2f}/10<extra></extra>'
             ))
 
             # Raw score line
@@ -16052,7 +16093,7 @@ Generate {num_questions} questions now:
                 name='3-Interview Trend',
                 mode='lines',
                 line=dict(color='#ff9800', width=2, dash='dash'),
-                hovertemplate='Interview #%{x}<br>Trend: %{y:.1f}/10<extra></extra>'
+                hovertemplate='Interview #%{x}<br>Trend: %{y:.2f}/10<extra></extra>'
             ))
 
             # Best interview marker
@@ -16061,10 +16102,10 @@ Generate {num_questions} questions now:
                 name='🏆 Best',
                 mode='markers+text',
                 marker=dict(size=14, color='#00e676', symbol='star', line=dict(width=1.5, color='white')),
-                text=[f" Best: {_raw_scores[_best_idx]:.1f}"],
+                text=[f" Best: {_raw_scores[_best_idx]:.2f}"],
                 textposition='top right',
                 textfont=dict(color='#00e676', size=11),
-                hovertemplate=f'<b>🏆 Best Interview!</b><br>Score: {_raw_scores[_best_idx]:.1f}/10<extra></extra>'
+                hovertemplate=f'<b>🏆 Best Interview!</b><br>Score: {_raw_scores[_best_idx]:.2f}/10<extra></extra>'
             ))
 
             # Worst interview marker
@@ -16073,17 +16114,17 @@ Generate {num_questions} questions now:
                 name='⚠️ Lowest',
                 mode='markers+text',
                 marker=dict(size=14, color='#f44336', symbol='x', line=dict(width=2, color='white')),
-                text=[f" Low: {_raw_scores[_worst_idx]:.1f}"],
+                text=[f" Low: {_raw_scores[_worst_idx]:.2f}"],
                 textposition='bottom right',
                 textfont=dict(color='#f44336', size=11),
-                hovertemplate=f'<b>⚠️ Lowest Interview</b><br>Score: {_raw_scores[_worst_idx]:.1f}/10<extra></extra>'
+                hovertemplate=f'<b>⚠️ Lowest Interview</b><br>Score: {_raw_scores[_worst_idx]:.2f}/10<extra></extra>'
             ))
 
             # Average reference line
             fig_trend.add_hline(
                 y=float(np.mean(_raw_scores)),
                 line_dash='dot', line_color='rgba(255,255,255,0.25)',
-                annotation_text=f'  Avg: {float(np.mean(_raw_scores)):.1f}',
+                annotation_text=f'  Avg: {float(np.mean(_raw_scores)):.2f}',
                 annotation_font_color='rgba(255,255,255,0.5)',
                 annotation_position='right'
             )
@@ -16179,11 +16220,11 @@ Generate {num_questions} questions now:
                         labels={'x': 'Career Area', 'y': 'Avg Score'},
                         color=domain_avg.values.tolist(),
                         color_continuous_scale=[[0,'#f44336'],[0.5,'#ffcc02'],[1,'#00e676']],
-                        text=[f"{v:.1f}" for v in domain_avg.values.tolist()]
+                        text=[f"{v:.2f}" for v in domain_avg.values.tolist()]
                     )
                     _fig_da.update_traces(
                         texttemplate='%{text}', textposition='outside',
-                        hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
+                        hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.2f}/10<extra></extra>'
                     )
                     _fig_da.update_layout(
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
@@ -16198,8 +16239,8 @@ Generate {num_questions} questions now:
                 if len(domain_avg) >= 1:
                     strongest_domain = domain_avg.idxmax()
                     weakest_domain = domain_avg.idxmin()
-                    st.markdown(f"🏆 **You shine in:** {strongest_domain} — avg score {domain_avg[strongest_domain]:.1f}/10")
-                    st.markdown(f"📌 **Room to grow in:** {weakest_domain} — avg score {domain_avg[weakest_domain]:.1f}/10. Spend more time practising here.")
+                    st.markdown(f"🏆 **You shine in:** {strongest_domain} — avg score {domain_avg[strongest_domain]:.2f}/10")
+                    st.markdown(f"📌 **Room to grow in:** {weakest_domain} — avg score {domain_avg[weakest_domain]:.2f}/10. Spend more time practising here.")
 
             # Role breakdown — bar chart + pie chart + styled table
             if 'role' in df.columns:
@@ -16221,9 +16262,9 @@ Generate {num_questions} questions now:
                     _fig_rb = go.Figure(go.Bar(
                         x=role_perf['Role'], y=role_perf['Avg Score'],
                         marker_color=_colors_bar,
-                        text=[f"{v:.1f}" for v in role_perf['Avg Score']],
+                        text=[f"{v:.2f}" for v in role_perf['Avg Score']],
                         textposition='outside',
-                        hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
+                        hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.2f}/10<extra></extra>'
                     ))
                     _fig_rb.update_layout(
                         title=dict(text='Avg Score by Role', font=dict(color='#00c3ff', size=14)),
@@ -16336,8 +16377,8 @@ Generate {num_questions} questions now:
                         _fig_dfa = go.Figure(go.Bar(
                             x=diff_avg.index.tolist(), y=diff_avg.values.tolist(),
                             marker_color=[_diff_colors.get(d, '#00c3ff') for d in diff_avg.index],
-                            text=[f"{v:.1f}" for v in diff_avg.values], textposition='outside',
-                            hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
+                            text=[f"{v:.2f}" for v in diff_avg.values], textposition='outside',
+                            hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.2f}/10<extra></extra>'
                         ))
                         _fig_dfa.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
@@ -16412,11 +16453,11 @@ Generate {num_questions} questions now:
                 strongest_skill_idx = skill_avgs.index(max(skill_avgs))
                 strongest_skill = skill_labels[strongest_skill_idx]
 
-                st.markdown(f"🌟 **You're best at:** {strongest_skill} ({skill_avgs[strongest_skill_idx]:.1f}/10)")
-                st.markdown(f"📌 **Focus area:** {weakest_skill} ({skill_avgs[weakest_skill_idx]:.1f}/10) — this is where more practice will help the most")
+                st.markdown(f"🌟 **You're best at:** {strongest_skill} ({skill_avgs[strongest_skill_idx]:.2f}/10)")
+                st.markdown(f"📌 **Focus area:** {weakest_skill} ({skill_avgs[weakest_skill_idx]:.2f}/10) — this is where more practice will help the most")
                 st.markdown("")
                 for lbl, val in zip(skill_labels, skill_avgs):
-                    st.markdown(f"**{lbl}:** {val:.1f}/10")
+                    st.markdown(f"**{lbl}:** {val:.2f}/10")
                     st.progress(val / 10.0)
 
             # =====================================================
@@ -16583,11 +16624,11 @@ Generate {num_questions} questions now:
             if _domain_avg_safe is not None and len(_domain_avg_safe) >= 1:
                 _s_domain = _domain_avg_safe.idxmax()
                 _w_domain = _domain_avg_safe.idxmin()
-                summary_parts.append(f"You perform best in **{_s_domain}** — that's where your confidence and knowledge really shows, with an average score of {_domain_avg_safe[_s_domain]:.1f}/10.")
+                summary_parts.append(f"You perform best in **{_s_domain}** — that's where your confidence and knowledge really shows, with an average score of {_domain_avg_safe[_s_domain]:.2f}/10.")
                 if len(_domain_avg_safe) > 1:
-                    summary_parts.append(f"**{_w_domain}** is the area that needs the most attention right now ({_domain_avg_safe[_w_domain]:.1f}/10). A little focused practice there will go a long way.")
+                    summary_parts.append(f"**{_w_domain}** is the area that needs the most attention right now ({_domain_avg_safe[_w_domain]:.2f}/10). A little focused practice there will go a long way.")
 
-            summary_parts.append(f"Across all your interviews, **{strongest_skill}** is your strongest skill ({skill_avgs[strongest_skill_idx]:.1f}/10). **{weakest_skill}** is the skill to focus on next ({skill_avgs[weakest_skill_idx]:.1f}/10) — even small improvements here will lift your overall scores.")
+            summary_parts.append(f"Across all your interviews, **{strongest_skill}** is your strongest skill ({skill_avgs[strongest_skill_idx]:.2f}/10). **{weakest_skill}** is the skill to focus on next ({skill_avgs[weakest_skill_idx]:.2f}/10) — even small improvements here will lift your overall scores.")
 
             # Trend direction — fully plain English, no slope values shown
             if total_interviews >= 3:
@@ -16617,9 +16658,9 @@ Generate {num_questions} questions now:
             if 'difficulty' in df.columns and 'Hard' in df['difficulty'].values:
                 _hard_avg_s = df[df['difficulty'] == 'Hard']['avg_score'].mean()
                 if _hard_avg_s < overall_avg - 1.0:
-                    summary_parts.append(f"Hard interviews are a challenge for you right now — you average {_hard_avg_s:.1f}/10 there, which is lower than your overall average. That's completely normal. The more you practise Hard mode, the more comfortable you'll get with tough questions.")
+                    summary_parts.append(f"Hard interviews are a challenge for you right now — you average {_hard_avg_s:.2f}/10 there, which is lower than your overall average. That's completely normal. The more you practise Hard mode, the more comfortable you'll get with tough questions.")
                 else:
-                    summary_parts.append(f"You're handling Hard interviews really well — averaging {_hard_avg_s:.1f}/10 even under pressure. That kind of resilience is exactly what real interviews reward.")
+                    summary_parts.append(f"You're handling Hard interviews really well — averaging {_hard_avg_s:.2f}/10 even under pressure. That kind of resilience is exactly what real interviews reward.")
 
             # Behavior class — explained naturally
             if 'behavior_class' in df.columns and df['behavior_class'].notna().any():
@@ -16721,8 +16762,8 @@ Generate {num_questions} questions now:
                         _fig_ma = go.Figure(go.Bar(
                             x=_mode_avg.index.tolist(), y=_mode_avg.values.tolist(),
                             marker_color=[f'rgba(0,195,255,{0.5 + 0.5*(v/10)})' for v in _mode_avg.values],
-                            text=[f"{v:.1f}" for v in _mode_avg.values], textposition='outside',
-                            hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
+                            text=[f"{v:.2f}" for v in _mode_avg.values], textposition='outside',
+                            hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.2f}/10<extra></extra>'
                         ))
                         _fig_ma.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
@@ -16759,18 +16800,18 @@ Generate {num_questions} questions now:
                 def _badge(v):
                     if pd.isna(v): return '<span style="color:#666">N/A</span>'
                     v = float(v)
-                    if v >= 8.5: return f'<span class="badge-excellent">{v:.1f}</span>'
-                    elif v >= 7.0: return f'<span class="badge-good">{v:.1f}</span>'
-                    elif v >= 5.5: return f'<span class="badge-average">{v:.1f}</span>'
-                    elif v >= 4.0: return f'<span class="badge-weak">{v:.1f}</span>'
-                    else: return f'<span class="badge-poor">{v:.1f}</span>'
+                    if v >= 8.5: return f'<span class="badge-excellent">{v:.2f}</span>'
+                    elif v >= 7.0: return f'<span class="badge-good">{v:.2f}</span>'
+                    elif v >= 5.5: return f'<span class="badge-average">{v:.2f}</span>'
+                    elif v >= 4.0: return f'<span class="badge-weak">{v:.2f}</span>'
+                    else: return f'<span class="badge-poor">{v:.2f}</span>'
 
                 def _trend_arrow(current, prev):
                     if prev is None or pd.isna(prev): return ''
                     delta = float(current) - float(prev)
-                    if delta > 0.3: return f'<span style="color:#00e676;font-size:14px;" title="+{delta:.1f}">▲</span>'
-                    elif delta < -0.3: return f'<span style="color:#f44336;font-size:14px;" title="{delta:.1f}">▼</span>'
-                    else: return f'<span style="color:#ffcc02;font-size:14px;" title="~{delta:.1f}">●</span>'
+                    if delta > 0.3: return f'<span style="color:#00e676;font-size:14px;" title="+{delta:.2f}">▲</span>'
+                    elif delta < -0.3: return f'<span style="color:#f44336;font-size:14px;" title="{delta:.2f}">▼</span>'
+                    else: return f'<span style="color:#ffcc02;font-size:14px;" title="~{delta:.2f}">●</span>'
 
                 _th_style = "padding:9px 12px;color:#38bdf8;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid rgba(0,195,255,0.3);white-space:nowrap;"
                 _td_style = "padding:8px 12px;color:#e0e0e0;font-size:13px;white-space:nowrap;"
@@ -16814,7 +16855,6 @@ Generate {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
-
 if tab5:
 	with tab5:
 		import sqlite3
