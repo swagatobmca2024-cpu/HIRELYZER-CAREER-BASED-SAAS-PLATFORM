@@ -13079,7 +13079,7 @@ def show_resume_scanning_animation():
 
     for text, value in steps:
         status.markdown(
-            f"<p style='text-align:center;color:var(--accent-cyan,#38bdf8);font-size:0.9rem;font-weight:600;'>{text}</p>",
+            f"<h4 style='text-align:center;color:#00c3ff'>{text}</h4>",
             unsafe_allow_html=True
         )
         progress.progress(value)
@@ -13299,549 +13299,437 @@ Generate {num_questions} questions:"""
 
 
 with tab4:
-    # ── Premium Apple-style Design System ─────────────────────────────────
+    # Inject CSS styles (keeping existing styles)
     st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
 
-    /* ══════════════════════════════════════
-       CSS VARIABLES — Single source of truth
-       ══════════════════════════════════════ */
-    :root {
-        --bg-base:        #07090f;
-        --bg-surface:     #0d1117;
-        --bg-elevated:    #141922;
-        --bg-hover:       #1a2130;
-        --border-subtle:  rgba(255,255,255,0.07);
-        --border-accent:  rgba(56,189,248,0.22);
-        --accent-cyan:    #38bdf8;
-        --accent-violet:  #818cf8;
-        --accent-emerald: #34d399;
-        --accent-amber:   #fbbf24;
-        --accent-rose:    #fb7185;
-        --text-primary:   #f0f4f8;
-        --text-secondary: #94a3b8;
-        --text-muted:     #475569;
-        --radius-sm:      8px;
-        --radius-md:      12px;
-        --radius-lg:      16px;
-        --radius-xl:      22px;
-        --shadow-card:    0 1px 3px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.32);
-        --font-sans:      'DM Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-        --font-mono:      'DM Mono', 'SF Mono', monospace;
-        --ease-out:       cubic-bezier(0.22,1,0.36,1);
-    }
+        .header-box {
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 25%, #2d3561 50%, #3f4787 75%, #5158ae 100%);
+            border: 2px solid transparent;
+            background-clip: padding-box;
+            position: relative;
+            padding: 25px;
+            border-radius: 20px;
+            text-align: center;
+            margin-bottom: 35px;
+            box-shadow: 
+                0 8px 32px rgba(0, 195, 255, 0.15),
+                0 4px 16px rgba(0, 195, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            overflow: hidden;
+        }
 
-    *, *::before, *::after {
-        font-family: var(--font-sans) !important;
-        box-sizing: border-box;
-    }
+        .header-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, #00c3ff, #0066cc, #00c3ff, #0066cc);
+            background-size: 400% 400%;
+            animation: gradientShift 8s ease infinite;
+            z-index: -1;
+            border-radius: 20px;
+            padding: 2px;
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+        }
 
-    /* ══════════════════════════════════════
-       PAGE HEADER BOX
-       ══════════════════════════════════════ */
-    .t4-header {
-        background: linear-gradient(160deg, rgba(13,17,23,0.98) 0%, rgba(7,9,15,1) 100%);
-        border: 1px solid var(--border-accent);
-        border-radius: var(--radius-xl);
-        padding: 36px 40px;
-        text-align: center;
-        margin-bottom: 28px;
-        position: relative;
-        overflow: hidden;
-        box-shadow: var(--shadow-card), 0 0 60px rgba(56,189,248,0.05);
-    }
-    .t4-header::before {
-        content: '';
-        position: absolute;
-        top: -80px; left: 50%; transform: translateX(-50%);
-        width: 600px; height: 200px;
-        background: radial-gradient(ellipse, rgba(56,189,248,0.08) 0%, transparent 70%);
-        pointer-events: none;
-    }
-    .t4-header h2 {
-        font-size: 1.9rem;
-        font-weight: 700;
-        color: var(--text-primary);
-        margin: 0 0 6px;
-        letter-spacing: -0.04em;
-    }
-    .t4-header p {
-        font-size: 0.9rem;
-        color: var(--text-muted);
-        margin: 0;
-    }
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
 
-    /* ══════════════════════════════════════
-       NAV PILL (replaces glow-header label)
-       ══════════════════════════════════════ */
-    .t4-nav-label {
-        font-size: 0.72rem;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--text-muted);
-        text-align: center;
-        margin: 4px 0 14px;
-    }
+        .header-box h2 {
+            font-size: 32px;
+            color: #ffffff;
+            margin: 0;
+            font-weight: 700;
+            text-shadow: 
+                0 0 20px rgba(0, 195, 255, 0.5),
+                0 2px 4px rgba(0, 0, 0, 0.3);
+            letter-spacing: -0.5px;
+        }
 
-    /* ══════════════════════════════════════
-       SECTION LABEL
-       ══════════════════════════════════════ */
-    .t4-section-label {
-        font-size: 0.7rem;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--text-muted);
-        border-bottom: 1px solid var(--border-subtle);
-        padding-bottom: 8px;
-        margin: 28px 0 16px;
-    }
+        .glow-header {
+            font-size: 24px;
+            text-align: center;
+            color: #00c3ff;
+            text-shadow: 
+                0 0 20px rgba(0, 195, 255, 0.8),
+                0 0 40px rgba(0, 195, 255, 0.4);
+            margin: 20px 0 15px 0;
+            font-weight: 600;
+            letter-spacing: -0.3px;
+            animation: pulse 3s ease-in-out infinite;
+        }
 
-    /* ══════════════════════════════════════
-       GLASS CARD — base
-       ══════════════════════════════════════ */
-    .t4-card {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-lg);
-        padding: 20px 24px;
-        margin: 10px 0;
-        position: relative;
-        overflow: hidden;
-        transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-    }
-    .t4-card::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(135deg, rgba(255,255,255,0.025) 0%, transparent 55%);
-        pointer-events: none;
-        border-radius: inherit;
-    }
-    .t4-card:hover {
-        border-color: var(--border-accent);
-        transform: translateY(-3px);
-        box-shadow: var(--shadow-card), 0 0 32px rgba(56,189,248,0.08);
-    }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.9; transform: scale(1.02); }
+        }
 
-    /* ══════════════════════════════════════
-       COURSE TILE
-       ══════════════════════════════════════ */
-    .course-tile {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-lg);
-        padding: 22px 24px;
-        margin: 12px 0;
-        transition: border-color 0.22s ease, transform 0.22s ease, box-shadow 0.22s ease;
-        position: relative;
-        overflow: hidden;
-    }
-    .course-tile::after {
-        content: '';
-        position: absolute;
-        top: 0; left: -100%;
-        width: 60%; height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(56,189,248,0.04), transparent);
-        transition: left 0.5s ease;
-    }
-    .course-tile:hover { border-color: var(--border-accent); transform: translateY(-4px); box-shadow: 0 12px 36px rgba(0,0,0,0.3); }
-    .course-tile:hover::after { left: 150%; }
+        .stRadio > div {
+            flex-direction: row !important;
+            justify-content: center !important;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
 
-    .course-title {
-        font-size: 0.975rem;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 8px;
-        letter-spacing: -0.01em;
-    }
-    .course-description {
-        font-size: 0.835rem;
-        color: var(--text-secondary);
-        margin-bottom: 14px;
-        line-height: 1.6;
-    }
-    .difficulty-badge {
-        display: inline-block;
-        padding: 3px 10px;
-        border-radius: 99px;
-        font-size: 0.72rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        margin-bottom: 14px;
-    }
-    .difficulty-beginner    { background: rgba(52,211,153,0.12); color: #34d399; border: 1px solid rgba(52,211,153,0.28); }
-    .difficulty-intermediate { background: rgba(251,191,36,0.12);  color: #fbbf24; border: 1px solid rgba(251,191,36,0.28); }
-    .difficulty-advanced     { background: rgba(251,113,133,0.12); color: #fb7185; border: 1px solid rgba(251,113,133,0.28); }
+        .stRadio label {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            color: #00c3ff;
+            padding: 14px 24px;
+            margin: 6px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            min-width: 190px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 4px 15px rgba(0, 195, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
 
-    .course-link-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: rgba(56,189,248,0.1);
-        color: var(--accent-cyan);
-        border: 1px solid rgba(56,189,248,0.25);
-        padding: 7px 16px;
-        border-radius: var(--radius-sm);
-        font-size: 0.82rem;
-        font-weight: 600;
-        text-decoration: none;
-        transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
-    }
-    .course-link-btn:hover {
-        background: rgba(56,189,248,0.18);
-        border-color: rgba(56,189,248,0.45);
-        transform: translateX(3px);
-        text-decoration: none;
-        color: var(--accent-cyan);
-    }
+        .stRadio label::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 195, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
 
-    /* ══════════════════════════════════════
-       QUIZ / QUESTION CARD
-       ══════════════════════════════════════ */
-    .quiz-card {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-lg);
-        padding: 26px 28px;
-        margin: 14px 0;
-        position: relative;
-        overflow: hidden;
-    }
-    .quiz-card::before {
-        content: '';
-        position: absolute;
-        top: 0; left: 0; bottom: 0;
-        width: 3px;
-        background: linear-gradient(180deg, var(--accent-cyan) 0%, var(--accent-violet) 100%);
-        border-radius: 0 0 0 var(--radius-lg);
-    }
+        .stRadio label:hover {
+            background: linear-gradient(135deg, #00c3ff15 0%, #00c3ff25 100%);
+            transform: translateY(-2px);
+            box-shadow: 
+                0 8px 25px rgba(0, 195, 255, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
 
-    /* ══════════════════════════════════════
-       PROGRESS / INTERVIEW STATUS BAR
-       ══════════════════════════════════════ */
-    .t4-progress-bar {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-md);
-        padding: 14px 20px;
-        margin: 18px 0;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-    .t4-progress-bar .pb-label {
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: var(--text-secondary);
-    }
-    .t4-progress-bar .pb-value {
-        font-size: 0.82rem;
-        font-weight: 700;
-        color: var(--accent-cyan);
-        margin-left: auto;
-    }
+        .stRadio label:hover::before {
+            left: 100%;
+        }
 
-    /* ══════════════════════════════════════
-       TIMER
-       ══════════════════════════════════════ */
-    .timer-container {
-        background: rgba(251,191,36,0.06);
-        border: 1px solid rgba(251,191,36,0.22);
-        border-radius: var(--radius-md);
-        padding: 13px 20px;
-        margin: 12px 0;
-        text-align: center;
-    }
-    .timer-display {
-        font-family: var(--font-mono) !important;
-        font-size: 1.3rem;
-        font-weight: 500;
-        color: var(--accent-amber);
-        letter-spacing: 0.05em;
-    }
-    .timer-urgent {
-        color: var(--accent-rose) !important;
-        animation: timerPulse 0.8s ease-in-out infinite;
-    }
-    @keyframes timerPulse {
-        0%,100% { opacity: 1; }
-        50%      { opacity: 0.55; }
-    }
+        .stRadio input:checked + div > label {
+            background: linear-gradient(135deg, #00c3ff 0%, #0099cc 100%);
+            color: #000000;
+            font-weight: 600;
+            transform: scale(1.05);
+            box-shadow: 
+                0 8px 30px rgba(0, 195, 255, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
 
-    /* ══════════════════════════════════════
-       FEEDBACK CARD (post-answer)
-       ══════════════════════════════════════ */
-    .t4-feedback-card {
-        background: rgba(56,189,248,0.04);
-        border: 1px solid rgba(56,189,248,0.18);
-        border-radius: var(--radius-lg);
-        padding: 20px 24px;
-        margin: 16px 0;
-    }
-    .t4-feedback-card .fb-header {
-        font-size: 0.72rem;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--accent-cyan);
-        margin-bottom: 12px;
-    }
-    .t4-score-pills {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-bottom: 14px;
-    }
-    .t4-score-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid var(--border-subtle);
-        border-radius: 99px;
-        padding: 4px 12px;
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: var(--text-secondary);
-    }
-    .t4-score-pill span { color: var(--accent-cyan); font-weight: 700; }
+        .card {
+            background: linear-gradient(135deg, #0f1419 0%, #1a2332 25%, #253447 50%, #30455c 75%, #3b5671 100%);
+            border: 2px solid transparent;
+            border-radius: 16px;
+            padding: 20px 25px;
+            margin: 12px 0;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 
+                0 4px 20px rgba(0, 195, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
 
-    /* ══════════════════════════════════════
-       FOLLOWUP CARD (Hard mode)
-       ══════════════════════════════════════ */
-    .t4-followup-card {
-        background: rgba(251,191,36,0.05);
-        border: 1px solid rgba(251,191,36,0.22);
-        border-left: 3px solid var(--accent-amber);
-        border-radius: var(--radius-md);
-        padding: 16px 20px;
-        margin: 12px 0;
-    }
-    .t4-followup-card .fq-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 10px;
-    }
-    .t4-followup-card .fq-title {
-        font-size: 0.78rem;
-        font-weight: 700;
-        color: var(--accent-amber);
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-    }
-    .t4-pressure-pill {
-        font-size: 0.68rem;
-        font-weight: 700;
-        padding: 3px 9px;
-        border-radius: 99px;
-        background: rgba(0,0,0,0.3);
-        letter-spacing: 0.05em;
-    }
-    .t4-followup-card p {
-        font-size: 0.9rem;
-        color: var(--text-secondary);
-        margin: 0;
-        line-height: 1.65;
-    }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, #00c3ff, #0066cc);
+            z-index: -1;
+            border-radius: 16px;
+            padding: 2px;
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+            opacity: 0.8;
+        }
 
-    /* ══════════════════════════════════════
-       RESULTS / BADGE CONTAINER
-       ══════════════════════════════════════ */
-    .badge-container {
-        background: linear-gradient(160deg, rgba(13,17,23,0.98) 0%, rgba(7,9,15,1) 100%);
-        border: 1px solid var(--border-accent);
-        border-radius: var(--radius-xl);
-        padding: 40px 36px;
-        text-align: center;
-        margin: 20px 0;
-        position: relative;
-        overflow: hidden;
-    }
-    .badge-container::before {
-        content: '';
-        position: absolute;
-        top: -60px; left: 50%; transform: translateX(-50%);
-        width: 400px; height: 180px;
-        background: radial-gradient(ellipse, rgba(56,189,248,0.09) 0%, transparent 70%);
-        pointer-events: none;
-    }
-    .score-display {
-        font-size: 4.5rem;
-        font-weight: 800;
-        letter-spacing: -0.04em;
-        color: var(--accent-cyan);
-        line-height: 1;
-        margin: 16px 0 8px;
-    }
+        .card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.6s;
+        }
 
-    /* ══════════════════════════════════════
-       ROLE SELECTOR WRAPPER
-       ══════════════════════════════════════ */
-    .role-selector {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-lg);
-        padding: 20px 24px;
-        margin: 14px 0;
-    }
+        .card:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 
+                0 12px 40px rgba(0, 195, 255, 0.25),
+                0 8px 20px rgba(0, 195, 255, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
 
-    /* ══════════════════════════════════════
-       RADAR / CHART CONTAINER
-       ══════════════════════════════════════ */
-    .radar-container {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-lg);
-        padding: 20px 24px;
-        margin: 18px 0;
-    }
+        .card:hover::after {
+            left: 100%;
+        }
 
-    /* ══════════════════════════════════════
-       MY PROGRESS — METRIC CARDS
-       ══════════════════════════════════════ */
-    .metric-card {
-        background: var(--bg-elevated);
-        border: 1px solid var(--border-subtle);
-        border-radius: var(--radius-md);
-        padding: 18px 20px;
-        margin: 6px 0;
-        transition: border-color 0.2s ease, transform 0.2s ease;
-    }
-    .metric-card:hover {
-        border-color: var(--border-accent);
-        transform: translateY(-3px);
-    }
-    .metric-card .metric-label {
-        font-size: 0.68rem;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        color: var(--text-muted);
-        margin: 0 0 8px;
-    }
-    .metric-card .metric-value {
-        font-size: 1.75rem;
-        font-weight: 800;
-        letter-spacing: -0.04em;
-        color: var(--accent-cyan);
-        margin: 0;
-        line-height: 1;
-    }
-    .metric-card .metric-sub {
-        font-size: 0.75rem;
-        color: var(--text-muted);
-        margin: 5px 0 0;
-    }
+        .card a {
+            color: #00c3ff;
+            font-weight: 600;
+            font-size: 16px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+            text-shadow: 0 0 10px rgba(0, 195, 255, 0.3);
+        }
 
-    /* Score badges */
-    .badge-excellent { background:rgba(0,230,118,0.1);  color:#00e676; border:1px solid rgba(0,230,118,0.3);  border-radius:6px; padding:3px 10px; font-weight:700; font-size:12px; }
-    .badge-good      { background:rgba(105,240,174,0.1); color:#69f0ae; border:1px solid rgba(105,240,174,0.3); border-radius:6px; padding:3px 10px; font-weight:700; font-size:12px; }
-    .badge-average   { background:rgba(255,204,2,0.1);   color:#ffcc02; border:1px solid rgba(255,204,2,0.3);   border-radius:6px; padding:3px 10px; font-weight:700; font-size:12px; }
-    .badge-weak      { background:rgba(255,152,0,0.1);   color:#ff9800; border:1px solid rgba(255,152,0,0.3);   border-radius:6px; padding:3px 10px; font-weight:700; font-size:12px; }
-    .badge-poor      { background:rgba(244,67,54,0.1);   color:#f44336; border:1px solid rgba(244,67,54,0.3);   border-radius:6px; padding:3px 10px; font-weight:700; font-size:12px; }
-    .best-row { background: rgba(0,230,118,0.08) !important; }
+        .card a:hover {
+            color: #ffffff;
+            text-decoration: none;
+            text-shadow: 
+                0 0 15px rgba(255, 255, 255, 0.5),
+                0 0 30px rgba(0, 195, 255, 0.3);
+            transform: translateX(4px);
+        }
 
-    .section-header {
-        font-size: 0.72rem;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--text-muted);
-        border-left: 3px solid var(--accent-cyan);
-        padding-left: 10px;
-        margin: 28px 0 6px;
-    }
+        /* Enhanced selectbox styling */
+        .stSelectbox > div > div {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            border-radius: 10px;
+            color: #00c3ff;
+        }
 
-    /* ══════════════════════════════════════
-       LEARNING PATH HEADER
-       ══════════════════════════════════════ */
-    .learning-path-container {
-        text-align: center;
-        margin: 22px 0 14px;
-        padding: 13px 20px;
-        background: rgba(56,189,248,0.04);
-        border-radius: var(--radius-md);
-        border: 1px solid var(--border-accent);
-    }
-    .learning-path-text {
-        font-size: 0.88rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--accent-cyan);
-    }
+        .stSelectbox > div > div:hover {
+            box-shadow: 0 0 15px rgba(0, 195, 255, 0.3);
+        }
 
-    /* ══════════════════════════════════════
-       STREAMLIT OVERRIDES
-       ══════════════════════════════════════ */
-    div[data-testid="stMarkdownContainer"] p { color: var(--text-secondary) !important; line-height: 1.65 !important; }
-    div[data-testid="stMarkdownContainer"] strong { color: var(--text-primary) !important; }
+        /* Enhanced subheader styling */
+        .stApp h3 {
+            color: #00c3ff;
+            text-shadow: 0 0 10px rgba(0, 195, 255, 0.5);
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
 
-    /* Radio nav pills */
-    .stRadio > div { flex-direction: row !important; justify-content: center !important; gap: 8px; flex-wrap: wrap; }
-    .stRadio label {
-        background: var(--bg-elevated) !important;
-        border: 1px solid var(--border-subtle) !important;
-        color: var(--text-secondary) !important;
-        padding: 9px 18px !important;
-        border-radius: var(--radius-sm) !important;
-        font-size: 0.82rem !important;
-        font-weight: 500 !important;
-        transition: border-color 0.2s ease, color 0.2s ease !important;
-        min-width: 0 !important;
-        cursor: pointer;
-    }
-    .stRadio label:hover { border-color: var(--border-accent) !important; color: var(--accent-cyan) !important; }
+        /* Learning path container */
+        .learning-path-container {
+            text-align: center;
+            margin: 30px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
+            border-radius: 12px;
+            border: 1px solid rgba(0, 195, 255, 0.2);
+        }
 
-    /* Selectbox */
-    .stSelectbox > div > div {
-        background: var(--bg-elevated) !important;
-        border: 1px solid var(--border-subtle) !important;
-        border-radius: var(--radius-sm) !important;
-        color: var(--text-secondary) !important;
-    }
-    .stSelectbox > div > div:hover { border-color: var(--border-accent) !important; }
+        .learning-path-text {
+            color: #00c3ff;
+            font-weight: 600;
+            font-size: 20px;
+            text-shadow: 0 0 15px rgba(0, 195, 255, 0.6);
+            letter-spacing: -0.3px;
+        }
 
-    /* Text area */
-    .stTextArea textarea {
-        background: var(--bg-elevated) !important;
-        border: 1px solid var(--border-subtle) !important;
-        border-radius: var(--radius-sm) !important;
-        color: var(--text-primary) !important;
-        font-size: 0.9rem !important;
-        line-height: 1.65 !important;
-        transition: border-color 0.2s ease !important;
-    }
-    .stTextArea textarea:focus { border-color: var(--border-accent) !important; box-shadow: 0 0 0 3px rgba(56,189,248,0.1) !important; }
+        /* Video container enhancements */
+        .stVideo {
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
+        }
 
-    /* Alerts */
-    .stAlert {
-        background: rgba(56,189,248,0.05) !important;
-        border: 1px solid rgba(56,189,248,0.2) !important;
-        border-radius: var(--radius-md) !important;
-    }
+        .stVideo:hover {
+            transform: scale(1.02);
+        }
 
-    /* Subheaders */
-    .stApp h3 { color: var(--text-primary) !important; font-weight: 700 !important; letter-spacing: -0.02em !important; }
-    .stApp h2 { color: var(--text-primary) !important; font-weight: 700 !important; letter-spacing: -0.03em !important; }
-    </style>
+        /* Info message styling */
+        .stAlert {
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.1) 0%, rgba(0, 195, 255, 0.05) 100%);
+            border: 1px solid rgba(0, 195, 255, 0.3);
+            border-radius: 10px;
+        }
+
+        /* New styles for quiz and interview sections */
+        .quiz-card {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 4px 20px rgba(0, 195, 255, 0.15);
+        }
+
+        .badge-container {
+            text-align: center;
+            padding: 30px;
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.12) 0%, rgba(0, 195, 255, 0.06) 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 195, 255, 0.25);
+            margin: 20px 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .score-display {
+            font-size: 64px;
+            font-weight: bold;
+            color: #00d4ff;
+            text-shadow: 0 0 30px rgba(0, 212, 255, 0.6);
+            letter-spacing: 2px;
+        }
+
+        .role-selector {
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
+            border: 1px solid rgba(0, 195, 255, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+
+        /* Course tile styling */
+        .course-tile {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .course-tile:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 195, 255, 0.3);
+        }
+
+        .course-title {
+            color: #00c3ff;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .course-description {
+            color: #ffffff;
+            font-size: 14px;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        .difficulty-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 15px;
+        }
+
+        .difficulty-beginner {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+        }
+
+        .difficulty-intermediate {
+            background: linear-gradient(135deg, #FF9800, #f57c00);
+            color: white;
+        }
+
+        .difficulty-advanced {
+            background: linear-gradient(135deg, #f44336, #d32f2f);
+            color: white;
+        }
+
+        .course-link-btn {
+            background: linear-gradient(135deg, #00c3ff, #0099cc);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .course-link-btn:hover {
+            background: linear-gradient(135deg, #0099cc, #007acc);
+            transform: translateX(2px);
+            text-decoration: none;
+            color: white;
+        }
+
+        /* Radar chart container */
+        .radar-container {
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
+            border: 1px solid rgba(0, 195, 255, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        /* Timer styling */
+        .timer-container {
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .timer-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        .timer-urgent {
+            color: #ff4444;
+            text-shadow: 0 0 15px rgba(255, 68, 68, 0.8);
+            animation: pulse 1s ease-in-out infinite;
+        }
+        </style>
     """, unsafe_allow_html=True)
 
-    # Header
+    # Header (keeping existing)
     st.markdown("""
-        <div class="t4-header">
-            <h2>📚 Learning Hub</h2>
-            <p>Courses, interview prep, and AI coaching — all in one place</p>
+        <div class="header-box">
+            <h2>📚 Recommended Learning Hub</h2>
         </div>
     """, unsafe_allow_html=True)
 
-    # Nav label
-    st.markdown('<p class="t4-nav-label">🧭 Choose Your Learning Path</p>', unsafe_allow_html=True)
+    # Subheader (keeping existing)
+    st.markdown('<div class="glow-header">🎓 Explore Career Resources</div>', unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#ccc; font-size: 16px; margin-bottom: 25px;'>Curated courses and videos for your career growth, resume tips, and interview success.</p>", unsafe_allow_html=True)
+
+    # Learning path label (keeping existing)
+    st.markdown("""
+        <div class="learning-path-container">
+            <span class="learning-path-text">
+                🧭 Choose Your Learning Path
+            </span>
+        </div>
+    """, unsafe_allow_html=True)
 
     # Updated Radio buttons with new options
     st.markdown("""
@@ -14593,7 +14481,7 @@ Generate {num_questions} questions now:
         # Display each difficulty group
         for difficulty in ["Beginner", "Intermediate", "Advanced"]:
             if difficulty_groups[difficulty]:
-                st.markdown(f"<p class='t4-section-label'>{difficulty} Level</p>", unsafe_allow_html=True)
+                st.markdown(f"### 🎯 {difficulty} Level")
                 for title, url, description in difficulty_groups[difficulty]:
                     st.markdown(f"""
                         <div class="course-tile">
@@ -14611,7 +14499,7 @@ Generate {num_questions} questions now:
 
     # Section 1: UPDATED Courses by Role with Index-based Difficulty
     if page == "Courses by Role":
-        st.markdown('<p class="t4-section-label">Courses by Career Role</p>', unsafe_allow_html=True)
+        st.subheader("🎯 Courses by Career Role")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -14778,7 +14666,7 @@ Generate {num_questions} questions now:
 
     # Section 2: Resume Videos (unchanged)
     elif page == "Resume Videos":
-        st.markdown('<p class="t4-section-label">Resume Writing Videos</p>'  , unsafe_allow_html=True)
+        st.subheader("📄 Resume Writing Videos")
         categories = list(RESUME_VIDEOS.keys())
         selected_cat = st.selectbox(
             "Select Resume Video Category",
@@ -14796,7 +14684,7 @@ Generate {num_questions} questions now:
 
     # Section 3: Interview Videos (unchanged)
     elif page == "Interview Videos":
-        st.markdown('<p class="t4-section-label">Interview Preparation Videos</p>', unsafe_allow_html=True)
+        st.subheader("🗣️ Interview Preparation Videos")
         categories = list(INTERVIEW_VIDEOS.keys())
         selected_cat = st.selectbox(
             "Select Interview Video Category",
@@ -14814,8 +14702,8 @@ Generate {num_questions} questions now:
 
     # Section 4: UPDATED AI Interview Coach 🤖 with Resume-Based Interviewing
     elif page == "AI Interview Coach 🤖":
-        st.markdown('<p class="t4-section-label">AI Interview Coach</p>', unsafe_allow_html=True)
-        st.markdown("<p style='color:var(--text-secondary);font-size:0.9rem;margin-bottom:4px;'>Upload your resume and practice role-specific interview questions with AI-powered feedback.</p>", unsafe_allow_html=True)
+        st.subheader("🤖 AI Interview Coach")
+        st.markdown("Upload your resume and practice role-specific interview questions with AI-powered feedback!")
 
         # Create database table if not exists
         create_interview_database()
@@ -14832,7 +14720,7 @@ Generate {num_questions} questions now:
 
         # RESUME UPLOAD SECTION (MANDATORY)
         st.markdown("---")
-        st.markdown("<p class='t4-section-label'>Step 1 — Upload Your Resume</p>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #00c3ff;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
 
         if st.session_state.resume_file is None:
             uploaded_resume = st.file_uploader(
@@ -14880,7 +14768,7 @@ Generate {num_questions} questions now:
         # Only show domain/role selection if resume is uploaded
         if st.session_state.resume_file is not None:
             st.markdown("---")
-            st.markdown("<p class='t4-section-label'>Step 2 — Select Target Role</p>", unsafe_allow_html=True)
+            st.markdown("<h3 style='color: #00c3ff;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
 
             # Domain and Role selection
             st.markdown('<div class="role-selector">', unsafe_allow_html=True)
@@ -14959,7 +14847,7 @@ Generate {num_questions} questions now:
 
             # Start interview setup
             if not st.session_state.dynamic_interview_started:
-                st.markdown(f"<p class='t4-section-label'>Practice Interview — {selected_role}</p>", unsafe_allow_html=True)
+                st.markdown(f"### Practice interview for: {selected_role}")
 
                 # PART 5: Show weakness memory insight
                 _username_wm = st.session_state.get("username", "Guest")
@@ -15221,10 +15109,17 @@ Generate {num_questions} questions now:
 
                 # Display progress with correct counts in glassmorphism box
                 st.markdown(f"""
-                <div class="t4-progress-bar">
-                    <span class="pb-label">📊 Progress</span>
-                    <span style="color:var(--text-muted);font-size:0.8rem;">{current_phase}</span>
-                    <span class="pb-value">{questions_answered} / {st.session_state.original_num_questions} answered</span>
+                <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.08) 0%, rgba(0, 195, 255, 0.04) 100%);
+                            backdrop-filter: blur(10px);
+                            -webkit-backdrop-filter: blur(10px);
+                            border: 1px solid rgba(0, 195, 255, 0.2);
+                            border-radius: 12px;
+                            padding: 16px 24px;
+                            margin: 20px 0;
+                            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.05);">
+                    <p style="color: #ffffff; font-size: 16px; margin: 0; font-weight: 500;">
+                        📊 Progress: Answered {questions_answered}/{st.session_state.original_num_questions} questions | Phase: {current_phase}
+                    </p>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -15260,18 +15155,12 @@ Generate {num_questions} questions now:
                     phase_badge = "📄 Resume-Based Question" if current_index <= num_resume_qs else "💼 Generic Interview Question"
                     st.markdown(f"""
                     <div class="quiz-card">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-                            <span style="font-size:0.72rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent-cyan);">
-                                Question {questions_answered + 1} of {st.session_state.original_num_questions}
-                            </span>
-                            <span style="background:rgba(56,189,248,0.1);color:var(--accent-cyan);border:1px solid rgba(56,189,248,0.2);border-radius:99px;padding:4px 12px;font-size:0.72rem;font-weight:600;">
-                                {phase_badge}
-                            </span>
+                        <h3 style="color: #00c3ff;">Question {questions_answered + 1} of {st.session_state.original_num_questions}</h3>
+                        <div style="background: rgba(0, 195, 255, 0.15); padding: 8px 12px; border-radius: 6px; margin: 10px 0; display: inline-block;">
+                            <span style="color: #00c3ff; font-weight: 600;">{phase_badge}</span>
                         </div>
-                        <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 12px;font-weight:500;">
-                            {selected_role} &nbsp;·&nbsp; {st.session_state.interview_difficulty}
-                        </p>
-                        <p style="font-size:1.05rem;color:var(--text-primary);margin:0;line-height:1.7;font-weight:500;">{question}</p>
+                        <h4 style="color: #ffffff; margin: 15px 0;">Role: {selected_role} | Difficulty: {st.session_state.interview_difficulty}</h4>
+                        <p style="font-size: 18px; color: #ffffff; margin: 15px 0;">{question}</p>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -15441,15 +15330,12 @@ Generate {num_questions} questions now:
                         formatted_feedback = format_feedback_text(feedback_text)
 
                         st.markdown(f"""
-                        <div class="t4-feedback-card">
-                            <p class="fb-header">Feedback</p>
-                            <div class="t4-score-pills">
-                                <div class="t4-score-pill">📘 Knowledge <span>{current_score_dict["knowledge"]}/10</span></div>
-                                <div class="t4-score-pill">🗣 Communication <span>{current_score_dict["communication"]}/10</span></div>
-                                <div class="t4-score-pill">🎯 Relevance <span>{current_score_dict["relevance"]}/10</span></div>
-                                <div class="t4-score-pill">⭐ Score <span>{avg_q_score:.1f}/10</span></div>
-                            </div>
-                            <div style="color:var(--text-secondary);font-size:0.875rem;line-height:1.7;">
+                        <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.1) 0%, rgba(0, 195, 255, 0.05) 100%);
+                                    border: 1px solid rgba(0, 195, 255, 0.3); border-radius: 10px; padding: 15px; margin: 15px 0;">
+                            <h4 style="color: #00c3ff;">Immediate Feedback:</h4>
+                            <p style="color: #ffffff;">📊 Knowledge: {current_score_dict["knowledge"]}/10 | Communication: {current_score_dict["communication"]}/10 | Relevance: {current_score_dict["relevance"]}/10</p>
+                            <p style="color: #ffffff;">⭐ Question Score: {avg_q_score:.1f}/10</p>
+                            <div style="color: #ffffff; margin-top: 10px;">
                                 {formatted_feedback}
                             </div>
                         </div>
@@ -15469,14 +15355,19 @@ Generate {num_questions} questions now:
                             }
                             _pc = _pressure_colors.get(_pressure, "#ffa500")
                             st.markdown(f"""
-                            <div class="t4-followup-card">
-                                <div class="fq-header">
-                                    <span class="fq-title">🔎 Follow-Up — {_preview_strategy}</span>
-                                    <span class="t4-pressure-pill" style="color:{_pc};">
-                                        Layer {_esc_layer}/5: {_layer_name} · {_pressure}
+                            <div style="background: linear-gradient(135deg, rgba(255,165,0,0.12), rgba(255,165,0,0.06));
+                                        border: 1px solid rgba(255,165,0,0.4); border-radius: 10px;
+                                        padding: 14px 18px; margin: 12px 0;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                                    <span style="color: #ffa500; font-weight: 600;">
+                                        🔎 Follow-Up — {_preview_strategy}
+                                    </span>
+                                    <span style="color:{_pc};font-size:12px;font-weight:600;
+                                                 background:rgba(0,0,0,0.3);padding:2px 8px;border-radius:12px;">
+                                        Layer {_esc_layer}/5: {_layer_name} | Pressure: {_pressure}
                                     </span>
                                 </div>
-                                <p>{_preview_fq}</p>
+                                <p style="color: #ffffff; margin: 0; font-size: 15px;">{_preview_fq}</p>
                             </div>
                             """, unsafe_allow_html=True)
 
@@ -15509,8 +15400,9 @@ Generate {num_questions} questions now:
                                 st.session_state.question_timer_start = time.time()
                                 st.rerun()
 
+                    # Progress bar for interview completion
                     interview_progress = questions_answered / st.session_state.original_num_questions
-                    st.markdown('<p class="t4-section-label">Interview Progress</p>', unsafe_allow_html=True)
+                    st.markdown("### Interview Progress")
                     st.progress(interview_progress)
 
                     # CRITICAL FIX: Review Previous Answers - show all properly
@@ -15587,29 +15479,21 @@ Generate {num_questions} questions now:
 
                 st.markdown(f"""
                 <div class="badge-container">
-                    <p style="font-size:0.72rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-muted);margin:0 0 4px;">Mock Interview Complete</p>
-                    <h2 style="margin:0 0 20px;color:var(--text-primary);font-size:1.6rem;font-weight:700;letter-spacing:-0.03em;">🎉 Results</h2>
-                    <div class="score-display">{overall_avg:.1f}<span style="font-size:1.6rem;color:var(--text-muted);font-weight:400;">/10</span></div>
-                    <h3 style="color:var(--text-primary);margin:12px 0 20px;font-size:1.3rem;font-weight:600;">{badge_emoji} {badge}</h3>
-                    <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:8px;">
-                        <span style="background:rgba(255,255,255,0.05);border:1px solid var(--border-subtle);border-radius:99px;padding:5px 14px;font-size:0.82rem;color:var(--text-secondary);">
-                            {selected_role} in {selected_domain}
-                        </span>
-                        <span style="background:rgba(255,255,255,0.05);border:1px solid var(--border-subtle);border-radius:99px;padding:5px 14px;font-size:0.82rem;color:var(--text-secondary);">
-                            {st.session_state.interview_difficulty} difficulty
-                        </span>
-                        <span style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:99px;padding:5px 14px;font-size:0.82rem;color:var(--accent-cyan);">
-                            ⚡ Weighted: {_weighted_avg:.2f}/10 ×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)}
-                        </span>
-                        <span style="background:rgba(255,255,255,0.05);border:1px solid var(--border-subtle);border-radius:99px;padding:5px 14px;font-size:0.82rem;color:var(--text-secondary);">
-                            Follow-ups: {_follow_up_count} · Depth: {_depth_score:.1f}/10
-                        </span>
+                    <h2 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">🎉 Mock Interview Complete!</h2>
+                    <div style="margin: 30px 0;">
+                        <div class="score-display">{overall_avg:.1f}/10</div>
+                        <h3 style="color: #ffffff; margin: 15px 0; font-size: 24px; font-weight: 500;">{badge_emoji} {badge}</h3>
                     </div>
+                    <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Role: {selected_role} in {selected_domain}</p>
+                    <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Difficulty: {st.session_state.interview_difficulty}</p>
+                    <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.2f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
+                    <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; margin: 4px 0;">Follow-up Probes: {_follow_up_count} | Depth Score: {_depth_score:.1f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
 
+                # Create radar chart for skills
                 st.markdown('<div class="radar-container">', unsafe_allow_html=True)
-                st.markdown('<p class="t4-section-label">Performance Radar</p>', unsafe_allow_html=True)
+                st.subheader("📊 Performance Radar Chart")
 
                 radar_data = {
                     "Communication": avg_communication,
@@ -15657,7 +15541,7 @@ Generate {num_questions} questions now:
                 st.markdown('</div>', unsafe_allow_html=True)
 
                 # Strengths and Weaknesses
-                st.markdown('<p class="t4-section-label">Performance Analysis</p>', unsafe_allow_html=True)
+                st.subheader("💡 Performance Analysis")
                 col1, col2 = st.columns(2)
 
                 metrics = [("Communication", avg_communication), ("Knowledge", avg_knowledge), ("Confidence", avg_relevance)]
@@ -15673,8 +15557,9 @@ Generate {num_questions} questions now:
                     for name, score in metrics_sorted[-2:]:
                         st.markdown(f"- {name}: {score:.1f}/10")
 
+                # FIXED: Show detailed Q&A results with full answers and proper matching
                 st.markdown("---")
-                st.markdown('<p class="t4-section-label">Detailed Q&A Review</p>', unsafe_allow_html=True)
+                st.subheader("📋 Detailed Q&A Review:")
 
                 # Ensure we only show as many Q&A pairs as we have complete data for
                 num_complete_qa = min(
@@ -15724,7 +15609,7 @@ Generate {num_questions} questions now:
 
                 # Generate PDF report
                 st.markdown("---")
-                st.markdown('<p class="t4-section-label">Download Interview Report</p>', unsafe_allow_html=True)
+                st.subheader("📄 Download Interview Report")
 
                 completed_on = get_ist_time()
 
@@ -15761,9 +15646,10 @@ Generate {num_questions} questions now:
                 else:
                     st.warning("PDF generation failed. You can still review your results above.")
 
+                # UNIFIED: Display recommended courses by difficulty
                 st.markdown("---")
-                st.markdown('<p class="t4-section-label">Recommended Courses for Your Growth</p>', unsafe_allow_html=True)
-                st.markdown(f"<p style='color:var(--text-secondary);font-size:0.875rem;margin-bottom:14px;'>Based on your practice for <strong style='color:var(--text-primary);'>{selected_role}</strong> in <strong style='color:var(--text-primary);'>{selected_domain}</strong>.</p>", unsafe_allow_html=True)
+                st.subheader("📚 Recommended Courses for Your Career Growth")
+                st.markdown(f"Based on your interview practice for **{selected_role}** in **{selected_domain}**, here are our course recommendations organized by difficulty level:")
 
                 courses = get_courses_for_role(selected_domain, selected_role)
                 if courses:
@@ -15815,15 +15701,61 @@ Generate {num_questions} questions now:
         import plotly.express as px
         from plotly.subplots import make_subplots
 
-        # ── My Progress extra CSS (inherits the main design system above) ──
+        # ── Dashboard CSS ──────────────────────────────────────────────────────
         st.markdown("""
         <style>
-        /* Additional My Progress overrides */
+        /* Metric cards */
+        .metric-card {
+            background: linear-gradient(135deg, rgba(0,195,255,0.10) 0%, rgba(0,195,255,0.04) 100%);
+            border: 1px solid rgba(0,195,255,0.25);
+            border-radius: 14px;
+            padding: 18px 20px;
+            margin: 6px 0;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 24px rgba(0,195,255,0.18);
+        }
+        .metric-card .metric-label {
+            color: rgba(255,255,255,0.55);
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 0 0 6px 0;
+        }
+        .metric-card .metric-value {
+            color: #00c3ff;
+            font-size: 28px;
+            font-weight: 700;
+            margin: 0;
+            line-height: 1.1;
+        }
+        .metric-card .metric-sub {
+            color: rgba(255,255,255,0.45);
+            font-size: 11px;
+            margin: 4px 0 0 0;
+        }
+        /* Score badges */
+        .badge-excellent { background:#1a3a2a; color:#00e676; border:1px solid #00e676; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-good      { background:#1a3020; color:#69f0ae; border:1px solid #69f0ae; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-average   { background:#2a2a10; color:#ffcc02; border:1px solid #ffcc02; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-weak      { background:#2a1a10; color:#ff9800; border:1px solid #ff9800; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-poor      { background:#2a1010; color:#f44336; border:1px solid #f44336; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        /* Highlighted best row */
+        .best-row { background: rgba(0,230,118,0.12) !important; }
+        /* Section divider */
+        .section-header {
+            font-size: 20px; font-weight: 700; color: #00c3ff;
+            border-left: 4px solid #00c3ff; padding-left: 12px;
+            margin: 24px 0 4px 0;
+        }
         </style>
         """, unsafe_allow_html=True)
 
-        st.markdown('<p class="t4-section-label">My Progress Dashboard</p>', unsafe_allow_html=True)
-        st.markdown("<p style='color:var(--text-secondary);font-size:0.9rem;margin-bottom:20px;'>Track your improvement over time, spot your strengths, and find exactly what to work on next.</p>", unsafe_allow_html=True)
+        st.subheader("📊 My Progress Dashboard")
+        st.markdown("Track how you're improving over time, spot your strengths, and find exactly what to work on next.")
 
         username = st.session_state.get("username", "Guest")
 
@@ -15864,8 +15796,8 @@ Generate {num_questions} questions now:
             # SECTION A — EXECUTIVE SUMMARY METRICS
             # =====================================================
             st.markdown("---")
-            st.markdown('<p class="section-header">Your Progress at a Glance</p>', unsafe_allow_html=True)
-            st.caption("A quick overview of everything you've accomplished so far.")
+            st.markdown("### 🏆 Your Progress at a Glance")
+            st.caption("Here's a quick overview of everything you've accomplished so far.")
 
             total_interviews = len(df)
             highest_score = df['avg_score'].max()
@@ -15951,8 +15883,8 @@ Generate {num_questions} questions now:
             # SECTION B — SCORE TREND INTELLIGENCE
             # =====================================================
             st.markdown("---")
-            st.markdown('<p class="section-header">Are You Getting Better Over Time?</p>', unsafe_allow_html=True)
-            st.caption("Your scores across every interview. The smoother line filters out single-session spikes.")
+            st.markdown("### 📈 Are You Getting Better Over Time?")
+            st.caption("This chart shows how your scores have changed across every interview you've done. The smoother line helps filter out one-off good or bad days.")
 
             trend_df = df[['avg_score', 'weighted_score']].copy().reset_index(drop=True)
             trend_df.index = trend_df.index + 1
@@ -16104,8 +16036,8 @@ Generate {num_questions} questions now:
             # SECTION C — DOMAIN & ROLE ANALYTICS
             # =====================================================
             st.markdown("---")
-            st.markdown('<p class="section-header">Where Are You Strongest?</p>', unsafe_allow_html=True)
-            st.caption("Which career areas and roles you score highest in — and which need more practice.")
+            st.markdown("### 🌐 Where Are You Strongest?")
+            st.caption("See which career areas and job roles you score highest in — and which ones need more practice.")
 
             if 'domain' in df.columns:
                 col_l, col_r = st.columns(2)
@@ -16263,7 +16195,7 @@ Generate {num_questions} questions now:
             # SECTION D — DIFFICULTY PERFORMANCE
             # =====================================================
             st.markdown("---")
-            st.markdown('<p class="section-header">How You Handle Different Difficulty Levels</p>', unsafe_allow_html=True)
+            st.markdown("### 🎯 How You Handle Different Difficulty Levels")
             st.caption("Easy interviews build confidence. Medium tests your thinking. Hard interviews push your limits — and show real growth.")
 
             if 'difficulty' in df.columns:
@@ -16329,7 +16261,7 @@ Generate {num_questions} questions now:
             # SECTION E — SKILL INTELLIGENCE (RADAR CHART)
             # =====================================================
             st.markdown("---")
-            st.markdown('<p class="section-header">Your Skill Strengths</p>', unsafe_allow_html=True)
+            st.markdown("### 🕸️ Your Skill Strengths")
             st.caption("This chart shows how you're performing across three key interview skills. The bigger the shape, the stronger you are overall.")
 
             skill_cols = ['knowledge_avg', 'communication_avg', 'relevance_avg']
@@ -16386,7 +16318,7 @@ Generate {num_questions} questions now:
             # SECTION F — BEHAVIORAL ANALYTICS
             # =====================================================
             st.markdown("---")
-            st.markdown('<p class="section-header">Your Interview Style</p>', unsafe_allow_html=True)
+            st.markdown("### 🧠 Your Interview Style")
             st.caption("This section looks at how you behave during interviews — how long you spend, how that affects your score, and what kind of interviewer you are.")
 
             col_b1, col_b2, col_b3 = st.columns(3)
@@ -16465,7 +16397,7 @@ Generate {num_questions} questions now:
                 _hard_avg_b = df[df['difficulty'] == 'Hard']['avg_score'].mean()
                 _med_avg_b = df[df['difficulty'] == 'Medium']['avg_score'].mean()
                 _hard_delta = _hard_avg_b - _med_avg_b
-                st.markdown('<p class="section-header">How You Perform in Hard Interviews</p>', unsafe_allow_html=True)
+                st.markdown("#### 💪 How You Perform in Hard Interviews")
                 st.caption("Hard interviews are more demanding — it's normal to score a little lower. Here's how you're doing.")
                 col_hd1, col_hd2 = st.columns(2)
                 with col_hd1:
@@ -16498,7 +16430,7 @@ Generate {num_questions} questions now:
             # SECTION G — CLASSIFICATION ENGINE
             # =====================================================
             st.markdown("---")
-            st.markdown('<p class="section-header">Where Do You Stand Right Now?</p>', unsafe_allow_html=True)
+            st.markdown("### 🎖️ Where Do You Stand Right Now?")
             st.caption("Based on all your interviews, here's an honest picture of where you are today — and where you're headed.")
 
             if not pd.isna(overall_avg):
@@ -16536,7 +16468,7 @@ Generate {num_questions} questions now:
             # SECTION H — AI GENERATED PERFORMANCE SUMMARY
             # =====================================================
             st.markdown("---")
-            st.markdown('<p class="section-header">Your Personal Progress Report</p>', unsafe_allow_html=True)
+            st.markdown("### 📝 Your Personal Progress Report")
             st.caption("Here's a plain-English summary of everything your data is telling us about your interview journey so far.")
 
             # Generate programmatic summary from real data
@@ -16609,7 +16541,7 @@ Generate {num_questions} questions now:
             # SECTION I — RECOMMENDATION ENGINE
             # =====================================================
             st.markdown("---")
-            st.markdown('<p class="section-header">What You Should Do Next</p>', unsafe_allow_html=True)
+            st.markdown("### 💡 What You Should Do Next")
             st.caption("These suggestions are personalised based on your actual interview history. Follow them and you'll see real improvement.")
 
             recommendations = []
@@ -16656,7 +16588,7 @@ Generate {num_questions} questions now:
             # Mode breakdown if available
             if 'interview_mode' in df.columns and df['interview_mode'].notna().any():
                 st.markdown("---")
-                st.markdown('<p class="section-header">Which Interview Type Do You Prefer?</p>', unsafe_allow_html=True)
+                st.markdown("### 🎮 Which Interview Type Do You Prefer?")
                 st.caption("See how you perform across technical, behavioural, and mixed interview formats.")
                 _mode_df = df[df['interview_mode'].notna() & (df['interview_mode'] != '')]
                 if not _mode_df.empty:
