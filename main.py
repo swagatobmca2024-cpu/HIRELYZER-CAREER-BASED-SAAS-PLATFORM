@@ -1507,7 +1507,7 @@ if not st.session_state.get("authenticated", False):
       -webkit-backdrop-filter: blur(32px) saturate(180%);
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 20px;
-      padding: 40px 36px 32px;
+      padding: 28px 28px 24px;
       box-shadow:
         0 2px 6px rgba(0,0,0,0.25),
         0 16px 48px rgba(0,0,0,0.40),
@@ -1826,17 +1826,46 @@ if not st.session_state.get("authenticated", False):
     with center:
         st.markdown(
             """<div class='login-card'>
-            <div style='text-align:center; margin-bottom:20px;'>
-                <div style='display:inline-flex; align-items:center; justify-content:center; width:48px; height:48px; border-radius:12px; background:rgba(79,140,255,0.12); border:1px solid rgba(79,140,255,0.22); margin-bottom:16px;'>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <div style='text-align:center; margin-bottom:12px;'>
+                <div style='display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:10px; background:rgba(79,140,255,0.12); border:1px solid rgba(79,140,255,0.22); margin-bottom:12px;'>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <rect x="5" y="11" width="14" height="10" rx="2" stroke="#4f8cff" stroke-width="1.5" fill="rgba(79,140,255,0.12)"/>
                         <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#4f8cff" stroke-width="1.5" stroke-linecap="round"/>
                         <circle cx="12" cy="16" r="1.2" fill="#4f8cff"/>
                     </svg>
                 </div>
             </div>
-            <h2 style='text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:1.45rem; font-weight:700; letter-spacing:-0.025em; color:#e6edf3; margin:0 0 6px 0;'>Sign in to <span style='color:#4f8cff;'>HIRELYZER</span></h2>
-            <p style='text-align:center; font-size:0.8rem; color:#9aa4af; margin:0 0 28px 0; font-family:-apple-system,"Segoe UI",Roboto,sans-serif; letter-spacing:0.01em;'>AI-Powered Resume Intelligence Platform</p>""",
+            <h2 id='auth-heading' style='text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:1.3rem; font-weight:700; letter-spacing:-0.025em; color:#e6edf3; margin:0 0 4px 0;'>Sign in to <span style='color:#4f8cff;'>HIRELYZER</span></h2>
+            <p style='text-align:center; font-size:0.75rem; color:#9aa4af; margin:0 0 18px 0; font-family:-apple-system,"Segoe UI",Roboto,sans-serif; letter-spacing:0.01em;'>AI-Powered Resume Intelligence Platform</p>
+            <script>
+            (function() {
+                function updateHeading() {
+                    var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
+                    var heading = window.parent.document.getElementById('auth-heading');
+                    if (!heading || tabs.length < 2) return;
+                    var activeTab = window.parent.document.querySelector('[data-baseweb="tab"][aria-selected="true"]');
+                    if (activeTab) {
+                        var label = activeTab.textContent.trim().toLowerCase();
+                        if (label === 'register') {
+                            heading.innerHTML = 'Register to <span style="color:#4f8cff;">HIRELYZER</span>';
+                        } else {
+                            heading.innerHTML = 'Sign in to <span style="color:#4f8cff;">HIRELYZER</span>';
+                        }
+                    }
+                    tabs.forEach(function(tab) {
+                        tab.addEventListener('click', function() {
+                            setTimeout(updateHeading, 80);
+                        });
+                    });
+                }
+                setTimeout(updateHeading, 400);
+                var observer = new MutationObserver(function() { updateHeading(); });
+                setTimeout(function() {
+                    var tabBar = window.parent.document.querySelector('[data-baseweb="tab-list"]');
+                    if (tabBar) observer.observe(tabBar, { attributes: true, subtree: true, attributeFilter: ['aria-selected'] });
+                }, 600);
+            })();
+            </script>""",
             unsafe_allow_html=True,
         )
 
@@ -4751,7 +4780,6 @@ with tab1:
 
     else:           
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
-
 
 from xhtml2pdf import pisa
 from io import BytesIO
