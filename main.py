@@ -8435,30 +8435,43 @@ _SALARY_ROLES = [
 ]
 
 
-def _jsearch_count(query: str, location: str = "India") -> int:
-    """Fire one JSearch request and return how many jobs were returned (max 10 per page)."""
+def _inr_per_year(job: dict):
+    """Convert any salary field to approximate annual INR LPA. Returns None if not available."""
+    min_s = job.get("job_min_salary")
+    max_s = job.get("job_max_salary")
+    if min_s is None and max_s is None:
+        return None
     try:
-        url = f"https://{RAPID_API_HOST}/search"
-        headers = {"X-RapidAPI-Key": RAPID_API_KEY, "X-RapidAPI-Host": RAPID_API_HOST}
-        params  = {"query": f"{query} in {location}", "page": "1", "num_pages": "1"}
-        r = requests.get(url, headers=headers, params=params, timeout=8)
-        if r.status_code == 200:
-            data = r.json().get("data", [])
-            # JSearch returns estimated_total_results when available
-            total = r.json().get("num_pages", 1) * len(data)
-            return max(len(data), total)
-        return 0
+        val = (float(min_s or 0) + float(max_s or 0)) / 2
+        if val <= 0:
+            return None
+        currency = (job.get("job_salary_currency") or "INR").upper()
+        period   = (job.get("job_salary_period")   or "YEAR").upper()
+        if "HOUR" in period:
+            val *= 2080
+        elif "MONTH" in period:
+            val *= 12
+        elif "WEEK" in period:
+            val *= 52
+        fx = {"USD": 83.5, "EUR": 90.0, "GBP": 106.0, "AUD": 55.0, "CAD": 62.0, "INR": 1.0}
+        val *= fx.get(currency, 1.0)
+        lpa = round(val / 100_000, 1)
+        return lpa if 1 < lpa < 300 else None
     except Exception:
-        return 0
+        return None
 
 
-def _jsearch_jobs(query: str, location: str = "India", pages: int = 1):
-    """Return raw job list from JSearch."""
+def _fetch_one(query: str, location: str, pages: int = 1, timeout: int = 6):
+    """Single JSearch call — returns list of job dicts, empty list on any error."""
     try:
-        url = f"https://{RAPID_API_HOST}/search"
+        url     = f"https://{RAPID_API_HOST}/search"
         headers = {"X-RapidAPI-Key": RAPID_API_KEY, "X-RapidAPI-Host": RAPID_API_HOST}
-        params  = {"query": f"{query} in {location}", "page": "1", "num_pages": str(pages)}
-        r = requests.get(url, headers=headers, params=params, timeout=10)
+        params  = {
+            "query":     f"{query} in {location}",
+            "page":      "1",
+            "num_pages": str(pages),
+        }
+        r = requests.get(url, headers=headers, params=params, timeout=timeout)
         if r.status_code == 200:
             return r.json().get("data", [])
         return []
@@ -8466,124 +8479,115 @@ def _jsearch_jobs(query: str, location: str = "India", pages: int = 1):
         return []
 
 
-def _inr_per_year(job: dict) -> float | None:
-    """Convert any salary field to approximate annual INR. Returns None if not available."""
-    min_s = job.get("job_min_salary")
-    max_s = job.get("job_max_salary")
-    if min_s is None and max_s is None:
-        return None
-    val = (float(min_s or 0) + float(max_s or 0)) / 2
-    currency = (job.get("job_salary_currency") or "").upper()
-    period   = (job.get("job_salary_period")   or "").upper()
-
-    # Convert to annual
-    if "HOUR" in period:
-        val *= 2080          # 40h × 52w
-    elif "MONTH" in period:
-        val *= 12
-    elif "WEEK" in period:
-        val *= 52
-    # else assume annual
-
-    # Convert to INR
-    fx = {"USD": 83.5, "EUR": 90.0, "GBP": 106.0, "AUD": 55.0, "CAD": 62.0}
-    val *= fx.get(currency, 1.0)
-
-    # To LPA
-    return round(val / 100_000, 1)
-
-
 @st.cache_data(ttl=21600, show_spinner=False)   # 6-hour cache
 def fetch_live_market_insights():
     """
-    Pull live data from JSearch for:
-      • Trending Skills  — job count per skill query in India
+    Pull live data from JSearch in parallel (ThreadPoolExecutor) for:
+      • Trending Skills  — job count per skill
       • Top Locations    — job count per city
-      • Salary Insights  — min/max/avg LPA per role from actual job listings
-    Returns a dict with the same shape as the old JOB_MARKET_INSIGHTS.
-    Falls back gracefully to sensible estimates if API fails.
+      • Salary Insights  — LPA range from real listings
+    Hard timeout per call = 6 s. Falls back silently if API is down.
     """
+    from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
+
+    # ── Build all tasks up-front ──────────────────────────────────
+    # tag → (query, location, pages)
+    tasks = {}
+    for skill in _SKILL_QUERIES:
+        tasks[f"skill::{skill}"] = (skill, "India", 1)
+    for loc in _LOCATION_LIST:
+        query_loc = "Remote" if loc == "Remote India" else loc
+        tasks[f"loc::{loc}"] = ("software developer", query_loc, 1)
+    for role in _SALARY_ROLES:
+        tasks[f"sal::{role}"] = (role, "India", 1)
+
+    results = {}   # tag → list[job]
+
+    # ── Fire all tasks concurrently (max 10 workers) ───────────────
+    try:
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            future_map = {
+                pool.submit(_fetch_one, q, loc, pg, 6): tag
+                for tag, (q, loc, pg) in tasks.items()
+            }
+            for future in as_completed(future_map, timeout=20):
+                tag = future_map[future]
+                try:
+                    results[tag] = future.result()
+                except Exception:
+                    results[tag] = []
+    except FuturesTimeout:
+        pass   # whatever finished is in results; rest will fallback
+
     # ── 1. Trending Skills ────────────────────────────────────────
     skill_counts = []
     for skill in _SKILL_QUERIES:
-        cnt = _jsearch_count(skill, "India")
-        skill_counts.append({"name": skill, "count": cnt})
+        jobs = results.get(f"skill::{skill}", [])
+        skill_counts.append({"name": skill, "count": len(jobs)})
 
-    # If all zeros (API down / quota hit) use fallback
     if all(s["count"] == 0 for s in skill_counts):
-        skill_counts = _FALLBACK_SKILLS
+        skill_counts = list(_FALLBACK_SKILLS)
 
-    # Sort descending, compute relative growth %
     skill_counts.sort(key=lambda x: x["count"], reverse=True)
-    top_count = skill_counts[0]["count"] if skill_counts[0]["count"] > 0 else 1
-    trending_skills = []
-    for s in skill_counts:
-        pct = round((s["count"] / top_count) * 45)   # scale to 0-45 range
-        pct = max(pct, 5)
-        trending_skills.append({"name": s["name"], "count": s["count"], "growth": f"+{pct}%"})
+    top_cnt = max(skill_counts[0]["count"], 1)
+    trending_skills = [
+        {
+            "name":   s["name"],
+            "count":  s["count"],
+            "growth": f"+{max(round((s['count'] / top_cnt) * 45), 5)}%",
+        }
+        for s in skill_counts
+    ]
 
     # ── 2. Top Locations ─────────────────────────────────────────
     loc_counts = []
     for loc in _LOCATION_LIST:
-        query_loc = "Remote" if loc == "Remote India" else loc
-        cnt = _jsearch_count("software engineer", query_loc)
+        jobs    = results.get(f"loc::{loc}", [])
         display = "Remote" if loc == "Remote India" else loc
-        loc_counts.append({"name": display, "count": cnt})
+        loc_counts.append({"name": display, "count": len(jobs)})
 
     if all(l["count"] == 0 for l in loc_counts):
-        loc_counts = _FALLBACK_LOCATIONS
+        loc_counts = list(_FALLBACK_LOCATIONS)
 
     loc_counts.sort(key=lambda x: x["count"], reverse=True)
     top_locations = []
     for l in loc_counts:
         cnt = l["count"]
-        # Format nicely
-        if cnt >= 1000:
-            jobs_str = f"{cnt // 1000},{cnt % 1000:03d}+"
-        else:
-            jobs_str = f"{cnt}+"
+        jobs_str = f"{cnt:,}+" if cnt else "N/A"
         top_locations.append({"name": l["name"], "jobs": jobs_str, "raw": cnt})
 
     # ── 3. Salary Insights ────────────────────────────────────────
+    _fb = {
+        "Machine Learning Engineer": ("10", "35"),
+        "Big Data Engineer":         ("8",  "30"),
+        "Software Engineer":         ("5",  "25"),
+        "Data Scientist":            ("8",  "30"),
+        "DevOps Engineer":           ("6",  "28"),
+        "UI/UX Designer":            ("5",  "25"),
+        "Full Stack Developer":      ("8",  "30"),
+        "Cloud Engineer":            ("6",  "26"),
+        "Salesforce Engineer":       ("6",  "26"),
+    }
     salary_insights = []
     for role in _SALARY_ROLES:
-        jobs = _jsearch_jobs(role, "India", pages=2)
-        lpas = [_inr_per_year(j) for j in jobs]
-        lpas = [x for x in lpas if x is not None and 1 < x < 200]
+        jobs = results.get(f"sal::{role}", [])
+        lpas = [lpa for j in jobs if (lpa := _inr_per_year(j)) is not None]
 
         if lpas:
-            lo  = round(min(lpas), 1)
-            hi  = round(max(lpas), 1)
-            avg = round(sum(lpas) / len(lpas), 1)
-            salary_range = f"{lo}–{hi} LPA"
-            avg_str      = f"{avg} LPA"
-            source       = "live"
+            lo, hi  = round(min(lpas), 1), round(max(lpas), 1)
+            avg     = round(sum(lpas) / len(lpas), 1)
+            salary_insights.append({
+                "role": role, "range": f"{lo}–{hi} LPA",
+                "avg": f"{avg} LPA", "experience": "0–5 years",
+                "source": "live", "sample": len(lpas),
+            })
         else:
-            # Fallback estimates per role
-            _fb = {
-                "Machine Learning Engineer": ("10", "35"),
-                "Big Data Engineer":         ("8",  "30"),
-                "Software Engineer":         ("5",  "25"),
-                "Data Scientist":            ("8",  "30"),
-                "DevOps Engineer":           ("6",  "28"),
-                "UI/UX Designer":            ("5",  "25"),
-                "Full Stack Developer":      ("8",  "30"),
-                "Cloud Engineer":            ("6",  "26"),
-                "Salesforce Engineer":       ("6",  "26"),
-            }
-            lo_s, hi_s   = _fb.get(role, ("5", "20"))
-            salary_range = f"{lo_s}–{hi_s} LPA"
-            avg_str      = f"{round((int(lo_s)+int(hi_s))/2, 1)} LPA"
-            source       = "est"
-
-        salary_insights.append({
-            "role":       role,
-            "range":      salary_range,
-            "avg":        avg_str,
-            "experience": "0–5 years",
-            "source":     source,
-            "sample":     len(lpas),
-        })
+            lo_s, hi_s = _fb.get(role, ("5", "20"))
+            salary_insights.append({
+                "role": role, "range": f"{lo_s}–{hi_s} LPA",
+                "avg": f"{round((int(lo_s)+int(hi_s))/2, 1)} LPA",
+                "experience": "0–5 years", "source": "est", "sample": 0,
+            })
 
     return {
         "trending_skills": trending_skills,
@@ -10876,26 +10880,49 @@ with tab3:
     with ctrl_col:
         if st.button("↻  Refresh Live Data", key="refresh_market", use_container_width=True):
             fetch_live_market_insights.clear()
-            st.rerun(scope="fragment")
+            st.rerun()
 
-    with st.spinner("Fetching live job market data from JSearch…"):
-        live_insights = fetch_live_market_insights()
+    try:
+        with st.spinner("Fetching live job market data…"):
+            live_insights = fetch_live_market_insights()
+        fetch_ok = True
+    except Exception as _e:
+        fetch_ok     = False
+        live_insights = {
+            "trending_skills": [{"name": s["name"], "count": s["count"], "growth": "+–%"} for s in _FALLBACK_SKILLS],
+            "top_locations":   [{"name": l["name"], "jobs": f"{l['count']}+", "raw": l["count"]} for l in _FALLBACK_LOCATIONS],
+            "salary_insights": [],
+            "fetched_at":      "unavailable",
+        }
+        st.warning(f"Live data unavailable — showing estimates. ({type(_e).__name__})")
 
     with badge_col:
-        st.markdown(f"""
-        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-            <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(52,211,153,0.12);
-                border:1px solid rgba(52,211,153,0.28);border-radius:99px;
-                padding:4px 12px;font-size:0.72rem;font-weight:700;color:#34d399;
-                font-family:-apple-system,sans-serif;letter-spacing:0.04em;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="#34d399"><circle cx="12" cy="12" r="10"/></svg>
-                LIVE · JSearch API
-            </span>
-            <span style="font-size:0.7rem;color:#475569;font-family:-apple-system,sans-serif;">
-                Updated {live_insights.get('fetched_at','—')} · refreshes every 6 h
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
+        if fetch_ok:
+            badge_html = f"""
+            <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+                <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(52,211,153,0.12);
+                    border:1px solid rgba(52,211,153,0.28);border-radius:99px;
+                    padding:4px 12px;font-size:0.72rem;font-weight:700;color:#34d399;
+                    font-family:-apple-system,sans-serif;letter-spacing:0.04em;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="#34d399"><circle cx="12" cy="12" r="10"/></svg>
+                    LIVE · JSearch API
+                </span>
+                <span style="font-size:0.7rem;color:#475569;font-family:-apple-system,sans-serif;">
+                    Updated {live_insights.get('fetched_at','—')} · refreshes every 6 h
+                </span>
+            </div>"""
+        else:
+            badge_html = """
+            <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+                <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(251,191,36,0.10);
+                    border:1px solid rgba(251,191,36,0.28);border-radius:99px;
+                    padding:4px 12px;font-size:0.72rem;font-weight:700;color:#fbbf24;
+                    font-family:-apple-system,sans-serif;letter-spacing:0.04em;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="#fbbf24"><circle cx="12" cy="12" r="10"/></svg>
+                    ESTIMATES · API unavailable
+                </span>
+            </div>"""
+        st.markdown(badge_html, unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
 
