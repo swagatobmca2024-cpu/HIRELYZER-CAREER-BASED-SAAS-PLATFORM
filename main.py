@@ -1,16 +1,4 @@
-
-from xhtml2pdf import pisa
-from io import BytesIO
-
-def html_to_pdf_bytes(html_string):
-    styled_html = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{
-                size: 400mm 297mm;  /* Original custom large page size */
-                margin-top: 10mm;import os
+import os
 os.environ["STREAMLIT_WATCHDOG"] = "false"
 import json
 import random
@@ -4338,6 +4326,19 @@ with tab1:
 
     else:           
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
+
+from xhtml2pdf import pisa
+from io import BytesIO
+
+def html_to_pdf_bytes(html_string):
+    styled_html = f"""
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 400mm 297mm;  /* Original custom large page size */
+                margin-top: 10mm;
                 margin-bottom: 10mm;
                 margin-left: 10mm;
                 margin-right: 10mm;
