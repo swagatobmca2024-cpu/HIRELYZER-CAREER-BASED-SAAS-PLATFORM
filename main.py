@@ -13172,7 +13172,7 @@ def show_resume_scanning_animation():
 
     for text, value in steps:
         status.markdown(
-            f"<h4 style='text-align:center;color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Display\",sans-serif;font-weight:600;letter-spacing:-0.02em;'>{text}</h4>",
+            f"<h4 style='text-align:center;color:#00c3ff'>{text}</h4>",
             unsafe_allow_html=True
         )
         progress.progress(value)
@@ -13392,420 +13392,415 @@ Generate {num_questions} questions:"""
 
 
 with tab4:
-    # Inject CSS styles — Apple-style SaaS dark theme (matching tab1.py HIRELYZER design language)
+    # Inject CSS styles (keeping existing styles)
     st.markdown("""
         <style>
-        /* ═══════════════════════════════════════════════════════════════
-           HIRELYZER — Premium Apple-Style Dark Theme (Tab 4)
-           Font Stack: SF Pro Display → DM Sans → Segoe UI → sans-serif
-           Design Language: Glassmorphism · Soft gradients · Refined motion
-           ═══════════════════════════════════════════════════════════════ */
-
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
-
-        :root {
-            --t4-bg-primary:      #080c12;
-            --t4-bg-secondary:    #0e1420;
-            --t4-bg-tertiary:     #141c2b;
-            --t4-surface-01:      rgba(255,255,255,0.04);
-            --t4-surface-02:      rgba(255,255,255,0.07);
-            --t4-surface-hover:   rgba(255,255,255,0.10);
-            --t4-border-subtle:   rgba(255,255,255,0.07);
-            --t4-border-accent:   rgba(99,179,237,0.30);
-            --t4-accent-blue:     #4fa3e3;
-            --t4-accent-cyan:     #38bdf8;
-            --t4-accent-violet:   #818cf8;
-            --t4-accent-emerald:  #34d399;
-            --t4-accent-amber:    #fbbf24;
-            --t4-accent-rose:     #fb7185;
-            --t4-text-primary:    #f0f4f8;
-            --t4-text-secondary:  #94a3b8;
-            --t4-text-muted:      #4a5568;
-            --t4-radius-sm:       8px;
-            --t4-radius-md:       14px;
-            --t4-radius-lg:       20px;
-            --t4-radius-xl:       28px;
-            --t4-shadow-glow:     0 0 30px rgba(79,163,227,0.15);
-            --t4-shadow-card:     0 8px 40px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.06) inset;
-            --t4-font:            -apple-system, BlinkMacSystemFont, "SF Pro Display", "DM Sans", "Segoe UI", Roboto, sans-serif;
-            --t4-ease-fast:       0.18s cubic-bezier(0.4,0,0.2,1);
-            --t4-ease-base:       0.28s cubic-bezier(0.4,0,0.2,1);
-            --t4-ease-slow:       0.45s cubic-bezier(0.4,0,0.2,1);
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
 
-        /* ── Animations ── */
-        @keyframes t4-fadeSlideUp  { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes t4-shimmer      { 0% { transform:translateX(-100%) skewX(-12deg); } 100% { transform:translateX(220%) skewX(-12deg); } }
-        @keyframes t4-pulseGlow    { 0%,100% { box-shadow: var(--t4-shadow-card); } 50% { box-shadow: var(--t4-shadow-card), var(--t4-shadow-glow); } }
-        @keyframes t4-gradientFlow { 0%,100% { background-position:0% 50%; } 50% { background-position:100% 50%; } }
-        @keyframes t4-subtlePulse  { 0%,100% { opacity:1; } 50% { opacity:0.82; } }
-
-        /* ── Header Box ── */
         .header-box {
-            background: linear-gradient(160deg, rgba(14,20,32,0.97) 0%, rgba(8,12,18,0.99) 100%);
-            backdrop-filter: blur(32px) saturate(160%);
-            -webkit-backdrop-filter: blur(32px) saturate(160%);
-            border: 1px solid rgba(99,179,237,0.20);
-            border-radius: var(--t4-radius-xl);
-            padding: 32px 28px;
-            text-align: center;
-            margin-bottom: 32px;
-            box-shadow: var(--t4-shadow-card), 0 0 60px rgba(79,163,227,0.07);
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 25%, #2d3561 50%, #3f4787 75%, #5158ae 100%);
+            border: 2px solid transparent;
+            background-clip: padding-box;
             position: relative;
+            padding: 25px;
+            border-radius: 20px;
+            text-align: center;
+            margin-bottom: 35px;
+            box-shadow: 
+                0 8px 32px rgba(0, 195, 255, 0.15),
+                0 4px 16px rgba(0, 195, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
             overflow: hidden;
-            animation: t4-fadeSlideUp 0.65s cubic-bezier(0.22,1,0.36,1) forwards;
         }
-        .header-box::after {
+
+        .header-box::before {
             content: '';
             position: absolute;
-            top: 0; left: -100%;
-            width: 60%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(79,163,227,0.06), transparent);
-            animation: t4-shimmer 3.5s ease-in-out infinite;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, #00c3ff, #0066cc, #00c3ff, #0066cc);
+            background-size: 400% 400%;
+            animation: gradientShift 8s ease infinite;
+            z-index: -1;
+            border-radius: 20px;
+            padding: 2px;
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
         }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
         .header-box h2 {
-            font-family: var(--t4-font) !important;
-            font-size: 1.85rem !important;
-            font-weight: 700 !important;
-            color: var(--t4-text-primary) !important;
-            letter-spacing: -0.03em !important;
-            margin: 0 !important;
-            text-shadow: none !important;
+            font-size: 32px;
+            color: #ffffff;
+            margin: 0;
+            font-weight: 700;
+            text-shadow: 
+                0 0 20px rgba(0, 195, 255, 0.5),
+                0 2px 4px rgba(0, 0, 0, 0.3);
+            letter-spacing: -0.5px;
         }
 
-        /* ── Glow Header ── */
         .glow-header {
-            font-family: var(--t4-font);
-            font-size: 1.25rem;
+            font-size: 24px;
             text-align: center;
-            color: var(--t4-accent-cyan);
+            color: #00c3ff;
+            text-shadow: 
+                0 0 20px rgba(0, 195, 255, 0.8),
+                0 0 40px rgba(0, 195, 255, 0.4);
+            margin: 20px 0 15px 0;
             font-weight: 600;
-            letter-spacing: -0.02em;
-            margin: 20px 0 12px 0;
-            animation: t4-subtlePulse 3.5s ease-in-out infinite;
+            letter-spacing: -0.3px;
+            animation: pulse 3s ease-in-out infinite;
         }
 
-        /* ── Learning Path Container ── */
-        .learning-path-container {
-            text-align: center;
-            margin: 24px 0 18px 0;
-            padding: 14px 20px;
-            background: var(--t4-surface-01);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border-radius: var(--t4-radius-md);
-            border: 1px solid var(--t4-border-subtle);
-            transition: border-color var(--t4-ease-base);
-        }
-        .learning-path-container:hover {
-            border-color: var(--t4-border-accent);
-        }
-        .learning-path-text {
-            font-family: var(--t4-font);
-            color: var(--t4-text-secondary);
-            font-weight: 600;
-            font-size: 0.875rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.9; transform: scale(1.02); }
         }
 
-        /* ── Card ── */
-        .card {
-            background: var(--t4-surface-01);
-            backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border: 1px solid var(--t4-border-subtle);
-            border-radius: var(--t4-radius-lg);
-            padding: 20px 24px;
-            margin: 10px 0;
+        .stRadio > div {
+            flex-direction: row !important;
+            justify-content: center !important;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .stRadio label {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            color: #00c3ff;
+            padding: 14px 24px;
+            margin: 6px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            min-width: 190px;
+            text-align: center;
             position: relative;
             overflow: hidden;
-            transition: transform var(--t4-ease-base), box-shadow var(--t4-ease-base), border-color var(--t4-ease-base);
-            box-shadow: var(--t4-shadow-card);
-            animation: t4-fadeSlideUp 0.5s ease forwards;
+            box-shadow: 
+                0 4px 15px rgba(0, 195, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
+
+        .stRadio label::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 195, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .stRadio label:hover {
+            background: linear-gradient(135deg, #00c3ff15 0%, #00c3ff25 100%);
+            transform: translateY(-2px);
+            box-shadow: 
+                0 8px 25px rgba(0, 195, 255, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .stRadio label:hover::before {
+            left: 100%;
+        }
+
+        .stRadio input:checked + div > label {
+            background: linear-gradient(135deg, #00c3ff 0%, #0099cc 100%);
+            color: #000000;
+            font-weight: 600;
+            transform: scale(1.05);
+            box-shadow: 
+                0 8px 30px rgba(0, 195, 255, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .card {
+            background: linear-gradient(135deg, #0f1419 0%, #1a2332 25%, #253447 50%, #30455c 75%, #3b5671 100%);
+            border: 2px solid transparent;
+            border-radius: 16px;
+            padding: 20px 25px;
+            margin: 12px 0;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 
+                0 4px 20px rgba(0, 195, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
         .card::before {
             content: '';
             position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 60%);
-            pointer-events: none;
-            border-radius: inherit;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, #00c3ff, #0066cc);
+            z-index: -1;
+            border-radius: 16px;
+            padding: 2px;
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+            opacity: 0.8;
         }
+
         .card::after {
             content: '';
             position: absolute;
-            top: 0; left: -100%;
-            width: 50%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(79,163,227,0.05), transparent);
-            transition: left 0.6s ease;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.6s;
         }
+
         .card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--t4-shadow-card), 0 0 50px rgba(79,163,227,0.10);
-            border-color: var(--t4-border-accent);
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 
+                0 12px 40px rgba(0, 195, 255, 0.25),
+                0 8px 20px rgba(0, 195, 255, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
-        .card:hover::after { left: 150%; }
+
+        .card:hover::after {
+            left: 100%;
+        }
+
         .card a {
-            font-family: var(--t4-font);
-            color: var(--t4-accent-cyan);
+            color: #00c3ff;
             font-weight: 600;
-            font-size: 0.95rem;
+            font-size: 16px;
             text-decoration: none;
             display: flex;
             align-items: center;
             gap: 8px;
-            transition: all var(--t4-ease-fast);
+            transition: all 0.3s ease;
+            text-shadow: 0 0 10px rgba(0, 195, 255, 0.3);
         }
+
         .card a:hover {
-            color: var(--t4-text-primary);
+            color: #ffffff;
             text-decoration: none;
-            transform: translateX(3px);
+            text-shadow: 
+                0 0 15px rgba(255, 255, 255, 0.5),
+                0 0 30px rgba(0, 195, 255, 0.3);
+            transform: translateX(4px);
         }
 
-        /* ── Course Tile ── */
-        .course-tile {
-            background: var(--t4-surface-01);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--t4-border-subtle);
-            border-radius: var(--t4-radius-lg);
-            padding: 20px;
-            margin: 12px 0;
-            transition: all var(--t4-ease-base);
-            position: relative;
+        /* Enhanced selectbox styling */
+        .stSelectbox > div > div {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            border-radius: 10px;
+            color: #00c3ff;
+        }
+
+        .stSelectbox > div > div:hover {
+            box-shadow: 0 0 15px rgba(0, 195, 255, 0.3);
+        }
+
+        /* Enhanced subheader styling */
+        .stApp h3 {
+            color: #00c3ff;
+            text-shadow: 0 0 10px rgba(0, 195, 255, 0.5);
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        /* Learning path container */
+        .learning-path-container {
+            text-align: center;
+            margin: 30px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
+            border-radius: 12px;
+            border: 1px solid rgba(0, 195, 255, 0.2);
+        }
+
+        .learning-path-text {
+            color: #00c3ff;
+            font-weight: 600;
+            font-size: 20px;
+            text-shadow: 0 0 15px rgba(0, 195, 255, 0.6);
+            letter-spacing: -0.3px;
+        }
+
+        /* Video container enhancements */
+        .stVideo {
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: var(--t4-shadow-card);
-        }
-        .course-tile:hover {
-            transform: translateY(-4px);
-            border-color: var(--t4-border-accent);
-            box-shadow: var(--t4-shadow-card), var(--t4-shadow-glow);
-        }
-        .course-title {
-            font-family: var(--t4-font);
-            color: var(--t4-accent-cyan);
-            font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 8px;
-            letter-spacing: -0.01em;
-        }
-        .course-description {
-            font-family: var(--t4-font);
-            color: var(--t4-text-secondary);
-            font-size: 0.85rem;
-            margin-bottom: 14px;
-            line-height: 1.55;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
         }
 
-        /* ── Difficulty Badges ── */
-        .difficulty-badge {
-            display: inline-block;
-            padding: 3px 10px;
-            border-radius: 99px;
-            font-size: 0.72rem;
-            font-weight: 600;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            margin-bottom: 12px;
-            font-family: var(--t4-font);
-        }
-        .difficulty-beginner    { background: rgba(52,211,153,0.15); color: var(--t4-accent-emerald); border: 1px solid rgba(52,211,153,0.3); }
-        .difficulty-intermediate{ background: rgba(251,191,36,0.12); color: var(--t4-accent-amber);   border: 1px solid rgba(251,191,36,0.28); }
-        .difficulty-advanced    { background: rgba(251,113,133,0.12); color: var(--t4-accent-rose);   border: 1px solid rgba(251,113,133,0.28); }
-
-        /* ── Course Link Button ── */
-        .course-link-btn {
-            background: linear-gradient(135deg, rgba(56,189,248,0.18) 0%, rgba(79,163,227,0.12) 100%);
-            color: var(--t4-accent-cyan);
-            border: 1px solid rgba(56,189,248,0.30);
-            padding: 7px 16px;
-            border-radius: var(--t4-radius-sm);
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 0.825rem;
-            font-family: var(--t4-font);
-            display: inline-block;
-            transition: all var(--t4-ease-fast);
-            backdrop-filter: blur(8px);
-        }
-        .course-link-btn:hover {
-            background: linear-gradient(135deg, rgba(56,189,248,0.28) 0%, rgba(79,163,227,0.22) 100%);
-            border-color: rgba(56,189,248,0.55);
-            transform: translateY(-1px);
-            text-decoration: none;
-            color: #e0f6ff;
+        .stVideo:hover {
+            transform: scale(1.02);
         }
 
-        /* ── Quiz Card ── */
+        /* Info message styling */
+        .stAlert {
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.1) 0%, rgba(0, 195, 255, 0.05) 100%);
+            border: 1px solid rgba(0, 195, 255, 0.3);
+            border-radius: 10px;
+        }
+
+        /* New styles for quiz and interview sections */
         .quiz-card {
-            background: var(--t4-surface-01);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--t4-border-subtle);
-            border-radius: var(--t4-radius-lg);
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            border-radius: 15px;
             padding: 20px;
-            margin: 14px 0;
-            box-shadow: var(--t4-shadow-card);
-            transition: all var(--t4-ease-base);
-        }
-        .quiz-card:hover {
-            border-color: var(--t4-border-accent);
+            margin: 15px 0;
+            box-shadow: 0 4px 20px rgba(0, 195, 255, 0.15);
         }
 
-        /* ── Badge Container ── */
         .badge-container {
             text-align: center;
-            padding: 28px;
-            background: var(--t4-surface-01);
-            backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border-radius: var(--t4-radius-lg);
-            border: 1px solid var(--t4-border-subtle);
-            margin: 18px 0;
-            box-shadow: var(--t4-shadow-card);
-            animation: t4-fadeSlideUp 0.5s ease forwards;
+            padding: 30px;
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.12) 0%, rgba(0, 195, 255, 0.06) 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 195, 255, 0.25);
+            margin: 20px 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
         }
 
-        /* ── Score Display ── */
         .score-display {
-            font-family: var(--t4-font);
-            font-size: 4rem;
-            font-weight: 700;
-            color: var(--t4-accent-cyan);
-            letter-spacing: -0.04em;
-            line-height: 1;
+            font-size: 64px;
+            font-weight: bold;
+            color: #00d4ff;
+            text-shadow: 0 0 30px rgba(0, 212, 255, 0.6);
+            letter-spacing: 2px;
         }
 
-        /* ── Role Selector ── */
         .role-selector {
-            background: var(--t4-surface-01);
-            border: 1px solid var(--t4-border-subtle);
-            border-radius: var(--t4-radius-md);
-            padding: 18px;
-            margin: 12px 0;
-            backdrop-filter: blur(16px);
-            transition: border-color var(--t4-ease-fast);
-        }
-        .role-selector:hover { border-color: var(--t4-border-accent); }
-
-        /* ── Radar Container ── */
-        .radar-container {
-            background: var(--t4-surface-01);
-            border: 1px solid var(--t4-border-subtle);
-            border-radius: var(--t4-radius-lg);
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
+            border: 1px solid rgba(0, 195, 255, 0.2);
+            border-radius: 12px;
             padding: 20px;
-            margin: 18px 0;
-            backdrop-filter: blur(16px);
+            margin: 15px 0;
         }
 
-        /* ── Timer ── */
-        .timer-container {
-            background: linear-gradient(135deg, rgba(251,191,36,0.08) 0%, rgba(251,191,36,0.04) 100%);
-            border: 1px solid rgba(251,191,36,0.25);
-            border-radius: var(--t4-radius-md);
-            padding: 14px;
-            margin: 14px 0;
-            text-align: center;
-            backdrop-filter: blur(16px);
-        }
-        .timer-display {
-            font-family: var(--t4-font);
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: var(--t4-accent-amber);
-            letter-spacing: -0.01em;
-        }
-        .timer-urgent {
-            color: var(--t4-accent-rose);
-            animation: t4-subtlePulse 1s ease-in-out infinite;
-        }
-
-        /* ── Selectbox ── */
-        .stSelectbox > div > div {
-            background: var(--t4-surface-01) !important;
-            border: 1px solid var(--t4-border-subtle) !important;
-            border-radius: var(--t4-radius-sm) !important;
-            color: var(--t4-text-primary) !important;
-            font-family: var(--t4-font) !important;
-            transition: border-color var(--t4-ease-fast) !important;
-        }
-        .stSelectbox > div > div:hover {
-            border-color: rgba(79,163,227,0.35) !important;
-            box-shadow: 0 0 0 3px rgba(79,163,227,0.08) !important;
-        }
-
-        /* ── Subheaders ── */
-        .stApp h3 {
-            font-family: var(--t4-font) !important;
-            color: var(--t4-text-primary) !important;
-            font-weight: 600 !important;
-            letter-spacing: -0.02em !important;
-            margin-bottom: 16px !important;
-        }
-
-        /* ── Alert/Info ── */
-        .stAlert {
-            background: var(--t4-surface-01) !important;
-            border: 1px solid var(--t4-border-subtle) !important;
-            border-radius: var(--t4-radius-md) !important;
-            backdrop-filter: blur(16px) !important;
-            font-family: var(--t4-font) !important;
-            font-size: 0.875rem !important;
-        }
-
-        /* ── Video ── */
-        .stVideo {
-            border-radius: var(--t4-radius-md);
+        /* Course tile styling */
+        .course-tile {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+            transition: all 0.3s ease;
+            position: relative;
             overflow: hidden;
-            box-shadow: var(--t4-shadow-card);
-            transition: transform var(--t4-ease-base);
-        }
-        .stVideo:hover { transform: scale(1.01); }
-
-        /* ── Radio buttons ── */
-        .stRadio > div {
-            flex-direction: row !important;
-            justify-content: center !important;
-            gap: 8px !important;
-            flex-wrap: wrap !important;
-        }
-        .stRadio label {
-            background: var(--t4-surface-01) !important;
-            border: 1px solid var(--t4-border-subtle) !important;
-            color: var(--t4-text-secondary) !important;
-            padding: 10px 20px !important;
-            border-radius: var(--t4-radius-sm) !important;
-            cursor: pointer !important;
-            transition: all var(--t4-ease-fast) !important;
-            font-family: var(--t4-font) !important;
-            font-weight: 500 !important;
-            font-size: 0.875rem !important;
-            text-align: center !important;
-            backdrop-filter: blur(12px) !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-        }
-        .stRadio label:hover {
-            background: var(--t4-surface-hover) !important;
-            border-color: rgba(79,163,227,0.35) !important;
-            color: var(--t4-text-primary) !important;
-            transform: translateY(-2px) !important;
-        }
-        .stRadio input:checked + div > label {
-            background: linear-gradient(135deg, rgba(56,189,248,0.18) 0%, rgba(79,163,227,0.12) 100%) !important;
-            color: var(--t4-accent-cyan) !important;
-            border: 1px solid rgba(56,189,248,0.30) !important;
-            font-weight: 600 !important;
-            box-shadow: 0 2px 12px rgba(56,189,248,0.12) !important;
         }
 
-        /* ── Score badge classes for table ── */
-        .badge-excellent { background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.3); padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
-        .badge-good      { background:rgba(56,189,248,0.12); color:#38bdf8; border:1px solid rgba(56,189,248,0.28); padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
-        .badge-average   { background:rgba(251,191,36,0.12); color:#fbbf24; border:1px solid rgba(251,191,36,0.28); padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
-        .badge-weak      { background:rgba(251,113,133,0.10); color:#fb7185; border:1px solid rgba(251,113,133,0.25); padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
-        .badge-poor      { background:rgba(100,116,139,0.12); color:#64748b; border:1px solid rgba(100,116,139,0.25); padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
+        .course-tile:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 195, 255, 0.3);
+        }
 
+        .course-title {
+            color: #00c3ff;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .course-description {
+            color: #ffffff;
+            font-size: 14px;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        .difficulty-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 15px;
+        }
+
+        .difficulty-beginner {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+        }
+
+        .difficulty-intermediate {
+            background: linear-gradient(135deg, #FF9800, #f57c00);
+            color: white;
+        }
+
+        .difficulty-advanced {
+            background: linear-gradient(135deg, #f44336, #d32f2f);
+            color: white;
+        }
+
+        .course-link-btn {
+            background: linear-gradient(135deg, #00c3ff, #0099cc);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .course-link-btn:hover {
+            background: linear-gradient(135deg, #0099cc, #007acc);
+            transform: translateX(2px);
+            text-decoration: none;
+            color: white;
+        }
+
+        /* Radar chart container */
+        .radar-container {
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
+            border: 1px solid rgba(0, 195, 255, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        /* Timer styling */
+        .timer-container {
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .timer-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        .timer-urgent {
+            color: #ff4444;
+            text-shadow: 0 0 15px rgba(255, 68, 68, 0.8);
+            animation: pulse 1s ease-in-out infinite;
+        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -13818,7 +13813,7 @@ with tab4:
 
     # Subheader (keeping existing)
     st.markdown('<div class="glow-header">🎓 Explore Career Resources</div>', unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#94a3b8; font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Display\",sans-serif; font-size: 0.95rem; margin-bottom: 22px; letter-spacing:-0.01em;'>Curated courses and videos for your career growth, resume tips, and interview success.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#ccc; font-size: 16px; margin-bottom: 25px;'>Curated courses and videos for your career growth, resume tips, and interview success.</p>", unsafe_allow_html=True)
 
     # Learning path label (keeping existing)
     st.markdown("""
@@ -14755,7 +14750,7 @@ Generate {num_questions} questions now:
             
             # Add hover tooltip information
             st.markdown("""
-                <div style="text-align: center; color: #38bdf8; margin-top: 10px;">
+                <div style="text-align: center; color: #00c3ff; margin-top: 10px;">
                     💡 Hover over the chart points to see skill importance ratings!
                 </div>
             """, unsafe_allow_html=True)
@@ -14818,7 +14813,7 @@ Generate {num_questions} questions now:
 
         # RESUME UPLOAD SECTION (MANDATORY)
         st.markdown("---")
-        st.markdown("<h3 style='color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Display\",sans-serif;font-weight:600;letter-spacing:-0.02em;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #00c3ff;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
 
         if st.session_state.resume_file is None:
             uploaded_resume = st.file_uploader(
@@ -14866,7 +14861,7 @@ Generate {num_questions} questions now:
         # Only show domain/role selection if resume is uploaded
         if st.session_state.resume_file is not None:
             st.markdown("---")
-            st.markdown("<h3 style='color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Display\",sans-serif;font-weight:600;letter-spacing:-0.02em;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='color: #00c3ff;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
 
             # Domain and Role selection
             st.markdown('<div class="role-selector">', unsafe_allow_html=True)
@@ -15015,7 +15010,7 @@ Generate {num_questions} questions now:
                             '<span style="color:#aaa;font-size:12px;">none detected in top skills</span>'
                         )
                         _domain_pills = "".join(
-                            f'<span style="background:rgba(56,189,248,0.12);color:#38bdf8;'
+                            f'<span style="background:rgba(0,195,255,0.12);color:#00c3ff;'
                             f'border:1px solid rgba(0,195,255,0.25);border-radius:4px;'
                             f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
                             f'{t}</span>'
@@ -15046,7 +15041,7 @@ Generate {num_questions} questions now:
                                 <div style="margin-top:5px;">{_suppressed_str}</div>
                             </div>
                             <div>
-                                <span style="color:#38bdf8;font-size:11px;font-weight:600;text-transform:uppercase;
+                                <span style="color:#00c3ff;font-size:11px;font-weight:600;text-transform:uppercase;
                                             letter-spacing:0.06em;">Questions will draw from these topics:</span><br/>
                                 <div style="margin-top:5px;">{_domain_pills}
                                     <span style="color:#aaa;font-size:11px;margin-left:4px;">
@@ -15063,7 +15058,7 @@ Generate {num_questions} questions now:
                     else:
                         # Resume aligns with domain — show a positive confirmation card
                         _domain_pills = "".join(
-                            f'<span style="background:rgba(56,189,248,0.10);color:#38bdf8;'
+                            f'<span style="background:rgba(0,195,255,0.1);color:#00c3ff;'
                             f'border:1px solid rgba(0,195,255,0.2);border-radius:4px;'
                             f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
                             f'{t}</span>'
@@ -15071,11 +15066,11 @@ Generate {num_questions} questions now:
                         )
                         st.markdown(f"""
                         <div style="background:rgba(0,195,255,0.05);border:1px solid rgba(0,195,255,0.2);
-                                    border-left:4px solid #38bdf8;border-radius:10px;
+                                    border-left:4px solid #00c3ff;border-radius:10px;
                                     padding:14px 18px;margin:10px 0;">
                             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
                                 <span style="font-size:18px;">✅</span>
-                                <strong style="color:#38bdf8;font-size:14px;">
+                                <strong style="color:#00c3ff;font-size:14px;">
                                     Domain Aligned — {selected_domain}
                                 </strong>
                             </div>
@@ -15253,12 +15248,12 @@ Generate {num_questions} questions now:
                     phase_badge = "📄 Resume-Based Question" if current_index <= num_resume_qs else "💼 Generic Interview Question"
                     st.markdown(f"""
                     <div class="quiz-card">
-                        <h3 style="color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-weight:600;letter-spacing:-0.02em;">Question {questions_answered + 1} of {st.session_state.original_num_questions}</h3>
-                        <div style="background:rgba(56,189,248,0.10);padding:6px 12px;border-radius:99px;margin:10px 0;display:inline-block;border:1px solid rgba(56,189,248,0.22);">
-                            <span style="color:#38bdf8;font-weight:600;font-size:0.8rem;letter-spacing:0.03em;text-transform:uppercase;">{phase_badge}</span>
+                        <h3 style="color: #00c3ff;">Question {questions_answered + 1} of {st.session_state.original_num_questions}</h3>
+                        <div style="background: rgba(0, 195, 255, 0.15); padding: 8px 12px; border-radius: 6px; margin: 10px 0; display: inline-block;">
+                            <span style="color: #00c3ff; font-weight: 600;">{phase_badge}</span>
                         </div>
-                        <h4 style="color:#94a3b8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-weight:500;font-size:0.875rem;margin:12px 0;letter-spacing:0.02em;">Role: {selected_role} | Difficulty: {st.session_state.interview_difficulty}</h4>
-                        <p style="font-size:1rem;color:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;line-height:1.6;margin:14px 0;">{question}</p>
+                        <h4 style="color: #ffffff; margin: 15px 0;">Role: {selected_role} | Difficulty: {st.session_state.interview_difficulty}</h4>
+                        <p style="font-size: 18px; color: #ffffff; margin: 15px 0;">{question}</p>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -15430,7 +15425,7 @@ Generate {num_questions} questions now:
                         st.markdown(f"""
                         <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.1) 0%, rgba(0, 195, 255, 0.05) 100%);
                                     border: 1px solid rgba(0, 195, 255, 0.3); border-radius: 10px; padding: 15px; margin: 15px 0;">
-                            <h4 style="color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-weight:600;letter-spacing:-0.02em;">Immediate Feedback:</h4>
+                            <h4 style="color: #00c3ff;">Immediate Feedback:</h4>
                             <p style="color: #ffffff;">📊 Knowledge: {current_score_dict["knowledge"]}/10 | Communication: {current_score_dict["communication"]}/10 | Relevance: {current_score_dict["relevance"]}/10</p>
                             <p style="color: #ffffff;">⭐ Question Score: {avg_q_score:.1f}/10</p>
                             <div style="color: #ffffff; margin-top: 10px;">
@@ -15804,56 +15799,49 @@ Generate {num_questions} questions now:
         <style>
         /* Metric cards */
         .metric-card {
-            background: rgba(255,255,255,0.04);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255,255,255,0.07);
+            background: linear-gradient(135deg, rgba(0,195,255,0.10) 0%, rgba(0,195,255,0.04) 100%);
+            border: 1px solid rgba(0,195,255,0.25);
             border-radius: 14px;
             padding: 18px 20px;
             margin: 6px 0;
-            transition: transform 0.18s cubic-bezier(0.4,0,0.2,1), box-shadow 0.18s cubic-bezier(0.4,0,0.2,1), border-color 0.18s cubic-bezier(0.4,0,0.2,1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
         .metric-card:hover {
             transform: translateY(-3px);
-            border-color: rgba(99,179,237,0.30);
-            box-shadow: 0 8px 40px rgba(0,0,0,0.45), 0 0 30px rgba(79,163,227,0.15);
+            box-shadow: 0 8px 24px rgba(0,195,255,0.18);
         }
         .metric-card .metric-label {
-            color: #94a3b8;
-            font-size: 0.72rem;
-            font-weight: 600;
+            color: rgba(255,255,255,0.55);
+            font-size: 12px;
+            font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 0.06em;
+            letter-spacing: 0.08em;
             margin: 0 0 6px 0;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
         }
         .metric-card .metric-value {
-            color: #38bdf8;
-            font-size: 1.75rem;
+            color: #00c3ff;
+            font-size: 28px;
             font-weight: 700;
             margin: 0;
-            line-height: 1.2;
-            letter-spacing: -0.03em;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+            line-height: 1.1;
         }
         .metric-card .metric-sub {
-            color: rgba(148,163,184,0.6);
-            font-size: 0.72rem;
+            color: rgba(255,255,255,0.45);
+            font-size: 11px;
             margin: 4px 0 0 0;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
         }
-        /* Score badges — Apple SaaS style */
-        .badge-excellent { background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.30); border-radius:99px; padding:2px 10px; font-weight:600; font-size:12px; }
-        .badge-good      { background:rgba(56,189,248,0.12); color:#38bdf8; border:1px solid rgba(56,189,248,0.28); border-radius:99px; padding:2px 10px; font-weight:600; font-size:12px; }
-        .badge-average   { background:rgba(251,191,36,0.12); color:#fbbf24; border:1px solid rgba(251,191,36,0.28); border-radius:99px; padding:2px 10px; font-weight:600; font-size:12px; }
-        .badge-weak      { background:rgba(251,113,133,0.10); color:#fb7185; border:1px solid rgba(251,113,133,0.25); border-radius:99px; padding:2px 10px; font-weight:600; font-size:12px; }
-        .badge-poor      { background:rgba(100,116,139,0.12); color:#64748b; border:1px solid rgba(100,116,139,0.25); border-radius:99px; padding:2px 10px; font-weight:600; font-size:12px; }
+        /* Score badges */
+        .badge-excellent { background:#1a3a2a; color:#00e676; border:1px solid #00e676; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-good      { background:#1a3020; color:#69f0ae; border:1px solid #69f0ae; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-average   { background:#2a2a10; color:#ffcc02; border:1px solid #ffcc02; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-weak      { background:#2a1a10; color:#ff9800; border:1px solid #ff9800; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-poor      { background:#2a1010; color:#f44336; border:1px solid #f44336; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
         /* Highlighted best row */
         .best-row { background: rgba(0,230,118,0.12) !important; }
         /* Section divider */
         .section-header {
-            font-size: 1.1rem; font-weight: 700; color: #38bdf8;
-            border-left: 4px solid #38bdf8; padding-left: 12px;
+            font-size: 20px; font-weight: 700; color: #00c3ff;
+            border-left: 4px solid #00c3ff; padding-left: 12px;
             margin: 24px 0 4px 0;
         }
         </style>
@@ -16285,11 +16273,11 @@ Generate {num_questions} questions now:
                 <table style="width:100%;border-collapse:collapse;background:rgba(15,20,25,0.8);">
                   <thead>
                     <tr style="border-bottom:1px solid rgba(0,195,255,0.3);">
-                      <th style="padding:10px 12px;color:#38bdf8;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Role</th>
-                      <th style="padding:10px 12px;color:#38bdf8;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Times</th>
-                      <th style="padding:10px 12px;color:#38bdf8;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Avg Score</th>
-                      <th style="padding:10px 12px;color:#38bdf8;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Best</th>
-                      <th style="padding:10px 12px;color:#38bdf8;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Last</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Role</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Times</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Avg Score</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Best</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Last</th>
                     </tr>
                   </thead>
                   <tbody>{_table_rows}</tbody>
@@ -16681,7 +16669,7 @@ Generate {num_questions} questions now:
             if recommendations:
                 for rec in recommendations:
                     st.markdown(f"""
-                    <div style="background: rgba(56,189,248,0.07); border-left: 4px solid #38bdf8;
+                    <div style="background: rgba(0,195,255,0.07); border-left: 4px solid #00c3ff;
                                 padding: 12px 16px; margin: 8px 0; border-radius: 0 8px 8px 0;">
                         <p style="color: #ffffff; margin: 0;">{rec}</p>
                     </div>
@@ -16772,7 +16760,7 @@ Generate {num_questions} questions now:
                     elif delta < -0.3: return f'<span style="color:#f44336;font-size:14px;" title="{delta:.1f}">▼</span>'
                     else: return f'<span style="color:#ffcc02;font-size:14px;" title="~{delta:.1f}">●</span>'
 
-                _th_style = "padding:9px 12px;color:#38bdf8;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid rgba(0,195,255,0.3);white-space:nowrap;"
+                _th_style = "padding:9px 12px;color:#00c3ff;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid rgba(0,195,255,0.3);white-space:nowrap;"
                 _td_style = "padding:8px 12px;color:#e0e0e0;font-size:13px;white-space:nowrap;"
 
                 _headers = list(display_df.columns)
