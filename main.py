@@ -8307,7 +8307,7 @@ FEATURED_COMPANIES = {
     "indian_tech": [
         {
             "name": "TCS",
-            "logo_url": "https://upload.wikimedia.org/wikipedia/commons/f/f6/TCS_New_Logo.svg",
+            "logo_url": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60'%3E%3Crect width='200' height='60' fill='%230070C0' rx='6'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial,sans-serif' font-size='26' font-weight='900' fill='white' letter-spacing='3'%3ETCS%3C/text%3E%3C/svg%3E",
             "color": "#0070C0",
             "careers_url": "https://www.tcs.com/careers",
             "description": "India's largest IT services company",
@@ -8315,7 +8315,7 @@ FEATURED_COMPANIES = {
         },
         {
             "name": "Infosys",
-            "logo_url": "https://upload.wikimedia.org/wikipedia/commons/5/55/Infosys_logo.svg",
+            "logo_url": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 60'%3E%3Crect width='240' height='60' fill='%23007CC3' rx='6'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial,sans-serif' font-size='22' font-weight='700' fill='white' letter-spacing='1'%3EInfosys%3C/text%3E%3C/svg%3E",
             "color": "#007CC3",
             "careers_url": "https://www.infosys.com/careers",
             "description": "Global leader in digital services and consulting",
@@ -8323,15 +8323,15 @@ FEATURED_COMPANIES = {
         },
         {
             "name": "Wipro",
-            "logo_url": "https://upload.wikimedia.org/wikipedia/commons/8/80/Wipro_Primary_Logo_Color_RGB.svg",
+            "logo_url": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 60'%3E%3Crect width='220' height='60' fill='%23341F65' rx='6'/%3E%3Ccircle cx='28' cy='30' r='16' fill='%2300BFFF' opacity='0.9'/%3E%3Ccircle cx='28' cy='30' r='10' fill='%23341F65'/%3E%3Ccircle cx='28' cy='30' r='5' fill='%2300BFFF' opacity='0.7'/%3E%3Ctext x='118' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial,sans-serif' font-size='22' font-weight='700' fill='white'%3EWipro%3C/text%3E%3C/svg%3E",
             "color": "#341F65",
             "careers_url": "https://careers.wipro.com",
             "description": "Leading global information technology company",
             "categories": ["IT Services", "Consulting", "Digital"]
         },
         {
-            "name": "HCL",
-            "logo_url": "https://upload.wikimedia.org/wikipedia/commons/5/5e/HCL_Technologies_logo.svg",
+            "name": "HCLTech",
+            "logo_url": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 60'%3E%3Crect width='220' height='60' fill='%230075C9' rx='6'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial,sans-serif' font-size='22' font-weight='900' fill='white' letter-spacing='1'%3EHCLTech%3C/text%3E%3C/svg%3E",
             "color": "#0075C9",
             "careers_url": "https://www.hcltech.com/careers",
             "description": "Global technology company",
@@ -8351,7 +8351,7 @@ FEATURED_COMPANIES = {
         },
         {
             "name": "Accenture",
-            "logo_url": "https://upload.wikimedia.org/wikipedia/commons/8/80/Accenture_Logo.svg",
+            "logo_url": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 60'%3E%3Crect width='240' height='60' fill='%23111' rx='6'/%3E%3Cpolygon points='22,10 38,30 22,50 30,50 46,30 30,10' fill='%23A100FF'/%3E%3Ctext x='135' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial,sans-serif' font-size='19' font-weight='700' fill='white' letter-spacing='0.5'%3EAccenture%3C/text%3E%3C/svg%3E",
             "color": "#A100FF",
             "careers_url": "https://www.accenture.com/careers",
             "description": "Global professional services company",
@@ -8359,7 +8359,7 @@ FEATURED_COMPANIES = {
         },
         {
             "name": "Cognizant",
-            "logo_url": "https://upload.wikimedia.org/wikipedia/commons/6/6e/Cognizant_logo_2022.svg",
+            "logo_url": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 60'%3E%3Crect width='260' height='60' fill='%231299D8' rx='6'/%3E%3Ccircle cx='22' cy='30' r='14' fill='white' opacity='0.15'/%3E%3Ccircle cx='22' cy='30' r='8' fill='white' opacity='0.9'/%3E%3Ctext x='148' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial,sans-serif' font-size='19' font-weight='700' fill='white'%3ECognizant%3C/text%3E%3C/svg%3E",
             "color": "#1299D8",
             "careers_url": "https://careers.cognizant.com",
             "description": "Leading professional services company",
@@ -8412,7 +8412,8 @@ JOB_MARKET_INSIGHTS = {
 def get_featured_companies(category=None):
     """Get featured companies with original logos, optionally filtered by category"""
     def has_valid_logo(company):
-        return "logo_url" in company and company["logo_url"].startswith("https://upload.wikimedia.org/")
+        url = company.get("logo_url", "")
+        return url.startswith("https://") or url.startswith("data:image/")
 
     if category and category in FEATURED_COMPANIES:
         return [company for company in FEATURED_COMPANIES[category] if has_valid_logo(company)]
@@ -10375,14 +10376,18 @@ def _job_search_interactive():
         margin-right: 12px;
         flex-shrink: 0;
     }
-    /* Logo image brightness on dark bg */
-    .company-card img {
+    /* External logos (Google, Microsoft etc) get subtle dark-mode treatment */
+    .company-card img[src^="https"] {
         filter: brightness(0.92) contrast(1.05);
         transition: filter 0.2s ease;
-        border-radius: 4px;
     }
-    .company-card:hover img {
+    .company-card:hover img[src^="https"] {
         filter: brightness(1) contrast(1.1);
+    }
+    /* Data URI badge logos — no filter, already styled */
+    .company-card img[src^="data"] {
+        border-radius: 6px;
+        filter: none;
     }
 
     /* ══════════════════════════════════
