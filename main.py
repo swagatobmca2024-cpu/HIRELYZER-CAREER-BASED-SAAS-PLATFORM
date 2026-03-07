@@ -169,16 +169,16 @@ def generate_cover_letter_from_resume_builder():
     today_date = datetime.today().strftime("%B %d, %Y")
 
     # ✅ Input boxes for contact info
-    company = st.text_input("🏢 Target Company", placeholder="e.g., Google")
-    linkedin = st.text_input("🔗 LinkedIn URL", placeholder="e.g., https://linkedin.com/in/username")
-    email = st.text_input("📧 Email", placeholder="e.g., you@example.com")
-    mobile = st.text_input("📞 Mobile Number", placeholder="e.g., +91 9876543210")
+    company = st.text_input("Target Company", placeholder="e.g., Google")
+    linkedin = st.text_input("LinkedIn URL", placeholder="e.g., https://linkedin.com/in/username")
+    email = st.text_input("Email", placeholder="e.g., you@example.com")
+    mobile = st.text_input("Mobile Number", placeholder="e.g., +91 9876543210")
 
     # ✅ Button to prevent relooping
-    if st.button("✉️ Generate Cover Letter"):
+    if st.button("Generate Cover Letter"):
         # ✅ Validate input before generating
         if not all([name, job_title, summary, skills, company, linkedin, email, mobile]):
-            st.warning("⚠️ Please fill in all fields including LinkedIn, email, and mobile.")
+            st.warning("Please fill in all fields including LinkedIn, email, and mobile.")
             return
 
         prompt = f"""
@@ -322,7 +322,7 @@ def display_timer(remaining_seconds, expired=False, key_suffix=""):
                 font-weight: bold;
                 font-family: 'Orbitron', sans-serif;
                 text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
-            ">⏱️ OTP Expired</span>
+            ">OTP Expired</span>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -345,7 +345,7 @@ def display_timer(remaining_seconds, expired=False, key_suffix=""):
                 font-weight: bold;
                 font-family: 'Orbitron', sans-serif;
                 text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
-            ">⏱️ Time Remaining: <span id='countdown-{key_suffix}'>{minutes:02d}:{seconds:02d}</span></span>
+            ">Time Remaining: <span id='countdown-{key_suffix}'>{minutes:02d}:{seconds:02d}</span></span>
         </div>
         <script>
         (function() {{
@@ -360,7 +360,7 @@ def display_timer(remaining_seconds, expired=False, key_suffix=""):
                     if (timerEl) {{
                         timerEl.style.background = 'linear-gradient(135deg, rgba(255, 99, 71, 0.18) 0%, rgba(255, 99, 71, 0.08) 100%)';
                         timerEl.style.border = '2px solid rgba(255, 99, 71, 0.4)';
-                        timerEl.innerHTML = "<span style='color: #FF6347; font-size: 1.15em; font-weight: bold; font-family: Orbitron, sans-serif; text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);'>⏱️ OTP Expired</span>";
+                        timerEl.innerHTML = "<span style='color: #FF6347; font-size: 1.15em; font-weight: bold; font-family: Orbitron, sans-serif; text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);'>OTP Expired</span>";
                     }}
                 }} else {{
                     const mins = Math.floor(remaining / 60);
@@ -527,32 +527,40 @@ div.stAlert {
    LOGIN / AUTH CARD
    ══════════════════════════════════════ */
 .login-card {
-    background: linear-gradient(160deg,
-        rgba(14,20,32,0.95) 0%,
-        rgba(8,12,18,0.98) 100%);
-    backdrop-filter: blur(32px) saturate(160%);
-    -webkit-backdrop-filter: blur(32px) saturate(160%);
-    border: 1px solid rgba(99,179,237,0.18);
+    background: linear-gradient(170deg,
+        rgba(16,22,36,0.97) 0%,
+        rgba(10,14,22,0.99) 100%);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    border: 1px solid rgba(56,189,248,0.14);
+    border-top: 1px solid rgba(255,255,255,0.10);
     border-radius: var(--radius-xl);
-    padding: 36px 32px;
-    box-shadow: var(--shadow-card), 0 0 60px rgba(79,163,227,0.07);
+    padding: 40px 36px 32px;
+    box-shadow:
+        0 32px 80px rgba(0,0,0,0.55),
+        0 1px 0 rgba(255,255,255,0.07) inset,
+        0 0 0 1px rgba(56,189,248,0.04) inset;
     transition: all var(--transition-slow);
     position: relative;
     overflow: hidden;
-    animation: fadeSlideUp 0.7s cubic-bezier(0.22,1,0.36,1) forwards;
+    animation: fadeSlideUp 0.65s cubic-bezier(0.22,1,0.36,1) forwards;
+}
+.login-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(56,189,248,0.35), transparent);
 }
 .login-card::after {
     content: '';
     position: absolute;
     top: 0; left: -100%;
     width: 60%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(79,163,227,0.06), transparent);
-    animation: shimmerSlide 3.5s ease-in-out infinite;
+    background: linear-gradient(90deg, transparent, rgba(56,189,248,0.04), transparent);
+    animation: shimmerSlide 4s ease-in-out infinite;
 }
-.login-card:hover {
-    border-color: rgba(99,179,237,0.32);
-    box-shadow: var(--shadow-card), 0 0 80px rgba(79,163,227,0.12);
-}
+
 
 /* ══════════════════════════════════════
    TEXT INPUTS & TEXTAREAS
@@ -560,24 +568,28 @@ div.stAlert {
 .stTextInput > div > div > input,
 .stTextArea > div > div > textarea,
 .stSelectbox > div > div > div {
-    background: rgba(255,255,255,0.04) !important;
+    background: rgba(255,255,255,0.05) !important;
     color: var(--text-primary) !important;
     border: 1px solid rgba(255,255,255,0.10) !important;
-    border-radius: var(--radius-sm) !important;
+    border-bottom: 1px solid rgba(255,255,255,0.14) !important;
+    border-radius: 10px !important;
     font-family: var(--font-sans) !important;
-    font-size: 0.9rem !important;
-    padding: 10px 14px !important;
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
+    font-size: 0.92rem !important;
+    padding: 11px 15px !important;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast) !important;
+    letter-spacing: 0.01em !important;
 }
 .stTextInput > div > div > input:focus,
 .stTextArea > div > div > textarea:focus {
-    border-color: rgba(79,163,227,0.5) !important;
-    box-shadow: 0 0 0 3px rgba(79,163,227,0.12) !important;
+    border-color: rgba(56,189,248,0.55) !important;
+    background: rgba(56,189,248,0.05) !important;
+    box-shadow: 0 0 0 3px rgba(56,189,248,0.10), 0 1px 4px rgba(0,0,0,0.3) !important;
     outline: none !important;
 }
 .stTextInput > div > div > input:hover,
 .stTextArea > div > div > textarea:hover {
-    border-color: rgba(79,163,227,0.28) !important;
+    border-color: rgba(56,189,248,0.30) !important;
+    background: rgba(255,255,255,0.06) !important;
 }
 .stTextInput > label,
 .stTextArea > label,
@@ -585,46 +597,55 @@ div.stAlert {
 .stSlider > label,
 .stFileUploader > label {
     color: var(--text-secondary) !important;
-    font-size: 0.8rem !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.03em !important;
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.06em !important;
     text-transform: uppercase !important;
     font-family: var(--font-sans) !important;
+    margin-bottom: 4px !important;
 }
 
 /* ══════════════════════════════════════
    BUTTONS — Primary style
    ══════════════════════════════════════ */
 .stButton > button {
-    background: linear-gradient(135deg,
-        rgba(56,189,248,0.18) 0%,
-        rgba(79,163,227,0.12) 100%) !important;
-    color: var(--accent-cyan) !important;
-    border: 1px solid rgba(56,189,248,0.3) !important;
-    border-radius: var(--radius-sm) !important;
+    background: linear-gradient(180deg,
+        rgba(79,163,227,0.22) 0%,
+        rgba(56,140,210,0.15) 100%) !important;
+    color: #a8d8f5 !important;
+    border: 1px solid rgba(56,189,248,0.25) !important;
+    border-bottom: 1px solid rgba(56,189,248,0.15) !important;
+    border-radius: 10px !important;
     font-family: var(--font-sans) !important;
     font-weight: 600 !important;
     font-size: 0.875rem !important;
-    letter-spacing: 0.02em !important;
-    padding: 10px 22px !important;
+    letter-spacing: 0.025em !important;
+    padding: 11px 22px !important;
     backdrop-filter: blur(12px) !important;
-    box-shadow: 0 2px 12px rgba(56,189,248,0.08), inset 0 1px 0 rgba(255,255,255,0.08) !important;
+    box-shadow:
+        0 1px 3px rgba(0,0,0,0.30),
+        0 1px 0 rgba(255,255,255,0.06) inset !important;
     transition: all var(--transition-fast) !important;
     position: relative;
     overflow: hidden;
 }
 .stButton > button:hover {
-    background: linear-gradient(135deg,
-        rgba(56,189,248,0.28) 0%,
-        rgba(79,163,227,0.22) 100%) !important;
-    border-color: rgba(56,189,248,0.55) !important;
-    box-shadow: 0 4px 20px rgba(56,189,248,0.18), inset 0 1px 0 rgba(255,255,255,0.12) !important;
-    transform: translateY(-2px) !important;
-    color: #e0f6ff !important;
+    background: linear-gradient(180deg,
+        rgba(79,163,227,0.32) 0%,
+        rgba(56,140,210,0.24) 100%) !important;
+    border-color: rgba(56,189,248,0.45) !important;
+    box-shadow:
+        0 4px 16px rgba(56,189,248,0.15),
+        0 1px 0 rgba(255,255,255,0.10) inset !important;
+    transform: translateY(-1px) !important;
+    color: #d4edfb !important;
 }
 .stButton > button:active {
     transform: translateY(0px) !important;
-    box-shadow: 0 1px 6px rgba(56,189,248,0.10) !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.20) !important;
+    background: linear-gradient(180deg,
+        rgba(56,140,210,0.24) 0%,
+        rgba(79,163,227,0.16) 100%) !important;
 }
 
 /* ══════════════════════════════════════
@@ -1453,21 +1474,9 @@ if not st.session_state.get("authenticated", False):
     response = requests.get(image_url)
     img_base64 = b64encode(response.content).decode()
 
-    # ✅ Inject glassmorphism CSS with shimmer effects
+    # Inject minimal clean override for login section
     st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
-
-    @keyframes shimmer {{
-        0% {{ background-position: -200% 0; }}
-        100% {{ background-position: 200% 0; }}
-    }}
-
-    @keyframes glassShimmer {{
-        0% {{ transform: translateX(-100%) skewX(-15deg); }}
-        100% {{ transform: translateX(200%) skewX(-15deg); }}
-    }}
-
     /* ===== Card Shuffle Animation ===== */
     .animated-cards {{
       margin-top: 40px;
@@ -1481,344 +1490,19 @@ if not st.session_state.get("authenticated", False):
       width: 220px;
       animation: splitCards 2.5s ease-in-out infinite alternate;
       z-index: 1;
-      filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
+      filter: drop-shadow(0 0 12px rgba(56,189,248,0.18));
+      opacity: 0.85;
     }}
     .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
     .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
     .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-
     @keyframes splitCards {{
-      0%   {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
+      0%   {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 0.85; }}
+      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 0.85; }}
     }}
     .card-left   {{ --x-offset: -80px; --rot: -4deg; }}
     .card-center {{ --x-offset: 0px;  --rot: 0deg;  }}
     .card-right  {{ --x-offset: 80px;  --rot: 4deg;  }}
-
-    /* ===== Glassmorphism Login Card ===== */
-    .login-card {{
-      background: linear-gradient(135deg,
-        rgba(0, 191, 255, 0.1) 0%,
-        rgba(30, 144, 255, 0.05) 50%,
-        rgba(0, 191, 255, 0.1) 100%);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(0, 191, 255, 0.2);
-      border-radius: 20px;
-      padding: 25px;
-      box-shadow:
-        0 8px 32px rgba(0, 191, 255, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      font-family: 'Orbitron', sans-serif;
-      color: white;
-      margin-top: 20px;
-      opacity: 0;
-      transform: translateX(-120%);
-      animation: slideInLeft 1.2s ease-out forwards;
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .login-card::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(0, 191, 255, 0.2),
-        transparent
-      );
-      animation: glassShimmer 3s infinite;
-    }}
-
-    @keyframes slideInLeft {{
-      0%   {{ transform: translateX(-120%); opacity: 0; }}
-      100% {{ transform: translateX(0); opacity: 1; }}
-    }}
-
-    .login-card h2 {{
-      text-align: center;
-      font-size: 1.6rem;
-      text-shadow: 0 0 15px rgba(0, 191, 255, 0.5);
-      margin-bottom: 15px;
-      position: relative;
-      z-index: 2;
-    }}
-    .login-card h2 span {{ color: #00BFFF; }}
-
-    /* ===== Enhanced Message Cards with Consistent Layout ===== */
-    .slide-message {{
-      position: relative;
-      overflow: hidden;
-      margin: 16px 0;
-      padding: 14px 20px;
-      border-radius: 14px;
-      font-weight: 600;
-      font-size: 0.95em;
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 12px;
-      animation: slideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      box-shadow:
-        0 4px 20px rgba(0, 0, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      line-height: 1.5;
-      font-family: 'Orbitron', sans-serif;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      min-height: 50px;
-    }}
-
-    .slide-message:hover {{
-      transform: translateY(-3px) scale(1.01);
-      box-shadow:
-        0 8px 30px rgba(0, 0, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    }}
-
-    .slide-message::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.1),
-        transparent
-      );
-      transition: left 0.5s;
-    }}
-
-    .slide-message:hover::before {{
-      left: 100%;
-    }}
-
-    .slide-message svg {{
-      width: 22px;
-      height: 22px;
-      flex-shrink: 0;
-      filter: drop-shadow(0 0 6px currentColor);
-      z-index: 2;
-    }}
-
-    .slide-message-text {{
-      flex: 1;
-      z-index: 2;
-      position: relative;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-      white-space: normal;
-    }}
-
-    .success-msg {{
-      background: linear-gradient(135deg,
-        rgba(0, 255, 127, 0.20) 0%,
-        rgba(0, 255, 127, 0.08) 100%);
-      border: 2px solid rgba(0, 255, 127, 0.4);
-      color: #00FF7F;
-      text-shadow: 0 0 12px rgba(0, 255, 127, 0.4);
-    }}
-
-    .error-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.20) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-      color: #FF6347;
-      text-shadow: 0 0 12px rgba(255, 99, 71, 0.4);
-    }}
-
-    .info-msg {{
-      background: linear-gradient(135deg,
-        rgba(30, 144, 255, 0.20) 0%,
-        rgba(30, 144, 255, 0.08) 100%);
-      border: 2px solid rgba(30, 144, 255, 0.4);
-      color: #1E90FF;
-      text-shadow: 0 0 12px rgba(30, 144, 255, 0.4);
-    }}
-
-    .warn-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.20) 0%,
-        rgba(255, 215, 0, 0.08) 100%);
-      border: 2px solid rgba(255, 215, 0, 0.4);
-      color: #FFD700;
-      text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
-    }}
-
-    @keyframes slideIn {{
-      0%   {{
-        transform: translateX(-50px);
-        opacity: 0;
-      }}
-      100% {{
-        transform: translateX(0);
-        opacity: 1;
-      }}
-    }}
-
-    /* ===== Improved Timer Display ===== */
-    .timer-display {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.18) 0%,
-        rgba(255, 165, 0, 0.08) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      border: 2px solid rgba(255, 215, 0, 0.4);
-      border-radius: 14px;
-      padding: 16px 24px;
-      margin: 20px 0;
-      text-align: center;
-      box-shadow:
-        0 4px 20px rgba(255, 215, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .timer-display::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 215, 0, 0.2),
-        transparent
-      );
-      animation: glassShimmer 3s infinite;
-    }}
-
-    .timer-display:hover {{
-      box-shadow:
-        0 8px 30px rgba(255, 215, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-      transform: translateY(-3px);
-    }}
-
-    .timer-text {{
-      color: #FFD700;
-      font-size: 1.15em;
-      font-weight: bold;
-      font-family: 'Orbitron', sans-serif;
-      text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
-      position: relative;
-      z-index: 2;
-    }}
-
-    .timer-expired {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.18) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-    }}
-
-    .timer-expired .timer-text {{
-      color: #FF6347;
-      text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
-    }}
-
-    /* ===== Glassmorphism Buttons ===== */
-    .stButton>button {{
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.2) 0%, 
-        rgba(30, 144, 255, 0.1) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      color: white;
-      border: 1px solid rgba(0, 191, 255, 0.3);
-      border-radius: 12px;
-      font-family: 'Orbitron', sans-serif;
-      font-weight: bold;
-      padding: 8px 20px;
-      box-shadow: 
-        0 4px 16px rgba(0, 191, 255, 0.1),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }}
-    
-    .stButton>button::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.2),
-        transparent
-      );
-      transition: left 0.5s;
-    }}
-    
-    .stButton>button:hover {{
-      transform: translateY(-2px);
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.3) 0%, 
-        rgba(30, 144, 255, 0.15) 100%);
-      border: 1px solid rgba(0, 191, 255, 0.5);
-      box-shadow: 
-        0 8px 25px rgba(0, 191, 255, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    }}
-    
-    .stButton>button:hover::before {{
-      left: 100%;
-    }}
-
-    /* ===== Glassmorphism Input Fields ===== */
-    .stTextInput input {{
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.08) 0%, 
-        rgba(30, 144, 255, 0.04) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      border: 1px solid rgba(0, 191, 255, 0.2);
-      border-radius: 10px;
-      padding: 10px;
-      color: #E0F7FF;
-      font-family: 'Orbitron', sans-serif;
-      box-shadow: 
-        0 4px 16px rgba(0, 191, 255, 0.05),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-      transition: all 0.3s ease-in-out;
-    }}
-    .stTextInput input:focus {{
-      outline: none !important;
-      background: linear-gradient(135deg, 
-        rgba(0, 191, 255, 0.12) 0%, 
-        rgba(30, 144, 255, 0.06) 100%);
-      border: 1px solid rgba(0, 191, 255, 0.4);
-      box-shadow: 
-        0 8px 25px rgba(0, 191, 255, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transform: translateY(-1px);
-    }}
-    .stTextInput label {{
-      font-family: 'Orbitron', sans-serif;
-      color: #00BFFF !important;
-      text-shadow: 0 0 10px rgba(0, 191, 255, 0.3);
-    }}
     </style>
 
     <!-- Animated Cards -->
@@ -1834,16 +1518,44 @@ if not st.session_state.get("authenticated", False):
 
     with center:
         st.markdown(
-            """<div class='login-card'>
+            """<div class='login-card' id='auth-card'>
             <div style='text-align:center; margin-bottom:6px;'>
-                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block; margin-bottom:8px;">
+                <svg id="auth-icon-lock" width="38" height="38" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block; margin-bottom:8px;">
                     <rect x="5" y="11" width="14" height="10" rx="2" stroke="#38bdf8" stroke-width="1.5" fill="rgba(56,189,248,0.10)"/>
                     <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
                     <circle cx="12" cy="16" r="1.5" fill="#38bdf8"/>
                 </svg>
             </div>
-            <h2 style='text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif; font-size:1.45rem; font-weight:700; letter-spacing:-0.02em; color:#e6edf3; margin:0 0 4px 0;'>Sign in to <span style='color:#38bdf8;'>HIRELYZER</span></h2>
-            <p style='text-align:center; font-size:0.8rem; color:#64748b; margin:0 0 20px 0; font-family:-apple-system,sans-serif; letter-spacing:0.02em;'>AI-Powered Resume Intelligence Platform</p>""",
+            <h2 id="auth-card-title" style='text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif; font-size:1.45rem; font-weight:700; letter-spacing:-0.02em; color:#e6edf3; margin:0 0 4px 0;'>Sign in to <span style='color:#38bdf8;'>HIRELYZER</span></h2>
+            <p id="auth-card-sub" style='text-align:center; font-size:0.8rem; color:#64748b; margin:0 0 20px 0; font-family:-apple-system,sans-serif; letter-spacing:0.02em;'>AI-Powered Resume Intelligence Platform</p>
+            <script>
+            (function() {
+                function updateAuthHeader() {
+                    var tabs = parent.document.querySelectorAll('[data-baseweb="tab"]');
+                    var title = parent.document.getElementById('auth-card-title');
+                    if (!title) {
+                        title = document.getElementById('auth-card-title');
+                    }
+                    if (!title) return;
+                    var activeText = '';
+                    tabs.forEach(function(tab) {
+                        if (tab.getAttribute('aria-selected') === 'true') {
+                            activeText = tab.innerText.trim();
+                        }
+                    });
+                    if (activeText === 'Register') {
+                        title.innerHTML = 'Create your <span style="color:#38bdf8;">HIRELYZER</span> account';
+                    } else {
+                        title.innerHTML = 'Sign in to <span style="color:#38bdf8;">HIRELYZER</span>';
+                    }
+                }
+                updateAuthHeader();
+                var observer = new MutationObserver(updateAuthHeader);
+                observer.observe(parent.document.body, { subtree: true, attributes: true, attributeFilter: ['aria-selected'] });
+                setInterval(updateAuthHeader, 500);
+            })();
+            </script>
+            """,
             unsafe_allow_html=True,
         )
 
@@ -1858,13 +1570,13 @@ if not st.session_state.get("authenticated", False):
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="8" r="4" stroke="#38bdf8" stroke-width="1.5"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/></svg>
                     Welcome Back</h3>""", unsafe_allow_html=True)
 
-                user = st.text_input("👤 Username or Email", key="login_user")
-                pwd = st.text_input("🔑 Password", type="password", key="login_pass")
+                user = st.text_input("Username or Email", key="login_user")
+                pwd = st.text_input("Password", type="password", key="login_pass")
 
                 # Render notification area (reserves space)
                 render_notification("login")
 
-                if st.button("🚀 Login", key="login_btn", use_container_width=True):
+                if st.button("Sign In", key="login_btn", use_container_width=True):
                     success, saved_key = verify_user(user.strip(), pwd.strip())
                     if success:
                         st.session_state.authenticated = True
@@ -1873,17 +1585,17 @@ if not st.session_state.get("authenticated", False):
                             st.session_state["user_groq_key"] = saved_key
                         log_user_action(st.session_state.username, "login")
 
-                        notify("login", "success", "✅ Login successful!")
+                        notify("login", "success", "Login successful")
                         time.sleep(3.0)
                         st.rerun()
                     else:
-                        notify("login", "error", "❌ Invalid credentials. Please try again.")
+                        notify("login", "error", "Invalid credentials. Please try again.")
                         st.rerun()
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
                 # Forgot Password Link
-                if st.button("🔑 Forgot Password?", key="forgot_pw_link"):
+                if st.button("Forgot Password?", key="forgot_pw_link"):
                     st.session_state.reset_stage = "request_email"
                     st.rerun()
 
@@ -1896,14 +1608,14 @@ if not st.session_state.get("authenticated", False):
                     Reset Password</h3>""", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your registered email to receive an OTP</p>", unsafe_allow_html=True)
 
-                email_input = st.text_input("📧 Email Address", key="reset_email_input")
+                email_input = st.text_input("Email Address", key="reset_email_input")
 
                 # Render notification area (reserves space)
                 render_notification("login")
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("📤 Send OTP", key="send_otp_btn", use_container_width=True):
+                    if st.button("Send OTP", key="send_otp_btn", use_container_width=True):
                         if email_input.strip():
                             if get_user_by_email(email_input.strip()):
                                 # Generate and send OTP
@@ -1916,21 +1628,21 @@ if not st.session_state.get("authenticated", False):
                                     st.session_state.reset_otp_time = time.time()
                                     st.session_state.reset_stage = "verify_otp"
 
-                                    notify("login", "success", "✅ OTP sent successfully to your email!")
+                                    notify("login", "success", "OTP sent to your email")
                                     time.sleep(0.5)
                                     st.rerun()
                                 else:
-                                    notify("login", "error", "❌ Failed to send OTP. Please try again.")
+                                    notify("login", "error", "Failed to send OTP. Please try again.")
                                     st.rerun()
                             else:
-                                notify("login", "error", "❌ Email not found. Please register first.")
+                                notify("login", "error", "Email not found. Please register first.")
                                 st.rerun()
                         else:
-                            notify("login", "warning", "⚠️ Please enter your email address.")
+                            notify("login", "warning", "Please enter your email address.")
                             st.rerun()
 
                 with col2:
-                    if st.button("↩️ Back to Login", key="back_to_login_1", use_container_width=True):
+                    if st.button("Back to Login", key="back_to_login_1", use_container_width=True):
                         st.session_state.reset_stage = "none"
                         st.rerun()
 
@@ -1954,11 +1666,11 @@ if not st.session_state.get("authenticated", False):
                 if remaining_time == 0:
                     # OTP Expired - Show resend option
                     render_notification("login")
-                    notify("login", "error", "⏱️ OTP expired. Please request a new one.")
+                    notify("login", "error", "OTP expired. Please request a new one.")
 
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("🔄 Resend OTP", key="resend_otp_btn", use_container_width=True):
+                        if st.button("Resend OTP", key="resend_otp_btn", use_container_width=True):
                             # Generate new OTP
                             otp = generate_otp()
                             success = send_email_otp(st.session_state.reset_email, otp)
@@ -1966,43 +1678,43 @@ if not st.session_state.get("authenticated", False):
                             if success:
                                 st.session_state.reset_otp = otp
                                 st.session_state.reset_otp_time = time.time()
-                                notify("login", "info", "📨 New OTP sent!")
+                                notify("login", "info", "New OTP sent")
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
-                                notify("login", "error", "❌ Failed to send OTP. Please try again.")
+                                notify("login", "error", "Failed to send OTP. Please try again.")
                                 st.rerun()
 
                     with col2:
-                        if st.button("↩️ Back to Login", key="back_to_login_expired", use_container_width=True):
+                        if st.button("Back to Login", key="back_to_login_expired", use_container_width=True):
                             st.session_state.reset_stage = "none"
                             st.rerun()
                 else:
                     # OTP still valid - Show verification form
-                    otp_input = st.text_input("🔢 Enter 6-Digit OTP", key="otp_input", max_chars=6)
+                    otp_input = st.text_input("Enter 6-Digit OTP", key="otp_input", max_chars=6)
 
                     # Render notification area (reserves space)
                     render_notification("login")
 
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("✅ Verify OTP", key="verify_otp_btn", use_container_width=True):
+                        if st.button("Verify OTP", key="verify_otp_btn", use_container_width=True):
                             # Re-check expiry on server side before verifying
                             current_elapsed = time.time() - st.session_state.reset_otp_time
                             if current_elapsed >= 180:
-                                notify("login", "error", "⏱️ OTP has expired. Please request a new one.")
+                                notify("login", "error", "OTP has expired. Please request a new one.")
                                 st.rerun()
                             elif otp_input.strip() == st.session_state.reset_otp:
                                 st.session_state.reset_stage = "reset_password"
-                                notify("login", "success", "✅ OTP verified successfully!")
+                                notify("login", "success", "OTP verified")
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
-                                notify("login", "error", "❌ Invalid OTP. Please try again.")
+                                notify("login", "error", "Invalid OTP. Please try again.")
                                 st.rerun()
 
                     with col2:
-                        if st.button("↩️ Back to Login", key="back_to_login_2", use_container_width=True):
+                        if st.button("Back to Login", key="back_to_login_2", use_container_width=True):
                             st.session_state.reset_stage = "none"
                             st.rerun()
 
@@ -2015,21 +1727,21 @@ if not st.session_state.get("authenticated", False):
                     Set New Password</h3>""", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your new password</p>", unsafe_allow_html=True)
 
-                new_password = st.text_input("🔑 New Password", type="password", key="new_password_input")
-                confirm_password = st.text_input("🔑 Confirm Password", type="password", key="confirm_password_input")
+                new_password = st.text_input("New Password", type="password", key="new_password_input")
+                confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password_input")
 
                 st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
 
                 # Render notification area (reserves space)
                 render_notification("login")
 
-                if st.button("✅ Reset Password", key="reset_password_btn", use_container_width=True):
+                if st.button("Reset Password", key="reset_password_btn", use_container_width=True):
                     if new_password.strip() and confirm_password.strip():
                         if new_password == confirm_password:
                             success = update_password_by_email(st.session_state.reset_email, new_password)
 
                             if success:
-                                notify("login", "success", "✅ Password reset successful! Please log in again.")
+                                notify("login", "success", "Password reset successful. Please log in.")
 
                                 # Log the password reset action
                                 log_user_action(st.session_state.reset_email, "password_reset")
@@ -2043,16 +1755,16 @@ if not st.session_state.get("authenticated", False):
                                 time.sleep(1)
                                 st.rerun()
                             else:
-                                notify("login", "error", "❌ Failed to reset password. Please try again.")
+                                notify("login", "error", "Failed to reset password. Please try again.")
                                 st.rerun()
                         else:
-                            notify("login", "error", "❌ Passwords do not match.")
+                            notify("login", "error", "Passwords do not match.")
                             st.rerun()
                     else:
-                        notify("login", "warning", "⚠️ Please fill in both password fields.")
+                        notify("login", "warning", "Please fill in both password fields.")
                         st.rerun()
 
-                if st.button("↩️ Back to Login", key="back_to_login_3"):
+                if st.button("Back to Login", key="back_to_login_3"):
                     st.session_state.reset_stage = "none"
                     st.rerun()
 
@@ -2076,41 +1788,41 @@ if not st.session_state.get("authenticated", False):
                 if remaining == 0:
                     # OTP Expired
                     render_notification("register")
-                    notify("register", "error", "⏱️ OTP expired. Please request a new one.")
+                    notify("register", "error", "OTP expired. Please request a new one.")
 
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("🔄 Resend OTP", key="reg_resend_expired_btn", use_container_width=True):
+                        if st.button("Resend OTP", key="reg_resend_expired_btn", use_container_width=True):
                             pending = st.session_state.pending_registration
                             success, message = add_user(pending['username'], pending['password'], pending['email'])
                             if success:
-                                notify("register", "success", "✅ New OTP sent!")
+                                notify("register", "success", "New OTP sent")
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
-                                notify("register", "error", f"❌ {message}")
+                                notify("register", "error", f"{message}")
                                 st.rerun()
                     with col2:
-                        if st.button("↩️ Start Over", key="reg_start_over_btn", use_container_width=True):
+                        if st.button("Start Over", key="reg_start_over_btn", use_container_width=True):
                             del st.session_state.pending_registration
                             st.rerun()
                 else:
                     # OTP still valid
-                    otp_input = st.text_input("🔢 Enter 6-Digit OTP", key="reg_otp_input", max_chars=6)
+                    otp_input = st.text_input("Enter 6-Digit OTP", key="reg_otp_input", max_chars=6)
 
                     # Render notification area (reserves space)
                     render_notification("register")
 
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        if st.button("✅ Verify", key="verify_reg_otp_btn", use_container_width=True):
+                        if st.button("Verify", key="verify_reg_otp_btn", use_container_width=True):
                             # Cache username BEFORE calling complete_registration
                             cached_username = st.session_state.pending_registration['username']
 
                             # Re-check expiry before verification
                             current_elapsed = (datetime.now(st.session_state.pending_registration['timestamp'].tzinfo) - st.session_state.pending_registration['timestamp']).total_seconds()
                             if current_elapsed >= 180:
-                                notify("register", "error", "⏱️ OTP has expired. Please request a new one.")
+                                notify("register", "error", "OTP has expired. Please request a new one.")
                                 st.rerun()
                             else:
                                 success, message = complete_registration(otp_input.strip())
@@ -2124,28 +1836,30 @@ if not st.session_state.get("authenticated", False):
                                     st.rerun()
 
                     with col2:
-                        if st.button("🔄 Resend", key="resend_reg_otp_btn", use_container_width=True):
+                        if st.button("Resend", key="resend_reg_otp_btn", use_container_width=True):
                             pending = st.session_state.pending_registration
                             success, message = add_user(pending['username'], pending['password'], pending['email'])
                             if success:
-                                notify("register", "info", "📨 New OTP sent successfully!")
+                                notify("register", "info", "New OTP sent successfully")
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
-                                notify("register", "error", f"❌ {message}")
+                                notify("register", "error", f"{message}")
                                 st.rerun()
 
                     with col3:
-                        if st.button("↩️ Back", key="back_to_reg_btn", use_container_width=True):
+                        if st.button("Back", key="back_to_reg_btn", use_container_width=True):
                             del st.session_state.pending_registration
                             st.rerun()
 
             else:
                 # Normal registration form
-                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
+                st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif; font-size:1.05rem; font-weight:600; letter-spacing:-0.01em; margin-bottom:18px;'>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" fill="#38bdf8"/></svg>
+                    Create Your Account</h3>""", unsafe_allow_html=True)
 
                 # Email input with live validation
-                new_email = st.text_input("📧 Email", key="reg_email", placeholder="your@email.com")
+                new_email = st.text_input("Email", key="reg_email", placeholder="your@email.com")
 
                 # Email validation placeholder (using st.empty for dynamic updates)
                 email_validation_placeholder = st.empty()
@@ -2155,21 +1869,21 @@ if not st.session_state.get("authenticated", False):
                     if not is_valid_email(new_email.strip()):
                         with email_validation_placeholder:
                             st.markdown(
-                                '<div class="slide-message warn-msg"><span class="slide-message-text">⚠️ Invalid email format.</span></div>',
+                                '<div class="slide-message warn-msg"><span class="slide-message-text">Invalid email format.</span></div>',
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_email = new_email
                     elif email_exists(new_email.strip()):
                         with email_validation_placeholder:
                             st.markdown(
-                                '<div class="slide-message error-msg"><span class="slide-message-text">❌ Email already registered.</span></div>',
+                                '<div class="slide-message error-msg"><span class="slide-message-text">Email already registered.</span></div>',
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_email = new_email
                     else:
                         with email_validation_placeholder:
                             st.markdown(
-                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Email is available.</span></div>',
+                                '<div class="slide-message success-msg"><span class="slide-message-text">Email is available.</span></div>',
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_email = new_email
@@ -2181,7 +1895,7 @@ if not st.session_state.get("authenticated", False):
                     st.session_state.last_validated_email = ""
 
                 # Username input with live validation
-                new_user = st.text_input("👤 Username", key="reg_user")
+                new_user = st.text_input("Username", key="reg_user")
 
                 # Username validation placeholder
                 username_validation_placeholder = st.empty()
@@ -2191,14 +1905,14 @@ if not st.session_state.get("authenticated", False):
                     if username_exists(new_user.strip()):
                         with username_validation_placeholder:
                             st.markdown(
-                                '<div class="slide-message error-msg"><span class="slide-message-text">❌ Username already exists.</span></div>',
+                                '<div class="slide-message error-msg"><span class="slide-message-text">Username already exists.</span></div>',
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_username = new_user
                     else:
                         with username_validation_placeholder:
                             st.markdown(
-                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Username is available.</span></div>',
+                                '<div class="slide-message success-msg"><span class="slide-message-text">Username is available.</span></div>',
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_username = new_user
@@ -2209,7 +1923,7 @@ if not st.session_state.get("authenticated", False):
                     st.session_state.last_validated_username = ""
 
                 # Password input with live validation
-                new_pass = st.text_input("🔑 Password", type="password", key="reg_pass")
+                new_pass = st.text_input("Password", type="password", key="reg_pass")
                 st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
 
                 # Password validation placeholder
@@ -2220,14 +1934,14 @@ if not st.session_state.get("authenticated", False):
                     if not is_strong_password(new_pass):
                         with password_validation_placeholder:
                             st.markdown(
-                                '<div class="slide-message warn-msg"><span class="slide-message-text">⚠️ Password must be at least 8 characters and strong.</span></div>',
+                                '<div class="slide-message warn-msg"><span class="slide-message-text">Password must be at least 8 characters and strong.</span></div>',
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_password = new_pass
                     else:
                         with password_validation_placeholder:
                             st.markdown(
-                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Strong password.</span></div>',
+                                '<div class="slide-message success-msg"><span class="slide-message-text">Strong password.</span></div>',
                                 unsafe_allow_html=True
                             )
                         st.session_state.last_validated_password = new_pass
@@ -2240,17 +1954,17 @@ if not st.session_state.get("authenticated", False):
                 # Render notification area (reserves space)
                 render_notification("register")
 
-                if st.button("📧 Register & Send OTP", key="register_btn", use_container_width=True):
+                if st.button("Create Account", key="register_btn", use_container_width=True):
                     if new_email.strip() and new_user.strip() and new_pass.strip():
                         # Validate before attempting registration
                         if not is_valid_email(new_email.strip()):
-                            notify("register", "warning", "⚠️ Invalid email format.")
+                            notify("register", "warning", "Invalid email format.")
                             st.rerun()
                         elif email_exists(new_email.strip()):
-                            notify("register", "error", "🚫 Email already registered.")
+                            notify("register", "error", "Email already registered.")
                             st.rerun()
                         elif username_exists(new_user.strip()):
-                            notify("register", "error", "🚫 Username already exists.")
+                            notify("register", "error", "Username already exists.")
                             st.rerun()
                         else:
                             success, message = add_user(new_user.strip(), new_pass.strip(), new_email.strip())
@@ -2262,7 +1976,7 @@ if not st.session_state.get("authenticated", False):
                                 notify("register", "error", message)
                                 st.rerun()
                     else:
-                        notify("register", "warning", "⚠️ Please fill in all fields (email, username, and password).")
+                        notify("register", "warning", "Please fill in all fields.")
                         st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
@@ -2274,7 +1988,7 @@ if st.session_state.get("authenticated"):
     st.markdown(f"""
     <div class="welcome-banner">
         <div>
-            <div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span> 👋</div>
+            <div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span></div>
             <div class="welcome-subtitle">HIRELYZER — AI-Powered Resume Intelligence Platform</div>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
@@ -2295,14 +2009,14 @@ if st.session_state.get("authenticated"):
     """, unsafe_allow_html=True)
 
     # 🔓 LOGOUT BUTTON
-    if st.button("🚪 Logout"):
+    if st.button("Sign Out"):
         log_user_action(st.session_state.get("username", "unknown"), "logout")
 
         # ✅ Clear all session keys safely
         for key in list(st.session_state.keys()):
             del st.session_state[key]
 
-        st.success("✅ Logged out successfully.")
+        st.success("Logged out successfully.")
         st.rerun()  # Force rerun to prevent stale UI
 
     # 🔑 GROQ API KEY SECTION (SIDEBAR)
@@ -2317,7 +2031,7 @@ if st.session_state.get("authenticated"):
         padding-bottom: 8px;
         margin-bottom: 12px;
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-    '>🔑 Groq API Key</p>
+    '>Groq API Key</p>
     """, unsafe_allow_html=True)
 
     # ✅ Load saved key from DB
@@ -2334,18 +2048,18 @@ if st.session_state.get("authenticated"):
     if user_api_key_input:
         st.session_state["user_groq_key"] = user_api_key_input
         save_user_api_key(st.session_state.username, user_api_key_input)
-        st.sidebar.success("✅ New key saved and in use.")
+        st.sidebar.success("New key saved and in use.")
     elif saved_key:
         st.session_state["user_groq_key"] = saved_key
         st.sidebar.info(f"ℹ️ Using your previously saved API key ({masked_preview})")
     else:
-        st.sidebar.warning("⚠ Using shared admin key with possible usage limits")
+        st.sidebar.warning("Using shared admin key with possible usage limits")
 
     # 🧹 Clear saved key
-    if st.sidebar.button("🗑️ Clear My API Key"):
+    if st.sidebar.button("Clear API Key"):
         st.session_state["user_groq_key"] = None
         save_user_api_key(st.session_state.username, None)
-        st.sidebar.success("✅ Cleared saved Groq API key. Now using shared admin key.")
+        st.sidebar.success("Cleared API key. Now using shared admin key.")
 
 if st.session_state.username == "admin":
     st.markdown("""
@@ -2357,13 +2071,13 @@ if st.session_state.username == "admin":
     # Metrics row
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("👤 Total Registered Users", get_total_registered_users())
+        st.metric("Total Registered Users", get_total_registered_users())
     with col2:
-        st.metric("📅 Logins Today (IST)", get_logins_today())
+        st.metric("Logins Today (IST)", get_logins_today())
 
     # Removed API key usage section (no longer tracked)
     # Activity log
-    st.markdown("<p class='section-label'>📋 Activity Log</p>", unsafe_allow_html=True)
+    st.markdown("<p class='section-label'>Activity Log</p>", unsafe_allow_html=True)
     logs = get_all_user_logs()
     if logs:
         st.dataframe(
@@ -2378,7 +2092,7 @@ if st.session_state.username == "admin":
         st.info("No logs found yet.")
 
     st.divider()
-    st.subheader("📦 Database Backup & Download")
+    st.subheader("Database Backup & Download")
 
     if os.path.exists(DB_PATH):
         with open(DB_PATH, "rb") as f:
@@ -2389,7 +2103,7 @@ if st.session_state.username == "admin":
                 mime="application/octet-stream"
             )
     else:
-        st.warning("⚠️ No database file found yet.")
+        st.warning("No database file found yet.")
 # Always-visible tabs
 tab_labels = [
     "📊 Dashboard",
@@ -2665,7 +2379,7 @@ with tab1:
     </div>
 
     <!-- Header -->
-    <div class="header">💼 HIRELYZER - AI BASED ETHICAL RESUME ANALYZER</div>
+    <div class="header">HIRELYZER — AI-Based Ethical Resume Analyzer</div>
     """, unsafe_allow_html=True)
 
 # Load environment variables
@@ -2755,7 +2469,7 @@ def extract_text_from_pdf(file_path):
         doc.close()
         return text_list if text_list else extract_text_from_images(file_path)
     except Exception as e:
-        st.error(f"⚠ Error extracting text: {e}")
+        st.error(f"Error extracting text: {e}")
         return []
 
 def extract_text_from_images(pdf_path):
@@ -2763,7 +2477,7 @@ def extract_text_from_images(pdf_path):
         images = convert_from_path(pdf_path, dpi=150, first_page=1, last_page=5)
         return ["\n".join(reader.readtext(np.array(img), detail=0)) for img in images]
     except Exception as e:
-        st.error(f"⚠ Error extracting from image: {e}")
+        st.error(f"Error extracting from image: {e}")
         return []
 
 def safe_extract_text(uploaded_file):
@@ -2782,13 +2496,13 @@ def safe_extract_text(uploaded_file):
 
         # If nothing readable found
         if not text_list or all(len(t.strip()) == 0 for t in text_list):
-            st.warning("⚠️ This file doesn't look like a resume or contains no readable text.")
+            st.warning("This file doesn't look like a resume or contains no readable text.")
             return None
 
         return "\n".join(text_list)
 
     except Exception as e:
-        st.error(f"⚠️ Could not process this file: {e}")
+        st.error(f"Could not process this file: {e}")
         return None
 
 # Detect bias in resume
@@ -3138,7 +2852,7 @@ Return a COMPLETE, polished resume with these sections (skip only if truly impos
 
 🏷️ Full Name  
 📞 Phone Number  
-📧 Email Address  
+Email Address  
 📍 Location  
 🔗 LinkedIn Profile URL  
 🌐 GitHub / Portfolio URL  
@@ -3923,7 +3637,7 @@ with tab1:
     if uploaded_files:
         for uploaded_file in uploaded_files:
             with st.container():
-                st.subheader(f"📄 Original Resume Preview: {uploaded_file.name}")
+                st.subheader(f"Original Resume Preview: {uploaded_file.name}")
 
                 try:
                     # ✅ Show PDF preview safely
@@ -4146,7 +3860,7 @@ if uploaded_files and job_description:
         # ✅ Extract text from PDF
         text = extract_text_from_pdf(file_path)
         if not text:
-            st.warning(f"⚠️ Could not extract text from {uploaded_file.name}. Skipping.")
+            st.warning(f"Could not extract text from {uploaded_file.name}. Skipping.")
             scanner_placeholder.empty()
             continue
 
@@ -4355,7 +4069,7 @@ if uploaded_files and job_description:
 
 # 🔄 Developer Reset Button
 with tab1:
-    if st.button("🔄 Refresh view"):
+    if st.button("Refresh View"):
         st.session_state.processed_files.clear()
         st.session_state.resume_data.clear()
 
@@ -4538,18 +4252,18 @@ with tab1:
         avg_bias = round(np.mean([r.get("Bias Score (0 = Fair, 1 = Biased)", 0) for r in resume_data]), 2)
         total_resumes = len(resume_data)
 
-        st.markdown("<p class='section-label'>📊 Session Summary</p>", unsafe_allow_html=True)
+        st.markdown("<p class='section-label'>Session Summary</p>", unsafe_allow_html=True)
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("📄 Resumes Uploaded", total_resumes)
+            st.metric("Resumes Uploaded", total_resumes)
         with col2:
-            st.metric("🔎 Avg. Bias Score", avg_bias)
+            st.metric("Avg. Bias Score", avg_bias)
         with col3:
-            st.metric("🔵 Total Masculine Words", total_masc)
+            st.metric("Total Masculine Words", total_masc)
         with col4:
-            st.metric("🔴 Total Feminine Words", total_fem)
+            st.metric("Total Feminine Words", total_fem)
 
-        st.markdown("<p class='section-label'>🗂️ Resumes Overview</p>", unsafe_allow_html=True)
+        st.markdown("<p class='section-label'>Resumes Overview</p>", unsafe_allow_html=True)
         df = pd.DataFrame(resume_data)
 
         # ✅ Add calculated count columns safely
@@ -4564,7 +4278,7 @@ with tab1:
 
         st.dataframe(df[overview_cols], use_container_width=True)
 
-        st.markdown("<p class='section-label'>📊 Visual Analysis</p>", unsafe_allow_html=True)
+        st.markdown("<p class='section-label'>Visual Analysis</p>", unsafe_allow_html=True)
         chart_tab1, chart_tab2 = st.tabs(["📉 Bias Score Chart", "⚖ Gender-Coded Words"])
         with chart_tab1:
             st.subheader("Bias Score Comparison Across Resumes")
@@ -4601,7 +4315,7 @@ with tab1:
             )
             st.altair_chart(gender_altair, use_container_width=True)
 
-        st.markdown("<p class='section-label'>📝 Detailed Resume Reports</p>", unsafe_allow_html=True)
+        st.markdown("<p class='section-label'>Detailed Resume Reports</p>", unsafe_allow_html=True)
         for resume in resume_data:
             candidate_name = resume.get("Candidate Name", "Not Found")
             resume_name = resume.get("Resume Name", "Unknown")
@@ -4629,33 +4343,33 @@ with tab1:
                 """, unsafe_allow_html=True)
                 score_col1, score_col2, score_col3 = st.columns(3)
                 with score_col1:
-                    st.metric("📈 Overall Match", f"{resume.get('ATS Match %', 'N/A')}%")
+                    st.metric("Overall Match", f"{resume.get('ATS Match %', 'N/A')}%")
                 with score_col2:
-                    st.metric("🏆 Formatted Score", resume.get("Formatted Score", "N/A"))
+                    st.metric("Formatted Score", resume.get("Formatted Score", "N/A"))
                 with score_col3:
-                    st.metric("🧠 Language Quality", f"{resume.get('Language Score', 'N/A')} / {lang_weight}")
+                    st.metric("Language Quality", f"{resume.get('Language Score', 'N/A')} / {lang_weight}")
 
                 col_a, col_b, col_c, col_d = st.columns(4)
                 with col_a:
-                    st.metric("🎓 Education Score", f"{resume.get('Education Score', 'N/A')} / {edu_weight}")
+                    st.metric("Education Score", f"{resume.get('Education Score', 'N/A')} / {edu_weight}")
                 with col_b:
-                    st.metric("💼 Experience Score", f"{resume.get('Experience Score', 'N/A')} / {exp_weight}")
+                    st.metric("Experience Score", f"{resume.get('Experience Score', 'N/A')} / {exp_weight}")
                 with col_c:
-                    st.metric("🛠 Skills Score", f"{resume.get('Skills Score', 'N/A')} / {skills_weight}")
+                    st.metric("Skills Score", f"{resume.get('Skills Score', 'N/A')} / {skills_weight}")
                 with col_d:
-                    st.metric("🔍 Keyword Score", f"{resume.get('Keyword Score', 'N/A')} / {keyword_weight}")
+                    st.metric("Keyword Score", f"{resume.get('Keyword Score', 'N/A')} / {keyword_weight}")
 
                 # Fit summary
-                st.markdown("<p class='section-label'>📝 Fit Summary</p>", unsafe_allow_html=True)
+                st.markdown("<p class='section-label'>Fit Summary</p>", unsafe_allow_html=True)
                 st.write(resume.get('Final Thoughts', 'N/A'))
 
                 # ATS Report
                 if resume.get("ATS Report"):
-                    st.markdown("<p class='section-label'>📋 ATS Evaluation Report</p>", unsafe_allow_html=True)
+                    st.markdown("<p class='section-label'>ATS Evaluation Report</p>", unsafe_allow_html=True)
                     st.markdown(resume["ATS Report"], unsafe_allow_html=True)
 
                 # ATS Chart
-                st.markdown("<p class='section-label'>📊 ATS Score Breakdown</p>", unsafe_allow_html=True)
+                st.markdown("<p class='section-label'>ATS Score Breakdown</p>", unsafe_allow_html=True)
                 ats_df = pd.DataFrame({
                     'Component': ['Education', 'Experience', 'Skills', 'Language', 'Keywords'],
                     'Score': [
@@ -4678,7 +4392,7 @@ with tab1:
                 )
                 st.altair_chart(ats_chart, use_container_width=True)
 
-                st.markdown("<p class='section-label'>🔍 Detailed ATS Section Analyses</p>", unsafe_allow_html=True)
+                st.markdown("<p class='section-label'>Detailed ATS Section Analyses</p>", unsafe_allow_html=True)
                 for section_title, key in [
                     ("🏫 Education Analysis", "Education Analysis"),
                     ("💼 Experience Analysis", "Experience Analysis"),
@@ -4708,14 +4422,14 @@ with tab1:
                 detail_tab1, detail_tab2 = st.tabs(["🔎 Bias Analysis", "✅ Rewritten Resume"])
 
                 with detail_tab1:
-                    st.markdown("<p class='section-label'>🔍 Bias-Highlighted Original Text</p>", unsafe_allow_html=True)
+                    st.markdown("<p class='section-label'>Bias-Highlighted Original Text</p>", unsafe_allow_html=True)
                     st.markdown(resume["Highlighted Text"], unsafe_allow_html=True)
 
-                    st.markdown("<p class='section-label'>📌 Gender-Coded Word Counts</p>", unsafe_allow_html=True)
+                    st.markdown("<p class='section-label'>Gender-Coded Word Counts</p>", unsafe_allow_html=True)
                     bias_col1, bias_col2 = st.columns(2)
 
                     with bias_col1:
-                        st.metric("🔵 Masculine Words", len(resume["Detected Masculine Words"]))
+                        st.metric("Masculine Words", len(resume["Detected Masculine Words"]))
                         if resume["Detected Masculine Words"]:
                             st.markdown("<p class='section-label'>Masculine Words with Context</p>", unsafe_allow_html=True)
                             for item in resume["Detected Masculine Words"]:
@@ -4726,7 +4440,7 @@ with tab1:
                             st.info("No masculine words detected.")
 
                     with bias_col2:
-                        st.metric("🔴 Feminine Words", len(resume["Detected Feminine Words"]))
+                        st.metric("Feminine Words", len(resume["Detected Feminine Words"]))
                         if resume["Detected Feminine Words"]:
                             st.markdown("<p class='section-label'>Feminine Words with Context</p>", unsafe_allow_html=True)
                             for item in resume["Detected Feminine Words"]:
@@ -4737,7 +4451,7 @@ with tab1:
                             st.info("No feminine words detected.")
 
                 with detail_tab2:
-                    st.markdown("<p class='section-label'>✨ Bias-Free Rewritten Resume</p>", unsafe_allow_html=True)
+                    st.markdown("<p class='section-label'>Bias-Free Rewritten Resume</p>", unsafe_allow_html=True)
                     st.write(resume["Rewritten Text"])
                     docx_file = generate_docx(resume["Rewritten Text"])
                     st.download_button(
@@ -4761,7 +4475,7 @@ with tab1:
                     )               
 
     else:           
-        st.warning("⚠️ Please upload resumes to view dashboard analytics.")
+        st.warning("Please upload resumes to view dashboard analytics.")
 
 from xhtml2pdf import pisa
 from io import BytesIO
