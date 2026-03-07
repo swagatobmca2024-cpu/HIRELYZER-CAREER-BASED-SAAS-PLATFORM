@@ -1,4 +1,16 @@
-import os
+
+from xhtml2pdf import pisa
+from io import BytesIO
+
+def html_to_pdf_bytes(html_string):
+    styled_html = f"""
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 400mm 297mm;  /* Original custom large page size */
+                margin-top: 10mm;import os
 os.environ["STREAMLIT_WATCHDOG"] = "false"
 import json
 import random
@@ -3741,92 +3753,64 @@ if uploaded_files and job_description:
 
         st.session_state.processed_files.add(uploaded_file.name)
 
-        # ✅ IMPROVED: Smoother success animation with better transitions
+        # ✅ IMPROVED: Compact inline success toast (no full-screen takeover)
         SUCCESS_HTML = """
         <style>
-        .success-overlay {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            background: linear-gradient(135deg, #080c12 0%, #0e1420 100%);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            animation: fadeIn 0.5s ease-out;
+        @keyframes toastSlideIn {
+            0%  { opacity: 0; transform: translateY(-10px); }
+            100%{ opacity: 1; transform: translateY(0); }
         }
-        
-        @keyframes fadeIn {
-            0% { opacity: 0; }
-            100% { opacity: 1; }
+        @keyframes checkDraw {
+            0%  { stroke-dashoffset: 50; opacity: 0; }
+            60% { opacity: 1; }
+            100%{ stroke-dashoffset: 0; opacity: 1; }
         }
-        
-        .success-circle {
-            width: 140px;
-            height: 140px;
-            border: 1.5px solid rgba(79,140,255,0.35);
-            border-radius: 50%;
-            position: relative;
+        .success-toast {
             display: flex;
             align-items: center;
-            justify-content: center;
-            background: radial-gradient(circle, rgba(0,191,255,0.1) 0%, rgba(0,191,255,0.05) 50%, transparent 100%);
-            animation: successPulse 2s ease-in-out infinite;
-        }
-        
-        @keyframes successPulse {
-            0%, 100% { 
-                transform: scale(1);
-                box-shadow: 0 0 20px rgba(0,191,255,0.3);
-            }
-            50% { 
-                transform: scale(1.05);
-                box-shadow: 0 0 30px rgba(0,191,255,0.6);
-            }
-        }
-        
-        .success-checkmark {
-            font-size: 48px;
-            color: #00ff7f;
-            animation: checkmarkPop 0.8s ease-out;
-        }
-        
-        @keyframes checkmarkPop {
-            0% { transform: scale(0) rotate(-45deg); opacity: 0; }
-            50% { transform: scale(1.2) rotate(-10deg); opacity: 0.8; }
-            100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-        
-        .success-text {
-            margin-top: 25px;
+            gap: 14px;
+            background: linear-gradient(135deg, rgba(52,211,153,0.10) 0%, rgba(52,211,153,0.04) 100%);
+            border: 1px solid rgba(52,211,153,0.28);
+            border-radius: 14px;
+            padding: 14px 20px;
+            margin: 12px 0;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06);
+            animation: toastSlideIn 0.45s cubic-bezier(0.22,1,0.36,1) forwards;
             font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
-            font-size: 20px;
-            font-weight: 600;
-            color: #4f8cff;
-            color: #9aa4af;
-            animation: textSlideUp 0.8s ease-out 0.3s both;
         }
-        
-        @keyframes textSlideUp {
-            0% { transform: translateY(20px); opacity: 0; }
-            100% { transform: translateY(0); opacity: 1; }
+        .success-toast-icon {
+            flex-shrink: 0;
+            width: 36px; height: 36px;
+            background: rgba(52,211,153,0.15);
+            border: 1px solid rgba(52,211,153,0.35);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
         }
-        
-        .success-subtitle {
-            margin-top: 10px;
-            font-size: 14px;
-            color: #8e9aaf;
-            animation: textSlideUp 0.8s ease-out 0.5s both;
+        .success-toast-icon svg {
+            width: 18px; height: 18px;
+            stroke: #34d399; stroke-width: 2.5;
+            fill: none; stroke-linecap: round; stroke-linejoin: round;
+            stroke-dasharray: 50; stroke-dashoffset: 50;
+            animation: checkDraw 0.5s ease-out 0.2s forwards;
+        }
+        .success-toast-body { flex: 1; }
+        .success-toast-title {
+            font-size: 0.875rem; font-weight: 600;
+            color: #6ee7b7; letter-spacing: -0.01em;
+        }
+        .success-toast-sub {
+            font-size: 0.78rem; color: #9aa4af; margin-top: 2px;
         }
         </style>
-        
-        <div class="success-overlay">
-            <div class="success-circle">
-                <div class="success-checkmark">✓</div>
+        <div class="success-toast">
+            <div class="success-toast-icon">
+                <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
             </div>
-            <div class="success-text">Scan Complete!</div>
-            <div class="success-subtitle">Resume analysis ready</div>
+            <div class="success-toast-body">
+                <div class="success-toast-title">Analysis Complete</div>
+                <div class="success-toast-sub">Resume processed successfully — results ready below</div>
+            </div>
         </div>
         """
         
@@ -4031,15 +4015,70 @@ with tab1:
         total_resumes = len(resume_data)
 
         st.markdown("<p class='section-label'>📊 Session Summary</p>", unsafe_allow_html=True)
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("📄 Resumes Uploaded", total_resumes)
-        with col2:
-            st.metric("🔎 Avg. Bias Score", avg_bias)
-        with col3:
-            st.metric("🔵 Total Masculine Words", total_masc)
-        with col4:
-            st.metric("🔴 Total Feminine Words", total_fem)
+
+        st.markdown(f"""
+        <style>
+        .pill-row {{
+            display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;
+        }}
+        .pill-card {{
+            flex: 1; min-width: 140px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 40px;
+            padding: 10px 22px;
+            display: flex; align-items: center; gap: 12px;
+            backdrop-filter: blur(16px);
+            transition: border-color 0.2s, background 0.2s;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+        }}
+        .pill-card:hover {{
+            background: rgba(255,255,255,0.07);
+            border-color: rgba(79,140,255,0.28);
+        }}
+        .pill-dot {{
+            width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+        }}
+        .pill-label {{
+            font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.07em; color: #64748b;
+        }}
+        .pill-value {{
+            font-size: 1.35rem; font-weight: 700; letter-spacing: -0.03em;
+            color: #e6edf3; line-height: 1.1;
+        }}
+        </style>
+        <div class="pill-row">
+            <div class="pill-card">
+                <div class="pill-dot" style="background:#4f8cff;"></div>
+                <div>
+                    <div class="pill-label">Resumes</div>
+                    <div class="pill-value">{total_resumes}</div>
+                </div>
+            </div>
+            <div class="pill-card">
+                <div class="pill-dot" style="background:#f59e0b;"></div>
+                <div>
+                    <div class="pill-label">Avg Bias Score</div>
+                    <div class="pill-value">{avg_bias}</div>
+                </div>
+            </div>
+            <div class="pill-card">
+                <div class="pill-dot" style="background:#60a5fa;"></div>
+                <div>
+                    <div class="pill-label">Masculine Words</div>
+                    <div class="pill-value">{total_masc}</div>
+                </div>
+            </div>
+            <div class="pill-card">
+                <div class="pill-dot" style="background:#f87171;"></div>
+                <div>
+                    <div class="pill-label">Feminine Words</div>
+                    <div class="pill-value">{total_fem}</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
         st.markdown("<p class='section-label'>🗂️ Resumes Overview</p>", unsafe_allow_html=True)
         df = pd.DataFrame(resume_data)
@@ -4059,22 +4098,70 @@ with tab1:
         st.markdown("<p class='section-label'>📊 Visual Analysis</p>", unsafe_allow_html=True)
         chart_tab1, chart_tab2 = st.tabs(["📉 Bias Score Chart", "⚖ Gender-Coded Words"])
         with chart_tab1:
-            st.subheader("Bias Score Comparison Across Resumes")
-            st.bar_chart(df.set_index("Resume Name")[["Bias Score (0 = Fair, 1 = Biased)"]])
+            bias_df = df[["Resume Name", "Bias Score (0 = Fair, 1 = Biased)"]].copy()
+            bias_df["Short Name"] = bias_df["Resume Name"].str[:18] + "…"
+            bias_chart = alt.Chart(bias_df).mark_bar(
+                cornerRadiusTopLeft=4, cornerRadiusTopRight=4,
+                color="#4f8cff"
+            ).encode(
+                x=alt.X("Short Name:N", axis=alt.Axis(
+                    labelAngle=-30, labelColor="#64748b", labelFontSize=11,
+                    titleColor="#64748b", title="Resume", grid=False,
+                    labelFont="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif"
+                )),
+                y=alt.Y("Bias Score (0 = Fair, 1 = Biased):Q",
+                    scale=alt.Scale(domain=[0, 1]),
+                    axis=alt.Axis(labelColor="#64748b", titleColor="#64748b",
+                                  grid=True, gridColor="rgba(255,255,255,0.05)",
+                                  title="Bias Score")),
+                tooltip=[
+                    alt.Tooltip("Resume Name:N", title="Resume"),
+                    alt.Tooltip("Bias Score (0 = Fair, 1 = Biased):Q", title="Bias Score", format=".2f")
+                ]
+            ).properties(height=220).configure_view(
+                strokeWidth=0,
+                fill="transparent"
+            ).configure(background="transparent")
+            st.altair_chart(bias_chart, use_container_width=True)
+
         with chart_tab2:
-            st.subheader("Masculine vs Feminine Word Usage")
-            fig, ax = plt.subplots(figsize=(10, 5))
-            index = np.arange(len(df))
-            bar_width = 0.35
-            ax.bar(index, df["Masculine Words Count"], bar_width, label="Masculine", color="#3498db")
-            ax.bar(index + bar_width, df["Feminine Words Count"], bar_width, label="Feminine", color="#e74c3c")
-            ax.set_xlabel("Resumes", fontsize=12)
-            ax.set_ylabel("Word Count", fontsize=12)
-            ax.set_title("Gender-Coded Word Usage per Resume", fontsize=14)
-            ax.set_xticks(index + bar_width / 2)
-            ax.set_xticklabels(df["Resume Name"], rotation=45, ha='right')
-            ax.legend()
-            st.pyplot(fig)
+            gender_df = df[["Resume Name", "Masculine Words Count", "Feminine Words Count"]].copy()
+            gender_df["Short Name"] = gender_df["Resume Name"].str[:18] + "…"
+            gender_melted = gender_df.melt(
+                id_vars=["Short Name", "Resume Name"],
+                value_vars=["Masculine Words Count", "Feminine Words Count"],
+                var_name="Type", value_name="Count"
+            )
+            gender_melted["Type"] = gender_melted["Type"].str.replace(" Words Count", "")
+            gender_chart = alt.Chart(gender_melted).mark_bar(
+                cornerRadiusTopLeft=4, cornerRadiusTopRight=4
+            ).encode(
+                x=alt.X("Short Name:N", axis=alt.Axis(
+                    labelAngle=-30, labelColor="#64748b", labelFontSize=11,
+                    title="Resume", grid=False,
+                    labelFont="-apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif"
+                )),
+                y=alt.Y("Count:Q", axis=alt.Axis(
+                    labelColor="#64748b", titleColor="#64748b",
+                    grid=True, gridColor="rgba(255,255,255,0.05)", title="Word Count"
+                )),
+                color=alt.Color("Type:N", scale=alt.Scale(
+                    domain=["Masculine", "Feminine"],
+                    range=["#60a5fa", "#f87171"]
+                ), legend=alt.Legend(
+                    orient="top-right", labelColor="#9aa4af",
+                    titleColor="#64748b", labelFontSize=11
+                )),
+                xOffset="Type:N",
+                tooltip=[
+                    alt.Tooltip("Resume Name:N", title="Resume"),
+                    alt.Tooltip("Type:N", title="Type"),
+                    alt.Tooltip("Count:Q", title="Count")
+                ]
+            ).properties(height=220).configure_view(
+                strokeWidth=0, fill="transparent"
+            ).configure(background="transparent")
+            st.altair_chart(gender_chart, use_container_width=True)
 
         st.markdown("<p class='section-label'>📝 Detailed Resume Reports</p>", unsafe_allow_html=True)
         for resume in resume_data:
@@ -4104,11 +4191,25 @@ with tab1:
                 """, unsafe_allow_html=True)
                 score_col1, score_col2, score_col3 = st.columns(3)
                 with score_col1:
-                    st.metric("📈 Overall Match", f"{resume.get('ATS Match %', 'N/A')}%")
+                    st.metric("Overall Match", f"{resume.get('ATS Match %', 'N/A')}%")
                 with score_col2:
-                    st.metric("🏆 Formatted Score", resume.get("Formatted Score", "N/A"))
+                    fmt_score = str(resume.get("Formatted Score", "N/A"))
+                    st.markdown(f"""
+                    <div style="
+                        background: rgba(255,255,255,0.04);
+                        border: 1px solid rgba(255,255,255,0.08);
+                        border-radius: 12px;
+                        padding: 14px 16px 10px;
+                        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+                    ">
+                        <div style="font-size:0.72rem; font-weight:600; text-transform:uppercase;
+                            letter-spacing:0.07em; color:#64748b; margin-bottom:6px;">Formatted Score</div>
+                        <div style="font-size:1.25rem; font-weight:700; color:#e6edf3;
+                            letter-spacing:-0.02em; word-break:break-word; line-height:1.3;">{fmt_score}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 with score_col3:
-                    st.metric("🧠 Language Quality", f"{resume.get('Language Score', 'N/A')} / {lang_weight}")
+                    st.metric("Language Quality", f"{resume.get('Language Score', 'N/A')} / {lang_weight}")
 
                 col_a, col_b, col_c, col_d = st.columns(4)
                 with col_a:
@@ -4237,18 +4338,6 @@ with tab1:
 
     else:           
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
-from xhtml2pdf import pisa
-from io import BytesIO
-
-def html_to_pdf_bytes(html_string):
-    styled_html = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{
-                size: 400mm 297mm;  /* Original custom large page size */
-                margin-top: 10mm;
                 margin-bottom: 10mm;
                 margin-left: 10mm;
                 margin-right: 10mm;
