@@ -1354,26 +1354,24 @@ if not st.session_state.authenticated:
         """, unsafe_allow_html=True)
 
         features = [
-            ("https://img.icons8.com/fluency/48/resume.png", "Resume Analyzer", "Get feedback, scores, and tips powered by AI along with the biased words detection and rewriting the resume in an inclusive way."),
-            ("https://img.icons8.com/fluency/48/resume-website.png", "Resume Builder", "Build modern, eye-catching resumes easily."),
-            ("https://img.icons8.com/fluency/48/job.png", "Job Search", "Find tailored job matches."),
-            ("https://img.icons8.com/fluency/48/classroom.png", "Course Suggestions", "Get upskilling recommendations based on your goals."),
-            ("https://img.icons8.com/fluency/48/combo-chart.png", "Interactive Dashboard", "Visualize trends, scores, and analytics."),
+            ("""<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="3" fill="rgba(79,163,227,0.15)" stroke="rgba(79,163,227,0.4)" stroke-width="1.2"/><path d="M7 8h10M7 12h10M7 16h6" stroke="#4fa3e3" stroke-width="1.5" stroke-linecap="round"/></svg>""", "Resume Analyzer", "Get feedback, scores, and tips powered by AI along with the biased words detection and rewriting the resume in an inclusive way."),
+            ("""<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="3" fill="rgba(52,211,153,0.12)" stroke="rgba(52,211,153,0.35)" stroke-width="1.2"/><path d="M8 6v12M12 10v8M16 8v10" stroke="#34d399" stroke-width="1.5" stroke-linecap="round"/></svg>""", "Resume Builder", "Build modern, eye-catching resumes easily."),
+            ("""<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="3" fill="rgba(129,140,248,0.12)" stroke="rgba(129,140,248,0.35)" stroke-width="1.2"/><circle cx="12" cy="10" r="3" stroke="#818cf8" stroke-width="1.5"/><path d="M6 19c0-3.314 2.686-5 6-5s6 1.686 6 5" stroke="#818cf8" stroke-width="1.5" stroke-linecap="round"/></svg>""", "Job Search", "Find tailored job matches."),
+            ("""<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="3" fill="rgba(251,191,36,0.10)" stroke="rgba(251,191,36,0.32)" stroke-width="1.2"/><path d="M12 7v5l3 3" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="7" stroke="#fbbf24" stroke-width="1.2" stroke-dasharray="2 2"/></svg>""", "Course Suggestions", "Get upskilling recommendations based on your goals."),
+            ("""<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="3" fill="rgba(56,189,248,0.10)" stroke="rgba(56,189,248,0.32)" stroke-width="1.2"/><path d="M6 16l4-4 3 3 5-6" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>""", "Interactive Dashboard", "Visualize trends, scores, and analytics."),
         ]
 
         for icon, title, desc in features:
             st.markdown(f"""
             <div class="feature-card">
-                <img src="{icon}" width="40"/>
+                {icon}
                 <h3>{title}</h3>
                 <p>{desc}</p>
             </div>
             """, unsafe_allow_html=True)
 
     # -------- Animated Cards --------
-    image_url = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
+    inline_svg_b64 = "PHN2ZyB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI0MCIgdmlld0JveD0iMCAwIDI0MCAyNDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjI0MCIgaGVpZ2h0PSIyNDAiIHJ4PSIzMiIgZmlsbD0icmdiYSgxNCwyMCwzMiwwLjkpIiBzdHJva2U9InJnYmEoNTYsMTg5LDI0OCwwLjIpIiBzdHJva2Utd2lkdGg9IjEuNSIvPjxjaXJjbGUgY3g9IjEyMCIgY3k9Ijg4IiByPSI0MCIgZmlsbD0icmdiYSg3OSwxNjMsMjI3LDAuMTUpIiBzdHJva2U9InJnYmEoNTYsMTg5LDI0OCwwLjQpIiBzdHJva2Utd2lkdGg9IjIiLz48cGF0aCBkPSJNNTAgMjAwYzAtMzguNjYgMzEuMzQtNzAgNzAtNzBzNzAgMzEuMzQgNzAgNzAiIGZpbGw9InJnYmEoNzksMTYzLDIyNywwLjEyKSIgc3Ryb2tlPSJyZ2JhKDU2LDE4OSwyNDgsMC4zNSkiIHN0cm9rZS13aWR0aD0iMiIvPjwvc3ZnPg=="
 
     st.markdown(f"""
     <style>
@@ -1402,9 +1400,9 @@ if not st.session_state.authenticated:
     .card-right {{ --x-offset: 80px; --rot: 5deg; }}
     </style>
     <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
+        <img class="card-left" src="data:image/svg+xml;base64,{inline_svg_b64}" />
+        <img class="card-center" src="data:image/svg+xml;base64,{inline_svg_b64}" />
+        <img class="card-right" src="data:image/svg+xml;base64,{inline_svg_b64}" />
     </div>
     """, unsafe_allow_html=True)
 
@@ -1448,10 +1446,8 @@ if not st.session_state.authenticated:
 
 if not st.session_state.get("authenticated", False):
 
-    # ✅ Futuristic silhouette
-    image_url = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
+    # ✅ Futuristic silhouette - inline SVG (no external requests)
+    img_base64 = "PHN2ZyB3aWR0aD0iMjIwIiBoZWlnaHQ9IjIyMCIgdmlld0JveD0iMCAwIDIyMCAyMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMTEwIiBjeT0iMTEwIiByPSIxMDgiIGZpbGw9InJnYmEoMTQsMjAsMzIsMC45NSkiIHN0cm9rZT0icmdiYSg1NiwxODksMjQ4LDAuMjUpIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxMTAiIGN5PSI4NSIgcj0iMzgiIGZpbGw9InJnYmEoNzksMTYzLDIyNywwLjE1KSIgc3Ryb2tlPSJyZ2JhKDU2LDE4OSwyNDgsMC40KSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHBhdGggZD0iTTMwIDE5MGMwLTQ0LjE4IDM1LjgyLTgwIDgwLTgwczgwIDM1LjgyIDgwIDgwIiBmaWxsPSJyZ2JhKDc5LDE2MywyMjcsMC4xMikiIHN0cm9rZT0icmdiYSg1NiwxODksMjQ4LDAuMzUpIiBzdHJva2Utd2lkdGg9IjIiLz48L3N2Zz4="
 
     # ✅ Inject glassmorphism CSS with shimmer effects
     st.markdown(f"""
@@ -1823,9 +1819,9 @@ if not st.session_state.get("authenticated", False):
 
     <!-- Animated Cards -->
     <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
+        <img class="card-left" src="data:image/svg+xml;base64,{img_base64}" />
+        <img class="card-center" src="data:image/svg+xml;base64,{img_base64}" />
+        <img class="card-right" src="data:image/svg+xml;base64,{img_base64}" />
     </div>
     """, unsafe_allow_html=True)
 
@@ -1833,8 +1829,32 @@ if not st.session_state.get("authenticated", False):
     left, center, right = st.columns([1, 2, 1])
 
     with center:
-        st.markdown(
-            "<div class='login-card'><h2 style='text-align:center;'>🔐 Login to <span style='color:#00BFFF;'>HIRELYZER</span></h2>",
+        st.markdown("""
+            <div class='login-card'>
+            <h2 id="auth-heading" style='text-align:center; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; font-size:1.45rem; font-weight:700; letter-spacing:-0.02em; color:#e6edf3;'>
+                Login to <span style='color:#38bdf8;'>HIRELYZER</span>
+            </h2>
+            <script>
+            (function() {
+                function updateHeading() {
+                    var tabs = document.querySelectorAll('[data-baseweb="tab"]');
+                    var heading = document.getElementById('auth-heading');
+                    if (!heading || tabs.length < 2) return;
+                    var selected = document.querySelector('[data-baseweb="tab"][aria-selected="true"]');
+                    if (!selected) return;
+                    var label = selected.textContent.trim().toLowerCase();
+                    if (label === 'register') {
+                        heading.innerHTML = 'Register to <span style="color:#38bdf8;">HIRELYZER</span>';
+                    } else {
+                        heading.innerHTML = 'Login to <span style="color:#38bdf8;">HIRELYZER</span>';
+                    }
+                }
+                var observer = new MutationObserver(updateHeading);
+                observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['aria-selected'] });
+                setTimeout(updateHeading, 500);
+            })();
+            </script>
+            """,
             unsafe_allow_html=True,
         )
 
@@ -1845,15 +1865,15 @@ if not st.session_state.get("authenticated", False):
             # Show login or forgot password flow based on reset_stage
             if st.session_state.reset_stage == "none":
                 # Normal Login UI
-                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Login to Your Account</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#38bdf8; text-align:center; font-family:-apple-system,sans-serif; font-weight:600; letter-spacing:-0.01em;'>Login to Your Account</h3>", unsafe_allow_html=True)
 
-                user = st.text_input("👤 Username or Email", key="login_user")
-                pwd = st.text_input("🔑 Password", type="password", key="login_pass")
+                user = st.text_input("USERNAME OR EMAIL", key="login_user")
+                pwd = st.text_input("PASSWORD", type="password", key="login_pass")
 
                 # Render notification area (reserves space)
                 render_notification("login")
 
-                if st.button("🚀 Login", key="login_btn", use_container_width=True):
+                if st.button("Login", key="login_btn", use_container_width=True):
                     success, saved_key = verify_user(user.strip(), pwd.strip())
                     if success:
                         st.session_state.authenticated = True
@@ -1872,7 +1892,7 @@ if not st.session_state.get("authenticated", False):
                 st.markdown("<br>", unsafe_allow_html=True)
 
                 # Forgot Password Link
-                if st.button("🔑 Forgot Password?", key="forgot_pw_link"):
+                if st.button("Forgot Password?", key="forgot_pw_link"):
                     st.session_state.reset_stage = "request_email"
                     st.rerun()
 
@@ -2123,10 +2143,10 @@ if not st.session_state.get("authenticated", False):
 
             else:
                 # Normal registration form
-                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#38bdf8; text-align:center; font-family:-apple-system,sans-serif; font-weight:600; letter-spacing:-0.01em;'>Create New Account</h3>", unsafe_allow_html=True)
 
                 # Email input with live validation
-                new_email = st.text_input("📧 Email", key="reg_email", placeholder="your@email.com")
+                new_email = st.text_input("EMAIL", key="reg_email", placeholder="your@email.com")
 
                 # Email validation placeholder (using st.empty for dynamic updates)
                 email_validation_placeholder = st.empty()
@@ -2162,7 +2182,7 @@ if not st.session_state.get("authenticated", False):
                     st.session_state.last_validated_email = ""
 
                 # Username input with live validation
-                new_user = st.text_input("👤 Username", key="reg_user")
+                new_user = st.text_input("USERNAME", key="reg_user")
 
                 # Username validation placeholder
                 username_validation_placeholder = st.empty()
@@ -2190,7 +2210,7 @@ if not st.session_state.get("authenticated", False):
                     st.session_state.last_validated_username = ""
 
                 # Password input with live validation
-                new_pass = st.text_input("🔑 Password", type="password", key="reg_pass")
+                new_pass = st.text_input("PASSWORD", type="password", key="reg_pass")
                 st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
 
                 # Password validation placeholder
@@ -4549,21 +4569,31 @@ with tab1:
         chart_tab1, chart_tab2 = st.tabs(["📉 Bias Score Chart", "⚖ Gender-Coded Words"])
         with chart_tab1:
             st.subheader("Bias Score Comparison Across Resumes")
-            st.bar_chart(df.set_index("Resume Name")[["Bias Score (0 = Fair, 1 = Biased)"]])
+            chart_df = df.set_index("Resume Name")[["Bias Score (0 = Fair, 1 = Biased)"]]
+            st.bar_chart(chart_df, height=260)
         with chart_tab2:
             st.subheader("Masculine vs Feminine Word Usage")
-            fig, ax = plt.subplots(figsize=(10, 5))
+            fig, ax = plt.subplots(figsize=(7, 3.5))
+            fig.patch.set_facecolor('#0e1420')
+            ax.set_facecolor('#0e1420')
             index = np.arange(len(df))
             bar_width = 0.35
-            ax.bar(index, df["Masculine Words Count"], bar_width, label="Masculine", color="#3498db")
-            ax.bar(index + bar_width, df["Feminine Words Count"], bar_width, label="Feminine", color="#e74c3c")
-            ax.set_xlabel("Resumes", fontsize=12)
-            ax.set_ylabel("Word Count", fontsize=12)
-            ax.set_title("Gender-Coded Word Usage per Resume", fontsize=14)
+            bars1 = ax.bar(index, df["Masculine Words Count"], bar_width, label="Masculine", color="#4fa3e3", alpha=0.85, linewidth=0)
+            bars2 = ax.bar(index + bar_width, df["Feminine Words Count"], bar_width, label="Feminine", color="#fb7185", alpha=0.85, linewidth=0)
+            ax.set_xlabel("Resumes", fontsize=9, color="#9aa4af")
+            ax.set_ylabel("Word Count", fontsize=9, color="#9aa4af")
+            ax.set_title("Gender-Coded Word Usage per Resume", fontsize=11, color="#e6edf3", pad=10)
             ax.set_xticks(index + bar_width / 2)
-            ax.set_xticklabels(df["Resume Name"], rotation=45, ha='right')
-            ax.legend()
-            st.pyplot(fig)
+            ax.set_xticklabels(df["Resume Name"], rotation=30, ha='right', fontsize=8, color="#9aa4af")
+            ax.tick_params(axis='y', colors='#9aa4af', labelsize=8)
+            ax.spines['bottom'].set_color('rgba(255,255,255,0.08)')
+            ax.spines['left'].set_color('rgba(255,255,255,0.08)')
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.grid(axis='y', color='rgba(255,255,255,0.05)', linewidth=0.5)
+            legend = ax.legend(fontsize=8, framealpha=0, labelcolor="#9aa4af")
+            fig.tight_layout(pad=1.5)
+            st.pyplot(fig, use_container_width=False)
 
         st.markdown("<p class='section-label'>📝 Detailed Resume Reports</p>", unsafe_allow_html=True)
         for resume in resume_data:
