@@ -7880,237 +7880,45 @@ FEATURED_COMPANIES = {
 }
 
 
-# ── Fallback data (used if API is unavailable) ─────────────────────────────
-_FALLBACK_SKILLS = [
-    {"name": "Artificial Intelligence", "count": 900},
-    {"name": "Cloud Computing",         "count": 760},
-    {"name": "Data Science",            "count": 700},
-    {"name": "Cybersecurity",           "count": 640},
-    {"name": "DevOps",                  "count": 600},
-    {"name": "Machine Learning",        "count": 560},
-    {"name": "Blockchain",              "count": 500},
-    {"name": "Big Data",                "count": 460},
-    {"name": "Internet of Things",      "count": 420},
-]
-_FALLBACK_LOCATIONS = [
-    {"name": "Bangalore", "count": 1000},
-    {"name": "Mumbai",    "count": 700},
-    {"name": "Delhi NCR", "count": 600},
-    {"name": "Hyderabad", "count": 500},
-    {"name": "Pune",      "count": 400},
-    {"name": "Chennai",   "count": 300},
-    {"name": "Noida",     "count": 200},
-    {"name": "Ahmedabad", "count": 140},
-    {"name": "Remote",    "count": 80},
-]
-_FALLBACK_SALARY_ROLES = [
-    "Machine Learning Engineer",
-    "Big Data Engineer",
-    "Software Engineer",
-    "Data Scientist",
-    "DevOps Engineer",
-    "UI/UX Designer",
-    "Full Stack Developer",
-    "Cloud Engineer",
-    "Salesforce Engineer",
-]
-
-# ── Skill queries → JSearch "query" strings ────────────────────────────────
-_SKILL_QUERIES = [
-    "Artificial Intelligence",
-    "Cloud Computing",
-    "Data Science",
-    "Cybersecurity",
-    "DevOps",
-    "Machine Learning",
-    "Blockchain",
-    "Big Data",
-    "Internet of Things",
-]
-
-_LOCATION_LIST = [
-    "Bangalore", "Mumbai", "Delhi NCR", "Hyderabad",
-    "Pune", "Chennai", "Noida", "Ahmedabad", "Remote India",
-]
-
-_SALARY_ROLES = [
-    "Machine Learning Engineer",
-    "Big Data Engineer",
-    "Software Engineer",
-    "Data Scientist",
-    "DevOps Engineer",
-    "UI/UX Designer",
-    "Full Stack Developer",
-    "Cloud Engineer",
-    "Salesforce Engineer",
-]
-
-
-def _inr_per_year(job: dict):
-    """Convert any salary field to approximate annual INR LPA. Returns None if not available."""
-    min_s = job.get("job_min_salary")
-    max_s = job.get("job_max_salary")
-    if min_s is None and max_s is None:
-        return None
-    try:
-        val = (float(min_s or 0) + float(max_s or 0)) / 2
-        if val <= 0:
-            return None
-        currency = (job.get("job_salary_currency") or "INR").upper()
-        period   = (job.get("job_salary_period")   or "YEAR").upper()
-        if "HOUR" in period:
-            val *= 2080
-        elif "MONTH" in period:
-            val *= 12
-        elif "WEEK" in period:
-            val *= 52
-        fx = {"USD": 83.5, "EUR": 90.0, "GBP": 106.0, "AUD": 55.0, "CAD": 62.0, "INR": 1.0}
-        val *= fx.get(currency, 1.0)
-        lpa = round(val / 100_000, 1)
-        return lpa if 1 < lpa < 300 else None
-    except Exception:
-        return None
-
-
-def _fetch_one(query: str, location: str, pages: int = 1, timeout: int = 6):
-    """Single JSearch call — returns list of job dicts, empty list on any error."""
-    try:
-        url     = f"https://{RAPID_API_HOST}/search"
-        headers = {"X-RapidAPI-Key": RAPID_API_KEY, "X-RapidAPI-Host": RAPID_API_HOST}
-        params  = {
-            "query":     f"{query} in {location}",
-            "page":      "1",
-            "num_pages": str(pages),
-        }
-        r = requests.get(url, headers=headers, params=params, timeout=timeout)
-        if r.status_code == 200:
-            return r.json().get("data", [])
-        return []
-    except Exception:
-        return []
-
-
-@st.cache_data(ttl=21600, show_spinner=False)   # 6-hour cache
-def fetch_live_market_insights():
-    """
-    Pull live data from JSearch in parallel (ThreadPoolExecutor) for:
-      • Trending Skills  — job count per skill
-      • Top Locations    — job count per city
-      • Salary Insights  — LPA range from real listings
-    Hard timeout per call = 6 s. Falls back silently if API is down.
-    """
-    from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
-
-    # ── Build all tasks up-front ──────────────────────────────────
-    # tag → (query, location, pages)
-    tasks = {}
-    for skill in _SKILL_QUERIES:
-        tasks[f"skill::{skill}"] = (skill, "India", 1)
-    for loc in _LOCATION_LIST:
-        query_loc = "Remote" if loc == "Remote India" else loc
-        tasks[f"loc::{loc}"] = ("software developer", query_loc, 1)
-    for role in _SALARY_ROLES:
-        tasks[f"sal::{role}"] = (role, "India", 1)
-
-    results = {}   # tag → list[job]
-
-    # ── Fire all tasks concurrently (max 10 workers) ───────────────
-    try:
-        with ThreadPoolExecutor(max_workers=10) as pool:
-            future_map = {
-                pool.submit(_fetch_one, q, loc, pg, 6): tag
-                for tag, (q, loc, pg) in tasks.items()
-            }
-            for future in as_completed(future_map, timeout=20):
-                tag = future_map[future]
-                try:
-                    results[tag] = future.result()
-                except Exception:
-                    results[tag] = []
-    except FuturesTimeout:
-        pass   # whatever finished is in results; rest will fallback
-
-    # ── 1. Trending Skills ────────────────────────────────────────
-    skill_counts = []
-    for skill in _SKILL_QUERIES:
-        jobs = results.get(f"skill::{skill}", [])
-        skill_counts.append({"name": skill, "count": len(jobs)})
-
-    if all(s["count"] == 0 for s in skill_counts):
-        skill_counts = list(_FALLBACK_SKILLS)
-
-    skill_counts.sort(key=lambda x: x["count"], reverse=True)
-    top_cnt = max(skill_counts[0]["count"], 1)
-    trending_skills = [
-        {
-            "name":   s["name"],
-            "count":  s["count"],
-            "growth": f"+{max(round((s['count'] / top_cnt) * 45), 5)}%",
-        }
-        for s in skill_counts
+JOB_MARKET_INSIGHTS = {
+    "trending_skills": [
+        {"name": "Artificial Intelligence", "growth": "+45%", "icon": "fas fa-brain"},
+        {"name": "Cloud Computing", "growth": "+38%", "icon": "fas fa-cloud"},
+        {"name": "Data Science", "growth": "+35%", "icon": "fas fa-chart-line"},
+        {"name": "Cybersecurity", "growth": "+32%", "icon": "fas fa-shield-alt"},
+        {"name": "DevOps", "growth": "+30%", "icon": "fas fa-code-branch"},
+        {"name": "Machine Learning", "growth": "+28%", "icon": "fas fa-robot"},
+        {"name": "Blockchain", "growth": "+25%", "icon": "fas fa-lock"},
+        {"name": "Big Data", "growth": "+23%", "icon": "fas fa-database"},
+        {"name": "Internet of Things", "growth": "+21%", "icon": "fas fa-wifi"}
+    ],
+    "top_locations": [
+        {"name": "Bangalore", "jobs": "50,000+", "icon": "fas fa-city"},
+        {"name": "Mumbai", "jobs": "35,000+", "icon": "fas fa-city"},
+        {"name": "Delhi NCR", "jobs": "30,000+", "icon": "fas fa-city"},
+        {"name": "Hyderabad", "jobs": "25,000+", "icon": "fas fa-city"},
+        {"name": "Pune", "jobs": "20,000+", "icon": "fas fa-city"},
+        {"name": "Chennai", "jobs": "15,000+", "icon": "fas fa-city"},
+        {"name": "Noida", "jobs": "10,000+", "icon": "fas fa-city"},
+        {"name": "Vadodara", "jobs": "7,000+", "icon": "fas fa-city"},
+        {"name": "Ahmedabad", "jobs": "6,000+", "icon": "fas fa-city"},
+        {"name": "Remote", "jobs": "3,000+", "icon": "fas fa-globe-americas"},
+    ],
+    "salary_insights": [
+        {"role": "Machine Learning Engineer", "range": "10-35 LPA", "experience": "0-5 years"},
+        {"role": "Big Data Engineer", "range": "8-30 LPA", "experience": "0-5 years"},
+        {"role": "Software Engineer", "range": "5-25 LPA", "experience": "0-5 years"},
+        {"role": "Data Scientist", "range": "8-30 LPA", "experience": "0-5 years"},
+        {"role": "DevOps Engineer", "range": "6-28 LPA", "experience": "0-5 years"},
+        {"role": "UI/UX Designer", "range": "5-25 LPA", "experience": "0-5 years"},
+        {"role": "Full Stack Developer", "range": "8-30 LPA", "experience": "0-5 years"},
+        {"role": "C++/C#/Python/Java Developer", "range": "6-26 LPA", "experience": "0-5 years"},
+        {"role": "Django Developer", "range": "7-27 LPA", "experience": "0-5 years"},
+        {"role": "Cloud Engineer", "range": "6-26 LPA", "experience": "0-5 years"},
+        {"role": "Google Cloud/AWS/Azure Engineer", "range": "6-26 LPA", "experience": "0-5 years"},
+        {"role": "Salesforce Engineer", "range": "6-26 LPA", "experience": "0-5 years"},
     ]
-
-    # ── 2. Top Locations ─────────────────────────────────────────
-    loc_counts = []
-    for loc in _LOCATION_LIST:
-        jobs    = results.get(f"loc::{loc}", [])
-        display = "Remote" if loc == "Remote India" else loc
-        loc_counts.append({"name": display, "count": len(jobs)})
-
-    if all(l["count"] == 0 for l in loc_counts):
-        loc_counts = list(_FALLBACK_LOCATIONS)
-
-    loc_counts.sort(key=lambda x: x["count"], reverse=True)
-    top_locations = []
-    for l in loc_counts:
-        cnt = l["count"]
-        jobs_str = f"{cnt:,}+" if cnt else "N/A"
-        top_locations.append({"name": l["name"], "jobs": jobs_str, "raw": cnt})
-
-    # ── 3. Salary Insights ────────────────────────────────────────
-    _fb = {
-        "Machine Learning Engineer": ("10", "35"),
-        "Big Data Engineer":         ("8",  "30"),
-        "Software Engineer":         ("5",  "25"),
-        "Data Scientist":            ("8",  "30"),
-        "DevOps Engineer":           ("6",  "28"),
-        "UI/UX Designer":            ("5",  "25"),
-        "Full Stack Developer":      ("8",  "30"),
-        "Cloud Engineer":            ("6",  "26"),
-        "Salesforce Engineer":       ("6",  "26"),
-    }
-    salary_insights = []
-    for role in _SALARY_ROLES:
-        jobs = results.get(f"sal::{role}", [])
-        lpas = [lpa for j in jobs if (lpa := _inr_per_year(j)) is not None]
-
-        if lpas:
-            lo, hi  = round(min(lpas), 1), round(max(lpas), 1)
-            avg     = round(sum(lpas) / len(lpas), 1)
-            salary_insights.append({
-                "role": role, "range": f"{lo}–{hi} LPA",
-                "avg": f"{avg} LPA", "experience": "0–5 years",
-                "source": "live", "sample": len(lpas),
-            })
-        else:
-            lo_s, hi_s = _fb.get(role, ("5", "20"))
-            salary_insights.append({
-                "role": role, "range": f"{lo_s}–{hi_s} LPA",
-                "avg": f"{round((int(lo_s)+int(hi_s))/2, 1)} LPA",
-                "experience": "0–5 years", "source": "est", "sample": 0,
-            })
-
-    return {
-        "trending_skills": trending_skills,
-        "top_locations":   top_locations,
-        "salary_insights": salary_insights,
-        "fetched_at":      datetime.datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%b %d, %Y %I:%M %p IST"),
-    }
-
-
-def get_market_insights():
-    """Public accessor — returns live data with 6h cache."""
-    return fetch_live_market_insights()
+}
 
 def get_featured_companies(category=None):
     """Get featured companies with original logos, optionally filtered by category"""
@@ -8126,6 +7934,10 @@ def get_featured_companies(category=None):
         for company in companies if has_valid_logo(company)
     ]
 
+
+def get_market_insights():
+    """Get job market insights"""
+    return JOB_MARKET_INSIGHTS
 
 def get_company_info(company_name):
     """Get company information by name"""
@@ -10383,58 +10195,8 @@ with tab3:
         </a>
         """, unsafe_allow_html=True)
 
-    # ---------- Market Insights (Live) ----------
+    # ---------- Market Insights ----------
     st.markdown("""### <div class='title-header'><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#g2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:8px;"><defs><linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#818cf8"/></linearGradient></defs><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg> Job Market Trends</div>""", unsafe_allow_html=True)
-
-    # Refresh control row
-    ctrl_col, badge_col = st.columns([1, 3])
-    with ctrl_col:
-        if st.button("↻  Refresh Live Data", key="refresh_market", use_container_width=True):
-            fetch_live_market_insights.clear()
-            st.rerun()
-
-    try:
-        with st.spinner("Fetching live job market data…"):
-            live_insights = fetch_live_market_insights()
-        fetch_ok = True
-    except Exception as _e:
-        fetch_ok     = False
-        live_insights = {
-            "trending_skills": [{"name": s["name"], "count": s["count"], "growth": "+–%"} for s in _FALLBACK_SKILLS],
-            "top_locations":   [{"name": l["name"], "jobs": f"{l['count']}+", "raw": l["count"]} for l in _FALLBACK_LOCATIONS],
-            "salary_insights": [],
-            "fetched_at":      "unavailable",
-        }
-        st.warning(f"Live data unavailable — showing estimates. ({type(_e).__name__})")
-
-    with badge_col:
-        if fetch_ok:
-            badge_html = f"""
-            <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-                <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(52,211,153,0.12);
-                    border:1px solid rgba(52,211,153,0.28);border-radius:99px;
-                    padding:4px 12px;font-size:0.72rem;font-weight:700;color:#34d399;
-                    font-family:-apple-system,sans-serif;letter-spacing:0.04em;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="#34d399"><circle cx="12" cy="12" r="10"/></svg>
-                    LIVE · JSearch API
-                </span>
-                <span style="font-size:0.7rem;color:#475569;font-family:-apple-system,sans-serif;">
-                    Updated {live_insights.get('fetched_at','—')} · refreshes every 6 h
-                </span>
-            </div>"""
-        else:
-            badge_html = """
-            <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
-                <span style="display:inline-flex;align-items:center;gap:5px;background:rgba(251,191,36,0.10);
-                    border:1px solid rgba(251,191,36,0.28);border-radius:99px;
-                    padding:4px 12px;font-size:0.72rem;font-weight:700;color:#fbbf24;
-                    font-family:-apple-system,sans-serif;letter-spacing:0.04em;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="#fbbf24"><circle cx="12" cy="12" r="10"/></svg>
-                    ESTIMATES · API unavailable
-                </span>
-            </div>"""
-        st.markdown(badge_html, unsafe_allow_html=True)
-
     col1, col2 = st.columns(2)
 
     with col1:
@@ -10448,18 +10210,14 @@ with tab3:
             display:flex; align-items:center; gap:6px;
         '><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="#38bdf8"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Trending Skills</p>
         """, unsafe_allow_html=True)
-        for skill in live_insights["trending_skills"]:
-            count_str = f"{skill['count']:,} listings" if skill.get("count", 0) > 0 else "live count"
+        for skill in JOB_MARKET_INSIGHTS["trending_skills"]:
             st.markdown(f"""
             <div class="insight-card">
                 <h4 style="color:#38bdf8; display:flex; align-items:center; gap:7px;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>
                     {skill['name']}
                 </h4>
-                <p style="display:flex;justify-content:space-between;align-items:center;">
-                    <span>Demand: <span style="color:#34d399; font-weight:700;">{skill['growth']}</span> relative growth</span>
-                    <span style="font-size:0.7rem;color:#475569;">{count_str}</span>
-                </p>
+                <p>Growth Rate: <span style="color:#34d399; font-weight:700;">{skill['growth']}</span></p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -10474,47 +10232,30 @@ with tab3:
             display:flex; align-items:center; gap:6px;
         '><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 018 8c0 5.25-8 14-8 14S4 15.25 4 10a8 8 0 018-8z"/></svg> Top Job Locations</p>
         """, unsafe_allow_html=True)
-        for loc in live_insights["top_locations"]:
+        for loc in JOB_MARKET_INSIGHTS["top_locations"]:
             st.markdown(f"""
             <div class="insight-card" style="--left-bar: var(--t3-violet);">
                 <h4 style="color:#818cf8; display:flex; align-items:center; gap:7px;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="#818cf8"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 018 8c0 5.25-8 14-8 14S4 15.25 4 10a8 8 0 018-8z"/></svg>
                     {loc['name']}
                 </h4>
-                <p>Live Openings: <span style="color:#fbbf24; font-weight:700;">{loc['jobs']}</span></p>
+                <p>Openings: <span style="color:#fbbf24; font-weight:700;">{loc['jobs']}</span></p>
             </div>
             """, unsafe_allow_html=True)
 
-    # ---------- Salary Insights (Live) ----------
+    # ---------- Salary Insights ----------
     st.markdown("""### <div class='title-header'><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="url(#g3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:8px;"><defs><linearGradient id="g3" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#34d399"/></linearGradient></defs><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg> Salary Insights</div>""", unsafe_allow_html=True)
-
-    for role in live_insights["salary_insights"]:
-        is_live   = role.get("source") == "live"
-        src_badge = (
-            f'<span style="font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:99px;'
-            f'background:{"rgba(52,211,153,0.12)" if is_live else "rgba(251,191,36,0.10)"};'
-            f'border:1px solid {"rgba(52,211,153,0.30)" if is_live else "rgba(251,191,36,0.25)"};'
-            f'color:{"#34d399" if is_live else "#fbbf24"};letter-spacing:0.04em;">'
-            f'{"● LIVE" if is_live else "◎ EST"}</span>'
-        )
-        sample_txt = f"from {role['sample']} listings" if is_live and role.get("sample") else "market estimate"
+    for role in JOB_MARKET_INSIGHTS["salary_insights"]:
         st.markdown(f"""
         <div class="insight-card">
-            <h4 style="color:#34d399; display:flex; align-items:center; justify-content:space-between;">
-                <span style="display:flex;align-items:center;gap:7px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
-                    {role['role']}
-                </span>
-                {src_badge}
+            <h4 style="color:#34d399; display:flex; align-items:center; gap:7px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+                {role['role']}
             </h4>
-            <p style="margin-bottom:4px !important;">
+            <p style="margin-bottom:5px !important;">
                 Experience: <span style="color:#7dd3fc; font-weight:600;">{role['experience']}</span>
-                <span style="color:#475569;font-size:0.72rem;margin-left:8px;">{sample_txt}</span>
             </p>
-            <p style="display:flex;align-items:center;gap:16px;">
-                <span>Range: <span style="color:#34d399; font-weight:700;">{role['range']}</span></span>
-                <span style="color:#64748b;font-size:0.8rem;">Avg: <span style="color:#7dd3fc;font-weight:600;">{role.get('avg','—')}</span></span>
-            </p>
+            <p>Salary Range: <span style="color:#34d399; font-weight:700;">{role['range']}</span></p>
         </div>
         """, unsafe_allow_html=True)
 def evaluate_interview_answer(answer: str, question: str = None):
