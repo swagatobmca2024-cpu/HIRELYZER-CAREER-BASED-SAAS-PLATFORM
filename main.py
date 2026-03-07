@@ -950,66 +950,59 @@ h3, .stMarkdown h3 {
 .counter-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    padding: 24px 0;
-    max-width: 520px;
+    gap: 12px;
+    padding: 20px 0 28px;
+    max-width: 500px;
     margin: 0 auto;
 }
 .counter-box {
-    background: var(--surface-01);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    padding: 22px 18px;
+    background: linear-gradient(160deg, rgba(20,28,43,0.92) 0%, rgba(13,18,30,0.96) 100%);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-top: 1px solid rgba(255,255,255,0.10);
+    border-radius: 16px;
+    padding: 24px 16px 20px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     position: relative;
     overflow: hidden;
-    transition: all var(--transition-base);
-    animation: floatUp 4s ease-in-out infinite;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.05) inset;
 }
-.counter-box::before {
+.counter-box::after {
     content: '';
     position: absolute;
-    top: 0; left: -100%;
-    width: 50%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(56,189,248,0.06), transparent);
-    animation: shimmerSlide 3s infinite;
+    bottom: 0; left: 20%; right: 20%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(56,189,248,0.25), transparent);
 }
 .counter-box:hover {
-    transform: translateY(-6px) scale(1.02);
-    border-color: var(--border-accent);
-    box-shadow: 0 12px 40px rgba(56,189,248,0.10);
+    transform: translateY(-3px);
+    border-color: rgba(56,189,248,0.22);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.45), 0 0 0 1px rgba(56,189,248,0.10) inset;
 }
-.counter-box:nth-child(1) { animation-delay: 0s; }
-.counter-box:nth-child(2) { animation-delay: 0.6s; }
-.counter-box:nth-child(3) { animation-delay: 1.2s; }
-.counter-box:nth-child(4) { animation-delay: 1.8s; }
 .counter-number {
-    font-size: 2rem;
+    font-size: 2.2rem;
     font-weight: 700;
-    color: var(--accent-cyan);
-    letter-spacing: -0.03em;
+    color: #e6edf3;
+    letter-spacing: -0.04em;
     line-height: 1;
     position: relative;
     z-index: 2;
-    font-family: var(--font-sans);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
 }
 .counter-label {
-    margin-top: 6px;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    font-weight: 500;
+    margin-top: 7px;
+    font-size: 0.70rem;
+    color: #4f8cff;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.10em;
     position: relative;
     z-index: 2;
-    font-family: var(--font-sans);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
 }
-
 /* ══════════════════════════════════════
    ATS SECTION CARDS (analysis results)
    ══════════════════════════════════════ */
@@ -1396,41 +1389,7 @@ if not st.session_state.authenticated:
     response = requests.get(image_url)
     img_base64 = b64encode(response.content).decode()
 
-    st.markdown(f"""
-    <style>
-    .animated-cards {{
-      margin-top: 30px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 300px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 240px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-    @keyframes splitCards {{
-      0% {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left {{ --x-offset: -80px; --rot: -5deg; }}
-    .card-center {{ --x-offset: 0px; --rot: 0deg; }}
-    .card-right {{ --x-offset: 80px; --rot: 5deg; }}
-    </style>
-    <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
-    </div>
-    """, unsafe_allow_html=True)
-
-    # -------- Counter Section (Updated Layout & Style with glassmorphism and shimmer) --------
-
+    # -------- Counter Section --------
     # Fetch counters
     total_users = get_total_registered_users()
     active_logins = get_logins_today()
@@ -1517,45 +1476,35 @@ if not st.session_state.get("authenticated", False):
     left, center, right = st.columns([1, 2, 1])
 
     with center:
+        # Determine active tab via session state
+        if "auth_tab_active" not in st.session_state:
+            st.session_state.auth_tab_active = "login"
+
+        # Render card header based on current tab state
+        _is_register = st.session_state.get("auth_tab_active") == "register"
+        _auth_title = "Create your" if _is_register else "Sign in to"
+        _auth_sub = "Join HIRELYZER — start your AI career journey" if _is_register else "AI-Powered Resume Intelligence Platform"
+        _icon_svg = (
+            """<svg width="38" height="38" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block; margin-bottom:8px; filter:drop-shadow(0 0 8px rgba(56,189,248,0.4));">
+                <circle cx="12" cy="8" r="4" stroke="#38bdf8" stroke-width="1.5" fill="rgba(56,189,248,0.08)"/>
+                <path d="M5 20c0-3.87 3.13-7 7-7s7 3.13 7 7" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="19" y1="8" x2="22" y2="8" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="20.5" y1="6.5" x2="20.5" y2="9.5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>"""
+            if _is_register else
+            """<svg width="38" height="38" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block; margin-bottom:8px; filter:drop-shadow(0 0 8px rgba(56,189,248,0.4));">
+                <rect x="5" y="11" width="14" height="10" rx="2" stroke="#38bdf8" stroke-width="1.5" fill="rgba(56,189,248,0.08)"/>
+                <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+                <circle cx="12" cy="16" r="1.5" fill="#38bdf8"/>
+            </svg>"""
+        )
+
         st.markdown(
-            """<div class='login-card' id='auth-card'>
-            <div style='text-align:center; margin-bottom:6px;'>
-                <svg id="auth-icon-lock" width="38" height="38" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block; margin-bottom:8px;">
-                    <rect x="5" y="11" width="14" height="10" rx="2" stroke="#38bdf8" stroke-width="1.5" fill="rgba(56,189,248,0.10)"/>
-                    <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
-                    <circle cx="12" cy="16" r="1.5" fill="#38bdf8"/>
-                </svg>
-            </div>
-            <h2 id="auth-card-title" style='text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif; font-size:1.45rem; font-weight:700; letter-spacing:-0.02em; color:#e6edf3; margin:0 0 4px 0;'>Sign in to <span style='color:#38bdf8;'>HIRELYZER</span></h2>
-            <p id="auth-card-sub" style='text-align:center; font-size:0.8rem; color:#64748b; margin:0 0 20px 0; font-family:-apple-system,sans-serif; letter-spacing:0.02em;'>AI-Powered Resume Intelligence Platform</p>
-            <script>
-            (function() {
-                function updateAuthHeader() {
-                    var tabs = parent.document.querySelectorAll('[data-baseweb="tab"]');
-                    var title = parent.document.getElementById('auth-card-title');
-                    if (!title) {
-                        title = document.getElementById('auth-card-title');
-                    }
-                    if (!title) return;
-                    var activeText = '';
-                    tabs.forEach(function(tab) {
-                        if (tab.getAttribute('aria-selected') === 'true') {
-                            activeText = tab.innerText.trim();
-                        }
-                    });
-                    if (activeText === 'Register') {
-                        title.innerHTML = 'Create your <span style="color:#38bdf8;">HIRELYZER</span> account';
-                    } else {
-                        title.innerHTML = 'Sign in to <span style="color:#38bdf8;">HIRELYZER</span>';
-                    }
-                }
-                updateAuthHeader();
-                var observer = new MutationObserver(updateAuthHeader);
-                observer.observe(parent.document.body, { subtree: true, attributes: true, attributeFilter: ['aria-selected'] });
-                setInterval(updateAuthHeader, 500);
-            })();
-            </script>
-            """,
+            f"""<div class='login-card'>
+            <div style='text-align:center; margin-bottom:6px;'>{_icon_svg}</div>
+            <h2 style='text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif; font-size:1.45rem; font-weight:700; letter-spacing:-0.02em; color:#e6edf3; margin:0 0 4px 0;'>{_auth_title} <span style='color:#38bdf8;'>HIRELYZER</span></h2>
+            <p style='text-align:center; font-size:0.8rem; color:#64748b; margin:0 0 4px 0; font-family:-apple-system,sans-serif; letter-spacing:0.02em;'>{_auth_sub}</p>
+            </div>""",
             unsafe_allow_html=True,
         )
 
@@ -1563,6 +1512,7 @@ if not st.session_state.get("authenticated", False):
 
         # ---------------- LOGIN TAB ----------------
         with login_tab:
+            st.session_state.auth_tab_active = "login"
             # Show login or forgot password flow based on reset_stage
             if st.session_state.reset_stage == "none":
                 # Normal Login UI
@@ -1770,6 +1720,7 @@ if not st.session_state.get("authenticated", False):
 
         # ---------------- REGISTER TAB ----------------
         with register_tab:
+            st.session_state.auth_tab_active = "register"
             # Check if OTP was sent and pending verification
             if 'pending_registration' in st.session_state:
                 st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
