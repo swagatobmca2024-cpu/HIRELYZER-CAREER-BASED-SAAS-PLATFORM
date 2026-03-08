@@ -1495,27 +1495,26 @@ if not st.session_state.get("authenticated", False):
     .card-center {{ --x-offset: 0px;  --rot: 0deg;  }}
     .card-right  {{ --x-offset: 80px;  --rot: 4deg;  }}
 
-    /* ===== Premium Apple-Style Login Card ===== */
-    @keyframes fadeSlideUp {{
-      0%   {{ transform: translateY(28px); opacity: 0; }}
-      100% {{ transform: translateY(0);    opacity: 1; }}
-    }}
-
+    /* ===== Glassmorphism Login Card ===== */
     .login-card {{
-      background: rgba(255, 255, 255, 0.05);
-      backdrop-filter: blur(32px) saturate(180%);
-      -webkit-backdrop-filter: blur(32px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: linear-gradient(135deg,
+        rgba(0, 191, 255, 0.1) 0%,
+        rgba(30, 144, 255, 0.05) 50%,
+        rgba(0, 191, 255, 0.1) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 191, 255, 0.2);
       border-radius: 20px;
-      padding: 28px 28px 24px;
+      padding: 25px;
       box-shadow:
-        0 2px 6px rgba(0,0,0,0.25),
-        0 16px 48px rgba(0,0,0,0.40),
-        inset 0 1px 0 rgba(255,255,255,0.07);
-      color: #e6edf3;
+        0 8px 32px rgba(0, 191, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      font-family: 'Orbitron', sans-serif;
+      color: white;
       margin-top: 20px;
       opacity: 0;
-      animation: fadeSlideUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+      transform: translateX(-120%);
+      animation: slideInLeft 1.2s ease-out forwards;
       position: relative;
       overflow: hidden;
     }}
@@ -1523,28 +1522,33 @@ if not st.session_state.get("authenticated", False):
     .login-card::before {{
       content: '';
       position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 1px;
-      background: linear-gradient(90deg,
-        transparent 0%,
-        rgba(255,255,255,0.14) 40%,
-        rgba(79,140,255,0.22) 60%,
-        transparent 100%);
-      pointer-events: none;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(0, 191, 255, 0.2),
+        transparent
+      );
+      animation: glassShimmer 3s infinite;
+    }}
+
+    @keyframes slideInLeft {{
+      0%   {{ transform: translateX(-120%); opacity: 0; }}
+      100% {{ transform: translateX(0); opacity: 1; }}
     }}
 
     .login-card h2 {{
       text-align: center;
-      font-size: 1.45rem;
-      font-weight: 700;
-      letter-spacing: -0.025em;
-      color: #e6edf3;
-      margin-bottom: 4px;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+      font-size: 1.6rem;
+      text-shadow: 0 0 15px rgba(0, 191, 255, 0.5);
+      margin-bottom: 15px;
       position: relative;
       z-index: 2;
     }}
-    .login-card h2 span {{ color: #4f8cff; }}
+    .login-card h2 span {{ color: #00BFFF; }}
 
     /* ===== Enhanced Message Cards with Consistent Layout ===== */
     .slide-message {{
@@ -1730,85 +1734,90 @@ if not st.session_state.get("authenticated", False):
       text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
     }}
 
-    /* ===== Premium Minimal Buttons ===== */
+    /* ===== Glassmorphism Buttons ===== */
     .stButton>button {{
-      background: linear-gradient(135deg,
-        #4f8cff 0%,
-        #3b6fd4 100%);
-      backdrop-filter: none;
-      color: #ffffff;
-      border: none;
-      border-radius: 10px;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      font-weight: 600;
-      font-size: 0.9rem;
-      letter-spacing: 0.01em;
-      padding: 10px 20px;
-      box-shadow:
-        0 1px 2px rgba(0,0,0,0.20),
-        0 4px 16px rgba(79,140,255,0.28);
-      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.2) 0%, 
+        rgba(30, 144, 255, 0.1) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      color: white;
+      border: 1px solid rgba(0, 191, 255, 0.3);
+      border-radius: 12px;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: bold;
+      padding: 8px 20px;
+      box-shadow: 
+        0 4px 16px rgba(0, 191, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transition: all 0.3s ease;
       position: relative;
       overflow: hidden;
     }}
     
     .stButton>button::before {{
-      display: none;
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent
+      );
+      transition: left 0.5s;
     }}
     
     .stButton>button:hover {{
-      transform: translateY(-1px);
-      background: linear-gradient(135deg,
-        #5a96ff 0%,
-        #4478e0 100%);
-      border: none;
-      box-shadow:
-        0 2px 4px rgba(0,0,0,0.22),
-        0 8px 24px rgba(79,140,255,0.40);
+      transform: translateY(-2px);
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.3) 0%, 
+        rgba(30, 144, 255, 0.15) 100%);
+      border: 1px solid rgba(0, 191, 255, 0.5);
+      box-shadow: 
+        0 8px 25px rgba(0, 191, 255, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
     }}
     
-    .stButton>button:active {{
-      transform: translateY(0px);
-      box-shadow:
-        0 1px 2px rgba(0,0,0,0.20),
-        0 2px 8px rgba(79,140,255,0.20);
-    }}
-
     .stButton>button:hover::before {{
-      display: none;
+      left: 100%;
     }}
 
-    /* ===== Premium Minimal Input Fields ===== */
+    /* ===== Glassmorphism Input Fields ===== */
     .stTextInput input {{
-      background: rgba(255, 255, 255, 0.04);
-      backdrop-filter: none;
-      border: 1px solid rgba(255, 255, 255, 0.10);
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.08) 0%, 
+        rgba(30, 144, 255, 0.04) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border: 1px solid rgba(0, 191, 255, 0.2);
       border-radius: 10px;
-      padding: 11px 14px;
-      color: #e6edf3;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      font-size: 0.9rem;
-      box-shadow: none;
-      transition: border-color 0.18s ease, box-shadow 0.18s ease;
+      padding: 10px;
+      color: #E0F7FF;
+      font-family: 'Orbitron', sans-serif;
+      box-shadow: 
+        0 4px 16px rgba(0, 191, 255, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transition: all 0.3s ease-in-out;
     }}
     .stTextInput input:focus {{
       outline: none !important;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(79, 140, 255, 0.55);
-      box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.14);
-      transform: none;
-    }}
-    .stTextInput input:hover {{
-      border: 1px solid rgba(255, 255, 255, 0.20);
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.12) 0%, 
+        rgba(30, 144, 255, 0.06) 100%);
+      border: 1px solid rgba(0, 191, 255, 0.4);
+      box-shadow: 
+        0 8px 25px rgba(0, 191, 255, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transform: translateY(-1px);
     }}
     .stTextInput label {{
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif !important;
-      color: #9aa4af !important;
-      font-size: 0.78rem !important;
-      font-weight: 500 !important;
-      letter-spacing: 0.04em !important;
-      text-transform: uppercase !important;
-      text-shadow: none !important;
+      font-family: 'Orbitron', sans-serif;
+      color: #00BFFF !important;
+      text-shadow: 0 0 10px rgba(0, 191, 255, 0.3);
     }}
     </style>
 
@@ -1825,47 +1834,7 @@ if not st.session_state.get("authenticated", False):
 
     with center:
         st.markdown(
-            """<div class='login-card'>
-            <div style='text-align:center; margin-bottom:12px;'>
-                <div style='display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:10px; background:rgba(79,140,255,0.12); border:1px solid rgba(79,140,255,0.22); margin-bottom:12px;'>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="5" y="11" width="14" height="10" rx="2" stroke="#4f8cff" stroke-width="1.5" fill="rgba(79,140,255,0.12)"/>
-                        <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#4f8cff" stroke-width="1.5" stroke-linecap="round"/>
-                        <circle cx="12" cy="16" r="1.2" fill="#4f8cff"/>
-                    </svg>
-                </div>
-            </div>
-            <h2 id='auth-heading' style='text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:1.3rem; font-weight:700; letter-spacing:-0.025em; color:#e6edf3; margin:0 0 4px 0;'>Sign in to <span style='color:#4f8cff;'>HIRELYZER</span></h2>
-            <p style='text-align:center; font-size:0.75rem; color:#9aa4af; margin:0 0 18px 0; font-family:-apple-system,"Segoe UI",Roboto,sans-serif; letter-spacing:0.01em;'>AI-Powered Resume Intelligence Platform</p>
-            <script>
-            (function() {
-                function updateHeading() {
-                    var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
-                    var heading = window.parent.document.getElementById('auth-heading');
-                    if (!heading || tabs.length < 2) return;
-                    var activeTab = window.parent.document.querySelector('[data-baseweb="tab"][aria-selected="true"]');
-                    if (activeTab) {
-                        var label = activeTab.textContent.trim().toLowerCase();
-                        if (label === 'register') {
-                            heading.innerHTML = 'Register to <span style="color:#4f8cff;">HIRELYZER</span>';
-                        } else {
-                            heading.innerHTML = 'Sign in to <span style="color:#4f8cff;">HIRELYZER</span>';
-                        }
-                    }
-                    tabs.forEach(function(tab) {
-                        tab.addEventListener('click', function() {
-                            setTimeout(updateHeading, 80);
-                        });
-                    });
-                }
-                setTimeout(updateHeading, 400);
-                var observer = new MutationObserver(function() { updateHeading(); });
-                setTimeout(function() {
-                    var tabBar = window.parent.document.querySelector('[data-baseweb="tab-list"]');
-                    if (tabBar) observer.observe(tabBar, { attributes: true, subtree: true, attributeFilter: ['aria-selected'] });
-                }, 600);
-            })();
-            </script>""",
+            "<div class='login-card'><h2 style='text-align:center;'>🔐 Login to <span style='color:#00BFFF;'>HIRELYZER</span></h2>",
             unsafe_allow_html=True,
         )
 
@@ -1876,15 +1845,15 @@ if not st.session_state.get("authenticated", False):
             # Show login or forgot password flow based on reset_stage
             if st.session_state.reset_stage == "none":
                 # Normal Login UI
-                st.markdown("""<h3 style='color:#9aa4af; text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:0.82rem; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:24px;'>Welcome Back</h3>""", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Login to Your Account</h3>", unsafe_allow_html=True)
 
-                user = st.text_input("Username or Email", key="login_user")
-                pwd = st.text_input("Password", type="password", key="login_pass")
+                user = st.text_input("👤 Username or Email", key="login_user")
+                pwd = st.text_input("🔑 Password", type="password", key="login_pass")
 
                 # Render notification area (reserves space)
                 render_notification("login")
 
-                if st.button("Sign In", key="login_btn", use_container_width=True):
+                if st.button("🚀 Login", key="login_btn", use_container_width=True):
                     success, saved_key = verify_user(user.strip(), pwd.strip())
                     if success:
                         st.session_state.authenticated = True
@@ -1903,7 +1872,7 @@ if not st.session_state.get("authenticated", False):
                 st.markdown("<br>", unsafe_allow_html=True)
 
                 # Forgot Password Link
-                if st.button("Forgot Password?", key="forgot_pw_link"):
+                if st.button("🔑 Forgot Password?", key="forgot_pw_link"):
                     st.session_state.reset_stage = "request_email"
                     st.rerun()
 
@@ -1911,10 +1880,10 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 1: Request Email
             # ============================================================
             elif st.session_state.reset_stage == "request_email":
-                st.markdown("""<h3 style='color:#9aa4af; text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:0.82rem; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:16px;'>Reset Password</h3>""", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your registered email to receive an OTP</p>", unsafe_allow_html=True)
 
-                email_input = st.text_input("Email Address", key="reset_email_input")
+                email_input = st.text_input("📧 Email Address", key="reset_email_input")
 
                 # Render notification area (reserves space)
                 render_notification("login")
@@ -1956,9 +1925,7 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 2: Verify OTP
             # ============================================================
             elif st.session_state.reset_stage == "verify_otp":
-                st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16v16H4z" rx="2" stroke="#38bdf8" stroke-width="1.5" fill="none"/><path d="M4 9h16" stroke="#38bdf8" stroke-width="1.5"/><path d="M8 4v5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/><path d="M16 4v5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/></svg>
-                    Verify OTP</h3>""", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📩 Verify OTP</h3>", unsafe_allow_html=True)
                 st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.reset_email}</strong></p>", unsafe_allow_html=True)
 
                 # Calculate elapsed and remaining time (server-side)
@@ -2028,13 +1995,11 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 3: Reset Password
             # ============================================================
             elif st.session_state.reset_stage == "reset_password":
-                st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M12 3a4 4 0 0 1 4 4v1H8V7a4 4 0 0 1 4-4z" stroke="#38bdf8" stroke-width="1.5" fill="none"/><rect x="5" y="11" width="14" height="10" rx="2" stroke="#38bdf8" stroke-width="1.5" fill="rgba(56,189,248,0.08)"/><circle cx="12" cy="16" r="1.5" fill="#38bdf8"/></svg>
-                    Set New Password</h3>""", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your new password</p>", unsafe_allow_html=True)
 
-                new_password = st.text_input("New Password", type="password", key="new_password_input")
-                confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password_input")
+                new_password = st.text_input("🔑 New Password", type="password", key="new_password_input")
+                confirm_password = st.text_input("🔑 Confirm Password", type="password", key="confirm_password_input")
 
                 st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
 
@@ -2078,9 +2043,7 @@ if not st.session_state.get("authenticated", False):
         with register_tab:
             # Check if OTP was sent and pending verification
             if 'pending_registration' in st.session_state:
-                st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#38bdf8" stroke-width="1.5" fill="none"/><path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.5"/></svg>
-                    Verify Your Email</h3>""", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📧 Verify Your Email</h3>", unsafe_allow_html=True)
                 st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.pending_registration['email']}</strong></p>", unsafe_allow_html=True)
 
                 # Calculate remaining time
@@ -4586,38 +4549,21 @@ with tab1:
         chart_tab1, chart_tab2 = st.tabs(["📉 Bias Score Chart", "⚖ Gender-Coded Words"])
         with chart_tab1:
             st.subheader("Bias Score Comparison Across Resumes")
-            bias_chart_df = df[["Resume Name", "Bias Score (0 = Fair, 1 = Biased)"]].copy()
-            bias_chart_df.columns = ["Resume", "Bias Score"]
-            bias_altair = alt.Chart(bias_chart_df).mark_bar(
-                cornerRadiusTopLeft=4,
-                cornerRadiusTopRight=4,
-                color="#4f8cff"
-            ).encode(
-                x=alt.X("Resume:N", sort=None, axis=alt.Axis(labelAngle=-35, labelFontSize=11, titleFontSize=12)),
-                y=alt.Y("Bias Score:Q", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(titleFontSize=12)),
-                tooltip=["Resume", alt.Tooltip("Bias Score:Q", format=".2f")]
-            ).properties(height=260).configure_view(strokeWidth=0).configure_axis(
-                grid=False, domainColor="#2d3748"
-            )
-            st.altair_chart(bias_altair, use_container_width=True)
+            st.bar_chart(df.set_index("Resume Name")[["Bias Score (0 = Fair, 1 = Biased)"]])
         with chart_tab2:
             st.subheader("Masculine vs Feminine Word Usage")
-            gender_df = pd.DataFrame({
-                "Resume": list(df["Resume Name"]) * 2,
-                "Type": ["Masculine"] * len(df) + ["Feminine"] * len(df),
-                "Count": list(df["Masculine Words Count"]) + list(df["Feminine Words Count"])
-            })
-            color_scale = alt.Scale(domain=["Masculine", "Feminine"], range=["#4f8cff", "#fb7185"])
-            gender_altair = alt.Chart(gender_df).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
-                x=alt.X("Resume:N", sort=None, axis=alt.Axis(labelAngle=-35, labelFontSize=11, titleFontSize=12)),
-                y=alt.Y("Count:Q", axis=alt.Axis(titleFontSize=12)),
-                color=alt.Color("Type:N", scale=color_scale, legend=alt.Legend(orient="top", titleFontSize=11)),
-                xOffset="Type:N",
-                tooltip=["Resume", "Type", "Count"]
-            ).properties(height=260).configure_view(strokeWidth=0).configure_axis(
-                grid=False, domainColor="#2d3748"
-            )
-            st.altair_chart(gender_altair, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(10, 5))
+            index = np.arange(len(df))
+            bar_width = 0.35
+            ax.bar(index, df["Masculine Words Count"], bar_width, label="Masculine", color="#3498db")
+            ax.bar(index + bar_width, df["Feminine Words Count"], bar_width, label="Feminine", color="#e74c3c")
+            ax.set_xlabel("Resumes", fontsize=12)
+            ax.set_ylabel("Word Count", fontsize=12)
+            ax.set_title("Gender-Coded Word Usage per Resume", fontsize=14)
+            ax.set_xticks(index + bar_width / 2)
+            ax.set_xticklabels(df["Resume Name"], rotation=45, ha='right')
+            ax.legend()
+            st.pyplot(fig)
 
         st.markdown("<p class='section-label'>📝 Detailed Resume Reports</p>", unsafe_allow_html=True)
         for resume in resume_data:
