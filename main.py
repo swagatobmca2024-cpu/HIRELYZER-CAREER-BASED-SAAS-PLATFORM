@@ -924,70 +924,154 @@ h3, .stMarkdown h3 {
 }
 
 /* ══════════════════════════════════════
-   COUNTER GRID (landing page stats)
+   METRICS GRID — Apple SaaS Premium
    ══════════════════════════════════════ */
-.counter-grid {
+
+/* Animated number counter */
+@keyframes countUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0);   }
+}
+@keyframes metricFadeIn {
+    from { opacity: 0; transform: translateY(18px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+.metrics-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    padding: 24px 0;
-    max-width: 520px;
+    gap: 18px;
+    padding: 28px 0 8px;
+    max-width: 560px;
     margin: 0 auto;
 }
-.counter-box {
-    background: var(--surface-01);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    padding: 22px 18px;
+
+/* ── Metric card ── */
+.metric-card {
+    position: relative;
+    background: linear-gradient(
+        145deg,
+        rgba(255,255,255,0.055) 0%,
+        rgba(255,255,255,0.025) 100%
+    );
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 18px;
+    padding: 26px 22px 22px;
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    position: relative;
+    align-items: flex-start;
+    gap: 14px;
     overflow: hidden;
-    transition: all var(--transition-base);
-    animation: floatUp 4s ease-in-out infinite;
+    cursor: default;
+    box-shadow:
+        0 4px 24px rgba(0,0,0,0.38),
+        0 1px 0 rgba(255,255,255,0.06) inset;
+    transition:
+        transform 0.26s cubic-bezier(0.34,1.56,0.64,1),
+        box-shadow 0.26s cubic-bezier(0.4,0,0.2,1),
+        border-color 0.26s ease;
+    animation: metricFadeIn 0.55s cubic-bezier(0.22,1,0.36,1) both;
 }
-.counter-box::before {
+
+/* Staggered entrance */
+.metric-card:nth-child(1) { animation-delay: 0.05s; }
+.metric-card:nth-child(2) { animation-delay: 0.13s; }
+.metric-card:nth-child(3) { animation-delay: 0.21s; }
+.metric-card:nth-child(4) { animation-delay: 0.29s; }
+
+/* Subtle top-left light sheen */
+.metric-card::before {
     content: '';
     position: absolute;
-    top: 0; left: -100%;
-    width: 50%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(56,189,248,0.06), transparent);
-    animation: shimmerSlide 3s infinite;
+    inset: 0;
+    background: linear-gradient(
+        135deg,
+        rgba(255,255,255,0.045) 0%,
+        transparent 55%
+    );
+    border-radius: inherit;
+    pointer-events: none;
 }
-.counter-box:hover {
-    transform: translateY(-6px) scale(1.02);
-    border-color: var(--border-accent);
-    box-shadow: 0 12px 40px rgba(56,189,248,0.10);
+
+/* Hover: scale only — no vertical lift */
+.metric-card:hover {
+    transform: scale(1.028);
+    border-color: rgba(99,179,237,0.28);
+    box-shadow:
+        0 8px 36px rgba(0,0,0,0.42),
+        0 0 0 1px rgba(56,189,248,0.10),
+        0 1px 0 rgba(255,255,255,0.08) inset;
 }
-.counter-box:nth-child(1) { animation-delay: 0s; }
-.counter-box:nth-child(2) { animation-delay: 0.6s; }
-.counter-box:nth-child(3) { animation-delay: 1.2s; }
-.counter-box:nth-child(4) { animation-delay: 1.8s; }
-.counter-number {
-    font-size: 2rem;
+
+/* ── Icon container ── */
+.metric-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    background: rgba(56,189,248,0.10);
+    border: 1px solid rgba(56,189,248,0.18);
+    flex-shrink: 0;
+}
+.metric-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke: #38bdf8;
+    stroke-width: 1.75;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* Per-card accent tints */
+.metric-card:nth-child(1) .metric-icon { background: rgba(129,140,248,0.10); border-color: rgba(129,140,248,0.20); }
+.metric-card:nth-child(1) .metric-icon svg { stroke: #818cf8; }
+.metric-card:nth-child(2) .metric-icon { background: rgba(52,211,153,0.10); border-color: rgba(52,211,153,0.20); }
+.metric-card:nth-child(2) .metric-icon svg { stroke: #34d399; }
+.metric-card:nth-child(3) .metric-icon { background: rgba(251,191,36,0.10); border-color: rgba(251,191,36,0.20); }
+.metric-card:nth-child(3) .metric-icon svg { stroke: #fbbf24; }
+.metric-card:nth-child(4) .metric-icon { background: rgba(251,113,133,0.10); border-color: rgba(251,113,133,0.20); }
+.metric-card:nth-child(4) .metric-icon svg { stroke: #fb7185; }
+
+/* ── Number ── */
+.metric-number {
+    font-size: 2.25rem;
     font-weight: 700;
-    color: var(--accent-cyan);
-    letter-spacing: -0.03em;
+    letter-spacing: -0.04em;
     line-height: 1;
+    color: #f0f4f8;
+    font-family: var(--font-sans);
     position: relative;
     z-index: 2;
-    font-family: var(--font-sans);
+    animation: countUp 0.6s cubic-bezier(0.22,1,0.36,1) both;
 }
-.counter-label {
-    margin-top: 6px;
-    font-size: 0.78rem;
+.metric-card:nth-child(1) .metric-number { color: #c4b5fd; }
+.metric-card:nth-child(2) .metric-number { color: #6ee7b7; }
+.metric-card:nth-child(3) .metric-number { color: #fde68a; }
+.metric-card:nth-child(4) .metric-number { color: #fda4af; }
+
+/* ── Label ── */
+.metric-label {
+    font-size: 0.73rem;
+    font-weight: 600;
     color: var(--text-secondary);
-    font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
+    font-family: var(--font-sans);
     position: relative;
     z-index: 2;
-    font-family: var(--font-sans);
+    margin-top: -8px;
 }
+
+/* Legacy aliases kept for backward compat (unused) */
+.counter-grid  { display: none; }
+.counter-box   { display: none; }
+.counter-number{ display: none; }
+.counter-label { display: none; }
 
 /* ══════════════════════════════════════
    ATS SECTION CARDS (analysis results)
@@ -1426,24 +1510,93 @@ if not st.session_state.authenticated:
     st.markdown(glassmorphism_counter_style, unsafe_allow_html=True)
 
     st.markdown(f"""
-    <div class="counter-grid">
-        <div class="counter-box">
-            <div class="counter-number">{total_users}</div>
-            <div class="counter-label">Total Users</div>
+    <div class="metrics-grid">
+
+        <!-- Total Users -->
+        <div class="metric-card">
+            <div class="metric-icon">
+                <!-- Lucide: users -->
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+            </div>
+            <div class="metric-number" id="count-users">{total_users}</div>
+            <div class="metric-label">Total Users</div>
         </div>
-        <div class="counter-box">
-            <div class="counter-number">{active_domains}</div>
-            <div class="counter-label">Active Domains</div>
+
+        <!-- Active Domains -->
+        <div class="metric-card">
+            <div class="metric-icon">
+                <!-- Lucide: globe -->
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="2" y1="12" x2="22" y2="12"/>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+            </div>
+            <div class="metric-number" id="count-domains">{active_domains}</div>
+            <div class="metric-label">Active Domains</div>
         </div>
-        <div class="counter-box">
-            <div class="counter-number">{resumes_uploaded}</div>
-            <div class="counter-label">Resumes Uploaded</div>
+
+        <!-- Resumes Uploaded -->
+        <div class="metric-card">
+            <div class="metric-icon">
+                <!-- Lucide: file-text -->
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+            </div>
+            <div class="metric-number" id="count-resumes">{resumes_uploaded}</div>
+            <div class="metric-label">Resumes Uploaded</div>
         </div>
-        <div class="counter-box">
-            <div class="counter-number">{active_logins}</div>
-            <div class="counter-label">Active Sessions</div>
+
+        <!-- Active Sessions -->
+        <div class="metric-card">
+            <div class="metric-icon">
+                <!-- Lucide: activity -->
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+            </div>
+            <div class="metric-number" id="count-sessions">{active_logins}</div>
+            <div class="metric-label">Active Sessions</div>
         </div>
+
     </div>
+
+    <script>
+    (function() {{
+        function animateCount(id, target, duration) {{
+            var el = document.getElementById(id);
+            if (!el) return;
+            var start = 0;
+            var startTime = null;
+            var end = parseInt(target, 10) || 0;
+            function step(ts) {{
+                if (!startTime) startTime = ts;
+                var progress = Math.min((ts - startTime) / duration, 1);
+                var ease = 1 - Math.pow(1 - progress, 3);
+                el.textContent = Math.round(ease * end);
+                if (progress < 1) requestAnimationFrame(step);
+                else el.textContent = end;
+            }}
+            requestAnimationFrame(step);
+        }}
+        window.addEventListener('load', function() {{
+            animateCount('count-users',   {total_users},      900);
+            animateCount('count-domains', {active_domains},   1050);
+            animateCount('count-resumes', {resumes_uploaded}, 1200);
+            animateCount('count-sessions',{active_logins},    750);
+        }});
+    }})();
+    </script>
     """, unsafe_allow_html=True)
 
 if not st.session_state.get("authenticated", False):
