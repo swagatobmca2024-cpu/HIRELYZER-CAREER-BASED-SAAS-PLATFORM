@@ -15574,12 +15574,7 @@ Generate {num_questions} questions now:
                 if new_domain in COURSES_BY_CATEGORY:
                     st.session_state.selected_domain = new_domain
                     _new_roles = list(COURSES_BY_CATEGORY[new_domain].keys())
-                    # Reset target_role to the first valid role in the new domain
                     st.session_state.target_role = _new_roles[0] if _new_roles else None
-                    # Clear the role selectbox widget key so Streamlit re-renders it
-                    # from scratch with the correct index, not a stale cached value
-                    if "interview_role_selection" in st.session_state:
-                        del st.session_state["interview_role_selection"]
                     # Also reset interview state when domain changes
                     st.session_state.interview_domain = new_domain
                     st.session_state.interview_role = st.session_state.target_role
@@ -15600,8 +15595,7 @@ Generate {num_questions} questions now:
             with col2:
                 if selected_domain:
                     roles = list(COURSES_BY_CATEGORY[selected_domain].keys())
-                    # Ensure stored target_role is valid for this domain; reset if not.
-                    # This guard handles both first render and any cross-domain mismatch.
+                    # Ensure stored target_role is valid for this domain; reset if not
                     if "target_role" not in st.session_state or st.session_state.target_role not in roles:
                         st.session_state.target_role = roles[0] if roles else None
                     _current_role_idx = roles.index(st.session_state.target_role) if st.session_state.target_role in roles else 0
@@ -15611,7 +15605,7 @@ Generate {num_questions} questions now:
                         index=_current_role_idx,
                         key="interview_role_selection"
                     )
-                    # Keep target_role session_state in sync with what the widget shows
+                    # Keep target_role session_state in sync
                     st.session_state.target_role = selected_role
                 else:
                     selected_role = None
