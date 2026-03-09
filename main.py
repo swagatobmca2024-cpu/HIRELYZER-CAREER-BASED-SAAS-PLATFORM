@@ -10863,25 +10863,6 @@ def evaluate_interview_answer(answer: str, question: str = None):
     return score, feedback
 
 
-def format_score(score) -> str:
-    """
-    Uniform score formatter for all UI display.
-    Always returns a 2-decimal-place string (e.g. 6.47, 6.50, 6.00).
-    Returns 'N/A' for None / NaN values.
-    Raw database values are never modified — formatting is display-layer only.
-    """
-    import math
-    if score is None:
-        return "N/A"
-    try:
-        val = float(score)
-        if math.isnan(val):
-            return "N/A"
-        return f"{val:.2f}"
-    except (TypeError, ValueError):
-        return "N/A"
-
-
 def evaluate_interview_answer_for_scores(answer: str, question: str, difficulty: str, role: str = "", domain: str = ""):
     """
     UPGRADED: Intelligent evaluation with chain-of-thought reasoning and structured feedback.
@@ -11407,11 +11388,6 @@ def save_interview_result(username: str, role: str, domain: str, avg_score: floa
               weighted_score, raw_avg_score, follow_up_count, depth_score, behavior_class))
         conn.commit()
         conn.close()
-        # Invalidate dashboard data cache so next visit shows fresh results
-        _dirty_key = f"_dashboard_dirty_{username}"
-        import streamlit as _st_cache
-        if hasattr(_st_cache, 'session_state'):
-            _st_cache.session_state[_dirty_key] = True
         return True
     except Exception as e:
         import streamlit as st
@@ -11486,7 +11462,7 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
             </div>
             <div class="summary">
                 <h2>Overall Performance</h2>
-                <p class="score">Average Score: {overall_avg:.2f}/10</p>
+                <p class="score">Average Score: {overall_avg:.1f}/10</p>
                 <p><strong>Badge Earned:</strong> {badge}</p>
             </div>
             <h2>Detailed Q&amp;A Review</h2>
@@ -11530,7 +11506,7 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
                 <p><strong>Q:</strong> {q_escaped}</p>
                 <div class="answer-text"><strong>Your Answer:</strong><br/>{a_escaped}</div>
                 <p class="score">Knowledge: {score_dict.get('knowledge', 0)}/10 | Communication: {score_dict.get('communication', 0)}/10 | Relevance: {score_dict.get('relevance', 0)}/10</p>
-                <p class="score">Question Score: {avg_q_score:.2f}/10</p>
+                <p class="score">Question Score: {avg_q_score:.1f}/10</p>
                 <div class="feedback">{bullet_feedback}</div>
             </div>
                 """
@@ -11563,7 +11539,7 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
                 <p><strong>Q:</strong> {fu_q_esc}</p>
                 <div class="answer-text"><strong>Your Answer:</strong><br/>{fu_a_esc}</div>
                 <p class="score">Knowledge: {fu_score.get('knowledge', 0)}/10 | Communication: {fu_score.get('communication', 0)}/10 | Relevance: {fu_score.get('relevance', 0)}/10</p>
-                <p class="score">Follow-Up Score: {fu_avg:.2f}/10</p>
+                <p class="score">Follow-Up Score: {fu_avg:.1f}/10</p>
                 <div class="feedback">{fu_bullets}</div>
             </div>
                     """
@@ -11607,7 +11583,7 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
                 <p><strong>Q:</strong> {q_escaped}</p>
                 <div class="answer-text"><strong>Your Answer:</strong><br/>{a_escaped}</div>
                 <p class="score">Knowledge: {score_dict.get('knowledge', 0)}/10 | Communication: {score_dict.get('communication', 0)}/10 | Relevance: {score_dict.get('relevance', 0)}/10</p>
-                <p class="score">Question Score: {avg_q_score:.2f}/10</p>
+                <p class="score">Question Score: {avg_q_score:.1f}/10</p>
                 <div class="feedback">{bullet_feedback}</div>
                 {followup_text}
             </div>
@@ -11650,393 +11626,6 @@ import re
 import streamlit as st
 
 # =============================================================================
-# DOMAIN → ROLE MAPPING  (Task 1 – dropdown reset fix)
-# =============================================================================
-DOMAIN_ROLES = {
-    "Software Development and Engineering": [
-        "Frontend Developer",
-        "Backend Developer",
-        "Full Stack Developer",
-        "Mobile App Developer",
-        "Game Developer",
-    ],
-    "Data Science and Analytics": [
-        "Data Scientist",
-        "Data Analyst",
-        "Machine Learning Engineer",
-    ],
-    "Cloud Computing and DevOps": [
-        "Cloud Architect",
-        "DevOps Engineer",
-        "Site Reliability Engineer",
-    ],
-    "Cybersecurity": [
-        "Security Analyst",
-        "Penetration Tester",
-    ],
-    "UI/UX Design": [
-        "UI Designer",
-        "UX Designer",
-    ],
-    "Project Management": [
-        "Project Manager",
-        "Product Manager",
-    ],
-}
-
-# =============================================================================
-# KEY TOPICS IN SCOPE  (Task 2 – expanded knowledge dictionary)
-# =============================================================================
-KEY_TOPICS_IN_SCOPE = {
-    "Software Development and Engineering": {
-        "Frontend Developer": [
-            "HTML5 Semantics", "CSS3 & Flexbox", "CSS Grid Layout",
-            "JavaScript (ES6+)", "TypeScript", "DOM Manipulation",
-            "Event Handling & Bubbling", "Responsive Design", "React",
-            "React Hooks", "State Management (Redux / Zustand)",
-            "Vue.js", "Angular Basics", "Next.js (SSR / SSG / ISR)",
-            "Component Architecture", "API Integration (REST / GraphQL)",
-            "Async / Await & Promises", "Frontend Performance Optimization",
-            "Core Web Vitals (LCP, CLS, INP)", "Code Splitting & Lazy Loading",
-            "Webpack / Vite / Rollup", "Browser DevTools",
-            "Cross-Browser Compatibility", "Accessibility (WCAG 2.1 / ARIA)",
-            "Unit Testing (Jest)", "React Testing Library",
-            "End-to-End Testing (Cypress / Playwright)", "Snapshot Testing",
-            "XSS Prevention", "CSRF in SPAs", "Content Security Policy",
-            "Design Systems & Storybook", "Micro-Frontends",
-            "Progressive Web Apps (PWA)", "WebSockets & SSE",
-            "Internationalization (i18n)", "SEO Best Practices",
-            "CSS-in-JS (styled-components)", "Tailwind CSS",
-            "Version Control (Git / GitHub)", "CI/CD for Frontend",
-        ],
-        "Backend Developer": [
-            "REST API Design Principles", "GraphQL", "gRPC",
-            "API Versioning & Backward Compatibility", "Rate Limiting & Throttling",
-            "Authentication (JWT, OAuth 2.0, OpenID Connect)",
-            "Authorization (RBAC / ABAC)", "Password Hashing (bcrypt / Argon2)",
-            "PostgreSQL", "MySQL", "MongoDB", "Redis & Caching Patterns",
-            "Database Indexing & Query Optimization", "ACID Transactions",
-            "Database Migrations & Schema Design", "ORM Patterns",
-            "Connection Pooling", "N+1 Query Problem",
-            "Microservices Architecture", "Event-Driven Architecture",
-            "Message Queues (RabbitMQ, Kafka, SQS)", "Circuit Breaker Pattern",
-            "Horizontal vs Vertical Scaling", "Load Balancing",
-            "Async Programming & Concurrency", "Background Jobs & Workers",
-            "Unit & Integration Testing", "Contract Testing",
-            "Docker & Containerization", "12-Factor App Principles",
-            "Logging & Observability", "API Gateway Patterns",
-            "OWASP Top 10 for APIs", "Input Validation & Sanitization",
-            "Secrets Management", "Profiling & Bottleneck Identification",
-            "CAP Theorem", "Eventual Consistency",
-        ],
-        "Full Stack Developer": [
-            "React / Vue / Angular", "Node.js & Express", "Django / FastAPI",
-            "TypeScript (Frontend & Backend)", "REST API Design",
-            "GraphQL Schemas & Resolvers", "Authentication & Authorization",
-            "PostgreSQL & MongoDB", "Redis Caching", "Database Indexing",
-            "ORM (Prisma / Sequelize / SQLAlchemy)", "State Management",
-            "Server-Side Rendering (Next.js / Nuxt.js)", "Static Site Generation",
-            "CI/CD Pipelines", "Docker & Compose", "Nginx / Reverse Proxy",
-            "Unit Testing (Jest / Pytest)", "End-to-End Testing",
-            "WebSockets & Real-Time Features", "Message Queues",
-            "Microservices vs Monolith Tradeoffs", "BFF (Backend For Frontend) Pattern",
-            "Web Security (XSS, CSRF, SQL Injection)", "API Versioning",
-            "Performance Optimization (Frontend & Backend)", "Cloud Deployment (AWS / GCP / Azure)",
-            "Environment Variables & Config Management", "Logging & Monitoring",
-            "Responsive Design", "Accessibility", "Feature Flags",
-            "Code Review Best Practices", "Git Branching Strategies",
-            "Agile & Scrum Workflows", "Technical Debt Management",
-        ],
-        "Mobile App Developer": [
-            "React Native", "Flutter & Dart", "Swift (iOS)",
-            "Kotlin (Android)", "Jetpack Compose", "SwiftUI",
-            "Mobile UI Design Principles", "Navigation Patterns",
-            "State Management (Redux / Bloc / Provider)",
-            "REST API Integration", "GraphQL on Mobile",
-            "Offline-First Architecture", "Local Storage (SQLite / Realm / CoreData)",
-            "Push Notifications (FCM / APNs)", "Deep Linking",
-            "App Performance Optimization", "Memory Management",
-            "Battery & Network Efficiency", "App Lifecycle Management",
-            "Permissions & Privacy Handling", "Biometric Authentication",
-            "In-App Purchases & Subscriptions", "Mobile Security Best Practices",
-            "Unit Testing (XCTest / JUnit / Flutter Test)", "UI Testing",
-            "App Store Submission (Apple / Google Play)", "CI/CD for Mobile (Fastlane)",
-            "Crash Reporting (Sentry / Firebase Crashlytics)", "Analytics Integration",
-            "Accessibility on Mobile", "Localization (i18n)", "Dark Mode Support",
-            "Cross-Platform vs Native Tradeoffs", "Animations & Gestures",
-        ],
-        "Game Developer": [
-            "Unity (C#)", "Unreal Engine (C++ / Blueprints)", "Godot Engine",
-            "Game Loop Architecture", "Physics Engine Integration",
-            "Collision Detection & Response", "2D vs 3D Game Development",
-            "Sprite & Tilemap Systems", "Shader Programming (HLSL / GLSL)",
-            "Asset Pipeline & Management", "Level Design Principles",
-            "AI for NPCs (Pathfinding, FSM, Behaviour Trees)",
-            "Multiplayer Networking (TCP / UDP / WebSockets)",
-            "Client-Server Architecture for Games", "Lag Compensation",
-            "Audio System Integration", "Input Handling & Remapping",
-            "Memory Management & Optimization", "Frame Rate & Performance Profiling",
-            "LOD (Level of Detail)", "Particle Systems", "Animation State Machines",
-            "Game Economy Design", "Monetization Models (F2P / Premium)",
-            "Save System Design", "Scene Management",
-            "Version Control for Game Projects (Git LFS)", "Testing in Games",
-            "Mobile Game Optimization", "Cross-Platform Builds",
-            "UI/HUD Design in Games", "Anti-Cheat Mechanisms",
-        ],
-    },
-
-    "Data Science and Analytics": {
-        "Data Scientist": [
-            "Python for Data Science (pandas, NumPy, SciPy)", "SQL & Window Functions",
-            "Exploratory Data Analysis (EDA)", "Data Cleaning & Missing Value Imputation",
-            "Outlier Detection", "Feature Engineering", "Feature Selection (SHAP, MI)",
-            "Linear & Logistic Regression", "Decision Trees & Random Forests",
-            "Gradient Boosting (XGBoost, LightGBM, CatBoost)",
-            "Clustering (K-Means, DBSCAN, Hierarchical)",
-            "Dimensionality Reduction (PCA, t-SNE, UMAP)",
-            "Bias-Variance Tradeoff", "Cross-Validation & Hyperparameter Tuning",
-            "Class Imbalance Handling (SMOTE, Cost-Sensitive Learning)",
-            "Evaluation Metrics (Precision, Recall, F1, ROC-AUC, RMSE)",
-            "A/B Testing & Hypothesis Testing", "Statistical Significance & p-values",
-            "Confidence Intervals & Bayesian Reasoning",
-            "Time Series Forecasting (ARIMA, Prophet)", "NLP Fundamentals",
-            "Deep Learning Basics (Neural Nets, CNNs, RNNs)", "Transfer Learning",
-            "Experiment Design", "Data Storytelling & Visualization",
-            "Tableau / Power BI / Looker", "ETL Pipelines", "Data Warehousing",
-            "Jupyter Notebooks Best Practices", "Reproducible Research",
-            "Model Explainability (SHAP, LIME)", "Production Model Deployment",
-            "MLflow & Experiment Tracking", "Data Ethics & Bias",
-        ],
-        "Data Analyst": [
-            "SQL (Joins, CTEs, Window Functions, Subqueries)",
-            "Query Optimization & Execution Plans", "Python (pandas, NumPy, Matplotlib)",
-            "Excel / Google Sheets Advanced Functions",
-            "Data Cleaning & Validation", "Data Profiling",
-            "Exploratory Data Analysis (EDA)", "Descriptive Statistics",
-            "Inferential Statistics & Hypothesis Testing",
-            "A/B Testing Design & Analysis", "Cohort Analysis",
-            "Funnel Analysis", "Retention & Churn Analysis",
-            "KPI Definition & Metric Frameworks", "Dashboard Design",
-            "Tableau", "Power BI", "Looker / Looker Studio",
-            "Data Storytelling & Visualization Best Practices",
-            "Business Intelligence Concepts", "OLAP vs OLTP",
-            "Star Schema & Snowflake Schema", "dbt (Data Build Tool)",
-            "Apache Airflow Basics", "Data Lineage & Governance",
-            "Data Warehousing (Snowflake, BigQuery, Redshift)",
-            "Report Automation", "Root Cause Analysis",
-            "Statistical Significance in Business Context",
-            "Communication of Insights to Stakeholders",
-            "Excel PivotTables & Advanced Formulas",
-            "Google Analytics / Product Analytics",
-        ],
-        "Machine Learning Engineer": [
-            "ML Fundamentals (Supervised, Unsupervised, RL)",
-            "Feature Engineering & Feature Stores", "Data Pipelines & ETL for ML",
-            "Scikit-Learn", "TensorFlow", "PyTorch", "Keras",
-            "Gradient Boosting (XGBoost, LightGBM)", "Hyperparameter Optimization (Optuna, Ray Tune)",
-            "Cross-Validation & Model Selection", "Evaluation Metrics",
-            "Model Explainability (SHAP, LIME)", "Transfer Learning & Fine-Tuning",
-            "NLP (Transformers, BERT, GPT)", "RAG (Retrieval-Augmented Generation)",
-            "Embeddings & Vector Databases (FAISS, Pinecone, Weaviate)",
-            "Computer Vision (CNNs, Object Detection)", "Time Series Modeling",
-            "MLOps & ML Pipelines (Kubeflow, MLflow, SageMaker Pipelines)",
-            "Experiment Tracking (MLflow, Weights & Biases)",
-            "Model Registry & Versioning", "Model Serving (TF Serving, Triton, FastAPI)",
-            "Batch vs Real-Time Inference", "Model Monitoring & Data Drift Detection",
-            "A/B Testing for ML Models", "Shadow Deployment & Canary Releases",
-            "Model Quantization & Pruning", "Distributed Training",
-            "Docker & Kubernetes for ML", "Data Versioning (DVC)",
-            "LLM Fine-Tuning (LoRA, PEFT)", "Prompt Engineering",
-            "ML System Design", "Responsible AI & Fairness",
-        ],
-    },
-
-    "Cloud Computing and DevOps": {
-        "Cloud Architect": [
-            "AWS Core Services (EC2, S3, RDS, Lambda, VPC)",
-            "Azure Core Services (VMs, Blob Storage, Azure SQL, AKS)",
-            "GCP Core Services (GCE, GCS, BigQuery, Cloud Run)",
-            "Cloud-Native Architecture Patterns", "Multi-Cloud & Hybrid Cloud Strategies",
-            "Serverless Architecture (Lambda, Cloud Functions, Azure Functions)",
-            "Microservices Design on Cloud", "Containerization (Docker)",
-            "Kubernetes Architecture & Orchestration", "Service Mesh (Istio, Linkerd)",
-            "Infrastructure as Code (Terraform, CloudFormation, Pulumi)",
-            "Cloud Networking (VPC, Subnets, Security Groups, NAT, VPN)",
-            "CDN & Edge Computing", "Auto Scaling & Load Balancing",
-            "High Availability & Disaster Recovery", "RTO & RPO Design",
-            "Cloud Storage Options (Block, Object, File)",
-            "Managed Databases (Aurora, Cloud SQL, Cosmos DB)",
-            "Data Streaming (Kinesis, Pub/Sub, Event Hubs)",
-            "Cloud Security & IAM", "Encryption at Rest & In Transit",
-            "Cloud Cost Optimization (FinOps)", "Reserved vs Spot Instances",
-            "Observability (CloudWatch, Stackdriver, Azure Monitor)",
-            "Well-Architected Framework (AWS / Azure / GCP)",
-            "Cloud Migration Strategies (6 Rs)", "SLA & SLO Design",
-            "API Gateway on Cloud", "Edge Cases in Distributed Cloud Systems",
-        ],
-        "DevOps Engineer": [
-            "CI/CD Pipeline Design (Jenkins, GitHub Actions, GitLab CI, CircleCI)",
-            "Docker & Container Best Practices", "Kubernetes (Deployments, Services, ConfigMaps, Ingress)",
-            "Helm Charts", "Infrastructure as Code (Terraform, Ansible, Pulumi)",
-            "GitOps (Argo CD, Flux)", "Secrets Management (Vault, AWS Secrets Manager)",
-            "Configuration Management", "Blue-Green & Canary Deployments",
-            "Feature Flags", "Git Branching Strategies (GitFlow, Trunk-Based)",
-            "Automated Testing in Pipelines", "Static Code Analysis (SonarQube)",
-            "Container Security Scanning (Trivy, Snyk)", "Logging (ELK Stack, Loki)",
-            "Monitoring & Alerting (Prometheus, Grafana, Datadog)",
-            "Distributed Tracing (Jaeger, Zipkin, OpenTelemetry)", "SRE Principles",
-            "Incident Management & Postmortems", "Cloud Platforms (AWS / GCP / Azure)",
-            "Serverless Deployments", "Microservices & Service Mesh",
-            "Networking Basics (DNS, Load Balancers, CDN)", "Security in DevOps (DevSecOps)",
-            "Compliance as Code", "Cost Optimization Automation",
-            "Database Migrations in CI/CD", "Chaos Engineering (Chaos Monkey)",
-            "Rollback Strategies", "SLA / SLO / Error Budgets",
-        ],
-        "Site Reliability Engineer": [
-            "SRE Principles (Google SRE Book Concepts)", "SLI / SLO / SLA Definition",
-            "Error Budgets & Policy Design", "Toil Identification & Elimination",
-            "Incident Management & On-Call Practices", "Postmortem Culture (Blameless Postmortems)",
-            "Distributed Systems Reliability", "Chaos Engineering",
-            "Observability (Metrics, Logs, Traces)", "Prometheus & Grafana",
-            "Distributed Tracing (Jaeger, OpenTelemetry)", "Alerting Design (Avoiding Alert Fatigue)",
-            "Kubernetes Reliability Patterns", "Auto-Scaling & Capacity Planning",
-            "Load Testing (k6, Locust, JMeter)", "Performance Profiling",
-            "Deployment Strategies (Blue-Green, Canary, Rolling)", "Rollback Automation",
-            "High Availability Architecture", "Disaster Recovery Planning",
-            "Database Reliability (Backups, Replication, Failover)",
-            "Network Reliability & Latency", "CDN & Caching for Reliability",
-            "Infrastructure as Code (Terraform)", "Configuration Drift Detection",
-            "Security Patching Automation", "Cost vs Reliability Tradeoffs",
-            "Service Mesh Reliability (Istio)", "Feature Flags for Safe Releases",
-            "Runbook Design", "CI/CD Pipeline Reliability",
-        ],
-    },
-
-    "Cybersecurity": {
-        "Security Analyst": [
-            "OWASP Top 10 Vulnerabilities", "Network Security Fundamentals (TCP/IP, DNS, HTTP/S)",
-            "Firewalls, IDS & IPS", "SIEM Tools (Splunk, QRadar, Microsoft Sentinel)",
-            "Log Analysis & Correlation", "Security Event Monitoring",
-            "Threat Intelligence & Threat Hunting", "Vulnerability Assessment",
-            "Vulnerability Management Lifecycle", "CVE & CVSS Scoring",
-            "Incident Response (Preparation, Detection, Containment, Recovery)",
-            "Digital Forensics Basics", "Malware Analysis Fundamentals",
-            "Phishing & Social Engineering Awareness", "Identity & Access Management (IAM)",
-            "Multi-Factor Authentication", "Zero Trust Architecture",
-            "Endpoint Detection & Response (EDR)", "Cloud Security Concepts (AWS/Azure/GCP)",
-            "Encryption (Symmetric, Asymmetric, TLS/SSL)", "PKI & Certificate Management",
-            "Compliance Frameworks (ISO 27001, NIST, SOC 2, GDPR)",
-            "Risk Assessment & Risk Management", "Security Policies & Procedures",
-            "Active Directory Security", "Privileged Access Management (PAM)",
-            "Data Loss Prevention (DLP)", "Security Awareness Training",
-            "Python Scripting for Security Automation", "SOC Tier 1/2/3 Workflows",
-        ],
-        "Penetration Tester": [
-            "Penetration Testing Methodology (PTES, OWASP)", "Reconnaissance (OSINT, Passive/Active)",
-            "Network Scanning (Nmap, Masscan)", "Enumeration Techniques",
-            "Vulnerability Scanning (Nessus, OpenVAS)", "Exploitation Frameworks (Metasploit)",
-            "Manual Exploitation Techniques", "Privilege Escalation (Linux & Windows)",
-            "Post-Exploitation & Lateral Movement", "Pivoting & Tunneling",
-            "Web Application Penetration Testing", "SQL Injection & Exploitation",
-            "Cross-Site Scripting (XSS) Exploitation", "Authentication Bypass",
-            "File Inclusion Vulnerabilities (LFI / RFI)", "SSRF & XXE Exploitation",
-            "API Security Testing", "Mobile Application Penetration Testing",
-            "Wireless Network Testing (WPA2 Cracking, Evil Twin)",
-            "Social Engineering & Phishing Simulations",
-            "Active Directory Attacks (Kerberoasting, Pass-the-Hash, BloodHound)",
-            "Buffer Overflow & Memory Corruption Basics",
-            "Reverse Engineering Basics (Ghidra, IDA Pro)", "Burp Suite Proficiency",
-            "Scripting for Pentesting (Python, Bash, PowerShell)",
-            "Report Writing & Findings Communication",
-            "CVE Research & PoC Development", "Responsible Disclosure",
-            "Red Team vs Blue Team Concepts", "Capture the Flag (CTF) Methodology",
-            "Compliance & Legal Considerations (Rules of Engagement)",
-        ],
-    },
-
-    "UI/UX Design": {
-        "UI Designer": [
-            "Visual Design Principles (Hierarchy, Balance, Contrast)", "Typography in UI",
-            "Color Theory & Accessible Color Palettes", "Iconography & Illustration",
-            "Design Systems & Component Libraries", "Figma Proficiency",
-            "Adobe XD / Sketch", "Responsive & Adaptive Design",
-            "Grid Systems & Spacing", "Layout Design",
-            "Dark Mode & Theme Design", "Motion Design & Micro-Interactions",
-            "Prototyping (Low-Fi & High-Fi)", "Design Tokens",
-            "Accessibility in UI (WCAG 2.1, Contrast Ratios, ARIA)",
-            "Cross-Platform UI (Web, iOS, Android)", "Design-to-Development Handoff",
-            "Zeplin / Figma Dev Mode", "Storybook for UI Components",
-            "Design Review & Critique Process", "Brand Identity Application",
-            "UI Animation (Lottie, CSS, After Effects)", "Atomic Design Methodology",
-            "Card & List UI Patterns", "Form Design Best Practices",
-            "Dashboard UI Design", "Mobile-First Design",
-            "Style Guide Creation", "Version Control for Design (Abstract / Git)",
-            "Collaboration with Developers & Product Managers",
-        ],
-        "UX Designer": [
-            "User Research Methods (Interviews, Surveys, Contextual Inquiry)",
-            "Personas & User Journey Mapping", "Jobs-to-Be-Done Framework",
-            "Information Architecture (IA)", "Card Sorting & Tree Testing",
-            "Wireframing & Lo-Fi Prototyping", "Hi-Fi Prototyping (Figma, InVision)",
-            "Usability Testing (Moderated & Unmoderated)",
-            "Heuristic Evaluation (Nielsen's 10 Heuristics)", "Cognitive Load Reduction",
-            "Interaction Design Principles", "Gestalt Principles in UX",
-            "Accessibility & Inclusive Design", "WCAG 2.1 Compliance",
-            "Design Thinking Process (Empathize, Define, Ideate, Prototype, Test)",
-            "A/B Testing & Multivariate Testing", "Analytics for UX (Hotjar, FullStory, GA)",
-            "Conversion Rate Optimization (CRO)", "Friction & Drop-Off Analysis",
-            "Content Strategy & UX Writing", "Microcopy & Error Messaging",
-            "Mobile UX Patterns (Bottom Nav, Gestures, Thumb Zones)",
-            "Onboarding UX Design", "Empty States & Edge Cases",
-            "Accessibility Audits & Remediation", "Stakeholder Presentations",
-            "Design Metrics (Task Success Rate, Time-on-Task, SUS Score)",
-            "Collaboration with Engineering & Product", "UX Strategy & Roadmapping",
-        ],
-    },
-
-    "Project Management": {
-        "Project Manager": [
-            "Project Lifecycle (Initiation, Planning, Execution, Monitoring, Closing)",
-            "Waterfall Methodology", "Agile & Scrum Framework",
-            "Kanban Methodology", "Hybrid Project Management",
-            "Project Charter & Scope Definition", "Work Breakdown Structure (WBS)",
-            "Stakeholder Analysis & Management", "Communication Planning",
-            "Risk Identification & Risk Register", "Risk Mitigation Strategies",
-            "Issue Management & Escalation", "Change Management & Change Control",
-            "Project Scheduling (Gantt Charts, Critical Path Method)",
-            "Resource Planning & Capacity Management", "Budget Management & Cost Control",
-            "Earned Value Management (EVM)", "Project Health Dashboards",
-            "KPIs & Project Metrics", "Sprint Planning & Retrospectives",
-            "Backlog Grooming & Prioritization", "Dependency Management",
-            "Vendor & Contract Management", "Quality Assurance Processes",
-            "Project Tools (Jira, MS Project, Asana, Monday.com)",
-            "Documentation & Reporting", "Post-Project Review & Lessons Learned",
-            "Team Motivation & Leadership", "Conflict Resolution",
-            "Remote Team Management", "PMI / PMP Framework",
-        ],
-        "Product Manager": [
-            "Product Strategy & Vision Definition", "Roadmap Planning & Prioritization",
-            "OKRs (Objectives & Key Results)", "KPI Definition & Measurement",
-            "User Research & Customer Discovery", "Jobs-to-Be-Done Framework",
-            "Competitive Analysis", "Market Sizing & Opportunity Assessment",
-            "Product Requirements Documents (PRDs)", "User Stories & Acceptance Criteria",
-            "Backlog Management & Grooming", "Agile & Scrum in Product Management",
-            "Sprint Planning & Review", "Go-to-Market (GTM) Strategy",
-            "Feature Prioritization Frameworks (RICE, MoSCoW, ICE)",
-            "A/B Testing & Experimentation", "Data-Driven Product Decisions",
-            "Product Metrics (DAU, MAU, Retention, Churn, NPS, CSAT)",
-            "Funnel Analysis & Conversion Optimization", "Monetization Strategy",
-            "Stakeholder Management & Alignment", "Cross-Functional Collaboration",
-            "Design Thinking & UX Collaboration", "Technical Literacy for PMs",
-            "MVP Definition & Iterative Development", "Product Launch Planning",
-            "Post-Launch Monitoring & Iteration", "Product Analytics Tools (Mixpanel, Amplitude)",
-            "Customer Feedback Loops", "Pricing Strategy",
-            "Dependency & Risk Management", "Product Ethics & Responsible Design",
-        ],
-    },
-}
-
-# =============================================================================
 # ARCHITECTURAL FIX 1: DOMAIN AUTHORITY LAYER
 # =============================================================================
 # Problem: Resume context dominates LLM prompts, causing Full Stack resumes to
@@ -12047,476 +11636,57 @@ KEY_TOPICS_IN_SCOPE = {
 DOMAIN_AUTHORITY_CONFIG = {
     "Data Science & Analytics": {
         "aliases": ["data analyst", "data science", "analytics", "business intelligence", "bi", "ml", "machine learning"],
-        "mandatory_topics": [
-            # Core Python data stack
-            "pandas", "NumPy", "SciPy", "Matplotlib", "Seaborn", "Plotly",
-            # SQL & querying
-            "SQL", "window functions", "CTEs", "query optimization", "joins", "GROUP BY aggregations",
-            # Statistical foundations
-            "descriptive statistics", "inferential statistics", "hypothesis testing", "p-values",
-            "confidence intervals", "A/B testing", "statistical significance", "effect size",
-            "probability distributions", "Bayesian reasoning",
-            # EDA & data quality
-            "exploratory data analysis", "data cleaning", "missing value imputation",
-            "outlier detection", "data profiling", "feature distributions",
-            # Classical ML
-            "linear regression", "logistic regression", "decision trees", "random forests",
-            "gradient boosting", "XGBoost", "LightGBM", "k-means clustering", "PCA",
-            "bias-variance tradeoff", "cross-validation", "regularization (L1/L2)",
-            # Model evaluation
-            "precision", "recall", "F1 score", "ROC-AUC", "confusion matrix",
-            "RMSE", "MAE", "R-squared", "lift curves",
-            # BI & visualization
-            "Tableau", "Power BI", "Looker", "dashboard design", "data storytelling",
-            "KPI definition", "metric frameworks", "cohort analysis",
-            # Data pipelines
-            "ETL pipelines", "data warehousing", "OLAP vs OLTP", "star schema",
-            "dbt", "Apache Airflow", "data lineage",
-            # Advanced / modern
-            "time series forecasting", "ARIMA", "Prophet", "feature engineering",
-            "dimensionality reduction", "class imbalance handling", "SMOTE",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "angular", "vue", "next.js", "nuxt", "svelte",
-            "node.js", "express", "fastify", "django", "flask", "spring boot",
-            "frontend", "css", "html", "tailwind", "bootstrap", "figma",
-            "mobile app", "swift", "kotlin", "flutter", "react native",
-            "graphql", "REST API design", "OAuth", "JWT authentication",
-        ],
-        "context_override": (
-            "This is a Data Science & Analytics interview. Focus EXCLUSIVELY on data analysis, "
-            "statistical reasoning, SQL, Python data libraries (pandas/numpy/scikit-learn), "
-            "model evaluation, data visualization, A/B testing, EDA, and business intelligence tools. "
-            "Probe for depth on statistical rigour, evaluation metric selection, and data storytelling — "
-            "not just tool familiarity."
-        ),
+        "mandatory_topics": ["pandas", "SQL", "statistical analysis", "data visualization", "EDA", "hypothesis testing", "regression", "data cleaning"],
+        "forbidden_resume_keywords": ["react", "angular", "vue", "node.js", "express", "django", "flask", "spring", "frontend", "css", "html", "mobile app"],
+        "context_override": "This is a Data Science & Analytics interview. Focus EXCLUSIVELY on data analysis, statistics, SQL, Python data libraries (pandas/numpy/matplotlib), machine learning fundamentals, and business intelligence tools.",
     },
-
     "Full Stack Development": {
-        "aliases": ["full stack", "fullstack", "web developer", "mern", "mean", "full-stack engineer"],
-        "mandatory_topics": [
-            # Frontend
-            "React", "Vue.js", "Angular", "Next.js", "TypeScript", "JavaScript (ES6+)",
-            "state management", "Redux", "Zustand", "Pinia", "component lifecycle",
-            "virtual DOM", "server-side rendering", "static site generation",
-            "CSS-in-JS", "Tailwind CSS", "responsive design", "accessibility (WCAG)",
-            "browser performance", "lazy loading", "code splitting", "web vitals",
-            # Backend
-            "Node.js", "Express", "NestJS", "Django", "FastAPI", "Spring Boot",
-            "REST API design", "GraphQL", "API versioning", "rate limiting",
-            "middleware patterns", "input validation", "error handling",
-            # Databases
-            "PostgreSQL", "MySQL", "MongoDB", "Redis", "database indexing",
-            "query optimization", "ORM (Prisma/Sequelize/SQLAlchemy)", "N+1 problem",
-            "transactions and ACID", "database migrations",
-            # Auth & security
-            "JWT", "OAuth 2.0", "session management", "CORS", "CSRF", "XSS", "SQL injection",
-            "HTTPS", "secrets management", "RBAC",
-            # DevOps basics
-            "Docker", "CI/CD", "environment variables", "12-factor app",
-            "Nginx", "reverse proxy", "load balancing basics",
-            # Testing
-            "unit testing", "integration testing", "Jest", "React Testing Library",
-            "end-to-end testing", "Cypress", "Playwright", "test coverage",
-            # Architecture
-            "monolith vs microservices", "BFF pattern", "caching strategies",
-            "WebSockets", "real-time updates", "message queues basics",
-        ],
-        "forbidden_resume_keywords": [
-            "tensorflow", "pytorch", "sklearn", "scikit-learn", "pandas",
-            "regression model", "clustering", "NLP pipeline", "deep learning model",
-            "Kubernetes operator", "Terraform modules", "Ansible playbooks",
-            "pen testing", "SIEM", "SOC analyst",
-        ],
-        "context_override": (
-            "This is a Full Stack Development interview. Cover the entire request lifecycle: "
-            "browser → frontend framework → API layer → database → response. "
-            "Focus on React/Next.js or Vue, Node.js or Django backends, PostgreSQL/MongoDB, "
-            "authentication patterns, caching, testing strategies, and deployment pipelines. "
-            "Probe for real decisions: state management choices, API contract design, N+1 fixes, "
-            "and security hardening — not just stack enumeration."
-        ),
+        "aliases": ["full stack", "fullstack", "web developer", "mern", "mean"],
+        "mandatory_topics": ["frontend", "backend", "REST APIs", "databases", "authentication", "deployment", "React/Angular/Vue", "Node.js/Django/Spring"],
+        "forbidden_resume_keywords": ["tensorflow", "pytorch", "sklearn", "regression", "clustering", "NLP", "deep learning model"],
+        "context_override": "This is a Full Stack Development interview. Focus on frontend frameworks, backend APIs, databases, authentication, CI/CD, and web architecture.",
     },
-
     "Backend Development": {
-        "aliases": ["backend", "server-side", "api developer", "java developer", "python developer",
-                    "golang developer", "backend engineer", "software engineer backend"],
-        "mandatory_topics": [
-            # API design
-            "REST API design principles", "GraphQL", "gRPC", "API versioning",
-            "idempotency", "pagination", "rate limiting", "API gateway",
-            "OpenAPI / Swagger documentation",
-            # Databases
-            "PostgreSQL", "MySQL", "database indexing", "query execution plans",
-            "EXPLAIN ANALYZE", "N+1 problem", "connection pooling",
-            "transactions", "ACID properties", "isolation levels", "deadlocks",
-            "database migrations", "schema design", "normalization",
-            "Redis", "caching patterns (cache-aside, write-through)", "cache invalidation",
-            # System design
-            "horizontal vs vertical scaling", "load balancing", "reverse proxy",
-            "microservices", "service mesh", "event-driven architecture",
-            "message queues (RabbitMQ, Kafka, SQS)", "pub/sub patterns",
-            "circuit breaker", "bulkhead pattern", "retry with backoff",
-            "CAP theorem", "eventual consistency", "distributed transactions",
-            # Auth & security
-            "JWT", "OAuth 2.0", "OpenID Connect", "RBAC", "ABAC",
-            "password hashing (bcrypt/argon2)", "secrets management",
-            "input validation", "SQL injection", "OWASP Top 10 for APIs",
-            # Performance
-            "async programming", "concurrency models", "thread pools",
-            "profiling", "bottleneck identification", "background jobs",
-            "batch processing", "streaming",
-            # Testing
-            "unit testing", "integration testing", "contract testing",
-            "mocking dependencies", "test isolation", "CI test pipelines",
-            # Languages & runtimes
-            "Python (asyncio/FastAPI/Django)", "Node.js (event loop)",
-            "Java (Spring Boot, JVM tuning)", "Go (goroutines, channels)",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "css", "html", "angular", "vue", "next.js", "tailwind",
-            "figma", "photoshop", "sketch", "frontend", "ui design",
-            "pandas", "sklearn", "tensorflow", "pytorch",
-            "mobile app", "swift", "kotlin", "flutter",
-        ],
-        "context_override": (
-            "This is a Backend Development interview. Focus on server-side engineering: "
-            "REST/GraphQL/gRPC API design, relational and NoSQL databases (including indexing, "
-            "transactions, and query optimisation), caching strategies, message queues, "
-            "distributed system patterns, authentication/authorisation, and backend testing. "
-            "Push candidates to explain WHY they made design decisions, not just WHAT they used."
-        ),
+        "aliases": ["backend", "server-side", "api developer", "java developer", "python developer"],
+        "mandatory_topics": ["REST APIs", "databases", "system design", "microservices", "caching", "message queues", "authentication", "scalability"],
+        "forbidden_resume_keywords": ["react", "css", "html", "angular", "vue", "figma", "photoshop", "frontend"],
+        "context_override": "This is a Backend Development interview. Focus on API design, server-side logic, databases, microservices, caching strategies, and system scalability.",
     },
-
     "Frontend Development": {
-        "aliases": ["frontend", "ui developer", "react developer", "angular developer",
-                    "vue developer", "frontend engineer", "web ui engineer"],
-        "mandatory_topics": [
-            # Core JavaScript
-            "JavaScript (ES6+)", "TypeScript", "closures", "event loop", "async/await",
-            "Promises", "prototypal inheritance", "hoisting", "debounce/throttle",
-            "Web APIs (Fetch, localStorage, IntersectionObserver)",
-            # Frameworks
-            "React (hooks, context, reconciliation)", "Vue.js (Options API vs Composition API)",
-            "Angular (dependency injection, change detection)",
-            "Next.js (SSR vs SSG vs ISR)", "Nuxt.js",
-            # State management
-            "Redux (flux architecture)", "Redux Toolkit", "Zustand", "Recoil",
-            "React Query / TanStack Query", "SWR", "Pinia",
-            # CSS & styling
-            "CSS specificity", "flexbox", "CSS Grid", "responsive design",
-            "CSS-in-JS (styled-components, Emotion)", "Tailwind CSS",
-            "CSS custom properties", "animations and transitions",
-            # Performance
-            "Core Web Vitals (LCP, CLS, FID/INP)", "code splitting",
-            "lazy loading", "tree shaking", "bundle analysis (Webpack, Vite)",
-            "image optimisation", "caching strategies (HTTP cache, service workers)",
-            "virtual DOM and reconciliation", "memoization (useMemo, useCallback, React.memo)",
-            # Testing
-            "Jest", "React Testing Library", "Vitest",
-            "end-to-end testing (Cypress, Playwright)",
-            "snapshot testing", "accessibility testing",
-            # Accessibility
-            "WCAG 2.1 guidelines", "ARIA attributes", "keyboard navigation",
-            "screen reader compatibility", "semantic HTML",
-            # Architecture
-            "micro-frontends", "module federation", "design systems",
-            "component composition patterns", "render props vs HOC vs hooks",
-            "Storybook", "monorepo (Nx, Turborepo)",
-            # Security
-            "XSS prevention", "CSP headers", "CSRF in SPAs", "sanitisation",
-        ],
-        "forbidden_resume_keywords": [
-            "kubernetes", "docker-compose", "terraform", "ansible",
-            "CI/CD pipeline design", "microservices orchestration", "kafka",
-            "grpc", "tensorflow", "pytorch", "pandas", "sklearn",
-            "SQL joins", "database schema design", "backend API design",
-            "pen testing", "SIEM", "firewall rules",
-        ],
-        "context_override": (
-            "This is a Frontend Development interview. Focus on deep JavaScript/TypeScript knowledge, "
-            "React or Vue framework internals (reconciliation, hooks, reactivity), state management "
-            "tradeoffs, Core Web Vitals and performance optimisation, CSS layout and architecture, "
-            "accessibility standards, testing strategies, and client-side security. "
-            "Go beyond tool lists — probe for understanding of browser behaviour, "
-            "render performance, and component design decisions."
-        ),
+        "aliases": ["frontend", "ui developer", "react developer", "angular developer"],
+        "mandatory_topics": ["JavaScript", "React/Angular/Vue", "CSS", "responsive design", "state management", "performance optimization", "accessibility", "browser APIs"],
+        "forbidden_resume_keywords": ["kubernetes", "docker-compose", "terraform", "CI/CD pipeline", "microservices", "kafka"],
+        "context_override": "This is a Frontend Development interview. Focus on UI frameworks, JavaScript, CSS, browser performance, accessibility, and client-side architecture.",
     },
-
     "Machine Learning & AI": {
-        "aliases": ["machine learning", "ml engineer", "ai engineer", "deep learning",
-                    "nlp engineer", "computer vision engineer", "mlops engineer", "ai researcher"],
-        "mandatory_topics": [
-            # Foundations
-            "supervised vs unsupervised vs reinforcement learning",
-            "bias-variance tradeoff", "overfitting", "underfitting", "regularisation (L1/L2/dropout)",
-            "cross-validation (k-fold, stratified)", "train/val/test split strategy",
-            "data leakage", "target encoding pitfalls",
-            # Feature engineering
-            "feature selection (mutual information, SHAP)", "feature scaling (standardisation, normalisation)",
-            "handling missing values", "categorical encoding (one-hot, ordinal, target)",
-            "dimensionality reduction (PCA, t-SNE, UMAP)", "class imbalance (SMOTE, cost-sensitive learning)",
-            # Classical ML
-            "linear/logistic regression", "decision trees and ensemble methods",
-            "random forests", "gradient boosting (XGBoost, LightGBM, CatBoost)",
-            "SVMs", "k-means clustering", "DBSCAN",
-            # Deep learning
-            "neural network architecture", "backpropagation", "gradient descent variants (Adam, SGD)",
-            "batch normalisation", "dropout", "learning rate scheduling",
-            "CNNs (convolution, pooling)", "RNNs / LSTMs", "attention mechanism",
-            "Transformer architecture", "transfer learning", "fine-tuning",
-            "BERT, GPT, and LLM fundamentals",
-            # Evaluation metrics
-            "precision, recall, F1", "ROC-AUC, PR-AUC", "NDCG", "MAP",
-            "RMSE, MAE, MAPE", "calibration", "offline vs online evaluation",
-            # MLOps
-            "ML pipelines (Kubeflow, MLflow, SageMaker Pipelines)",
-            "experiment tracking (MLflow, Weights & Biases)",
-            "model versioning", "model registry", "feature stores",
-            "data drift detection", "model monitoring in production",
-            "A/B testing for ML models", "shadow deployment", "canary deployment",
-            # Deployment
-            "model serialisation (ONNX, pickle, TorchScript)",
-            "serving (TensorFlow Serving, Triton, FastAPI)", "batch vs real-time inference",
-            "latency-throughput tradeoffs", "model quantisation", "pruning", "distillation",
-            # LLM-specific
-            "prompt engineering", "RAG (retrieval-augmented generation)",
-            "vector databases (Pinecone, Weaviate, FAISS)", "embedding models",
-            "LLM fine-tuning (LoRA, PEFT)", "hallucination mitigation",
-            "LLM evaluation (BERTScore, RAGAS)", "token context windows",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "angular", "vue", "next.js", "tailwind",
-            "node.js", "express", "spring boot", "django REST framework",
-            "frontend", "css", "html", "figma", "mobile app",
-            "swift", "kotlin", "flutter", "react native",
-        ],
-        "context_override": (
-            "This is a Machine Learning & AI interview. Cover the full ML lifecycle: "
-            "problem framing, data preparation, feature engineering, model selection and evaluation, "
-            "production deployment, and monitoring. For senior roles, probe on MLOps maturity, "
-            "LLM engineering, and system design for ML (feature stores, serving infrastructure). "
-            "Demand technical depth — evaluation metric justification, tradeoff reasoning, "
-            "and real failure scenarios, not just algorithm definitions."
-        ),
+        "aliases": ["machine learning", "ml engineer", "ai engineer", "deep learning", "nlp engineer"],
+        "mandatory_topics": ["model training", "feature engineering", "model evaluation", "neural networks", "overfitting", "hyperparameter tuning", "ML pipelines", "deployment"],
+        "forbidden_resume_keywords": ["react", "angular", "vue", "node.js", "express", "spring boot", "mobile"],
+        "context_override": "This is a Machine Learning & AI interview. Focus on model architecture, training pipelines, evaluation metrics, feature engineering, ML system design, and model deployment.",
     },
-
     "DevOps & Cloud": {
-        "aliases": ["devops", "cloud engineer", "platform engineer", "sre", "site reliability",
-                    "infrastructure engineer", "cloud architect", "devsecops"],
-        "mandatory_topics": [
-            # CI/CD
-            "CI/CD pipeline design (GitHub Actions, GitLab CI, Jenkins, CircleCI)",
-            "pipeline stages (build, test, security scan, deploy)",
-            "artifact management", "deployment strategies (blue-green, canary, rolling)",
-            "feature flags", "rollback strategies", "trunk-based development",
-            # Containers & orchestration
-            "Docker (images, layers, multi-stage builds, registry)",
-            "Kubernetes (pods, deployments, services, ingress, namespaces)",
-            "Kubernetes resource requests/limits", "HPA and VPA",
-            "Helm charts", "operators", "StatefulSets", "PersistentVolumes",
-            "service mesh (Istio, Linkerd)", "container security scanning",
-            # Infrastructure as Code
-            "Terraform (state management, modules, workspaces)",
-            "Ansible", "Pulumi", "CloudFormation / CDK",
-            "GitOps (ArgoCD, Flux)", "drift detection",
-            # Cloud platforms
-            "AWS (EC2, ECS/EKS, Lambda, S3, RDS, CloudFront, IAM, VPC, Route53)",
-            "Azure (AKS, App Service, Azure Functions, Blob Storage, AAD)",
-            "GCP (GKE, Cloud Run, Cloud Functions, BigQuery, IAM, VPC)",
-            "multi-cloud and hybrid cloud patterns",
-            "cloud cost optimisation (reserved instances, spot/preemptible, rightsizing)",
-            # Observability
-            "metrics (Prometheus, CloudWatch, Datadog)", "logging (ELK stack, Loki, CloudWatch Logs)",
-            "tracing (Jaeger, Zipkin, AWS X-Ray, OpenTelemetry)",
-            "alerting (PagerDuty, OpsGenie)", "SLOs, SLAs, SLIs, error budgets",
-            "on-call practices", "incident management (runbooks, postmortems)",
-            # Networking
-            "DNS", "load balancers (ALB, NLB, HAProxy)", "CDN",
-            "VPC design (subnets, NACLs, security groups)", "VPN and Direct Connect",
-            "service discovery", "network policies in Kubernetes",
-            # Security & compliance
-            "IAM least privilege", "secrets management (Vault, AWS Secrets Manager)",
-            "SAST/DAST in pipelines", "image vulnerability scanning (Trivy, Snyk)",
-            "CIS benchmarks", "SOC2/PCI compliance automation",
-            # Reliability
-            "chaos engineering", "fault injection", "disaster recovery",
-            "RTO and RPO", "backup strategies", "multi-region failover",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "angular", "vue", "next.js", "tailwind", "figma",
-            "pandas", "sklearn", "tensorflow", "pytorch",
-            "mobile app", "swift", "kotlin", "flutter",
-            "SEO optimisation", "UI component library",
-        ],
-        "context_override": (
-            "This is a DevOps & Cloud interview. Cover CI/CD pipeline design, container orchestration "
-            "(Kubernetes internals and production operations), Infrastructure as Code (Terraform/GitOps), "
-            "cloud platform services (AWS/GCP/Azure), observability (metrics/logs/traces/SLOs), "
-            "networking, and cloud security. Probe for real operational experience: "
-            "incident response war stories, cost optimisation decisions, and reliability engineering "
-            "— not just tool enumerations."
-        ),
+        "aliases": ["devops", "cloud engineer", "platform engineer", "sre", "site reliability"],
+        "mandatory_topics": ["CI/CD", "Docker", "Kubernetes", "infrastructure as code", "monitoring", "cloud platforms", "incident response", "scaling strategies"],
+        "forbidden_resume_keywords": ["react", "angular", "pandas", "sklearn", "tableau", "power bi"],
+        "context_override": "This is a DevOps & Cloud interview. Focus on CI/CD pipelines, containerization, orchestration, cloud infrastructure, monitoring, and reliability engineering.",
     },
-
     "Cybersecurity": {
-        "aliases": ["cybersecurity", "security engineer", "pen tester", "information security",
-                    "appsec", "application security", "cloud security", "devsecops engineer",
-                    "soc analyst", "threat intelligence"],
-        "mandatory_topics": [
-            # Fundamentals
-            "CIA triad (confidentiality, integrity, availability)",
-            "defence in depth", "principle of least privilege", "zero trust architecture",
-            "threat modelling (STRIDE, PASTA, attack trees)",
-            "risk assessment and risk scoring (CVSS)", "security controls taxonomy",
-            # Application security
-            "OWASP Top 10 (SQLi, XSS, SSRF, IDOR, broken auth, etc.)",
-            "input validation and output encoding", "parameterised queries",
-            "authentication flows (OAuth 2.0, OIDC, SAML)", "JWT security pitfalls",
-            "session management", "CSRF", "clickjacking", "security headers (CSP, HSTS)",
-            "API security (rate limiting, auth, mass assignment)",
-            "SAST and DAST", "software composition analysis (SCA)", "secret scanning",
-            # Network security
-            "TCP/IP fundamentals", "TLS/SSL (handshake, certificate chains, HSTS)",
-            "firewalls and WAFs", "IDS/IPS", "VPN and Zero Trust Network Access",
-            "DNS security (DNSSEC, DNS poisoning)", "DDoS mitigation",
-            "network segmentation and micro-segmentation",
-            # Penetration testing
-            "OWASP Testing Guide", "recon and OSINT", "exploitation frameworks (Metasploit)",
-            "web app pen testing (Burp Suite)", "privilege escalation techniques",
-            "post-exploitation and lateral movement", "reporting and severity classification",
-            # Cloud security
-            "IAM misconfiguration", "S3 bucket exposure", "AWS security best practices",
-            "cloud security posture management (CSPM)", "container security",
-            "secrets management (Vault, AWS Secrets Manager)", "CWPP",
-            # Incident response
-            "incident response lifecycle (preparation, detection, containment, eradication, recovery)",
-            "digital forensics basics", "log analysis and SIEM (Splunk, Microsoft Sentinel, Chronicle)",
-            "threat hunting", "IoCs and IoAs", "MITRE ATT&CK framework",
-            # Cryptography
-            "symmetric vs asymmetric encryption", "AES, RSA, ECC",
-            "hashing (SHA-256, bcrypt, argon2)", "PKI and certificate management",
-            "key management", "TLS configuration best practices",
-            # Compliance & governance
-            "GDPR", "SOC 2", "ISO 27001", "PCI-DSS", "HIPAA",
-            "security policies and standards", "vulnerability management lifecycle",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "angular", "vue", "pandas", "sklearn",
-            "mobile app", "ui design", "figma", "photoshop",
-            "CSS animations", "frontend state management",
-        ],
-        "context_override": (
-            "This is a Cybersecurity interview. Cover application security (OWASP Top 10, "
-            "auth flows, API security), network security, penetration testing methodology, "
-            "cloud security, incident response, and cryptography fundamentals. "
-            "Probe for offensive AND defensive mindset: threat modelling, exploit chaining, "
-            "detection engineering, and security architecture decisions — not just tool familiarity."
-        ),
+        "aliases": ["cybersecurity", "security engineer", "pen tester", "information security"],
+        "mandatory_topics": ["threat modeling", "OWASP", "penetration testing", "encryption", "authentication", "incident response", "network security", "vulnerability assessment"],
+        "forbidden_resume_keywords": ["react", "pandas", "sklearn", "mobile app", "ui design"],
+        "context_override": "This is a Cybersecurity interview. Focus on security principles, threat vectors, defensive/offensive techniques, compliance, and security architecture.",
     },
-
     "UI/UX Design": {
-        "aliases": ["ui designer", "ux designer", "product designer", "interaction designer",
-                    "ux researcher", "design lead", "experience designer"],
-        "mandatory_topics": [
-            # Research methods
-            "user interviews", "contextual inquiry", "diary studies",
-            "surveys (quantitative vs qualitative)", "usability testing (moderated/unmoderated)",
-            "card sorting", "tree testing", "A/B testing for UX",
-            "affinity mapping", "persona development", "jobs-to-be-done framework",
-            # Information architecture & flows
-            "information architecture", "site maps", "user flows", "task flows",
-            "mental models", "navigation patterns", "progressive disclosure",
-            # Wireframing & prototyping
-            "low-fidelity wireframes", "high-fidelity mockups",
-            "interactive prototyping (Figma, Axure, ProtoPie)",
-            "design handoff (Figma Dev Mode, Zeplin)",
-            "micro-interactions and animation principles",
-            # Design systems
-            "design tokens", "component libraries", "atomic design",
-            "responsive and adaptive design", "platform guidelines (HIG, Material Design)",
-            "version control for design (Figma branching, Abstract)",
-            # Visual design
-            "typography hierarchy", "colour theory and accessible colour contrast (WCAG AA/AAA)",
-            "gestalt principles", "visual hierarchy and layout grids",
-            "icon design", "illustration style consistency",
-            # Accessibility
-            "WCAG 2.1 / 2.2 guidelines", "ARIA roles and labels",
-            "keyboard navigation design", "screen reader compatibility",
-            "colour blindness considerations", "inclusive design principles",
-            # Metrics & measurement
-            "usability metrics (task completion, error rate, time-on-task)",
-            "NPS and CSAT", "System Usability Scale (SUS)",
-            "funnel analysis", "heatmaps and session recordings",
-            "design iteration cycles", "OKRs tied to UX outcomes",
-            # Collaboration
-            "design critique facilitation", "stakeholder alignment",
-            "design sprints", "cross-functional collaboration with engineering",
-            "documenting design decisions and rationale",
-        ],
-        "forbidden_resume_keywords": [
-            "tensorflow", "docker", "kubernetes", "SQL queries",
-            "backend API design", "microservices", "CI/CD pipelines",
-            "server infrastructure", "network security", "penetration testing",
-        ],
-        "context_override": (
-            "This is a UI/UX Design interview. Cover the full design process from research "
-            "(user interviews, usability testing) through information architecture, wireframing, "
-            "high-fidelity prototyping, design systems, and accessibility. "
-            "Probe for research rigour, design decision justification, stakeholder communication, "
-            "and how the candidate measures design impact — not just tool proficiency."
-        ),
+        "aliases": ["ui designer", "ux designer", "product designer", "interaction designer"],
+        "mandatory_topics": ["user research", "wireframing", "prototyping", "usability testing", "design systems", "information architecture", "accessibility", "figma"],
+        "forbidden_resume_keywords": ["tensorflow", "docker", "kubernetes", "SQL queries", "backend API"],
+        "context_override": "This is a UI/UX Design interview. Focus on design process, user research methods, wireframing, prototyping tools, usability testing, and design systems.",
     },
-
     "Project Management": {
-        "aliases": ["project manager", "product manager", "scrum master", "agile coach",
-                    "program manager", "technical program manager", "delivery manager"],
-        "mandatory_topics": [
-            # Methodologies
-            "Agile (Scrum, Kanban, SAFe, LeSS)", "Waterfall and hybrid approaches",
-            "sprint planning", "backlog refinement", "sprint retrospectives",
-            "definition of done vs definition of ready", "velocity and story points",
-            "epic, story, task hierarchy", "release planning",
-            # Product management
-            "product vision and strategy", "product roadmapping (now/next/later, theme-based)",
-            "OKRs and KPI definition", "prioritisation frameworks (RICE, MoSCoW, Kano, WSJF)",
-            "product discovery", "opportunity sizing", "market research",
-            "customer journey mapping", "user story writing",
-            "go-to-market planning", "launch checklists",
-            # Stakeholder management
-            "stakeholder mapping", "RACI matrix", "executive communication",
-            "managing up vs managing down", "conflict resolution",
-            "requirements gathering and sign-off", "change management",
-            # Risk & delivery
-            "risk identification and RAID log", "risk mitigation strategies",
-            "dependency mapping", "critical path analysis",
-            "scope creep management", "escalation paths",
-            "delivery metrics (cycle time, lead time, throughput)",
-            # Technical program management
-            "technical debt management", "cross-team dependency management",
-            "technical roadmap alignment", "engineering capacity planning",
-            "incident retrospectives", "architecture decision records (ADRs)",
-            # Data & metrics
-            "funnel metrics", "retention metrics", "activation, engagement, churn",
-            "hypothesis-driven development", "experiment design",
-            "dashboard creation", "reporting to leadership",
-            # Tools
-            "Jira", "Linear", "Confluence", "Notion", "Asana",
-            "Miro / FigJam for workshops", "ProductBoard", "Amplitude / Mixpanel",
-        ],
-        "forbidden_resume_keywords": [
-            "react", "tensorflow", "docker", "SQL joins", "API development",
-            "frontend CSS", "kubernetes", "penetration testing",
-            "SIEM tools", "malware analysis",
-        ],
-        "context_override": (
-            "This is a Project/Product Management interview. Cover planning methodologies (Agile/Scrum), "
-            "prioritisation frameworks (RICE, MoSCoW, WSJF), stakeholder communication, risk management, "
-            "product discovery and roadmapping, delivery metrics, and data-driven decision making. "
-            "For PM roles, probe for customer empathy and impact measurement. "
-            "For TPM roles, probe for technical dependency management and engineering collaboration. "
-            "Demand specific examples — STAR method, not generic process descriptions."
-        ),
+        "aliases": ["project manager", "product manager", "scrum master", "agile coach"],
+        "mandatory_topics": ["project planning", "stakeholder management", "agile/scrum", "risk management", "roadmapping", "KPIs", "cross-functional coordination", "prioritization"],
+        "forbidden_resume_keywords": ["react", "tensorflow", "docker", "SQL joins", "API development"],
+        "context_override": "This is a Project/Product Management interview. Focus on planning methodologies, stakeholder communication, risk mitigation, prioritization frameworks, and delivery metrics.",
     },
 }
 
@@ -12537,105 +11707,6 @@ def get_domain_config(domain: str) -> dict:
         if any(alias in domain_lower for alias in cfg.get("aliases", [])):
             return cfg
     return _DEFAULT_DOMAIN_CONFIG
-
-
-def generate_key_topics(resume_context: dict, domain_config: dict, selected_role: str) -> list:
-    """
-    Generate a ranked, deduplicated list of up to 10 key topics in scope for the
-    interview, combining three sources in priority order:
-
-        1. Resume technologies  (most specific to the candidate)
-        2. Resume skills        (secondary candidate signal)
-        3. Domain mandatory_topics (domain-level fundamentals, fill remaining slots)
-
-    Parameters
-    ----------
-    resume_context : dict
-        Parsed resume data with keys: "technologies", "skills", "projects", "experience".
-        May be None or empty — function degrades gracefully to domain topics only.
-    domain_config : dict
-        Output of get_domain_config() for the selected domain.
-    selected_role : str
-        The sub-role chosen by the user (e.g. "Frontend Developer", "ML Engineer").
-        Used as a tiebreaker to surface more relevant domain topics when the resume
-        is sparse.
-
-    Returns
-    -------
-    list[str]
-        Between 1 and 10 topic strings, never empty.
-    """
-    MAX_TOPICS = 10
-
-    # ── Normalise inputs ──────────────────────────────────────────────────────
-    rc = resume_context or {}
-    domain_mandatory = domain_config.get("mandatory_topics", [])
-    forbidden = [kw.lower() for kw in domain_config.get("forbidden_resume_keywords", [])]
-
-    def _clean(items):
-        """Deduplicate, strip empties, remove items that are forbidden in this domain."""
-        seen = set()
-        out = []
-        for item in items:
-            norm = item.strip()
-            if not norm:
-                continue
-            # Drop resume items that conflict with the selected domain
-            if any(f in norm.lower() for f in forbidden):
-                continue
-            key = norm.lower()
-            if key not in seen:
-                seen.add(key)
-                out.append(norm)
-        return out
-
-    # ── Source 1: resume technologies ────────────────────────────────────────
-    resume_techs = _clean(rc.get("technologies", []))
-
-    # ── Source 2: resume skills ───────────────────────────────────────────────
-    # Exclude anything already captured from technologies
-    tech_keys = {t.lower() for t in resume_techs}
-    resume_skills = _clean(
-        [s for s in rc.get("skills", []) if s.strip().lower() not in tech_keys]
-    )
-
-    # ── Source 3: domain mandatory topics ────────────────────────────────────
-    # Prioritise mandatory topics whose text overlaps with the selected role name,
-    # so a "Frontend Developer" sees React/CSS before obscure backend topics.
-    role_lower = selected_role.lower()
-    role_keywords = set(role_lower.replace("-", " ").split())
-
-    def _role_relevance(topic: str) -> int:
-        """Higher = more relevant to the selected role."""
-        t_lower = topic.lower()
-        return sum(1 for kw in role_keywords if kw in t_lower)
-
-    already_seen = {t.lower() for t in resume_techs + resume_skills}
-    domain_topics_filtered = [
-        t for t in domain_mandatory if t.strip().lower() not in already_seen
-    ]
-    domain_topics_sorted = sorted(
-        domain_topics_filtered,
-        key=_role_relevance,
-        reverse=True
-    )
-
-    # ── Merge in priority order ───────────────────────────────────────────────
-    combined = resume_techs[:MAX_TOPICS]
-    remaining = MAX_TOPICS - len(combined)
-
-    if remaining > 0:
-        combined += resume_skills[:remaining]
-        remaining = MAX_TOPICS - len(combined)
-
-    if remaining > 0:
-        combined += domain_topics_sorted[:remaining]
-
-    # ── Guarantee non-empty list ──────────────────────────────────────────────
-    if not combined:
-        combined = domain_mandatory[:MAX_TOPICS] or [selected_role + " fundamentals"]
-
-    return combined[:MAX_TOPICS]
 
 
 def filter_resume_for_domain(resume_context: dict, selected_domain: str) -> dict:
@@ -13681,7 +12752,7 @@ def show_resume_scanning_animation():
 
     for text, value in steps:
         status.markdown(
-            f"<h4 style='text-align:center;color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Display\",sans-serif;font-weight:600;letter-spacing:-0.02em;'>{text}</h4>",
+            f"<h4 style='text-align:center;color:#00c3ff'>{text}</h4>",
             unsafe_allow_html=True
         )
         progress.progress(value)
@@ -13901,420 +12972,415 @@ Generate {num_questions} questions:"""
 
 
 with tab4:
-    # Inject CSS styles — Apple-style SaaS dark theme (matching tab1.py HIRELYZER design language)
+    # Inject CSS styles (keeping existing styles)
     st.markdown("""
         <style>
-        /* ═══════════════════════════════════════════════════════════════
-           HIRELYZER — Premium Apple-Style Dark Theme (Tab 4)
-           Font Stack: SF Pro Display → DM Sans → Segoe UI → sans-serif
-           Design Language: Glassmorphism · Soft gradients · Refined motion
-           ═══════════════════════════════════════════════════════════════ */
-
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
-
-        :root {
-            --t4-bg-primary:      #080c12;
-            --t4-bg-secondary:    #0e1420;
-            --t4-bg-tertiary:     #141c2b;
-            --t4-surface-01:      rgba(255,255,255,0.04);
-            --t4-surface-02:      rgba(255,255,255,0.07);
-            --t4-surface-hover:   rgba(255,255,255,0.10);
-            --t4-border-subtle:   rgba(255,255,255,0.07);
-            --t4-border-accent:   rgba(99,179,237,0.30);
-            --t4-accent-blue:     #4fa3e3;
-            --t4-accent-cyan:     #38bdf8;
-            --t4-accent-violet:   #818cf8;
-            --t4-accent-emerald:  #34d399;
-            --t4-accent-amber:    #fbbf24;
-            --t4-accent-rose:     #fb7185;
-            --t4-text-primary:    #f0f4f8;
-            --t4-text-secondary:  #94a3b8;
-            --t4-text-muted:      #4a5568;
-            --t4-radius-sm:       8px;
-            --t4-radius-md:       14px;
-            --t4-radius-lg:       20px;
-            --t4-radius-xl:       28px;
-            --t4-shadow-glow:     0 0 30px rgba(79,163,227,0.15);
-            --t4-shadow-card:     0 8px 40px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.06) inset;
-            --t4-font:            -apple-system, BlinkMacSystemFont, "SF Pro Display", "DM Sans", "Segoe UI", Roboto, sans-serif;
-            --t4-ease-fast:       0.18s cubic-bezier(0.4,0,0.2,1);
-            --t4-ease-base:       0.28s cubic-bezier(0.4,0,0.2,1);
-            --t4-ease-slow:       0.45s cubic-bezier(0.4,0,0.2,1);
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
 
-        /* ── Animations ── */
-        @keyframes t4-fadeSlideUp  { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes t4-shimmer      { 0% { transform:translateX(-100%) skewX(-12deg); } 100% { transform:translateX(220%) skewX(-12deg); } }
-        @keyframes t4-pulseGlow    { 0%,100% { box-shadow: var(--t4-shadow-card); } 50% { box-shadow: var(--t4-shadow-card), var(--t4-shadow-glow); } }
-        @keyframes t4-gradientFlow { 0%,100% { background-position:0% 50%; } 50% { background-position:100% 50%; } }
-        @keyframes t4-subtlePulse  { 0%,100% { opacity:1; } 50% { opacity:0.82; } }
-
-        /* ── Header Box ── */
         .header-box {
-            background: linear-gradient(160deg, rgba(14,20,32,0.97) 0%, rgba(8,12,18,0.99) 100%);
-            backdrop-filter: blur(32px) saturate(160%);
-            -webkit-backdrop-filter: blur(32px) saturate(160%);
-            border: 1px solid rgba(99,179,237,0.20);
-            border-radius: var(--t4-radius-xl);
-            padding: 32px 28px;
-            text-align: center;
-            margin-bottom: 32px;
-            box-shadow: var(--t4-shadow-card), 0 0 60px rgba(79,163,227,0.07);
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 25%, #2d3561 50%, #3f4787 75%, #5158ae 100%);
+            border: 2px solid transparent;
+            background-clip: padding-box;
             position: relative;
+            padding: 25px;
+            border-radius: 20px;
+            text-align: center;
+            margin-bottom: 35px;
+            box-shadow: 
+                0 8px 32px rgba(0, 195, 255, 0.15),
+                0 4px 16px rgba(0, 195, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
             overflow: hidden;
-            animation: t4-fadeSlideUp 0.65s cubic-bezier(0.22,1,0.36,1) forwards;
         }
-        .header-box::after {
+
+        .header-box::before {
             content: '';
             position: absolute;
-            top: 0; left: -100%;
-            width: 60%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(79,163,227,0.06), transparent);
-            animation: t4-shimmer 3.5s ease-in-out infinite;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, #00c3ff, #0066cc, #00c3ff, #0066cc);
+            background-size: 400% 400%;
+            animation: gradientShift 8s ease infinite;
+            z-index: -1;
+            border-radius: 20px;
+            padding: 2px;
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
         }
+
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
         .header-box h2 {
-            font-family: var(--t4-font) !important;
-            font-size: 1.85rem !important;
-            font-weight: 700 !important;
-            color: var(--t4-text-primary) !important;
-            letter-spacing: -0.03em !important;
-            margin: 0 !important;
-            text-shadow: none !important;
+            font-size: 32px;
+            color: #ffffff;
+            margin: 0;
+            font-weight: 700;
+            text-shadow: 
+                0 0 20px rgba(0, 195, 255, 0.5),
+                0 2px 4px rgba(0, 0, 0, 0.3);
+            letter-spacing: -0.5px;
         }
 
-        /* ── Glow Header ── */
         .glow-header {
-            font-family: var(--t4-font);
-            font-size: 1.25rem;
+            font-size: 24px;
             text-align: center;
-            color: var(--t4-accent-cyan);
+            color: #00c3ff;
+            text-shadow: 
+                0 0 20px rgba(0, 195, 255, 0.8),
+                0 0 40px rgba(0, 195, 255, 0.4);
+            margin: 20px 0 15px 0;
             font-weight: 600;
-            letter-spacing: -0.02em;
-            margin: 20px 0 12px 0;
-            animation: t4-subtlePulse 3.5s ease-in-out infinite;
+            letter-spacing: -0.3px;
+            animation: pulse 3s ease-in-out infinite;
         }
 
-        /* ── Learning Path Container ── */
-        .learning-path-container {
-            text-align: center;
-            margin: 24px 0 18px 0;
-            padding: 14px 20px;
-            background: var(--t4-surface-01);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border-radius: var(--t4-radius-md);
-            border: 1px solid var(--t4-border-subtle);
-            transition: border-color var(--t4-ease-base);
-        }
-        .learning-path-container:hover {
-            border-color: var(--t4-border-accent);
-        }
-        .learning-path-text {
-            font-family: var(--t4-font);
-            color: var(--t4-text-secondary);
-            font-weight: 600;
-            font-size: 0.875rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.9; transform: scale(1.02); }
         }
 
-        /* ── Card ── */
-        .card {
-            background: var(--t4-surface-01);
-            backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border: 1px solid var(--t4-border-subtle);
-            border-radius: var(--t4-radius-lg);
-            padding: 20px 24px;
-            margin: 10px 0;
+        .stRadio > div {
+            flex-direction: row !important;
+            justify-content: center !important;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .stRadio label {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            color: #00c3ff;
+            padding: 14px 24px;
+            margin: 6px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            font-weight: 500;
+            min-width: 190px;
+            text-align: center;
             position: relative;
             overflow: hidden;
-            transition: transform var(--t4-ease-base), box-shadow var(--t4-ease-base), border-color var(--t4-ease-base);
-            box-shadow: var(--t4-shadow-card);
-            animation: t4-fadeSlideUp 0.5s ease forwards;
+            box-shadow: 
+                0 4px 15px rgba(0, 195, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
+
+        .stRadio label::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 195, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .stRadio label:hover {
+            background: linear-gradient(135deg, #00c3ff15 0%, #00c3ff25 100%);
+            transform: translateY(-2px);
+            box-shadow: 
+                0 8px 25px rgba(0, 195, 255, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .stRadio label:hover::before {
+            left: 100%;
+        }
+
+        .stRadio input:checked + div > label {
+            background: linear-gradient(135deg, #00c3ff 0%, #0099cc 100%);
+            color: #000000;
+            font-weight: 600;
+            transform: scale(1.05);
+            box-shadow: 
+                0 8px 30px rgba(0, 195, 255, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .card {
+            background: linear-gradient(135deg, #0f1419 0%, #1a2332 25%, #253447 50%, #30455c 75%, #3b5671 100%);
+            border: 2px solid transparent;
+            border-radius: 16px;
+            padding: 20px 25px;
+            margin: 12px 0;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 
+                0 4px 20px rgba(0, 195, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
         .card::before {
             content: '';
             position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 60%);
-            pointer-events: none;
-            border-radius: inherit;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, #00c3ff, #0066cc);
+            z-index: -1;
+            border-radius: 16px;
+            padding: 2px;
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+            opacity: 0.8;
         }
+
         .card::after {
             content: '';
             position: absolute;
-            top: 0; left: -100%;
-            width: 50%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(79,163,227,0.05), transparent);
-            transition: left 0.6s ease;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.6s;
         }
+
         .card:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--t4-shadow-card), 0 0 50px rgba(79,163,227,0.10);
-            border-color: var(--t4-border-accent);
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 
+                0 12px 40px rgba(0, 195, 255, 0.25),
+                0 8px 20px rgba(0, 195, 255, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
-        .card:hover::after { left: 150%; }
+
+        .card:hover::after {
+            left: 100%;
+        }
+
         .card a {
-            font-family: var(--t4-font);
-            color: var(--t4-accent-cyan);
+            color: #00c3ff;
             font-weight: 600;
-            font-size: 0.95rem;
+            font-size: 16px;
             text-decoration: none;
             display: flex;
             align-items: center;
             gap: 8px;
-            transition: all var(--t4-ease-fast);
+            transition: all 0.3s ease;
+            text-shadow: 0 0 10px rgba(0, 195, 255, 0.3);
         }
+
         .card a:hover {
-            color: var(--t4-text-primary);
+            color: #ffffff;
             text-decoration: none;
-            transform: translateX(3px);
+            text-shadow: 
+                0 0 15px rgba(255, 255, 255, 0.5),
+                0 0 30px rgba(0, 195, 255, 0.3);
+            transform: translateX(4px);
         }
 
-        /* ── Course Tile ── */
-        .course-tile {
-            background: var(--t4-surface-01);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--t4-border-subtle);
-            border-radius: var(--t4-radius-lg);
-            padding: 20px;
-            margin: 12px 0;
-            transition: all var(--t4-ease-base);
-            position: relative;
+        /* Enhanced selectbox styling */
+        .stSelectbox > div > div {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            border-radius: 10px;
+            color: #00c3ff;
+        }
+
+        .stSelectbox > div > div:hover {
+            box-shadow: 0 0 15px rgba(0, 195, 255, 0.3);
+        }
+
+        /* Enhanced subheader styling */
+        .stApp h3 {
+            color: #00c3ff;
+            text-shadow: 0 0 10px rgba(0, 195, 255, 0.5);
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        /* Learning path container */
+        .learning-path-container {
+            text-align: center;
+            margin: 30px 0 20px 0;
+            padding: 15px;
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
+            border-radius: 12px;
+            border: 1px solid rgba(0, 195, 255, 0.2);
+        }
+
+        .learning-path-text {
+            color: #00c3ff;
+            font-weight: 600;
+            font-size: 20px;
+            text-shadow: 0 0 15px rgba(0, 195, 255, 0.6);
+            letter-spacing: -0.3px;
+        }
+
+        /* Video container enhancements */
+        .stVideo {
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: var(--t4-shadow-card);
-        }
-        .course-tile:hover {
-            transform: translateY(-4px);
-            border-color: var(--t4-border-accent);
-            box-shadow: var(--t4-shadow-card), var(--t4-shadow-glow);
-        }
-        .course-title {
-            font-family: var(--t4-font);
-            color: var(--t4-accent-cyan);
-            font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 8px;
-            letter-spacing: -0.01em;
-        }
-        .course-description {
-            font-family: var(--t4-font);
-            color: var(--t4-text-secondary);
-            font-size: 0.85rem;
-            margin-bottom: 14px;
-            line-height: 1.55;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
         }
 
-        /* ── Difficulty Badges ── */
-        .difficulty-badge {
-            display: inline-block;
-            padding: 3px 10px;
-            border-radius: 99px;
-            font-size: 0.72rem;
-            font-weight: 600;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            margin-bottom: 12px;
-            font-family: var(--t4-font);
-        }
-        .difficulty-beginner    { background: rgba(52,211,153,0.15); color: var(--t4-accent-emerald); border: 1px solid rgba(52,211,153,0.3); }
-        .difficulty-intermediate{ background: rgba(251,191,36,0.12); color: var(--t4-accent-amber);   border: 1px solid rgba(251,191,36,0.28); }
-        .difficulty-advanced    { background: rgba(251,113,133,0.12); color: var(--t4-accent-rose);   border: 1px solid rgba(251,113,133,0.28); }
-
-        /* ── Course Link Button ── */
-        .course-link-btn {
-            background: linear-gradient(135deg, rgba(56,189,248,0.18) 0%, rgba(79,163,227,0.12) 100%);
-            color: var(--t4-accent-cyan);
-            border: 1px solid rgba(56,189,248,0.30);
-            padding: 7px 16px;
-            border-radius: var(--t4-radius-sm);
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 0.825rem;
-            font-family: var(--t4-font);
-            display: inline-block;
-            transition: all var(--t4-ease-fast);
-            backdrop-filter: blur(8px);
-        }
-        .course-link-btn:hover {
-            background: linear-gradient(135deg, rgba(56,189,248,0.28) 0%, rgba(79,163,227,0.22) 100%);
-            border-color: rgba(56,189,248,0.55);
-            transform: translateY(-1px);
-            text-decoration: none;
-            color: #e0f6ff;
+        .stVideo:hover {
+            transform: scale(1.02);
         }
 
-        /* ── Quiz Card ── */
+        /* Info message styling */
+        .stAlert {
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.1) 0%, rgba(0, 195, 255, 0.05) 100%);
+            border: 1px solid rgba(0, 195, 255, 0.3);
+            border-radius: 10px;
+        }
+
+        /* New styles for quiz and interview sections */
         .quiz-card {
-            background: var(--t4-surface-01);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--t4-border-subtle);
-            border-radius: var(--t4-radius-lg);
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            border-radius: 15px;
             padding: 20px;
-            margin: 14px 0;
-            box-shadow: var(--t4-shadow-card);
-            transition: all var(--t4-ease-base);
-        }
-        .quiz-card:hover {
-            border-color: var(--t4-border-accent);
+            margin: 15px 0;
+            box-shadow: 0 4px 20px rgba(0, 195, 255, 0.15);
         }
 
-        /* ── Badge Container ── */
         .badge-container {
             text-align: center;
-            padding: 28px;
-            background: var(--t4-surface-01);
-            backdrop-filter: blur(24px) saturate(180%);
-            -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border-radius: var(--t4-radius-lg);
-            border: 1px solid var(--t4-border-subtle);
-            margin: 18px 0;
-            box-shadow: var(--t4-shadow-card);
-            animation: t4-fadeSlideUp 0.5s ease forwards;
+            padding: 30px;
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.12) 0%, rgba(0, 195, 255, 0.06) 100%);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 195, 255, 0.25);
+            margin: 20px 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.08);
         }
 
-        /* ── Score Display ── */
         .score-display {
-            font-family: var(--t4-font);
-            font-size: 4rem;
-            font-weight: 700;
-            color: var(--t4-accent-cyan);
-            letter-spacing: -0.04em;
-            line-height: 1;
+            font-size: 64px;
+            font-weight: bold;
+            color: #00d4ff;
+            text-shadow: 0 0 30px rgba(0, 212, 255, 0.6);
+            letter-spacing: 2px;
         }
 
-        /* ── Role Selector ── */
         .role-selector {
-            background: var(--t4-surface-01);
-            border: 1px solid var(--t4-border-subtle);
-            border-radius: var(--t4-radius-md);
-            padding: 18px;
-            margin: 12px 0;
-            backdrop-filter: blur(16px);
-            transition: border-color var(--t4-ease-fast);
-        }
-        .role-selector:hover { border-color: var(--t4-border-accent); }
-
-        /* ── Radar Container ── */
-        .radar-container {
-            background: var(--t4-surface-01);
-            border: 1px solid var(--t4-border-subtle);
-            border-radius: var(--t4-radius-lg);
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
+            border: 1px solid rgba(0, 195, 255, 0.2);
+            border-radius: 12px;
             padding: 20px;
-            margin: 18px 0;
-            backdrop-filter: blur(16px);
+            margin: 15px 0;
         }
 
-        /* ── Timer ── */
-        .timer-container {
-            background: linear-gradient(135deg, rgba(251,191,36,0.08) 0%, rgba(251,191,36,0.04) 100%);
-            border: 1px solid rgba(251,191,36,0.25);
-            border-radius: var(--t4-radius-md);
-            padding: 14px;
-            margin: 14px 0;
-            text-align: center;
-            backdrop-filter: blur(16px);
-        }
-        .timer-display {
-            font-family: var(--t4-font);
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: var(--t4-accent-amber);
-            letter-spacing: -0.01em;
-        }
-        .timer-urgent {
-            color: var(--t4-accent-rose);
-            animation: t4-subtlePulse 1s ease-in-out infinite;
-        }
-
-        /* ── Selectbox ── */
-        .stSelectbox > div > div {
-            background: var(--t4-surface-01) !important;
-            border: 1px solid var(--t4-border-subtle) !important;
-            border-radius: var(--t4-radius-sm) !important;
-            color: var(--t4-text-primary) !important;
-            font-family: var(--t4-font) !important;
-            transition: border-color var(--t4-ease-fast) !important;
-        }
-        .stSelectbox > div > div:hover {
-            border-color: rgba(79,163,227,0.35) !important;
-            box-shadow: 0 0 0 3px rgba(79,163,227,0.08) !important;
-        }
-
-        /* ── Subheaders ── */
-        .stApp h3 {
-            font-family: var(--t4-font) !important;
-            color: var(--t4-text-primary) !important;
-            font-weight: 600 !important;
-            letter-spacing: -0.02em !important;
-            margin-bottom: 16px !important;
-        }
-
-        /* ── Alert/Info ── */
-        .stAlert {
-            background: var(--t4-surface-01) !important;
-            border: 1px solid var(--t4-border-subtle) !important;
-            border-radius: var(--t4-radius-md) !important;
-            backdrop-filter: blur(16px) !important;
-            font-family: var(--t4-font) !important;
-            font-size: 0.875rem !important;
-        }
-
-        /* ── Video ── */
-        .stVideo {
-            border-radius: var(--t4-radius-md);
+        /* Course tile styling */
+        .course-tile {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border: 2px solid #00c3ff;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 15px 0;
+            transition: all 0.3s ease;
+            position: relative;
             overflow: hidden;
-            box-shadow: var(--t4-shadow-card);
-            transition: transform var(--t4-ease-base);
-        }
-        .stVideo:hover { transform: scale(1.01); }
-
-        /* ── Radio buttons ── */
-        .stRadio > div {
-            flex-direction: row !important;
-            justify-content: center !important;
-            gap: 8px !important;
-            flex-wrap: wrap !important;
-        }
-        .stRadio label {
-            background: var(--t4-surface-01) !important;
-            border: 1px solid var(--t4-border-subtle) !important;
-            color: var(--t4-text-secondary) !important;
-            padding: 10px 20px !important;
-            border-radius: var(--t4-radius-sm) !important;
-            cursor: pointer !important;
-            transition: all var(--t4-ease-fast) !important;
-            font-family: var(--t4-font) !important;
-            font-weight: 500 !important;
-            font-size: 0.875rem !important;
-            text-align: center !important;
-            backdrop-filter: blur(12px) !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-        }
-        .stRadio label:hover {
-            background: var(--t4-surface-hover) !important;
-            border-color: rgba(79,163,227,0.35) !important;
-            color: var(--t4-text-primary) !important;
-            transform: translateY(-2px) !important;
-        }
-        .stRadio input:checked + div > label {
-            background: linear-gradient(135deg, rgba(56,189,248,0.18) 0%, rgba(79,163,227,0.12) 100%) !important;
-            color: var(--t4-accent-cyan) !important;
-            border: 1px solid rgba(56,189,248,0.30) !important;
-            font-weight: 600 !important;
-            box-shadow: 0 2px 12px rgba(56,189,248,0.12) !important;
         }
 
-        /* ── Score badge classes for table ── */
-        .badge-excellent { background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.3); padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
-        .badge-good      { background:rgba(56,189,248,0.12); color:#38bdf8; border:1px solid rgba(56,189,248,0.28); padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
-        .badge-average   { background:rgba(251,191,36,0.12); color:#fbbf24; border:1px solid rgba(251,191,36,0.28); padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
-        .badge-weak      { background:rgba(251,113,133,0.10); color:#fb7185; border:1px solid rgba(251,113,133,0.25); padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
-        .badge-poor      { background:rgba(100,116,139,0.12); color:#64748b; border:1px solid rgba(100,116,139,0.25); padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; }
+        .course-tile:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 195, 255, 0.3);
+        }
 
+        .course-title {
+            color: #00c3ff;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .course-description {
+            color: #ffffff;
+            font-size: 14px;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        .difficulty-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 15px;
+        }
+
+        .difficulty-beginner {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+        }
+
+        .difficulty-intermediate {
+            background: linear-gradient(135deg, #FF9800, #f57c00);
+            color: white;
+        }
+
+        .difficulty-advanced {
+            background: linear-gradient(135deg, #f44336, #d32f2f);
+            color: white;
+        }
+
+        .course-link-btn {
+            background: linear-gradient(135deg, #00c3ff, #0099cc);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .course-link-btn:hover {
+            background: linear-gradient(135deg, #0099cc, #007acc);
+            transform: translateX(2px);
+            text-decoration: none;
+            color: white;
+        }
+
+        /* Radar chart container */
+        .radar-container {
+            background: linear-gradient(135deg, rgba(0, 195, 255, 0.05) 0%, rgba(0, 195, 255, 0.1) 100%);
+            border: 1px solid rgba(0, 195, 255, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        /* Timer styling */
+        .timer-container {
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: center;
+        }
+
+        .timer-display {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        .timer-urgent {
+            color: #ff4444;
+            text-shadow: 0 0 15px rgba(255, 68, 68, 0.8);
+            animation: pulse 1s ease-in-out infinite;
+        }
         </style>
     """, unsafe_allow_html=True)
 
@@ -14327,7 +13393,7 @@ with tab4:
 
     # Subheader (keeping existing)
     st.markdown('<div class="glow-header">🎓 Explore Career Resources</div>', unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center; color:#94a3b8; font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Display\",sans-serif; font-size: 0.95rem; margin-bottom: 22px; letter-spacing:-0.01em;'>Curated courses and videos for your career growth, resume tips, and interview success.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; color:#ccc; font-size: 16px; margin-bottom: 25px;'>Curated courses and videos for your career growth, resume tips, and interview success.</p>", unsafe_allow_html=True)
 
     # Learning path label (keeping existing)
     st.markdown("""
@@ -15264,7 +14330,7 @@ Generate {num_questions} questions now:
             
             # Add hover tooltip information
             st.markdown("""
-                <div style="text-align: center; color: #38bdf8; margin-top: 10px;">
+                <div style="text-align: center; color: #00c3ff; margin-top: 10px;">
                     💡 Hover over the chart points to see skill importance ratings!
                 </div>
             """, unsafe_allow_html=True)
@@ -15327,7 +14393,7 @@ Generate {num_questions} questions now:
 
         # RESUME UPLOAD SECTION (MANDATORY)
         st.markdown("---")
-        st.markdown("<h3 style='color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Display\",sans-serif;font-weight:600;letter-spacing:-0.02em;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #00c3ff;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
 
         if st.session_state.resume_file is None:
             uploaded_resume = st.file_uploader(
@@ -15375,7 +14441,7 @@ Generate {num_questions} questions now:
         # Only show domain/role selection if resume is uploaded
         if st.session_state.resume_file is not None:
             st.markdown("---")
-            st.markdown("<h3 style='color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Display\",sans-serif;font-weight:600;letter-spacing:-0.02em;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='color: #00c3ff;'>👔 Step 2: Select Target Role</h3>", unsafe_allow_html=True)
 
             # Domain and Role selection
             st.markdown('<div class="role-selector">', unsafe_allow_html=True)
@@ -15388,20 +14454,9 @@ Generate {num_questions} questions now:
                     key="interview_domain_selection"
                 )
 
-            # ── Task 1 Fix: reset role when domain changes ──────────────────
-            if st.session_state.get("_prev_interview_domain") != selected_domain:
-                st.session_state["_prev_interview_domain"] = selected_domain
-                # Clear stale role so the new domain's first role is shown
-                if "interview_role_selection" in st.session_state:
-                    del st.session_state["interview_role_selection"]
-
             with col2:
                 if selected_domain:
-                    # Prefer DOMAIN_ROLES mapping; fall back to COURSES_BY_CATEGORY keys
-                    roles = DOMAIN_ROLES.get(
-                        selected_domain,
-                        list(COURSES_BY_CATEGORY[selected_domain].keys())
-                    )
+                    roles = list(COURSES_BY_CATEGORY[selected_domain].keys())
                     selected_role = st.selectbox(
                         "Select Target Role",
                         options=roles,
@@ -15476,7 +14531,7 @@ Generate {num_questions} questions now:
                     _wm_score = _wm_avgs.get(_wm["weakest_skill"], 0)
                     _wm_count = _wm.get("interview_count", 0)
                     _wm_label = f"last {_wm_count} interview{'s' if _wm_count != 1 else ''}"
-                    st.info(f"🧠 **Weakness Memory:** Based on your {_wm_label}, your weakest recurring skill is **{_wm_skill}** (avg: {_wm_score:.2f}/10). Questions will be biased toward improving this.")
+                    st.info(f"🧠 **Weakness Memory:** Based on your {_wm_label}, your weakest recurring skill is **{_wm_skill}** (avg: {_wm_score:.1f}/10). Questions will be biased toward improving this.")
 
                 col1, col2 = st.columns(2)
 
@@ -15509,117 +14564,13 @@ Generate {num_questions} questions now:
                     _resume_techs = " ".join(_rc.get("technologies", []) + _rc.get("skills", [])).lower()
                     _domain_cfg = get_domain_config(selected_domain)
                     _forbidden = _domain_cfg.get("forbidden_resume_keywords", [])
-                    _mandatory = _domain_cfg.get("mandatory_topics", [])
                     _has_mismatch = any(kw.lower() in _resume_techs for kw in _forbidden)
-                    _matched_forbidden = [kw for kw in _forbidden if kw.lower() in _resume_techs]
-
-                    # Always show domain scope card; escalate to warning if mismatch detected
-                    _context_note = _domain_cfg.get("context_override", "")
-
                     if _has_mismatch:
-                        # Domain override is active — topics come purely from domain config
-                        # (resume technologies are suppressed because they conflict with the
-                        # selected domain, so we pass an empty resume context to the function).
-                        _key_topics = generate_key_topics({}, _domain_cfg, selected_role)
-
-                        # Identify which resume skills are being suppressed
-                        _suppressed = list(dict.fromkeys(
-                            kw for kw in _matched_forbidden
-                            if any(kw.lower() in s.lower() for s in (_rc.get("technologies", []) + _rc.get("skills", [])))
-                        ))[:4]
-                        _suppressed_str = (
-                            "".join(
-                                f'<span style="background:rgba(244,67,54,0.15);color:#ef9a9a;'
-                                f'border:1px solid rgba(244,67,54,0.3);border-radius:4px;'
-                                f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
-                                f'{kw}</span>'
-                                for kw in _suppressed
-                            )
-                            if _suppressed else
-                            '<span style="color:#aaa;font-size:12px;">none detected in top skills</span>'
+                        st.info(
+                            f"⚠️ **Domain Override Active**: Your resume appears to have a different technical background. "
+                            f"Questions will be **strictly aligned to {selected_domain}** regardless of your resume content. "
+                            f"This simulates interviewing for a new domain."
                         )
-                        _domain_pills = "".join(
-                            f'<span style="background:rgba(56,189,248,0.12);color:#38bdf8;'
-                            f'border:1px solid rgba(0,195,255,0.25);border-radius:4px;'
-                            f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
-                            f'{t}</span>'
-                            for t in _key_topics
-                        )
-                        st.markdown(f"""
-                        <div style="background:linear-gradient(135deg,rgba(255,152,0,0.08) 0%,rgba(255,87,34,0.06) 100%);
-                                    border:1px solid rgba(255,152,0,0.35);border-left:4px solid #ff9800;
-                                    border-radius:10px;padding:16px 20px;margin:10px 0;">
-                            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-                                <span style="font-size:20px;">🔄</span>
-                                <div>
-                                    <strong style="color:#ffb74d;font-size:15px;">Domain Override Active</strong>
-                                    <span style="color:#aaa;font-size:12px;margin-left:8px;">
-                                        Career pivot simulation enabled
-                                    </span>
-                                </div>
-                            </div>
-                            <p style="color:#e0e0e0;font-size:13px;margin:0 0 10px 0;line-height:1.6;">
-                                Your resume contains skills outside <strong style="color:#ffb74d;">{selected_domain}</strong>.
-                                All questions will be strictly scoped to your <em>target domain</em>, regardless of your
-                                existing background. This mirrors what a real interviewer would focus on when you apply
-                                to a new domain.
-                            </p>
-                            <div style="margin-bottom:10px;">
-                                <span style="color:#ef9a9a;font-size:11px;font-weight:600;text-transform:uppercase;
-                                            letter-spacing:0.06em;">Resume skills excluded from question scope:</span><br/>
-                                <div style="margin-top:5px;">{_suppressed_str}</div>
-                            </div>
-                            <div>
-                                <span style="color:#38bdf8;font-size:11px;font-weight:600;text-transform:uppercase;
-                                            letter-spacing:0.06em;">Questions will draw from these topics:</span><br/>
-                                <div style="margin-top:5px;">{_domain_pills}
-                                    <span style="color:#aaa;font-size:11px;margin-left:4px;">
-                                        + {max(0, len(_mandatory) - len(_key_topics))} more domain topics
-                                    </span>
-                                </div>
-                            </div>
-                            <p style="color:#aaa;font-size:11px;margin:10px 0 0 0;font-style:italic;">
-                                💡 Treat this as authentic interview prep for breaking into {selected_domain}.
-                                Focus on fundamentals, not your existing stack.
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        # Resume aligns with domain — blend resume content with domain topics
-                        _key_topics = generate_key_topics(_rc, _domain_cfg, selected_role)
-                        _domain_pills = "".join(
-                            f'<span style="background:rgba(56,189,248,0.10);color:#38bdf8;'
-                            f'border:1px solid rgba(0,195,255,0.2);border-radius:4px;'
-                            f'padding:2px 8px;font-size:11px;margin:2px 3px;display:inline-block;">'
-                            f'{t}</span>'
-                            for t in _key_topics
-                        )
-                        st.markdown(f"""
-                        <div style="background:rgba(0,195,255,0.05);border:1px solid rgba(0,195,255,0.2);
-                                    border-left:4px solid #38bdf8;border-radius:10px;
-                                    padding:14px 18px;margin:10px 0;">
-                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                                <span style="font-size:18px;">✅</span>
-                                <strong style="color:#38bdf8;font-size:14px;">
-                                    Domain Aligned — {selected_domain}
-                                </strong>
-                            </div>
-                            <p style="color:#ccc;font-size:12px;margin:0 0 8px 0;line-height:1.5;">
-                                Your resume aligns with the selected domain. Questions will leverage your
-                                background and probe for <strong style="color:#e0e0e0;">depth and decision-making</strong>,
-                                not just familiarity.
-                            </p>
-                            <div>
-                                <span style="color:#aaa;font-size:11px;font-weight:600;text-transform:uppercase;
-                                            letter-spacing:0.06em;">Key topics in scope:</span><br/>
-                                <div style="margin-top:5px;">{_domain_pills}
-                                    <span style="color:#666;font-size:11px;margin-left:4px;">
-                                        + {max(0, len(_mandatory) - len(_key_topics))} more
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
 
                 # ── DIFFICULTY CONTRACT: Show what each level means ──
                 _diff_contract = DIFFICULTY_CONTRACTS.get(interview_difficulty, {})
@@ -15778,12 +14729,12 @@ Generate {num_questions} questions now:
                     phase_badge = "📄 Resume-Based Question" if current_index <= num_resume_qs else "💼 Generic Interview Question"
                     st.markdown(f"""
                     <div class="quiz-card">
-                        <h3 style="color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-weight:600;letter-spacing:-0.02em;">Question {questions_answered + 1} of {st.session_state.original_num_questions}</h3>
-                        <div style="background:rgba(56,189,248,0.10);padding:6px 12px;border-radius:99px;margin:10px 0;display:inline-block;border:1px solid rgba(56,189,248,0.22);">
-                            <span style="color:#38bdf8;font-weight:600;font-size:0.8rem;letter-spacing:0.03em;text-transform:uppercase;">{phase_badge}</span>
+                        <h3 style="color: #00c3ff;">Question {questions_answered + 1} of {st.session_state.original_num_questions}</h3>
+                        <div style="background: rgba(0, 195, 255, 0.15); padding: 8px 12px; border-radius: 6px; margin: 10px 0; display: inline-block;">
+                            <span style="color: #00c3ff; font-weight: 600;">{phase_badge}</span>
                         </div>
-                        <h4 style="color:#94a3b8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-weight:500;font-size:0.875rem;margin:12px 0;letter-spacing:0.02em;">Role: {selected_role} | Difficulty: {st.session_state.interview_difficulty}</h4>
-                        <p style="font-size:1rem;color:#f0f4f8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;line-height:1.6;margin:14px 0;">{question}</p>
+                        <h4 style="color: #ffffff; margin: 15px 0;">Role: {selected_role} | Difficulty: {st.session_state.interview_difficulty}</h4>
+                        <p style="font-size: 18px; color: #ffffff; margin: 15px 0;">{question}</p>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -15955,9 +14906,9 @@ Generate {num_questions} questions now:
                         st.markdown(f"""
                         <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.1) 0%, rgba(0, 195, 255, 0.05) 100%);
                                     border: 1px solid rgba(0, 195, 255, 0.3); border-radius: 10px; padding: 15px; margin: 15px 0;">
-                            <h4 style="color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-weight:600;letter-spacing:-0.02em;">Immediate Feedback:</h4>
+                            <h4 style="color: #00c3ff;">Immediate Feedback:</h4>
                             <p style="color: #ffffff;">📊 Knowledge: {current_score_dict["knowledge"]}/10 | Communication: {current_score_dict["communication"]}/10 | Relevance: {current_score_dict["relevance"]}/10</p>
-                            <p style="color: #ffffff;">⭐ Question Score: {avg_q_score:.2f}/10</p>
+                            <p style="color: #ffffff;">⭐ Question Score: {avg_q_score:.1f}/10</p>
                             <div style="color: #ffffff; margin-top: 10px;">
                                 {formatted_feedback}
                             </div>
@@ -16047,7 +14998,7 @@ Generate {num_questions} questions now:
 
                                     st.markdown(f"**Question {i+1}:** {prev_question}")
                                     st.markdown(f"**Your Answer:** {answer_preview}")
-                                    st.markdown(f"**Score:** {prev_avg:.2f}/10")
+                                    st.markdown(f"**Score:** {prev_avg:.1f}/10")
                                     if i < num_to_show - 1:  # Don't add separator after last item
                                         st.markdown("---")
 
@@ -16104,13 +15055,13 @@ Generate {num_questions} questions now:
                 <div class="badge-container">
                     <h2 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">🎉 Mock Interview Complete!</h2>
                     <div style="margin: 30px 0;">
-                        <div class="score-display">{overall_avg:.2f}/10</div>
+                        <div class="score-display">{overall_avg:.1f}/10</div>
                         <h3 style="color: #ffffff; margin: 15px 0; font-size: 24px; font-weight: 500;">{badge_emoji} {badge}</h3>
                     </div>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Role: {selected_role} in {selected_domain}</p>
                     <p style="color: rgba(255, 255, 255, 0.85); font-size: 16px; margin: 8px 0;">Difficulty: {st.session_state.interview_difficulty}</p>
                     <p style="color: rgba(0, 195, 255, 0.9); font-size: 15px; margin: 8px 0;">⚡ Weighted Score: {_weighted_avg:.2f}/10 (×{DIFFICULTY_MULTIPLIERS.get(st.session_state.interview_difficulty, 1.0)} difficulty multiplier)</p>
-                    <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; margin: 4px 0;">Follow-up Probes: {_follow_up_count} | Depth Score: {_depth_score:.2f}/10</p>
+                    <p style="color: rgba(255, 255, 255, 0.7); font-size: 14px; margin: 4px 0;">Follow-up Probes: {_follow_up_count} | Depth Score: {_depth_score:.1f}/10</p>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -16173,12 +15124,12 @@ Generate {num_questions} questions now:
                 with col1:
                     st.markdown("**🌟 Strengths:**")
                     for name, score in metrics_sorted[:2]:
-                        st.markdown(f"- {name}: {score:.2f}/10")
+                        st.markdown(f"- {name}: {score:.1f}/10")
 
                 with col2:
                     st.markdown("**📈 Areas to Improve:**")
                     for name, score in metrics_sorted[-2:]:
-                        st.markdown(f"- {name}: {score:.2f}/10")
+                        st.markdown(f"- {name}: {score:.1f}/10")
 
                 # FIXED: Show detailed Q&A results with full answers and proper matching
                 st.markdown("---")
@@ -16200,7 +15151,7 @@ Generate {num_questions} questions now:
 
                     q_avg = (score_dict["knowledge"] + score_dict["communication"] + score_dict["relevance"]) / 3
 
-                    with st.expander(f"Question {i+1}: Score {q_avg:.2f}/10"):
+                    with st.expander(f"Question {i+1}: Score {q_avg:.1f}/10"):
                         st.write(f"**Question:** {question}")
                         st.write(f"**Your Answer:** {answer}")  # Show full answer
                         st.write(f"**Scores:** Knowledge: {score_dict['knowledge']}/10 | Communication: {score_dict['communication']}/10 | Relevance: {score_dict['relevance']}/10")
@@ -16329,56 +15280,49 @@ Generate {num_questions} questions now:
         <style>
         /* Metric cards */
         .metric-card {
-            background: rgba(255,255,255,0.04);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255,255,255,0.07);
+            background: linear-gradient(135deg, rgba(0,195,255,0.10) 0%, rgba(0,195,255,0.04) 100%);
+            border: 1px solid rgba(0,195,255,0.25);
             border-radius: 14px;
             padding: 18px 20px;
             margin: 6px 0;
-            transition: transform 0.18s cubic-bezier(0.4,0,0.2,1), box-shadow 0.18s cubic-bezier(0.4,0,0.2,1), border-color 0.18s cubic-bezier(0.4,0,0.2,1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
         .metric-card:hover {
             transform: translateY(-3px);
-            border-color: rgba(99,179,237,0.30);
-            box-shadow: 0 8px 40px rgba(0,0,0,0.45), 0 0 30px rgba(79,163,227,0.15);
+            box-shadow: 0 8px 24px rgba(0,195,255,0.18);
         }
         .metric-card .metric-label {
-            color: #94a3b8;
-            font-size: 0.72rem;
-            font-weight: 600;
+            color: rgba(255,255,255,0.55);
+            font-size: 12px;
+            font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 0.06em;
+            letter-spacing: 0.08em;
             margin: 0 0 6px 0;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
         }
         .metric-card .metric-value {
-            color: #38bdf8;
-            font-size: 1.75rem;
+            color: #00c3ff;
+            font-size: 28px;
             font-weight: 700;
             margin: 0;
-            line-height: 1.2;
-            letter-spacing: -0.03em;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+            line-height: 1.1;
         }
         .metric-card .metric-sub {
-            color: rgba(148,163,184,0.6);
-            font-size: 0.72rem;
+            color: rgba(255,255,255,0.45);
+            font-size: 11px;
             margin: 4px 0 0 0;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
         }
-        /* Score badges — Apple SaaS style */
-        .badge-excellent { background:rgba(52,211,153,0.15); color:#34d399; border:1px solid rgba(52,211,153,0.30); border-radius:99px; padding:2px 10px; font-weight:600; font-size:12px; }
-        .badge-good      { background:rgba(56,189,248,0.12); color:#38bdf8; border:1px solid rgba(56,189,248,0.28); border-radius:99px; padding:2px 10px; font-weight:600; font-size:12px; }
-        .badge-average   { background:rgba(251,191,36,0.12); color:#fbbf24; border:1px solid rgba(251,191,36,0.28); border-radius:99px; padding:2px 10px; font-weight:600; font-size:12px; }
-        .badge-weak      { background:rgba(251,113,133,0.10); color:#fb7185; border:1px solid rgba(251,113,133,0.25); border-radius:99px; padding:2px 10px; font-weight:600; font-size:12px; }
-        .badge-poor      { background:rgba(100,116,139,0.12); color:#64748b; border:1px solid rgba(100,116,139,0.25); border-radius:99px; padding:2px 10px; font-weight:600; font-size:12px; }
+        /* Score badges */
+        .badge-excellent { background:#1a3a2a; color:#00e676; border:1px solid #00e676; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-good      { background:#1a3020; color:#69f0ae; border:1px solid #69f0ae; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-average   { background:#2a2a10; color:#ffcc02; border:1px solid #ffcc02; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-weak      { background:#2a1a10; color:#ff9800; border:1px solid #ff9800; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
+        .badge-poor      { background:#2a1010; color:#f44336; border:1px solid #f44336; border-radius:8px; padding:3px 10px; font-weight:700; font-size:13px; }
         /* Highlighted best row */
         .best-row { background: rgba(0,230,118,0.12) !important; }
         /* Section divider */
         .section-header {
-            font-size: 1.1rem; font-weight: 700; color: #38bdf8;
-            border-left: 4px solid #38bdf8; padding-left: 12px;
+            font-size: 20px; font-weight: 700; color: #00c3ff;
+            border-left: 4px solid #00c3ff; padding-left: 12px;
             margin: 24px 0 4px 0;
         }
         </style>
@@ -16392,34 +15336,17 @@ Generate {num_questions} questions now:
         # Ensure DB and columns exist
         create_interview_database()
 
-        # ── Load dashboard data with session_state caching ──────────────────────
-        # Only re-query the DB when the user navigates to this page fresh, or when
-        # a new interview has been saved (signalled by clearing _dashboard_cache_key).
-        # This prevents a full DB round-trip (and visible flicker) on every widget
-        # interaction that triggers a Streamlit rerun.
-        _cache_key = f"_dashboard_df_{username}"
-        _cache_dirty_key = f"_dashboard_dirty_{username}"
-
-        if st.session_state.get(_cache_dirty_key, True) or _cache_key not in st.session_state:
-            try:
-                conn = sqlite3.connect('resume_data.db')
-                df = pd.read_sql_query(
-                    "SELECT * FROM interview_results WHERE username = ? ORDER BY id ASC",
-                    conn, params=(username,)
-                )
-                conn.close()
-            except Exception as e:
-                st.error(f"Error loading data: {e}")
-                df = pd.DataFrame()
-            st.session_state[_cache_key] = df
-            st.session_state[_cache_dirty_key] = False
-        else:
-            df = st.session_state[_cache_key]
-
-        # Refresh button — invalidates cache without a full page rerun
-        if st.button("🔄 Refresh Dashboard", key="_dashboard_refresh_btn"):
-            st.session_state[_cache_dirty_key] = True
-            st.rerun()
+        # Load data for current user only
+        try:
+            conn = sqlite3.connect('resume_data.db')
+            df = pd.read_sql_query(
+                "SELECT * FROM interview_results WHERE username = ? ORDER BY id ASC",
+                conn, params=(username,)
+            )
+            conn.close()
+        except Exception as e:
+            st.error(f"Error loading data: {e}")
+            df = pd.DataFrame()
 
         if df.empty:
             st.info("👋 You haven't completed any interviews yet. Head over to the **AI Interview Coach** tab, do your first practice session, and come back here to see your results!")
@@ -16480,21 +15407,21 @@ Generate {num_questions} questions now:
                     <p class="metric-sub">Total sessions</p>
                 </div>""", unsafe_allow_html=True)
             with col2:
-                best_val = f"{format_score(highest_score)}/10" if not pd.isna(highest_score) else "N/A"
+                best_val = f"{highest_score:.1f}/10" if not pd.isna(highest_score) else "N/A"
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Best Score Ever</p>
                     <p class="metric-value">{best_val}</p>
                     <p class="metric-sub">Personal best</p>
                 </div>""", unsafe_allow_html=True)
             with col3:
-                low_val = f"{format_score(lowest_score)}/10" if not pd.isna(lowest_score) else "N/A"
+                low_val = f"{lowest_score:.1f}/10" if not pd.isna(lowest_score) else "N/A"
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Lowest Score</p>
                     <p class="metric-value" style="color:#ff9800;">{low_val}</p>
                     <p class="metric-sub">Room to grow</p>
                 </div>""", unsafe_allow_html=True)
             with col4:
-                avg_val = f"{format_score(overall_avg)}/10" if not pd.isna(overall_avg) else "N/A"
+                avg_val = f"{overall_avg:.2f}/10" if not pd.isna(overall_avg) else "N/A"
                 st.markdown(f"""<div class="metric-card">
                     <p class="metric-label">Average Score</p>
                     <p class="metric-value">{avg_val}</p>
@@ -16560,7 +15487,7 @@ Generate {num_questions} questions now:
             _date_labels = df['completed_on'].tolist() if 'completed_on' in df.columns else [''] * len(_x_vals)
 
             _hover_text = [
-                f"<b>Interview #{x}</b><br>Score: {float(s):.2f}/10<br>Role: {r}<br>Difficulty: {d}<br>Date: {dt}"
+                f"<b>Interview #{x}</b><br>Score: {s:.1f}/10<br>Role: {r}<br>Difficulty: {d}<br>Date: {dt}"
                 for x, s, r, d, dt in zip(_x_vals, _raw_scores, _role_labels, _diff_labels, _date_labels)
             ]
 
@@ -16574,7 +15501,7 @@ Generate {num_questions} questions now:
                 line=dict(color='rgba(102,187,106,0.7)', width=1.5, dash='dot'),
                 fill='tozeroy',
                 fillcolor='rgba(102,187,106,0.05)',
-                hovertemplate='Interview #%{x}<br>Adjusted: %{y:.2f}/10<extra></extra>'
+                hovertemplate='Interview #%{x}<br>Adjusted: %{y:.1f}/10<extra></extra>'
             ))
 
             # Raw score line
@@ -16594,7 +15521,7 @@ Generate {num_questions} questions now:
                 name='3-Interview Trend',
                 mode='lines',
                 line=dict(color='#ff9800', width=2, dash='dash'),
-                hovertemplate='Interview #%{x}<br>Trend: %{y:.2f}/10<extra></extra>'
+                hovertemplate='Interview #%{x}<br>Trend: %{y:.1f}/10<extra></extra>'
             ))
 
             # Best interview marker
@@ -16603,10 +15530,10 @@ Generate {num_questions} questions now:
                 name='🏆 Best',
                 mode='markers+text',
                 marker=dict(size=14, color='#00e676', symbol='star', line=dict(width=1.5, color='white')),
-                text=[f" Best: {_raw_scores[_best_idx]:.2f}"],
+                text=[f" Best: {_raw_scores[_best_idx]:.1f}"],
                 textposition='top right',
                 textfont=dict(color='#00e676', size=11),
-                hovertemplate=f'<b>🏆 Best Interview!</b><br>Score: {_raw_scores[_best_idx]:.2f}/10<extra></extra>'
+                hovertemplate=f'<b>🏆 Best Interview!</b><br>Score: {_raw_scores[_best_idx]:.1f}/10<extra></extra>'
             ))
 
             # Worst interview marker
@@ -16615,17 +15542,17 @@ Generate {num_questions} questions now:
                 name='⚠️ Lowest',
                 mode='markers+text',
                 marker=dict(size=14, color='#f44336', symbol='x', line=dict(width=2, color='white')),
-                text=[f" Low: {_raw_scores[_worst_idx]:.2f}"],
+                text=[f" Low: {_raw_scores[_worst_idx]:.1f}"],
                 textposition='bottom right',
                 textfont=dict(color='#f44336', size=11),
-                hovertemplate=f'<b>⚠️ Lowest Interview</b><br>Score: {_raw_scores[_worst_idx]:.2f}/10<extra></extra>'
+                hovertemplate=f'<b>⚠️ Lowest Interview</b><br>Score: {_raw_scores[_worst_idx]:.1f}/10<extra></extra>'
             ))
 
             # Average reference line
             fig_trend.add_hline(
                 y=float(np.mean(_raw_scores)),
                 line_dash='dot', line_color='rgba(255,255,255,0.25)',
-                annotation_text=f'  Avg: {float(np.mean(_raw_scores)):.2f}',
+                annotation_text=f'  Avg: {float(np.mean(_raw_scores)):.1f}',
                 annotation_font_color='rgba(255,255,255,0.5)',
                 annotation_position='right'
             )
@@ -16721,11 +15648,11 @@ Generate {num_questions} questions now:
                         labels={'x': 'Career Area', 'y': 'Avg Score'},
                         color=domain_avg.values.tolist(),
                         color_continuous_scale=[[0,'#f44336'],[0.5,'#ffcc02'],[1,'#00e676']],
-                        text=[f"{v:.2f}" for v in domain_avg.values.tolist()]
+                        text=[f"{v:.1f}" for v in domain_avg.values.tolist()]
                     )
                     _fig_da.update_traces(
                         texttemplate='%{text}', textposition='outside',
-                        hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.2f}/10<extra></extra>'
+                        hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                     )
                     _fig_da.update_layout(
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
@@ -16740,8 +15667,8 @@ Generate {num_questions} questions now:
                 if len(domain_avg) >= 1:
                     strongest_domain = domain_avg.idxmax()
                     weakest_domain = domain_avg.idxmin()
-                    st.markdown(f"🏆 **You shine in:** {strongest_domain} — avg score {domain_avg[strongest_domain]:.2f}/10")
-                    st.markdown(f"📌 **Room to grow in:** {weakest_domain} — avg score {domain_avg[weakest_domain]:.2f}/10. Spend more time practising here.")
+                    st.markdown(f"🏆 **You shine in:** {strongest_domain} — avg score {domain_avg[strongest_domain]:.1f}/10")
+                    st.markdown(f"📌 **Room to grow in:** {weakest_domain} — avg score {domain_avg[weakest_domain]:.1f}/10. Spend more time practising here.")
 
             # Role breakdown — bar chart + pie chart + styled table
             if 'role' in df.columns:
@@ -16763,9 +15690,9 @@ Generate {num_questions} questions now:
                     _fig_rb = go.Figure(go.Bar(
                         x=role_perf['Role'], y=role_perf['Avg Score'],
                         marker_color=_colors_bar,
-                        text=[f"{v:.2f}" for v in role_perf['Avg Score']],
+                        text=[f"{v:.1f}" for v in role_perf['Avg Score']],
                         textposition='outside',
-                        hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.2f}/10<extra></extra>'
+                        hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                     ))
                     _fig_rb.update_layout(
                         title=dict(text='Avg Score by Role', font=dict(color='#00c3ff', size=14)),
@@ -16827,11 +15754,11 @@ Generate {num_questions} questions now:
                 <table style="width:100%;border-collapse:collapse;background:rgba(15,20,25,0.8);">
                   <thead>
                     <tr style="border-bottom:1px solid rgba(0,195,255,0.3);">
-                      <th style="padding:10px 12px;color:#38bdf8;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Role</th>
-                      <th style="padding:10px 12px;color:#38bdf8;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Times</th>
-                      <th style="padding:10px 12px;color:#38bdf8;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Avg Score</th>
-                      <th style="padding:10px 12px;color:#38bdf8;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Best</th>
-                      <th style="padding:10px 12px;color:#38bdf8;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Last</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Role</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Times</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Avg Score</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Best</th>
+                      <th style="padding:10px 12px;color:#00c3ff;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:0.07em;">Last</th>
                     </tr>
                   </thead>
                   <tbody>{_table_rows}</tbody>
@@ -16878,8 +15805,8 @@ Generate {num_questions} questions now:
                         _fig_dfa = go.Figure(go.Bar(
                             x=diff_avg.index.tolist(), y=diff_avg.values.tolist(),
                             marker_color=[_diff_colors.get(d, '#00c3ff') for d in diff_avg.index],
-                            text=[f"{v:.2f}" for v in diff_avg.values], textposition='outside',
-                            hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.2f}/10<extra></extra>'
+                            text=[f"{v:.1f}" for v in diff_avg.values], textposition='outside',
+                            hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                         ))
                         _fig_dfa.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
@@ -16954,11 +15881,11 @@ Generate {num_questions} questions now:
                 strongest_skill_idx = skill_avgs.index(max(skill_avgs))
                 strongest_skill = skill_labels[strongest_skill_idx]
 
-                st.markdown(f"🌟 **You're best at:** {strongest_skill} ({skill_avgs[strongest_skill_idx]:.2f}/10)")
-                st.markdown(f"📌 **Focus area:** {weakest_skill} ({skill_avgs[weakest_skill_idx]:.2f}/10) — this is where more practice will help the most")
+                st.markdown(f"🌟 **You're best at:** {strongest_skill} ({skill_avgs[strongest_skill_idx]:.1f}/10)")
+                st.markdown(f"📌 **Focus area:** {weakest_skill} ({skill_avgs[weakest_skill_idx]:.1f}/10) — this is where more practice will help the most")
                 st.markdown("")
                 for lbl, val in zip(skill_labels, skill_avgs):
-                    st.markdown(f"**{lbl}:** {val:.2f}/10")
+                    st.markdown(f"**{lbl}:** {val:.1f}/10")
                     st.progress(val / 10.0)
 
             # =====================================================
@@ -17125,11 +16052,11 @@ Generate {num_questions} questions now:
             if _domain_avg_safe is not None and len(_domain_avg_safe) >= 1:
                 _s_domain = _domain_avg_safe.idxmax()
                 _w_domain = _domain_avg_safe.idxmin()
-                summary_parts.append(f"You perform best in **{_s_domain}** — that's where your confidence and knowledge really shows, with an average score of {_domain_avg_safe[_s_domain]:.2f}/10.")
+                summary_parts.append(f"You perform best in **{_s_domain}** — that's where your confidence and knowledge really shows, with an average score of {_domain_avg_safe[_s_domain]:.1f}/10.")
                 if len(_domain_avg_safe) > 1:
-                    summary_parts.append(f"**{_w_domain}** is the area that needs the most attention right now ({_domain_avg_safe[_w_domain]:.2f}/10). A little focused practice there will go a long way.")
+                    summary_parts.append(f"**{_w_domain}** is the area that needs the most attention right now ({_domain_avg_safe[_w_domain]:.1f}/10). A little focused practice there will go a long way.")
 
-            summary_parts.append(f"Across all your interviews, **{strongest_skill}** is your strongest skill ({skill_avgs[strongest_skill_idx]:.2f}/10). **{weakest_skill}** is the skill to focus on next ({skill_avgs[weakest_skill_idx]:.2f}/10) — even small improvements here will lift your overall scores.")
+            summary_parts.append(f"Across all your interviews, **{strongest_skill}** is your strongest skill ({skill_avgs[strongest_skill_idx]:.1f}/10). **{weakest_skill}** is the skill to focus on next ({skill_avgs[weakest_skill_idx]:.1f}/10) — even small improvements here will lift your overall scores.")
 
             # Trend direction — fully plain English, no slope values shown
             if total_interviews >= 3:
@@ -17159,9 +16086,9 @@ Generate {num_questions} questions now:
             if 'difficulty' in df.columns and 'Hard' in df['difficulty'].values:
                 _hard_avg_s = df[df['difficulty'] == 'Hard']['avg_score'].mean()
                 if _hard_avg_s < overall_avg - 1.0:
-                    summary_parts.append(f"Hard interviews are a challenge for you right now — you average {_hard_avg_s:.2f}/10 there, which is lower than your overall average. That's completely normal. The more you practise Hard mode, the more comfortable you'll get with tough questions.")
+                    summary_parts.append(f"Hard interviews are a challenge for you right now — you average {_hard_avg_s:.1f}/10 there, which is lower than your overall average. That's completely normal. The more you practise Hard mode, the more comfortable you'll get with tough questions.")
                 else:
-                    summary_parts.append(f"You're handling Hard interviews really well — averaging {_hard_avg_s:.2f}/10 even under pressure. That kind of resilience is exactly what real interviews reward.")
+                    summary_parts.append(f"You're handling Hard interviews really well — averaging {_hard_avg_s:.1f}/10 even under pressure. That kind of resilience is exactly what real interviews reward.")
 
             # Behavior class — explained naturally
             if 'behavior_class' in df.columns and df['behavior_class'].notna().any():
@@ -17223,7 +16150,7 @@ Generate {num_questions} questions now:
             if recommendations:
                 for rec in recommendations:
                     st.markdown(f"""
-                    <div style="background: rgba(56,189,248,0.07); border-left: 4px solid #38bdf8;
+                    <div style="background: rgba(0,195,255,0.07); border-left: 4px solid #00c3ff;
                                 padding: 12px 16px; margin: 8px 0; border-radius: 0 8px 8px 0;">
                         <p style="color: #ffffff; margin: 0;">{rec}</p>
                     </div>
@@ -17263,8 +16190,8 @@ Generate {num_questions} questions now:
                         _fig_ma = go.Figure(go.Bar(
                             x=_mode_avg.index.tolist(), y=_mode_avg.values.tolist(),
                             marker_color=[f'rgba(0,195,255,{0.5 + 0.5*(v/10)})' for v in _mode_avg.values],
-                            text=[f"{v:.2f}" for v in _mode_avg.values], textposition='outside',
-                            hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.2f}/10<extra></extra>'
+                            text=[f"{v:.1f}" for v in _mode_avg.values], textposition='outside',
+                            hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.1f}/10<extra></extra>'
                         ))
                         _fig_ma.update_layout(
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
@@ -17301,20 +16228,20 @@ Generate {num_questions} questions now:
                 def _badge(v):
                     if pd.isna(v): return '<span style="color:#666">N/A</span>'
                     v = float(v)
-                    if v >= 8.5: return f'<span class="badge-excellent">{v:.2f}</span>'
-                    elif v >= 7.0: return f'<span class="badge-good">{v:.2f}</span>'
-                    elif v >= 5.5: return f'<span class="badge-average">{v:.2f}</span>'
-                    elif v >= 4.0: return f'<span class="badge-weak">{v:.2f}</span>'
-                    else: return f'<span class="badge-poor">{v:.2f}</span>'
+                    if v >= 8.5: return f'<span class="badge-excellent">{v:.1f}</span>'
+                    elif v >= 7.0: return f'<span class="badge-good">{v:.1f}</span>'
+                    elif v >= 5.5: return f'<span class="badge-average">{v:.1f}</span>'
+                    elif v >= 4.0: return f'<span class="badge-weak">{v:.1f}</span>'
+                    else: return f'<span class="badge-poor">{v:.1f}</span>'
 
                 def _trend_arrow(current, prev):
                     if prev is None or pd.isna(prev): return ''
                     delta = float(current) - float(prev)
-                    if delta > 0.3: return f'<span style="color:#00e676;font-size:14px;" title="+{delta:.2f}">▲</span>'
-                    elif delta < -0.3: return f'<span style="color:#f44336;font-size:14px;" title="{delta:.2f}">▼</span>'
-                    else: return f'<span style="color:#ffcc02;font-size:14px;" title="~{delta:.2f}">●</span>'
+                    if delta > 0.3: return f'<span style="color:#00e676;font-size:14px;" title="+{delta:.1f}">▲</span>'
+                    elif delta < -0.3: return f'<span style="color:#f44336;font-size:14px;" title="{delta:.1f}">▼</span>'
+                    else: return f'<span style="color:#ffcc02;font-size:14px;" title="~{delta:.1f}">●</span>'
 
-                _th_style = "padding:9px 12px;color:#38bdf8;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid rgba(0,195,255,0.3);white-space:nowrap;"
+                _th_style = "padding:9px 12px;color:#00c3ff;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid rgba(0,195,255,0.3);white-space:nowrap;"
                 _td_style = "padding:8px 12px;color:#e0e0e0;font-size:13px;white-space:nowrap;"
 
                 _headers = list(display_df.columns)
