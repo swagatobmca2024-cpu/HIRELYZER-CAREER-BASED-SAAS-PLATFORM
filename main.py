@@ -464,6 +464,27 @@ section[data-testid="stMain"] > div {
     background: var(--bg-primary) !important;
 }
 
+/* ── Streamlit top toolbar / header bar — the actual seam source ── */
+header[data-testid="stHeader"],
+header[data-testid="stHeader"] > div,
+header[data-testid="stHeader"] > div > div,
+.stApp header,
+div[data-testid="stToolbar"],
+div[data-testid="stStatusWidget"] {
+    background-color: var(--bg-primary) !important;
+    background: var(--bg-primary) !important;
+    border-bottom: none !important;
+    box-shadow: none !important;
+}
+
+/* ── Remove the decorative top colour bar Streamlit injects ── */
+div[data-testid="stDecoration"],
+#stDecoration {
+    background: var(--bg-primary) !important;
+    background-image: none !important;
+    display: none !important;
+}
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-secondary); }
