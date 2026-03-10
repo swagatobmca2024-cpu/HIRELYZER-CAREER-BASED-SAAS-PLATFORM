@@ -1466,11 +1466,13 @@ if not st.session_state.authenticated:
         background-clip: text;
     }}
     .hero-tagline {{
-        margin-top: 10px;
-        font-size: 0.95rem;
-        color: #64748b;
+        margin-top: 8px;
+        font-size: 0.8rem;
+        color: #334155;
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-        letter-spacing: 0.01em;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        font-weight: 500;
     }}
     .hero-pills-container {{
         display: inline-flex;
@@ -1539,8 +1541,8 @@ if not st.session_state.authenticated:
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 14px 26px;
-        gap: 3px;
+        padding: 16px 28px;
+        gap: 2px;
         transition: background 0.2s ease;
     }}
     .hero-stat-item:hover {{
@@ -1558,9 +1560,15 @@ if not st.session_state.authenticated:
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
     }}
     .hero-stat-icon {{
-        font-size: 0.8rem;
-        margin-bottom: 1px;
-        opacity: 0.7;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px; height: 28px;
+        border-radius: 8px;
+        background: rgba(56,189,248,0.08);
+        border: 1px solid rgba(56,189,248,0.15);
+        margin-bottom: 4px;
+        flex-shrink: 0;
     }}
     .hero-stat-lbl {{
         font-size: 0.65rem;
@@ -1590,22 +1598,41 @@ if not st.session_state.authenticated:
         </div>
         <div class="hero-stat-ribbon">
             <div class="hero-stat-item">
-                <div class="hero-stat-icon">👤</div>
+                <div class="hero-stat-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="7" r="4" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.12)"/>
+                        <path d="M4 20c0-4 3.582-7 8-7s8 3 8 7" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>
+                    </svg>
+                </div>
                 <div class="hero-stat-num">{total_users}</div>
                 <div class="hero-stat-lbl">Users</div>
             </div>
             <div class="hero-stat-item">
-                <div class="hero-stat-icon">📄</div>
+                <div class="hero-stat-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="4" y="2" width="16" height="20" rx="2" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.08)"/>
+                        <path d="M8 7h8M8 11h8M8 15h5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </div>
                 <div class="hero-stat-num">{resumes_uploaded}</div>
                 <div class="hero-stat-lbl">Resumes Analysed</div>
             </div>
             <div class="hero-stat-item">
-                <div class="hero-stat-icon">🏷️</div>
+                <div class="hero-stat-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="9" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.08)"/>
+                        <path d="M12 3v18M3 12h18" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </div>
                 <div class="hero-stat-num">{active_domains}</div>
                 <div class="hero-stat-lbl">Domains</div>
             </div>
             <div class="hero-stat-item">
-                <div class="hero-stat-icon">⚡</div>
+                <div class="hero-stat-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M13 2L4.5 13.5H12L11 22L19.5 10.5H12L13 2Z" stroke="#38bdf8" stroke-width="1.8" stroke-linejoin="round" fill="rgba(56,189,248,0.12)"/>
+                    </svg>
+                </div>
                 <div class="hero-stat-num">{active_logins}</div>
                 <div class="hero-stat-lbl">Active Today</div>
             </div>
@@ -1616,31 +1643,33 @@ if not st.session_state.authenticated:
     # ── Typewriter animation via components.html (scripts work here) ──
     st.components.v1.html("""
     <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
     .tw-wrap {
         text-align: center;
-        height: 36px;
-        margin: -10px 0 20px 0;
+        padding: 4px 0 8px;
+        width: 100%;
     }
     .tw-text {
-        font-size: 1.05rem;
+        font-size: 1rem;
         font-weight: 600;
         color: #38bdf8;
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
         letter-spacing: -0.01em;
         border-right: 2px solid #38bdf8;
         white-space: nowrap;
-        overflow: hidden;
         display: inline-block;
+        max-width: 100%;
         animation: twBlink 1s ease-in-out infinite;
         background: transparent;
+        vertical-align: middle;
     }
     @keyframes twBlink {
         0%, 100% { border-color: #38bdf8; }
         50%       { border-color: transparent; }
     }
-    body { margin: 0; background: transparent; }
     </style>
-    <div class="tw-wrap"><span class="tw-text" id="tw"></span></div>
+    <div class="tw-wrap"><span class="tw-text" id="tw">&nbsp;</span></div>
     <script>
     (function() {
         var phrases = [
@@ -1666,7 +1695,7 @@ if not st.session_state.authenticated:
         setTimeout(tick, 600);
     })();
     </script>
-    """, height=50, scrolling=False)
+    """, height=44, scrolling=False)
 
 if not st.session_state.get("authenticated", False):
 
