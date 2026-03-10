@@ -7241,6 +7241,7 @@ with tab2:
         ],
         key="template_selector"
     )
+    st.session_state["selected_template"] = selected_template
 
     # 📸 Upload profile photo
     uploaded_image = st.file_uploader("Upload a Profile Image", type=["png", "jpg", "jpeg"], key="profile_img_upload")
@@ -7273,8 +7274,12 @@ with tab2:
         </div>
         """
         st.markdown(profile_img_html, unsafe_allow_html=True)
+        st.session_state["_profile_img_html_cache"] = profile_img_html
     else:
         st.info("📸 Please upload a clear, front-facing profile photo (square or vertical preferred).")
+        # Keep previously cached image html if it exists
+        if "_profile_img_html_cache" not in st.session_state:
+            st.session_state["_profile_img_html_cache"] = ""
 
     # ---------------- Session State Defaults ----------------
     fields = ["name", "email", "phone", "linkedin", "location", "portfolio", "summary",
@@ -7454,97 +7459,39 @@ with tab2:
         st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
         st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
 
-        left, right = st.columns([1, 2])
+        # Render the actual selected template HTML inside an iframe-like component
+        # so the preview exactly matches the chosen template format
+        import streamlit.components.v1 as components
 
-        with left:
-            st.markdown(f"""
-                <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
-                <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
-                <p style='font-size:14px;'>
-                📍 {st.session_state['location']}<br>
-                📞 {st.session_state['phone']}<br>
-                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
-                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
-                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
-                </p>
-            """, unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Skills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for skill in [s.strip() for s in st.session_state["skills"].split(",") if s.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {skill}</div>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Languages</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for lang in [l.strip() for l in st.session_state["languages"].split(",") if l.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {lang}</div>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Interests</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for interest in [i.strip() for i in st.session_state["interests"].split(",") if i.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {interest}</div>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Softskills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for ss in [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {ss}</div>", unsafe_allow_html=True)
-
-        with right:
-            st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            summary_text = st.session_state["summary"].replace("\n", "<br>")
-            st.markdown(f"<p style='font-size:17px;'>{summary_text}</p>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for exp in st.session_state.experience_entries:
-                if exp["company"] or exp["title"]:
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
-                        <div style='display:flex; justify-content:space-between;'>
-                            <b>🏢 {exp['company']}</b><span style='color:gray;'>📆 {exp['duration']}</span>
-                        </div>
-                        <div style='font-size:14px;'>💼 <i>{exp['title']}</i></div>
-                        <div style='font-size:17px;'>📝 {exp['description']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for edu in st.session_state.education_entries:
-                if edu["institution"] or edu["degree"]:
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px;'>
-                        <div style='display:flex; justify-content:space-between; font-size:16px; font-weight:bold;'>
-                            <span>🏫 {edu['institution']}</span>
-                            <span style='color:gray;'>📅 {edu['year']}</span>
-                        </div>
-                        <div style='font-size:14px;'>🎓 <i>{edu['degree']}</i></div>
-                        <div style='font-size:14px;'>📄 {edu['details']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for proj in st.session_state.project_entries:
-                if proj.get("title"):
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px;'>
-                        <strong style='font-size:16px;'>{proj['title']}</strong><br>
-                        <span style='font-size:14px;'>🛠️ <strong>Tech Stack:</strong> {proj['tech']}</span><br>
-                        <span style='font-size:14px;'>⏳ <strong>Duration:</strong> {proj['duration']}</span><br>
-                        <span style='font-size:17px;'>📝 <strong>Description:</strong> {proj['description']}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            if st.session_state.project_links:
-                st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for i, link in enumerate(st.session_state.project_links):
-                    st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
-
-            if st.session_state.certificate_links:
-                st.markdown("<h4 style='color:#336699;'>Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for cert in st.session_state.certificate_links:
-                    if cert["name"] and cert["link"]:
-                        st.markdown(f"""
-                        <div style='display:flex; justify-content:space-between;'>
-                            <a href="{cert['link']}" target="_blank"><b>📄 {cert['name']}</b></a>
-                            <span style='color:gray;'>{cert['duration']}</span>
-                        </div>
-                        <div style='margin-bottom:10px; font-size:14px;'>{cert['description']}</div>
-                        """, unsafe_allow_html=True)
+        preview_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{
+                    margin: 0;
+                    padding: 0;
+                    background: #f5f5f5;
+                }}
+                .resume-wrapper {{
+                    background: white;
+                    max-width: 900px;
+                    margin: 16px auto;
+                    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+                    border-radius: 4px;
+                    overflow: hidden;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="resume-wrapper">
+                {st.session_state["generated_html"]}
+            </div>
+        </body>
+        </html>
+        """
+        components.html(preview_html, height=1100, scrolling=True)
 
 import re
 
@@ -7840,7 +7787,7 @@ with tab2:
                 ai_output = call_llm(enhance_prompt, session=st.session_state)
                 st.session_state["ai_output"] = ai_output
 
-    # ------------------------- PARSE + RENDER -------------------------
+    # ------------------------- PARSE AI OUTPUT + REBUILD TEMPLATE -------------------------
     if "ai_output" in st.session_state:
         ai_output = st.session_state["ai_output"]
 
@@ -7848,6 +7795,7 @@ with tab2:
             match = re.search(rf"{label}:\s*(.*?)(?=\n\w+:|\Z)", output, re.DOTALL)
             return match.group(1).strip() if match else default
 
+        # Parse AI-enhanced sections
         summary_enhanced = extract_section("Summary", ai_output, st.session_state['summary'])
         experience_raw = extract_section("Experience", ai_output)
         experience_blocks = re.split(r"\n(?=[A-Z]\. )", experience_raw.strip())
@@ -7859,112 +7807,114 @@ with tab2:
         interests_list = extract_section("Interests", ai_output, st.session_state['interests'])
         certificates_list = extract_section("Certificates", ai_output)
 
-        # ------------------------- UI RENDER -------------------------
-        left, right = st.columns([1, 2])
+        # Build an enhanced session state snapshot for re-rendering with the selected template
+        import copy
+        ai_session = copy.copy(st.session_state)
 
-        with left:
-            st.markdown(f"""
-                <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
-                <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
-                <p style='font-size:14px;'>
-                📍 {st.session_state['location']}<br>
-                📞 {st.session_state['phone']}<br>
-                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
-                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
-                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
-                </p>
-            """, unsafe_allow_html=True)
+        # Override text fields with AI-enhanced values
+        ai_session['summary'] = summary_enhanced
+        ai_session['skills'] = skills_list
+        ai_session['Softskills'] = softskills_list
+        ai_session['languages'] = languages_list
+        ai_session['interests'] = interests_list
 
-            def render_bullet_section(title, items):
-                st.markdown(f"<h4 style='color:#336699;'>{title}</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for item in [i.strip() for i in items.split(",") if i.strip()]:
-                    st.markdown(f"<div style='margin-left:10px;'>• {item}</div>", unsafe_allow_html=True)
+        # Rebuild experience_entries from AI blocks
+        ai_exp_entries = []
+        for idx, exp_block in enumerate(experience_blocks):
+            lines = exp_block.strip().split("\n")
+            if not lines:
+                continue
+            heading = lines[0]
+            description_text = "\n".join(lines[1:]).strip()
+            match_h = re.match(r"[A-Z]\.\s*(.+?)\s*\((.*?)\)", heading)
+            company_name = match_h.group(1).strip() if match_h else heading
+            duration_val = match_h.group(2).strip() if match_h else ""
+            # Preserve original title if available
+            orig = st.session_state.experience_entries[idx] if idx < len(st.session_state.experience_entries) else {}
+            ai_exp_entries.append({
+                "title": orig.get("title", ""),
+                "company": company_name,
+                "duration": duration_val or orig.get("duration", ""),
+                "description": description_text,
+            })
+        if ai_exp_entries:
+            ai_session.experience_entries = ai_exp_entries
 
-            render_bullet_section("Skills", skills_list)
-            render_bullet_section("Languages", languages_list)
-            render_bullet_section("Interests", interests_list)
-            render_bullet_section("Soft Skills", softskills_list)
+        # Rebuild project_entries from AI blocks
+        ai_proj_entries = []
+        for idx, proj_block in enumerate(projects_blocks):
+            orig = st.session_state.project_entries[idx] if idx < len(st.session_state.project_entries) else {}
+            lines = proj_block.strip().split("\n")
+            description_text = "\n".join(lines[1:]).strip() if len(lines) > 1 else proj_block.strip()
+            ai_proj_entries.append({
+                "title": orig.get("title", ""),
+                "tech": orig.get("tech", ""),
+                "duration": orig.get("duration", ""),
+                "description": description_text,
+            })
+        if ai_proj_entries:
+            ai_session.project_entries = ai_proj_entries
 
-        with right:
-            formatted_summary = summary_enhanced.replace('\n• ', '<br>• ').replace('\n', '<br>')
-            st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            st.markdown(f"<p style='font-size:17px;'>{formatted_summary}</p>", unsafe_allow_html=True)
+        # Determine which template was selected and re-render with AI-enhanced data
+        _sel = st.session_state.get("selected_template", "Default (Professional)")
+        _profile_img = st.session_state.get("_profile_img_html_cache", "")
 
-            # Experience
-            if experience_blocks:
-                st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                experience_titles = [entry.get("title", "").strip().upper() for entry in st.session_state.experience_entries]
-                for idx, exp_block in enumerate(experience_blocks):
-                    lines = exp_block.strip().split("\n")
-                    if not lines:
-                        continue
-                    heading = lines[0]
-                    description_lines = lines[1:]
-                    match = re.match(r"[A-Z]\.\s*(.+?)\s*\((.*?)\)", heading)
-                    company, duration = (match.group(1).strip(), match.group(2).strip()) if match else (heading, "")
-                    role = experience_titles[idx] if idx < len(experience_titles) else ""
-                    formatted_exp = "<br>".join(description_lines)
+        if _sel == "Default (Professional)":
+            ai_html = render_template_default(ai_session, _profile_img)
+        elif _sel == "Modern Minimal":
+            ai_html = render_template_modern(ai_session, _profile_img)
+        elif _sel == "Elegant Sidebar":
+            ai_html = render_template_sidebar(ai_session, _profile_img)
+        elif _sel == "Classic Clean (Single Column)":
+            ai_html = render_template_classic(ai_session, _profile_img)
+        elif _sel == "Executive (Single Column)":
+            ai_html = render_template_executive(ai_session, _profile_img)
+        elif _sel == "Timeline (Single Column)":
+            ai_html = render_template_timeline(ai_session, _profile_img)
+        elif _sel == "Corporate Blue (Two Column)":
+            ai_html = render_template_corporate(ai_session, _profile_img)
+        elif _sel == "Creative Green (Two Column)":
+            ai_html = render_template_creative_green(ai_session, _profile_img)
+        elif _sel == "Warm Terracotta (Two Column)":
+            ai_html = render_template_terracotta(ai_session, _profile_img)
+        else:
+            ai_html = render_template_default(ai_session, _profile_img)
 
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
-                        <div style='display:flex; justify-content:space-between;'>
-                            <b>🏢 {company.upper()}</b><span style='color:gray;'>📆 {duration}</span>
-                        </div>
-                        <div style='font-size:14px;'>💼 <i>{role}</i></div>
-                        <div style='font-size:17px;'>📝 {formatted_exp}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+        # Store AI-enhanced HTML so download also gets the enhanced version
+        st.session_state["generated_html"] = ai_html
 
-            # Education
-            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for edu in st.session_state.education_entries:
-                st.markdown(f"""
-                <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px;'>
-                    <div style='display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;'>
-                        <span>🏫 {edu['institution']}</span>
-                        <span style='color: gray;'>📅 {edu['year']}</span>
-                    </div>
-                    <div style='font-size: 14px;'>🎓 <i>{edu['degree']}</i></div>
-                    <div style='font-size: 14px;'>📄 {edu['details']}</div>
-                </div>
-                """, unsafe_allow_html=True)
+        # ------------------------- RENDER AS TEMPLATE (not two-column hardcoded) -------------------------
+        import streamlit.components.v1 as components
 
-            # Projects
-            if projects_blocks:
-                st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for idx, proj_block in enumerate(projects_blocks):
-                    proj = st.session_state.project_entries[idx] if idx < len(st.session_state.project_entries) else {}
-                    title = proj.get("title", "")
-                    tech = proj.get("tech", "")
-                    duration = proj.get("duration", "")
-                    description = proj_block
-                    for keyword in [title, f"Tech Stack: {tech}", f"Duration: {duration}"]:
-                        if keyword and keyword in description:
-                            description = description.replace(keyword, "")
-                    formatted_proj = description.strip().replace('\n• ', '<br>• ').replace('\n', '<br>')
-                    label = chr(65 + idx)
-
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding: 10px;'>
-                        <strong style='font-size:16px;'>📌 <span style='color:#444;'>{label}. </span>{title}</strong><br>
-                        <span style='font-size:14px;'>🛠️ <strong>Tech Stack:</strong> {tech}</span><br>
-                        <span style='font-size:14px;'>⏳ <strong>Duration:</strong> {duration}</span><br>
-                        <span style='font-size:17px;'>📄 <strong>Description:</strong></span><br>
-                        <div style='margin-top:4px; font-size:15px;'>{formatted_proj}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            # Certificates
-            if certificates_list:
-                st.markdown("<h4 style='color:#336699;'>📜 Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                certs = re.split(r"\n|(?<=\))(?=\s*[A-Z])|(?<=[a-z]\))(?= [A-Z])", certificates_list)
-                for cert in [c.strip() for c in certs if c.strip()]:
-                    st.markdown(f"<div style='margin-left:10px;'>• {cert}</div>", unsafe_allow_html=True)
-
-            if st.session_state.project_links:
-                st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for i, link in enumerate(st.session_state.project_links):
-                    st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
+        ai_preview_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body {{
+                    margin: 0;
+                    padding: 0;
+                    background: #f5f5f5;
+                }}
+                .resume-wrapper {{
+                    background: white;
+                    max-width: 900px;
+                    margin: 16px auto;
+                    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+                    border-radius: 4px;
+                    overflow: hidden;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="resume-wrapper">
+                {ai_html}
+            </div>
+        </body>
+        </html>
+        """
+        components.html(ai_preview_html, height=1100, scrolling=True)
 
     # Generate HTML content based on selected template — only on submit, stored in session_state
     if submitted:
