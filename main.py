@@ -1422,9 +1422,9 @@ if not st.session_state.authenticated:
     resumes_uploaded = stats.get("total_candidates", 0)
     active_domains = stats.get("unique_domains", 0)
 
+    # ── Hero HTML (no script — Streamlit strips <script> from st.markdown) ──
     st.markdown(f"""
     <style>
-    /* ── Hero wrapper ── */
     .hero-section {{
         display: flex;
         flex-direction: column;
@@ -1434,8 +1434,6 @@ if not st.session_state.authenticated:
         position: relative;
         overflow: hidden;
     }}
-
-    /* ── Radial glow behind hero ── */
     .hero-section::before {{
         content: '';
         position: absolute;
@@ -1446,8 +1444,6 @@ if not st.session_state.authenticated:
         pointer-events: none;
         z-index: 0;
     }}
-
-    /* ── Brand lockup ── */
     .hero-brand {{
         position: relative;
         z-index: 2;
@@ -1476,34 +1472,6 @@ if not st.session_state.authenticated:
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
         letter-spacing: 0.01em;
     }}
-
-    /* ── Typewriter value props ── */
-    .hero-typewriter-wrap {{
-        position: relative;
-        z-index: 2;
-        text-align: center;
-        height: 32px;
-        margin-bottom: 32px;
-        animation: fadeSlideUp 0.9s cubic-bezier(0.22,1,0.36,1) 0.15s both;
-    }}
-    .hero-typewriter {{
-        font-size: 1.05rem;
-        font-weight: 600;
-        color: #38bdf8;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-        letter-spacing: -0.01em;
-        border-right: 2px solid #38bdf8;
-        white-space: nowrap;
-        overflow: hidden;
-        display: inline-block;
-        animation: typePulse 1s ease-in-out infinite;
-    }}
-    @keyframes typePulse {{
-        0%, 100% {{ border-color: #38bdf8; }}
-        50%       {{ border-color: transparent; }}
-    }}
-
-    /* ── Feature pill row ── */
     .hero-pills {{
         display: flex;
         gap: 10px;
@@ -1541,8 +1509,6 @@ if not st.session_state.authenticated:
         background: #38bdf8;
         opacity: 0.7;
     }}
-
-    /* ── Stat ribbon — subtle, bottom-aligned ── */
     .hero-stat-ribbon {{
         display: flex;
         gap: 0;
@@ -1582,19 +1548,10 @@ if not st.session_state.authenticated:
     </style>
 
     <div class="hero-section">
-
-        <!-- Brand -->
         <div class="hero-brand">
             <div class="hero-wordmark">HIRE<span>LYZER</span></div>
             <div class="hero-tagline">AI-Powered Resume Intelligence Platform</div>
         </div>
-
-        <!-- Typewriter -->
-        <div class="hero-typewriter-wrap">
-            <span class="hero-typewriter" id="hero-tw"></span>
-        </div>
-
-        <!-- Feature pills -->
         <div class="hero-pills">
             <div class="hero-pill"><span class="hero-pill-dot"></span>Bias Detection</div>
             <div class="hero-pill"><span class="hero-pill-dot"></span>ATS Scoring</div>
@@ -1602,8 +1559,6 @@ if not st.session_state.authenticated:
             <div class="hero-pill"><span class="hero-pill-dot"></span>Job Matching</div>
             <div class="hero-pill"><span class="hero-pill-dot"></span>Course AI</div>
         </div>
-
-        <!-- Stat ribbon -->
         <div class="hero-stat-ribbon">
             <div class="hero-stat-item">
                 <div class="hero-stat-num">{total_users}</div>
@@ -1622,11 +1577,39 @@ if not st.session_state.authenticated:
                 <div class="hero-stat-lbl">Active Today</div>
             </div>
         </div>
-
     </div>
+    """, unsafe_allow_html=True)
 
+    # ── Typewriter animation via components.html (scripts work here) ──
+    st.components.v1.html("""
+    <style>
+    .tw-wrap {
+        text-align: center;
+        height: 36px;
+        margin: -24px 0 28px 0;
+    }
+    .tw-text {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #38bdf8;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+        letter-spacing: -0.01em;
+        border-right: 2px solid #38bdf8;
+        white-space: nowrap;
+        overflow: hidden;
+        display: inline-block;
+        animation: twBlink 1s ease-in-out infinite;
+        background: transparent;
+    }
+    @keyframes twBlink {
+        0%, 100% { border-color: #38bdf8; }
+        50%       { border-color: transparent; }
+    }
+    body { margin: 0; background: transparent; }
+    </style>
+    <div class="tw-wrap"><span class="tw-text" id="tw"></span></div>
     <script>
-    (function() {{
+    (function() {
         var phrases = [
             "Analyse resumes with zero bias.",
             "Score smarter. Hire better.",
@@ -1634,24 +1617,23 @@ if not st.session_state.authenticated:
             "Ethical hiring starts here.",
             "10x faster resume screening."
         ];
-        var idx = 0, charIdx = 0, deleting = false, el = null;
-        function tick() {{
-            el = el || document.getElementById('hero-tw');
-            if (!el) {{ setTimeout(tick, 100); return; }}
+        var idx = 0, charIdx = 0, deleting = false;
+        var el = document.getElementById('tw');
+        function tick() {
             var phrase = phrases[idx];
-            if (!deleting) {{
+            if (!deleting) {
                 el.textContent = phrase.slice(0, ++charIdx);
-                if (charIdx === phrase.length) {{ deleting = true; setTimeout(tick, 1800); return; }}
-            }} else {{
+                if (charIdx === phrase.length) { deleting = true; setTimeout(tick, 1800); return; }
+            } else {
                 el.textContent = phrase.slice(0, --charIdx);
-                if (charIdx === 0) {{ deleting = false; idx = (idx + 1) % phrases.length; }}
-            }}
+                if (charIdx === 0) { deleting = false; idx = (idx + 1) % phrases.length; }
+            }
             setTimeout(tick, deleting ? 38 : 62);
-        }}
+        }
         setTimeout(tick, 600);
-    }})();
+    })();
     </script>
-    """, unsafe_allow_html=True)
+    """, height=50, scrolling=False)
 
 if not st.session_state.get("authenticated", False):
 
