@@ -524,31 +524,7 @@ div[data-testid="stDecoration"],
     50%       { transform: translateY(-6px); }
 }
 
-/* ── Animated Cards (pre-login hero) ── */
-.animated-cards {
-    margin-top: 40px;
-    display: flex;
-    justify-content: center;
-    position: relative;
-    height: 260px;
-}
-.animated-cards img {
-    position: absolute;
-    width: 220px;
-    animation: splitCards 2.5s ease-in-out infinite alternate;
-    z-index: 1;
-    filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
-}
-.animated-cards img:nth-child(1) { animation-delay: 0s; z-index: 3; }
-.animated-cards img:nth-child(2) { animation-delay: 0.3s; z-index: 2; }
-.animated-cards img:nth-child(3) { animation-delay: 0.6s; z-index: 1; }
-@keyframes splitCards {
-    0%   { transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }
-    100% { transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }
-}
-.card-left   { --x-offset: -80px; --rot: -4deg; }
-.card-center { --x-offset: 0px;   --rot: 0deg;  }
-.card-right  { --x-offset: 80px;  --rot: 4deg;  }
+/* ── Animated cards removed — replaced by premium hero section ── */
 
 /* ══════════════════════════════════════
    STREAMLIT ALERT TOASTS
@@ -1438,97 +1414,246 @@ if not st.session_state.authenticated:
             </div>
             """, unsafe_allow_html=True)
 
-    # -------- Animated Cards --------
-    image_url = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
-
-    st.markdown(f"""
-    <style>
-    .animated-cards {{
-      margin-top: 30px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 300px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 240px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-    @keyframes splitCards {{
-      0% {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left {{ --x-offset: -80px; --rot: -5deg; }}
-    .card-center {{ --x-offset: 0px; --rot: 0deg; }}
-    .card-right {{ --x-offset: 80px; --rot: 5deg; }}
-    </style>
-    <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
-    </div>
-    """, unsafe_allow_html=True)
-
-    # -------- Counter Section (Updated Layout & Style with glassmorphism and shimmer) --------
-
-    # Fetch counters
+    # -------- Premium Hero Section --------
+    # Fetch live stats for subtle ribbon
     total_users = get_total_registered_users()
     active_logins = get_logins_today()
     stats = get_database_stats()
-
-# Replace static 15 with dynamic count
     resumes_uploaded = stats.get("total_candidates", 0)
-
     active_domains = stats.get("unique_domains", 0)
 
-
-    glassmorphism_counter_style = ""  # Styles now handled by global CSS
-
-    st.markdown(glassmorphism_counter_style, unsafe_allow_html=True)
-
     st.markdown(f"""
-    <div class="counter-grid">
-        <div class="counter-box">
-            <div class="counter-number">{total_users}</div>
-            <div class="counter-label">Total Users</div>
+    <style>
+    /* ── Hero wrapper ── */
+    .hero-section {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 48px 24px 32px;
+        position: relative;
+        overflow: hidden;
+    }}
+
+    /* ── Radial glow behind hero ── */
+    .hero-section::before {{
+        content: '';
+        position: absolute;
+        top: -60px; left: 50%;
+        transform: translateX(-50%);
+        width: 520px; height: 320px;
+        background: radial-gradient(ellipse, rgba(56,189,248,0.08) 0%, transparent 70%);
+        pointer-events: none;
+        z-index: 0;
+    }}
+
+    /* ── Brand lockup ── */
+    .hero-brand {{
+        position: relative;
+        z-index: 2;
+        text-align: center;
+        margin-bottom: 18px;
+        animation: fadeSlideUp 0.7s cubic-bezier(0.22,1,0.36,1) both;
+    }}
+    .hero-wordmark {{
+        font-size: 3rem;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        color: #f0f4f8;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "DM Sans", sans-serif;
+    }}
+    .hero-wordmark span {{
+        background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }}
+    .hero-tagline {{
+        margin-top: 10px;
+        font-size: 0.95rem;
+        color: #64748b;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+        letter-spacing: 0.01em;
+    }}
+
+    /* ── Typewriter value props ── */
+    .hero-typewriter-wrap {{
+        position: relative;
+        z-index: 2;
+        text-align: center;
+        height: 32px;
+        margin-bottom: 32px;
+        animation: fadeSlideUp 0.9s cubic-bezier(0.22,1,0.36,1) 0.15s both;
+    }}
+    .hero-typewriter {{
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #38bdf8;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+        letter-spacing: -0.01em;
+        border-right: 2px solid #38bdf8;
+        white-space: nowrap;
+        overflow: hidden;
+        display: inline-block;
+        animation: typePulse 1s ease-in-out infinite;
+    }}
+    @keyframes typePulse {{
+        0%, 100% {{ border-color: #38bdf8; }}
+        50%       {{ border-color: transparent; }}
+    }}
+
+    /* ── Feature pill row ── */
+    .hero-pills {{
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-bottom: 36px;
+        position: relative;
+        z-index: 2;
+        animation: fadeSlideUp 1s cubic-bezier(0.22,1,0.36,1) 0.25s both;
+    }}
+    .hero-pill {{
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 99px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.09);
+        font-size: 0.78rem;
+        font-weight: 500;
+        color: #94a3b8;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        letter-spacing: 0.01em;
+        backdrop-filter: blur(10px);
+        transition: all 0.2s ease;
+    }}
+    .hero-pill:hover {{
+        border-color: rgba(56,189,248,0.3);
+        color: #38bdf8;
+        background: rgba(56,189,248,0.06);
+    }}
+    .hero-pill-dot {{
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: #38bdf8;
+        opacity: 0.7;
+    }}
+
+    /* ── Stat ribbon — subtle, bottom-aligned ── */
+    .hero-stat-ribbon {{
+        display: flex;
+        gap: 0;
+        justify-content: center;
+        align-items: center;
+        position: relative;
+        z-index: 2;
+        margin-bottom: 8px;
+        animation: fadeSlideUp 1.1s cubic-bezier(0.22,1,0.36,1) 0.35s both;
+    }}
+    .hero-stat-item {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0 28px;
+    }}
+    .hero-stat-item:not(:last-child) {{
+        border-right: 1px solid rgba(255,255,255,0.07);
+    }}
+    .hero-stat-num {{
+        font-size: 1.45rem;
+        font-weight: 700;
+        color: #f0f4f8;
+        letter-spacing: -0.03em;
+        line-height: 1;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+    }}
+    .hero-stat-lbl {{
+        font-size: 0.68rem;
+        color: #4a5568;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 600;
+        margin-top: 4px;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }}
+    </style>
+
+    <div class="hero-section">
+
+        <!-- Brand -->
+        <div class="hero-brand">
+            <div class="hero-wordmark">HIRE<span>LYZER</span></div>
+            <div class="hero-tagline">AI-Powered Resume Intelligence Platform</div>
         </div>
-        <div class="counter-box">
-            <div class="counter-number">{active_domains}</div>
-            <div class="counter-label">Active Domains</div>
+
+        <!-- Typewriter -->
+        <div class="hero-typewriter-wrap">
+            <span class="hero-typewriter" id="hero-tw"></span>
         </div>
-        <div class="counter-box">
-            <div class="counter-number">{resumes_uploaded}</div>
-            <div class="counter-label">Resumes Uploaded</div>
+
+        <!-- Feature pills -->
+        <div class="hero-pills">
+            <div class="hero-pill"><span class="hero-pill-dot"></span>Bias Detection</div>
+            <div class="hero-pill"><span class="hero-pill-dot"></span>ATS Scoring</div>
+            <div class="hero-pill"><span class="hero-pill-dot"></span>Resume Builder</div>
+            <div class="hero-pill"><span class="hero-pill-dot"></span>Job Matching</div>
+            <div class="hero-pill"><span class="hero-pill-dot"></span>Course AI</div>
         </div>
-        <div class="counter-box">
-            <div class="counter-number">{active_logins}</div>
-            <div class="counter-label">Active Sessions</div>
+
+        <!-- Stat ribbon -->
+        <div class="hero-stat-ribbon">
+            <div class="hero-stat-item">
+                <div class="hero-stat-num">{total_users}</div>
+                <div class="hero-stat-lbl">Users</div>
+            </div>
+            <div class="hero-stat-item">
+                <div class="hero-stat-num">{resumes_uploaded}</div>
+                <div class="hero-stat-lbl">Resumes Analysed</div>
+            </div>
+            <div class="hero-stat-item">
+                <div class="hero-stat-num">{active_domains}</div>
+                <div class="hero-stat-lbl">Domains</div>
+            </div>
+            <div class="hero-stat-item">
+                <div class="hero-stat-num">{active_logins}</div>
+                <div class="hero-stat-lbl">Active Today</div>
+            </div>
         </div>
+
     </div>
+
+    <script>
+    (function() {{
+        var phrases = [
+            "Analyse resumes with zero bias.",
+            "Score smarter. Hire better.",
+            "AI that reads between the lines.",
+            "Ethical hiring starts here.",
+            "10x faster resume screening."
+        ];
+        var idx = 0, charIdx = 0, deleting = false, el = null;
+        function tick() {{
+            el = el || document.getElementById('hero-tw');
+            if (!el) {{ setTimeout(tick, 100); return; }}
+            var phrase = phrases[idx];
+            if (!deleting) {{
+                el.textContent = phrase.slice(0, ++charIdx);
+                if (charIdx === phrase.length) {{ deleting = true; setTimeout(tick, 1800); return; }}
+            }} else {{
+                el.textContent = phrase.slice(0, --charIdx);
+                if (charIdx === 0) {{ deleting = false; idx = (idx + 1) % phrases.length; }}
+            }}
+            setTimeout(tick, deleting ? 38 : 62);
+        }}
+        setTimeout(tick, 600);
+    }})();
+    </script>
     """, unsafe_allow_html=True)
 
 if not st.session_state.get("authenticated", False):
-
-    # ✅ Futuristic silhouette
-    image_url = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
-
-    # ✅ Render animated cards only (styles already in global CSS block above)
-    st.markdown(f"""
-    <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
-    </div>
-    """, unsafe_allow_html=True)
 
     # -------- Login/Register Layout --------
     left, center, right = st.columns([1, 2, 1])
