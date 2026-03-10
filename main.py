@@ -459,9 +459,18 @@ html, body, [class*="css"], .stApp {
 
 /* ── Main container ── */
 .main .block-container {
-    padding: 1.5rem 2rem 3rem !important;
+    padding: 2.5rem 2rem 3rem !important;
     max-width: 1280px;
 }
+
+/* ── Hide default Streamlit top decoration / header gap ── */
+header[data-testid="stHeader"] {
+    background: var(--bg-primary) !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
+}
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+.stDeployButton { display: none; }
 
 /* ══════════════════════════════════════
    FADE ANIMATIONS
@@ -928,50 +937,34 @@ h3, .stMarkdown h3 {
    ══════════════════════════════════════ */
 .counter-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    padding: 24px 0;
-    max-width: 520px;
-    margin: 0 auto;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    padding: 0;
+    max-width: 760px;
+    margin: 40px auto 0;
+    background: var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
 }
 .counter-box {
-    background: var(--surface-01);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    padding: 22px 18px;
+    background: var(--bg-secondary);
+    padding: 28px 20px 24px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     position: relative;
-    overflow: hidden;
-    transition: all var(--transition-base);
-    animation: floatUp 4s ease-in-out infinite;
-}
-.counter-box::before {
-    content: '';
-    position: absolute;
-    top: 0; left: -100%;
-    width: 50%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(56,189,248,0.06), transparent);
-    animation: shimmerSlide 3s infinite;
+    transition: background var(--transition-fast);
 }
 .counter-box:hover {
-    transform: translateY(-6px) scale(1.02);
-    border-color: var(--border-accent);
-    box-shadow: 0 12px 40px rgba(56,189,248,0.10);
+    background: var(--bg-tertiary);
 }
-.counter-box:nth-child(1) { animation-delay: 0s; }
-.counter-box:nth-child(2) { animation-delay: 0.6s; }
-.counter-box:nth-child(3) { animation-delay: 1.2s; }
-.counter-box:nth-child(4) { animation-delay: 1.8s; }
 .counter-number {
-    font-size: 2rem;
+    font-size: 2.2rem;
     font-weight: 700;
-    color: var(--accent-cyan);
-    letter-spacing: -0.03em;
+    color: var(--text-primary);
+    letter-spacing: -0.04em;
     line-height: 1;
     position: relative;
     z-index: 2;
@@ -979,11 +972,11 @@ h3, .stMarkdown h3 {
 }
 .counter-label {
     margin-top: 6px;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
+    font-size: 0.72rem;
+    color: var(--text-muted);
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     position: relative;
     z-index: 2;
     font-family: var(--font-sans);
@@ -1370,41 +1363,70 @@ if not st.session_state.authenticated:
             </div>
             """, unsafe_allow_html=True)
 
-    # -------- Animated Cards --------
-    image_url = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
-
-    st.markdown(f"""
+    # -------- Premium Hero Section --------
+    st.markdown("""
     <style>
-    .animated-cards {{
-      margin-top: 30px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 300px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 240px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-    @keyframes splitCards {{
-      0% {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left {{ --x-offset: -80px; --rot: -5deg; }}
-    .card-center {{ --x-offset: 0px; --rot: 0deg; }}
-    .card-right {{ --x-offset: 80px; --rot: 5deg; }}
+    .hero-section {
+        text-align: center;
+        padding: 60px 24px 40px;
+        position: relative;
+    }
+    .hero-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(79,163,227,0.10);
+        border: 1px solid rgba(79,163,227,0.22);
+        border-radius: 99px;
+        padding: 5px 14px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #38bdf8;
+        margin-bottom: 24px;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+    }
+    .hero-eyebrow span {
+        width: 6px; height: 6px;
+        background: #38bdf8;
+        border-radius: 50%;
+        display: inline-block;
+        animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(0.7); }
+    }
+    .hero-title {
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "DM Sans", sans-serif;
+        font-size: clamp(2.2rem, 5vw, 3.4rem);
+        font-weight: 700;
+        letter-spacing: -0.035em;
+        line-height: 1.1;
+        color: #f0f4f8;
+        margin: 0 0 16px;
+    }
+    .hero-title .accent {
+        background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    .hero-subtitle {
+        font-size: 1rem;
+        color: #64748b;
+        max-width: 480px;
+        margin: 0 auto;
+        line-height: 1.65;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+        font-weight: 400;
+    }
     </style>
-    <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
+    <div class="hero-section">
+        <div class="hero-eyebrow"><span></span> AI-Powered Platform</div>
+        <h1 class="hero-title">Your Resume,<br><span class="accent">Intelligently Analyzed</span></h1>
+        <p class="hero-subtitle">Score, optimize, and tailor your resume with AI precision. Land interviews faster with data-driven insights.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1446,379 +1468,8 @@ if not st.session_state.authenticated:
     </div>
     """, unsafe_allow_html=True)
 
+
 if not st.session_state.get("authenticated", False):
-
-    # ✅ Futuristic silhouette
-    image_url = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
-
-    # ✅ Inject glassmorphism CSS with shimmer effects
-    st.markdown(f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
-
-    @keyframes shimmer {{
-        0% {{ background-position: -200% 0; }}
-        100% {{ background-position: 200% 0; }}
-    }}
-
-    @keyframes glassShimmer {{
-        0% {{ transform: translateX(-100%) skewX(-15deg); }}
-        100% {{ transform: translateX(200%) skewX(-15deg); }}
-    }}
-
-    /* ===== Card Shuffle Animation ===== */
-    .animated-cards {{
-      margin-top: 40px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 260px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 220px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-      filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-
-    @keyframes splitCards {{
-      0%   {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left   {{ --x-offset: -80px; --rot: -4deg; }}
-    .card-center {{ --x-offset: 0px;  --rot: 0deg;  }}
-    .card-right  {{ --x-offset: 80px;  --rot: 4deg;  }}
-
-    /* ===== Premium Apple-Style Login Card ===== */
-    @keyframes fadeSlideUp {{
-      0%   {{ transform: translateY(28px); opacity: 0; }}
-      100% {{ transform: translateY(0);    opacity: 1; }}
-    }}
-
-    .login-card {{
-      background: rgba(255, 255, 255, 0.05);
-      backdrop-filter: blur(32px) saturate(180%);
-      -webkit-backdrop-filter: blur(32px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 20px;
-      padding: 28px 28px 24px;
-      box-shadow:
-        0 2px 6px rgba(0,0,0,0.25),
-        0 16px 48px rgba(0,0,0,0.40),
-        inset 0 1px 0 rgba(255,255,255,0.07);
-      color: #e6edf3;
-      margin-top: 20px;
-      opacity: 0;
-      animation: fadeSlideUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .login-card::before {{
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 1px;
-      background: linear-gradient(90deg,
-        transparent 0%,
-        rgba(255,255,255,0.14) 40%,
-        rgba(79,140,255,0.22) 60%,
-        transparent 100%);
-      pointer-events: none;
-    }}
-
-    .login-card h2 {{
-      text-align: center;
-      font-size: 1.45rem;
-      font-weight: 700;
-      letter-spacing: -0.025em;
-      color: #e6edf3;
-      margin-bottom: 4px;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      position: relative;
-      z-index: 2;
-    }}
-    .login-card h2 span {{ color: #4f8cff; }}
-
-    /* ===== Enhanced Message Cards with Consistent Layout ===== */
-    .slide-message {{
-      position: relative;
-      overflow: hidden;
-      margin: 16px 0;
-      padding: 14px 20px;
-      border-radius: 14px;
-      font-weight: 600;
-      font-size: 0.95em;
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 12px;
-      animation: slideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      box-shadow:
-        0 4px 20px rgba(0, 0, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      line-height: 1.5;
-      font-family: 'Orbitron', sans-serif;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      min-height: 50px;
-    }}
-
-    .slide-message:hover {{
-      transform: translateY(-3px) scale(1.01);
-      box-shadow:
-        0 8px 30px rgba(0, 0, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    }}
-
-    .slide-message::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.1),
-        transparent
-      );
-      transition: left 0.5s;
-    }}
-
-    .slide-message:hover::before {{
-      left: 100%;
-    }}
-
-    .slide-message svg {{
-      width: 22px;
-      height: 22px;
-      flex-shrink: 0;
-      filter: drop-shadow(0 0 6px currentColor);
-      z-index: 2;
-    }}
-
-    .slide-message-text {{
-      flex: 1;
-      z-index: 2;
-      position: relative;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-      white-space: normal;
-    }}
-
-    .success-msg {{
-      background: linear-gradient(135deg,
-        rgba(0, 255, 127, 0.20) 0%,
-        rgba(0, 255, 127, 0.08) 100%);
-      border: 2px solid rgba(0, 255, 127, 0.4);
-      color: #00FF7F;
-      text-shadow: 0 0 12px rgba(0, 255, 127, 0.4);
-    }}
-
-    .error-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.20) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-      color: #FF6347;
-      text-shadow: 0 0 12px rgba(255, 99, 71, 0.4);
-    }}
-
-    .info-msg {{
-      background: linear-gradient(135deg,
-        rgba(30, 144, 255, 0.20) 0%,
-        rgba(30, 144, 255, 0.08) 100%);
-      border: 2px solid rgba(30, 144, 255, 0.4);
-      color: #1E90FF;
-      text-shadow: 0 0 12px rgba(30, 144, 255, 0.4);
-    }}
-
-    .warn-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.20) 0%,
-        rgba(255, 215, 0, 0.08) 100%);
-      border: 2px solid rgba(255, 215, 0, 0.4);
-      color: #FFD700;
-      text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
-    }}
-
-    @keyframes slideIn {{
-      0%   {{
-        transform: translateX(-50px);
-        opacity: 0;
-      }}
-      100% {{
-        transform: translateX(0);
-        opacity: 1;
-      }}
-    }}
-
-    /* ===== Improved Timer Display ===== */
-    .timer-display {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.18) 0%,
-        rgba(255, 165, 0, 0.08) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      border: 2px solid rgba(255, 215, 0, 0.4);
-      border-radius: 14px;
-      padding: 16px 24px;
-      margin: 20px 0;
-      text-align: center;
-      box-shadow:
-        0 4px 20px rgba(255, 215, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .timer-display::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 215, 0, 0.2),
-        transparent
-      );
-      animation: glassShimmer 3s infinite;
-    }}
-
-    .timer-display:hover {{
-      box-shadow:
-        0 8px 30px rgba(255, 215, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-      transform: translateY(-3px);
-    }}
-
-    .timer-text {{
-      color: #FFD700;
-      font-size: 1.15em;
-      font-weight: bold;
-      font-family: 'Orbitron', sans-serif;
-      text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
-      position: relative;
-      z-index: 2;
-    }}
-
-    .timer-expired {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.18) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-    }}
-
-    .timer-expired .timer-text {{
-      color: #FF6347;
-      text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
-    }}
-
-    /* ===== Premium Minimal Buttons ===== */
-    .stButton>button {{
-      background: linear-gradient(135deg,
-        #4f8cff 0%,
-        #3b6fd4 100%);
-      backdrop-filter: none;
-      color: #ffffff;
-      border: none;
-      border-radius: 10px;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      font-weight: 600;
-      font-size: 0.9rem;
-      letter-spacing: 0.01em;
-      padding: 10px 20px;
-      box-shadow:
-        0 1px 2px rgba(0,0,0,0.20),
-        0 4px 16px rgba(79,140,255,0.28);
-      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-      position: relative;
-      overflow: hidden;
-    }}
-    
-    .stButton>button::before {{
-      display: none;
-    }}
-    
-    .stButton>button:hover {{
-      transform: translateY(-1px);
-      background: linear-gradient(135deg,
-        #5a96ff 0%,
-        #4478e0 100%);
-      border: none;
-      box-shadow:
-        0 2px 4px rgba(0,0,0,0.22),
-        0 8px 24px rgba(79,140,255,0.40);
-    }}
-    
-    .stButton>button:active {{
-      transform: translateY(0px);
-      box-shadow:
-        0 1px 2px rgba(0,0,0,0.20),
-        0 2px 8px rgba(79,140,255,0.20);
-    }}
-
-    .stButton>button:hover::before {{
-      display: none;
-    }}
-
-    /* ===== Premium Minimal Input Fields ===== */
-    .stTextInput input {{
-      background: rgba(255, 255, 255, 0.04);
-      backdrop-filter: none;
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      border-radius: 10px;
-      padding: 11px 14px;
-      color: #e6edf3;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      font-size: 0.9rem;
-      box-shadow: none;
-      transition: border-color 0.18s ease, box-shadow 0.18s ease;
-    }}
-    .stTextInput input:focus {{
-      outline: none !important;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(79, 140, 255, 0.55);
-      box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.14);
-      transform: none;
-    }}
-    .stTextInput input:hover {{
-      border: 1px solid rgba(255, 255, 255, 0.20);
-    }}
-    .stTextInput label {{
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif !important;
-      color: #9aa4af !important;
-      font-size: 0.78rem !important;
-      font-weight: 500 !important;
-      letter-spacing: 0.04em !important;
-      text-transform: uppercase !important;
-      text-shadow: none !important;
-    }}
-    </style>
-
-    <!-- Animated Cards -->
-    <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
-    </div>
-    """, unsafe_allow_html=True)
 
     # -------- Login/Register Layout --------
     left, center, right = st.columns([1, 2, 1])
