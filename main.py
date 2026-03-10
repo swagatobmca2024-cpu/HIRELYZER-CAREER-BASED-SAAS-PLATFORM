@@ -1,4 +1,23 @@
-import os
+
+from xhtml2pdf import pisa
+from io import BytesIO
+
+def html_to_pdf_bytes(html_string):
+    styled_html = f"""
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: 400mm 297mm;  /* Original custom large page size */
+                margin-top: 10mm;
+                margin-bottom: 10mm;
+                margin-left: 10mm;
+                margin-right: 10mm;
+            }}
+            body {{
+                font-size: 14pt;
+                font-import os
 os.environ["STREAMLIT_WATCHDOG"] = "false"
 import json
 import random
@@ -1422,215 +1441,301 @@ if not st.session_state.authenticated:
     resumes_uploaded = stats.get("total_candidates", 0)
     active_domains = stats.get("unique_domains", 0)
 
-    # ── Hero HTML (no script — Streamlit strips <script> from st.markdown) ──
+    # ── Premium Hero HTML ──
     st.markdown(f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+    /* ── Hero wrapper ── */
     .hero-section {{
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 36px 24px 14px;
+        padding: 52px 24px 28px;
         position: relative;
-        overflow: hidden;
+        overflow: visible;
+        text-align: center;
     }}
+
+    /* ── Multi-layer atmospheric background ── */
     .hero-section::before {{
         content: '';
         position: absolute;
-        top: -60px; left: 50%;
+        top: -80px; left: 50%;
         transform: translateX(-50%);
-        width: 520px; height: 320px;
-        background: radial-gradient(ellipse, rgba(56,189,248,0.08) 0%, transparent 70%);
+        width: 700px; height: 400px;
+        background:
+            radial-gradient(ellipse 60% 50% at 40% 40%, rgba(56,189,248,0.10) 0%, transparent 70%),
+            radial-gradient(ellipse 50% 40% at 65% 55%, rgba(129,140,248,0.08) 0%, transparent 65%);
         pointer-events: none;
         z-index: 0;
     }}
+    /* subtle noise texture overlay */
+    .hero-section::after {{
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+        background-size: 180px 180px;
+        pointer-events: none;
+        z-index: 1;
+        opacity: 0.4;
+    }}
+
+    /* ── Wordmark block ── */
     .hero-brand {{
         position: relative;
         z-index: 2;
         text-align: center;
-        margin-bottom: 18px;
-        animation: fadeSlideUp 0.7s cubic-bezier(0.22,1,0.36,1) both;
+        margin-bottom: 6px;
+        animation: fadeSlideUp 0.65s cubic-bezier(0.22,1,0.36,1) both;
+    }}
+    .hero-eyebrow {{
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        background: rgba(56,189,248,0.07);
+        border: 1px solid rgba(56,189,248,0.18);
+        border-radius: 99px;
+        padding: 4px 13px;
+        margin-bottom: 16px;
+        font-size: 0.68rem;
+        font-weight: 600;
+        color: #38bdf8;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-family: 'Inter', -apple-system, sans-serif;
+    }}
+    .hero-eyebrow-dot {{
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: #38bdf8;
+        box-shadow: 0 0 6px rgba(56,189,248,0.8);
+        animation: heroPulse 2s ease-in-out infinite;
+    }}
+    @keyframes heroPulse {{
+        0%, 100% {{ opacity: 1; transform: scale(1); }}
+        50% {{ opacity: 0.5; transform: scale(0.7); }}
     }}
     .hero-wordmark {{
-        font-size: 3rem;
-        font-weight: 800;
-        letter-spacing: -0.04em;
-        line-height: 1;
+        font-size: 4rem;
+        font-weight: 900;
+        letter-spacing: -0.05em;
+        line-height: 0.95;
         color: #f0f4f8;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "DM Sans", sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+        position: relative;
     }}
-    .hero-wordmark span {{
+    .hero-wordmark-hire {{
+        color: #f0f4f8;
+    }}
+    .hero-wordmark-lyzer {{
         background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
     }}
     .hero-tagline {{
-        margin-top: 8px;
-        font-size: 0.8rem;
-        color: #334155;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        font-weight: 500;
+        margin-top: 12px;
+        font-size: 0.92rem;
+        color: #475569;
+        font-family: 'Inter', -apple-system, sans-serif;
+        letter-spacing: 0.01em;
+        font-weight: 400;
+        line-height: 1.5;
+        max-width: 380px;
+        margin-left: auto;
+        margin-right: auto;
+    }}
+
+    /* ── Feature pill bar ── */
+    .hero-pills-wrap {{
+        position: relative;
+        z-index: 2;
+        margin: 22px 0 24px;
+        animation: fadeSlideUp 0.85s cubic-bezier(0.22,1,0.36,1) 0.15s both;
     }}
     .hero-pills-container {{
         display: inline-flex;
-        gap: 6px;
-        flex-wrap: wrap;
-        justify-content: center;
         align-items: center;
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(15,20,30,0.8);
+        border: 1px solid rgba(255,255,255,0.09);
         border-radius: 99px;
-        padding: 6px 10px;
-        margin-bottom: 32px;
-        position: relative;
-        z-index: 2;
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        animation: fadeSlideUp 1s cubic-bezier(0.22,1,0.36,1) 0.25s both;
+        padding: 5px 6px;
+        gap: 2px;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        box-shadow:
+            0 1px 0 rgba(255,255,255,0.05) inset,
+            0 8px 32px rgba(0,0,0,0.4);
     }}
     .hero-pill {{
         display: inline-flex;
         align-items: center;
         gap: 5px;
-        padding: 4px 11px;
+        padding: 5px 13px;
         border-radius: 99px;
-        background: transparent;
-        font-size: 0.75rem;
+        font-size: 0.76rem;
         font-weight: 500;
         color: #64748b;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: 'Inter', -apple-system, sans-serif;
         letter-spacing: 0.01em;
-        transition: color 0.2s ease;
+        transition: all 0.2s ease;
+        cursor: default;
+        white-space: nowrap;
     }}
     .hero-pill:hover {{
-        color: #38bdf8;
+        background: rgba(56,189,248,0.08);
+        color: #7dd3fc;
     }}
     .hero-pill-dot {{
-        width: 5px; height: 5px;
+        width: 4px; height: 4px;
         border-radius: 50%;
         background: #38bdf8;
-        opacity: 0.55;
+        opacity: 0.6;
         flex-shrink: 0;
     }}
     .hero-pill-sep {{
-        width: 1px; height: 12px;
-        background: rgba(255,255,255,0.10);
+        width: 1px; height: 14px;
+        background: rgba(255,255,255,0.07);
         flex-shrink: 0;
-        align-self: center;
     }}
-    .hero-stat-ribbon {{
-        display: inline-flex;
-        gap: 0;
-        justify-content: center;
-        align-items: stretch;
+
+    /* ── Stat cards grid ── */
+    .hero-stats-grid {{
         position: relative;
         z-index: 2;
-        margin-bottom: 8px;
-        background: rgba(255,255,255,0.025);
-        border: 1px solid rgba(255,255,255,0.07);
-        border-radius: 16px;
-        padding: 0;
-        overflow: hidden;
-        animation: fadeSlideUp 1.1s cubic-bezier(0.22,1,0.36,1) 0.35s both;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        width: 100%;
+        max-width: 640px;
+        animation: fadeSlideUp 1s cubic-bezier(0.22,1,0.36,1) 0.28s both;
     }}
-    .hero-stat-item {{
+    .hero-stat-card {{
+        background: linear-gradient(160deg, rgba(20,28,43,0.9) 0%, rgba(12,18,28,0.95) 100%);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 14px;
+        padding: 16px 12px 14px;
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
-        padding: 16px 28px;
-        gap: 2px;
-        transition: background 0.2s ease;
+        gap: 6px;
+        position: relative;
+        overflow: hidden;
+        transition: all 0.25s ease;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,255,0.04) inset;
     }}
-    .hero-stat-item:hover {{
-        background: rgba(56,189,248,0.05);
+    .hero-stat-card::before {{
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(56,189,248,0.35), transparent);
     }}
-    .hero-stat-item:not(:last-child) {{
-        border-right: 1px solid rgba(255,255,255,0.07);
+    .hero-stat-card:hover {{
+        border-color: rgba(56,189,248,0.22);
+        transform: translateY(-3px);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 24px rgba(56,189,248,0.06);
     }}
-    .hero-stat-num {{
-        font-size: 1.4rem;
-        font-weight: 700;
-        color: #f0f4f8;
-        letter-spacing: -0.03em;
-        line-height: 1;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-    }}
-    .hero-stat-icon {{
+    .hero-stat-icon-wrap {{
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 28px; height: 28px;
-        border-radius: 8px;
-        background: rgba(56,189,248,0.08);
-        border: 1px solid rgba(56,189,248,0.15);
-        margin-bottom: 4px;
+        width: 32px; height: 32px;
+        border-radius: 9px;
+        background: rgba(56,189,248,0.07);
+        border: 1px solid rgba(56,189,248,0.14);
         flex-shrink: 0;
     }}
+    .hero-stat-num {{
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: #f1f5f9;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        font-family: 'Inter', -apple-system, sans-serif;
+    }}
     .hero-stat-lbl {{
-        font-size: 0.65rem;
-        color: #4a5568;
+        font-size: 0.62rem;
+        color: #475569;
         text-transform: uppercase;
-        letter-spacing: 0.09em;
+        letter-spacing: 0.1em;
         font-weight: 600;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: 'Inter', -apple-system, sans-serif;
+        text-align: center;
+        line-height: 1.3;
     }}
     </style>
 
     <div class="hero-section">
+        <!-- Brand block -->
         <div class="hero-brand">
-            <div class="hero-wordmark">HIRE<span>LYZER</span></div>
-            <div class="hero-tagline">AI-Powered Resume Intelligence Platform</div>
+            <div class="hero-eyebrow">
+                <span class="hero-eyebrow-dot"></span>
+                AI-Powered · Resume Intelligence
+            </div>
+            <div class="hero-wordmark">
+                <span class="hero-wordmark-hire">HIRE</span><span class="hero-wordmark-lyzer">LYZER</span>
+            </div>
+            <div class="hero-tagline">
+                Smarter hiring starts with unbiased, AI-driven resume analysis
+            </div>
         </div>
-        <div class="hero-pills-container">
-            <div class="hero-pill"><span class="hero-pill-dot"></span>Bias Detection</div>
-            <div class="hero-pill-sep"></div>
-            <div class="hero-pill"><span class="hero-pill-dot"></span>ATS Scoring</div>
-            <div class="hero-pill-sep"></div>
-            <div class="hero-pill"><span class="hero-pill-dot"></span>Resume Builder</div>
-            <div class="hero-pill-sep"></div>
-            <div class="hero-pill"><span class="hero-pill-dot"></span>Job Matching</div>
-            <div class="hero-pill-sep"></div>
-            <div class="hero-pill"><span class="hero-pill-dot"></span>AI Coach</div>
+
+        <!-- Feature pills -->
+        <div class="hero-pills-wrap">
+            <div class="hero-pills-container">
+                <div class="hero-pill"><span class="hero-pill-dot"></span>Bias Detection</div>
+                <div class="hero-pill-sep"></div>
+                <div class="hero-pill"><span class="hero-pill-dot"></span>ATS Scoring</div>
+                <div class="hero-pill-sep"></div>
+                <div class="hero-pill"><span class="hero-pill-dot"></span>Resume Builder</div>
+                <div class="hero-pill-sep"></div>
+                <div class="hero-pill"><span class="hero-pill-dot"></span>Job Matching</div>
+                <div class="hero-pill-sep"></div>
+                <div class="hero-pill"><span class="hero-pill-dot"></span>AI Coach</div>
+            </div>
         </div>
-        <div class="hero-stat-ribbon">
-            <div class="hero-stat-item">
-                <div class="hero-stat-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="7" r="4" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.12)"/>
-                        <path d="M4 20c0-4 3.582-7 8-7s8 3 8 7" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>
+
+        <!-- Stat cards -->
+        <div class="hero-stats-grid">
+            <div class="hero-stat-card">
+                <div class="hero-stat-icon-wrap">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="7" r="4" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.15)"/>
+                        <path d="M4 20c0-3.866 3.582-7 8-7s8 3.134 8 7" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>
                     </svg>
                 </div>
                 <div class="hero-stat-num">{total_users}</div>
-                <div class="hero-stat-lbl">Users</div>
+                <div class="hero-stat-lbl">Total Users</div>
             </div>
-            <div class="hero-stat-item">
-                <div class="hero-stat-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="4" y="2" width="16" height="20" rx="2" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.08)"/>
-                        <path d="M8 7h8M8 11h8M8 15h5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+            <div class="hero-stat-card">
+                <div class="hero-stat-icon-wrap">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="4" y="2" width="16" height="20" rx="2.5" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.10)"/>
+                        <path d="M8 7h8M8 11h8M8 15h5" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
                     </svg>
                 </div>
                 <div class="hero-stat-num">{resumes_uploaded}</div>
                 <div class="hero-stat-lbl">Resumes Analysed</div>
             </div>
-            <div class="hero-stat-item">
-                <div class="hero-stat-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="12" r="9" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.08)"/>
-                        <path d="M12 3v18M3 12h18" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
+            <div class="hero-stat-card">
+                <div class="hero-stat-icon-wrap">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="9" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.10)"/>
+                        <ellipse cx="12" cy="12" rx="4" ry="9" stroke="#38bdf8" stroke-width="1.4"/>
+                        <path d="M3.5 9h17M3.5 15h17" stroke="#38bdf8" stroke-width="1.4" stroke-linecap="round"/>
                     </svg>
                 </div>
                 <div class="hero-stat-num">{active_domains}</div>
                 <div class="hero-stat-lbl">Domains</div>
             </div>
-            <div class="hero-stat-item">
-                <div class="hero-stat-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M13 2L4.5 13.5H12L11 22L19.5 10.5H12L13 2Z" stroke="#38bdf8" stroke-width="1.8" stroke-linejoin="round" fill="rgba(56,189,248,0.12)"/>
+            <div class="hero-stat-card">
+                <div class="hero-stat-icon-wrap">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="#38bdf8" stroke-width="1.8" stroke-linejoin="round" fill="rgba(56,189,248,0.15)"/>
                     </svg>
                 </div>
                 <div class="hero-stat-num">{active_logins}</div>
@@ -1640,34 +1745,32 @@ if not st.session_state.authenticated:
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Typewriter animation via components.html (scripts work here) ──
+    # ── Typewriter — runs in its own iframe so scripts execute ──
     st.components.v1.html("""
     <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
-    .tw-wrap {
+    * {{ box-sizing: border-box; }}
+    body {{ margin: 0; padding: 0; background: transparent; overflow: hidden; }}
+    .tw-wrap {{
         text-align: center;
-        padding: 4px 0 8px;
+        padding: 6px 16px 10px;
         width: 100%;
-    }
-    .tw-text {
-        font-size: 1rem;
-        font-weight: 600;
+    }}
+    .tw-text {{
+        font-size: 0.95rem;
+        font-weight: 500;
         color: #38bdf8;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-        letter-spacing: -0.01em;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        letter-spacing: 0.005em;
         border-right: 2px solid #38bdf8;
         white-space: nowrap;
         display: inline-block;
-        max-width: 100%;
+        padding-right: 2px;
         animation: twBlink 1s ease-in-out infinite;
-        background: transparent;
-        vertical-align: middle;
-    }
-    @keyframes twBlink {
-        0%, 100% { border-color: #38bdf8; }
-        50%       { border-color: transparent; }
-    }
+    }}
+    @keyframes twBlink {{
+        0%, 100% {{ border-color: #38bdf8; }}
+        50%       {{ border-color: transparent; }}
+    }}
     </style>
     <div class="tw-wrap"><span class="tw-text" id="tw">&nbsp;</span></div>
     <script>
@@ -1685,17 +1788,17 @@ if not st.session_state.authenticated:
             var phrase = phrases[idx];
             if (!deleting) {
                 el.textContent = phrase.slice(0, ++charIdx);
-                if (charIdx === phrase.length) { deleting = true; setTimeout(tick, 1800); return; }
+                if (charIdx === phrase.length) { deleting = true; setTimeout(tick, 2000); return; }
             } else {
                 el.textContent = phrase.slice(0, --charIdx);
                 if (charIdx === 0) { deleting = false; idx = (idx + 1) % phrases.length; }
             }
-            setTimeout(tick, deleting ? 38 : 62);
+            setTimeout(tick, deleting ? 32 : 58);
         }
-        setTimeout(tick, 600);
+        setTimeout(tick, 800);
     })();
     </script>
-    """, height=44, scrolling=False)
+    """, height=46, scrolling=False)
 
 if not st.session_state.get("authenticated", False):
 
@@ -4657,26 +4760,7 @@ with tab1:
                     )               
 
     else:           
-        st.warning("⚠️ Please upload resumes to view dashboard analytics.")
-from xhtml2pdf import pisa
-from io import BytesIO
-
-def html_to_pdf_bytes(html_string):
-    styled_html = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{
-                size: 400mm 297mm;  /* Original custom large page size */
-                margin-top: 10mm;
-                margin-bottom: 10mm;
-                margin-left: 10mm;
-                margin-right: 10mm;
-            }}
-            body {{
-                font-size: 14pt;
-                font-family: "Segoe UI", "Helvetica", sans-serif;
+        st.warning("⚠️ Please upload resumes to view dashboard analytics.")family: "Segoe UI", "Helvetica", sans-serif;
                 line-height: 1.5;
                 color: #000;
             }}
