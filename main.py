@@ -578,7 +578,7 @@ div.stAlert {
     -webkit-backdrop-filter: blur(32px) saturate(160%);
     border: 1px solid rgba(99,179,237,0.18);
     border-radius: var(--radius-xl);
-    padding: 36px 32px;
+    padding: 28px 32px 36px;
     box-shadow: var(--shadow-card), 0 0 60px rgba(79,163,227,0.07);
     transition: all var(--transition-slow);
     position: relative;
@@ -1401,7 +1401,7 @@ if not st.session_state.authenticated:
             ("https://img.icons8.com/fluency/48/resume.png", "Resume Analyzer", "Get feedback, scores, and tips powered by AI along with the biased words detection and rewriting the resume in an inclusive way."),
             ("https://img.icons8.com/fluency/48/resume-website.png", "Resume Builder", "Build modern, eye-catching resumes easily."),
             ("https://img.icons8.com/fluency/48/job.png", "Job Search", "Find tailored job matches."),
-            ("https://img.icons8.com/fluency/48/learning.png", "AI Coach", "Personalised upskilling recommendations and career guidance powered by AI."),
+            ("https://img.icons8.com/fluency/48/classroom.png", "Course Suggestions", "Get upskilling recommendations based on your goals."),
             ("https://img.icons8.com/fluency/48/combo-chart.png", "Interactive Dashboard", "Visualize trends, scores, and analytics."),
         ]
 
@@ -1422,42 +1422,42 @@ if not st.session_state.authenticated:
     resumes_uploaded = stats.get("total_candidates", 0)
     active_domains = stats.get("unique_domains", 0)
 
-    # ── Premium Hero — contained, no loose elements ──
+    # ── Hero HTML (no script — Streamlit strips <script> from st.markdown) ──
     st.markdown(f"""
     <style>
-    /* ── outer page centering ── */
-    .hero-outer {{
+    .hero-section {{
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 40px 16px 20px;
+        justify-content: center;
+        padding: 36px 24px 14px;
         position: relative;
         overflow: hidden;
     }}
-    .hero-outer::before {{
+    .hero-section::before {{
         content: '';
         position: absolute;
-        top: 0; left: 50%;
+        top: -60px; left: 50%;
         transform: translateX(-50%);
-        width: 600px; height: 260px;
-        background: radial-gradient(ellipse at 50% 0%, rgba(56,189,248,0.09) 0%, transparent 68%);
+        width: 520px; height: 320px;
+        background: radial-gradient(ellipse, rgba(56,189,248,0.08) 0%, transparent 70%);
         pointer-events: none;
         z-index: 0;
     }}
-
-    /* ── wordmark ── */
-    .hero-wordmark {{
+    .hero-brand {{
         position: relative;
         z-index: 2;
-        font-size: 2.8rem;
+        text-align: center;
+        margin-bottom: 18px;
+        animation: fadeSlideUp 0.7s cubic-bezier(0.22,1,0.36,1) both;
+    }}
+    .hero-wordmark {{
+        font-size: 3rem;
         font-weight: 800;
-        letter-spacing: -0.045em;
+        letter-spacing: -0.04em;
         line-height: 1;
         color: #f0f4f8;
-        text-align: center;
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "DM Sans", sans-serif;
-        margin-bottom: 8px;
-        animation: fadeSlideUp 0.6s cubic-bezier(0.22,1,0.36,1) both;
     }}
     .hero-wordmark span {{
         background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
@@ -1465,175 +1465,180 @@ if not st.session_state.authenticated:
         -webkit-text-fill-color: transparent;
         background-clip: text;
     }}
-    .hero-sub {{
-        position: relative;
-        z-index: 2;
-        font-size: 0.82rem;
-        color: #475569;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        font-weight: 500;
-        text-align: center;
-        margin-bottom: 28px;
-        animation: fadeSlideUp 0.7s cubic-bezier(0.22,1,0.36,1) 0.08s both;
+    .hero-tagline {{
+        margin-top: 10px;
+        font-size: 0.95rem;
+        color: #64748b;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+        letter-spacing: 0.01em;
     }}
-
-    /* ── contained feature box ── */
-    .hero-feature-box {{
-        position: relative;
-        z-index: 2;
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.07);
-        border-radius: 16px;
-        padding: 20px 28px;
-        width: 100%;
-        max-width: 580px;
-        margin-bottom: 20px;
-        backdrop-filter: blur(12px);
-        animation: fadeSlideUp 0.8s cubic-bezier(0.22,1,0.36,1) 0.15s both;
-    }}
-    .hero-feature-label {{
-        font-size: 0.62rem;
-        font-weight: 700;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: #38bdf8;
-        margin-bottom: 14px;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    }}
-    .hero-pills {{
-        display: flex;
-        gap: 8px;
+    .hero-pills-container {{
+        display: inline-flex;
+        gap: 6px;
         flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 99px;
+        padding: 6px 10px;
+        margin-bottom: 32px;
+        position: relative;
+        z-index: 2;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        animation: fadeSlideUp 1s cubic-bezier(0.22,1,0.36,1) 0.25s both;
     }}
     .hero-pill {{
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        padding: 5px 12px;
+        gap: 5px;
+        padding: 4px 11px;
         border-radius: 99px;
-        background: rgba(56,189,248,0.06);
-        border: 1px solid rgba(56,189,248,0.16);
+        background: transparent;
         font-size: 0.75rem;
         font-weight: 500;
-        color: #7dd3fc;
+        color: #64748b;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         letter-spacing: 0.01em;
-        white-space: nowrap;
+        transition: color 0.2s ease;
     }}
-    .hero-pill-icon {{
-        font-size: 0.82rem;
-        line-height: 1;
+    .hero-pill:hover {{
+        color: #38bdf8;
     }}
-
-    /* ── contained stat box ── */
-    .hero-stat-box {{
+    .hero-pill-dot {{
+        width: 5px; height: 5px;
+        border-radius: 50%;
+        background: #38bdf8;
+        opacity: 0.55;
+        flex-shrink: 0;
+    }}
+    .hero-pill-sep {{
+        width: 1px; height: 12px;
+        background: rgba(255,255,255,0.10);
+        flex-shrink: 0;
+        align-self: center;
+    }}
+    .hero-stat-ribbon {{
+        display: inline-flex;
+        gap: 0;
+        justify-content: center;
+        align-items: stretch;
         position: relative;
         z-index: 2;
-        background: rgba(255,255,255,0.02);
-        border: 1px solid rgba(255,255,255,0.06);
-        border-radius: 14px;
-        padding: 16px 0;
-        width: 100%;
-        max-width: 580px;
-        display: flex;
-        animation: fadeSlideUp 0.9s cubic-bezier(0.22,1,0.36,1) 0.22s both;
         margin-bottom: 8px;
+        background: rgba(255,255,255,0.025);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 16px;
+        padding: 0;
+        overflow: hidden;
+        animation: fadeSlideUp 1.1s cubic-bezier(0.22,1,0.36,1) 0.35s both;
     }}
     .hero-stat-item {{
-        flex: 1;
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 4px 0;
+        justify-content: center;
+        padding: 14px 26px;
+        gap: 3px;
+        transition: background 0.2s ease;
     }}
-    .hero-stat-item + .hero-stat-item {{
-        border-left: 1px solid rgba(255,255,255,0.06);
+    .hero-stat-item:hover {{
+        background: rgba(56,189,248,0.05);
+    }}
+    .hero-stat-item:not(:last-child) {{
+        border-right: 1px solid rgba(255,255,255,0.07);
     }}
     .hero-stat-num {{
-        font-size: 1.5rem;
+        font-size: 1.4rem;
         font-weight: 700;
         color: #f0f4f8;
         letter-spacing: -0.03em;
         line-height: 1;
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
     }}
+    .hero-stat-icon {{
+        font-size: 0.8rem;
+        margin-bottom: 1px;
+        opacity: 0.7;
+    }}
     .hero-stat-lbl {{
-        font-size: 0.6rem;
-        color: #475569;
+        font-size: 0.65rem;
+        color: #4a5568;
         text-transform: uppercase;
-        letter-spacing: 0.1em;
+        letter-spacing: 0.09em;
         font-weight: 600;
-        margin-top: 5px;
         font-family: -apple-system, BlinkMacSystemFont, sans-serif;
     }}
     </style>
 
-    <div class="hero-outer">
-
-        <div class="hero-wordmark">HIRE<span>LYZER</span></div>
-        <div class="hero-sub">AI &nbsp;·&nbsp; Resume Intelligence &nbsp;·&nbsp; Ethical Hiring</div>
-
-        <div class="hero-feature-box">
-            <div class="hero-feature-label">What you get</div>
-            <div class="hero-pills">
-                <div class="hero-pill"><span class="hero-pill-icon">🔍</span>Bias Detection</div>
-                <div class="hero-pill"><span class="hero-pill-icon">📊</span>ATS Scoring</div>
-                <div class="hero-pill"><span class="hero-pill-icon">📝</span>Resume Builder</div>
-                <div class="hero-pill"><span class="hero-pill-icon">💼</span>Job Search</div>
-                <div class="hero-pill"><span class="hero-pill-icon">🤖</span>AI Coach</div>
-            </div>
+    <div class="hero-section">
+        <div class="hero-brand">
+            <div class="hero-wordmark">HIRE<span>LYZER</span></div>
+            <div class="hero-tagline">AI-Powered Resume Intelligence Platform</div>
         </div>
-
-        <div class="hero-stat-box">
+        <div class="hero-pills-container">
+            <div class="hero-pill"><span class="hero-pill-dot"></span>Bias Detection</div>
+            <div class="hero-pill-sep"></div>
+            <div class="hero-pill"><span class="hero-pill-dot"></span>ATS Scoring</div>
+            <div class="hero-pill-sep"></div>
+            <div class="hero-pill"><span class="hero-pill-dot"></span>Resume Builder</div>
+            <div class="hero-pill-sep"></div>
+            <div class="hero-pill"><span class="hero-pill-dot"></span>Job Matching</div>
+            <div class="hero-pill-sep"></div>
+            <div class="hero-pill"><span class="hero-pill-dot"></span>AI Coach</div>
+        </div>
+        <div class="hero-stat-ribbon">
             <div class="hero-stat-item">
+                <div class="hero-stat-icon">👤</div>
                 <div class="hero-stat-num">{total_users}</div>
                 <div class="hero-stat-lbl">Users</div>
             </div>
             <div class="hero-stat-item">
+                <div class="hero-stat-icon">📄</div>
                 <div class="hero-stat-num">{resumes_uploaded}</div>
                 <div class="hero-stat-lbl">Resumes Analysed</div>
             </div>
             <div class="hero-stat-item">
+                <div class="hero-stat-icon">🏷️</div>
                 <div class="hero-stat-num">{active_domains}</div>
                 <div class="hero-stat-lbl">Domains</div>
             </div>
             <div class="hero-stat-item">
+                <div class="hero-stat-icon">⚡</div>
                 <div class="hero-stat-num">{active_logins}</div>
                 <div class="hero-stat-lbl">Active Today</div>
             </div>
         </div>
-
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Typewriter via components.html (scripts work here, not in st.markdown) ──
+    # ── Typewriter animation via components.html (scripts work here) ──
     st.components.v1.html("""
     <style>
-    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    body {{ background: transparent; }}
-    .tw-wrap {{
+    .tw-wrap {
         text-align: center;
-        padding: 0 0 4px 0;
-    }}
-    .tw-text {{
-        font-size: 0.95rem;
-        font-weight: 500;
+        height: 36px;
+        margin: -10px 0 20px 0;
+    }
+    .tw-text {
+        font-size: 1.05rem;
+        font-weight: 600;
         color: #38bdf8;
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-        letter-spacing: 0.01em;
+        letter-spacing: -0.01em;
         border-right: 2px solid #38bdf8;
         white-space: nowrap;
         overflow: hidden;
         display: inline-block;
-        min-width: 2px;
-        animation: twBlink 0.9s ease-in-out infinite;
-    }}
-    @keyframes twBlink {{
-        0%, 100% {{ border-color: #38bdf8; }}
-        50%       {{ border-color: transparent; }}
-    }}
+        animation: twBlink 1s ease-in-out infinite;
+        background: transparent;
+    }
+    @keyframes twBlink {
+        0%, 100% { border-color: #38bdf8; }
+        50%       { border-color: transparent; }
+    }
+    body { margin: 0; background: transparent; }
     </style>
     <div class="tw-wrap"><span class="tw-text" id="tw"></span></div>
     <script>
@@ -1658,10 +1663,10 @@ if not st.session_state.authenticated:
             }
             setTimeout(tick, deleting ? 38 : 62);
         }
-        setTimeout(tick, 500);
+        setTimeout(tick, 600);
     })();
     </script>
-    """, height=32, scrolling=False)
+    """, height=50, scrolling=False)
 
 if not st.session_state.get("authenticated", False):
 
@@ -1680,8 +1685,7 @@ if not st.session_state.get("authenticated", False):
                     </svg>
                 </div>
             </div>
-            <h2 id='auth-heading' style='text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:1.3rem; font-weight:700; letter-spacing:-0.025em; color:#e6edf3; margin:0 0 4px 0;'>Sign in to <span style='color:#4f8cff;'>HIRELYZER</span></h2>
-            <p style='text-align:center; font-size:0.75rem; color:#9aa4af; margin:0 0 18px 0; font-family:-apple-system,"Segoe UI",Roboto,sans-serif; letter-spacing:0.01em;'>AI-Powered Resume Intelligence Platform</p>
+            <h2 id='auth-heading' style='text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:1.3rem; font-weight:700; letter-spacing:-0.025em; color:#e6edf3; margin:0 0 18px 0;'>Sign in to <span style='color:#4f8cff;'>HIRELYZER</span></h2>
             <script>
             (function() {
                 function updateHeading() {
