@@ -1311,6 +1311,22 @@ h3, .stMarkdown h3 {
     color: var(--text-secondary) !important;
     font-family: var(--font-sans) !important;
 }
+
+/* ══════════════════════════════════════
+   SUPPRESS STREAMLIT BLOCK SEAM LINES
+   ══════════════════════════════════════ */
+.stMarkdown {
+    border: none !important;
+    outline: none !important;
+}
+iframe {
+    border: none !important;
+    outline: none !important;
+    display: block !important;
+}
+[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] {
+    gap: 0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 # 🔹 VIDEO BACKGROUND & GLOW TEXT
@@ -1370,44 +1386,6 @@ if not st.session_state.authenticated:
             </div>
             """, unsafe_allow_html=True)
 
-    # -------- Animated Cards --------
-    image_url = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"
-    response = requests.get(image_url)
-    img_base64 = b64encode(response.content).decode()
-
-    st.markdown(f"""
-    <style>
-    .animated-cards {{
-      margin-top: 30px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 300px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 240px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-    @keyframes splitCards {{
-      0% {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left {{ --x-offset: -80px; --rot: -5deg; }}
-    .card-center {{ --x-offset: 0px; --rot: 0deg; }}
-    .card-right {{ --x-offset: 80px; --rot: 5deg; }}
-    </style>
-    <div class="animated-cards">
-        <img class="card-left" src="data:image/png;base64,{img_base64}" />
-        <img class="card-center" src="data:image/png;base64,{img_base64}" />
-        <img class="card-right" src="data:image/png;base64,{img_base64}" />
-    </div>
-    """, unsafe_allow_html=True)
-
     # -------- Counter Section (Updated Layout & Style with glassmorphism and shimmer) --------
 
     # Fetch counters
@@ -1420,10 +1398,6 @@ if not st.session_state.authenticated:
 
     active_domains = stats.get("unique_domains", 0)
 
-
-    glassmorphism_counter_style = ""  # Styles now handled by global CSS
-
-    st.markdown(glassmorphism_counter_style, unsafe_allow_html=True)
 
     st.markdown(f"""
     <div class="counter-grid">
@@ -2450,13 +2424,13 @@ with tab1:
         width: 100%;
         height: 80px;
         background: linear-gradient(90deg, #000428, #004e92);
-        border-bottom: 2px solid cyan;
+        border: 1px solid rgba(0, 191, 255, 0.2);
         overflow: hidden;
         display: flex;
         align-items: center;
         justify-content: flex-start;
         position: relative;
-        margin-bottom: 20px;
+        margin-bottom: 12px;
         border-radius: 12px;
         backdrop-filter: blur(14px);
     }
