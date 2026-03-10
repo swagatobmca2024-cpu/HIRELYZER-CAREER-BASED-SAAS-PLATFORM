@@ -409,7 +409,7 @@ st.markdown("""
    Design Language: Glassmorphism · Soft gradients · Refined motion
    ═══════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&family=Orbitron:wght@600&display=swap');
 
 :root {
     --bg-primary:       #080c12;
@@ -451,6 +451,19 @@ html, body, [class*="css"], .stApp {
     scroll-behavior: smooth;
 }
 
+/* ── Force unified background — eliminates the horizontal seam glitch ── */
+.stApp > header,
+.stApp [data-testid="stAppViewContainer"],
+.stApp [data-testid="stAppViewBlockContainer"],
+.stApp [data-testid="block-container"],
+.main,
+.main > div,
+section[data-testid="stMain"],
+section[data-testid="stMain"] > div {
+    background-color: var(--bg-primary) !important;
+    background: var(--bg-primary) !important;
+}
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-secondary); }
@@ -477,10 +490,44 @@ html, body, [class*="css"], .stApp {
     0%   { transform: translateX(-100%) skewX(-12deg); }
     100% { transform: translateX(220%) skewX(-12deg); }
 }
+@keyframes glassShimmer {
+    0%   { transform: translateX(-100%) skewX(-15deg); }
+    100% { transform: translateX(200%) skewX(-15deg); }
+}
+@keyframes slideIn {
+    0%   { transform: translateX(-50px); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+}
 @keyframes floatUp {
     0%, 100% { transform: translateY(0); }
     50%       { transform: translateY(-6px); }
 }
+
+/* ── Animated Cards (pre-login hero) ── */
+.animated-cards {
+    margin-top: 40px;
+    display: flex;
+    justify-content: center;
+    position: relative;
+    height: 260px;
+}
+.animated-cards img {
+    position: absolute;
+    width: 220px;
+    animation: splitCards 2.5s ease-in-out infinite alternate;
+    z-index: 1;
+    filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
+}
+.animated-cards img:nth-child(1) { animation-delay: 0s; z-index: 3; }
+.animated-cards img:nth-child(2) { animation-delay: 0.3s; z-index: 2; }
+.animated-cards img:nth-child(3) { animation-delay: 0.6s; z-index: 1; }
+@keyframes splitCards {
+    0%   { transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }
+    100% { transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }
+}
+.card-left   { --x-offset: -80px; --rot: -4deg; }
+.card-center { --x-offset: 0px;   --rot: 0deg;  }
+.card-right  { --x-offset: 80px;  --rot: 4deg;  }
 
 /* ══════════════════════════════════════
    STREAMLIT ALERT TOASTS
@@ -1311,22 +1358,6 @@ h3, .stMarkdown h3 {
     color: var(--text-secondary) !important;
     font-family: var(--font-sans) !important;
 }
-
-/* ══════════════════════════════════════
-   SUPPRESS STREAMLIT BLOCK SEAM LINES
-   ══════════════════════════════════════ */
-.stMarkdown {
-    border: none !important;
-    outline: none !important;
-}
-iframe {
-    border: none !important;
-    outline: none !important;
-    display: block !important;
-}
-[data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] {
-    gap: 0 !important;
-}
 </style>
 """, unsafe_allow_html=True)
 # 🔹 VIDEO BACKGROUND & GLOW TEXT
@@ -1386,6 +1417,44 @@ if not st.session_state.authenticated:
             </div>
             """, unsafe_allow_html=True)
 
+    # -------- Animated Cards --------
+    image_url = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"
+    response = requests.get(image_url)
+    img_base64 = b64encode(response.content).decode()
+
+    st.markdown(f"""
+    <style>
+    .animated-cards {{
+      margin-top: 30px;
+      display: flex;
+      justify-content: center;
+      position: relative;
+      height: 300px;
+    }}
+    .animated-cards img {{
+      position: absolute;
+      width: 240px;
+      animation: splitCards 2.5s ease-in-out infinite alternate;
+      z-index: 1;
+    }}
+    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
+    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
+    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
+    @keyframes splitCards {{
+      0% {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
+      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
+    }}
+    .card-left {{ --x-offset: -80px; --rot: -5deg; }}
+    .card-center {{ --x-offset: 0px; --rot: 0deg; }}
+    .card-right {{ --x-offset: 80px; --rot: 5deg; }}
+    </style>
+    <div class="animated-cards">
+        <img class="card-left" src="data:image/png;base64,{img_base64}" />
+        <img class="card-center" src="data:image/png;base64,{img_base64}" />
+        <img class="card-right" src="data:image/png;base64,{img_base64}" />
+    </div>
+    """, unsafe_allow_html=True)
+
     # -------- Counter Section (Updated Layout & Style with glassmorphism and shimmer) --------
 
     # Fetch counters
@@ -1398,6 +1467,10 @@ if not st.session_state.authenticated:
 
     active_domains = stats.get("unique_domains", 0)
 
+
+    glassmorphism_counter_style = ""  # Styles now handled by global CSS
+
+    st.markdown(glassmorphism_counter_style, unsafe_allow_html=True)
 
     st.markdown(f"""
     <div class="counter-grid">
@@ -1427,366 +1500,8 @@ if not st.session_state.get("authenticated", False):
     response = requests.get(image_url)
     img_base64 = b64encode(response.content).decode()
 
-    # ✅ Inject glassmorphism CSS with shimmer effects
+    # ✅ Render animated cards only (styles already in global CSS block above)
     st.markdown(f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
-
-    @keyframes shimmer {{
-        0% {{ background-position: -200% 0; }}
-        100% {{ background-position: 200% 0; }}
-    }}
-
-    @keyframes glassShimmer {{
-        0% {{ transform: translateX(-100%) skewX(-15deg); }}
-        100% {{ transform: translateX(200%) skewX(-15deg); }}
-    }}
-
-    /* ===== Card Shuffle Animation ===== */
-    .animated-cards {{
-      margin-top: 40px;
-      display: flex;
-      justify-content: center;
-      position: relative;
-      height: 260px;
-    }}
-    .animated-cards img {{
-      position: absolute;
-      width: 220px;
-      animation: splitCards 2.5s ease-in-out infinite alternate;
-      z-index: 1;
-      filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
-    }}
-    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
-    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
-    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
-
-    @keyframes splitCards {{
-      0%   {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
-      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
-    }}
-    .card-left   {{ --x-offset: -80px; --rot: -4deg; }}
-    .card-center {{ --x-offset: 0px;  --rot: 0deg;  }}
-    .card-right  {{ --x-offset: 80px;  --rot: 4deg;  }}
-
-    /* ===== Premium Apple-Style Login Card ===== */
-    @keyframes fadeSlideUp {{
-      0%   {{ transform: translateY(28px); opacity: 0; }}
-      100% {{ transform: translateY(0);    opacity: 1; }}
-    }}
-
-    .login-card {{
-      background: rgba(255, 255, 255, 0.05);
-      backdrop-filter: blur(32px) saturate(180%);
-      -webkit-backdrop-filter: blur(32px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 20px;
-      padding: 28px 28px 24px;
-      box-shadow:
-        0 2px 6px rgba(0,0,0,0.25),
-        0 16px 48px rgba(0,0,0,0.40),
-        inset 0 1px 0 rgba(255,255,255,0.07);
-      color: #e6edf3;
-      margin-top: 20px;
-      opacity: 0;
-      animation: fadeSlideUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .login-card::before {{
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 1px;
-      background: linear-gradient(90deg,
-        transparent 0%,
-        rgba(255,255,255,0.14) 40%,
-        rgba(79,140,255,0.22) 60%,
-        transparent 100%);
-      pointer-events: none;
-    }}
-
-    .login-card h2 {{
-      text-align: center;
-      font-size: 1.45rem;
-      font-weight: 700;
-      letter-spacing: -0.025em;
-      color: #e6edf3;
-      margin-bottom: 4px;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      position: relative;
-      z-index: 2;
-    }}
-    .login-card h2 span {{ color: #4f8cff; }}
-
-    /* ===== Enhanced Message Cards with Consistent Layout ===== */
-    .slide-message {{
-      position: relative;
-      overflow: hidden;
-      margin: 16px 0;
-      padding: 14px 20px;
-      border-radius: 14px;
-      font-weight: 600;
-      font-size: 0.95em;
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 12px;
-      animation: slideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      box-shadow:
-        0 4px 20px rgba(0, 0, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      width: 100%;
-      max-width: 100%;
-      box-sizing: border-box;
-      line-height: 1.5;
-      font-family: 'Orbitron', sans-serif;
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      min-height: 50px;
-    }}
-
-    .slide-message:hover {{
-      transform: translateY(-3px) scale(1.01);
-      box-shadow:
-        0 8px 30px rgba(0, 0, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    }}
-
-    .slide-message::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 255, 255, 0.1),
-        transparent
-      );
-      transition: left 0.5s;
-    }}
-
-    .slide-message:hover::before {{
-      left: 100%;
-    }}
-
-    .slide-message svg {{
-      width: 22px;
-      height: 22px;
-      flex-shrink: 0;
-      filter: drop-shadow(0 0 6px currentColor);
-      z-index: 2;
-    }}
-
-    .slide-message-text {{
-      flex: 1;
-      z-index: 2;
-      position: relative;
-      word-wrap: break-word;
-      overflow-wrap: break-word;
-      white-space: normal;
-    }}
-
-    .success-msg {{
-      background: linear-gradient(135deg,
-        rgba(0, 255, 127, 0.20) 0%,
-        rgba(0, 255, 127, 0.08) 100%);
-      border: 2px solid rgba(0, 255, 127, 0.4);
-      color: #00FF7F;
-      text-shadow: 0 0 12px rgba(0, 255, 127, 0.4);
-    }}
-
-    .error-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.20) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-      color: #FF6347;
-      text-shadow: 0 0 12px rgba(255, 99, 71, 0.4);
-    }}
-
-    .info-msg {{
-      background: linear-gradient(135deg,
-        rgba(30, 144, 255, 0.20) 0%,
-        rgba(30, 144, 255, 0.08) 100%);
-      border: 2px solid rgba(30, 144, 255, 0.4);
-      color: #1E90FF;
-      text-shadow: 0 0 12px rgba(30, 144, 255, 0.4);
-    }}
-
-    .warn-msg {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.20) 0%,
-        rgba(255, 215, 0, 0.08) 100%);
-      border: 2px solid rgba(255, 215, 0, 0.4);
-      color: #FFD700;
-      text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
-    }}
-
-    @keyframes slideIn {{
-      0%   {{
-        transform: translateX(-50px);
-        opacity: 0;
-      }}
-      100% {{
-        transform: translateX(0);
-        opacity: 1;
-      }}
-    }}
-
-    /* ===== Improved Timer Display ===== */
-    .timer-display {{
-      background: linear-gradient(135deg,
-        rgba(255, 215, 0, 0.18) 0%,
-        rgba(255, 165, 0, 0.08) 100%);
-      backdrop-filter: blur(15px);
-      -webkit-backdrop-filter: blur(15px);
-      border: 2px solid rgba(255, 215, 0, 0.4);
-      border-radius: 14px;
-      padding: 16px 24px;
-      margin: 20px 0;
-      text-align: center;
-      box-shadow:
-        0 4px 20px rgba(255, 215, 0, 0.15),
-        inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      overflow: hidden;
-    }}
-
-    .timer-display::before {{
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(255, 215, 0, 0.2),
-        transparent
-      );
-      animation: glassShimmer 3s infinite;
-    }}
-
-    .timer-display:hover {{
-      box-shadow:
-        0 8px 30px rgba(255, 215, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.15);
-      transform: translateY(-3px);
-    }}
-
-    .timer-text {{
-      color: #FFD700;
-      font-size: 1.15em;
-      font-weight: bold;
-      font-family: 'Orbitron', sans-serif;
-      text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
-      position: relative;
-      z-index: 2;
-    }}
-
-    .timer-expired {{
-      background: linear-gradient(135deg,
-        rgba(255, 99, 71, 0.18) 0%,
-        rgba(255, 99, 71, 0.08) 100%);
-      border: 2px solid rgba(255, 99, 71, 0.4);
-    }}
-
-    .timer-expired .timer-text {{
-      color: #FF6347;
-      text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
-    }}
-
-    /* ===== Premium Minimal Buttons ===== */
-    .stButton>button {{
-      background: linear-gradient(135deg,
-        #4f8cff 0%,
-        #3b6fd4 100%);
-      backdrop-filter: none;
-      color: #ffffff;
-      border: none;
-      border-radius: 10px;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      font-weight: 600;
-      font-size: 0.9rem;
-      letter-spacing: 0.01em;
-      padding: 10px 20px;
-      box-shadow:
-        0 1px 2px rgba(0,0,0,0.20),
-        0 4px 16px rgba(79,140,255,0.28);
-      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-      position: relative;
-      overflow: hidden;
-    }}
-    
-    .stButton>button::before {{
-      display: none;
-    }}
-    
-    .stButton>button:hover {{
-      transform: translateY(-1px);
-      background: linear-gradient(135deg,
-        #5a96ff 0%,
-        #4478e0 100%);
-      border: none;
-      box-shadow:
-        0 2px 4px rgba(0,0,0,0.22),
-        0 8px 24px rgba(79,140,255,0.40);
-    }}
-    
-    .stButton>button:active {{
-      transform: translateY(0px);
-      box-shadow:
-        0 1px 2px rgba(0,0,0,0.20),
-        0 2px 8px rgba(79,140,255,0.20);
-    }}
-
-    .stButton>button:hover::before {{
-      display: none;
-    }}
-
-    /* ===== Premium Minimal Input Fields ===== */
-    .stTextInput input {{
-      background: rgba(255, 255, 255, 0.04);
-      backdrop-filter: none;
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      border-radius: 10px;
-      padding: 11px 14px;
-      color: #e6edf3;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      font-size: 0.9rem;
-      box-shadow: none;
-      transition: border-color 0.18s ease, box-shadow 0.18s ease;
-    }}
-    .stTextInput input:focus {{
-      outline: none !important;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(79, 140, 255, 0.55);
-      box-shadow: 0 0 0 3px rgba(79, 140, 255, 0.14);
-      transform: none;
-    }}
-    .stTextInput input:hover {{
-      border: 1px solid rgba(255, 255, 255, 0.20);
-    }}
-    .stTextInput label {{
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif !important;
-      color: #9aa4af !important;
-      font-size: 0.78rem !important;
-      font-weight: 500 !important;
-      letter-spacing: 0.04em !important;
-      text-transform: uppercase !important;
-      text-shadow: none !important;
-    }}
-    </style>
-
-    <!-- Animated Cards -->
     <div class="animated-cards">
         <img class="card-left" src="data:image/png;base64,{img_base64}" />
         <img class="card-center" src="data:image/png;base64,{img_base64}" />
@@ -2424,13 +2139,13 @@ with tab1:
         width: 100%;
         height: 80px;
         background: linear-gradient(90deg, #000428, #004e92);
-        border: 1px solid rgba(0, 191, 255, 0.2);
+        border-bottom: 2px solid cyan;
         overflow: hidden;
         display: flex;
         align-items: center;
         justify-content: flex-start;
         position: relative;
-        margin-bottom: 12px;
+        margin-bottom: 20px;
         border-radius: 12px;
         backdrop-filter: blur(14px);
     }
