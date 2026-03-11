@@ -91,10 +91,8 @@ from user_login import (
 )
 
 # ============================================================
-# 💾 Persistent Storage Configuration for Streamlit Cloud
+# 💾 Database is hosted on Supabase PostgreSQL
 # ============================================================
-os.makedirs(".streamlit_storage", exist_ok=True)
-DB_PATH = os.path.join(".streamlit_storage", "resume_data.db")
 
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
@@ -252,8 +250,10 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
         st.markdown(cover_letter_html, unsafe_allow_html=True)
 
 # ------------------- Initialize -------------------
-# ✅ Initialize database in persistent storage
-create_user_table()
+# ✅ Initialize database tables only once per session
+if "db_initialized" not in st.session_state:
+    create_user_table()
+    st.session_state.db_initialized = True
 
 # ------------------- Tab-Specific Notification System -------------------
 if "login_notification" not in st.session_state:
@@ -2275,17 +2275,7 @@ if st.session_state.username == "admin":
 
     st.divider()
     st.subheader("📦 Database Backup & Download")
-
-    if os.path.exists(DB_PATH):
-        with open(DB_PATH, "rb") as f:
-            st.download_button(
-                "⬇️ Download resume_data.db",
-                data=f,
-                file_name="resume_data_backup.db",
-                mime="application/octet-stream"
-            )
-    else:
-        st.warning("⚠️ No database file found yet.")
+    st.info("ℹ️ Database is hosted on Supabase PostgreSQL. Local file download is not available.")
 # Always-visible tabs
 tab_labels = [
     "📊 Dashboard",
