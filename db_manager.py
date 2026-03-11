@@ -34,11 +34,13 @@ class DatabaseManager:
         self._initialize_database()
         
     def _initialize_database(self):
-        """Initialize database with optimized schema and indexes"""
+        """
+        Initialize database schema once.
+        Protected by @st.cache_resource on _get_db_manager() so this
+        runs ONCE per server process lifetime, never on reruns.
+        """
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            
-            # Create main candidates table with optimized schema
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS candidates (
                     id SERIAL PRIMARY KEY,
@@ -55,8 +57,6 @@ class DatabaseManager:
                     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            
-            # Create optimized indexes for better query performance
             indexes = [
                 "CREATE INDEX IF NOT EXISTS idx_candidates_domain ON candidates(domain)",
                 "CREATE INDEX IF NOT EXISTS idx_candidates_ats_score ON candidates(ats_score)",
@@ -65,52 +65,77 @@ class DatabaseManager:
                 "CREATE INDEX IF NOT EXISTS idx_candidates_domain_ats ON candidates(domain, ats_score)",
                 "CREATE INDEX IF NOT EXISTS idx_candidates_timestamp_domain ON candidates(timestamp, domain)"
             ]
-            
             for index_sql in indexes:
                 cursor.execute(index_sql)
-            
             conn.commit()
-            logger.info("Database initialized with optimized schema and indexes")
+            logger.info("Database initialized (ran once via cache_resource)")
+
+    def _make_connection(self):
+        """Open a fresh Supabase connection."""
+        return psycopg2.connect(
+            host=st.secrets["SUPABASE_HOST"],
+            database=st.secrets["SUPABASE_DB"],
+            user=st.secrets["SUPABASE_USER"],
+            password=st.secrets["SUPABASE_PASSWORD"],
+            port=st.secrets["SUPABASE_PORT"]
+        )
+
+    def _get_live_connection(self):
+        """
+        Return a healthy connection from the pool, or create one.
+        Connections are NEVER closed after use — they are returned
+        to the pool so the same TCP socket is reused across reruns.
+        This is what eliminates the per-interaction Supabase handshake
+        that caused visible page reloads after migrating from SQLite.
+        """
+        with self._pool_lock:
+            while self._connection_pool:
+                conn = self._connection_pool.pop()
+                try:
+                    conn.cursor().execute("SELECT 1")
+                    return conn
+                except Exception:
+                    pass  # stale — discard and try next
+            # Pool empty — open a new connection
+            return self._make_connection()
 
     @contextmanager
     def get_connection(self):
         """
-        Context manager for database connections with connection pooling
+        Context manager that checks out a connection from the pool
+        and returns it when done — never closes it.
         """
-        conn = None
+        conn = self._get_live_connection()
         try:
-            with self._pool_lock:
-                if self._connection_pool:
-                    conn = self._connection_pool.pop()
-                    # Test connection is still alive
-                    try:
-                        conn.cursor().execute("SELECT 1")
-                    except Exception:
-                        conn = None
-
-                if conn is None:
-                    conn = psycopg2.connect(
-                        host=st.secrets["SUPABASE_HOST"],
-                        database=st.secrets["SUPABASE_DB"],
-                        user=st.secrets["SUPABASE_USER"],
-                        password=st.secrets["SUPABASE_PASSWORD"],
-                        port=st.secrets["SUPABASE_PORT"]
-                    )
-            
             yield conn
-            
         except Exception as e:
-            if conn:
+            try:
                 conn.rollback()
+            except Exception:
+                pass
             logger.error(f"Database error: {e}")
             raise
         finally:
-            if conn:
-                with self._pool_lock:
-                    if len(self._connection_pool) < self.pool_size:
-                        self._connection_pool.append(conn)
-                    else:
-                        conn.close()
+            # Always return connection to pool — reused on next call
+            with self._pool_lock:
+                self._connection_pool.append(conn)
+
+    def _query_to_df(self, query: str, params=None) -> pd.DataFrame:
+        """
+        Execute a SELECT query and return results as a DataFrame.
+        Uses cursor.description for column names — works correctly with
+        psycopg2 persistent connections where pd.read_sql_query can
+        silently return empty results due to transaction state issues.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if params is not None:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            rows = cursor.fetchall()
+            cols = [desc[0] for desc in cursor.description] if cursor.description else []
+            return pd.DataFrame(rows, columns=cols)
 
     def detect_domain_llm(self, job_title: str, job_description: str, session=None) -> str:
         """
@@ -856,8 +881,7 @@ Agile Coaching, Software Engineering]
                 ORDER BY DATE(timestamp) DESC
                 LIMIT 365
             """
-            with self.get_connection() as conn:
-                return pd.read_sql_query(query, conn)
+            return self._query_to_df(query)
         except Exception as e:
             logger.error(f"Error getting resume count by day: {e}")
             return pd.DataFrame()
@@ -874,8 +898,7 @@ Agile Coaching, Software Engineering]
                 HAVING COUNT(*) >= 1
                 ORDER BY avg_ats_score DESC
             """
-            with self.get_connection() as conn:
-                return pd.read_sql_query(query, conn)
+            return self._query_to_df(query)
         except Exception as e:
             logger.error(f"Error getting average ATS by domain: {e}")
             return pd.DataFrame()
@@ -891,8 +914,7 @@ Agile Coaching, Software Engineering]
                 GROUP BY domain
                 ORDER BY count DESC
             """
-            with self.get_connection() as conn:
-                return pd.read_sql_query(query, conn)
+            return self._query_to_df(query)
         except Exception as e:
             logger.error(f"Error getting domain distribution: {e}")
             return pd.DataFrame()
@@ -909,8 +931,7 @@ Agile Coaching, Software Engineering]
                 WHERE DATE(timestamp) BETWEEN DATE(%s) AND DATE(%s)
                 ORDER BY timestamp DESC
             """
-            with self.get_connection() as conn:
-                return pd.read_sql_query(query, conn, params=(start, end))
+            return self._query_to_df(query, params=(start, end))
         except ValueError as e:
             logger.error(f"Invalid date format: {e}")
             return pd.DataFrame()
@@ -960,8 +981,7 @@ Agile Coaching, Software Engineering]
                 query += " LIMIT %s OFFSET %s"
                 params.extend([limit, offset])
 
-            with self.get_connection() as conn:
-                return pd.read_sql_query(query, conn, params=params)
+            return self._query_to_df(query, params=params if params else None)
         except Exception as e:
             logger.error(f"Error getting all candidates: {e}")
             return pd.DataFrame()
@@ -989,11 +1009,10 @@ Agile Coaching, Software Engineering]
             
             query += " ORDER BY timestamp DESC"
             
-            with self.get_connection() as conn:
-                df = pd.read_sql_query(query, conn, params=params)
-                df.to_csv(filepath, index=False)
-                logger.info(f"Exported {len(df)} records to {filepath}")
-                return True
+            df = self._query_to_df(query, params=params if params else None)
+            df.to_csv(filepath, index=False)
+            logger.info(f"Exported {len(df)} records to {filepath}")
+            return True
         except Exception as e:
             logger.error(f"Error exporting to CSV: {e}")
             return False
@@ -1002,8 +1021,7 @@ Agile Coaching, Software Engineering]
         """Get a specific candidate by ID"""
         try:
             query = "SELECT * FROM candidates WHERE id = %s"
-            with self.get_connection() as conn:
-                return pd.read_sql_query(query, conn, params=(candidate_id,))
+            return self._query_to_df(query, params=(candidate_id,))
         except Exception as e:
             logger.error(f"Error getting candidate by ID: {e}")
             return pd.DataFrame()
@@ -1022,8 +1040,7 @@ Agile Coaching, Software Engineering]
                 FROM candidates
                 GROUP BY bias_category
             """
-            with self.get_connection() as conn:
-                return pd.read_sql_query(query, conn, params=(threshold,))
+            return self._query_to_df(query, params=(threshold,))
         except Exception as e:
             logger.error(f"Error getting bias distribution: {e}")
             return pd.DataFrame()
@@ -1041,8 +1058,7 @@ Agile Coaching, Software Engineering]
                 ORDER BY DATE(timestamp)
             """.format(days_limit)
             
-            with self.get_connection() as conn:
-                return pd.read_sql_query(query, conn)
+            return self._query_to_df(query)
         except Exception as e:
             logger.error(f"Error getting daily ATS stats: {e}")
             return pd.DataFrame()
@@ -1059,8 +1075,7 @@ Agile Coaching, Software Engineering]
                 WHERE bias_score > %s
                 ORDER BY bias_score DESC
             """
-            with self.get_connection() as conn:
-                return pd.read_sql_query(query, conn, params=(threshold,))
+            return self._query_to_df(query, params=(threshold,))
         except Exception as e:
             logger.error(f"Error getting flagged candidates: {e}")
             return pd.DataFrame()
@@ -1087,8 +1102,7 @@ Agile Coaching, Software Engineering]
                 HAVING COUNT(*) >= 1
                 ORDER BY avg_ats_score DESC
             """
-            with self.get_connection() as conn:
-                return pd.read_sql_query(query, conn)
+            return self._query_to_df(query)
         except Exception as e:
             logger.error(f"Error getting domain performance stats: {e}")
             return pd.DataFrame()
@@ -1108,8 +1122,7 @@ Agile Coaching, Software Engineering]
                 HAVING COUNT(*) >= 1
                 ORDER BY frequency DESC
             """
-            with self.get_connection() as conn:
-                return pd.read_sql_query(query, conn)
+            return self._query_to_df(query)
         except Exception as e:
             logger.error(f"Error analyzing domain transitions: {e}")
             return pd.DataFrame()
@@ -1185,15 +1198,16 @@ Agile Coaching, Software Engineering]
             logger.info("All database connections closed")
 
 
-# Create global instance for backward compatibility
-# Uses a lazy singleton via a module-level container to avoid re-initializing on every rerun
-_db_manager_instance = None
-
+# --------------------------------------------------------------
+# Singleton DatabaseManager via st.cache_resource.
+# Streamlit caches this across ALL reruns for the lifetime of
+# the server process — so DatabaseManager.__init__ (and the
+# _initialize_database network call) runs EXACTLY ONCE, never
+# on tab switches, form submits, or button clicks.
+# --------------------------------------------------------------
+@st.cache_resource
 def _get_db_manager():
-    global _db_manager_instance
-    if _db_manager_instance is None:
-        _db_manager_instance = DatabaseManager()
-    return _db_manager_instance
+    return DatabaseManager()
 
 db_manager = _get_db_manager()
 
