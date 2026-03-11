@@ -17361,12 +17361,11 @@ if tab5:
 			DatabaseManager
 		)
 
-		# Initialize enhanced database manager
-		@st.cache_resource
-		def get_db_manager():
-			return DatabaseManager()
-
-		db_manager = get_db_manager()
+		# Reuse the same cached DatabaseManager instance from db_manager module
+		# (already singleton via @st.cache_resource there — creating a second one
+		# would open a second connection pool and cause duplicate init queries)
+		from db_manager import _get_db_manager as _get_shared_db_manager
+		db_manager = _get_shared_db_manager()
 
 		def create_enhanced_pie_chart(df, values_col, labels_col, title):
 			"""Create an enhanced pie chart with better styling"""
@@ -17552,7 +17551,6 @@ if tab5:
 							}
 							</style>
 						""", unsafe_allow_html=True)
-						time.sleep(3)
 						msg_placeholder.empty()
 
 			st.stop()
