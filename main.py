@@ -93,8 +93,8 @@ from user_login import (
 # ============================================================
 # 💾 Persistent Storage Configuration for Streamlit Cloud
 # ============================================================
-# Supabase PostgreSQL is used - no local DB path needed
-# DB_PATH removed - using Supabase PostgreSQL
+os.makedirs(".streamlit_storage", exist_ok=True)
+DB_PATH = os.path.join(".streamlit_storage", "resume_data.db")
 
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
@@ -252,10 +252,8 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
         st.markdown(cover_letter_html, unsafe_allow_html=True)
 
 # ------------------- Initialize -------------------
-# ✅ Initialize database only once per session (not on every rerun)
-if "db_initialized" not in st.session_state:
-    create_user_table()
-    st.session_state.db_initialized = True
+# ✅ Initialize database in persistent storage
+create_user_table()
 
 # ------------------- Tab-Specific Notification System -------------------
 if "login_notification" not in st.session_state:
@@ -1417,23 +1415,12 @@ if not st.session_state.authenticated:
             """, unsafe_allow_html=True)
 
     # -------- Premium Hero Section --------
-    # Fetch live stats — cached for 60 s to avoid a DB hit on every rerun
-    if (
-        "hero_stats_cache" not in st.session_state
-        or time.time() - st.session_state.get("hero_stats_ts", 0) > 60
-    ):
-        st.session_state.hero_stats_cache = {
-            "total_users": get_total_registered_users(),
-            "active_logins": get_logins_today(),
-            "stats": get_database_stats(),
-        }
-        st.session_state.hero_stats_ts = time.time()
-
-    _hc = st.session_state.hero_stats_cache
-    total_users = _hc["total_users"]
-    active_logins = _hc["active_logins"]
-    resumes_uploaded = _hc["stats"].get("total_candidates", 0)
-    active_domains = _hc["stats"].get("unique_domains", 0)
+    # Fetch live stats for subtle ribbon
+    total_users = get_total_registered_users()
+    active_logins = get_logins_today()
+    stats = get_database_stats()
+    resumes_uploaded = stats.get("total_candidates", 0)
+    active_domains = stats.get("unique_domains", 0)
 
     # ── Hero HTML (no script — Streamlit strips <script> from st.markdown) ──
     st.markdown(f"""
@@ -2059,7 +2046,7 @@ if not st.session_state.get("authenticated", False):
                 # Email validation placeholder (using st.empty for dynamic updates)
                 email_validation_placeholder = st.empty()
 
-                # Validate email format only (no DB call while typing — DB checked on submit)
+                # Check if email changed and validate
                 if new_email and new_email != st.session_state.last_validated_email:
                     if not is_valid_email(new_email.strip()):
                         with email_validation_placeholder:
@@ -2067,13 +2054,24 @@ if not st.session_state.get("authenticated", False):
                                 '<div class="slide-message warn-msg"><span class="slide-message-text">⚠️ Invalid email format.</span></div>',
                                 unsafe_allow_html=True
                             )
+                        st.session_state.last_validated_email = new_email
+                    elif email_exists(new_email.strip()):
+                        with email_validation_placeholder:
+                            st.markdown(
+                                '<div class="slide-message error-msg"><span class="slide-message-text">❌ Email already registered.</span></div>',
+                                unsafe_allow_html=True
+                            )
+                        st.session_state.last_validated_email = new_email
                     else:
                         with email_validation_placeholder:
                             st.markdown(
-                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Valid email format.</span></div>',
+                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Email is available.</span></div>',
                                 unsafe_allow_html=True
                             )
-                    st.session_state.last_validated_email = new_email
+                        st.session_state.last_validated_email = new_email
+                        # Auto-hide after 3 seconds by clearing after delay
+                        time.sleep(3)
+                        email_validation_placeholder.empty()
                 elif not new_email:
                     email_validation_placeholder.empty()
                     st.session_state.last_validated_email = ""
@@ -2084,21 +2082,24 @@ if not st.session_state.get("authenticated", False):
                 # Username validation placeholder
                 username_validation_placeholder = st.empty()
 
-                # Format-only validation while typing (no DB call — checked on submit)
+                # Check if username changed and validate
                 if new_user and new_user != st.session_state.last_validated_username:
-                    if len(new_user.strip()) < 3:
+                    if username_exists(new_user.strip()):
                         with username_validation_placeholder:
                             st.markdown(
-                                '<div class="slide-message warn-msg"><span class="slide-message-text">⚠️ Username must be at least 3 characters.</span></div>',
+                                '<div class="slide-message error-msg"><span class="slide-message-text">❌ Username already exists.</span></div>',
                                 unsafe_allow_html=True
                             )
+                        st.session_state.last_validated_username = new_user
                     else:
                         with username_validation_placeholder:
                             st.markdown(
-                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Username looks good.</span></div>',
+                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Username is available.</span></div>',
                                 unsafe_allow_html=True
                             )
-                    st.session_state.last_validated_username = new_user
+                        st.session_state.last_validated_username = new_user
+                        time.sleep(3)
+                        username_validation_placeholder.empty()
                 elif not new_user:
                     username_validation_placeholder.empty()
                     st.session_state.last_validated_username = ""
@@ -2118,13 +2119,16 @@ if not st.session_state.get("authenticated", False):
                                 '<div class="slide-message warn-msg"><span class="slide-message-text">⚠️ Password must be at least 8 characters and strong.</span></div>',
                                 unsafe_allow_html=True
                             )
+                        st.session_state.last_validated_password = new_pass
                     else:
                         with password_validation_placeholder:
                             st.markdown(
                                 '<div class="slide-message success-msg"><span class="slide-message-text">✅ Strong password.</span></div>',
                                 unsafe_allow_html=True
                             )
-                    st.session_state.last_validated_password = new_pass
+                        st.session_state.last_validated_password = new_pass
+                        time.sleep(3)
+                        password_validation_placeholder.empty()
                 elif not new_pass:
                     password_validation_placeholder.empty()
                     st.session_state.last_validated_password = ""
@@ -2212,11 +2216,8 @@ if st.session_state.get("authenticated"):
     '>🔑 Groq API Key</p>
     """, unsafe_allow_html=True)
 
-    # ✅ Load saved key from DB (cached in session — only fetched once per login)
-    if "sidebar_api_key_loaded" not in st.session_state:
-        st.session_state.sidebar_saved_key = get_user_api_key(st.session_state.username)
-        st.session_state.sidebar_api_key_loaded = True
-    saved_key = st.session_state.sidebar_saved_key
+    # ✅ Load saved key from DB
+    saved_key = get_user_api_key(st.session_state.username)
     masked_preview = f"****{saved_key[-6:]}" if saved_key else ""
 
     user_api_key_input = st.sidebar.text_input(
@@ -2225,12 +2226,10 @@ if st.session_state.get("authenticated"):
         type="password"
     )
 
-    # ✅ Save or reuse key — only write to DB if the user typed a NEW key
+    # ✅ Save or reuse key
     if user_api_key_input:
-        if user_api_key_input != st.session_state.get("sidebar_saved_key"):
-            save_user_api_key(st.session_state.username, user_api_key_input)
-            st.session_state.sidebar_saved_key = user_api_key_input
         st.session_state["user_groq_key"] = user_api_key_input
+        save_user_api_key(st.session_state.username, user_api_key_input)
         st.sidebar.success("✅ New key saved and in use.")
     elif saved_key:
         st.session_state["user_groq_key"] = saved_key
@@ -2241,7 +2240,6 @@ if st.session_state.get("authenticated"):
     # 🧹 Clear saved key
     if st.sidebar.button("🗑️ Clear My API Key"):
         st.session_state["user_groq_key"] = None
-        st.session_state.sidebar_saved_key = None
         save_user_api_key(st.session_state.username, None)
         st.sidebar.success("✅ Cleared saved Groq API key. Now using shared admin key.")
 
@@ -2277,7 +2275,17 @@ if st.session_state.username == "admin":
 
     st.divider()
     st.subheader("📦 Database Backup & Download")
-    st.info("ℹ️ Database is hosted on Supabase PostgreSQL. Use the Supabase dashboard to export or backup data.")
+
+    if os.path.exists(DB_PATH):
+        with open(DB_PATH, "rb") as f:
+            st.download_button(
+                "⬇️ Download resume_data.db",
+                data=f,
+                file_name="resume_data_backup.db",
+                mime="application/octet-stream"
+            )
+    else:
+        st.warning("⚠️ No database file found yet.")
 # Always-visible tabs
 tab_labels = [
     "📊 Dashboard",
@@ -17453,6 +17461,7 @@ Generate {num_questions} questions now:
                 """, unsafe_allow_html=True)
 if tab5:
 	with tab5:
+		import sqlite3
 		import pandas as pd
 		import matplotlib.pyplot as plt
 		import numpy as np
