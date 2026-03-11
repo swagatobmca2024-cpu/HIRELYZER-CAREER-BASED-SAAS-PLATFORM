@@ -12,6 +12,7 @@ pdfplumber
 pytesseract
 pdf2image
 Pillow
+psycopg2-binary
 
 matplotlib
 pytz
