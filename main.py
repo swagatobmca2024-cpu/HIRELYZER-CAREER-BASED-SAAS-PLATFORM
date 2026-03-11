@@ -7313,32 +7313,6 @@ with tab2:
     st.session_state.setdefault("form_key_counter", 0)
 
     # ---------------- Sidebar (ONLY in Tab 2) ----------------
-    # Process any pending section mutations BEFORE rendering the sidebar
-    # so the form fields re-render immediately without a visual jump.
-    _pending = st.session_state.pop("_pending_section_action", None)
-    if _pending:
-        _action, _section = _pending
-        if _section == "exp":
-            if _action == "add":
-                st.session_state.experience_entries.append({"title": "", "company": "", "duration": "", "description": ""})
-            elif _action == "del" and len(st.session_state.experience_entries) > 1:
-                st.session_state.experience_entries.pop()
-        elif _section == "edu":
-            if _action == "add":
-                st.session_state.education_entries.append({"degree": "", "institution": "", "year": "", "details": ""})
-            elif _action == "del" and len(st.session_state.education_entries) > 1:
-                st.session_state.education_entries.pop()
-        elif _section == "proj":
-            if _action == "add":
-                st.session_state.project_entries.append({"title": "", "tech": "", "duration": "", "description": ""})
-            elif _action == "del" and len(st.session_state.project_entries) > 1:
-                st.session_state.project_entries.pop()
-        elif _section == "cert":
-            if _action == "add":
-                st.session_state.certificate_links.append({"name": "", "link": "", "duration": "", "description": ""})
-            elif _action == "del" and len(st.session_state.certificate_links) > 1:
-                st.session_state.certificate_links.pop()
-
     with st.sidebar:
         st.markdown("### ✨ Manage Resume Sections")
 
@@ -7349,130 +7323,140 @@ with tab2:
         st.session_state.edit_mode = mode
         st.markdown("---")
 
-        _action_key = "add" if mode == "Add" else "del"
-
         # 💼 Experience
         with st.expander("💼 Experience"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Experience", key="exp_btn"):
-                st.session_state["_pending_section_action"] = (_action_key, "exp")
-                st.rerun()
+                if mode == "Add":
+                    st.session_state.experience_entries.append(
+                        {"title": "", "company": "", "duration": "", "description": ""}
+                    )
+                elif mode == "Delete" and len(st.session_state.experience_entries) > 1:
+                    st.session_state.experience_entries.pop()
+                st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
 
         # 🎓 Education
         with st.expander("🎓 Education"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Education", key="edu_btn"):
-                st.session_state["_pending_section_action"] = (_action_key, "edu")
-                st.rerun()
+                if mode == "Add":
+                    st.session_state.education_entries.append(
+                        {"degree": "", "institution": "", "year": "", "details": ""}
+                    )
+                elif mode == "Delete" and len(st.session_state.education_entries) > 1:
+                    st.session_state.education_entries.pop()
+                st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
 
         # 🛠 Projects
         with st.expander("🛠 Projects"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Project", key="proj_btn"):
-                st.session_state["_pending_section_action"] = (_action_key, "proj")
-                st.rerun()
+                if mode == "Add":
+                    st.session_state.project_entries.append(
+                        {"title": "", "tech": "", "duration": "", "description": ""}
+                    )
+                elif mode == "Delete" and len(st.session_state.project_entries) > 1:
+                    st.session_state.project_entries.pop()
+                st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
 
         # 📜 Certificates
         with st.expander("📜 Certificates"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Certificate", key="cert_btn"):
-                st.session_state["_pending_section_action"] = (_action_key, "cert")
-                st.rerun()
+                if mode == "Add":
+                    st.session_state.certificate_links.append(
+                        {"name": "", "link": "", "duration": "", "description": ""}
+                    )
+                elif mode == "Delete" and len(st.session_state.certificate_links) > 1:
+                    st.session_state.certificate_links.pop()
+                st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
 
     # ---------------- Resume Form ----------------
-    @st.fragment
-    def _resume_form():
-        # ---------------- Resume Form ----------------
-        fk = st.session_state["form_key_counter"]
-        with st.form(f"resume_form_{fk}", clear_on_submit=False):
-            st.markdown("### 👤 <u>Personal Information</u>", unsafe_allow_html=True)
-            col1, col2 = st.columns(2)
-            with col1:
-                st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, key=f"name_input_{fk}")
-                st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, key=f"phone_input_{fk}")
-                st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, key=f"loc_input_{fk}")
-            with col2:
-                st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, key=f"email_input_{fk}")
-                st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, key=f"ln_input_{fk}")
-                st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, key=f"port_input_{fk}")
-                st.session_state.job_title = st.text_input("💼 Job Title", value=st.session_state.job_title, key=f"job_input_{fk}")
+    fk = st.session_state["form_key_counter"]
+    with st.form(f"resume_form_{fk}", clear_on_submit=False):
+        st.markdown("### 👤 <u>Personal Information</u>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, key=f"name_input_{fk}")
+            st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, key=f"phone_input_{fk}")
+            st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, key=f"loc_input_{fk}")
+        with col2:
+            st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, key=f"email_input_{fk}")
+            st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, key=f"ln_input_{fk}")
+            st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, key=f"port_input_{fk}")
+            st.session_state.job_title = st.text_input("💼 Job Title", value=st.session_state.job_title, key=f"job_input_{fk}")
 
-            st.markdown("### 📝 <u>Professional Summary</u>", unsafe_allow_html=True)
-            st.session_state.summary = st.text_area("Summary", value=st.session_state.summary, key=f"summary_input_{fk}")
+        st.markdown("### 📝 <u>Professional Summary</u>", unsafe_allow_html=True)
+        st.session_state.summary = st.text_area("Summary", value=st.session_state.summary, key=f"summary_input_{fk}")
 
-            st.markdown("### 💼 <u>Skills, Languages, Interests & Soft Skills</u>", unsafe_allow_html=True)
-            st.session_state.skills = st.text_area("Skills (comma-separated)", value=st.session_state.skills, key=f"skills_input_{fk}")
-            st.session_state.languages = st.text_area("Languages (comma-separated)", value=st.session_state.languages, key=f"lang_input_{fk}")
-            st.session_state.interests = st.text_area("Interests (comma-separated)", value=st.session_state.interests, key=f"int_input_{fk}")
-            st.session_state.Softskills = st.text_area("Softskills (comma-separated)", value=st.session_state.Softskills, key=f"soft_input_{fk}")
+        st.markdown("### 💼 <u>Skills, Languages, Interests & Soft Skills</u>", unsafe_allow_html=True)
+        st.session_state.skills = st.text_area("Skills (comma-separated)", value=st.session_state.skills, key=f"skills_input_{fk}")
+        st.session_state.languages = st.text_area("Languages (comma-separated)", value=st.session_state.languages, key=f"lang_input_{fk}")
+        st.session_state.interests = st.text_area("Interests (comma-separated)", value=st.session_state.interests, key=f"int_input_{fk}")
+        st.session_state.Softskills = st.text_area("Softskills (comma-separated)", value=st.session_state.Softskills, key=f"soft_input_{fk}")
 
-            st.markdown("### 🧱 <u>Work Experience</u>", unsafe_allow_html=True)
-            for idx, exp in enumerate(st.session_state.experience_entries):
-                with st.expander(f"Experience #{idx+1}", expanded=True):
-                    exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                    exp["company"] = st.text_input("Company", value=exp.get("company", ""), key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                    exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                    exp["description"] = st.text_area("Description", value=exp.get("description", ""), key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+        st.markdown("### 🧱 <u>Work Experience</u>", unsafe_allow_html=True)
+        for idx, exp in enumerate(st.session_state.experience_entries):
+            with st.expander(f"Experience #{idx+1}", expanded=True):
+                exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), key=f"exp_title_{idx}_{fk}")
+                exp["company"] = st.text_input("Company", value=exp.get("company", ""), key=f"exp_company_{idx}_{fk}")
+                exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), key=f"exp_duration_{idx}_{fk}")
+                exp["description"] = st.text_area("Description", value=exp.get("description", ""), key=f"exp_desc_{idx}_{fk}")
 
-            st.markdown("### 🎓 <u>Education</u>", unsafe_allow_html=True)
-            for idx, edu in enumerate(st.session_state.education_entries):
-                with st.expander(f"Education #{idx+1}", expanded=True):
-                    edu["degree"] = st.text_input("Degree", value=edu.get("degree", ""), key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                    edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                    edu["year"] = st.text_input("Year", value=edu.get("year", ""), key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                    edu["details"] = st.text_area("Details", value=edu.get("details", ""), key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
+        st.markdown("### 🎓 <u>Education</u>", unsafe_allow_html=True)
+        for idx, edu in enumerate(st.session_state.education_entries):
+            with st.expander(f"Education #{idx+1}", expanded=True):
+                edu["degree"] = st.text_input("Degree", value=edu.get("degree", ""), key=f"edu_degree_{idx}_{fk}")
+                edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), key=f"edu_inst_{idx}_{fk}")
+                edu["year"] = st.text_input("Year", value=edu.get("year", ""), key=f"edu_year_{idx}_{fk}")
+                edu["details"] = st.text_area("Details", value=edu.get("details", ""), key=f"edu_details_{idx}_{fk}")
 
-            st.markdown("### 🛠 <u>Projects</u>", unsafe_allow_html=True)
-            for idx, proj in enumerate(st.session_state.project_entries):
-                with st.expander(f"Project #{idx+1}", expanded=True):
-                    proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                    proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                    proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                    proj["description"] = st.text_area("Description", value=proj.get("description", ""), key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
+        st.markdown("### 🛠 <u>Projects</u>", unsafe_allow_html=True)
+        for idx, proj in enumerate(st.session_state.project_entries):
+            with st.expander(f"Project #{idx+1}", expanded=True):
+                proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), key=f"proj_title_{idx}_{fk}")
+                proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), key=f"proj_tech_{idx}_{fk}")
+                proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), key=f"proj_dur_{idx}_{fk}")
+                proj["description"] = st.text_area("Description", value=proj.get("description", ""), key=f"proj_desc_{idx}_{fk}")
 
-            st.markdown("### 🔗 Project Links")
-            project_links_input = st.text_area("Enter one project link per line:", value="\n".join(st.session_state.project_links), key=f"proj_links_input_{fk}")
-            if project_links_input:
-                st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
+        st.markdown("### 🔗 Project Links")
+        project_links_input = st.text_area("Enter one project link per line:", value="\n".join(st.session_state.project_links), key=f"proj_links_input_{fk}")
+        if project_links_input:
+            st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
 
-            st.markdown("### 🧾 <u>Certificates</u>", unsafe_allow_html=True)
-            for idx, cert in enumerate(st.session_state.certificate_links):
-                with st.expander(f"Certificate #{idx+1}", expanded=True):
-                    cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                    cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""), key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                    cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                    cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+        st.markdown("### 🧾 <u>Certificates</u>", unsafe_allow_html=True)
+        for idx, cert in enumerate(st.session_state.certificate_links):
+            with st.expander(f"Certificate #{idx+1}", expanded=True):
+                cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), key=f"cert_name_{idx}_{fk}")
+                cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""), key=f"cert_link_{idx}_{fk}")
+                cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_dur_{idx}_{fk}")
+                cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_desc_{idx}_{fk}")
 
-            btn_col1, btn_col2 = st.columns([1, 1])
-            with btn_col1:
-                submitted = st.form_submit_button("📑 Generate Resume", use_container_width=True)
-            with btn_col2:
-                clear_clicked = st.form_submit_button("🗑️ Clear Form", use_container_width=True)
+        btn_col1, btn_col2 = st.columns([1, 1])
+        with btn_col1:
+            submitted = st.form_submit_button("📑 Generate Resume", use_container_width=True)
+        with btn_col2:
+            clear_clicked = st.form_submit_button("🗑️ Clear Form", use_container_width=True)
 
-            if submitted:
-                st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
-                st.session_state["_form_submitted"] = True
-                st.rerun(scope="app")
+        if submitted:
+            st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
 
-            if clear_clicked:
-                # Reset only resume-related keys — do NOT clear() or rerun() as that
-                # wipes tab context and navigates back to the main/home page.
-                # Instead, reset values in-place and bump the form key counter so
-                # all widgets re-render empty on this same run, no page jump.
-                _new_counter = st.session_state.get("form_key_counter", 0) + 1
-                resume_fields = ["name", "email", "phone", "linkedin", "location",
-                                 "portfolio", "summary", "skills", "languages",
-                                 "interests", "Softskills", "job_title"]
-                for _f in resume_fields:
-                    st.session_state[_f] = ""
-                st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
-                st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
-                st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
-                st.session_state["project_links"] = []
-                st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
-                for _key in ["generated_html", "ai_output", "cover_letter",
-                             "cover_letter_html", "encoded_profile_image"]:
-                    st.session_state.pop(_key, None)
-                st.session_state["form_key_counter"] = _new_counter
-                st.rerun(scope="app")
-
-    _resume_form()
+        if clear_clicked:
+            # Reset only resume-related keys — do NOT clear() or rerun() as that
+            # wipes tab context and navigates back to the main/home page.
+            # Instead, reset values in-place and bump the form key counter so
+            # all widgets re-render empty on this same run, no page jump.
+            _new_counter = st.session_state.get("form_key_counter", 0) + 1
+            resume_fields = ["name", "email", "phone", "linkedin", "location",
+                             "portfolio", "summary", "skills", "languages",
+                             "interests", "Softskills", "job_title"]
+            for _f in resume_fields:
+                st.session_state[_f] = ""
+            st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
+            st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
+            st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
+            st.session_state["project_links"] = []
+            st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
+            for _key in ["generated_html", "ai_output", "cover_letter",
+                         "cover_letter_html", "encoded_profile_image"]:
+                st.session_state.pop(_key, None)
+            st.session_state["form_key_counter"] = _new_counter
 
     st.markdown("""
     <style>
@@ -7494,119 +7478,47 @@ with tab2:
 
     # --- Visual Resume Preview Section (only shown after form is submitted) ---
     if "generated_html" in st.session_state:
+        import streamlit.components.v1 as _components_v1
+
         st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
         st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
 
-        left, right = st.columns([1, 2])
+        # Get the selected template name to show label
+        _tpl_label = st.session_state.get("_last_template", "")
+        if _tpl_label:
+            st.markdown(
+                f"<p style='color:#555;font-size:13px;margin-bottom:8px;'>Template: <b>{_tpl_label}</b></p>",
+                unsafe_allow_html=True
+            )
 
-        with left:
-            st.markdown(f"""
-                <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
-                <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
-                <p style='font-size:14px;'>
-                📍 {st.session_state['location']}<br>
-                📞 {st.session_state['phone']}<br>
-                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
-                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
-                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
-                </p>
-            """, unsafe_allow_html=True)
+        # Render the actual template HTML — no more hardcoded 2-column layout
+        _html_to_render = st.session_state["generated_html"]
 
-            st.markdown("<h4 style='color:#336699;'>Skills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for skill in [s.strip() for s in st.session_state["skills"].split(",") if s.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {skill}</div>", unsafe_allow_html=True)
+        # Estimate height based on content length (min 900px, max 4000px)
+        _est_height = max(900, min(4000, 900 + len(_html_to_render) // 30))
 
-            st.markdown("<h4 style='color:#336699;'>Languages</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for lang in [l.strip() for l in st.session_state["languages"].split(",") if l.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {lang}</div>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Interests</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for interest in [i.strip() for i in st.session_state["interests"].split(",") if i.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {interest}</div>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Softskills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for ss in [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {ss}</div>", unsafe_allow_html=True)
-
-        with right:
-            st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            summary_text = st.session_state["summary"].replace("\n", "<br>")
-            st.markdown(f"<p style='font-size:17px;'>{summary_text}</p>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for exp in st.session_state.experience_entries:
-                if exp["company"] or exp["title"]:
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
-                        <div style='display:flex; justify-content:space-between;'>
-                            <b>🏢 {exp['company']}</b><span style='color:gray;'>📆 {exp['duration']}</span>
-                        </div>
-                        <div style='font-size:14px;'>💼 <i>{exp['title']}</i></div>
-                        <div style='font-size:17px;'>📝 {exp['description']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for edu in st.session_state.education_entries:
-                if edu["institution"] or edu["degree"]:
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px;'>
-                        <div style='display:flex; justify-content:space-between; font-size:16px; font-weight:bold;'>
-                            <span>🏫 {edu['institution']}</span>
-                            <span style='color:gray;'>📅 {edu['year']}</span>
-                        </div>
-                        <div style='font-size:14px;'>🎓 <i>{edu['degree']}</i></div>
-                        <div style='font-size:14px;'>📄 {edu['details']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for proj in st.session_state.project_entries:
-                if proj.get("title"):
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px;'>
-                        <strong style='font-size:16px;'>{proj['title']}</strong><br>
-                        <span style='font-size:14px;'>🛠️ <strong>Tech Stack:</strong> {proj['tech']}</span><br>
-                        <span style='font-size:14px;'>⏳ <strong>Duration:</strong> {proj['duration']}</span><br>
-                        <span style='font-size:17px;'>📝 <strong>Description:</strong> {proj['description']}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            if st.session_state.project_links:
-                st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for i, link in enumerate(st.session_state.project_links):
-                    st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
-
-            if st.session_state.certificate_links:
-                st.markdown("<h4 style='color:#336699;'>Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for cert in st.session_state.certificate_links:
-                    if cert["name"] and cert["link"]:
-                        st.markdown(f"""
-                        <div style='display:flex; justify-content:space-between;'>
-                            <a href="{cert['link']}" target="_blank"><b>📄 {cert['name']}</b></a>
-                            <span style='color:gray;'>{cert['duration']}</span>
-                        </div>
-                        <div style='margin-bottom:10px; font-size:14px;'>{cert['description']}</div>
-                        """, unsafe_allow_html=True)
-
+        _components_v1.html(
+            _html_to_render,
+            height=_est_height,
+            scrolling=True
+        )
 import re
 
 with tab2:
     st.markdown("## ✨ <span style='color:#336699;'>Enhanced AI Resume Preview</span>", unsafe_allow_html=True)
     st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
 
-    col1, spacer, col2 = st.columns([1, 0.2, 1])
+    @st.fragment
+    def _ai_section():
+        col1, spacer, col2 = st.columns([1, 0.2, 1])
+        with col1:
+            if st.button("🔁 Clear Preview"):
+                st.session_state.pop("ai_output", None)
+                st.rerun(scope="app")
+        with col2:
+            _gen = st.button("🚀 Generate AI Resume Preview")
 
-    with col1:
-        if st.button("🔁 Clear Preview"):
-            st.session_state.pop("ai_output", None)
-
-    with col2:
-        if st.button("🚀 Generate AI Resume Preview"):
-            st.session_state["_run_ai_generate"] = True
-
-    if st.session_state.pop("_run_ai_generate", False):
-        if True:
+        if _gen:
             # Normalize and ensure at least 2 experience entries
             experience_entries = st.session_state.get('experience_entries', [])
             normalized_experience_entries = []
@@ -7887,6 +7799,9 @@ with tab2:
                 ai_output = call_llm(enhance_prompt, session=st.session_state)
                 st.session_state["ai_output"] = ai_output
 
+
+    _ai_section()
+
     # ------------------------- PARSE + RENDER -------------------------
     if "ai_output" in st.session_state:
         ai_output = st.session_state["ai_output"]
@@ -8014,7 +7929,7 @@ with tab2:
                     st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
 
     # Generate HTML content based on selected template — only on submit, stored in session_state
-    if st.session_state.pop("_form_submitted", False):
+    if submitted:
         # Determine which template to use
         if selected_template == "Default (Professional)":
             html_content = render_template_default(st.session_state, profile_img_html)
@@ -8038,8 +7953,9 @@ with tab2:
             # Fallback to default
             html_content = render_template_default(st.session_state, profile_img_html)
 
-        # Store the generated content
+        # Store the generated content and which template was used
         st.session_state["generated_html"] = html_content
+        st.session_state["_last_template"] = selected_template
 
 with tab2:
     # ==========================
