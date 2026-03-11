@@ -13,13 +13,7 @@ import dns.resolver
 
 # ------------------ DB Connection ------------------
 def get_connection():
-    return psycopg2.connect(
-        host=st.secrets["SUPABASE_HOST"],
-        database=st.secrets["SUPABASE_DB"],
-        user=st.secrets["SUPABASE_USER"],
-        password=st.secrets["SUPABASE_PASSWORD"],
-        port=st.secrets["SUPABASE_PORT"]
-    )
+    return psycopg2.connect(st.secrets["DATABASE_URL"], sslmode="require")
 
 # ------------------ Utility: Get IST Time ------------------
 def get_ist_time():
