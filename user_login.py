@@ -12,7 +12,15 @@ from email.mime.multipart import MIMEMultipart
 import dns.resolver
 
 # ------------------ Supabase PostgreSQL Connection ------------------
-def get_db_connection():
+# @st.cache_resource keeps ONE connection alive for the entire server
+# process lifetime. This means zero TCP handshake overhead on every
+# button click / tab switch / form submit — exactly what SQLite gave
+# us for free with a local file handle.
+# get_db_connection() is kept as a thin wrapper so all call sites are
+# unchanged, but it now returns the cached persistent connection.
+
+@st.cache_resource
+def _get_persistent_connection():
     return psycopg2.connect(
         host=st.secrets["SUPABASE_HOST"],
         database=st.secrets["SUPABASE_DB"],
@@ -20,6 +28,27 @@ def get_db_connection():
         password=st.secrets["SUPABASE_PASSWORD"],
         port=st.secrets["SUPABASE_PORT"]
     )
+
+def get_db_connection():
+    """
+    Return the cached persistent connection.
+    If the connection has gone stale (Supabase idle timeout),
+    clear the cache and reconnect transparently.
+    Always rolls back any open transaction so the connection is
+    clean for the next caller (shared persistent connection safety).
+    """
+    conn = _get_persistent_connection()
+    try:
+        conn.cursor().execute("SELECT 1")
+    except Exception:
+        _get_persistent_connection.clear()
+        conn = _get_persistent_connection()
+    # Reset any lingering transaction state from a previous failed op
+    try:
+        conn.rollback()
+    except Exception:
+        pass
+    return conn
 
 # ------------------ Utility: Get IST Time ------------------
 def get_ist_time():
@@ -65,7 +94,6 @@ def username_exists(username):
     c = conn.cursor()
     c.execute("SELECT 1 FROM users WHERE username = %s", (username,))
     exists = c.fetchone() is not None
-    conn.close()
     return exists
 
 # ------------------ Check if Email Already Exists ------------------
@@ -74,7 +102,6 @@ def email_exists(email):
     c = conn.cursor()
     c.execute("SELECT 1 FROM users WHERE email = %s", (email,))
     exists = c.fetchone() is not None
-    conn.close()
     return exists
 
 # ------------------ Create Tables ------------------
@@ -102,7 +129,6 @@ def create_user_table():
     ''')
 
     conn.commit()
-    conn.close()
 
 # ------------------ Add User (with OTP Verification) ------------------
 def add_user(username, password, email=None):
@@ -234,7 +260,6 @@ def complete_registration(entered_otp):
     except Exception as e:
         return False, f"❌ Database error: {str(e)}"
     finally:
-        conn.close()
 
 # ------------------ Verify User & Load Saved API Key ------------------
 def verify_user(username_or_email, password):
@@ -247,7 +272,6 @@ def verify_user(username_or_email, password):
         c.execute('SELECT username, password, groq_api_key FROM users WHERE username = %s', (username_or_email,))
 
     result = c.fetchone()
-    conn.close()
 
     if result:
         if '@' in username_or_email:
@@ -269,7 +293,6 @@ def save_user_api_key(username, api_key):
     c = conn.cursor()
     c.execute("UPDATE users SET groq_api_key = %s WHERE username = %s", (api_key, username))
     conn.commit()
-    conn.close()
     st.session_state.user_groq_key = api_key
 
 # ------------------ Get User's Saved API Key ------------------
@@ -278,7 +301,6 @@ def get_user_api_key(username):
     c = conn.cursor()
     c.execute("SELECT groq_api_key FROM users WHERE username = %s", (username,))
     result = c.fetchone()
-    conn.close()
     return result[0] if result and result[0] else None
 
 # ------------------ Log User Action ------------------
@@ -289,7 +311,6 @@ def log_user_action(username, action):
     c.execute('INSERT INTO user_logs (username, action, timestamp) VALUES (%s, %s, %s)', 
               (username, action, timestamp))
     conn.commit()
-    conn.close()
 
 # ------------------ Get Total Registered Users ------------------
 def get_total_registered_users():
@@ -297,7 +318,6 @@ def get_total_registered_users():
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM users")
     count = c.fetchone()[0]
-    conn.close()
     return count
 
 # ------------------ Get Today's Logins (based on IST) ------------------
@@ -311,7 +331,6 @@ def get_logins_today():
           AND DATE(timestamp) = %s
     """, (today,))
     count = c.fetchone()[0]
-    conn.close()
     return count
 
 # ------------------ Get All User Logs ------------------
@@ -320,7 +339,6 @@ def get_all_user_logs():
     c = conn.cursor()
     c.execute("SELECT username, action, timestamp FROM user_logs ORDER BY timestamp DESC")
     logs = c.fetchall()
-    conn.close()
     return logs
 
 # ------------------ Forgot Password Functions ------------------
@@ -389,7 +407,6 @@ def get_user_by_email(email):
     c = conn.cursor()
     c.execute("SELECT username FROM users WHERE email = %s", (email,))
     result = c.fetchone()
-    conn.close()
     return result[0] if result else None
 
 def update_password_by_email(email, new_password):
@@ -411,12 +428,9 @@ def update_password_by_email(email, new_password):
         conn.commit()
 
         if c.rowcount > 0:
-            conn.close()
             return True
         else:
-            conn.close()
             return False
     except Exception as e:
         st.error(f"Database error: {str(e)}")
-        conn.close()
         return False
