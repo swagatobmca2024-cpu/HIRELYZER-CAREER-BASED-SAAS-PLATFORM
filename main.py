@@ -4523,7 +4523,12 @@ with tab1:
                     <div style="font-size:0.75rem; color:#64748b; margin-top:4px; font-family: -apple-system, sans-serif; text-transform:uppercase; letter-spacing:0.05em;">Resume Intelligence Report</div>
                 </div>
                 """, unsafe_allow_html=True)
-                def ats_card(icon, label, value):
+                def ats_card(icon, label, value, wrap=False):
+                    value_style = (
+                        "white-space:normal; word-break:break-word; overflow-wrap:break-word;"
+                        if wrap else
+                        "white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
+                    )
                     return f"""
                     <div style="
                         background: rgba(15,23,42,0.85);
@@ -4533,16 +4538,17 @@ with tab1:
                         margin-bottom: 8px;
                         min-width: 0;
                         box-sizing: border-box;
+                        overflow: hidden;
                     ">
                         <div style="font-size:0.78rem; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{icon} {label}</div>
-                        <div style="font-size:1.55rem; font-weight:700; color:#f0f4f8; margin-top:4px; white-space:nowrap; overflow:visible;">{value}</div>
+                        <div style="font-size:1.4rem; font-weight:700; color:#f0f4f8; margin-top:4px; {value_style}">{value}</div>
                     </div>"""
 
                 score_col1, score_col2, score_col3 = st.columns(3)
                 with score_col1:
                     st.markdown(ats_card("📈", "Overall Match", f"{resume.get('ATS Match %', 'N/A')}%"), unsafe_allow_html=True)
                 with score_col2:
-                    st.markdown(ats_card("🏆", "Formatted Score", resume.get("Formatted Score", "N/A")), unsafe_allow_html=True)
+                    st.markdown(ats_card("🏆", "Formatted Score", resume.get("Formatted Score", "N/A"), wrap=True), unsafe_allow_html=True)
                 with score_col3:
                     st.markdown(ats_card("🧠", "Language Quality", f"{resume.get('Language Score', 'N/A')} / {lang_weight}"), unsafe_allow_html=True)
 
@@ -4673,7 +4679,6 @@ with tab1:
 
     else:           
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
-
 from xhtml2pdf import pisa
 from io import BytesIO
 
