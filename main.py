@@ -93,8 +93,8 @@ from user_login import (
 # ============================================================
 # 💾 Persistent Storage Configuration for Streamlit Cloud
 # ============================================================
-# Supabase PostgreSQL is used - no local DB path needed
-# DB_PATH removed - using Supabase PostgreSQL
+# DB_PATH removed - database is now PostgreSQL on Supabase
+DB_PATH = None
 
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
@@ -2275,7 +2275,17 @@ if st.session_state.username == "admin":
 
     st.divider()
     st.subheader("📦 Database Backup & Download")
-    st.info("ℹ️ Database is hosted on Supabase PostgreSQL. Use the Supabase dashboard to export or backup data.")
+
+    if os.path.exists(DB_PATH):
+        with open(DB_PATH, "rb") as f:
+            st.download_button(
+                "⬇️ Download resume_data.db",
+                data=f,
+                file_name="resume_data_backup.db",
+                mime="application/octet-stream"
+            )
+    else:
+        st.warning("⚠️ No database file found yet.")
 # Always-visible tabs
 tab_labels = [
     "📊 Dashboard",
