@@ -93,8 +93,8 @@ from user_login import (
 # ============================================================
 # 💾 Persistent Storage Configuration for Streamlit Cloud
 # ============================================================
-os.makedirs(".streamlit_storage", exist_ok=True)
-DB_PATH = os.path.join(".streamlit_storage", "resume_data.db")
+# Supabase PostgreSQL is used - no local DB path needed
+# DB_PATH removed - using Supabase PostgreSQL
 
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
@@ -2275,17 +2275,7 @@ if st.session_state.username == "admin":
 
     st.divider()
     st.subheader("📦 Database Backup & Download")
-
-    if os.path.exists(DB_PATH):
-        with open(DB_PATH, "rb") as f:
-            st.download_button(
-                "⬇️ Download resume_data.db",
-                data=f,
-                file_name="resume_data_backup.db",
-                mime="application/octet-stream"
-            )
-    else:
-        st.warning("⚠️ No database file found yet.")
+    st.info("ℹ️ Database is hosted on Supabase PostgreSQL. Use the Supabase dashboard to export or backup data.")
 # Always-visible tabs
 tab_labels = [
     "📊 Dashboard",
@@ -17461,7 +17451,6 @@ Generate {num_questions} questions now:
                 """, unsafe_allow_html=True)
 if tab5:
 	with tab5:
-		import sqlite3
 		import pandas as pd
 		import matplotlib.pyplot as plt
 		import numpy as np
