@@ -1415,12 +1415,35 @@ if not st.session_state.authenticated:
             """, unsafe_allow_html=True)
 
     # -------- Premium Hero Section --------
-    # Fetch live stats for subtle ribbon
-    total_users = get_total_registered_users()
-    active_logins = get_logins_today()
-    stats = get_database_stats()
-    resumes_uploaded = stats.get("total_candidates", 0)
-    active_domains = stats.get("unique_domains", 0)
+    # Stats are cached with a 60-second TTL so they stay fresh after new resumes
+    # are analysed, but don't fire a Supabase round-trip on every keystroke rerun.
+    _now = time.time()
+    _cache = st.session_state.get("hero_stats_cache", {})
+    if not _cache or (_now - _cache.get("_ts", 0)) > 60:
+        try:
+            _stats = get_database_stats()
+            _resumes = _stats.get("total_candidates", 0)
+            _domains = _stats.get("unique_domains", 0)
+        except Exception:
+            _resumes = _cache.get("resumes_uploaded", 0)
+            _domains = _cache.get("active_domains", 0)
+        try:
+            _users = get_total_registered_users()
+            _logins = get_logins_today()
+        except Exception:
+            _users = _cache.get("total_users", 0)
+            _logins = _cache.get("active_logins", 0)
+        st.session_state.hero_stats_cache = {
+            "_ts": _now,
+            "total_users": _users,
+            "active_logins": _logins,
+            "resumes_uploaded": _resumes,
+            "active_domains": _domains,
+        }
+    total_users = st.session_state.hero_stats_cache["total_users"]
+    active_logins = st.session_state.hero_stats_cache["active_logins"]
+    resumes_uploaded = st.session_state.hero_stats_cache["resumes_uploaded"]
+    active_domains = st.session_state.hero_stats_cache["active_domains"]
 
     # ── Hero HTML (no script — Streamlit strips <script> from st.markdown) ──
     st.markdown(f"""
@@ -1772,7 +1795,6 @@ if not st.session_state.get("authenticated", False):
                         log_user_action(st.session_state.username, "login")
 
                         notify("login", "success", "✅ Login successful!")
-                        time.sleep(3.0)
                         st.rerun()
                     else:
                         notify("login", "error", "❌ Invalid credentials. Please try again.")
@@ -1813,7 +1835,6 @@ if not st.session_state.get("authenticated", False):
                                     st.session_state.reset_stage = "verify_otp"
 
                                     notify("login", "success", "✅ OTP sent successfully to your email!")
-                                    time.sleep(0.5)
                                     st.rerun()
                                 else:
                                     notify("login", "error", "❌ Failed to send OTP. Please try again.")
@@ -1863,7 +1884,6 @@ if not st.session_state.get("authenticated", False):
                                 st.session_state.reset_otp = otp
                                 st.session_state.reset_otp_time = time.time()
                                 notify("login", "info", "📨 New OTP sent!")
-                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("login", "error", "❌ Failed to send OTP. Please try again.")
@@ -1891,7 +1911,6 @@ if not st.session_state.get("authenticated", False):
                             elif otp_input.strip() == st.session_state.reset_otp:
                                 st.session_state.reset_stage = "reset_password"
                                 notify("login", "success", "✅ OTP verified successfully!")
-                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("login", "error", "❌ Invalid OTP. Please try again.")
@@ -1936,7 +1955,6 @@ if not st.session_state.get("authenticated", False):
                                 st.session_state.reset_otp = ""
                                 st.session_state.reset_otp_time = 0
 
-                                time.sleep(1)
                                 st.rerun()
                             else:
                                 notify("login", "error", "❌ Failed to reset password. Please try again.")
@@ -1981,7 +1999,6 @@ if not st.session_state.get("authenticated", False):
                             success, message = add_user(pending['username'], pending['password'], pending['email'])
                             if success:
                                 notify("register", "success", "✅ New OTP sent!")
-                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("register", "error", f"❌ {message}")
@@ -2013,7 +2030,6 @@ if not st.session_state.get("authenticated", False):
                                 if success:
                                     notify("register", "success", message)
                                     log_user_action(cached_username, "register")
-                                    time.sleep(0.5)
                                     st.rerun()
                                 else:
                                     notify("register", "error", message)
@@ -2025,7 +2041,6 @@ if not st.session_state.get("authenticated", False):
                             success, message = add_user(pending['username'], pending['password'], pending['email'])
                             if success:
                                 notify("register", "info", "📨 New OTP sent successfully!")
-                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("register", "error", f"❌ {message}")
@@ -2040,98 +2055,22 @@ if not st.session_state.get("authenticated", False):
                 # Normal registration form
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
 
-                # Email input with live validation
+                # NOTE: Live per-keystroke DB validation (email_exists / username_exists)
+                # has been removed. With remote Supabase PostgreSQL each call opens a
+                # network connection on EVERY character typed, causing Streamlit to visibly
+                # reload the whole page. Validation now happens only on the Register button.
+                # Client-side format checks below require no DB round-trip.
+
                 new_email = st.text_input("📧 Email", key="reg_email", placeholder="your@email.com")
+                if new_email and not is_valid_email(new_email.strip()):
+                    st.caption("⚠️ Invalid email format.")
 
-                # Email validation placeholder (using st.empty for dynamic updates)
-                email_validation_placeholder = st.empty()
-
-                # Check if email changed and validate
-                if new_email and new_email != st.session_state.last_validated_email:
-                    if not is_valid_email(new_email.strip()):
-                        with email_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message warn-msg"><span class="slide-message-text">⚠️ Invalid email format.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_email = new_email
-                    elif email_exists(new_email.strip()):
-                        with email_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message error-msg"><span class="slide-message-text">❌ Email already registered.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_email = new_email
-                    else:
-                        with email_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Email is available.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_email = new_email
-                        # Auto-hide after 3 seconds by clearing after delay
-                        time.sleep(3)
-                        email_validation_placeholder.empty()
-                elif not new_email:
-                    email_validation_placeholder.empty()
-                    st.session_state.last_validated_email = ""
-
-                # Username input with live validation
                 new_user = st.text_input("👤 Username", key="reg_user")
 
-                # Username validation placeholder
-                username_validation_placeholder = st.empty()
-
-                # Check if username changed and validate
-                if new_user and new_user != st.session_state.last_validated_username:
-                    if username_exists(new_user.strip()):
-                        with username_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message error-msg"><span class="slide-message-text">❌ Username already exists.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_username = new_user
-                    else:
-                        with username_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Username is available.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_username = new_user
-                        time.sleep(3)
-                        username_validation_placeholder.empty()
-                elif not new_user:
-                    username_validation_placeholder.empty()
-                    st.session_state.last_validated_username = ""
-
-                # Password input with live validation
                 new_pass = st.text_input("🔑 Password", type="password", key="reg_pass")
                 st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
-
-                # Password validation placeholder
-                password_validation_placeholder = st.empty()
-
-                # Check if password changed and validate
-                if new_pass and new_pass != st.session_state.last_validated_password:
-                    if not is_strong_password(new_pass):
-                        with password_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message warn-msg"><span class="slide-message-text">⚠️ Password must be at least 8 characters and strong.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_password = new_pass
-                    else:
-                        with password_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Strong password.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_password = new_pass
-                        time.sleep(3)
-                        password_validation_placeholder.empty()
-                elif not new_pass:
-                    password_validation_placeholder.empty()
-                    st.session_state.last_validated_password = ""
+                if new_pass and not is_strong_password(new_pass):
+                    st.caption("⚠️ Weak password — add uppercase, number, and special character.")
 
                 # Render notification area (reserves space)
                 render_notification("register")
@@ -2152,7 +2091,6 @@ if not st.session_state.get("authenticated", False):
                             success, message = add_user(new_user.strip(), new_pass.strip(), new_email.strip())
                             if success:
                                 notify("register", "success", message)
-                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("register", "error", message)
