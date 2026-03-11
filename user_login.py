@@ -259,7 +259,6 @@ def complete_registration(entered_otp):
             return False, "🚫 Registration failed. Username or email already exists."
     except Exception as e:
         return False, f"❌ Database error: {str(e)}"
-    finally:
 
 # ------------------ Verify User & Load Saved API Key ------------------
 def verify_user(username_or_email, password):
