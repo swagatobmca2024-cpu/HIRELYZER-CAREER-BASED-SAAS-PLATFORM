@@ -4523,12 +4523,9 @@ with tab1:
                     <div style="font-size:0.75rem; color:#64748b; margin-top:4px; font-family: -apple-system, sans-serif; text-transform:uppercase; letter-spacing:0.05em;">Resume Intelligence Report</div>
                 </div>
                 """, unsafe_allow_html=True)
-                def ats_card(icon, label, value, wrap=False):
-                    value_style = (
-                        "white-space:normal; word-break:break-word; overflow-wrap:break-word;"
-                        if wrap else
-                        "white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"
-                    )
+                def ats_card(icon, label, value, tooltip=None):
+                    tooltip_attr = f'title="{tooltip}"' if tooltip else ""
+                    tooltip_style = "cursor:help;" if tooltip else ""
                     return f"""
                     <div style="
                         background: rgba(15,23,42,0.85);
@@ -4538,17 +4535,22 @@ with tab1:
                         margin-bottom: 8px;
                         min-width: 0;
                         box-sizing: border-box;
+                        height: 80px;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
                         overflow: hidden;
                     ">
-                        <div style="font-size:0.78rem; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{icon} {label}</div>
-                        <div style="font-size:1.4rem; font-weight:700; color:#f0f4f8; margin-top:4px; {value_style}">{value}</div>
+                        <div style="font-size:0.75rem; color:#94a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{icon} {label}</div>
+                        <div {tooltip_attr} style="font-size:1.4rem; font-weight:700; color:#f0f4f8; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; {tooltip_style}">{value}</div>
                     </div>"""
 
                 score_col1, score_col2, score_col3 = st.columns(3)
+                formatted_val = resume.get("Formatted Score", "N/A")
                 with score_col1:
                     st.markdown(ats_card("📈", "Overall Match", f"{resume.get('ATS Match %', 'N/A')}%"), unsafe_allow_html=True)
                 with score_col2:
-                    st.markdown(ats_card("🏆", "Formatted Score", resume.get("Formatted Score", "N/A"), wrap=True), unsafe_allow_html=True)
+                    st.markdown(ats_card("🏆", "Formatted Score", formatted_val, tooltip=formatted_val), unsafe_allow_html=True)
                 with score_col3:
                     st.markdown(ats_card("🧠", "Language Quality", f"{resume.get('Language Score', 'N/A')} / {lang_weight}"), unsafe_allow_html=True)
 
