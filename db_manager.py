@@ -23,13 +23,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_connection():
-    return psycopg2.connect(
-        host=st.secrets["SUPABASE_HOST"],
-        database=st.secrets["SUPABASE_DB"],
-        user=st.secrets["SUPABASE_USER"],
-        password=st.secrets["SUPABASE_PASSWORD"],
-        port=st.secrets["SUPABASE_PORT"]
-    )
+    return psycopg2.connect(st.secrets["DATABASE_URL"], sslmode="require")
 
 class DatabaseManager:
     """
