@@ -17391,7 +17391,6 @@ Generate {num_questions} questions now:
                 """, unsafe_allow_html=True)
 if tab5:
 	with tab5:
-		import sqlite3
 		import pandas as pd
 		import matplotlib.pyplot as plt
 		import numpy as np
