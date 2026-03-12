@@ -3,8 +3,7 @@ Enhanced Database Manager for Resume Analysis System
 Optimized for large-scale user structures with improved performance and reliability
 """
 
-import psycopg2
-import psycopg2.extras
+import sqlite3
 import pandas as pd
 from datetime import datetime
 import pytz
@@ -14,7 +13,6 @@ from typing import Optional, List, Tuple, Dict, Any
 import logging
 from threading import Lock
 import os
-import streamlit as st
 from llm_manager import call_llm
 
 
@@ -27,23 +25,22 @@ class DatabaseManager:
     for handling large-scale user structures
     """
     
-    def __init__(self, pool_size: int = 10):
+    def __init__(self, db_path: str = "resume_data.db", pool_size: int = 10):
+        self.db_path = db_path
         self.pool_size = pool_size
         self._connection_pool = []
         self._pool_lock = Lock()
         self._initialize_database()
         
     def _initialize_database(self):
-        """
-        Initialize database schema once.
-        Protected by @st.cache_resource on _get_db_manager() so this
-        runs ONCE per server process lifetime, never on reruns.
-        """
+        """Initialize database with optimized schema and indexes"""
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            
+            # Create main candidates table with optimized schema
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS candidates (
-                    id SERIAL PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     resume_name TEXT NOT NULL,
                     candidate_name TEXT NOT NULL,
                     ats_score INTEGER NOT NULL CHECK(ats_score >= 0 AND ats_score <= 100),
@@ -54,9 +51,11 @@ class DatabaseManager:
                     keyword_score INTEGER NOT NULL CHECK(keyword_score >= 0 AND keyword_score <= 100),
                     bias_score REAL NOT NULL CHECK(bias_score >= 0.0 AND bias_score <= 1.0),
                     domain TEXT NOT NULL,
-                    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            
+            # Create optimized indexes for better query performance
             indexes = [
                 "CREATE INDEX IF NOT EXISTS idx_candidates_domain ON candidates(domain)",
                 "CREATE INDEX IF NOT EXISTS idx_candidates_ats_score ON candidates(ats_score)",
@@ -65,77 +64,49 @@ class DatabaseManager:
                 "CREATE INDEX IF NOT EXISTS idx_candidates_domain_ats ON candidates(domain, ats_score)",
                 "CREATE INDEX IF NOT EXISTS idx_candidates_timestamp_domain ON candidates(timestamp, domain)"
             ]
+            
             for index_sql in indexes:
                 cursor.execute(index_sql)
+            
             conn.commit()
-            logger.info("Database initialized (ran once via cache_resource)")
-
-    def _make_connection(self):
-        """Open a fresh Supabase connection."""
-        return psycopg2.connect(
-            host=st.secrets["SUPABASE_HOST"],
-            database=st.secrets["SUPABASE_DB"],
-            user=st.secrets["SUPABASE_USER"],
-            password=st.secrets["SUPABASE_PASSWORD"],
-            port=st.secrets["SUPABASE_PORT"]
-        )
-
-    def _get_live_connection(self):
-        """
-        Return a healthy connection from the pool, or create one.
-        Connections are NEVER closed after use — they are returned
-        to the pool so the same TCP socket is reused across reruns.
-        This is what eliminates the per-interaction Supabase handshake
-        that caused visible page reloads after migrating from SQLite.
-        """
-        with self._pool_lock:
-            while self._connection_pool:
-                conn = self._connection_pool.pop()
-                try:
-                    conn.cursor().execute("SELECT 1")
-                    return conn
-                except Exception:
-                    pass  # stale — discard and try next
-            # Pool empty — open a new connection
-            return self._make_connection()
+            logger.info("Database initialized with optimized schema and indexes")
 
     @contextmanager
     def get_connection(self):
         """
-        Context manager that checks out a connection from the pool
-        and returns it when done — never closes it.
+        Context manager for database connections with connection pooling
         """
-        conn = self._get_live_connection()
+        conn = None
         try:
+            with self._pool_lock:
+                if self._connection_pool:
+                    conn = self._connection_pool.pop()
+                else:
+                    conn = sqlite3.connect(
+                        self.db_path, 
+                        check_same_thread=False,
+                        timeout=30.0  # 30 second timeout for large operations
+                    )
+                    # Optimize SQLite settings for performance
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    conn.execute("PRAGMA synchronous=NORMAL")
+                    conn.execute("PRAGMA cache_size=10000")
+                    conn.execute("PRAGMA temp_store=MEMORY")
+            
             yield conn
+            
         except Exception as e:
-            try:
+            if conn:
                 conn.rollback()
-            except Exception:
-                pass
             logger.error(f"Database error: {e}")
             raise
         finally:
-            # Always return connection to pool — reused on next call
-            with self._pool_lock:
-                self._connection_pool.append(conn)
-
-    def _query_to_df(self, query: str, params=None) -> pd.DataFrame:
-        """
-        Execute a SELECT query and return results as a DataFrame.
-        Uses cursor.description for column names — works correctly with
-        psycopg2 persistent connections where pd.read_sql_query can
-        silently return empty results due to transaction state issues.
-        """
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            if params is not None:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
-            rows = cursor.fetchall()
-            cols = [desc[0] for desc in cursor.description] if cursor.description else []
-            return pd.DataFrame(rows, columns=cols)
+            if conn:
+                with self._pool_lock:
+                    if len(self._connection_pool) < self.pool_size:
+                        self._connection_pool.append(conn)
+                    else:
+                        conn.close()
 
     def detect_domain_llm(self, job_title: str, job_description: str, session=None) -> str:
         """
@@ -841,11 +812,10 @@ Agile Coaching, Software Engineering]
                     INSERT INTO candidates (
                         resume_name, candidate_name, ats_score, edu_score, exp_score,
                         skills_score, lang_score, keyword_score, bias_score, domain, timestamp
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    RETURNING id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, normalized_data + (local_time,))
                 conn.commit()
-                candidate_id = cursor.fetchone()[0]
+                candidate_id = cursor.lastrowid
                 logger.info(f"Inserted candidate with ID: {candidate_id}")
                 return candidate_id
 
@@ -862,9 +832,9 @@ Agile Coaching, Software Engineering]
                     SELECT domain, ROUND(AVG(ats_score), 2) AS avg_score, COUNT(*) AS count
                     FROM candidates
                     GROUP BY domain
-                    HAVING COUNT(*) >= 1
+                    HAVING count >= 1
                     ORDER BY avg_score DESC
-                    LIMIT %s
+                    LIMIT ?
                 """, (limit,))
                 return cursor.fetchall()
         except Exception as e:
@@ -881,7 +851,8 @@ Agile Coaching, Software Engineering]
                 ORDER BY DATE(timestamp) DESC
                 LIMIT 365
             """
-            return self._query_to_df(query)
+            with self.get_connection() as conn:
+                return pd.read_sql_query(query, conn)
         except Exception as e:
             logger.error(f"Error getting resume count by day: {e}")
             return pd.DataFrame()
@@ -895,10 +866,11 @@ Agile Coaching, Software Engineering]
                        COUNT(*) as candidate_count
                 FROM candidates
                 GROUP BY domain
-                HAVING COUNT(*) >= 1
+                HAVING candidate_count >= 1
                 ORDER BY avg_ats_score DESC
             """
-            return self._query_to_df(query)
+            with self.get_connection() as conn:
+                return pd.read_sql_query(query, conn)
         except Exception as e:
             logger.error(f"Error getting average ATS by domain: {e}")
             return pd.DataFrame()
@@ -914,7 +886,8 @@ Agile Coaching, Software Engineering]
                 GROUP BY domain
                 ORDER BY count DESC
             """
-            return self._query_to_df(query)
+            with self.get_connection() as conn:
+                return pd.read_sql_query(query, conn)
         except Exception as e:
             logger.error(f"Error getting domain distribution: {e}")
             return pd.DataFrame()
@@ -928,10 +901,11 @@ Agile Coaching, Software Engineering]
             
             query = """
                 SELECT * FROM candidates
-                WHERE DATE(timestamp) BETWEEN DATE(%s) AND DATE(%s)
+                WHERE DATE(timestamp) BETWEEN DATE(?) AND DATE(?)
                 ORDER BY timestamp DESC
             """
-            return self._query_to_df(query, params=(start, end))
+            with self.get_connection() as conn:
+                return pd.read_sql_query(query, conn, params=(start, end))
         except ValueError as e:
             logger.error(f"Invalid date format: {e}")
             return pd.DataFrame()
@@ -944,7 +918,7 @@ Agile Coaching, Software Engineering]
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM candidates WHERE id = %s", (candidate_id,))
+                cursor.execute("DELETE FROM candidates WHERE id = ?", (candidate_id,))
                 deleted_count = cursor.rowcount
                 conn.commit()
                 
@@ -968,20 +942,21 @@ Agile Coaching, Software Engineering]
             params = []
 
             if bias_threshold is not None:
-                query += " AND bias_score >= %s"
+                query += " AND bias_score >= ?"
                 params.append(bias_threshold)
 
             if min_ats is not None:
-                query += " AND ats_score >= %s"
+                query += " AND ats_score >= ?"
                 params.append(min_ats)
 
             query += " ORDER BY timestamp DESC"
             
             if limit is not None:
-                query += " LIMIT %s OFFSET %s"
+                query += " LIMIT ? OFFSET ?"
                 params.extend([limit, offset])
 
-            return self._query_to_df(query, params=params if params else None)
+            with self.get_connection() as conn:
+                return pd.read_sql_query(query, conn, params=params)
         except Exception as e:
             logger.error(f"Error getting all candidates: {e}")
             return pd.DataFrame()
@@ -995,24 +970,25 @@ Agile Coaching, Software Engineering]
             
             if filters:
                 if 'min_ats' in filters:
-                    query += " AND ats_score >= %s"
+                    query += " AND ats_score >= ?"
                     params.append(filters['min_ats'])
                 if 'domain' in filters:
-                    query += " AND domain = %s"
+                    query += " AND domain = ?"
                     params.append(filters['domain'])
                 if 'start_date' in filters:
-                    query += " AND DATE(timestamp) >= DATE(%s)"
+                    query += " AND DATE(timestamp) >= DATE(?)"
                     params.append(filters['start_date'])
                 if 'end_date' in filters:
-                    query += " AND DATE(timestamp) <= DATE(%s)"
+                    query += " AND DATE(timestamp) <= DATE(?)"
                     params.append(filters['end_date'])
             
             query += " ORDER BY timestamp DESC"
             
-            df = self._query_to_df(query, params=params if params else None)
-            df.to_csv(filepath, index=False)
-            logger.info(f"Exported {len(df)} records to {filepath}")
-            return True
+            with self.get_connection() as conn:
+                df = pd.read_sql_query(query, conn, params=params)
+                df.to_csv(filepath, index=False)
+                logger.info(f"Exported {len(df)} records to {filepath}")
+                return True
         except Exception as e:
             logger.error(f"Error exporting to CSV: {e}")
             return False
@@ -1020,8 +996,9 @@ Agile Coaching, Software Engineering]
     def get_candidate_by_id(self, candidate_id: int) -> pd.DataFrame:
         """Get a specific candidate by ID"""
         try:
-            query = "SELECT * FROM candidates WHERE id = %s"
-            return self._query_to_df(query, params=(candidate_id,))
+            query = "SELECT * FROM candidates WHERE id = ?"
+            with self.get_connection() as conn:
+                return pd.read_sql_query(query, conn, params=(candidate_id,))
         except Exception as e:
             logger.error(f"Error getting candidate by ID: {e}")
             return pd.DataFrame()
@@ -1034,13 +1011,14 @@ Agile Coaching, Software Engineering]
                 
             query = """
                 SELECT 
-                    CASE WHEN bias_score >= %s THEN 'Biased' ELSE 'Fair' END AS bias_category,
+                    CASE WHEN bias_score >= ? THEN 'Biased' ELSE 'Fair' END AS bias_category,
                     COUNT(*) AS count,
                     ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM candidates), 2) as percentage
                 FROM candidates
                 GROUP BY bias_category
             """
-            return self._query_to_df(query, params=(threshold,))
+            with self.get_connection() as conn:
+                return pd.read_sql_query(query, conn, params=(threshold,))
         except Exception as e:
             logger.error(f"Error getting bias distribution: {e}")
             return pd.DataFrame()
@@ -1053,12 +1031,13 @@ Agile Coaching, Software Engineering]
                        ROUND(AVG(ats_score), 2) AS avg_ats,
                        COUNT(*) as daily_count
                 FROM candidates
-                WHERE DATE(timestamp) >= CURRENT_DATE - INTERVAL '{} days'
+                WHERE DATE(timestamp) >= DATE('now', '-{} days')
                 GROUP BY DATE(timestamp)
                 ORDER BY DATE(timestamp)
             """.format(days_limit)
             
-            return self._query_to_df(query)
+            with self.get_connection() as conn:
+                return pd.read_sql_query(query, conn)
         except Exception as e:
             logger.error(f"Error getting daily ATS stats: {e}")
             return pd.DataFrame()
@@ -1072,10 +1051,11 @@ Agile Coaching, Software Engineering]
             query = """
                 SELECT resume_name, candidate_name, ats_score, bias_score, domain, timestamp
                 FROM candidates
-                WHERE bias_score > %s
+                WHERE bias_score > ?
                 ORDER BY bias_score DESC
             """
-            return self._query_to_df(query, params=(threshold,))
+            with self.get_connection() as conn:
+                return pd.read_sql_query(query, conn, params=(threshold,))
         except Exception as e:
             logger.error(f"Error getting flagged candidates: {e}")
             return pd.DataFrame()
@@ -1099,10 +1079,11 @@ Agile Coaching, Software Engineering]
                     ROUND(MAX(ats_score) - MIN(ats_score), 2) as score_range
                 FROM candidates
                 GROUP BY domain
-                HAVING COUNT(*) >= 1
+                HAVING total_candidates >= 1
                 ORDER BY avg_ats_score DESC
             """
-            return self._query_to_df(query)
+            with self.get_connection() as conn:
+                return pd.read_sql_query(query, conn)
         except Exception as e:
             logger.error(f"Error getting domain performance stats: {e}")
             return pd.DataFrame()
@@ -1119,10 +1100,11 @@ Agile Coaching, Software Engineering]
                     ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM candidates), 2) as percentage
                 FROM candidates
                 GROUP BY domain
-                HAVING COUNT(*) >= 1
+                HAVING frequency >= 1
                 ORDER BY frequency DESC
             """
-            return self._query_to_df(query)
+            with self.get_connection() as conn:
+                return pd.read_sql_query(query, conn)
         except Exception as e:
             logger.error(f"Error analyzing domain transitions: {e}")
             return pd.DataFrame()
@@ -1163,7 +1145,7 @@ Agile Coaching, Software Engineering]
                     'unique_domains': avg_stats[2] if avg_stats[2] else 0,
                     'earliest_date': date_range[0],
                     'latest_date': date_range[1],
-                    'database_size_mb': 0
+                    'database_size_mb': round(os.path.getsize(self.db_path) / (1024 * 1024), 2) if os.path.exists(self.db_path) else 0
                 }
         except Exception as e:
             logger.error(f"Error getting database stats: {e}")
@@ -1176,13 +1158,15 @@ Agile Coaching, Software Engineering]
                 cursor = conn.cursor()
                 cursor.execute("""
                     DELETE FROM candidates 
-                    WHERE DATE(timestamp) < CURRENT_DATE - INTERVAL '{} days'
+                    WHERE DATE(timestamp) < DATE('now', '-{} days')
                 """.format(days_to_keep))
                 deleted_count = cursor.rowcount
                 conn.commit()
                 
                 if deleted_count > 0:
                     logger.info(f"Cleaned up {deleted_count} old records")
+                    # Vacuum to reclaim space
+                    cursor.execute("VACUUM")
                     
                 return deleted_count
         except Exception as e:
@@ -1198,18 +1182,8 @@ Agile Coaching, Software Engineering]
             logger.info("All database connections closed")
 
 
-# --------------------------------------------------------------
-# Singleton DatabaseManager via st.cache_resource.
-# Streamlit caches this across ALL reruns for the lifetime of
-# the server process — so DatabaseManager.__init__ (and the
-# _initialize_database network call) runs EXACTLY ONCE, never
-# on tab switches, form submits, or button clicks.
-# --------------------------------------------------------------
-@st.cache_resource
-def _get_db_manager():
-    return DatabaseManager()
-
-db_manager = _get_db_manager()
+# Create global instance for backward compatibility
+db_manager = DatabaseManager()
 
 # Export functions for backward compatibility
 def detect_domain_from_title_and_description(job_title: str, job_description: str) -> str:
