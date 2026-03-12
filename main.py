@@ -7424,10 +7424,19 @@ with tab2:
                 cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
                 cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
 
-        # Only "Clear Form" stays inside the form so that pressing Enter
-        # in any text input does NOT accidentally trigger resume generation.
-        # The "Generate Resume" button lives OUTSIDE the form (see below).
-        clear_clicked = st.form_submit_button("🗑️ Clear Form", use_container_width=True)
+        # A hidden no-op button placed FIRST absorbs Enter-key submissions so
+        # pressing Enter in any text_input never fires "Generate Resume".
+        # The button is hidden via CSS injected just below the form.
+        st.form_submit_button("__enter_trap__", use_container_width=False)
+
+        btn_col1, btn_col2 = st.columns([1, 1])
+        with btn_col1:
+            submitted = st.form_submit_button("📑 Generate Resume", use_container_width=True)
+        with btn_col2:
+            clear_clicked = st.form_submit_button("🗑️ Clear Form", use_container_width=True)
+
+        if submitted:
+            st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
 
         if clear_clicked:
             # Reset only resume-related keys — do NOT clear() or rerun() as that
@@ -7450,11 +7459,18 @@ with tab2:
                 st.session_state.pop(_key, None)
             st.session_state["form_key_counter"] = _new_counter
 
-    # ── "Generate Resume" lives OUTSIDE the form so that pressing Enter
-    # inside any text/area input never accidentally fires it. ──────────
-    submitted = st.button("📑 Generate Resume", use_container_width=True, key="generate_resume_btn")
-    if submitted:
-        st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
+    # Hide the invisible Enter-trap submit button via CSS
+    st.markdown("""
+        <style>
+        /* Target the first stFormSubmitButton which is the Enter-trap dummy */
+        div[data-testid="stForm"] div[data-testid="stFormSubmitButton"]:first-of-type {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            overflow: hidden !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
     st.markdown("""
     <style>
