@@ -7424,11 +7424,6 @@ with tab2:
                 cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
                 cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
 
-        # A hidden no-op button placed FIRST absorbs Enter-key submissions so
-        # pressing Enter in any text_input never fires "Generate Resume".
-        # The button is hidden via CSS injected just below the form.
-        st.form_submit_button("__enter_trap__", use_container_width=False)
-
         btn_col1, btn_col2 = st.columns([1, 1])
         with btn_col1:
             submitted = st.form_submit_button("📑 Generate Resume", use_container_width=True)
@@ -7458,19 +7453,6 @@ with tab2:
                          "cover_letter_html", "encoded_profile_image"]:
                 st.session_state.pop(_key, None)
             st.session_state["form_key_counter"] = _new_counter
-
-    # Hide the invisible Enter-trap submit button via CSS
-    st.markdown("""
-        <style>
-        /* Target the first stFormSubmitButton which is the Enter-trap dummy */
-        div[data-testid="stForm"] div[data-testid="stFormSubmitButton"]:first-of-type {
-            display: none !important;
-            visibility: hidden !important;
-            height: 0 !important;
-            overflow: hidden !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
 
     st.markdown("""
     <style>
