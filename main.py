@@ -403,957 +403,78 @@ if "last_validated_password" not in st.session_state:
 # ------------------- CSS Styling -------------------
 st.markdown("""
 <style>
-/* ═══════════════════════════════════════════════════════════════
-   HIRELYZER — Premium Apple-Style Dark Theme
-   Font Stack: SF Pro Display → Segoe UI → Roboto → sans-serif
-   Design Language: Glassmorphism · Soft gradients · Refined motion
-   ═══════════════════════════════════════════════════════════════ */
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&family=Orbitron:wght@600&display=swap');
-
-:root {
-    --bg-primary:       #080c12;
-    --bg-secondary:     #0e1420;
-    --bg-tertiary:      #141c2b;
-    --surface-01:       rgba(255,255,255,0.04);
-    --surface-02:       rgba(255,255,255,0.07);
-    --surface-hover:    rgba(255,255,255,0.10);
-    --border-subtle:    rgba(255,255,255,0.07);
-    --border-accent:    rgba(99,179,237,0.30);
-    --accent-blue:      #4fa3e3;
-    --accent-cyan:      #38bdf8;
-    --accent-violet:    #818cf8;
-    --accent-emerald:   #34d399;
-    --accent-amber:     #fbbf24;
-    --accent-rose:      #fb7185;
-    --text-primary:     #f0f4f8;
-    --text-secondary:   #94a3b8;
-    --text-muted:       #4a5568;
-    --radius-sm:        8px;
-    --radius-md:        14px;
-    --radius-lg:        20px;
-    --radius-xl:        28px;
-    --shadow-glow-blue: 0 0 30px rgba(79,163,227,0.15);
-    --shadow-card:      0 8px 40px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.06) inset;
-    --font-sans:        -apple-system, BlinkMacSystemFont, "SF Pro Display", "DM Sans", "Segoe UI", Roboto, sans-serif;
-    --transition-fast:  0.18s cubic-bezier(0.4,0,0.2,1);
-    --transition-base:  0.28s cubic-bezier(0.4,0,0.2,1);
-    --transition-slow:  0.45s cubic-bezier(0.4,0,0.2,1);
+body, .main {
+    background-color: #0d1117;
+    color: white;
 }
 
-/* ── Base Reset ── */
-html, body, [class*="css"], .stApp {
-    font-family: var(--font-sans) !important;
-    background-color: var(--bg-primary) !important;
-    color: var(--text-primary) !important;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    scroll-behavior: smooth;
-}
-
-/* ── Force unified background — eliminates the horizontal seam glitch ── */
-.stApp > header,
-.stApp [data-testid="stAppViewContainer"],
-.stApp [data-testid="stAppViewBlockContainer"],
-.stApp [data-testid="block-container"],
-.main,
-.main > div,
-section[data-testid="stMain"],
-section[data-testid="stMain"] > div {
-    background-color: var(--bg-primary) !important;
-    background: var(--bg-primary) !important;
-}
-
-/* ── Streamlit top toolbar / header bar — the actual seam source ── */
-header[data-testid="stHeader"],
-header[data-testid="stHeader"] > div,
-header[data-testid="stHeader"] > div > div,
-.stApp header,
-div[data-testid="stToolbar"],
-div[data-testid="stStatusWidget"] {
-    background-color: var(--bg-primary) !important;
-    background: var(--bg-primary) !important;
-    border-bottom: none !important;
-    box-shadow: none !important;
-}
-
-/* ── Remove the decorative top colour bar Streamlit injects ── */
-div[data-testid="stDecoration"],
-#stDecoration {
-    background: var(--bg-primary) !important;
-    background-image: none !important;
-    display: none !important;
-}
-
-/* ── Scrollbar ── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-secondary); }
-::-webkit-scrollbar-thumb { background: rgba(79,163,227,0.35); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(79,163,227,0.6); }
-
-/* ── Main container ── */
-.main .block-container {
-    padding: 1.5rem 2rem 3rem !important;
-    max-width: 1280px;
-}
-
-/* ══════════════════════════════════════
-   FADE ANIMATIONS
-   ══════════════════════════════════════ */
-@keyframes fadein  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes fadeout { from { opacity: 1; } to { opacity: 0; } }
-@keyframes fadeSlideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes pulseGlow {
-    0%, 100% { box-shadow: var(--shadow-card); }
-    50%       { box-shadow: var(--shadow-card), var(--shadow-glow-blue); }
-}
-@keyframes shimmerSlide {
-    0%   { transform: translateX(-100%) skewX(-12deg); }
-    100% { transform: translateX(220%) skewX(-12deg); }
-}
-@keyframes glassShimmer {
-    0%   { transform: translateX(-100%) skewX(-15deg); }
-    100% { transform: translateX(200%) skewX(-15deg); }
-}
-@keyframes slideIn {
-    0%   { transform: translateX(-50px); opacity: 0; }
-    100% { transform: translateX(0); opacity: 1; }
-}
-@keyframes floatUp {
-    0%, 100% { transform: translateY(0); }
-    50%       { transform: translateY(-6px); }
-}
-
-/* ── Animated cards removed — replaced by premium hero section ── */
-
-/* ══════════════════════════════════════
-   STREAMLIT ALERT TOASTS
-   ══════════════════════════════════════ */
+/* Smooth fade animation for notifications */
 div.stAlert {
-    border-radius: var(--radius-md) !important;
-    padding: 12px 18px !important;
-    animation: fadein 0.3s ease, fadeout 0.3s 2.7s ease;
-    backdrop-filter: blur(20px);
-    border: 1px solid var(--border-subtle);
-    font-size: 0.875rem;
-    font-family: var(--font-sans) !important;
+    border-radius: 12px;
+    padding: 10px 14px;
+    animation: fadein 0.3s, fadeout 0.3s 2.7s;
+    text-align: center;
 }
+@keyframes fadein { from {opacity: 0;} to {opacity: 1;} }
+@keyframes fadeout { from {opacity: 1;} to {opacity: 0;} }
 
-/* ══════════════════════════════════════
-   GLASSMORPHISM CARD — base class
-   ══════════════════════════════════════ */
-.glass-card {
-    background: var(--surface-01);
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
-    transition: transform var(--transition-base), box-shadow var(--transition-base);
-    position: relative;
-    overflow: hidden;
-}
-.glass-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 60%);
-    pointer-events: none;
-    border-radius: inherit;
-}
-.glass-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-card), 0 0 50px rgba(79,163,227,0.10);
-    border-color: var(--border-accent);
-}
-
-/* ══════════════════════════════════════
-   LOGIN / AUTH CARD
-   ══════════════════════════════════════ */
 .login-card {
-    background: linear-gradient(160deg,
-        rgba(14,20,32,0.95) 0%,
-        rgba(8,12,18,0.98) 100%);
-    backdrop-filter: blur(32px) saturate(160%);
-    -webkit-backdrop-filter: blur(32px) saturate(160%);
-    border: 1px solid rgba(99,179,237,0.18);
-    border-radius: var(--radius-xl);
-    padding: 28px 32px 36px;
-    box-shadow: var(--shadow-card), 0 0 60px rgba(79,163,227,0.07);
-    transition: all var(--transition-slow);
-    position: relative;
-    overflow: hidden;
-    animation: fadeSlideUp 0.7s cubic-bezier(0.22,1,0.36,1) forwards;
-}
-.login-card::after {
-    content: '';
-    position: absolute;
-    top: 0; left: -100%;
-    width: 60%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(79,163,227,0.06), transparent);
-    animation: shimmerSlide 3.5s ease-in-out infinite;
+    background: #161b22;
+    padding: 30px;
+    border-radius: 20px;
+    box-shadow: 0 0 25px rgba(0,0,0,0.3);
+    transition: all 0.4s ease;
 }
 .login-card:hover {
-    border-color: rgba(99,179,237,0.32);
-    box-shadow: var(--shadow-card), 0 0 80px rgba(79,163,227,0.12);
+    transform: translateY(-6px) scale(1.01);
+    box-shadow: 0 0 45px rgba(0,255,255,0.25);
 }
-
-/* ══════════════════════════════════════
-   TEXT INPUTS & TEXTAREAS
-   ══════════════════════════════════════ */
-.stTextInput > div > div > input,
-.stTextArea > div > div > textarea,
-.stSelectbox > div > div > div {
-    background: rgba(255,255,255,0.04) !important;
-    color: var(--text-primary) !important;
-    border: 1px solid rgba(255,255,255,0.10) !important;
-    border-radius: var(--radius-sm) !important;
-    font-family: var(--font-sans) !important;
-    font-size: 0.9rem !important;
-    padding: 10px 14px !important;
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
+.stTextInput > div > input {
+    background-color: #0d1117;
+    color: white;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 0.6em;
 }
-.stTextInput > div > div > input:focus,
-.stTextArea > div > div > textarea:focus {
-    border-color: rgba(79,163,227,0.5) !important;
-    box-shadow: 0 0 0 3px rgba(79,163,227,0.12) !important;
-    outline: none !important;
+.stTextInput > div > input:hover {
+    border: 1px solid #00BFFF;
+    box-shadow: 0 0 8px rgba(0,191,255,0.2);
 }
-.stTextInput > div > div > input:hover,
-.stTextArea > div > div > textarea:hover {
-    border-color: rgba(79,163,227,0.28) !important;
+.stTextInput > label {
+    color: #c9d1d9;
 }
-.stTextInput > label,
-.stTextArea > label,
-.stSelectbox > label,
-.stSlider > label,
-.stFileUploader > label {
-    color: var(--text-secondary) !important;
-    font-size: 0.8rem !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.03em !important;
-    text-transform: uppercase !important;
-    font-family: var(--font-sans) !important;
-}
-
-/* ══════════════════════════════════════
-   BUTTONS — Primary style
-   ══════════════════════════════════════ */
 .stButton > button {
-    background: linear-gradient(135deg,
-        rgba(56,189,248,0.18) 0%,
-        rgba(79,163,227,0.12) 100%) !important;
-    color: var(--accent-cyan) !important;
-    border: 1px solid rgba(56,189,248,0.3) !important;
-    border-radius: var(--radius-sm) !important;
-    font-family: var(--font-sans) !important;
-    font-weight: 600 !important;
-    font-size: 0.875rem !important;
-    letter-spacing: 0.02em !important;
-    padding: 10px 22px !important;
-    backdrop-filter: blur(12px) !important;
-    box-shadow: 0 2px 12px rgba(56,189,248,0.08), inset 0 1px 0 rgba(255,255,255,0.08) !important;
-    transition: all var(--transition-fast) !important;
-    position: relative;
-    overflow: hidden;
+    background-color: #238636;
+    color: white;
+    border-radius: 10px;
+    padding: 0.6em 1.5em;
+    border: none;
+    font-weight: bold;
 }
 .stButton > button:hover {
-    background: linear-gradient(135deg,
-        rgba(56,189,248,0.28) 0%,
-        rgba(79,163,227,0.22) 100%) !important;
-    border-color: rgba(56,189,248,0.55) !important;
-    box-shadow: 0 4px 20px rgba(56,189,248,0.18), inset 0 1px 0 rgba(255,255,255,0.12) !important;
-    transform: translateY(-2px) !important;
-    color: #e0f6ff !important;
+    background-color: #2ea043;
+    box-shadow: 0 0 10px rgba(46,160,67,0.4);
+    transform: scale(1.02);
 }
-.stButton > button:active {
-    transform: translateY(0px) !important;
-    box-shadow: 0 1px 6px rgba(56,189,248,0.10) !important;
-}
-
-/* ══════════════════════════════════════
-   DOWNLOAD BUTTONS
-   ══════════════════════════════════════ */
-.stDownloadButton > button {
-    background: linear-gradient(135deg,
-        rgba(52,211,153,0.16) 0%,
-        rgba(52,211,153,0.08) 100%) !important;
-    color: var(--accent-emerald) !important;
-    border: 1px solid rgba(52,211,153,0.28) !important;
-    border-radius: var(--radius-sm) !important;
-    font-family: var(--font-sans) !important;
-    font-weight: 600 !important;
-    font-size: 0.875rem !important;
-    transition: all var(--transition-fast) !important;
-}
-.stDownloadButton > button:hover {
-    background: linear-gradient(135deg,
-        rgba(52,211,153,0.26) 0%,
-        rgba(52,211,153,0.16) 100%) !important;
-    transform: translateY(-2px) !important;
-    box-shadow: 0 4px 18px rgba(52,211,153,0.15) !important;
-}
-
-/* ══════════════════════════════════════
-   METRICS
-   ══════════════════════════════════════ */
-div[data-testid="metric-container"] {
-    background: var(--surface-01) !important;
-    border: 1px solid var(--border-subtle) !important;
-    border-radius: var(--radius-md) !important;
-    padding: 18px 20px !important;
-    backdrop-filter: blur(16px) !important;
-    transition: all var(--transition-base) !important;
-    animation: fadeSlideUp 0.5s ease forwards;
-}
-div[data-testid="metric-container"]:hover {
-    border-color: var(--border-accent) !important;
-    background: var(--surface-02) !important;
-    transform: translateY(-3px) !important;
-    box-shadow: var(--shadow-glow-blue) !important;
-}
-div[data-testid="metric-container"] label {
-    color: var(--text-secondary) !important;
-    font-size: 0.75rem !important;
-    font-weight: 600 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.06em !important;
-    font-family: var(--font-sans) !important;
-}
-div[data-testid="metric-container"] [data-testid="stMetricValue"] {
-    color: var(--text-primary) !important;
-    font-size: 1.75rem !important;
-    font-weight: 700 !important;
-    letter-spacing: -0.02em !important;
-    line-height: 1.2 !important;
-    font-family: var(--font-sans) !important;
-}
-
-/* ══════════════════════════════════════
-   TABS
-   ══════════════════════════════════════ */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 4px !important;
-    background: rgba(255,255,255,0.03) !important;
-    padding: 5px !important;
-    border-radius: var(--radius-md) !important;
-    border: 1px solid var(--border-subtle) !important;
-    backdrop-filter: blur(16px) !important;
-}
-.stTabs [data-baseweb="tab"] {
-    border-radius: var(--radius-sm) !important;
-    color: var(--text-secondary) !important;
-    font-family: var(--font-sans) !important;
-    font-weight: 500 !important;
-    font-size: 0.875rem !important;
-    padding: 9px 18px !important;
-    transition: all var(--transition-fast) !important;
-    border: none !important;
-    background: transparent !important;
-}
-.stTabs [aria-selected="true"] {
-    background: linear-gradient(135deg,
-        rgba(56,189,248,0.18) 0%,
-        rgba(79,163,227,0.12) 100%) !important;
-    color: var(--accent-cyan) !important;
-    font-weight: 600 !important;
-    border: 1px solid rgba(56,189,248,0.25) !important;
-    box-shadow: 0 2px 10px rgba(56,189,248,0.12) !important;
-}
-.stTabs [data-baseweb="tab-highlight"] { display: none !important; }
-.stTabs [data-baseweb="tab-panel"] {
-    background: transparent !important;
-    padding: 20px 0 !important;
-}
-
-/* ══════════════════════════════════════
-   DATAFRAME / TABLE
-   ══════════════════════════════════════ */
-.dataframe, .stDataFrame {
-    border-radius: var(--radius-md) !important;
-    overflow: hidden !important;
-    border: 1px solid var(--border-subtle) !important;
-}
-.stDataFrame [data-testid="stDataFrameResizable"] {
-    background: var(--bg-secondary) !important;
-}
-
-/* ══════════════════════════════════════
-   SIDEBAR
-   ══════════════════════════════════════ */
-section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg,
-        rgba(10,14,22,0.98) 0%,
-        rgba(8,12,18,1) 100%) !important;
-    border-right: 1px solid var(--border-subtle) !important;
-}
-section[data-testid="stSidebar"] .block-container {
-    padding: 1.5rem 1rem !important;
-}
-section[data-testid="stSidebar"] label {
-    color: var(--text-secondary) !important;
-    font-size: 0.8rem !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
-    font-weight: 600 !important;
-}
-section[data-testid="stSidebar"] .stTextInput > div > div > input,
-section[data-testid="stSidebar"] .stTextArea > div > div > textarea {
-    background: rgba(255,255,255,0.03) !important;
-    border-color: rgba(255,255,255,0.08) !important;
-}
-
-/* ══════════════════════════════════════
-   EXPANDER
-   ══════════════════════════════════════ */
-.streamlit-expanderHeader {
-    background: var(--surface-01) !important;
-    border: 1px solid var(--border-subtle) !important;
-    border-radius: var(--radius-md) !important;
-    color: var(--text-primary) !important;
-    font-family: var(--font-sans) !important;
-    font-weight: 500 !important;
-    transition: all var(--transition-fast) !important;
-}
-.streamlit-expanderHeader:hover {
-    background: var(--surface-hover) !important;
-    border-color: var(--border-accent) !important;
-}
-.streamlit-expanderContent {
-    background: rgba(255,255,255,0.02) !important;
-    border: 1px solid var(--border-subtle) !important;
-    border-top: none !important;
-    border-radius: 0 0 var(--radius-md) var(--radius-md) !important;
-}
-
-/* ══════════════════════════════════════
-   SLIDERS
-   ══════════════════════════════════════ */
-.stSlider [data-baseweb="slider"] [role="slider"] {
-    background: var(--accent-cyan) !important;
-    border: 2px solid var(--bg-primary) !important;
-    box-shadow: 0 0 0 3px rgba(56,189,248,0.3) !important;
-}
-.stSlider [data-baseweb="slider"] [data-testid="stTickBar"] > div {
-    background: rgba(56,189,248,0.6) !important;
-}
-
-/* ══════════════════════════════════════
-   FILE UPLOADER
-   ══════════════════════════════════════ */
-.stFileUploader > div {
-    background: var(--surface-01) !important;
-    border: 1.5px dashed rgba(79,163,227,0.3) !important;
-    border-radius: var(--radius-lg) !important;
-    transition: all var(--transition-base) !important;
-}
-.stFileUploader > div:hover {
-    border-color: rgba(79,163,227,0.6) !important;
-    background: rgba(79,163,227,0.04) !important;
-    box-shadow: 0 0 40px rgba(79,163,227,0.07) !important;
-}
-
-/* ══════════════════════════════════════
-   DIVIDER
-   ══════════════════════════════════════ */
-hr {
-    border: none !important;
-    border-top: 1px solid var(--border-subtle) !important;
-    margin: 28px 0 !important;
-}
-
-/* ══════════════════════════════════════
-   HEADINGS
-   ══════════════════════════════════════ */
-h1, h2, h3, h4, h5, h6,
-.stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
-    font-family: var(--font-sans) !important;
-    color: var(--text-primary) !important;
-    letter-spacing: -0.02em !important;
-    font-weight: 700 !important;
-}
-h1, .stMarkdown h1 { font-size: 2rem !important; }
-h2, .stMarkdown h2 { font-size: 1.4rem !important; }
-h3, .stMarkdown h3 {
-    font-size: 1.1rem !important;
-    color: var(--text-secondary) !important;
-    font-weight: 600 !important;
-}
-
-/* ══════════════════════════════════════
-   FEATURE CARDS (sidebar pre-login)
-   ══════════════════════════════════════ */
 .feature-card {
-    background: var(--surface-01);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    padding: 18px 16px;
-    margin-bottom: 12px;
-    transition: all var(--transition-base);
-    position: relative;
-    overflow: hidden;
-    animation: fadeSlideUp 0.5s ease forwards;
+    background: radial-gradient(circle at top left, #1f2937, #111827);
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 0 20px rgba(0,255,255,0.1);
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    color: #fff;
+    margin-bottom: 20px;
 }
-.feature-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: -100%;
-    width: 50%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(79,163,227,0.05), transparent);
-    transition: left 0.6s ease;
+.feature-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 0 30px rgba(0,255,255,0.4);
 }
-.feature-card:hover { transform: translateY(-4px); border-color: var(--border-accent); }
-.feature-card:hover::before { left: 150%; }
 .feature-card h3 {
-    color: var(--accent-cyan) !important;
-    font-size: 0.9rem !important;
-    font-weight: 600 !important;
-    margin: 8px 0 4px !important;
+    color: #00BFFF;
 }
 .feature-card p {
-    color: var(--text-secondary) !important;
-    font-size: 0.78rem !important;
-    line-height: 1.5 !important;
-    margin: 0 !important;
-}
-
-/* ══════════════════════════════════════
-   SLIDE MESSAGES (inline notifications)
-   ══════════════════════════════════════ */
-.slide-message {
-    position: relative;
-    overflow: hidden;
-    margin: 12px 0;
-    padding: 12px 18px;
-    border-radius: var(--radius-md);
-    font-weight: 500;
-    font-size: 0.875rem;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 10px;
-    animation: fadein 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.08);
-    width: 100%;
-    box-sizing: border-box;
-    font-family: var(--font-sans) !important;
-    transition: all var(--transition-fast);
-    min-height: 46px;
-}
-.slide-message:hover { transform: translateY(-2px); }
-.slide-message-text { flex: 1; position: relative; z-index: 2; word-wrap: break-word; }
-.success-msg {
-    background: linear-gradient(135deg, rgba(52,211,153,0.15) 0%, rgba(52,211,153,0.05) 100%);
-    border: 1px solid rgba(52,211,153,0.30);
-    color: #6ee7b7;
-}
-.error-msg {
-    background: linear-gradient(135deg, rgba(251,113,133,0.15) 0%, rgba(251,113,133,0.05) 100%);
-    border: 1px solid rgba(251,113,133,0.30);
-    color: #fca5a5;
-}
-.info-msg {
-    background: linear-gradient(135deg, rgba(56,189,248,0.15) 0%, rgba(56,189,248,0.05) 100%);
-    border: 1px solid rgba(56,189,248,0.30);
-    color: #7dd3fc;
-}
-.warn-msg {
-    background: linear-gradient(135deg, rgba(251,191,36,0.15) 0%, rgba(251,191,36,0.05) 100%);
-    border: 1px solid rgba(251,191,36,0.30);
-    color: #fde68a;
-}
-
-/* ══════════════════════════════════════
-   COUNTER GRID (landing page stats)
-   ══════════════════════════════════════ */
-.counter-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-    padding: 24px 0;
-    max-width: 520px;
-    margin: 0 auto;
-}
-.counter-box {
-    background: var(--surface-01);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    padding: 22px 18px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    position: relative;
-    overflow: hidden;
-    transition: all var(--transition-base);
-    animation: floatUp 4s ease-in-out infinite;
-}
-.counter-box::before {
-    content: '';
-    position: absolute;
-    top: 0; left: -100%;
-    width: 50%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(56,189,248,0.06), transparent);
-    animation: shimmerSlide 3s infinite;
-}
-.counter-box:hover {
-    transform: translateY(-6px) scale(1.02);
-    border-color: var(--border-accent);
-    box-shadow: 0 12px 40px rgba(56,189,248,0.10);
-}
-.counter-box:nth-child(1) { animation-delay: 0s; }
-.counter-box:nth-child(2) { animation-delay: 0.6s; }
-.counter-box:nth-child(3) { animation-delay: 1.2s; }
-.counter-box:nth-child(4) { animation-delay: 1.8s; }
-.counter-number {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--accent-cyan);
-    letter-spacing: -0.03em;
-    line-height: 1;
-    position: relative;
-    z-index: 2;
-    font-family: var(--font-sans);
-}
-.counter-label {
-    margin-top: 6px;
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    position: relative;
-    z-index: 2;
-    font-family: var(--font-sans);
-}
-
-/* ══════════════════════════════════════
-   ATS SECTION CARDS (analysis results)
-   ══════════════════════════════════════ */
-.ats-section-header {
-    background: linear-gradient(135deg,
-        rgba(56,189,248,0.14) 0%,
-        rgba(79,163,227,0.08) 100%);
-    border: 1px solid rgba(56,189,248,0.22);
-    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-    padding: 12px 18px;
-    font-family: var(--font-sans) !important;
-    font-weight: 700;
-    font-size: 0.875rem;
-    color: var(--accent-cyan);
-    letter-spacing: 0.02em;
-    text-transform: uppercase;
-}
-.ats-section-body {
-    background: rgba(255,255,255,0.025);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-top: none;
-    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-    padding: 16px 18px;
-    color: var(--text-secondary);
-    font-family: var(--font-sans) !important;
-    font-size: 0.875rem;
-    line-height: 1.65;
-    margin-bottom: 14px;
-}
-.score-badge {
-    display: inline-flex;
-    align-items: center;
-    background: linear-gradient(135deg, rgba(56,189,248,0.18) 0%, rgba(56,189,248,0.08) 100%);
-    border: 1px solid rgba(56,189,248,0.30);
-    border-radius: 99px;
-    padding: 4px 14px;
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--accent-cyan);
-    letter-spacing: 0.04em;
-    font-family: var(--font-sans);
-    margin-bottom: 10px;
-}
-
-/* ══════════════════════════════════════
-   WELCOME BANNER (post-login)
-   ══════════════════════════════════════ */
-.welcome-banner {
-    background: linear-gradient(135deg,
-        rgba(14,20,32,0.9) 0%,
-        rgba(10,16,26,0.95) 100%);
-    border: 1px solid rgba(56,189,248,0.15);
-    border-radius: var(--radius-lg);
-    padding: 24px 32px;
-    margin-bottom: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    animation: fadeSlideUp 0.6s ease forwards;
-    position: relative;
-    overflow: hidden;
-}
-.welcome-banner::before {
-    content: '';
-    position: absolute;
-    top: -50%; left: -20%;
-    width: 60%; height: 200%;
-    background: radial-gradient(ellipse, rgba(56,189,248,0.05) 0%, transparent 70%);
-    pointer-events: none;
-}
-.welcome-title {
-    font-family: var(--font-sans) !important;
-    font-size: 1.45rem !important;
-    font-weight: 700 !important;
-    letter-spacing: -0.025em !important;
-    color: var(--text-primary) !important;
-    line-height: 1.3 !important;
-}
-.welcome-subtitle {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin-top: 4px;
-    font-family: var(--font-sans);
-}
-.welcome-username {
-    color: var(--accent-cyan);
-    font-weight: 700;
-}
-
-/* ══════════════════════════════════════
-   ADMIN DASHBOARD
-   ══════════════════════════════════════ */
-.admin-header {
-    background: linear-gradient(135deg,
-        rgba(129,140,248,0.12) 0%,
-        rgba(99,102,241,0.06) 100%);
-    border: 1px solid rgba(129,140,248,0.20);
-    border-radius: var(--radius-md);
-    padding: 16px 24px;
-    margin-bottom: 24px;
-}
-.admin-header h2 {
-    color: var(--accent-violet) !important;
-    margin: 0 !important;
-    font-size: 1.2rem !important;
-}
-
-/* ══════════════════════════════════════
-   SECTION DIVIDER with label
-   ══════════════════════════════════════ */
-.section-label {
-    font-family: var(--font-sans) !important;
-    font-size: 0.72rem !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.12em !important;
-    text-transform: uppercase !important;
-    color: var(--text-muted) !important;
-    margin-bottom: 12px !important;
-    padding-bottom: 8px !important;
-    border-bottom: 1px solid var(--border-subtle) !important;
-}
-
-/* ══════════════════════════════════════
-   SPINNER
-   ══════════════════════════════════════ */
-.stSpinner > div {
-    border-top-color: var(--accent-cyan) !important;
-}
-
-/* ══════════════════════════════════════
-   TIMER DISPLAY
-   ══════════════════════════════════════ */
-.timer-display {
-    background: linear-gradient(135deg,
-        rgba(251,191,36,0.12) 0%,
-        rgba(251,191,36,0.05) 100%);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(251,191,36,0.28);
-    border-radius: var(--radius-md);
-    padding: 16px 24px;
-    margin: 18px 0;
-    text-align: center;
-    box-shadow: 0 4px 20px rgba(251,191,36,0.08), inset 0 1px 0 rgba(255,255,255,0.06);
-    transition: all var(--transition-base);
-    position: relative;
-    overflow: hidden;
-}
-.timer-display::before {
-    content: '';
-    position: absolute;
-    top: 0; left: -100%;
-    width: 50%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(251,191,36,0.08), transparent);
-    animation: shimmerSlide 3s infinite;
-}
-.timer-display:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(251,191,36,0.12); }
-.timer-text {
-    color: var(--accent-amber);
-    font-size: 1rem;
-    font-weight: 700;
-    font-family: var(--font-sans);
-    letter-spacing: 0.04em;
-    position: relative;
-    z-index: 2;
-}
-.timer-expired { 
-    background: linear-gradient(135deg, rgba(251,113,133,0.12) 0%, rgba(251,113,133,0.05) 100%);
-    border-color: rgba(251,113,133,0.28);
-}
-.timer-expired .timer-text { color: var(--accent-rose); }
-
-/* ══════════════════════════════════════
-   BANNER / MARQUEE (tab1 dashboard)
-   ══════════════════════════════════════ */
-.banner-container {
-    width: 100%;
-    height: 60px;
-    background: linear-gradient(90deg,
-        rgba(8,12,18,1) 0%,
-        rgba(14,20,32,0.9) 50%,
-        rgba(8,12,18,1) 100%);
-    border: 1px solid var(--border-subtle);
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    position: relative;
-    margin-bottom: 24px;
-    border-radius: var(--radius-md);
-    backdrop-filter: blur(20px);
-}
-.pulse-bar {
-    position: absolute;
-    display: flex;
-    align-items: center;
-    font-size: 0.9rem;
-    font-weight: 600;
-    font-family: var(--font-sans);
-    color: var(--accent-cyan);
-    white-space: nowrap;
-    letter-spacing: 0.04em;
-    animation: glideIn 14s linear infinite;
-}
-.pulse-bar .bar {
-    width: 3px;
-    height: 18px;
-    margin-right: 12px;
-    background: var(--accent-cyan);
-    border-radius: 2px;
-    box-shadow: 0 0 8px var(--accent-cyan);
-    animation: pulse 1s ease-in-out infinite;
-}
-@keyframes glideIn {
-    0%   { left: -40%; opacity: 0; }
-    8%   { opacity: 1; }
-    92%  { opacity: 1; }
-    100% { left: 110%; opacity: 0; }
-}
-@keyframes pulse {
-    0%, 100% { height: 14px; background: var(--accent-cyan); }
-    50%       { height: 22px; background: var(--accent-violet); }
-}
-
-/* ══════════════════════════════════════
-   HEADER BOX (dashboard title area)
-   ══════════════════════════════════════ */
-.header {
-    font-size: 1.5rem;
-    font-weight: 700;
-    text-align: center;
-    letter-spacing: -0.02em;
-    padding: 20px 28px;
-    color: var(--text-primary);
-    position: relative;
-    overflow: hidden;
-    border-radius: var(--radius-md);
-    background: linear-gradient(135deg,
-        rgba(14,20,32,0.8) 0%,
-        rgba(10,16,26,0.9) 100%);
-    border: 1px solid rgba(56,189,248,0.18);
-    box-shadow: var(--shadow-card);
-    font-family: var(--font-sans);
-}
-.header span { color: var(--accent-cyan); }
-.header::before {
-    content: '';
-    position: absolute;
-    top: 0; left: -100%;
-    width: 50%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(56,189,248,0.05), transparent);
-    transition: left 0.7s ease;
-}
-.header:hover::before { left: 150%; }
-
-/* ══════════════════════════════════════
-   ANALYSIS RESULT CARDS
-   ══════════════════════════════════════ */
-.result-card {
-    background: var(--surface-01);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    padding: 20px;
-    margin-bottom: 14px;
-    transition: all var(--transition-base);
-    animation: fadeSlideUp 0.5s ease forwards;
-    position: relative;
-    overflow: hidden;
-}
-.result-card::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 3px;
-    background: linear-gradient(180deg, var(--accent-cyan) 0%, var(--accent-violet) 100%);
-    border-radius: 0 0 0 var(--radius-md);
-}
-.result-card:hover {
-    border-color: var(--border-accent);
-    background: var(--surface-02);
-    transform: translateX(3px);
-}
-
-/* ══════════════════════════════════════
-   DARK STREAMLIT OVERRIDES
-   ══════════════════════════════════════ */
-.stMarkdown p, .stText {
-    color: var(--text-secondary) !important;
-    font-family: var(--font-sans) !important;
-    font-size: 0.9rem !important;
-    line-height: 1.65 !important;
-}
-.stMarkdown strong { color: var(--text-primary) !important; }
-.stMarkdown code {
-    background: rgba(255,255,255,0.06) !important;
-    color: var(--accent-cyan) !important;
-    border-radius: 4px !important;
-    padding: 2px 6px !important;
-    font-size: 0.83rem !important;
-}
-.stInfo, .stSuccess, .stWarning, .stError {
-    border-radius: var(--radius-md) !important;
-    font-family: var(--font-sans) !important;
-    font-size: 0.875rem !important;
-}
-
-/* Caption */
-.stCaption {
-    color: var(--text-muted) !important;
-    font-size: 0.78rem !important;
-    font-family: var(--font-sans) !important;
-}
-
-/* ══════════════════════════════════════
-   FILE UPLOADER INNER LABEL
-   ══════════════════════════════════════ */
-.stFileUploader [data-testid="stFileUploaderDropzone"] {
-    background: rgba(56,189,248,0.02) !important;
-}
-.stFileUploader [data-testid="stFileUploaderDropzone"] span {
-    color: var(--text-secondary) !important;
-    font-family: var(--font-sans) !important;
+    color: #c9d1d9;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1365,37 +486,8 @@ if not st.session_state.authenticated:
 
     # -------- Sidebar --------
     with st.sidebar:
-        st.markdown("""
-        <div style="
-            padding: 16px 4px 20px;
-            border-bottom: 1px solid rgba(255,255,255,0.07);
-            margin-bottom: 16px;
-        ">
-            <div style="
-                font-family: var(--font-sans, -apple-system, sans-serif);
-                font-size: 1.1rem;
-                font-weight: 700;
-                letter-spacing: -0.02em;
-                color: #f0f4f8;
-                line-height: 1.2;
-            ">HIRELYZER</div>
-            <div style="
-                font-size: 0.72rem;
-                font-weight: 600;
-                letter-spacing: 0.1em;
-                text-transform: uppercase;
-                color: #38bdf8;
-                margin-top: 3px;
-            ">AI Resume Intelligence</div>
-        </div>
-        <p style="
-            color: #64748b;
-            font-size: 0.8rem;
-            line-height: 1.55;
-            font-family: var(--font-sans, -apple-system, sans-serif);
-            margin-bottom: 16px;
-        ">Transform your career with AI-powered resume analysis, job matching, and smart insights.</p>
-        """, unsafe_allow_html=True)
+        st.markdown("<h1 style='color:#00BFFF;'>Smart Resume AI</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#c9d1d9;'>Transform your career with AI-powered resume analysis, job matching, and smart insights.</p>", unsafe_allow_html=True)
 
         features = [
             ("https://img.icons8.com/fluency/48/resume.png", "Resume Analyzer", "Get feedback, scores, and tips powered by AI along with the biased words detection and rewriting the resume in an inclusive way."),
@@ -1414,336 +506,567 @@ if not st.session_state.authenticated:
             </div>
             """, unsafe_allow_html=True)
 
-    # -------- Premium Hero Section --------
-    # Fetch live stats for subtle ribbon
+    # -------- Animated Cards --------
+    image_url = "https://cdn-icons-png.flaticon.com/512/3135/3135768.png"
+    response = requests.get(image_url)
+    img_base64 = b64encode(response.content).decode()
+
+    st.markdown(f"""
+    <style>
+    .animated-cards {{
+      margin-top: 30px;
+      display: flex;
+      justify-content: center;
+      position: relative;
+      height: 300px;
+    }}
+    .animated-cards img {{
+      position: absolute;
+      width: 240px;
+      animation: splitCards 2.5s ease-in-out infinite alternate;
+      z-index: 1;
+    }}
+    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
+    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
+    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
+    @keyframes splitCards {{
+      0% {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
+      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
+    }}
+    .card-left {{ --x-offset: -80px; --rot: -5deg; }}
+    .card-center {{ --x-offset: 0px; --rot: 0deg; }}
+    .card-right {{ --x-offset: 80px; --rot: 5deg; }}
+    </style>
+    <div class="animated-cards">
+        <img class="card-left" src="data:image/png;base64,{img_base64}" />
+        <img class="card-center" src="data:image/png;base64,{img_base64}" />
+        <img class="card-right" src="data:image/png;base64,{img_base64}" />
+    </div>
+    """, unsafe_allow_html=True)
+
+    # -------- Counter Section (Updated Layout & Style with glassmorphism and shimmer) --------
+
+    # Fetch counters
     total_users = get_total_registered_users()
     active_logins = get_logins_today()
     stats = get_database_stats()
+
+# Replace static 15 with dynamic count
     resumes_uploaded = stats.get("total_candidates", 0)
+
     active_domains = stats.get("unique_domains", 0)
 
-    # ── Hero HTML (no script — Streamlit strips <script> from st.markdown) ──
-    st.markdown(f"""
+
+    glassmorphism_counter_style = """
     <style>
-    .hero-section {{
+    @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+    }
+    
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-5px); }
+    }
+
+    .counter-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 250px);
+        column-gap: 40px;
+        row-gap: 25px;
+        justify-content: center;
+        padding: 30px 10px;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .counter-box {
+        background: linear-gradient(135deg, 
+            rgba(0, 191, 255, 0.1) 0%, 
+            rgba(30, 144, 255, 0.05) 50%, 
+            rgba(0, 191, 255, 0.1) 100%);
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
+        border: 1px solid rgba(0, 191, 255, 0.2);
+        border-radius: 16px;
+        width: 100%;
+        height: 120px;
         display: flex;
         flex-direction: column;
-        align-items: center;
         justify-content: center;
-        padding: 36px 24px 14px;
+        align-items: center;
         position: relative;
         overflow: hidden;
-    }}
-    .hero-section::before {{
+        transition: all 0.3s ease;
+        animation: float 3s ease-in-out infinite;
+    }
+
+    .counter-box::before {
         content: '';
         position: absolute;
-        top: -60px; left: 50%;
-        transform: translateX(-50%);
-        width: 520px; height: 320px;
-        background: radial-gradient(ellipse, rgba(56,189,248,0.08) 0%, transparent 70%);
-        pointer-events: none;
-        z-index: 0;
-    }}
-    .hero-brand {{
-        position: relative;
-        z-index: 2;
-        text-align: center;
-        margin-bottom: 18px;
-        animation: fadeSlideUp 0.7s cubic-bezier(0.22,1,0.36,1) both;
-    }}
-    .hero-wordmark {{
-        font-size: 3rem;
-        font-weight: 800;
-        letter-spacing: -0.04em;
-        line-height: 1;
-        color: #f0f4f8;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "DM Sans", sans-serif;
-    }}
-    .hero-wordmark span {{
-        background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }}
-    .hero-tagline {{
-        margin-top: 8px;
-        font-size: 0.8rem;
-        color: #334155;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        font-weight: 500;
-    }}
-    .hero-pills-container {{
-        display: inline-flex;
-        gap: 6px;
-        flex-wrap: wrap;
-        justify-content: center;
-        align-items: center;
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 99px;
-        padding: 6px 10px;
-        margin-bottom: 32px;
-        position: relative;
-        z-index: 2;
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        animation: fadeSlideUp 1s cubic-bezier(0.22,1,0.36,1) 0.25s both;
-    }}
-    .hero-pill {{
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        padding: 4px 11px;
-        border-radius: 99px;
-        background: transparent;
-        font-size: 0.75rem;
-        font-weight: 500;
-        color: #64748b;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        letter-spacing: 0.01em;
-        transition: color 0.2s ease;
-    }}
-    .hero-pill:hover {{
-        color: #38bdf8;
-    }}
-    .hero-pill-dot {{
-        width: 5px; height: 5px;
-        border-radius: 50%;
-        background: #38bdf8;
-        opacity: 0.55;
-        flex-shrink: 0;
-    }}
-    .hero-pill-sep {{
-        width: 1px; height: 12px;
-        background: rgba(255,255,255,0.10);
-        flex-shrink: 0;
-        align-self: center;
-    }}
-    .hero-stat-ribbon {{
-        display: inline-flex;
-        gap: 0;
-        justify-content: center;
-        align-items: stretch;
-        position: relative;
-        z-index: 2;
-        margin-bottom: 8px;
-        background: rgba(255,255,255,0.025);
-        border: 1px solid rgba(255,255,255,0.07);
-        border-radius: 16px;
-        padding: 0;
-        overflow: hidden;
-        animation: fadeSlideUp 1.1s cubic-bezier(0.22,1,0.36,1) 0.35s both;
-    }}
-    .hero-stat-item {{
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 16px 28px;
-        gap: 2px;
-        transition: background 0.2s ease;
-    }}
-    .hero-stat-item:hover {{
-        background: rgba(56,189,248,0.05);
-    }}
-    .hero-stat-item:not(:last-child) {{
-        border-right: 1px solid rgba(255,255,255,0.07);
-    }}
-    .hero-stat-num {{
-        font-size: 1.4rem;
-        font-weight: 700;
-        color: #f0f4f8;
-        letter-spacing: -0.03em;
-        line-height: 1;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-    }}
-    .hero-stat-icon {{
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px; height: 28px;
-        border-radius: 8px;
-        background: rgba(56,189,248,0.08);
-        border: 1px solid rgba(56,189,248,0.15);
-        margin-bottom: 4px;
-        flex-shrink: 0;
-    }}
-    .hero-stat-lbl {{
-        font-size: 0.65rem;
-        color: #4a5568;
-        text-transform: uppercase;
-        letter-spacing: 0.09em;
-        font-weight: 600;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    }}
-    </style>
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(0, 191, 255, 0.3),
+            transparent
+        );
+        animation: shimmer 2s infinite;
+    }
 
-    <div class="hero-section">
-        <div class="hero-brand">
-            <div class="hero-wordmark">HIRE<span>LYZER</span></div>
-            <div class="hero-tagline">AI-Powered Resume Intelligence Platform</div>
+    .counter-box:hover {
+        transform: translateY(-8px) scale(1.02);
+        background: linear-gradient(135deg, 
+            rgba(0, 191, 255, 0.15) 0%, 
+            rgba(30, 144, 255, 0.08) 50%, 
+            rgba(0, 191, 255, 0.15) 100%);
+        border: 1px solid rgba(0, 191, 255, 0.4);
+        box-shadow: 
+            0 20px 40px rgba(0, 191, 255, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .counter-box:nth-child(1) { animation-delay: 0s; }
+    .counter-box:nth-child(2) { animation-delay: 0.5s; }
+    .counter-box:nth-child(3) { animation-delay: 1s; }
+    .counter-box:nth-child(4) { animation-delay: 1.5s; }
+
+    .counter-number {
+        font-size: 2.2em;
+        font-weight: bold;
+        color: #00BFFF;
+        margin: 0;
+        position: relative;
+        z-index: 2;
+        text-shadow: 0 0 20px rgba(0, 191, 255, 0.5);
+    }
+
+    .counter-label {
+        margin-top: 8px;
+        font-size: 1em;
+        color: #c9d1d9;
+        position: relative;
+        z-index: 2;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+    </style>
+    """
+
+    st.markdown(glassmorphism_counter_style, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="counter-grid">
+        <div class="counter-box">
+            <div class="counter-number">{total_users}</div>
+            <div class="counter-label">Total Users</div>
         </div>
-        <div class="hero-pills-container">
-            <div class="hero-pill"><span class="hero-pill-dot"></span>Bias Detection</div>
-            <div class="hero-pill-sep"></div>
-            <div class="hero-pill"><span class="hero-pill-dot"></span>ATS Scoring</div>
-            <div class="hero-pill-sep"></div>
-            <div class="hero-pill"><span class="hero-pill-dot"></span>Resume Builder</div>
-            <div class="hero-pill-sep"></div>
-            <div class="hero-pill"><span class="hero-pill-dot"></span>Job Matching</div>
-            <div class="hero-pill-sep"></div>
-            <div class="hero-pill"><span class="hero-pill-dot"></span>AI Coach</div>
+        <div class="counter-box">
+            <div class="counter-number">{active_domains}</div>
+            <div class="counter-label">Active Domains</div>
         </div>
-        <div class="hero-stat-ribbon">
-            <div class="hero-stat-item">
-                <div class="hero-stat-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="7" r="4" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.12)"/>
-                        <path d="M4 20c0-4 3.582-7 8-7s8 3 8 7" stroke="#38bdf8" stroke-width="1.8" stroke-linecap="round"/>
-                    </svg>
-                </div>
-                <div class="hero-stat-num">{total_users}</div>
-                <div class="hero-stat-lbl">Users</div>
-            </div>
-            <div class="hero-stat-item">
-                <div class="hero-stat-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="4" y="2" width="16" height="20" rx="2" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.08)"/>
-                        <path d="M8 7h8M8 11h8M8 15h5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
-                    </svg>
-                </div>
-                <div class="hero-stat-num">{resumes_uploaded}</div>
-                <div class="hero-stat-lbl">Resumes Analysed</div>
-            </div>
-            <div class="hero-stat-item">
-                <div class="hero-stat-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="12" cy="12" r="9" stroke="#38bdf8" stroke-width="1.8" fill="rgba(56,189,248,0.08)"/>
-                        <path d="M12 3v18M3 12h18" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/>
-                    </svg>
-                </div>
-                <div class="hero-stat-num">{active_domains}</div>
-                <div class="hero-stat-lbl">Domains</div>
-            </div>
-            <div class="hero-stat-item">
-                <div class="hero-stat-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M13 2L4.5 13.5H12L11 22L19.5 10.5H12L13 2Z" stroke="#38bdf8" stroke-width="1.8" stroke-linejoin="round" fill="rgba(56,189,248,0.12)"/>
-                    </svg>
-                </div>
-                <div class="hero-stat-num">{active_logins}</div>
-                <div class="hero-stat-lbl">Active Today</div>
-            </div>
+        <div class="counter-box">
+            <div class="counter-number">{resumes_uploaded}</div>
+            <div class="counter-label">Resumes Uploaded</div>
+        </div>
+        <div class="counter-box">
+            <div class="counter-number">{active_logins}</div>
+            <div class="counter-label">Active Sessions</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Typewriter animation via components.html (scripts work here) ──
-    st.components.v1.html("""
-    <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
-    .tw-wrap {
-        text-align: center;
-        padding: 4px 0 8px;
-        width: 100%;
-    }
-    .tw-text {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #38bdf8;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-        letter-spacing: -0.01em;
-        border-right: 2px solid #38bdf8;
-        white-space: nowrap;
-        display: inline-block;
-        max-width: 100%;
-        animation: twBlink 1s ease-in-out infinite;
-        background: transparent;
-        vertical-align: middle;
-    }
-    @keyframes twBlink {
-        0%, 100% { border-color: #38bdf8; }
-        50%       { border-color: transparent; }
-    }
-    </style>
-    <div class="tw-wrap"><span class="tw-text" id="tw">&nbsp;</span></div>
-    <script>
-    (function() {
-        var phrases = [
-            "Analyse resumes with zero bias.",
-            "Score smarter. Hire better.",
-            "AI that reads between the lines.",
-            "Ethical hiring starts here.",
-            "10x faster resume screening."
-        ];
-        var idx = 0, charIdx = 0, deleting = false;
-        var el = document.getElementById('tw');
-        function tick() {
-            var phrase = phrases[idx];
-            if (!deleting) {
-                el.textContent = phrase.slice(0, ++charIdx);
-                if (charIdx === phrase.length) { deleting = true; setTimeout(tick, 1800); return; }
-            } else {
-                el.textContent = phrase.slice(0, --charIdx);
-                if (charIdx === 0) { deleting = false; idx = (idx + 1) % phrases.length; }
-            }
-            setTimeout(tick, deleting ? 38 : 62);
-        }
-        setTimeout(tick, 600);
-    })();
-    </script>
-    """, height=44, scrolling=False)
-
 if not st.session_state.get("authenticated", False):
+
+    # ✅ Futuristic silhouette
+    image_url = "https://cdn-icons-png.flaticon.com/512/4140/4140047.png"
+    response = requests.get(image_url)
+    img_base64 = b64encode(response.content).decode()
+
+    # ✅ Inject glassmorphism CSS with shimmer effects
+    st.markdown(f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600&display=swap');
+
+    @keyframes shimmer {{
+        0% {{ background-position: -200% 0; }}
+        100% {{ background-position: 200% 0; }}
+    }}
+
+    @keyframes glassShimmer {{
+        0% {{ transform: translateX(-100%) skewX(-15deg); }}
+        100% {{ transform: translateX(200%) skewX(-15deg); }}
+    }}
+
+    /* ===== Card Shuffle Animation ===== */
+    .animated-cards {{
+      margin-top: 40px;
+      display: flex;
+      justify-content: center;
+      position: relative;
+      height: 260px;
+    }}
+    .animated-cards img {{
+      position: absolute;
+      width: 220px;
+      animation: splitCards 2.5s ease-in-out infinite alternate;
+      z-index: 1;
+      filter: drop-shadow(0 0 15px rgba(0,191,255,0.3));
+    }}
+    .animated-cards img:nth-child(1) {{ animation-delay: 0s; z-index: 3; }}
+    .animated-cards img:nth-child(2) {{ animation-delay: 0.3s; z-index: 2; }}
+    .animated-cards img:nth-child(3) {{ animation-delay: 0.6s; z-index: 1; }}
+
+    @keyframes splitCards {{
+      0%   {{ transform: scale(1) translateX(0) rotate(0deg); opacity: 1; }}
+      100% {{ transform: scale(1) translateX(var(--x-offset)) rotate(var(--rot)); opacity: 1; }}
+    }}
+    .card-left   {{ --x-offset: -80px; --rot: -4deg; }}
+    .card-center {{ --x-offset: 0px;  --rot: 0deg;  }}
+    .card-right  {{ --x-offset: 80px;  --rot: 4deg;  }}
+
+    /* ===== Glassmorphism Login Card ===== */
+    .login-card {{
+      background: linear-gradient(135deg,
+        rgba(0, 191, 255, 0.1) 0%,
+        rgba(30, 144, 255, 0.05) 50%,
+        rgba(0, 191, 255, 0.1) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 191, 255, 0.2);
+      border-radius: 20px;
+      padding: 25px;
+      box-shadow:
+        0 8px 32px rgba(0, 191, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      font-family: 'Orbitron', sans-serif;
+      color: white;
+      margin-top: 20px;
+      opacity: 0;
+      transform: translateX(-120%);
+      animation: slideInLeft 1.2s ease-out forwards;
+      position: relative;
+      overflow: hidden;
+    }}
+
+    .login-card::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(0, 191, 255, 0.2),
+        transparent
+      );
+      animation: glassShimmer 3s infinite;
+    }}
+
+    @keyframes slideInLeft {{
+      0%   {{ transform: translateX(-120%); opacity: 0; }}
+      100% {{ transform: translateX(0); opacity: 1; }}
+    }}
+
+    .login-card h2 {{
+      text-align: center;
+      font-size: 1.6rem;
+      text-shadow: 0 0 15px rgba(0, 191, 255, 0.5);
+      margin-bottom: 15px;
+      position: relative;
+      z-index: 2;
+    }}
+    .login-card h2 span {{ color: #00BFFF; }}
+
+    /* ===== Enhanced Message Cards with Consistent Layout ===== */
+    .slide-message {{
+      position: relative;
+      overflow: hidden;
+      margin: 16px 0;
+      padding: 14px 20px;
+      border-radius: 14px;
+      font-weight: 600;
+      font-size: 0.95em;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 12px;
+      animation: slideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      line-height: 1.5;
+      font-family: 'Orbitron', sans-serif;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      min-height: 50px;
+    }}
+
+    .slide-message:hover {{
+      transform: translateY(-3px) scale(1.01);
+      box-shadow:
+        0 8px 30px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }}
+
+    .slide-message::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.1),
+        transparent
+      );
+      transition: left 0.5s;
+    }}
+
+    .slide-message:hover::before {{
+      left: 100%;
+    }}
+
+    .slide-message svg {{
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      filter: drop-shadow(0 0 6px currentColor);
+      z-index: 2;
+    }}
+
+    .slide-message-text {{
+      flex: 1;
+      z-index: 2;
+      position: relative;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      white-space: normal;
+    }}
+
+    .success-msg {{
+      background: linear-gradient(135deg,
+        rgba(0, 255, 127, 0.20) 0%,
+        rgba(0, 255, 127, 0.08) 100%);
+      border: 2px solid rgba(0, 255, 127, 0.4);
+      color: #00FF7F;
+      text-shadow: 0 0 12px rgba(0, 255, 127, 0.4);
+    }}
+
+    .error-msg {{
+      background: linear-gradient(135deg,
+        rgba(255, 99, 71, 0.20) 0%,
+        rgba(255, 99, 71, 0.08) 100%);
+      border: 2px solid rgba(255, 99, 71, 0.4);
+      color: #FF6347;
+      text-shadow: 0 0 12px rgba(255, 99, 71, 0.4);
+    }}
+
+    .info-msg {{
+      background: linear-gradient(135deg,
+        rgba(30, 144, 255, 0.20) 0%,
+        rgba(30, 144, 255, 0.08) 100%);
+      border: 2px solid rgba(30, 144, 255, 0.4);
+      color: #1E90FF;
+      text-shadow: 0 0 12px rgba(30, 144, 255, 0.4);
+    }}
+
+    .warn-msg {{
+      background: linear-gradient(135deg,
+        rgba(255, 215, 0, 0.20) 0%,
+        rgba(255, 215, 0, 0.08) 100%);
+      border: 2px solid rgba(255, 215, 0, 0.4);
+      color: #FFD700;
+      text-shadow: 0 0 12px rgba(255, 215, 0, 0.4);
+    }}
+
+    @keyframes slideIn {{
+      0%   {{
+        transform: translateX(-50px);
+        opacity: 0;
+      }}
+      100% {{
+        transform: translateX(0);
+        opacity: 1;
+      }}
+    }}
+
+    /* ===== Improved Timer Display ===== */
+    .timer-display {{
+      background: linear-gradient(135deg,
+        rgba(255, 215, 0, 0.18) 0%,
+        rgba(255, 165, 0, 0.08) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border: 2px solid rgba(255, 215, 0, 0.4);
+      border-radius: 14px;
+      padding: 16px 24px;
+      margin: 20px 0;
+      text-align: center;
+      box-shadow:
+        0 4px 20px rgba(255, 215, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }}
+
+    .timer-display::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 215, 0, 0.2),
+        transparent
+      );
+      animation: glassShimmer 3s infinite;
+    }}
+
+    .timer-display:hover {{
+      box-shadow:
+        0 8px 30px rgba(255, 215, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      transform: translateY(-3px);
+    }}
+
+    .timer-text {{
+      color: #FFD700;
+      font-size: 1.15em;
+      font-weight: bold;
+      font-family: 'Orbitron', sans-serif;
+      text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
+      position: relative;
+      z-index: 2;
+    }}
+
+    .timer-expired {{
+      background: linear-gradient(135deg,
+        rgba(255, 99, 71, 0.18) 0%,
+        rgba(255, 99, 71, 0.08) 100%);
+      border: 2px solid rgba(255, 99, 71, 0.4);
+    }}
+
+    .timer-expired .timer-text {{
+      color: #FF6347;
+      text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
+    }}
+
+    /* ===== Glassmorphism Buttons ===== */
+    .stButton>button {{
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.2) 0%, 
+        rgba(30, 144, 255, 0.1) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      color: white;
+      border: 1px solid rgba(0, 191, 255, 0.3);
+      border-radius: 12px;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: bold;
+      padding: 8px 20px;
+      box-shadow: 
+        0 4px 16px rgba(0, 191, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }}
+    
+    .stButton>button::before {{
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.2),
+        transparent
+      );
+      transition: left 0.5s;
+    }}
+    
+    .stButton>button:hover {{
+      transform: translateY(-2px);
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.3) 0%, 
+        rgba(30, 144, 255, 0.15) 100%);
+      border: 1px solid rgba(0, 191, 255, 0.5);
+      box-shadow: 
+        0 8px 25px rgba(0, 191, 255, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }}
+    
+    .stButton>button:hover::before {{
+      left: 100%;
+    }}
+
+    /* ===== Glassmorphism Input Fields ===== */
+    .stTextInput input {{
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.08) 0%, 
+        rgba(30, 144, 255, 0.04) 100%);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border: 1px solid rgba(0, 191, 255, 0.2);
+      border-radius: 10px;
+      padding: 10px;
+      color: #E0F7FF;
+      font-family: 'Orbitron', sans-serif;
+      box-shadow: 
+        0 4px 16px rgba(0, 191, 255, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transition: all 0.3s ease-in-out;
+    }}
+    .stTextInput input:focus {{
+      outline: none !important;
+      background: linear-gradient(135deg, 
+        rgba(0, 191, 255, 0.12) 0%, 
+        rgba(30, 144, 255, 0.06) 100%);
+      border: 1px solid rgba(0, 191, 255, 0.4);
+      box-shadow: 
+        0 8px 25px rgba(0, 191, 255, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transform: translateY(-1px);
+    }}
+    .stTextInput label {{
+      font-family: 'Orbitron', sans-serif;
+      color: #00BFFF !important;
+      text-shadow: 0 0 10px rgba(0, 191, 255, 0.3);
+    }}
+    </style>
+
+    <!-- Animated Cards -->
+    <div class="animated-cards">
+        <img class="card-left" src="data:image/png;base64,{img_base64}" />
+        <img class="card-center" src="data:image/png;base64,{img_base64}" />
+        <img class="card-right" src="data:image/png;base64,{img_base64}" />
+    </div>
+    """, unsafe_allow_html=True)
 
     # -------- Login/Register Layout --------
     left, center, right = st.columns([1, 2, 1])
 
     with center:
         st.markdown(
-            """<div class='login-card'>
-            <div style='text-align:center; margin-bottom:12px;'>
-                <div style='display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:10px; background:rgba(79,140,255,0.12); border:1px solid rgba(79,140,255,0.22); margin-bottom:12px;'>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="5" y="11" width="14" height="10" rx="2" stroke="#4f8cff" stroke-width="1.5" fill="rgba(79,140,255,0.12)"/>
-                        <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#4f8cff" stroke-width="1.5" stroke-linecap="round"/>
-                        <circle cx="12" cy="16" r="1.2" fill="#4f8cff"/>
-                    </svg>
-                </div>
-            </div>
-            <h2 id='auth-heading' style='text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:1.3rem; font-weight:700; letter-spacing:-0.025em; color:#e6edf3; margin:0 0 18px 0;'>Sign in to <span style='color:#4f8cff;'>HIRELYZER</span></h2>
-            <script>
-            (function() {
-                function updateHeading() {
-                    var tabs = window.parent.document.querySelectorAll('[data-baseweb="tab"]');
-                    var heading = window.parent.document.getElementById('auth-heading');
-                    if (!heading || tabs.length < 2) return;
-                    var activeTab = window.parent.document.querySelector('[data-baseweb="tab"][aria-selected="true"]');
-                    if (activeTab) {
-                        var label = activeTab.textContent.trim().toLowerCase();
-                        if (label === 'register') {
-                            heading.innerHTML = 'Register to <span style="color:#4f8cff;">HIRELYZER</span>';
-                        } else {
-                            heading.innerHTML = 'Sign in to <span style="color:#4f8cff;">HIRELYZER</span>';
-                        }
-                    }
-                    tabs.forEach(function(tab) {
-                        tab.addEventListener('click', function() {
-                            setTimeout(updateHeading, 80);
-                        });
-                    });
-                }
-                setTimeout(updateHeading, 400);
-                var observer = new MutationObserver(function() { updateHeading(); });
-                setTimeout(function() {
-                    var tabBar = window.parent.document.querySelector('[data-baseweb="tab-list"]');
-                    if (tabBar) observer.observe(tabBar, { attributes: true, subtree: true, attributeFilter: ['aria-selected'] });
-                }, 600);
-            })();
-            </script>""",
+            "<div class='login-card'><h2 style='text-align:center;'>🔐 Login to <span style='color:#00BFFF;'>HIRELYZER</span></h2>",
             unsafe_allow_html=True,
         )
 
@@ -1754,15 +1077,15 @@ if not st.session_state.get("authenticated", False):
             # Show login or forgot password flow based on reset_stage
             if st.session_state.reset_stage == "none":
                 # Normal Login UI
-                st.markdown("""<h3 style='color:#9aa4af; text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:0.82rem; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:24px;'>Welcome Back</h3>""", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Login to Your Account</h3>", unsafe_allow_html=True)
 
-                user = st.text_input("Username or Email", key="login_user")
-                pwd = st.text_input("Password", type="password", key="login_pass")
+                user = st.text_input("👤 Username or Email", key="login_user")
+                pwd = st.text_input("🔑 Password", type="password", key="login_pass")
 
                 # Render notification area (reserves space)
                 render_notification("login")
 
-                if st.button("Sign In", key="login_btn", use_container_width=True):
+                if st.button("🚀 Login", key="login_btn", use_container_width=True):
                     success, saved_key = verify_user(user.strip(), pwd.strip())
                     if success:
                         st.session_state.authenticated = True
@@ -1781,7 +1104,7 @@ if not st.session_state.get("authenticated", False):
                 st.markdown("<br>", unsafe_allow_html=True)
 
                 # Forgot Password Link
-                if st.button("Forgot Password?", key="forgot_pw_link"):
+                if st.button("🔑 Forgot Password?", key="forgot_pw_link"):
                     st.session_state.reset_stage = "request_email"
                     st.rerun()
 
@@ -1789,10 +1112,10 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 1: Request Email
             # ============================================================
             elif st.session_state.reset_stage == "request_email":
-                st.markdown("""<h3 style='color:#9aa4af; text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:0.82rem; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:16px;'>Reset Password</h3>""", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your registered email to receive an OTP</p>", unsafe_allow_html=True)
 
-                email_input = st.text_input("Email Address", key="reset_email_input")
+                email_input = st.text_input("📧 Email Address", key="reset_email_input")
 
                 # Render notification area (reserves space)
                 render_notification("login")
@@ -1834,9 +1157,7 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 2: Verify OTP
             # ============================================================
             elif st.session_state.reset_stage == "verify_otp":
-                st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16v16H4z" rx="2" stroke="#38bdf8" stroke-width="1.5" fill="none"/><path d="M4 9h16" stroke="#38bdf8" stroke-width="1.5"/><path d="M8 4v5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/><path d="M16 4v5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/></svg>
-                    Verify OTP</h3>""", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📩 Verify OTP</h3>", unsafe_allow_html=True)
                 st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.reset_email}</strong></p>", unsafe_allow_html=True)
 
                 # Calculate elapsed and remaining time (server-side)
@@ -1906,13 +1227,11 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 3: Reset Password
             # ============================================================
             elif st.session_state.reset_stage == "reset_password":
-                st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M12 3a4 4 0 0 1 4 4v1H8V7a4 4 0 0 1 4-4z" stroke="#38bdf8" stroke-width="1.5" fill="none"/><rect x="5" y="11" width="14" height="10" rx="2" stroke="#38bdf8" stroke-width="1.5" fill="rgba(56,189,248,0.08)"/><circle cx="12" cy="16" r="1.5" fill="#38bdf8"/></svg>
-                    Set New Password</h3>""", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🔐 Reset Password</h3>", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your new password</p>", unsafe_allow_html=True)
 
-                new_password = st.text_input("New Password", type="password", key="new_password_input")
-                confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password_input")
+                new_password = st.text_input("🔑 New Password", type="password", key="new_password_input")
+                confirm_password = st.text_input("🔑 Confirm Password", type="password", key="confirm_password_input")
 
                 st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
 
@@ -1956,9 +1275,7 @@ if not st.session_state.get("authenticated", False):
         with register_tab:
             # Check if OTP was sent and pending verification
             if 'pending_registration' in st.session_state:
-                st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#38bdf8" stroke-width="1.5" fill="none"/><path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.5"/></svg>
-                    Verify Your Email</h3>""", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>📧 Verify Your Email</h3>", unsafe_allow_html=True)
                 st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.pending_registration['email']}</strong></p>", unsafe_allow_html=True)
 
                 # Calculate remaining time
@@ -2167,28 +1484,10 @@ if not st.session_state.get("authenticated", False):
 
 # ------------------- AFTER LOGIN -------------------
 if st.session_state.get("authenticated"):
-    st.markdown(f"""
-    <div class="welcome-banner">
-        <div>
-            <div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span> 👋</div>
-            <div class="welcome-subtitle">HIRELYZER — AI-Powered Resume Intelligence Platform</div>
-        </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-            <div style="
-                background: linear-gradient(135deg, rgba(52,211,153,0.15) 0%, rgba(52,211,153,0.06) 100%);
-                border: 1px solid rgba(52,211,153,0.25);
-                border-radius: 99px;
-                padding: 5px 14px;
-                font-size: 0.75rem;
-                font-weight: 600;
-                color: #6ee7b7;
-                letter-spacing: 0.04em;
-                text-transform: uppercase;
-                font-family: var(--font-sans);
-            ">● Live</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f"<h2 style='color:#00BFFF;'>Welcome to HIRELYZER, <span style='color:white;'>{st.session_state.username}</span> 👋</h2>",
+        unsafe_allow_html=True,
+    )
 
     # 🔓 LOGOUT BUTTON
     if st.button("🚪 Logout"):
@@ -2202,19 +1501,7 @@ if st.session_state.get("authenticated"):
         st.rerun()  # Force rerun to prevent stale UI
 
     # 🔑 GROQ API KEY SECTION (SIDEBAR)
-    st.sidebar.markdown("""
-    <p style='
-        font-size: 0.72rem;
-        font-weight: 700;
-        letter-spacing: 0.10em;
-        text-transform: uppercase;
-        color: #4a5568;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
-        padding-bottom: 8px;
-        margin-bottom: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-    '>🔑 Groq API Key</p>
-    """, unsafe_allow_html=True)
+    st.sidebar.markdown("### 🔑 Groq API Key")
 
     # ✅ Load saved key from DB
     saved_key = get_user_api_key(st.session_state.username)
@@ -2244,11 +1531,8 @@ if st.session_state.get("authenticated"):
         st.sidebar.success("✅ Cleared saved Groq API key. Now using shared admin key.")
 
 if st.session_state.username == "admin":
-    st.markdown("""
-    <div class="admin-header">
-        <h2>⬡ Admin Control Panel</h2>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#00BFFF;'>📊 Admin Dashboard</h2>", unsafe_allow_html=True)
 
     # Metrics row
     col1, col2 = st.columns(2)
@@ -2259,7 +1543,7 @@ if st.session_state.username == "admin":
 
     # Removed API key usage section (no longer tracked)
     # Activity log
-    st.markdown("<p class='section-label'>📋 Activity Log</p>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color:#00BFFF;'>📋 Admin Activity Log</h3>", unsafe_allow_html=True)
     logs = get_all_user_logs()
     if logs:
         st.dataframe(
@@ -3719,19 +3003,7 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # ---------------- Sidebar Layout with Inline Images ----------------
-st.sidebar.markdown("""
-<p style='
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.10em;
-    text-transform: uppercase;
-    color: #4a5568;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    padding-bottom: 8px;
-    margin-bottom: 12px;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-'>🏷️ Job Configuration</p>
-""", unsafe_allow_html=True)
+st.sidebar.markdown("### 🏷️ Job Information")
 
 # ---------------- Job Information Dropdown ----------------
 with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Enter Job Details", expanded=False):
@@ -3765,21 +3037,20 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
     if total_weight != 100:
         st.markdown(
             f"""
-            <div style="display:flex;align-items:center;gap:8px;
-                        border:1px solid rgba(251,113,133,0.3);
-                        background:linear-gradient(135deg,rgba(251,113,133,0.12) 0%,rgba(251,113,133,0.05) 100%);
-                        padding:10px 14px;
-                        border-radius:10px;
-                        backdrop-filter:blur(12px);">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#fb7185" viewBox="0 0 24 24">
+            <div style="display:flex;align-items:center;gap:6px;
+                        border:1px solid #fca5a5;
+                        background:#fee2e2;
+                        padding:8px;
+                        border-radius:6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="red" viewBox="0 0 24 24">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10
                              10-4.48 10-10S17.52 2 12 2zm0 15
                              c-.83 0-1.5.67-1.5 1.5S11.17 20
                              12 20s1.5-.67 1.5-1.5S12.83 17
                              12 17zm1-4V7h-2v6h2z"/>
                 </svg>
-                <span style="color:#fca5a5;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;">
-                    Total = {total_weight}. Adjust to exactly 100.
+                <span style="color:#b91c1c;font-weight:500;">
+                    Total = {total_weight}. Please make it exactly 100.
                 </span>
             </div>
             """,
@@ -3788,18 +3059,17 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
     else:
         st.markdown(
             f"""
-            <div style="display:flex;align-items:center;gap:8px;
-                        border:1px solid rgba(52,211,153,0.28);
-                        background:linear-gradient(135deg,rgba(52,211,153,0.12) 0%,rgba(52,211,153,0.05) 100%);
-                        padding:10px 14px;
-                        border-radius:10px;
-                        backdrop-filter:blur(12px);">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#34d399" viewBox="0 0 24 24">
+            <div style="display:flex;align-items:center;gap:6px;
+                        border:1px solid #86efac;
+                        background:#dcfce7;
+                        padding:8px;
+                        border-radius:6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="green" viewBox="0 0 24 24">
                     <path d="M9 16.2l-3.5-3.5-1.4 1.4L9
                              19 20.3 7.7l-1.4-1.4z"/>
                 </svg>
-                <span style="color:#6ee7b7;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;">
-                    Weights balanced · Total = 100
+                <span style="color:#166534;font-weight:500;">
+                    Total weight = 100
                 </span>
             </div>
             """,
@@ -3807,7 +3077,36 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
         )
 
 with tab1:
-    # Slide message styles already defined in global CSS — no extra block needed
+    # 🎨 CSS for sliding success message
+    st.markdown("""
+    <style>
+    .slide-message {
+      position: relative;
+      overflow: hidden;
+      margin: 10px 0;
+      padding: 10px 15px;
+      border-radius: 10px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      animation: slideIn 0.8s ease forwards;
+    }
+    .slide-message svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+    .success-msg { background: rgba(0,255,127,0.12); border-left: 5px solid #00FF7F; color:#00FF7F; }
+    .error-msg   { background: rgba(255,99,71,0.12);  border-left: 5px solid #FF6347; color:#FF6347; }
+    .warn-msg    { background: rgba(255,215,0,0.12); border-left: 5px solid #FFD700; color:#FFD700; }
+
+    @keyframes slideIn {
+      0%   { transform: translateX(100%); opacity: 0; }
+      100% { transform: translateX(0); opacity: 1; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     uploaded_files = st.file_uploader(
         "📄 Upload PDF Resumes",
@@ -4434,7 +3733,7 @@ with tab1:
         avg_bias = round(np.mean([r.get("Bias Score (0 = Fair, 1 = Biased)", 0) for r in resume_data]), 2)
         total_resumes = len(resume_data)
 
-        st.markdown("<p class='section-label'>📊 Session Summary</p>", unsafe_allow_html=True)
+        st.markdown("### 📊 Summary Statistics")
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("📄 Resumes Uploaded", total_resumes)
@@ -4445,7 +3744,7 @@ with tab1:
         with col4:
             st.metric("🔴 Total Feminine Words", total_fem)
 
-        st.markdown("<p class='section-label'>🗂️ Resumes Overview</p>", unsafe_allow_html=True)
+        st.markdown("### 🗂️ Resumes Overview")
         df = pd.DataFrame(resume_data)
 
         # ✅ Add calculated count columns safely
@@ -4460,44 +3759,27 @@ with tab1:
 
         st.dataframe(df[overview_cols], use_container_width=True)
 
-        st.markdown("<p class='section-label'>📊 Visual Analysis</p>", unsafe_allow_html=True)
+        st.markdown("### 📊 Visual Analysis")
         chart_tab1, chart_tab2 = st.tabs(["📉 Bias Score Chart", "⚖ Gender-Coded Words"])
         with chart_tab1:
             st.subheader("Bias Score Comparison Across Resumes")
-            bias_chart_df = df[["Resume Name", "Bias Score (0 = Fair, 1 = Biased)"]].copy()
-            bias_chart_df.columns = ["Resume", "Bias Score"]
-            bias_altair = alt.Chart(bias_chart_df).mark_bar(
-                cornerRadiusTopLeft=4,
-                cornerRadiusTopRight=4,
-                color="#4f8cff"
-            ).encode(
-                x=alt.X("Resume:N", sort=None, axis=alt.Axis(labelAngle=-35, labelFontSize=11, titleFontSize=12)),
-                y=alt.Y("Bias Score:Q", scale=alt.Scale(domain=[0, 1]), axis=alt.Axis(titleFontSize=12)),
-                tooltip=["Resume", alt.Tooltip("Bias Score:Q", format=".2f")]
-            ).properties(height=260).configure_view(strokeWidth=0).configure_axis(
-                grid=False, domainColor="#2d3748"
-            )
-            st.altair_chart(bias_altair, use_container_width=True)
+            st.bar_chart(df.set_index("Resume Name")[["Bias Score (0 = Fair, 1 = Biased)"]])
         with chart_tab2:
             st.subheader("Masculine vs Feminine Word Usage")
-            gender_df = pd.DataFrame({
-                "Resume": list(df["Resume Name"]) * 2,
-                "Type": ["Masculine"] * len(df) + ["Feminine"] * len(df),
-                "Count": list(df["Masculine Words Count"]) + list(df["Feminine Words Count"])
-            })
-            color_scale = alt.Scale(domain=["Masculine", "Feminine"], range=["#4f8cff", "#fb7185"])
-            gender_altair = alt.Chart(gender_df).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
-                x=alt.X("Resume:N", sort=None, axis=alt.Axis(labelAngle=-35, labelFontSize=11, titleFontSize=12)),
-                y=alt.Y("Count:Q", axis=alt.Axis(titleFontSize=12)),
-                color=alt.Color("Type:N", scale=color_scale, legend=alt.Legend(orient="top", titleFontSize=11)),
-                xOffset="Type:N",
-                tooltip=["Resume", "Type", "Count"]
-            ).properties(height=260).configure_view(strokeWidth=0).configure_axis(
-                grid=False, domainColor="#2d3748"
-            )
-            st.altair_chart(gender_altair, use_container_width=True)
+            fig, ax = plt.subplots(figsize=(10, 5))
+            index = np.arange(len(df))
+            bar_width = 0.35
+            ax.bar(index, df["Masculine Words Count"], bar_width, label="Masculine", color="#3498db")
+            ax.bar(index + bar_width, df["Feminine Words Count"], bar_width, label="Feminine", color="#e74c3c")
+            ax.set_xlabel("Resumes", fontsize=12)
+            ax.set_ylabel("Word Count", fontsize=12)
+            ax.set_title("Gender-Coded Word Usage per Resume", fontsize=14)
+            ax.set_xticks(index + bar_width / 2)
+            ax.set_xticklabels(df["Resume Name"], rotation=45, ha='right')
+            ax.legend()
+            st.pyplot(fig)
 
-        st.markdown("<p class='section-label'>📝 Detailed Resume Reports</p>", unsafe_allow_html=True)
+        st.markdown("### 📝 Detailed Resume Reports")
         for resume in resume_data:
             candidate_name = resume.get("Candidate Name", "Not Found")
             resume_name = resume.get("Resume Name", "Unknown")
@@ -4505,76 +3787,36 @@ with tab1:
             missing_skills = resume.get("Missing Skills", [])
 
             with st.expander(f"📄 {resume_name} | {candidate_name}"):
-                st.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, rgba(56,189,248,0.10) 0%, rgba(79,163,227,0.05) 100%);
-                    border: 1px solid rgba(56,189,248,0.18);
-                    border-radius: 14px;
-                    padding: 18px 22px;
-                    margin-bottom: 20px;
-                ">
-                    <div style="
-                        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-                        font-size: 1rem;
-                        font-weight: 700;
-                        color: #f0f4f8;
-                        letter-spacing: -0.01em;
-                    ">ATS Evaluation — <span style='color:#38bdf8;'>{candidate_name}</span></div>
-                    <div style="font-size:0.75rem; color:#64748b; margin-top:4px; font-family: -apple-system, sans-serif; text-transform:uppercase; letter-spacing:0.05em;">Resume Intelligence Report</div>
-                </div>
-                """, unsafe_allow_html=True)
-                def ats_card(icon, label, value, tooltip=None):
-                    tooltip_attr = f'title="{tooltip}"' if tooltip else ""
-                    tooltip_style = "cursor:help;" if tooltip else ""
-                    return f"""
-                    <div style="
-                        background: rgba(15,23,42,0.85);
-                        border: 1px solid rgba(56,189,248,0.25);
-                        border-radius: 12px;
-                        padding: 14px 16px;
-                        margin-bottom: 8px;
-                        min-width: 0;
-                        box-sizing: border-box;
-                        height: 80px;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        overflow: hidden;
-                    ">
-                        <div style="font-size:0.75rem; color:#94a3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{icon} {label}</div>
-                        <div {tooltip_attr} style="font-size:1.4rem; font-weight:700; color:#f0f4f8; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; {tooltip_style}">{value}</div>
-                    </div>"""
-
+                st.markdown(f"### 📊 ATS Evaluation for: **{candidate_name}**")
                 score_col1, score_col2, score_col3 = st.columns(3)
-                formatted_val = resume.get("Formatted Score", "N/A")
                 with score_col1:
-                    st.markdown(ats_card("📈", "Overall Match", f"{resume.get('ATS Match %', 'N/A')}%"), unsafe_allow_html=True)
+                    st.metric("📈 Overall Match", f"{resume.get('ATS Match %', 'N/A')}%")
                 with score_col2:
-                    st.markdown(ats_card("🏆", "Formatted Score", formatted_val, tooltip=formatted_val), unsafe_allow_html=True)
+                    st.metric("🏆 Formatted Score", resume.get("Formatted Score", "N/A"))
                 with score_col3:
-                    st.markdown(ats_card("🧠", "Language Quality", f"{resume.get('Language Score', 'N/A')} / {lang_weight}"), unsafe_allow_html=True)
+                    st.metric("🧠 Language Quality", f"{resume.get('Language Score', 'N/A')} / {lang_weight}")
 
                 col_a, col_b, col_c, col_d = st.columns(4)
                 with col_a:
-                    st.markdown(ats_card("🎓", "Education Score", f"{resume.get('Education Score', 'N/A')} / {edu_weight}"), unsafe_allow_html=True)
+                    st.metric("🎓 Education Score", f"{resume.get('Education Score', 'N/A')} / {edu_weight}")
                 with col_b:
-                    st.markdown(ats_card("💼", "Experience Score", f"{resume.get('Experience Score', 'N/A')} / {exp_weight}"), unsafe_allow_html=True)
+                    st.metric("💼 Experience Score", f"{resume.get('Experience Score', 'N/A')} / {exp_weight}")
                 with col_c:
-                    st.markdown(ats_card("🛠", "Skills Score", f"{resume.get('Skills Score', 'N/A')} / {skills_weight}"), unsafe_allow_html=True)
+                    st.metric("🛠 Skills Score", f"{resume.get('Skills Score', 'N/A')} / {skills_weight}")
                 with col_d:
-                    st.markdown(ats_card("🔍", "Keyword Score", f"{resume.get('Keyword Score', 'N/A')} / {keyword_weight}"), unsafe_allow_html=True)
+                    st.metric("🔍 Keyword Score", f"{resume.get('Keyword Score', 'N/A')} / {keyword_weight}")
 
                 # Fit summary
-                st.markdown("<p class='section-label'>📝 Fit Summary</p>", unsafe_allow_html=True)
+                st.markdown("### 📝 Fit Summary")
                 st.write(resume.get('Final Thoughts', 'N/A'))
 
                 # ATS Report
                 if resume.get("ATS Report"):
-                    st.markdown("<p class='section-label'>📋 ATS Evaluation Report</p>", unsafe_allow_html=True)
+                    st.markdown("### 📋 ATS Evaluation Report")
                     st.markdown(resume["ATS Report"], unsafe_allow_html=True)
 
                 # ATS Chart
-                st.markdown("<p class='section-label'>📊 ATS Score Breakdown</p>", unsafe_allow_html=True)
+                st.markdown("### 📊 ATS Score Breakdown Chart")
                 ats_df = pd.DataFrame({
                     'Component': ['Education', 'Experience', 'Skills', 'Language', 'Keywords'],
                     'Score': [
@@ -4597,14 +3839,15 @@ with tab1:
                 )
                 st.altair_chart(ats_chart, use_container_width=True)
 
-                st.markdown("<p class='section-label'>🔍 Detailed ATS Section Analyses</p>", unsafe_allow_html=True)
+                # 🔷 Detailed ATS Analysis Cards
+                st.markdown("### 🔍 Detailed ATS Section Analyses")
                 for section_title, key in [
                     ("🏫 Education Analysis", "Education Analysis"),
                     ("💼 Experience Analysis", "Experience Analysis"),
                     ("🛠 Skills Analysis", "Skills Analysis"),
-                    ("🗣 Language Quality", "Language Analysis"),
+                    ("🗣 Language Quality Analysis", "Language Analysis"),
                     ("🔑 Keyword Analysis", "Keyword Analysis"),
-                    ("✅ Final Assessment", "Final Thoughts")
+                    ("✅ Final Thoughts", "Final Thoughts")
                 ]:
                     analysis_content = resume.get(key, "N/A")
                     if "**Score:**" in analysis_content:
@@ -4612,14 +3855,18 @@ with tab1:
                         rest = parts[1].split("**", 1)
                         score_text = rest[0].strip()
                         remaining = rest[1].strip() if len(rest) > 1 else ""
-                        score_html = f"<span class='score-badge'>Score: {score_text}</span>"
-                        body_html = f"{score_html}<div style='margin-top:8px;'>{remaining}</div>"
+                        formatted_score = f"<div style='background:#4c1d95;color:white;padding:8px;border-radius:6px;margin-bottom:5px;'><b>Score:</b> {score_text}</div>"
+                        analysis_html = formatted_score + f"<p>{remaining}</p>"
                     else:
-                        body_html = f"<div>{analysis_content}</div>"
+                        analysis_html = f"<p>{analysis_content}</p>"
 
                     st.markdown(f"""
-<div class="ats-section-header">{section_title}</div>
-<div class="ats-section-body">{body_html}</div>
+<div style="background:#5b3cc4; color:white; padding:10px; border-radius:6px;">
+  <h3>{section_title}</h3>
+</div>
+<div style="background:#2d2d3a; color:white; padding:10px; border-radius:6px;">
+{analysis_html}
+</div>
 """, unsafe_allow_html=True)
 
                 st.divider()
@@ -4627,16 +3874,16 @@ with tab1:
                 detail_tab1, detail_tab2 = st.tabs(["🔎 Bias Analysis", "✅ Rewritten Resume"])
 
                 with detail_tab1:
-                    st.markdown("<p class='section-label'>🔍 Bias-Highlighted Original Text</p>", unsafe_allow_html=True)
+                    st.markdown("#### Bias-Highlighted Original Text")
                     st.markdown(resume["Highlighted Text"], unsafe_allow_html=True)
 
-                    st.markdown("<p class='section-label'>📌 Gender-Coded Word Counts</p>", unsafe_allow_html=True)
+                    st.markdown("### 📌 Gender-Coded Word Counts:")
                     bias_col1, bias_col2 = st.columns(2)
 
                     with bias_col1:
                         st.metric("🔵 Masculine Words", len(resume["Detected Masculine Words"]))
                         if resume["Detected Masculine Words"]:
-                            st.markdown("<p class='section-label'>Masculine Words with Context</p>", unsafe_allow_html=True)
+                            st.markdown("### 📚 Detected Masculine Words with Context:")
                             for item in resume["Detected Masculine Words"]:
                                 word = item['word']
                                 sentence = item['sentence']
@@ -4647,7 +3894,7 @@ with tab1:
                     with bias_col2:
                         st.metric("🔴 Feminine Words", len(resume["Detected Feminine Words"]))
                         if resume["Detected Feminine Words"]:
-                            st.markdown("<p class='section-label'>Feminine Words with Context</p>", unsafe_allow_html=True)
+                            st.markdown("### 📚 Detected Feminine Words with Context:")
                             for item in resume["Detected Feminine Words"]:
                                 word = item['word']
                                 sentence = item['sentence']
@@ -4656,7 +3903,7 @@ with tab1:
                             st.info("No feminine words detected.")
 
                 with detail_tab2:
-                    st.markdown("<p class='section-label'>✨ Bias-Free Rewritten Resume</p>", unsafe_allow_html=True)
+                    st.markdown("#### ✨ Bias-Free Rewritten Resume")
                     st.write(resume["Rewritten Text"])
                     docx_file = generate_docx(resume["Rewritten Text"])
                     st.download_button(
