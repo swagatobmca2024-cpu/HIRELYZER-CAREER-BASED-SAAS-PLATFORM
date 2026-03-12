@@ -91,8 +91,10 @@ from user_login import (
 )
 
 # ============================================================
-# 💾 Database is hosted on Supabase PostgreSQL
+# 💾 Persistent Storage Configuration for Streamlit Cloud
 # ============================================================
+os.makedirs(".streamlit_storage", exist_ok=True)
+DB_PATH = os.path.join(".streamlit_storage", "resume_data.db")
 
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
@@ -250,10 +252,8 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
         st.markdown(cover_letter_html, unsafe_allow_html=True)
 
 # ------------------- Initialize -------------------
-# ✅ Initialize database tables only once per session
-if "db_initialized" not in st.session_state:
-    create_user_table()
-    st.session_state.db_initialized = True
+# ✅ Initialize database in persistent storage
+create_user_table()
 
 # ------------------- Tab-Specific Notification System -------------------
 if "login_notification" not in st.session_state:
@@ -1415,35 +1415,12 @@ if not st.session_state.authenticated:
             """, unsafe_allow_html=True)
 
     # -------- Premium Hero Section --------
-    # Stats are cached with a 60-second TTL so they stay fresh after new resumes
-    # are analysed, but don't fire a Supabase round-trip on every keystroke rerun.
-    _now = time.time()
-    _cache = st.session_state.get("hero_stats_cache", {})
-    if not _cache or (_now - _cache.get("_ts", 0)) > 60:
-        try:
-            _stats = get_database_stats()
-            _resumes = _stats.get("total_candidates", 0)
-            _domains = _stats.get("unique_domains", 0)
-        except Exception:
-            _resumes = _cache.get("resumes_uploaded", 0)
-            _domains = _cache.get("active_domains", 0)
-        try:
-            _users = get_total_registered_users()
-            _logins = get_logins_today()
-        except Exception:
-            _users = _cache.get("total_users", 0)
-            _logins = _cache.get("active_logins", 0)
-        st.session_state.hero_stats_cache = {
-            "_ts": _now,
-            "total_users": _users,
-            "active_logins": _logins,
-            "resumes_uploaded": _resumes,
-            "active_domains": _domains,
-        }
-    total_users = st.session_state.hero_stats_cache["total_users"]
-    active_logins = st.session_state.hero_stats_cache["active_logins"]
-    resumes_uploaded = st.session_state.hero_stats_cache["resumes_uploaded"]
-    active_domains = st.session_state.hero_stats_cache["active_domains"]
+    # Fetch live stats for subtle ribbon
+    total_users = get_total_registered_users()
+    active_logins = get_logins_today()
+    stats = get_database_stats()
+    resumes_uploaded = stats.get("total_candidates", 0)
+    active_domains = stats.get("unique_domains", 0)
 
     # ── Hero HTML (no script — Streamlit strips <script> from st.markdown) ──
     st.markdown(f"""
@@ -1795,6 +1772,7 @@ if not st.session_state.get("authenticated", False):
                         log_user_action(st.session_state.username, "login")
 
                         notify("login", "success", "✅ Login successful!")
+                        time.sleep(3.0)
                         st.rerun()
                     else:
                         notify("login", "error", "❌ Invalid credentials. Please try again.")
@@ -1835,6 +1813,7 @@ if not st.session_state.get("authenticated", False):
                                     st.session_state.reset_stage = "verify_otp"
 
                                     notify("login", "success", "✅ OTP sent successfully to your email!")
+                                    time.sleep(0.5)
                                     st.rerun()
                                 else:
                                     notify("login", "error", "❌ Failed to send OTP. Please try again.")
@@ -1884,6 +1863,7 @@ if not st.session_state.get("authenticated", False):
                                 st.session_state.reset_otp = otp
                                 st.session_state.reset_otp_time = time.time()
                                 notify("login", "info", "📨 New OTP sent!")
+                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("login", "error", "❌ Failed to send OTP. Please try again.")
@@ -1911,6 +1891,7 @@ if not st.session_state.get("authenticated", False):
                             elif otp_input.strip() == st.session_state.reset_otp:
                                 st.session_state.reset_stage = "reset_password"
                                 notify("login", "success", "✅ OTP verified successfully!")
+                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("login", "error", "❌ Invalid OTP. Please try again.")
@@ -1955,6 +1936,7 @@ if not st.session_state.get("authenticated", False):
                                 st.session_state.reset_otp = ""
                                 st.session_state.reset_otp_time = 0
 
+                                time.sleep(1)
                                 st.rerun()
                             else:
                                 notify("login", "error", "❌ Failed to reset password. Please try again.")
@@ -1999,6 +1981,7 @@ if not st.session_state.get("authenticated", False):
                             success, message = add_user(pending['username'], pending['password'], pending['email'])
                             if success:
                                 notify("register", "success", "✅ New OTP sent!")
+                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("register", "error", f"❌ {message}")
@@ -2030,6 +2013,7 @@ if not st.session_state.get("authenticated", False):
                                 if success:
                                     notify("register", "success", message)
                                     log_user_action(cached_username, "register")
+                                    time.sleep(0.5)
                                     st.rerun()
                                 else:
                                     notify("register", "error", message)
@@ -2041,6 +2025,7 @@ if not st.session_state.get("authenticated", False):
                             success, message = add_user(pending['username'], pending['password'], pending['email'])
                             if success:
                                 notify("register", "info", "📨 New OTP sent successfully!")
+                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("register", "error", f"❌ {message}")
@@ -2055,22 +2040,98 @@ if not st.session_state.get("authenticated", False):
                 # Normal registration form
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
 
-                # NOTE: Live per-keystroke DB validation (email_exists / username_exists)
-                # has been removed. With remote Supabase PostgreSQL each call opens a
-                # network connection on EVERY character typed, causing Streamlit to visibly
-                # reload the whole page. Validation now happens only on the Register button.
-                # Client-side format checks below require no DB round-trip.
-
+                # Email input with live validation
                 new_email = st.text_input("📧 Email", key="reg_email", placeholder="your@email.com")
-                if new_email and not is_valid_email(new_email.strip()):
-                    st.caption("⚠️ Invalid email format.")
 
+                # Email validation placeholder (using st.empty for dynamic updates)
+                email_validation_placeholder = st.empty()
+
+                # Check if email changed and validate
+                if new_email and new_email != st.session_state.last_validated_email:
+                    if not is_valid_email(new_email.strip()):
+                        with email_validation_placeholder:
+                            st.markdown(
+                                '<div class="slide-message warn-msg"><span class="slide-message-text">⚠️ Invalid email format.</span></div>',
+                                unsafe_allow_html=True
+                            )
+                        st.session_state.last_validated_email = new_email
+                    elif email_exists(new_email.strip()):
+                        with email_validation_placeholder:
+                            st.markdown(
+                                '<div class="slide-message error-msg"><span class="slide-message-text">❌ Email already registered.</span></div>',
+                                unsafe_allow_html=True
+                            )
+                        st.session_state.last_validated_email = new_email
+                    else:
+                        with email_validation_placeholder:
+                            st.markdown(
+                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Email is available.</span></div>',
+                                unsafe_allow_html=True
+                            )
+                        st.session_state.last_validated_email = new_email
+                        # Auto-hide after 3 seconds by clearing after delay
+                        time.sleep(3)
+                        email_validation_placeholder.empty()
+                elif not new_email:
+                    email_validation_placeholder.empty()
+                    st.session_state.last_validated_email = ""
+
+                # Username input with live validation
                 new_user = st.text_input("👤 Username", key="reg_user")
 
+                # Username validation placeholder
+                username_validation_placeholder = st.empty()
+
+                # Check if username changed and validate
+                if new_user and new_user != st.session_state.last_validated_username:
+                    if username_exists(new_user.strip()):
+                        with username_validation_placeholder:
+                            st.markdown(
+                                '<div class="slide-message error-msg"><span class="slide-message-text">❌ Username already exists.</span></div>',
+                                unsafe_allow_html=True
+                            )
+                        st.session_state.last_validated_username = new_user
+                    else:
+                        with username_validation_placeholder:
+                            st.markdown(
+                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Username is available.</span></div>',
+                                unsafe_allow_html=True
+                            )
+                        st.session_state.last_validated_username = new_user
+                        time.sleep(3)
+                        username_validation_placeholder.empty()
+                elif not new_user:
+                    username_validation_placeholder.empty()
+                    st.session_state.last_validated_username = ""
+
+                # Password input with live validation
                 new_pass = st.text_input("🔑 Password", type="password", key="reg_pass")
                 st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
-                if new_pass and not is_strong_password(new_pass):
-                    st.caption("⚠️ Weak password — add uppercase, number, and special character.")
+
+                # Password validation placeholder
+                password_validation_placeholder = st.empty()
+
+                # Check if password changed and validate
+                if new_pass and new_pass != st.session_state.last_validated_password:
+                    if not is_strong_password(new_pass):
+                        with password_validation_placeholder:
+                            st.markdown(
+                                '<div class="slide-message warn-msg"><span class="slide-message-text">⚠️ Password must be at least 8 characters and strong.</span></div>',
+                                unsafe_allow_html=True
+                            )
+                        st.session_state.last_validated_password = new_pass
+                    else:
+                        with password_validation_placeholder:
+                            st.markdown(
+                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Strong password.</span></div>',
+                                unsafe_allow_html=True
+                            )
+                        st.session_state.last_validated_password = new_pass
+                        time.sleep(3)
+                        password_validation_placeholder.empty()
+                elif not new_pass:
+                    password_validation_placeholder.empty()
+                    st.session_state.last_validated_password = ""
 
                 # Render notification area (reserves space)
                 render_notification("register")
@@ -2091,6 +2152,7 @@ if not st.session_state.get("authenticated", False):
                             success, message = add_user(new_user.strip(), new_pass.strip(), new_email.strip())
                             if success:
                                 notify("register", "success", message)
+                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 notify("register", "error", message)
@@ -2213,7 +2275,17 @@ if st.session_state.username == "admin":
 
     st.divider()
     st.subheader("📦 Database Backup & Download")
-    st.info("ℹ️ Database is hosted on Supabase PostgreSQL. Local file download is not available.")
+
+    if os.path.exists(DB_PATH):
+        with open(DB_PATH, "rb") as f:
+            st.download_button(
+                "⬇️ Download resume_data.db",
+                data=f,
+                file_name="resume_data_backup.db",
+                mime="application/octet-stream"
+            )
+    else:
+        st.warning("⚠️ No database file found yet.")
 # Always-visible tabs
 tab_labels = [
     "📊 Dashboard",
@@ -7241,6 +7313,32 @@ with tab2:
     st.session_state.setdefault("form_key_counter", 0)
 
     # ---------------- Sidebar (ONLY in Tab 2) ----------------
+    # Process any pending section mutations BEFORE rendering the sidebar
+    # so the form fields re-render immediately without a visual jump.
+    _pending = st.session_state.pop("_pending_section_action", None)
+    if _pending:
+        _action, _section = _pending
+        if _section == "exp":
+            if _action == "add":
+                st.session_state.experience_entries.append({"title": "", "company": "", "duration": "", "description": ""})
+            elif _action == "del" and len(st.session_state.experience_entries) > 1:
+                st.session_state.experience_entries.pop()
+        elif _section == "edu":
+            if _action == "add":
+                st.session_state.education_entries.append({"degree": "", "institution": "", "year": "", "details": ""})
+            elif _action == "del" and len(st.session_state.education_entries) > 1:
+                st.session_state.education_entries.pop()
+        elif _section == "proj":
+            if _action == "add":
+                st.session_state.project_entries.append({"title": "", "tech": "", "duration": "", "description": ""})
+            elif _action == "del" and len(st.session_state.project_entries) > 1:
+                st.session_state.project_entries.pop()
+        elif _section == "cert":
+            if _action == "add":
+                st.session_state.certificate_links.append({"name": "", "link": "", "duration": "", "description": ""})
+            elif _action == "del" and len(st.session_state.certificate_links) > 1:
+                st.session_state.certificate_links.pop()
+
     with st.sidebar:
         st.markdown("### ✨ Manage Resume Sections")
 
@@ -7251,140 +7349,130 @@ with tab2:
         st.session_state.edit_mode = mode
         st.markdown("---")
 
+        _action_key = "add" if mode == "Add" else "del"
+
         # 💼 Experience
         with st.expander("💼 Experience"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Experience", key="exp_btn"):
-                if mode == "Add":
-                    st.session_state.experience_entries.append(
-                        {"title": "", "company": "", "duration": "", "description": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.experience_entries) > 1:
-                    st.session_state.experience_entries.pop()
-                st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
+                st.session_state["_pending_section_action"] = (_action_key, "exp")
+                st.rerun()
 
         # 🎓 Education
         with st.expander("🎓 Education"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Education", key="edu_btn"):
-                if mode == "Add":
-                    st.session_state.education_entries.append(
-                        {"degree": "", "institution": "", "year": "", "details": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.education_entries) > 1:
-                    st.session_state.education_entries.pop()
-                st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
+                st.session_state["_pending_section_action"] = (_action_key, "edu")
+                st.rerun()
 
         # 🛠 Projects
         with st.expander("🛠 Projects"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Project", key="proj_btn"):
-                if mode == "Add":
-                    st.session_state.project_entries.append(
-                        {"title": "", "tech": "", "duration": "", "description": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.project_entries) > 1:
-                    st.session_state.project_entries.pop()
-                st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
+                st.session_state["_pending_section_action"] = (_action_key, "proj")
+                st.rerun()
 
         # 📜 Certificates
         with st.expander("📜 Certificates"):
             if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Certificate", key="cert_btn"):
-                if mode == "Add":
-                    st.session_state.certificate_links.append(
-                        {"name": "", "link": "", "duration": "", "description": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.certificate_links) > 1:
-                    st.session_state.certificate_links.pop()
-                st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
+                st.session_state["_pending_section_action"] = (_action_key, "cert")
+                st.rerun()
 
     # ---------------- Resume Form ----------------
-    fk = st.session_state["form_key_counter"]
-    with st.form(f"resume_form_{fk}", clear_on_submit=False):
-        st.markdown("### 👤 <u>Personal Information</u>", unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, key=f"name_input_{fk}")
-            st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, key=f"phone_input_{fk}")
-            st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, key=f"loc_input_{fk}")
-        with col2:
-            st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, key=f"email_input_{fk}")
-            st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, key=f"ln_input_{fk}")
-            st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, key=f"port_input_{fk}")
-            st.session_state.job_title = st.text_input("💼 Job Title", value=st.session_state.job_title, key=f"job_input_{fk}")
+    @st.fragment
+    def _resume_form():
+        # ---------------- Resume Form ----------------
+        fk = st.session_state["form_key_counter"]
+        with st.form(f"resume_form_{fk}", clear_on_submit=False):
+            st.markdown("### 👤 <u>Personal Information</u>", unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, key=f"name_input_{fk}")
+                st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, key=f"phone_input_{fk}")
+                st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, key=f"loc_input_{fk}")
+            with col2:
+                st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, key=f"email_input_{fk}")
+                st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, key=f"ln_input_{fk}")
+                st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, key=f"port_input_{fk}")
+                st.session_state.job_title = st.text_input("💼 Job Title", value=st.session_state.job_title, key=f"job_input_{fk}")
 
-        st.markdown("### 📝 <u>Professional Summary</u>", unsafe_allow_html=True)
-        st.session_state.summary = st.text_area("Summary", value=st.session_state.summary, key=f"summary_input_{fk}")
+            st.markdown("### 📝 <u>Professional Summary</u>", unsafe_allow_html=True)
+            st.session_state.summary = st.text_area("Summary", value=st.session_state.summary, key=f"summary_input_{fk}")
 
-        st.markdown("### 💼 <u>Skills, Languages, Interests & Soft Skills</u>", unsafe_allow_html=True)
-        st.session_state.skills = st.text_area("Skills (comma-separated)", value=st.session_state.skills, key=f"skills_input_{fk}")
-        st.session_state.languages = st.text_area("Languages (comma-separated)", value=st.session_state.languages, key=f"lang_input_{fk}")
-        st.session_state.interests = st.text_area("Interests (comma-separated)", value=st.session_state.interests, key=f"int_input_{fk}")
-        st.session_state.Softskills = st.text_area("Softskills (comma-separated)", value=st.session_state.Softskills, key=f"soft_input_{fk}")
+            st.markdown("### 💼 <u>Skills, Languages, Interests & Soft Skills</u>", unsafe_allow_html=True)
+            st.session_state.skills = st.text_area("Skills (comma-separated)", value=st.session_state.skills, key=f"skills_input_{fk}")
+            st.session_state.languages = st.text_area("Languages (comma-separated)", value=st.session_state.languages, key=f"lang_input_{fk}")
+            st.session_state.interests = st.text_area("Interests (comma-separated)", value=st.session_state.interests, key=f"int_input_{fk}")
+            st.session_state.Softskills = st.text_area("Softskills (comma-separated)", value=st.session_state.Softskills, key=f"soft_input_{fk}")
 
-        st.markdown("### 🧱 <u>Work Experience</u>", unsafe_allow_html=True)
-        for idx, exp in enumerate(st.session_state.experience_entries):
-            with st.expander(f"Experience #{idx+1}", expanded=True):
-                exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), key=f"exp_title_{idx}_{fk}")
-                exp["company"] = st.text_input("Company", value=exp.get("company", ""), key=f"exp_company_{idx}_{fk}")
-                exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), key=f"exp_duration_{idx}_{fk}")
-                exp["description"] = st.text_area("Description", value=exp.get("description", ""), key=f"exp_desc_{idx}_{fk}")
+            st.markdown("### 🧱 <u>Work Experience</u>", unsafe_allow_html=True)
+            for idx, exp in enumerate(st.session_state.experience_entries):
+                with st.expander(f"Experience #{idx+1}", expanded=True):
+                    exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                    exp["company"] = st.text_input("Company", value=exp.get("company", ""), key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                    exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                    exp["description"] = st.text_area("Description", value=exp.get("description", ""), key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
 
-        st.markdown("### 🎓 <u>Education</u>", unsafe_allow_html=True)
-        for idx, edu in enumerate(st.session_state.education_entries):
-            with st.expander(f"Education #{idx+1}", expanded=True):
-                edu["degree"] = st.text_input("Degree", value=edu.get("degree", ""), key=f"edu_degree_{idx}_{fk}")
-                edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), key=f"edu_inst_{idx}_{fk}")
-                edu["year"] = st.text_input("Year", value=edu.get("year", ""), key=f"edu_year_{idx}_{fk}")
-                edu["details"] = st.text_area("Details", value=edu.get("details", ""), key=f"edu_details_{idx}_{fk}")
+            st.markdown("### 🎓 <u>Education</u>", unsafe_allow_html=True)
+            for idx, edu in enumerate(st.session_state.education_entries):
+                with st.expander(f"Education #{idx+1}", expanded=True):
+                    edu["degree"] = st.text_input("Degree", value=edu.get("degree", ""), key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                    edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                    edu["year"] = st.text_input("Year", value=edu.get("year", ""), key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                    edu["details"] = st.text_area("Details", value=edu.get("details", ""), key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
 
-        st.markdown("### 🛠 <u>Projects</u>", unsafe_allow_html=True)
-        for idx, proj in enumerate(st.session_state.project_entries):
-            with st.expander(f"Project #{idx+1}", expanded=True):
-                proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), key=f"proj_title_{idx}_{fk}")
-                proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), key=f"proj_tech_{idx}_{fk}")
-                proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), key=f"proj_dur_{idx}_{fk}")
-                proj["description"] = st.text_area("Description", value=proj.get("description", ""), key=f"proj_desc_{idx}_{fk}")
+            st.markdown("### 🛠 <u>Projects</u>", unsafe_allow_html=True)
+            for idx, proj in enumerate(st.session_state.project_entries):
+                with st.expander(f"Project #{idx+1}", expanded=True):
+                    proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                    proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                    proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                    proj["description"] = st.text_area("Description", value=proj.get("description", ""), key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
 
-        st.markdown("### 🔗 Project Links")
-        project_links_input = st.text_area("Enter one project link per line:", value="\n".join(st.session_state.project_links), key=f"proj_links_input_{fk}")
-        if project_links_input:
-            st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
+            st.markdown("### 🔗 Project Links")
+            project_links_input = st.text_area("Enter one project link per line:", value="\n".join(st.session_state.project_links), key=f"proj_links_input_{fk}")
+            if project_links_input:
+                st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
 
-        st.markdown("### 🧾 <u>Certificates</u>", unsafe_allow_html=True)
-        for idx, cert in enumerate(st.session_state.certificate_links):
-            with st.expander(f"Certificate #{idx+1}", expanded=True):
-                cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), key=f"cert_name_{idx}_{fk}")
-                cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""), key=f"cert_link_{idx}_{fk}")
-                cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_dur_{idx}_{fk}")
-                cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_desc_{idx}_{fk}")
+            st.markdown("### 🧾 <u>Certificates</u>", unsafe_allow_html=True)
+            for idx, cert in enumerate(st.session_state.certificate_links):
+                with st.expander(f"Certificate #{idx+1}", expanded=True):
+                    cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                    cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""), key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                    cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                    cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
 
-        btn_col1, btn_col2 = st.columns([1, 1])
-        with btn_col1:
-            submitted = st.form_submit_button("📑 Generate Resume", use_container_width=True)
-        with btn_col2:
-            clear_clicked = st.form_submit_button("🗑️ Clear Form", use_container_width=True)
+            btn_col1, btn_col2 = st.columns([1, 1])
+            with btn_col1:
+                submitted = st.form_submit_button("📑 Generate Resume", use_container_width=True)
+            with btn_col2:
+                clear_clicked = st.form_submit_button("🗑️ Clear Form", use_container_width=True)
 
-        if submitted:
-            st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
+            if submitted:
+                st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
+                st.session_state["_form_submitted"] = True
+                st.rerun(scope="app")
 
-        if clear_clicked:
-            # Reset only resume-related keys — do NOT clear() or rerun() as that
-            # wipes tab context and navigates back to the main/home page.
-            # Instead, reset values in-place and bump the form key counter so
-            # all widgets re-render empty on this same run, no page jump.
-            _new_counter = st.session_state.get("form_key_counter", 0) + 1
-            resume_fields = ["name", "email", "phone", "linkedin", "location",
-                             "portfolio", "summary", "skills", "languages",
-                             "interests", "Softskills", "job_title"]
-            for _f in resume_fields:
-                st.session_state[_f] = ""
-            st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
-            st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
-            st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
-            st.session_state["project_links"] = []
-            st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
-            for _key in ["generated_html", "ai_output", "cover_letter",
-                         "cover_letter_html", "encoded_profile_image"]:
-                st.session_state.pop(_key, None)
-            st.session_state["form_key_counter"] = _new_counter
+            if clear_clicked:
+                # Reset only resume-related keys — do NOT clear() or rerun() as that
+                # wipes tab context and navigates back to the main/home page.
+                # Instead, reset values in-place and bump the form key counter so
+                # all widgets re-render empty on this same run, no page jump.
+                _new_counter = st.session_state.get("form_key_counter", 0) + 1
+                resume_fields = ["name", "email", "phone", "linkedin", "location",
+                                 "portfolio", "summary", "skills", "languages",
+                                 "interests", "Softskills", "job_title"]
+                for _f in resume_fields:
+                    st.session_state[_f] = ""
+                st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
+                st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
+                st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
+                st.session_state["project_links"] = []
+                st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
+                for _key in ["generated_html", "ai_output", "cover_letter",
+                             "cover_letter_html", "encoded_profile_image"]:
+                    st.session_state.pop(_key, None)
+                st.session_state["form_key_counter"] = _new_counter
+                st.rerun(scope="app")
+
+    _resume_form()
 
     st.markdown("""
     <style>
@@ -7406,47 +7494,119 @@ with tab2:
 
     # --- Visual Resume Preview Section (only shown after form is submitted) ---
     if "generated_html" in st.session_state:
-        import streamlit.components.v1 as _components_v1
-
         st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
         st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
 
-        # Get the selected template name to show label
-        _tpl_label = st.session_state.get("_last_template", "")
-        if _tpl_label:
-            st.markdown(
-                f"<p style='color:#555;font-size:13px;margin-bottom:8px;'>Template: <b>{_tpl_label}</b></p>",
-                unsafe_allow_html=True
-            )
+        left, right = st.columns([1, 2])
 
-        # Render the actual template HTML — no more hardcoded 2-column layout
-        _html_to_render = st.session_state["generated_html"]
+        with left:
+            st.markdown(f"""
+                <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
+                <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
+                <p style='font-size:14px;'>
+                📍 {st.session_state['location']}<br>
+                📞 {st.session_state['phone']}<br>
+                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
+                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
+                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
+                </p>
+            """, unsafe_allow_html=True)
 
-        # Estimate height based on content length (min 900px, max 4000px)
-        _est_height = max(900, min(4000, 900 + len(_html_to_render) // 30))
+            st.markdown("<h4 style='color:#336699;'>Skills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for skill in [s.strip() for s in st.session_state["skills"].split(",") if s.strip()]:
+                st.markdown(f"<div style='margin-left:10px;'>• {skill}</div>", unsafe_allow_html=True)
 
-        _components_v1.html(
-            _html_to_render,
-            height=_est_height,
-            scrolling=True
-        )
+            st.markdown("<h4 style='color:#336699;'>Languages</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for lang in [l.strip() for l in st.session_state["languages"].split(",") if l.strip()]:
+                st.markdown(f"<div style='margin-left:10px;'>• {lang}</div>", unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>Interests</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for interest in [i.strip() for i in st.session_state["interests"].split(",") if i.strip()]:
+                st.markdown(f"<div style='margin-left:10px;'>• {interest}</div>", unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>Softskills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for ss in [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]:
+                st.markdown(f"<div style='margin-left:10px;'>• {ss}</div>", unsafe_allow_html=True)
+
+        with right:
+            st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            summary_text = st.session_state["summary"].replace("\n", "<br>")
+            st.markdown(f"<p style='font-size:17px;'>{summary_text}</p>", unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for exp in st.session_state.experience_entries:
+                if exp["company"] or exp["title"]:
+                    st.markdown(f"""
+                    <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
+                        <div style='display:flex; justify-content:space-between;'>
+                            <b>🏢 {exp['company']}</b><span style='color:gray;'>📆 {exp['duration']}</span>
+                        </div>
+                        <div style='font-size:14px;'>💼 <i>{exp['title']}</i></div>
+                        <div style='font-size:17px;'>📝 {exp['description']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for edu in st.session_state.education_entries:
+                if edu["institution"] or edu["degree"]:
+                    st.markdown(f"""
+                    <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px;'>
+                        <div style='display:flex; justify-content:space-between; font-size:16px; font-weight:bold;'>
+                            <span>🏫 {edu['institution']}</span>
+                            <span style='color:gray;'>📅 {edu['year']}</span>
+                        </div>
+                        <div style='font-size:14px;'>🎓 <i>{edu['degree']}</i></div>
+                        <div style='font-size:14px;'>📄 {edu['details']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            for proj in st.session_state.project_entries:
+                if proj.get("title"):
+                    st.markdown(f"""
+                    <div style='margin-bottom:15px; padding:10px;'>
+                        <strong style='font-size:16px;'>{proj['title']}</strong><br>
+                        <span style='font-size:14px;'>🛠️ <strong>Tech Stack:</strong> {proj['tech']}</span><br>
+                        <span style='font-size:14px;'>⏳ <strong>Duration:</strong> {proj['duration']}</span><br>
+                        <span style='font-size:17px;'>📝 <strong>Description:</strong> {proj['description']}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            if st.session_state.project_links:
+                st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+                for i, link in enumerate(st.session_state.project_links):
+                    st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
+
+            if st.session_state.certificate_links:
+                st.markdown("<h4 style='color:#336699;'>Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+                for cert in st.session_state.certificate_links:
+                    if cert["name"] and cert["link"]:
+                        st.markdown(f"""
+                        <div style='display:flex; justify-content:space-between;'>
+                            <a href="{cert['link']}" target="_blank"><b>📄 {cert['name']}</b></a>
+                            <span style='color:gray;'>{cert['duration']}</span>
+                        </div>
+                        <div style='margin-bottom:10px; font-size:14px;'>{cert['description']}</div>
+                        """, unsafe_allow_html=True)
+
 import re
 
 with tab2:
     st.markdown("## ✨ <span style='color:#336699;'>Enhanced AI Resume Preview</span>", unsafe_allow_html=True)
     st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
 
-    @st.fragment
-    def _ai_section():
-        col1, spacer, col2 = st.columns([1, 0.2, 1])
-        with col1:
-            if st.button("🔁 Clear Preview"):
-                st.session_state.pop("ai_output", None)
-                st.rerun(scope="app")
-        with col2:
-            _gen = st.button("🚀 Generate AI Resume Preview")
+    col1, spacer, col2 = st.columns([1, 0.2, 1])
 
-        if _gen:
+    with col1:
+        if st.button("🔁 Clear Preview"):
+            st.session_state.pop("ai_output", None)
+
+    with col2:
+        if st.button("🚀 Generate AI Resume Preview"):
+            st.session_state["_run_ai_generate"] = True
+
+    if st.session_state.pop("_run_ai_generate", False):
+        if True:
             # Normalize and ensure at least 2 experience entries
             experience_entries = st.session_state.get('experience_entries', [])
             normalized_experience_entries = []
@@ -7727,9 +7887,6 @@ with tab2:
                 ai_output = call_llm(enhance_prompt, session=st.session_state)
                 st.session_state["ai_output"] = ai_output
 
-
-    _ai_section()
-
     # ------------------------- PARSE + RENDER -------------------------
     if "ai_output" in st.session_state:
         ai_output = st.session_state["ai_output"]
@@ -7857,7 +8014,7 @@ with tab2:
                     st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
 
     # Generate HTML content based on selected template — only on submit, stored in session_state
-    if submitted:
+    if st.session_state.pop("_form_submitted", False):
         # Determine which template to use
         if selected_template == "Default (Professional)":
             html_content = render_template_default(st.session_state, profile_img_html)
@@ -7881,9 +8038,8 @@ with tab2:
             # Fallback to default
             html_content = render_template_default(st.session_state, profile_img_html)
 
-        # Store the generated content and which template was used
+        # Store the generated content
         st.session_state["generated_html"] = html_content
-        st.session_state["_last_template"] = selected_template
 
 with tab2:
     # ==========================
@@ -17329,6 +17485,7 @@ Generate {num_questions} questions now:
                 """, unsafe_allow_html=True)
 if tab5:
 	with tab5:
+		import sqlite3
 		import pandas as pd
 		import matplotlib.pyplot as plt
 		import numpy as np
@@ -17361,11 +17518,12 @@ if tab5:
 			DatabaseManager
 		)
 
-		# Reuse the same cached DatabaseManager instance from db_manager module
-		# (already singleton via @st.cache_resource there — creating a second one
-		# would open a second connection pool and cause duplicate init queries)
-		from db_manager import _get_db_manager as _get_shared_db_manager
-		db_manager = _get_shared_db_manager()
+		# Initialize enhanced database manager
+		@st.cache_resource
+		def get_db_manager():
+			return DatabaseManager()
+
+		db_manager = get_db_manager()
 
 		def create_enhanced_pie_chart(df, values_col, labels_col, title):
 			"""Create an enhanced pie chart with better styling"""
@@ -17551,6 +17709,7 @@ if tab5:
 							}
 							</style>
 						""", unsafe_allow_html=True)
+						time.sleep(3)
 						msg_placeholder.empty()
 
 			st.stop()
