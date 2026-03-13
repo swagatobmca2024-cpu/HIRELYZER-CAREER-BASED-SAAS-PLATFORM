@@ -11135,9 +11135,8 @@ def log_user_action(username: str, action: str):
 
 def create_interview_database():
     """Create interview_results table if not exists, safely migrate new columns"""
-    import psycopg2
     try:
-        conn = get_progress_db()
+        conn = _get_live_conn()
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS interview_results (
@@ -11196,7 +11195,7 @@ def create_interview_questions_table():
     This is the SINGLE SOURCE OF TRUTH for PDF generation.
     """
     try:
-        conn = get_progress_db()
+        conn = _get_live_conn()
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS interview_questions (
@@ -11229,7 +11228,7 @@ def save_interview_question(interview_id: str, question_text: str, answer_text: 
     """
     import json
     try:
-        conn = get_progress_db()
+        conn = _get_live_conn()
         cursor = conn.cursor()
         score_json = json.dumps(score_breakdown) if score_breakdown else None
         timestamp = get_ist_time()
@@ -11259,7 +11258,7 @@ def get_interview_questions_from_db(interview_id: str) -> list:
     """
     import json
     try:
-        conn = get_progress_db()
+        conn = _get_live_conn()
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, question_text, answer_text, difficulty, is_follow_up,
@@ -11303,7 +11302,7 @@ def save_interview_result(username: str, role: str, domain: str, avg_score: floa
                           follow_up_count: int = 0, depth_score: float = None, behavior_class: str = None):
     """Save interview result to database with extended columns"""
     try:
-        conn = get_progress_db()
+        conn = _get_live_conn()
         cursor = conn.cursor()
         completed_on = get_ist_time()
         cursor.execute("""
@@ -11553,13 +11552,16 @@ import json
 
 
 # =============================================================================
-# SUPABASE POSTGRESQL — CACHED CONNECTION
+# SUPABASE POSTGRESQL — SINGLE CACHED CONNECTION  (anti-flicker fix)
 # =============================================================================
-# @st.cache_resource creates the psycopg2 connection exactly ONCE for the entire
-# Streamlit server process and reuses it on every rerun.  This is the root fix
-# for the page-flicker / scroll-to-top bug: previously a new sqlite3 connection
-# was opened inside every function call, forcing a full re-render on each widget
-# interaction.  With a single cached connection none of that overhead occurs.
+# @st.cache_resource creates the psycopg2 connection ONCE per server process
+# and reuses it on every Streamlit rerun.  Previously, sqlite3.connect() was
+# called inside every function → new I/O on every widget interaction → page
+# scrolled back to top and flickered.  A single cached connection eliminates
+# that entirely.
+#
+# We also add a lightweight ping so that if the connection goes idle and the
+# server closes it, we transparently reconnect without the user seeing an error.
 
 @st.cache_resource
 def get_progress_db():
@@ -11572,6 +11574,39 @@ def get_progress_db():
         password=st.secrets["SUPABASE_PASSWORD"],
         port=st.secrets["SUPABASE_PORT"]
     )
+
+
+def _get_live_conn():
+    """
+    Return the cached connection.  If the connection has gone idle/closed,
+    clear the cache so get_progress_db() reconnects on next call.
+    This prevents 'connection already closed' errors without any visible flicker.
+    """
+    import psycopg2
+    conn = get_progress_db()
+    try:
+        # Lightweight ping — no round-trip if connection is healthy
+        conn.cursor().execute("SELECT 1")
+    except Exception:
+        # Connection is dead — clear cache and reconnect
+        get_progress_db.clear()
+        conn = get_progress_db()
+    return conn
+
+
+# =============================================================================
+# ONE-TIME DB INIT GUARD  (anti-flicker fix)
+# =============================================================================
+# create_interview_database() was called on EVERY Streamlit rerun (every widget
+# interaction).  Each call ran DDL queries against Supabase — completely
+# unnecessary after the first run.  We guard it with a session_state flag so
+# the DDL only runs once per browser session.
+
+def _ensure_db_initialized():
+    """Run create_interview_database() at most once per browser session."""
+    if not st.session_state.get("_db_initialized", False):
+        create_interview_database()
+        st.session_state["_db_initialized"] = True
 
 
 import json
@@ -13852,16 +13887,20 @@ def generate_adaptive_followup(question: str, answer: str, strategy: str, escala
     )
 
 
+@st.cache_data(ttl=60)
 def get_user_weakness_history(username: str) -> dict:
     """
     PART 5: Weakness Memory Engine.
     Query ALL past interviews for total count and detect recurring weak skill.
     Uses all interviews for avg score computation and shows true total count.
     Returns dict with weakest_skill and bias recommendation.
+
+    @st.cache_data(ttl=60): result is cached per username for 60 seconds so
+    every dropdown change on the setup screen does NOT hit Supabase again.
     """
     import pandas as pd
     try:
-        conn = get_progress_db()
+        conn = _get_live_conn()
         # Fetch ALL interviews (no LIMIT) so count and averages reflect full history
         df = pd.read_sql_query(
             "SELECT knowledge_avg, communication_avg, relevance_avg FROM interview_results WHERE username=%s ORDER BY id DESC",
@@ -15422,8 +15461,8 @@ Generate {num_questions} questions now:
         st.subheader("🤖 AI Interview Coach")
         st.markdown("Upload your resume and practice role-specific interview questions with AI-powered feedback!")
 
-        # Create database table if not exists
-        create_interview_database()
+        # Create database tables if not yet done this session (runs once, never on every rerun)
+        _ensure_db_initialized()
 
         # Initialize resume state
         if 'resume_file' not in st.session_state:
@@ -16518,8 +16557,8 @@ Generate {num_questions} questions now:
 
         username = st.session_state.get("username", "Guest")
 
-        # Ensure DB and columns exist
-        create_interview_database()
+        # Ensure DB and columns exist (runs once per session, not on every rerun)
+        _ensure_db_initialized()
 
         # ── Load dashboard data with session_state caching ──────────────────────
         # Only re-query the DB when the user navigates to this page fresh, or when
@@ -16531,7 +16570,7 @@ Generate {num_questions} questions now:
 
         if st.session_state.get(_cache_dirty_key, True) or _cache_key not in st.session_state:
             try:
-                conn = get_progress_db()
+                conn = _get_live_conn()
                 df = pd.read_sql_query(
                     "SELECT * FROM interview_results WHERE username = %s ORDER BY id ASC",
                     conn, params=(username,)
