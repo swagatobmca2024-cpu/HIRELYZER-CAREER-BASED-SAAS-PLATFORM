@@ -2273,17 +2273,7 @@ if st.session_state.username == "admin":
         st.info("No logs found yet.")
 
     st.divider()
-    st.subheader("📦 Database Backup & Download")
-
-    # DB download removed — data now lives in Supabase
-        with open(DB_PATH, "rb") as f:
-            st.download_button(
-                "⬇️ Download Database Backup",
-                data=f,
-                mime="application/octet-stream"
-            )
-    else:
-        st.warning("⚠️ No database file found yet.")
+    st.info("ℹ️ Data is stored in Supabase PostgreSQL. Use the Admin DB View tab to export records as CSV.")
 # Always-visible tabs
 tab_labels = [
     "📊 Dashboard",
