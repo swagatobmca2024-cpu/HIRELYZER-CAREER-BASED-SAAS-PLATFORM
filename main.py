@@ -7146,9 +7146,38 @@ with tab2:
 
         <script>
         (function() {
+            // ── Block Enter / Ctrl+Enter from triggering any button ──────────
+            // Streamlit's default: pressing Enter in a text input fires the
+            // nearest button (causing a full rerun/page reload).
+            // We intercept keydown at capture phase on the whole document and
+            // prevent that for EVERY input and textarea so only an explicit
+            // mouse-click on "Generate Resume" can submit.
+            function blockEnterSubmit(e) {
+                if (e.key === 'Enter') {
+                    var tag = e.target && e.target.tagName;
+                    if (tag === 'INPUT' || tag === 'TEXTAREA') {
+                        // Allow Shift+Enter in textarea (newline) — block everything else
+                        if (tag === 'TEXTAREA' && !e.ctrlKey && !e.metaKey) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                }
+            }
+            // Use capture=true so we intercept before Streamlit's own handlers
+            document.addEventListener('keydown', blockEnterSubmit, true);
+
+            // Re-attach after every Streamlit DOM mutation (Streamlit re-mounts
+            // the widget tree on each rerun, which could re-enable the default)
+            var _enterObserver = new MutationObserver(function() {
+                document.removeEventListener('keydown', blockEnterSubmit, true);
+                document.addEventListener('keydown', blockEnterSubmit, true);
+            });
+            _enterObserver.observe(document.body, { childList: true, subtree: true });
+
+            // ── Scroll preservation ──────────────────────────────────────────
             var lastScrollY = 0;
             var ticking = false;
-            var observer = new MutationObserver(function() {
+            var _scrollObserver = new MutationObserver(function() {
                 if (!ticking) {
                     requestAnimationFrame(function() {
                         if (Math.abs(window.scrollY - lastScrollY) > 200) {
@@ -7159,7 +7188,7 @@ with tab2:
                     ticking = true;
                 }
             });
-            observer.observe(document.body, { childList: true, subtree: false });
+            _scrollObserver.observe(document.body, { childList: true, subtree: false });
             window.addEventListener('scroll', function() {
                 lastScrollY = window.scrollY;
             }, { passive: true });
@@ -7375,66 +7404,129 @@ with tab2:
                 elif mode == "Delete" and len(st.session_state.certificate_links) > 1:
                     st.session_state.certificate_links.pop()
 
-    # ---------------- Resume Form (NO st.form — fixes Enter-to-submit reload) ----------------
+    # ---------------- Resume Form ----------------
+    # KEY RULES to prevent rerun-on-every-keystroke:
+    # 1. NO st.form (Enter-to-submit rerun)
+    # 2. NO value= on widgets that have key= — value= + key= conflict causes Streamlit to
+    #    detect a state change on every render and trigger a rerun. Use key= only.
+    #    Pre-populate via st.session_state.setdefault() BEFORE the widget is rendered.
+    # 3. NO dict mutation (exp["x"] = st.text_input(...)) — mutating session_state
+    #    objects on every render = state change = rerun. Use key= only.
+    # 4. NO live writes to session_state mid-render (project_links live update).
+    #    Collect all values only on button click.
+
     fk = st.session_state["form_key_counter"]
+    _ne = len(st.session_state.experience_entries)
+    _ned = len(st.session_state.education_entries)
+    _np = len(st.session_state.project_entries)
+    _nc = len(st.session_state.certificate_links)
+
+    # Pre-populate widget keys in session_state ONCE (setdefault never overwrites existing value)
+    # Personal fields
+    for _field, _sskey in [
+        (f"name_input_{fk}",    "name"),
+        (f"phone_input_{fk}",   "phone"),
+        (f"loc_input_{fk}",     "location"),
+        (f"email_input_{fk}",   "email"),
+        (f"ln_input_{fk}",      "linkedin"),
+        (f"port_input_{fk}",    "portfolio"),
+        (f"job_input_{fk}",     "job_title"),
+        (f"summary_input_{fk}", "summary"),
+        (f"skills_input_{fk}",  "skills"),
+        (f"lang_input_{fk}",    "languages"),
+        (f"int_input_{fk}",     "interests"),
+        (f"soft_input_{fk}",    "Softskills"),
+    ]:
+        st.session_state.setdefault(_field, st.session_state.get(_sskey, ""))
+
+    # Experience widget keys
+    for idx, exp in enumerate(st.session_state.experience_entries):
+        st.session_state.setdefault(f"title_{idx}_{_ne}_{fk}",       exp.get("title", ""))
+        st.session_state.setdefault(f"company_{idx}_{_ne}_{fk}",     exp.get("company", ""))
+        st.session_state.setdefault(f"duration_{idx}_{_ne}_{fk}",    exp.get("duration", ""))
+        st.session_state.setdefault(f"description_{idx}_{_ne}_{fk}", exp.get("description", ""))
+
+    # Education widget keys
+    for idx, edu in enumerate(st.session_state.education_entries):
+        st.session_state.setdefault(f"degree_{idx}_{_ned}_{fk}",       edu.get("degree", ""))
+        st.session_state.setdefault(f"institution_{idx}_{_ned}_{fk}",  edu.get("institution", ""))
+        st.session_state.setdefault(f"edu_year_{idx}_{_ned}_{fk}",     edu.get("year", ""))
+        st.session_state.setdefault(f"edu_details_{idx}_{_ned}_{fk}",  edu.get("details", ""))
+
+    # Project widget keys
+    for idx, proj in enumerate(st.session_state.project_entries):
+        st.session_state.setdefault(f"proj_title_{idx}_{_np}_{fk}",    proj.get("title", ""))
+        st.session_state.setdefault(f"proj_tech_{idx}_{_np}_{fk}",     proj.get("tech", ""))
+        st.session_state.setdefault(f"proj_duration_{idx}_{_np}_{fk}", proj.get("duration", ""))
+        st.session_state.setdefault(f"proj_desc_{idx}_{_np}_{fk}",     proj.get("description", ""))
+
+    # Certificate widget keys
+    for idx, cert in enumerate(st.session_state.certificate_links):
+        st.session_state.setdefault(f"cert_name_{idx}_{_nc}_{fk}",        cert.get("name", ""))
+        st.session_state.setdefault(f"cert_link_{idx}_{_nc}_{fk}",        cert.get("link", ""))
+        st.session_state.setdefault(f"cert_duration_{idx}_{_nc}_{fk}",    cert.get("duration", ""))
+        st.session_state.setdefault(f"cert_description_{idx}_{_nc}_{fk}", cert.get("description", ""))
+
+    # Project links widget key
+    st.session_state.setdefault(f"proj_links_input_{fk}", "\n".join(st.session_state.project_links))
+
+    # ---- Render widgets (key= only, NO value=, NO dict mutation, NO live writes) ----
 
     st.markdown("### 👤 <u>Personal Information</u>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
-        st.text_input("👤 Full Name", value=st.session_state.name, key=f"name_input_{fk}")
-        st.text_input("📞 Phone Number", value=st.session_state.phone, key=f"phone_input_{fk}")
-        st.text_input("📍 Location", value=st.session_state.location, key=f"loc_input_{fk}")
+        st.text_input("👤 Full Name",    key=f"name_input_{fk}")
+        st.text_input("📞 Phone Number", key=f"phone_input_{fk}")
+        st.text_input("📍 Location",     key=f"loc_input_{fk}")
     with col2:
-        st.text_input("📧 Email", value=st.session_state.email, key=f"email_input_{fk}")
-        st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, key=f"ln_input_{fk}")
-        st.text_input("🌐 Portfolio", value=st.session_state.portfolio, key=f"port_input_{fk}")
-        st.text_input("💼 Job Title", value=st.session_state.job_title, key=f"job_input_{fk}")
+        st.text_input("📧 Email",     key=f"email_input_{fk}")
+        st.text_input("🔗 LinkedIn",  key=f"ln_input_{fk}")
+        st.text_input("🌐 Portfolio", key=f"port_input_{fk}")
+        st.text_input("💼 Job Title", key=f"job_input_{fk}")
 
     st.markdown("### 📝 <u>Professional Summary</u>", unsafe_allow_html=True)
-    st.text_area("Summary", value=st.session_state.summary, key=f"summary_input_{fk}")
+    st.text_area("Summary", key=f"summary_input_{fk}")
 
     st.markdown("### 💼 <u>Skills, Languages, Interests & Soft Skills</u>", unsafe_allow_html=True)
-    st.text_area("Skills (comma-separated)", value=st.session_state.skills, key=f"skills_input_{fk}")
-    st.text_area("Languages (comma-separated)", value=st.session_state.languages, key=f"lang_input_{fk}")
-    st.text_area("Interests (comma-separated)", value=st.session_state.interests, key=f"int_input_{fk}")
-    st.text_area("Softskills (comma-separated)", value=st.session_state.Softskills, key=f"soft_input_{fk}")
+    st.text_area("Skills (comma-separated)",     key=f"skills_input_{fk}")
+    st.text_area("Languages (comma-separated)",  key=f"lang_input_{fk}")
+    st.text_area("Interests (comma-separated)",  key=f"int_input_{fk}")
+    st.text_area("Softskills (comma-separated)", key=f"soft_input_{fk}")
 
     st.markdown("### 🧱 <u>Work Experience</u>", unsafe_allow_html=True)
-    for idx, exp in enumerate(st.session_state.experience_entries):
+    for idx in range(_ne):
         with st.expander(f"Experience #{idx+1}", expanded=True):
-            exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-            exp["company"] = st.text_input("Company", value=exp.get("company", ""), key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-            exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-            exp["description"] = st.text_area("Description", value=exp.get("description", ""), key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+            st.text_input("Job Title",    key=f"title_{idx}_{_ne}_{fk}")
+            st.text_input("Company",      key=f"company_{idx}_{_ne}_{fk}")
+            st.text_input("Duration",     key=f"duration_{idx}_{_ne}_{fk}")
+            st.text_area("Description",   key=f"description_{idx}_{_ne}_{fk}")
 
     st.markdown("### 🎓 <u>Education</u>", unsafe_allow_html=True)
-    for idx, edu in enumerate(st.session_state.education_entries):
+    for idx in range(_ned):
         with st.expander(f"Education #{idx+1}", expanded=True):
-            edu["degree"] = st.text_input("Degree", value=edu.get("degree", ""), key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
-            edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
-            edu["year"] = st.text_input("Year", value=edu.get("year", ""), key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
-            edu["details"] = st.text_area("Details", value=edu.get("details", ""), key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
+            st.text_input("Degree",      key=f"degree_{idx}_{_ned}_{fk}")
+            st.text_input("Institution", key=f"institution_{idx}_{_ned}_{fk}")
+            st.text_input("Year",        key=f"edu_year_{idx}_{_ned}_{fk}")
+            st.text_area("Details",      key=f"edu_details_{idx}_{_ned}_{fk}")
 
     st.markdown("### 🛠 <u>Projects</u>", unsafe_allow_html=True)
-    for idx, proj in enumerate(st.session_state.project_entries):
+    for idx in range(_np):
         with st.expander(f"Project #{idx+1}", expanded=True):
-            proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
-            proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
-            proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
-            proj["description"] = st.text_area("Description", value=proj.get("description", ""), key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
+            st.text_input("Project Title", key=f"proj_title_{idx}_{_np}_{fk}")
+            st.text_input("Tech Stack",    key=f"proj_tech_{idx}_{_np}_{fk}")
+            st.text_input("Duration",      key=f"proj_duration_{idx}_{_np}_{fk}")
+            st.text_area("Description",    key=f"proj_desc_{idx}_{_np}_{fk}")
 
     st.markdown("### 🔗 Project Links")
-    project_links_input = st.text_area("Enter one project link per line:", value="\n".join(st.session_state.project_links), key=f"proj_links_input_{fk}")
-    if project_links_input:
-        st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
+    st.text_area("Enter one project link per line:", key=f"proj_links_input_{fk}")
 
     st.markdown("### 🧾 <u>Certificates</u>", unsafe_allow_html=True)
-    for idx, cert in enumerate(st.session_state.certificate_links):
+    for idx in range(_nc):
         with st.expander(f"Certificate #{idx+1}", expanded=True):
-            cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-            cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""), key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-            cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-            cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+            st.text_input("Certificate Name", key=f"cert_name_{idx}_{_nc}_{fk}")
+            st.text_input("Certificate Link", key=f"cert_link_{idx}_{_nc}_{fk}")
+            st.text_input("Duration",         key=f"cert_duration_{idx}_{_nc}_{fk}")
+            st.text_area("Description",       key=f"cert_description_{idx}_{_nc}_{fk}")
 
     btn_col1, btn_col2 = st.columns([1, 1])
     with btn_col1:
@@ -7442,7 +7534,7 @@ with tab2:
     with btn_col2:
         clear_clicked = st.button("🗑️ Clear Form", use_container_width=True, key=f"clear_btn_{fk}")
 
-    # Fix Cause 2: Read widget values into session_state ONLY when Generate is clicked
+    # Harvest ALL widget values into session_state ONLY when Generate is clicked
     if submitted:
         st.session_state.name       = st.session_state.get(f"name_input_{fk}", "")
         st.session_state.phone      = st.session_state.get(f"phone_input_{fk}", "")
@@ -7456,28 +7548,57 @@ with tab2:
         st.session_state.languages  = st.session_state.get(f"lang_input_{fk}", "")
         st.session_state.interests  = st.session_state.get(f"int_input_{fk}", "")
         st.session_state.Softskills = st.session_state.get(f"soft_input_{fk}", "")
+
+        # Harvest experience
+        for idx in range(_ne):
+            st.session_state.experience_entries[idx]["title"]       = st.session_state.get(f"title_{idx}_{_ne}_{fk}", "")
+            st.session_state.experience_entries[idx]["company"]     = st.session_state.get(f"company_{idx}_{_ne}_{fk}", "")
+            st.session_state.experience_entries[idx]["duration"]    = st.session_state.get(f"duration_{idx}_{_ne}_{fk}", "")
+            st.session_state.experience_entries[idx]["description"] = st.session_state.get(f"description_{idx}_{_ne}_{fk}", "")
+
+        # Harvest education
+        for idx in range(_ned):
+            st.session_state.education_entries[idx]["degree"]      = st.session_state.get(f"degree_{idx}_{_ned}_{fk}", "")
+            st.session_state.education_entries[idx]["institution"]  = st.session_state.get(f"institution_{idx}_{_ned}_{fk}", "")
+            st.session_state.education_entries[idx]["year"]         = st.session_state.get(f"edu_year_{idx}_{_ned}_{fk}", "")
+            st.session_state.education_entries[idx]["details"]      = st.session_state.get(f"edu_details_{idx}_{_ned}_{fk}", "")
+
+        # Harvest projects
+        for idx in range(_np):
+            st.session_state.project_entries[idx]["title"]       = st.session_state.get(f"proj_title_{idx}_{_np}_{fk}", "")
+            st.session_state.project_entries[idx]["tech"]        = st.session_state.get(f"proj_tech_{idx}_{_np}_{fk}", "")
+            st.session_state.project_entries[idx]["duration"]    = st.session_state.get(f"proj_duration_{idx}_{_np}_{fk}", "")
+            st.session_state.project_entries[idx]["description"] = st.session_state.get(f"proj_desc_{idx}_{_np}_{fk}", "")
+
+        # Harvest project links
+        _links_raw = st.session_state.get(f"proj_links_input_{fk}", "")
+        st.session_state.project_links = [l.strip() for l in _links_raw.splitlines() if l.strip()]
+
+        # Harvest certificates
+        for idx in range(_nc):
+            st.session_state.certificate_links[idx]["name"]        = st.session_state.get(f"cert_name_{idx}_{_nc}_{fk}", "")
+            st.session_state.certificate_links[idx]["link"]        = st.session_state.get(f"cert_link_{idx}_{_nc}_{fk}", "")
+            st.session_state.certificate_links[idx]["duration"]    = st.session_state.get(f"cert_duration_{idx}_{_nc}_{fk}", "")
+            st.session_state.certificate_links[idx]["description"] = st.session_state.get(f"cert_description_{idx}_{_nc}_{fk}", "")
+
         st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
 
     if clear_clicked:
-            # Reset only resume-related keys — do NOT clear() or rerun() as that
-            # wipes tab context and navigates back to the main/home page.
-            # Instead, reset values in-place and bump the form key counter so
-            # all widgets re-render empty on this same run, no page jump.
-            _new_counter = st.session_state.get("form_key_counter", 0) + 1
-            resume_fields = ["name", "email", "phone", "linkedin", "location",
-                             "portfolio", "summary", "skills", "languages",
-                             "interests", "Softskills", "job_title"]
-            for _f in resume_fields:
-                st.session_state[_f] = ""
-            st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
-            st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
-            st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
-            st.session_state["project_links"] = []
-            st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
-            for _key in ["generated_html", "ai_output", "cover_letter",
-                         "cover_letter_html", "encoded_profile_image"]:
-                st.session_state.pop(_key, None)
-            st.session_state["form_key_counter"] = _new_counter
+        _new_counter = st.session_state.get("form_key_counter", 0) + 1
+        resume_fields = ["name", "email", "phone", "linkedin", "location",
+                         "portfolio", "summary", "skills", "languages",
+                         "interests", "Softskills", "job_title"]
+        for _f in resume_fields:
+            st.session_state[_f] = ""
+        st.session_state["experience_entries"]  = [{"title": "", "company": "", "duration": "", "description": ""}]
+        st.session_state["education_entries"]   = [{"degree": "", "institution": "", "year": "", "details": ""}]
+        st.session_state["project_entries"]     = [{"title": "", "tech": "", "duration": "", "description": ""}]
+        st.session_state["project_links"]       = []
+        st.session_state["certificate_links"]   = [{"name": "", "link": "", "duration": "", "description": ""}]
+        for _key in ["generated_html", "ai_output", "cover_letter",
+                     "cover_letter_html", "encoded_profile_image"]:
+            st.session_state.pop(_key, None)
+        st.session_state["form_key_counter"] = _new_counter
 
     st.markdown("""
     <style>
