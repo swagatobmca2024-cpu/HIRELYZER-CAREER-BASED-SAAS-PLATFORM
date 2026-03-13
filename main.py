@@ -93,8 +93,7 @@ from user_login import (
 # ============================================================
 # 💾 Persistent Storage Configuration for Streamlit Cloud
 # ============================================================
-os.makedirs(".streamlit_storage", exist_ok=True)
-DB_PATH = os.path.join(".streamlit_storage", "resume_data.db")
+# SQLite storage removed — data persists in Supabase PostgreSQL
 
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
@@ -2276,12 +2275,11 @@ if st.session_state.username == "admin":
     st.divider()
     st.subheader("📦 Database Backup & Download")
 
-    if os.path.exists(DB_PATH):
+    # DB download removed — data now lives in Supabase
         with open(DB_PATH, "rb") as f:
             st.download_button(
-                "⬇️ Download resume_data.db",
+                "⬇️ Download Database Backup",
                 data=f,
-                file_name="resume_data_backup.db",
                 mime="application/octet-stream"
             )
     else:
