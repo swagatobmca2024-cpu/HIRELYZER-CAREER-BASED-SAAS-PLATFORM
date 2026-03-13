@@ -95,6 +95,31 @@ from user_login import (
 # ============================================================
 # SQLite storage removed — data persists in Supabase PostgreSQL
 
+# ── Cached DB helpers — prevent re-querying Supabase on every rerun ──────────
+# These are the functions called in the script body (hero stats, admin panel,
+# sidebar). Without caching they fire on EVERY widget interaction / tab click.
+
+@st.cache_data(ttl=60)   # refresh hero counters every 60 s
+def _cached_hero_stats():
+    return (
+        get_total_registered_users(),
+        get_logins_today(),
+        get_database_stats(),
+    )
+
+@st.cache_data(ttl=30)   # admin panel metrics — slightly fresher
+def _cached_admin_metrics():
+    return (
+        get_total_registered_users(),
+        get_logins_today(),
+        get_all_user_logs(),
+    )
+
+@st.cache_data(ttl=300)  # API key rarely changes — 5-min cache per user
+def _cached_user_api_key(username: str):
+    return get_user_api_key(username)
+# ─────────────────────────────────────────────────────────────────────────────
+
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
     <html>
@@ -391,13 +416,8 @@ if "reset_otp" not in st.session_state:
 if "reset_otp_time" not in st.session_state:
     st.session_state.reset_otp_time = 0
 
-# Live validation session states for register tab
-if "last_validated_email" not in st.session_state:
-    st.session_state.last_validated_email = ""
-if "last_validated_username" not in st.session_state:
-    st.session_state.last_validated_username = ""
-if "last_validated_password" not in st.session_state:
-    st.session_state.last_validated_password = ""
+# Validation message state for register form (populated by on_change callbacks)
+# _email_msg, _user_msg, _pass_msg are initialised inside the register form block
 
 # ------------------- CSS Styling -------------------
 st.markdown("""
@@ -1414,10 +1434,8 @@ if not st.session_state.authenticated:
             """, unsafe_allow_html=True)
 
     # -------- Premium Hero Section --------
-    # Fetch live stats for subtle ribbon
-    total_users = get_total_registered_users()
-    active_logins = get_logins_today()
-    stats = get_database_stats()
+    # Fetch live stats for subtle ribbon (cached — no Supabase hit on every rerun)
+    total_users, active_logins, stats = _cached_hero_stats()
     resumes_uploaded = stats.get("total_candidates", 0)
     active_domains = stats.get("unique_domains", 0)
 
@@ -2039,98 +2057,96 @@ if not st.session_state.get("authenticated", False):
                 # Normal registration form
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
 
-                # Email input with live validation
-                new_email = st.text_input("📧 Email", key="reg_email", placeholder="your@email.com")
+                # ── CSS: auto-fade validation badges (no time.sleep / no extra rerun) ──
+                st.markdown("""
+                <style>
+                @keyframes _fadeout_msg {
+                    0%   { opacity: 1; max-height: 60px; }
+                    70%  { opacity: 1; max-height: 60px; }
+                    100% { opacity: 0; max-height: 0; padding: 0; margin: 0; }
+                }
+                .val-msg-autofade {
+                    animation: _fadeout_msg 3.5s ease forwards;
+                    overflow: hidden;
+                }
+                </style>
+                """, unsafe_allow_html=True)
 
-                # Email validation placeholder (using st.empty for dynamic updates)
-                email_validation_placeholder = st.empty()
-
-                # Check if email changed and validate
-                if new_email and new_email != st.session_state.last_validated_email:
-                    if not is_valid_email(new_email.strip()):
-                        with email_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message warn-msg"><span class="slide-message-text">⚠️ Invalid email format.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_email = new_email
-                    elif email_exists(new_email.strip()):
-                        with email_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message error-msg"><span class="slide-message-text">❌ Email already registered.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_email = new_email
+                # ── on_change callbacks — DB hits ONLY when field value changes ──
+                def _validate_email():
+                    val = st.session_state.get("reg_email", "").strip()
+                    if not val:
+                        st.session_state._email_msg = ("", "")
+                        return
+                    if not is_valid_email(val):
+                        st.session_state._email_msg = ("warn", "⚠️ Invalid email format.")
+                    elif email_exists(val):
+                        st.session_state._email_msg = ("error", "❌ Email already registered.")
                     else:
-                        with email_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Email is available.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_email = new_email
-                        # Auto-hide after 3 seconds by clearing after delay
-                        time.sleep(3)
-                        email_validation_placeholder.empty()
-                elif not new_email:
-                    email_validation_placeholder.empty()
-                    st.session_state.last_validated_email = ""
+                        st.session_state._email_msg = ("success", "✅ Email is available.")
 
-                # Username input with live validation
-                new_user = st.text_input("👤 Username", key="reg_user")
-
-                # Username validation placeholder
-                username_validation_placeholder = st.empty()
-
-                # Check if username changed and validate
-                if new_user and new_user != st.session_state.last_validated_username:
-                    if username_exists(new_user.strip()):
-                        with username_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message error-msg"><span class="slide-message-text">❌ Username already exists.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_username = new_user
+                def _validate_username():
+                    val = st.session_state.get("reg_user", "").strip()
+                    if not val:
+                        st.session_state._user_msg = ("", "")
+                        return
+                    if username_exists(val):
+                        st.session_state._user_msg = ("error", "❌ Username already exists.")
                     else:
-                        with username_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Username is available.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_username = new_user
-                        time.sleep(3)
-                        username_validation_placeholder.empty()
-                elif not new_user:
-                    username_validation_placeholder.empty()
-                    st.session_state.last_validated_username = ""
+                        st.session_state._user_msg = ("success", "✅ Username is available.")
 
-                # Password input with live validation
-                new_pass = st.text_input("🔑 Password", type="password", key="reg_pass")
+                def _validate_password():
+                    val = st.session_state.get("reg_pass", "")
+                    if not val:
+                        st.session_state._pass_msg = ("", "")
+                        return
+                    if not is_strong_password(val):
+                        st.session_state._pass_msg = ("warn", "⚠️ Password must be at least 8 characters and strong.")
+                    else:
+                        st.session_state._pass_msg = ("success", "✅ Strong password.")
+
+                # Initialise message state once
+                if "_email_msg" not in st.session_state:
+                    st.session_state._email_msg = ("", "")
+                if "_user_msg" not in st.session_state:
+                    st.session_state._user_msg = ("", "")
+                if "_pass_msg" not in st.session_state:
+                    st.session_state._pass_msg = ("", "")
+
+                def _render_val_msg(state_key):
+                    """Render a validation badge that CSS-fades after ~3 s (no sleep, no rerun)."""
+                    kind, text = st.session_state.get(state_key, ("", ""))
+                    if not kind or not text:
+                        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+                        return
+                    css_class = {"warn": "warn-msg", "error": "error-msg", "success": "success-msg"}.get(kind, "info-msg")
+                    # autofade only on success messages; keep error/warn visible
+                    fade = " val-msg-autofade" if kind == "success" else ""
+                    st.markdown(
+                        f'<div class="slide-message {css_class}{fade}"><span class="slide-message-text">{text}</span></div>',
+                        unsafe_allow_html=True
+                    )
+
+                # ── Inputs wired to on_change — NO inline DB calls ──
+                new_email = st.text_input(
+                    "📧 Email", key="reg_email",
+                    placeholder="your@email.com",
+                    on_change=_validate_email
+                )
+                _render_val_msg("_email_msg")
+
+                new_user = st.text_input(
+                    "👤 Username", key="reg_user",
+                    on_change=_validate_username
+                )
+                _render_val_msg("_user_msg")
+
+                new_pass = st.text_input(
+                    "🔑 Password", type="password", key="reg_pass",
+                    on_change=_validate_password
+                )
                 st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
-
-                # Password validation placeholder
-                password_validation_placeholder = st.empty()
-
-                # Check if password changed and validate
-                if new_pass and new_pass != st.session_state.last_validated_password:
-                    if not is_strong_password(new_pass):
-                        with password_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message warn-msg"><span class="slide-message-text">⚠️ Password must be at least 8 characters and strong.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_password = new_pass
-                    else:
-                        with password_validation_placeholder:
-                            st.markdown(
-                                '<div class="slide-message success-msg"><span class="slide-message-text">✅ Strong password.</span></div>',
-                                unsafe_allow_html=True
-                            )
-                        st.session_state.last_validated_password = new_pass
-                        time.sleep(3)
-                        password_validation_placeholder.empty()
-                elif not new_pass:
-                    password_validation_placeholder.empty()
-                    st.session_state.last_validated_password = ""
+                _render_val_msg("_pass_msg")
 
                 # Render notification area (reserves space)
                 render_notification("register")
@@ -2215,8 +2231,8 @@ if st.session_state.get("authenticated"):
     '>🔑 Groq API Key</p>
     """, unsafe_allow_html=True)
 
-    # ✅ Load saved key from DB
-    saved_key = get_user_api_key(st.session_state.username)
+    # ✅ Load saved key from DB (cached — won't re-query on every rerun)
+    saved_key = _cached_user_api_key(st.session_state.username)
     masked_preview = f"****{saved_key[-6:]}" if saved_key else ""
 
     user_api_key_input = st.sidebar.text_input(
@@ -2225,11 +2241,15 @@ if st.session_state.get("authenticated"):
         type="password"
     )
 
-    # ✅ Save or reuse key
+    # ✅ Save or reuse key — guarded so save_user_api_key only fires once per
+    #    new value, not on every rerun while the field holds a value.
     if user_api_key_input:
+        if user_api_key_input != st.session_state.get("_last_saved_api_key"):
+            save_user_api_key(st.session_state.username, user_api_key_input)
+            st.session_state["_last_saved_api_key"] = user_api_key_input
+            _cached_user_api_key.clear()  # bust cache so next read gets new value
+            st.sidebar.success("✅ New key saved and in use.")
         st.session_state["user_groq_key"] = user_api_key_input
-        save_user_api_key(st.session_state.username, user_api_key_input)
-        st.sidebar.success("✅ New key saved and in use.")
     elif saved_key:
         st.session_state["user_groq_key"] = saved_key
         st.sidebar.info(f"ℹ️ Using your previously saved API key ({masked_preview})")
@@ -2239,7 +2259,9 @@ if st.session_state.get("authenticated"):
     # 🧹 Clear saved key
     if st.sidebar.button("🗑️ Clear My API Key"):
         st.session_state["user_groq_key"] = None
+        st.session_state.pop("_last_saved_api_key", None)
         save_user_api_key(st.session_state.username, None)
+        _cached_user_api_key.clear()
         st.sidebar.success("✅ Cleared saved Groq API key. Now using shared admin key.")
 
 if st.session_state.username == "admin":
@@ -2249,17 +2271,18 @@ if st.session_state.username == "admin":
     </div>
     """, unsafe_allow_html=True)
 
-    # Metrics row
+    # Metrics row — cached, no Supabase hit on every rerun
+    _reg_users, _logins_today, _logs = _cached_admin_metrics()
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("👤 Total Registered Users", get_total_registered_users())
+        st.metric("👤 Total Registered Users", _reg_users)
     with col2:
-        st.metric("📅 Logins Today (IST)", get_logins_today())
+        st.metric("📅 Logins Today (IST)", _logins_today)
 
     # Removed API key usage section (no longer tracked)
     # Activity log
     st.markdown("<p class='section-label'>📋 Activity Log</p>", unsafe_allow_html=True)
-    logs = get_all_user_logs()
+    logs = _logs
     if logs:
         st.dataframe(
             {
