@@ -11133,35 +11133,15 @@ def log_user_action(username: str, action: str):
     pass
 
 
-def _get_pg_conn():
-    """Return a psycopg2 connection using Supabase credentials from st.secrets."""
-    import psycopg2
-    import streamlit as st
-    return psycopg2.connect(
-        host=st.secrets["SUPABASE_HOST"],
-        dbname=st.secrets["SUPABASE_DB"],
-        user=st.secrets["SUPABASE_USER"],
-        password=st.secrets["SUPABASE_PASSWORD"],
-        port=int(st.secrets["SUPABASE_PORT"]),
-        connect_timeout=30,
-        keepalives=1,
-        keepalives_idle=60,
-        keepalives_interval=10,
-        keepalives_count=5,
-        sslmode="require",
-    )
-
-
 def create_interview_database():
-    """Create interview_results table if not exists, safely migrate new columns — Supabase PostgreSQL."""
+    """Create interview_results table if not exists, safely migrate new columns"""
+    import sqlite3
     try:
-        conn = _get_pg_conn()
+        conn = sqlite3.connect('resume_data.db')
         cursor = conn.cursor()
-
-        # Create base table (PostgreSQL syntax)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS interview_results (
-                id SERIAL PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL,
                 role TEXT,
                 domain TEXT,
@@ -11174,26 +11154,21 @@ def create_interview_database():
         conn.commit()
 
         # Safe migration: add new columns only if they don't exist
-        # PostgreSQL equivalent of PRAGMA table_info — query information_schema
-        cursor.execute("""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'interview_results'
-        """)
-        existing_columns = {row[0] for row in cursor.fetchall()}
+        existing_columns = [row[1] for row in cursor.execute("PRAGMA table_info(interview_results)").fetchall()]
 
         migrations = [
-            ("knowledge_avg",      "REAL"),
-            ("communication_avg",  "REAL"),
-            ("relevance_avg",      "REAL"),
-            ("difficulty",         "TEXT"),
-            ("duration_seconds",   "INTEGER"),
-            ("interview_mode",     "TEXT"),
-            ("created_timestamp",  "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
-            ("weighted_score",     "REAL"),
-            ("raw_avg_score",      "REAL"),
-            ("follow_up_count",    "INTEGER DEFAULT 0"),
-            ("depth_score",        "REAL"),
-            ("behavior_class",     "TEXT"),
+            ("knowledge_avg", "REAL"),
+            ("communication_avg", "REAL"),
+            ("relevance_avg", "REAL"),
+            ("difficulty", "TEXT"),
+            ("duration_seconds", "INTEGER"),
+            ("interview_mode", "TEXT"),
+            ("created_timestamp", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
+            ("weighted_score", "REAL"),
+            ("raw_avg_score", "REAL"),
+            ("follow_up_count", "INTEGER DEFAULT 0"),
+            ("depth_score", "REAL"),
+            ("behavior_class", "TEXT"),
         ]
 
         for col_name, col_type in migrations:
@@ -11202,7 +11177,7 @@ def create_interview_database():
                     cursor.execute(f"ALTER TABLE interview_results ADD COLUMN {col_name} {col_type}")
                     conn.commit()
                 except Exception:
-                    conn.rollback()
+                    pass
 
         conn.close()
         # Also ensure interview_questions table exists
@@ -11217,12 +11192,13 @@ def create_interview_questions_table():
     Create interview_questions table for storing every question and answer with full context.
     This is the SINGLE SOURCE OF TRUTH for PDF generation.
     """
+    import sqlite3
     try:
-        conn = _get_pg_conn()
+        conn = sqlite3.connect('resume_data.db')
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS interview_questions (
-                id SERIAL PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 interview_id TEXT NOT NULL,
                 question_text TEXT NOT NULL,
                 answer_text TEXT,
@@ -11250,9 +11226,10 @@ def save_interview_question(interview_id: str, question_text: str, answer_text: 
     Returns the row id of the inserted record, or -1 on failure.
     This must be called immediately when a question is answered.
     """
+    import sqlite3
     import json
     try:
-        conn = _get_pg_conn()
+        conn = sqlite3.connect('resume_data.db')
         cursor = conn.cursor()
         score_json = json.dumps(score_breakdown) if score_breakdown else None
         timestamp = get_ist_time()
@@ -11260,13 +11237,12 @@ def save_interview_question(interview_id: str, question_text: str, answer_text: 
             INSERT INTO interview_questions
                 (interview_id, question_text, answer_text, difficulty, is_follow_up,
                  parent_question_id, timestamp, score_breakdown, question_order)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (interview_id, question_text, answer_text,
               difficulty, 1 if is_follow_up else 0,
               parent_question_id, timestamp, score_json, question_order))
         conn.commit()
-        row_id = cursor.fetchone()[0]
+        row_id = cursor.lastrowid
         conn.close()
         return row_id
     except Exception as e:
@@ -11281,15 +11257,16 @@ def get_interview_questions_from_db(interview_id: str) -> list:
     Returns list of dicts with keys: id, question_text, answer_text, difficulty,
     is_follow_up, parent_question_id, timestamp, score_breakdown, question_order.
     """
+    import sqlite3
     import json
     try:
-        conn = _get_pg_conn()
+        conn = sqlite3.connect('resume_data.db')
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, question_text, answer_text, difficulty, is_follow_up,
                    parent_question_id, timestamp, score_breakdown, question_order
             FROM interview_questions
-            WHERE interview_id = %s
+            WHERE interview_id = ?
             ORDER BY question_order ASC, timestamp ASC
         """, (interview_id,))
         rows = cursor.fetchall()
@@ -11327,15 +11304,16 @@ def save_interview_result(username: str, role: str, domain: str, avg_score: floa
                           weighted_score: float = None, raw_avg_score: float = None,
                           follow_up_count: int = 0, depth_score: float = None, behavior_class: str = None):
     """Save interview result to database with extended columns"""
+    import sqlite3
     try:
-        conn = _get_pg_conn()
+        conn = sqlite3.connect('resume_data.db')
         cursor = conn.cursor()
         completed_on = get_ist_time()
         cursor.execute("""
             INSERT INTO interview_results (username, role, domain, avg_score, total_questions, completed_on, feedback_summary,
                                           knowledge_avg, communication_avg, relevance_avg, difficulty, duration_seconds, interview_mode, created_timestamp,
                                           weighted_score, raw_avg_score, follow_up_count, depth_score, behavior_class)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s, %s, %s, %s, %s)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)
         """, (username, role, domain, avg_score, total_questions, completed_on, feedback_summary,
               knowledge_avg, communication_avg, relevance_avg, difficulty, duration_seconds, interview_mode,
               weighted_score, raw_avg_score, follow_up_count, depth_score, behavior_class))
@@ -13863,12 +13841,13 @@ def get_user_weakness_history(username: str) -> dict:
     Uses all interviews for avg score computation and shows true total count.
     Returns dict with weakest_skill and bias recommendation.
     """
+    import sqlite3
     try:
-        conn = _get_pg_conn()
+        conn = sqlite3.connect('resume_data.db')
         import pandas as pd
         # Fetch ALL interviews (no LIMIT) so count and averages reflect full history
         df = pd.read_sql_query(
-            "SELECT knowledge_avg, communication_avg, relevance_avg FROM interview_results WHERE username=%s ORDER BY id DESC",
+            "SELECT knowledge_avg, communication_avg, relevance_avg FROM interview_results WHERE username=? ORDER BY id DESC",
             conn, params=(username,)
         )
         conn.close()
@@ -16449,6 +16428,7 @@ Generate {num_questions} questions now:
             st.info("Please select both a career domain and target role to start the interview practice.")
     # Section 5: My Progress 📊
     elif page == "My Progress 📊":
+        import sqlite3
         import pandas as pd
         import numpy as np
         import matplotlib.pyplot as plt
@@ -16536,10 +16516,9 @@ Generate {num_questions} questions now:
 
         if st.session_state.get(_cache_dirty_key, True) or _cache_key not in st.session_state:
             try:
-                import pandas as pd
-                conn = _get_pg_conn()
+                conn = sqlite3.connect('resume_data.db')
                 df = pd.read_sql_query(
-                    "SELECT * FROM interview_results WHERE username = %s ORDER BY id ASC",
+                    "SELECT * FROM interview_results WHERE username = ? ORDER BY id ASC",
                     conn, params=(username,)
                 )
                 conn.close()
