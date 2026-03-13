@@ -17459,7 +17459,7 @@ Generate {num_questions} questions now:
                 """, unsafe_allow_html=True)
 if tab5:
 	with tab5:
-		import sqlite3
+		# sqlite3 removed — using Supabase PostgreSQL via db_manager
 		import pandas as pd
 		import matplotlib.pyplot as plt
 		import numpy as np
