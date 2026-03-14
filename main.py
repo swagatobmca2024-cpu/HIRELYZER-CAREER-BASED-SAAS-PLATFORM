@@ -11133,12 +11133,8 @@ def log_user_action(username: str, action: str):
     pass
 
 
-@st.cache_resource
 def create_interview_database():
-    """Create interview_results table if not exists, safely migrate new columns.
-    Decorated with @st.cache_resource so the schema check runs only ONCE per
-    server process — not on every Streamlit rerun — preventing repeated DB
-    round-trips that waste time and contribute to perceived flicker."""
+    """Create interview_results table if not exists, safely migrate new columns"""
     try:
         conn = _get_live_conn()
         cursor = conn.cursor()
@@ -11193,12 +11189,10 @@ def create_interview_database():
         st.error(f"Database error: {e}")
 
 
-@st.cache_resource
 def create_interview_questions_table():
     """
     Create interview_questions table for storing every question and answer with full context.
     This is the SINGLE SOURCE OF TRUTH for PDF generation.
-    Cached with @st.cache_resource so schema creation runs only once per process.
     """
     try:
         conn = _get_live_conn()
@@ -14056,11 +14050,8 @@ Generate {num_questions} questions:"""
 
 
 with tab4:
-    # Inject CSS styles — emitted only once per session to avoid repeated style injections
-    # on every Streamlit rerun (which contributes to flicker on low-end devices).
-    if not st.session_state.get('_t4_css_injected', False):
-        st.session_state['_t4_css_injected'] = True
-        st.markdown("""
+    # Inject CSS styles — Apple-style SaaS dark theme (matching tab1.py HIRELYZER design language)
+    st.markdown("""
         <style>
         /* ═══════════════════════════════════════════════════════════════
            HIRELYZER — Premium Apple-Style Dark Theme (Tab 4)
@@ -14101,9 +14092,7 @@ with tab4:
         }
 
         /* ── Animations ── */
-        /* Reduced motion: all animations use will-change:auto to avoid unnecessary
-           GPU compositing layer promotions on low-end integrated graphics */
-        @keyframes t4-fadeSlideUp  { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes t4-fadeSlideUp  { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
         @keyframes t4-shimmer      { 0% { transform:translateX(-100%) skewX(-12deg); } 100% { transform:translateX(220%) skewX(-12deg); } }
         @keyframes t4-pulseGlow    { 0%,100% { box-shadow: var(--t4-shadow-card); } 50% { box-shadow: var(--t4-shadow-card), var(--t4-shadow-glow); } }
         @keyframes t4-gradientFlow { 0%,100% { background-position:0% 50%; } 50% { background-position:100% 50%; } }
@@ -14112,8 +14101,8 @@ with tab4:
         /* ── Header Box ── */
         .header-box {
             background: linear-gradient(160deg, rgba(14,20,32,0.97) 0%, rgba(8,12,18,0.99) 100%);
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
+            backdrop-filter: blur(32px) saturate(160%);
+            -webkit-backdrop-filter: blur(32px) saturate(160%);
             border: 1px solid rgba(99,179,237,0.20);
             border-radius: var(--t4-radius-xl);
             padding: 32px 28px;
@@ -14124,9 +14113,14 @@ with tab4:
             overflow: hidden;
             animation: t4-fadeSlideUp 0.65s cubic-bezier(0.22,1,0.36,1) forwards;
         }
-        /* shimmer disabled — continuous GPU animation causes battery drain and
-           compositing jank on integrated graphics (low-end laptops) */
-        .header-box::after { content: none; }
+        .header-box::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 60%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(79,163,227,0.06), transparent);
+            animation: t4-shimmer 3.5s ease-in-out infinite;
+        }
         .header-box h2 {
             font-family: var(--t4-font) !important;
             font-size: 1.85rem !important;
@@ -14146,7 +14140,7 @@ with tab4:
             font-weight: 600;
             letter-spacing: -0.02em;
             margin: 20px 0 12px 0;
-
+            animation: t4-subtlePulse 3.5s ease-in-out infinite;
         }
 
         /* ── Learning Path Container ── */
@@ -14155,8 +14149,8 @@ with tab4:
             margin: 24px 0 18px 0;
             padding: 14px 20px;
             background: var(--t4-surface-01);
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             border-radius: var(--t4-radius-md);
             border: 1px solid var(--t4-border-subtle);
             transition: border-color var(--t4-ease-base);
@@ -14176,8 +14170,8 @@ with tab4:
         /* ── Card ── */
         .card {
             background: var(--t4-surface-01);
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
             border: 1px solid var(--t4-border-subtle);
             border-radius: var(--t4-radius-lg);
             padding: 20px 24px;
@@ -14196,15 +14190,20 @@ with tab4:
             pointer-events: none;
             border-radius: inherit;
         }
-        /* card shimmer-on-hover disabled — triggers compositing layer promotion on
-           every mouse move, causing frame drops on integrated graphics */
-        .card::after { content: none; }
+        .card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 50%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(79,163,227,0.05), transparent);
+            transition: left 0.6s ease;
+        }
         .card:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--t4-shadow-card), 0 0 30px rgba(79,163,227,0.08);
+            transform: translateY(-4px);
+            box-shadow: var(--t4-shadow-card), 0 0 50px rgba(79,163,227,0.10);
             border-color: var(--t4-border-accent);
         }
-        .card:hover::after { content: none; }
+        .card:hover::after { left: 150%; }
         .card a {
             font-family: var(--t4-font);
             color: var(--t4-accent-cyan);
@@ -14225,8 +14224,8 @@ with tab4:
         /* ── Course Tile ── */
         .course-tile {
             background: var(--t4-surface-01);
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--t4-border-subtle);
             border-radius: var(--t4-radius-lg);
             padding: 20px;
@@ -14237,7 +14236,7 @@ with tab4:
             box-shadow: var(--t4-shadow-card);
         }
         .course-tile:hover {
-            transform: translateY(-2px);
+            transform: translateY(-4px);
             border-color: var(--t4-border-accent);
             box-shadow: var(--t4-shadow-card), var(--t4-shadow-glow);
         }
@@ -14286,7 +14285,7 @@ with tab4:
             font-family: var(--t4-font);
             display: inline-block;
             transition: all var(--t4-ease-fast);
-            backdrop-filter: blur(4px);
+            backdrop-filter: blur(8px);
         }
         .course-link-btn:hover {
             background: linear-gradient(135deg, rgba(56,189,248,0.28) 0%, rgba(79,163,227,0.22) 100%);
@@ -14299,8 +14298,8 @@ with tab4:
         /* ── Quiz Card ── */
         .quiz-card {
             background: var(--t4-surface-01);
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--t4-border-subtle);
             border-radius: var(--t4-radius-lg);
             padding: 20px;
@@ -14317,8 +14316,8 @@ with tab4:
             text-align: center;
             padding: 28px;
             background: var(--t4-surface-01);
-            backdrop-filter: blur(4px);
-            -webkit-backdrop-filter: blur(4px);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
             border-radius: var(--t4-radius-lg);
             border: 1px solid var(--t4-border-subtle);
             margin: 18px 0;
@@ -14343,7 +14342,7 @@ with tab4:
             border-radius: var(--t4-radius-md);
             padding: 18px;
             margin: 12px 0;
-            backdrop-filter: blur(6px);
+            backdrop-filter: blur(16px);
             transition: border-color var(--t4-ease-fast);
         }
         .role-selector:hover { border-color: var(--t4-border-accent); }
@@ -14355,7 +14354,7 @@ with tab4:
             border-radius: var(--t4-radius-lg);
             padding: 20px;
             margin: 18px 0;
-            backdrop-filter: blur(6px);
+            backdrop-filter: blur(16px);
         }
 
         /* ── Timer ── */
@@ -14366,7 +14365,7 @@ with tab4:
             padding: 14px;
             margin: 14px 0;
             text-align: center;
-            backdrop-filter: blur(6px);
+            backdrop-filter: blur(16px);
         }
         .timer-display {
             font-family: var(--t4-font);
@@ -14377,7 +14376,7 @@ with tab4:
         }
         .timer-urgent {
             color: var(--t4-accent-rose);
-            animation: t4-subtlePulse 2s ease-in-out infinite;
+            animation: t4-subtlePulse 1s ease-in-out infinite;
         }
 
         /* ── Selectbox ── */
@@ -14408,7 +14407,7 @@ with tab4:
             background: var(--t4-surface-01) !important;
             border: 1px solid var(--t4-border-subtle) !important;
             border-radius: var(--t4-radius-md) !important;
-            backdrop-filter: blur(6px) !important;
+            backdrop-filter: blur(16px) !important;
             font-family: var(--t4-font) !important;
             font-size: 0.875rem !important;
         }
@@ -14441,7 +14440,7 @@ with tab4:
             font-weight: 500 !important;
             font-size: 0.875rem !important;
             text-align: center !important;
-            backdrop-filter: blur(4px) !important;
+            backdrop-filter: blur(12px) !important;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
         }
         .stRadio label:hover {
@@ -14467,7 +14466,6 @@ with tab4:
 
         </style>
     """, unsafe_allow_html=True)
-    # end CSS injection guard
 
     # Header (keeping existing)
     st.markdown("""
@@ -15904,8 +15902,8 @@ Generate {num_questions} questions now:
                 # Display progress with correct counts in glassmorphism box
                 st.markdown(f"""
                 <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.08) 0%, rgba(0, 195, 255, 0.04) 100%);
-                            backdrop-filter: blur(6px);
-                            -webkit-backdrop-filter: blur(6px);
+                            backdrop-filter: blur(10px);
+                            -webkit-backdrop-filter: blur(10px);
                             border: 1px solid rgba(0, 195, 255, 0.2);
                             border-radius: 12px;
                             padding: 16px 24px;
@@ -15928,141 +15926,22 @@ Generate {num_questions} questions now:
                     elapsed_time = time.time() - st.session_state.question_timer_start
                     remaining_time = max(0, st.session_state.timer_seconds - elapsed_time)
 
-                    # Display timer — JS-driven countdown so the page does NOT rerun every second.
-                    # Only the timer element updates in the browser, eliminating flicker on low-end devices.
-                    #
-                    # AUTO-SUBMIT BRIDGE: When the JS countdown hits 0 it clicks the hidden
-                    # Streamlit button below (id contains "timer_expired_trigger"), which causes
-                    # a single page rerun so the Python auto-submit block (remaining_time <= 0)
-                    # actually fires. Without this bridge, auto-submit would never trigger because
-                    # the page only reruns on user interaction.
-                    import streamlit.components.v1 as _components
-                    _total_secs = int(st.session_state.timer_seconds)
-                    _remaining_secs = int(max(0, remaining_time))
-                    _components.html(f"""
-                    <style>
-                      #t4-timer-wrap {{
-                        background: linear-gradient(135deg, rgba(251,191,36,0.08) 0%, rgba(251,191,36,0.04) 100%);
-                        border: 1px solid rgba(251,191,36,0.25);
-                        border-radius: 14px;
-                        padding: 14px;
-                        margin: 4px 0 8px 0;
-                        text-align: center;
-                      }}
-                      #t4-timer-txt {{
-                        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'DM Sans', sans-serif;
-                        font-size: 1.4rem;
-                        font-weight: 700;
-                        color: #fbbf24;
-                        letter-spacing: -0.01em;
-                      }}
-                      #t4-timer-txt.urgent {{
-                        color: #fb7185;
-                        animation: t4pulse 1s ease-in-out infinite;
-                      }}
-                      @keyframes t4pulse {{ 0%,100%{{opacity:1}} 50%{{opacity:0.72}} }}
-                      #t4-progress-bar {{
-                        width: 100%;
-                        height: 6px;
-                        border-radius: 3px;
-                        background: rgba(255,255,255,0.08);
-                        margin-top: 8px;
-                        overflow: hidden;
-                      }}
-                      #t4-progress-fill {{
-                        height: 100%;
-                        border-radius: 3px;
-                        background: linear-gradient(90deg, #4fa3e3, #38bdf8);
-                        transition: width 0.95s linear;
-                      }}
-                    </style>
-                    <div id="t4-timer-wrap">
-                      <div id="t4-timer-txt">⏰ Time Remaining: <span id="t4-mm">00</span>:<span id="t4-ss">00</span></div>
-                      <div id="t4-progress-bar"><div id="t4-progress-fill" style="width:0%"></div></div>
-                    </div>
-                    <script>
-                    (function() {{
-                      var remaining = {_remaining_secs};
-                      var total    = {_total_secs};
-                      var fired    = false;
-                      function pad(n) {{ return n < 10 ? '0'+n : ''+n; }}
-                      function clickTimerExpiredBtn() {{
-                        // Walk up into the parent Streamlit document and click the hidden trigger button.
-                        // The button key contains 'timer_expired_trigger' so we search by that substring.
-                        try {{
-                          var doc = window.parent.document;
-                          var btns = doc.querySelectorAll('button[kind="secondary"], button');
-                          for (var i = 0; i < btns.length; i++) {{
-                            if (btns[i].innerText && btns[i].innerText.indexOf('__timer_expired__') !== -1) {{
-                              btns[i].click();
-                              return;
-                            }}
-                          }}
-                          // Fallback: find by data-testid key attribute pattern
-                          var allBtns = doc.querySelectorAll('[data-testid="baseButton-secondary"]');
-                          for (var j = 0; j < allBtns.length; j++) {{
-                            if (allBtns[j].closest('[data-testid]') && 
-                                JSON.stringify(allBtns[j].closest('[data-testid]')).indexOf('timer_expired') !== -1) {{
-                              allBtns[j].click();
-                              return;
-                            }}
-                          }}
-                        }} catch(e) {{ /* cross-origin guard */ }}
-                      }}
-                      function tick() {{
-                        if (remaining < 0) remaining = 0;
-                        var mm = Math.floor(remaining / 60);
-                        var ss = remaining % 60;
-                        var txt = document.getElementById('t4-timer-txt');
-                        document.getElementById('t4-mm').textContent = pad(mm);
-                        document.getElementById('t4-ss').textContent = pad(ss);
-                        var pct = total > 0 ? ((total - remaining) / total * 100) : 100;
-                        document.getElementById('t4-progress-fill').style.width = pct + '%';
-                        if (remaining <= 30) {{ txt.classList.add('urgent'); }} else {{ txt.classList.remove('urgent'); }}
-                        if (remaining > 0) {{
-                          remaining--;
-                          setTimeout(tick, 1000);
-                        }} else if (!fired) {{
-                          fired = true;
-                          // Timer hit 0 — trigger the hidden Streamlit button to cause a rerun
-                          // so the Python auto-submit block executes.
-                          clickTimerExpiredBtn();
-                        }}
-                      }}
-                      tick();
-                    }})();
-                    </script>
-                    """, height=90, scrolling=False)
+                    # Display timer
+                    timer_minutes = int(remaining_time // 60)
+                    timer_seconds_display = int(remaining_time % 60)
+                    timer_urgent_class = "timer-urgent" if remaining_time <= 30 else ""
 
-                    # Hidden trigger button — invisible to the user, clicked by JS above when
-                    # the countdown hits 0. Its click causes a Streamlit rerun so Python sees
-                    # remaining_time <= 0 and fires the auto-submit path below.
-                    _timer_expired_clicked = st.button(
-                        "__timer_expired__",
-                        key="timer_expired_trigger",
-                        help="internal timer trigger",
-                    )
-                    # Hide the button visually (it must exist in the DOM for JS to find it)
-                    st.markdown("""
-                        <style>
-                        div[data-testid="stButton"]:has(button[kind="secondary"]) button[kind="secondary"]:only-child {
-                            display: none !important;
-                        }
-                        /* Targeted hide by label text — most reliable */
-                        </style>
-                        <script>
-                        (function hideTriggerBtn() {
-                          var doc = window.parent ? window.parent.document : document;
-                          var btns = doc.querySelectorAll('button');
-                          btns.forEach(function(b) {
-                            if (b.innerText && b.innerText.trim() === '__timer_expired__') {
-                              b.style.cssText = 'position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;border:0!important;';
-                            }
-                          });
-                          setTimeout(hideTriggerBtn, 500);
-                        })();
-                        </script>
+                    st.markdown(f"""
+                    <div class="timer-container">
+                        <div class="timer-display {timer_urgent_class}">
+                            ⏰ Time Remaining: {timer_minutes:02d}:{timer_seconds_display:02d}
+                        </div>
+                    </div>
                     """, unsafe_allow_html=True)
+
+                    # Timer progress bar
+                    progress_value = (st.session_state.timer_seconds - remaining_time) / st.session_state.timer_seconds
+                    st.progress(progress_value)
 
                     # Question display with phase indicator
                     phase_badge = "📄 Resume-Based Question" if current_index <= num_resume_qs else "💼 Generic Interview Question"
@@ -16206,13 +16085,8 @@ Generate {num_questions} questions now:
                     if 'pending_followup_strategy' not in st.session_state:
                         st.session_state.pending_followup_strategy = ""
 
-                    # Auto-submit when timer expires.
-                    # Triggers on two conditions (OR):
-                    #   1. _timer_expired_clicked — JS in the iframe clicked the hidden button when
-                    #      countdown hit 0, causing a rerun. This is the primary path.
-                    #   2. remaining_time <= 0 — Python-side elapsed-time check as a safety fallback
-                    #      (fires if the user interacts with the page right as time runs out).
-                    if (_timer_expired_clicked or remaining_time <= 0) and not st.session_state.dynamic_answer_submitted:
+                    # Auto-submit logic when timer expires
+                    if remaining_time <= 0 and not st.session_state.dynamic_answer_submitted:
                         if not answer.strip():
                             answer = "⚠️ No Answer"
                         with st.spinner("Evaluating your answer..."):
@@ -16346,10 +16220,10 @@ Generate {num_questions} questions now:
                                     if i < num_to_show - 1:  # Don't add separator after last item
                                         st.markdown("---")
 
-                    # Timer is now JS-driven (client-side countdown in the iframe above).
-                    # No time.sleep() + st.rerun() needed — eliminates the per-second full-page
-                    # re-render that caused flickering on low-end devices.
-                    # The page still reruns when the user submits an answer or clicks a button.
+                    # Auto-refresh for timer
+                    if remaining_time > 0 and not st.session_state.dynamic_answer_submitted:
+                        time.sleep(1)
+                        st.rerun()
                 else:
                     # CRITICAL FIX: All questions answered, move to completion automatically
                     # Capture exact duration at auto-completion moment
@@ -16624,8 +16498,8 @@ Generate {num_questions} questions now:
         /* Metric cards */
         .metric-card {
             background: rgba(255,255,255,0.04);
-            backdrop-filter: blur(6px);
-            -webkit-backdrop-filter: blur(6px);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
             border: 1px solid rgba(255,255,255,0.07);
             border-radius: 14px;
             padding: 18px 20px;
