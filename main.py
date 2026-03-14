@@ -7486,37 +7486,14 @@ with tab2:
     # --- Visual Resume Preview Section (only shown after form is submitted) ---
     if "generated_html" in st.session_state:
         import streamlit.components.v1 as components
-
         st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
-        st.markdown(
-            f"<p style='color:#555; font-size:14px; margin-top:-10px;'>"
-            f"Template: <b>{selected_template}</b></p>",
-            unsafe_allow_html=True,
-        )
         st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
-
-        # Wrap the generated template HTML in a full HTML document so the iframe
-        # renders it exactly as it will look when downloaded/opened in a browser.
-        preview_html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        /* Reset iframe body so the template styles take full effect */
-        body {{
-            margin: 0;
-            padding: 0;
-            background: #ffffff;
-        }}
-    </style>
-</head>
-<body>
-{st.session_state['generated_html']}
-</body>
-</html>"""
-
-        components.html(preview_html, height=1100, scrolling=True)
+        st.caption(f"🎨 Template: **{st.session_state.get('template_selector', 'Default (Professional)')}**")
+        components.html(
+            st.session_state["generated_html"],
+            height=1100,
+            scrolling=True,
+        )
 
 import re
 
