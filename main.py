@@ -587,244 +587,34 @@ div.stAlert {
 }
 
 /* ══════════════════════════════════════
-   LOGIN / AUTH CARD — Premium SaaS
+   LOGIN / AUTH CARD
    ══════════════════════════════════════ */
 .login-card {
     background: linear-gradient(160deg,
-        rgba(12,18,28,0.97) 0%,
-        rgba(7,11,17,0.99) 100%);
-    backdrop-filter: blur(40px) saturate(180%);
-    -webkit-backdrop-filter: blur(40px) saturate(180%);
-    border: 1px solid rgba(99,179,237,0.20);
-    border-top: 1px solid rgba(99,179,237,0.30);
+        rgba(14,20,32,0.95) 0%,
+        rgba(8,12,18,0.98) 100%);
+    backdrop-filter: blur(32px) saturate(160%);
+    -webkit-backdrop-filter: blur(32px) saturate(160%);
+    border: 1px solid rgba(99,179,237,0.18);
     border-radius: var(--radius-xl);
-    padding: 28px 30px 32px;
-    box-shadow: var(--shadow-card),
-                0 0 80px rgba(56,189,248,0.06),
-                inset 0 1px 0 rgba(255,255,255,0.07);
+    padding: 28px 32px 36px;
+    box-shadow: var(--shadow-card), 0 0 60px rgba(79,163,227,0.07);
     transition: all var(--transition-slow);
     position: relative;
     overflow: hidden;
     animation: fadeSlideUp 0.7s cubic-bezier(0.22,1,0.36,1) forwards;
-}
-.login-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, rgba(255,255,255,0.035) 0%, transparent 55%);
-    pointer-events: none;
-    border-radius: inherit;
 }
 .login-card::after {
     content: '';
     position: absolute;
     top: 0; left: -100%;
     width: 60%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(79,163,227,0.04), transparent);
-    animation: shimmerSlide 4.5s ease-in-out infinite;
+    background: linear-gradient(90deg, transparent, rgba(79,163,227,0.06), transparent);
+    animation: shimmerSlide 3.5s ease-in-out infinite;
 }
 .login-card:hover {
-    border-color: rgba(99,179,237,0.30);
-    box-shadow: var(--shadow-card),
-                0 0 100px rgba(79,163,227,0.10),
-                inset 0 1px 0 rgba(255,255,255,0.09);
-}
-
-/* ══════════════════════════════════════
-   AUTH FORM — Compact spacing & stable layout
-   ══════════════════════════════════════ */
-
-/* Kill ALL Streamlit default vertical gaps inside auth card */
-.login-card .stTextInput,
-.login-card .stTextInput > div,
-.login-card .stTextInput > div > div,
-.login-card .element-container,
-.login-card .stMarkdown {
-    margin-bottom: 0 !important;
-    padding-bottom: 0 !important;
-}
-/* Kill the gap Streamlit injects between vertical block children */
-.login-card [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlockBorderWrapper"],
-.login-card [data-testid="stVerticalBlock"] > div {
-    gap: 0 !important;
-}
-.login-card [data-testid="stVerticalBlock"] {
-    gap: 0 !important;
-}
-
-/* Inputs inside the auth card — smoother focus glow, tight sizing */
-.login-card .stTextInput > div > div > input {
-    border-radius: 10px !important;
-    background: rgba(255,255,255,0.035) !important;
-    border: 1px solid rgba(255,255,255,0.10) !important;
-    padding: 9px 14px !important;
-    font-size: 0.875rem !important;
-    transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease !important;
-}
-.login-card .stTextInput > div > div > input:focus {
-    border-color: rgba(56,189,248,0.55) !important;
-    box-shadow: 0 0 0 3px rgba(56,189,248,0.13),
-                0 1px 4px rgba(0,0,0,0.30) !important;
-    background: rgba(255,255,255,0.055) !important;
-    outline: none !important;
-}
-.login-card .stTextInput > div > div > input:hover:not(:focus) {
-    border-color: rgba(56,189,248,0.30) !important;
-    background: rgba(255,255,255,0.05) !important;
-}
-/* Tighten the label above each input */
-.login-card .stTextInput > label {
-    margin-bottom: 3px !important;
-    padding-bottom: 0 !important;
-    font-size: 0.72rem !important;
-    letter-spacing: 0.07em !important;
-}
-
-/* ── Validation pill card — fixed 28px height, never shifts layout ── */
-.val-row {
-    height: 28px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 4px 0 6px 0;
-    padding: 0 10px;
-    border-radius: 6px;
-    font-size: 0.74rem;
-    font-family: var(--font-sans);
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    line-height: 1;
-    overflow: hidden;
-    transition: opacity 0.3s ease;
-    white-space: nowrap;
-    box-sizing: border-box;
-}
-/* Empty state — invisible but holds its 28px */
-.val-row.empty {
-    opacity: 0;
-    pointer-events: none;
-    background: transparent !important;
-    border: none !important;
-}
-/* Success pill */
-.val-row.val-ok {
-    background: rgba(52,211,153,0.10);
-    border: 1px solid rgba(52,211,153,0.25);
-    color: #6ee7b7;
-    box-shadow: inset 0 1px 0 rgba(52,211,153,0.08);
-}
-/* Error pill */
-.val-row.val-err {
-    background: rgba(251,113,133,0.10);
-    border: 1px solid rgba(251,113,133,0.25);
-    color: #fca5a5;
-    box-shadow: inset 0 1px 0 rgba(251,113,133,0.08);
-}
-/* Warning pill */
-.val-row.val-warn {
-    background: rgba(251,191,36,0.10);
-    border: 1px solid rgba(251,191,36,0.22);
-    color: #fde68a;
-    box-shadow: inset 0 1px 0 rgba(251,191,36,0.08);
-}
-.val-icon { flex-shrink: 0; font-size: 0.7rem; line-height: 1; }
-
-/* Password helper text — single line, muted, zero extra margin */
-.pw-hint {
-    font-size: 0.70rem;
-    color: #3d4f63;
-    font-family: var(--font-sans);
-    letter-spacing: 0.01em;
-    line-height: 1;
-    margin: 3px 0 4px 2px;
-    display: block;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* Stable tab panel height — both tabs identical min-height */
-.login-card .stTabs [data-baseweb="tab-panel"] {
-    min-height: 340px !important;
-    padding: 12px 0 6px !important;
-}
-
-/* Auth tab bar — compact pill style */
-.login-card .stTabs [data-baseweb="tab-list"] {
-    gap: 3px !important;
-    background: rgba(255,255,255,0.025) !important;
-    padding: 4px !important;
-    border-radius: 12px !important;
-    border: 1px solid rgba(255,255,255,0.07) !important;
-    margin-bottom: 4px !important;
-}
-.login-card .stTabs [data-baseweb="tab"] {
-    border-radius: 9px !important;
-    font-size: 0.82rem !important;
-    font-weight: 600 !important;
-    padding: 7px 20px !important;
-    letter-spacing: 0.03em !important;
-}
-.login-card .stTabs [aria-selected="true"] {
-    background: linear-gradient(135deg,
-        rgba(56,189,248,0.22) 0%,
-        rgba(79,163,227,0.14) 100%) !important;
-    color: #7dd3fc !important;
-    border: 1px solid rgba(56,189,248,0.30) !important;
-    box-shadow: 0 2px 12px rgba(56,189,248,0.14),
-                inset 0 1px 0 rgba(255,255,255,0.08) !important;
-}
-
-/* Sign-in primary button — gradient pill */
-.login-card .stButton > button[kind="primary"],
-.login-card .stButton > button {
-    background: linear-gradient(135deg,
-        rgba(56,189,248,0.22) 0%,
-        rgba(79,163,227,0.16) 100%) !important;
-    color: #e0f6ff !important;
-    border: 1px solid rgba(56,189,248,0.38) !important;
-    border-radius: 10px !important;
-    font-weight: 600 !important;
-    font-size: 0.875rem !important;
-    letter-spacing: 0.04em !important;
-    padding: 11px 22px !important;
-    box-shadow: 0 4px 18px rgba(56,189,248,0.12),
-                inset 0 1px 0 rgba(255,255,255,0.10) !important;
-    transition: all 0.2s cubic-bezier(0.4,0,0.2,1) !important;
-}
-.login-card .stButton > button:hover {
-    background: linear-gradient(135deg,
-        rgba(56,189,248,0.34) 0%,
-        rgba(79,163,227,0.26) 100%) !important;
-    border-color: rgba(56,189,248,0.55) !important;
-    box-shadow: 0 6px 28px rgba(56,189,248,0.22),
-                inset 0 1px 0 rgba(255,255,255,0.14) !important;
-    transform: translateY(-2px) !important;
-    color: #fff !important;
-}
-.login-card .stButton > button:active {
-    transform: translateY(0) !important;
-    box-shadow: 0 2px 8px rgba(56,189,248,0.10) !important;
-}
-
-/* Subtitle label style inside auth card */
-.auth-subtitle {
-    color: #64748b;
-    text-align: center;
-    font-family: var(--font-sans);
-    font-size: 0.78rem;
-    font-weight: 500;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    margin-bottom: 20px;
-    display: block;
-}
-
-/* Notification slot — fixed height so buttons never jump */
-.notif-slot {
-    min-height: 52px;
-    display: flex;
-    align-items: center;
+    border-color: rgba(99,179,237,0.32);
+    box-shadow: var(--shadow-card), 0 0 80px rgba(79,163,227,0.12);
 }
 
 /* ══════════════════════════════════════
@@ -992,7 +782,7 @@ div[data-testid="metric-container"] [data-testid="stMetricValue"] {
 .stTabs [data-baseweb="tab-highlight"] { display: none !important; }
 .stTabs [data-baseweb="tab-panel"] {
     background: transparent !important;
-    padding: 16px 0 !important;
+    padding: 20px 0 !important;
 }
 
 /* ══════════════════════════════════════
@@ -1981,7 +1771,7 @@ if not st.session_state.get("authenticated", False):
             # Show login or forgot password flow based on reset_stage
             if st.session_state.reset_stage == "none":
                 # Normal Login UI
-                st.markdown("<span class='auth-subtitle'>Welcome Back</span>", unsafe_allow_html=True)
+                st.markdown("""<h3 style='color:#9aa4af; text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:0.82rem; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:24px;'>Welcome Back</h3>""", unsafe_allow_html=True)
 
                 user = st.text_input("Username or Email", key="login_user")
                 pwd = st.text_input("Password", type="password", key="login_pass")
@@ -2005,7 +1795,7 @@ if not st.session_state.get("authenticated", False):
                         notify("login", "error", "❌ Invalid credentials. Please try again.")
                         st.rerun()
 
-                st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
 
                 # Forgot Password Link
                 if st.button("Forgot Password?", key="forgot_pw_link"):
@@ -2016,7 +1806,7 @@ if not st.session_state.get("authenticated", False):
             # FORGOT PASSWORD FLOW - Stage 1: Request Email
             # ============================================================
             elif st.session_state.reset_stage == "request_email":
-                st.markdown("<span class='auth-subtitle'>Reset Password</span>", unsafe_allow_html=True)
+                st.markdown("""<h3 style='color:#9aa4af; text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:0.82rem; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:16px;'>Reset Password</h3>""", unsafe_allow_html=True)
                 st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your registered email to receive an OTP</p>", unsafe_allow_html=True)
 
                 email_input = st.text_input("Email Address", key="reset_email_input")
@@ -2265,18 +2055,19 @@ if not st.session_state.get("authenticated", False):
 
             else:
                 # Normal registration form
-                st.markdown("<span class='auth-subtitle'>Create your account</span>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
 
-                # ── CSS: fixed-height val-row autofade (opacity+scale — no height change) ──
+                # ── CSS: auto-fade validation badges (no time.sleep / no extra rerun) ──
                 st.markdown("""
                 <style>
-                @keyframes _val_fadeout {
-                    0%   { opacity: 1; transform: translateY(0); }
-                    60%  { opacity: 1; transform: translateY(0); }
-                    100% { opacity: 0; transform: translateY(-3px); }
+                @keyframes _fadeout_msg {
+                    0%   { opacity: 1; max-height: 60px; }
+                    70%  { opacity: 1; max-height: 60px; }
+                    100% { opacity: 0; max-height: 0; padding: 0; margin: 0; }
                 }
                 .val-msg-autofade {
-                    animation: _val_fadeout 3.2s cubic-bezier(0.4,0,0.2,1) forwards;
+                    animation: _fadeout_msg 3.5s ease forwards;
+                    overflow: hidden;
                 }
                 </style>
                 """, unsafe_allow_html=True)
@@ -2323,38 +2114,16 @@ if not st.session_state.get("authenticated", False):
                     st.session_state._pass_msg = ("", "")
 
                 def _render_val_msg(state_key):
-                    """Fixed-height (28px) pill card validation row — layout never shifts."""
+                    """Render a validation badge that CSS-fades after ~3 s (no sleep, no rerun)."""
                     kind, text = st.session_state.get(state_key, ("", ""))
                     if not kind or not text:
-                        st.markdown("<div class='val-row empty'>&nbsp;</div>", unsafe_allow_html=True)
+                        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
                         return
-                    icon_map = {
-                        "success": "✓",
-                        "warn":    "⚠",
-                        "error":   "✕",
-                    }
-                    cls_map = {
-                        "success": "val-ok",
-                        "warn":    "val-warn",
-                        "error":   "val-err",
-                    }
-                    # Strip leading emoji from message text for cleaner pill display
-                    clean = re.sub(r'^[\U00002700-\U000027BF\U0001F300-\U0001FAFF\u2600-\u26FF\u2700-\u27BF✅❌⚠️]+\s*', '', text)
-                    icon = icon_map.get(kind, "·")
-                    css  = cls_map.get(kind, "val-warn")
+                    css_class = {"warn": "warn-msg", "error": "error-msg", "success": "success-msg"}.get(kind, "info-msg")
+                    # autofade only on success messages; keep error/warn visible
                     fade = " val-msg-autofade" if kind == "success" else ""
-                    # slide-in entrance + optional autofade
                     st.markdown(
-                        f'<div class="val-row {css}{fade}" style="animation: _val_slidein 0.22s cubic-bezier(0.34,1.56,0.64,1) both;">'
-                        f'<span class="val-icon">{icon}</span>'
-                        f'<span>{clean}</span>'
-                        f'</div>'
-                        f'<style>'
-                        f'@keyframes _val_slidein {{'
-                        f'  from {{ opacity:0; transform:translateY(-4px); }}'
-                        f'  to   {{ opacity:1; transform:translateY(0); }}'
-                        f'}}'
-                        f'</style>',
+                        f'<div class="slide-message {css_class}{fade}"><span class="slide-message-text">{text}</span></div>',
                         unsafe_allow_html=True
                     )
 
@@ -2376,7 +2145,7 @@ if not st.session_state.get("authenticated", False):
                     "🔑 Password", type="password", key="reg_pass",
                     on_change=_validate_password
                 )
-                st.markdown("<span class='pw-hint'>Min 8 chars · uppercase · lowercase · number · special character</span>", unsafe_allow_html=True)
+                st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
                 _render_val_msg("_pass_msg")
 
                 # Render notification area (reserves space)
