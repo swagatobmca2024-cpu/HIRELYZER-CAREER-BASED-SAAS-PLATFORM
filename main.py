@@ -1374,97 +1374,6 @@ h3, .stMarkdown h3 {
     color: var(--text-secondary) !important;
     font-family: var(--font-sans) !important;
 }
-
-/* ══════════════════════════════════════
-   REGISTER TAB — compact, stable layout
-   ══════════════════════════════════════ */
-
-/* Collapse the large bottom margin Streamlit adds under every input widget */
-div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] > div[data-testid="stTextInput"] {
-    margin-bottom: 0 !important;
-}
-
-/* Kill the default bottom padding on the stTextInput wrapper itself */
-div[data-testid="stTextInput"] {
-    margin-bottom: 0 !important;
-    padding-bottom: 0 !important;
-}
-
-/* ── Register tab: nuke all element-container gaps ── */
-/* Streamlit wraps every widget in a div[data-testid="element-container"].
-   Target ONLY the register form inputs by scoping under the login-card. */
-.login-card div[data-testid="element-container"] {
-    margin-top: 0 !important;
-    margin-bottom: 0 !important;
-    padding-top: 0 !important;
-    padding-bottom: 0 !important;
-}
-/* Also kill the stVerticalBlock gap rows Streamlit injects between elements */
-.login-card div[data-testid="stVerticalBlock"] > div {
-    gap: 0 !important;
-}
-
-/* Fixed-height validation slot — always 22px, never shifts layout */
-.val-slot {
-    height: 22px !important;
-    min-height: 22px !important;
-    max-height: 22px !important;
-    overflow: hidden !important;
-    display: flex !important;
-    align-items: center !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    line-height: 1 !important;
-    box-sizing: border-box !important;
-}
-
-/* Inline validation pill — sits inside .val-slot */
-.val-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 2px 9px;
-    border-radius: 99px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    font-family: var(--font-sans) !important;
-    letter-spacing: 0.01em;
-    line-height: 1;
-    white-space: nowrap;
-    animation: fadein 0.2s ease forwards;
-}
-.val-pill-success {
-    background: rgba(52,211,153,0.12);
-    border: 1px solid rgba(52,211,153,0.28);
-    color: #6ee7b7;
-}
-.val-pill-error {
-    background: rgba(251,113,133,0.12);
-    border: 1px solid rgba(251,113,133,0.28);
-    color: #fca5a5;
-}
-.val-pill-warn {
-    background: rgba(251,191,36,0.12);
-    border: 1px solid rgba(251,191,36,0.28);
-    color: #fde68a;
-}
-
-/* Password hint — override the global stMarkdown p rule aggressively */
-p.pass-hint,
-.pass-hint {
-    font-size: 0.71rem !important;
-    color: var(--text-muted) !important;
-    font-family: var(--font-sans) !important;
-    line-height: 1.3 !important;
-    margin: 1px 0 0 2px !important;
-    padding: 0 !important;
-    display: block !important;
-}
-
-/* Prevent the tab panel itself from growing when messages appear */
-div[data-baseweb="tab-panel"] {
-    overflow: hidden !important;
-}
 </style>
 """, unsafe_allow_html=True)
 # 🔹 VIDEO BACKGROUND & GLOW TEXT
@@ -2022,7 +1931,7 @@ if not st.session_state.get("authenticated", False):
                 new_password = st.text_input("New Password", type="password", key="new_password_input")
                 confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password_input")
 
-                st.markdown("<p class='pass-hint'>Min 8 chars · uppercase · lowercase · number · special</p>", unsafe_allow_html=True)
+                st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
 
                 # Render notification area (reserves space)
                 render_notification("login")
@@ -2148,17 +2057,17 @@ if not st.session_state.get("authenticated", False):
                 # Normal registration form
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
 
-                # ── CSS: all validation pills fade out in 5 s (opacity only — no layout shift) ──
+                # ── CSS: auto-fade validation badges (no time.sleep / no extra rerun) ──
                 st.markdown("""
                 <style>
-                @keyframes _pill_fade {
-                    0%   { opacity: 1; }
-                    60%  { opacity: 1; }
-                    100% { opacity: 0; }
+                @keyframes _fadeout_msg {
+                    0%   { opacity: 1; max-height: 60px; }
+                    70%  { opacity: 1; max-height: 60px; }
+                    100% { opacity: 0; max-height: 0; padding: 0; margin: 0; }
                 }
-                /* Apply to every pill — success, error, warn all disappear in 5 s */
-                .val-pill {
-                    animation: fadein 0.2s ease forwards, _pill_fade 5s ease forwards !important;
+                .val-msg-autofade {
+                    animation: _fadeout_msg 3.5s ease forwards;
+                    overflow: hidden;
                 }
                 </style>
                 """, unsafe_allow_html=True)
@@ -2205,16 +2114,16 @@ if not st.session_state.get("authenticated", False):
                     st.session_state._pass_msg = ("", "")
 
                 def _render_val_msg(state_key):
-                    """Render a fixed-height (28px) validation slot — never causes layout shift."""
+                    """Render a validation badge that CSS-fades after ~3 s (no sleep, no rerun)."""
                     kind, text = st.session_state.get(state_key, ("", ""))
-                    pill_class = {
-                        "success": "val-pill val-pill-success",
-                        "error":   "val-pill val-pill-error",
-                        "warn":    "val-pill val-pill-warn",
-                    }.get(kind, "")
-                    inner = f'<span class="{pill_class}">{text}</span>' if pill_class and text else ""
+                    if not kind or not text:
+                        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+                        return
+                    css_class = {"warn": "warn-msg", "error": "error-msg", "success": "success-msg"}.get(kind, "info-msg")
+                    # autofade only on success messages; keep error/warn visible
+                    fade = " val-msg-autofade" if kind == "success" else ""
                     st.markdown(
-                        f'<div class="val-slot">{inner}</div>',
+                        f'<div class="slide-message {css_class}{fade}"><span class="slide-message-text">{text}</span></div>',
                         unsafe_allow_html=True
                     )
 
@@ -2236,7 +2145,7 @@ if not st.session_state.get("authenticated", False):
                     "🔑 Password", type="password", key="reg_pass",
                     on_change=_validate_password
                 )
-                st.markdown("<p class='pass-hint'>Min 8 chars · uppercase · lowercase · number · special</p>", unsafe_allow_html=True)
+                st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
                 _render_val_msg("_pass_msg")
 
                 # Render notification area (reserves space)
