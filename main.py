@@ -1390,17 +1390,31 @@ div[data-testid="stTextInput"] {
     padding-bottom: 0 !important;
 }
 
-/* Fixed-height validation slot — ALWAYS reserves exactly 28px so the layout
-   never jumps whether a message is present or absent */
+/* ── Register tab: nuke all element-container gaps ── */
+/* Streamlit wraps every widget in a div[data-testid="element-container"].
+   Target ONLY the register form inputs by scoping under the login-card. */
+.login-card div[data-testid="element-container"] {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+/* Also kill the stVerticalBlock gap rows Streamlit injects between elements */
+.login-card div[data-testid="stVerticalBlock"] > div {
+    gap: 0 !important;
+}
+
+/* Fixed-height validation slot — always 22px, never shifts layout */
 .val-slot {
-    height: 28px !important;
-    min-height: 28px !important;
-    max-height: 28px !important;
+    height: 22px !important;
+    min-height: 22px !important;
+    max-height: 22px !important;
     overflow: hidden !important;
     display: flex !important;
     align-items: center !important;
-    margin: 2px 0 4px !important;
+    margin: 0 !important;
     padding: 0 !important;
+    line-height: 1 !important;
     box-sizing: border-box !important;
 }
 
@@ -1408,16 +1422,16 @@ div[data-testid="stTextInput"] {
 .val-pill {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 3px 10px;
+    gap: 5px;
+    padding: 2px 9px;
     border-radius: 99px;
-    font-size: 0.76rem;
+    font-size: 0.72rem;
     font-weight: 600;
     font-family: var(--font-sans) !important;
     letter-spacing: 0.01em;
     line-height: 1;
     white-space: nowrap;
-    animation: fadein 0.25s ease forwards;
+    animation: fadein 0.2s ease forwards;
 }
 .val-pill-success {
     background: rgba(52,211,153,0.12);
@@ -1435,14 +1449,16 @@ div[data-testid="stTextInput"] {
     color: #fde68a;
 }
 
-/* Password hint line — replaces st.caption (no large margin) */
+/* Password hint — override the global stMarkdown p rule aggressively */
+p.pass-hint,
 .pass-hint {
-    font-size: 0.73rem;
-    color: var(--text-muted);
+    font-size: 0.71rem !important;
+    color: var(--text-muted) !important;
     font-family: var(--font-sans) !important;
-    line-height: 1.4;
-    margin: 2px 0 2px 2px;
-    padding: 0;
+    line-height: 1.3 !important;
+    margin: 1px 0 0 2px !important;
+    padding: 0 !important;
+    display: block !important;
 }
 
 /* Prevent the tab panel itself from growing when messages appear */
@@ -2006,7 +2022,7 @@ if not st.session_state.get("authenticated", False):
                 new_password = st.text_input("New Password", type="password", key="new_password_input")
                 confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password_input")
 
-                st.markdown("<p class='pass-hint'>Password must be at least 8 characters, include uppercase, lowercase, number, and special character.</p>", unsafe_allow_html=True)
+                st.markdown("<p class='pass-hint'>Min 8 chars · uppercase · lowercase · number · special</p>", unsafe_allow_html=True)
 
                 # Render notification area (reserves space)
                 render_notification("login")
@@ -2220,7 +2236,7 @@ if not st.session_state.get("authenticated", False):
                     "🔑 Password", type="password", key="reg_pass",
                     on_change=_validate_password
                 )
-                st.markdown("<p class='pass-hint'>Password must be at least 8 characters, include uppercase, lowercase, number, and special character.</p>", unsafe_allow_html=True)
+                st.markdown("<p class='pass-hint'>Min 8 chars · uppercase · lowercase · number · special</p>", unsafe_allow_html=True)
                 _render_val_msg("_pass_msg")
 
                 # Render notification area (reserves space)
