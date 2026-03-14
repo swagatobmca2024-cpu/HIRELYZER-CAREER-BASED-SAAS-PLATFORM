@@ -2148,17 +2148,17 @@ if not st.session_state.get("authenticated", False):
                 # Normal registration form
                 st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
 
-                # ── CSS: auto-fade validation badges (no time.sleep / no extra rerun) ──
+                # ── CSS: all validation pills fade out in 5 s (opacity only — no layout shift) ──
                 st.markdown("""
                 <style>
-                @keyframes _fadeout_msg {
-                    0%   { opacity: 1; max-height: 60px; }
-                    70%  { opacity: 1; max-height: 60px; }
-                    100% { opacity: 0; max-height: 0; padding: 0; margin: 0; }
+                @keyframes _pill_fade {
+                    0%   { opacity: 1; }
+                    60%  { opacity: 1; }
+                    100% { opacity: 0; }
                 }
-                .val-msg-autofade {
-                    animation: _fadeout_msg 3.5s ease forwards;
-                    overflow: hidden;
+                /* Apply to every pill — success, error, warn all disappear in 5 s */
+                .val-pill {
+                    animation: fadein 0.2s ease forwards, _pill_fade 5s ease forwards !important;
                 }
                 </style>
                 """, unsafe_allow_html=True)
