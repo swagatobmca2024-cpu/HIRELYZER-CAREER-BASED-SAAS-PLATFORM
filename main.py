@@ -7485,100 +7485,38 @@ with tab2:
 
     # --- Visual Resume Preview Section (only shown after form is submitted) ---
     if "generated_html" in st.session_state:
+        import streamlit.components.v1 as components
+
         st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
+        st.markdown(
+            f"<p style='color:#555; font-size:14px; margin-top:-10px;'>"
+            f"Template: <b>{selected_template}</b></p>",
+            unsafe_allow_html=True,
+        )
         st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
 
-        left, right = st.columns([1, 2])
+        # Wrap the generated template HTML in a full HTML document so the iframe
+        # renders it exactly as it will look when downloaded/opened in a browser.
+        preview_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* Reset iframe body so the template styles take full effect */
+        body {{
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+        }}
+    </style>
+</head>
+<body>
+{st.session_state['generated_html']}
+</body>
+</html>"""
 
-        with left:
-            st.markdown(f"""
-                <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
-                <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
-                <p style='font-size:14px;'>
-                📍 {st.session_state['location']}<br>
-                📞 {st.session_state['phone']}<br>
-                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
-                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
-                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
-                </p>
-            """, unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Skills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for skill in [s.strip() for s in st.session_state["skills"].split(",") if s.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {skill}</div>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Languages</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for lang in [l.strip() for l in st.session_state["languages"].split(",") if l.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {lang}</div>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Interests</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for interest in [i.strip() for i in st.session_state["interests"].split(",") if i.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {interest}</div>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Softskills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for ss in [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {ss}</div>", unsafe_allow_html=True)
-
-        with right:
-            st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            summary_text = st.session_state["summary"].replace("\n", "<br>")
-            st.markdown(f"<p style='font-size:17px;'>{summary_text}</p>", unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for exp in st.session_state.experience_entries:
-                if exp["company"] or exp["title"]:
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
-                        <div style='display:flex; justify-content:space-between;'>
-                            <b>🏢 {exp['company']}</b><span style='color:gray;'>📆 {exp['duration']}</span>
-                        </div>
-                        <div style='font-size:14px;'>💼 <i>{exp['title']}</i></div>
-                        <div style='font-size:17px;'>📝 {exp['description']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for edu in st.session_state.education_entries:
-                if edu["institution"] or edu["degree"]:
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px;'>
-                        <div style='display:flex; justify-content:space-between; font-size:16px; font-weight:bold;'>
-                            <span>🏫 {edu['institution']}</span>
-                            <span style='color:gray;'>📅 {edu['year']}</span>
-                        </div>
-                        <div style='font-size:14px;'>🎓 <i>{edu['degree']}</i></div>
-                        <div style='font-size:14px;'>📄 {edu['details']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for proj in st.session_state.project_entries:
-                if proj.get("title"):
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px;'>
-                        <strong style='font-size:16px;'>{proj['title']}</strong><br>
-                        <span style='font-size:14px;'>🛠️ <strong>Tech Stack:</strong> {proj['tech']}</span><br>
-                        <span style='font-size:14px;'>⏳ <strong>Duration:</strong> {proj['duration']}</span><br>
-                        <span style='font-size:17px;'>📝 <strong>Description:</strong> {proj['description']}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            if st.session_state.project_links:
-                st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for i, link in enumerate(st.session_state.project_links):
-                    st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
-
-            if st.session_state.certificate_links:
-                st.markdown("<h4 style='color:#336699;'>Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for cert in st.session_state.certificate_links:
-                    if cert["name"] and cert["link"]:
-                        st.markdown(f"""
-                        <div style='display:flex; justify-content:space-between;'>
-                            <a href="{cert['link']}" target="_blank"><b>📄 {cert['name']}</b></a>
-                            <span style='color:gray;'>{cert['duration']}</span>
-                        </div>
-                        <div style='margin-bottom:10px; font-size:14px;'>{cert['description']}</div>
-                        """, unsafe_allow_html=True)
+        components.html(preview_html, height=1100, scrolling=True)
 
 import re
 
