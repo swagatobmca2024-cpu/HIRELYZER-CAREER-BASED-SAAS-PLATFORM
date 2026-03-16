@@ -4392,7 +4392,11 @@ if uploaded_files and job_description:
             "Text Preview": full_text[:300] + "...",
             "Highlighted Text": highlighted_text,
             "Rewritten Text": rewritten_text,
-            "Domain": domain
+            "Domain": domain,
+            "Domain Penalty": ats_scores.get("Domain Penalty", 0),
+            "Domain Similarity Score": ats_scores.get("Domain Similarity Score", 1.0),
+            "Resume Domain": ats_scores.get("Resume Domain", domain),
+            "Job Domain": ats_scores.get("Job Domain", "Unknown"),
         })
 
         insert_candidate(
@@ -4921,9 +4925,11 @@ with tab1:
                 bias_label = "High Bias" if bias_raw > 0.6 else ("Moderate" if bias_raw > 0.3 else "Fair")
                 bias_color = "#ef4444" if bias_raw > 0.6 else ("#f59e0b" if bias_raw > 0.3 else "#22c55e")
 
-                dom_penalty = resume.get("Domain Penalty", 0) if isinstance(resume.get("Domain Penalty"), int) else 0
+                dom_penalty = resume.get("Domain Penalty", 0)
+                dom_penalty = dom_penalty if isinstance(dom_penalty, (int, float)) else 0
                 dom_sim     = resume.get("Domain Similarity Score", 1.0)
-                dom_pct     = round((dom_sim if isinstance(dom_sim, float) else 1.0) * 100)
+                dom_sim     = dom_sim if isinstance(dom_sim, (int, float)) else 1.0
+                dom_pct     = round(dom_sim * 100)
                 dom_label   = resume.get("Resume Domain", resume.get("Domain", "Unknown"))
 
                 r3c1, r3c2, r3c3, r3c4 = st.columns(4)
