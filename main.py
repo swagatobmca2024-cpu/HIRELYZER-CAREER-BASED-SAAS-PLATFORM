@@ -3847,31 +3847,37 @@ Follow this EXACT structure. Do not skip any section:
     missing_keywords = extract_list_items(missing_keywords_section)
     missing_skills = extract_list_items(missing_skills_section)
 
-    # ✅ IMPROVED: More balanced total score calculation
+    # ── Score assembly — fully deterministic integer arithmetic ──────────
+    # Step 1: sum the five LLM-scored components (already capped to their weights above)
     content_score = edu_score + exp_score + skills_score + lang_score + keyword_score
-    
-    # Blend in format score (10% weight on top of content score)
+    # content_score is naturally 0–100 because the weights sum to 100
+
+    # Step 2: format score (0–100) contributes a fixed 5-pt bonus/penalty
+    # normalised to ±5 around a neutral midpoint of 75
     fmt_score_raw = format_data.get("format_score", 75) if format_data else 75
-    # Normalise format score to a 10-pt contribution
-    format_contribution = round(fmt_score_raw / 100 * 10)
-    # Content is now out of 100, blend: 90% content + 10% format
-    total_score = round(content_score * 0.90 + fmt_score_raw * 0.10)
-    
-    # Apply domain penalty more gently
-    total_score = max(total_score - domain_penalty, int(total_score * 0.7))  # Never go below 70% of pre-penalty score
-    
-    # ✅ IMPROVED: More generous score caps and bonus for well-rounded candidates
-    total_score = min(total_score, 100)
-    total_score = max(total_score, 15)  # Minimum score of 15 to avoid completely crushing candidates
+    fmt_score_raw = max(0, min(100, int(fmt_score_raw)))   # clamp to 0–100
+    # delta: +5 if perfect format (100), 0 at 75, −5 if terrible format (25 or below)
+    format_delta = round((fmt_score_raw - 75) / 25 * 5)   # range: −10 … +5
+    format_delta = max(-10, min(5, format_delta))          # hard clamp
+
+    # Step 3: add format delta to content score — this is the pre-penalty total
+    pre_penalty_score = content_score + format_delta
+    pre_penalty_score = max(0, min(100, pre_penalty_score))
+
+    # Step 4: subtract domain mismatch penalty ONCE, straight subtraction — no floor tricks
+    total_score = pre_penalty_score - domain_penalty
+
+    # Step 5: clamp final result 15–100
+    total_score = max(15, min(100, total_score))
 
     # ✅ Industry-standard score labels with clear hiring signal
     formatted_score = (
-        "🌟 Exceptional Match — Top 10% Candidate" if total_score >= 85 else
-        "✅ Strong Match — Recommend for Interview" if total_score >= 70 else
-        "🟡 Good Potential — Competitive Candidate" if total_score >= 55 else
-        "⚠️ Fair Match — Needs Resume Optimization" if total_score >= 40 else
-        "🔄 Developing — Significant Skill Gaps" if total_score >= 25 else
-        "❌ Poor Match — Major Role Misalignment"
+        "Exceptional Match — Top 10% Candidate"    if total_score >= 85 else
+        "Strong Match — Recommend for Interview"    if total_score >= 70 else
+        "Good Potential — Competitive Candidate"    if total_score >= 55 else
+        "Fair Match — Needs Resume Optimization"    if total_score >= 40 else
+        "Developing — Significant Skill Gaps"       if total_score >= 25 else
+        "Poor Match — Major Role Misalignment"
     )
 
     # ✅ Format suggestions nicely
@@ -3888,26 +3894,31 @@ Follow this EXACT structure. Do not skip any section:
     # Enhanced final thoughts with domain analysis and industry benchmarks
     final_thoughts += f"""
 
-**📊 Technical Evaluation Details:**
-- Domain Similarity Score: {similarity_score:.2f}/1.0 ({int(similarity_score * 100)}% domain alignment)
+**Technical Evaluation Details:**
+- Content Score (pre-format): {content_score}/100
+- Format Delta Applied: {'+' if format_delta >= 0 else ''}{format_delta} pts (Format Score: {fmt_score_raw}/100)
+- Pre-Penalty Score: {pre_penalty_score}/100
 - Domain Penalty Applied: -{domain_penalty} pts (out of max -{MAX_DOMAIN_PENALTY} pts)
+- Final ATS Score: {total_score}/100
+- Domain Similarity: {similarity_score:.2f}/1.0 ({int(similarity_score * 100)}% alignment)
 - Resume Domain Detected: {resume_domain}
 - Target Job Domain: {job_domain}
-- Grammar & Language Pre-Score: {grammar_score}/{lang_weight}
+- Language Pre-Score: {grammar_score}/{lang_weight}
 
-**📈 Score Interpretation (Industry Benchmarks):**
-- 85–100: 🌟 Top 10% candidates — Strong interview recommendation
-- 70–84: ✅ Above average — Likely to advance past ATS screening
-- 55–69: 🟡 Competitive — May advance with strong cover letter
-- 40–54: ⚠️ Below average — Needs resume optimization before applying
-- 25–39: 🔄 Significant gaps — Upskilling recommended
-- 0–24: ❌ Major misalignment — Not suitable for this specific role
+**Score Interpretation (Industry Benchmarks):**
+- 85–100: Top 10% candidates — Strong interview recommendation
+- 70–84: Above average — Likely to advance past ATS screening
+- 55–69: Competitive — May advance with strong cover letter
+- 40–54: Below average — Needs resume optimization before applying
+- 25–39: Significant gaps — Upskilling recommended
+- 0–24: Major misalignment — Not suitable for this specific role
 
-**🔍 ATS Scoring Notes:**
+**ATS Scoring Notes:**
 - Minimum score thresholds applied to prevent unfair penalization
+- Format score contributes a ±5 to ±10 pt delta (neutral at 75/100)
+- Domain penalty is subtracted once as a flat deduction
 - Transferable skills, projects, and open-source contributions were credited
 - Career stage (entry/mid/senior) considered in experience scoring
-- Date parsing uses 2025 cutoff for education completion determination
 """
 
     return ats_result, {
