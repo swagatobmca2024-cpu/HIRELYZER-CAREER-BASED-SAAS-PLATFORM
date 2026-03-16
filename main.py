@@ -3455,7 +3455,7 @@ Suggestions:
     feedback_match = re.search(r"Feedback:\s*(.+)", response)
     suggestions = re.findall(r"- (.+)", response)
 
-    score = int(score_match.group(1)) if score_match else max(3, max_score-2)  # More generous default
+    score = int(score_match.group(1)) if score_match else max(0, min(max_score, max(3, max_score-2)))  # More generous default, clamped to max_score
     feedback = feedback_match.group(1).strip() if feedback_match else "Language quality appears adequate for professional communication."
     return score, feedback, suggestions
 
@@ -3506,48 +3506,7 @@ def ats_percentage_score(
     # ✅ FIXED: Stable education scoring with 2025 cutoff
     current_year = datetime.datetime.now().year
     current_month = datetime.datetime.now().month
-    
-    # ✅ FIXED: Education completion detection with 2025 cutoff
-    def determine_education_status(education_text, end_year_str):
-        """
-        Determine if education is completed or ongoing based on 2025 cutoff and keywords.
-        Returns 'completed' or 'ongoing'.
-        """
-        try:
-            end_year = int(end_year_str.strip())
-        except (ValueError, AttributeError):
-            # If we can't parse the year, default to ongoing
-            return "ongoing"
-        
-        # Apply 2025 cutoff rule (HARDCODED - NOT dynamic)
-        if end_year < 2025:
-            education_status = "completed"
-        elif end_year == 2025:
-            education_status = "completed"
-        else:  # end_year > 2025
-            education_status = "ongoing"
-        
-        # Check for explicit keywords that might override numeric rules
-        education_lower = education_text.lower()
-        ongoing_keywords = ["pursuing", "present", "ongoing", "currently enrolled", "in progress"]
-        completed_keywords = ["graduated", "completed", "finished"]
-        
-        # Override rule: If end year < 2025, always completed regardless of text
-        if end_year < 2025:
-            return "completed"
-        
-        # For years >= 2025, check keywords
-        if end_year < 2025:
-            return "completed"
-        
-        # For years >= 2025, check keywords
-        if any(keyword in education_lower for keyword in ongoing_keywords):
-            education_status = "ongoing"
-        elif any(keyword in education_lower for keyword in completed_keywords):
-            education_status = "completed"
-        
-        return education_status
-    
+
     # ✅ UPDATED: Stable education scoring with priority degrees minimum
     prompt = f"""
 You are a senior ATS (Applicant Tracking System) Evaluator and Technical Recruiter with 15+ years of experience at top-tier tech firms.
@@ -3719,13 +3678,15 @@ Follow this EXACT structure. Do not skip any section:
 **Format Score:** {format_data.get("format_score", "N/A") if format_data else "N/A"} / 100  
 **Format Grade:** {format_data.get("letter_grade", "N/A") if format_data else "N/A"} — {format_data.get("label", "") if format_data else ""}
 
+⚠️ IMPORTANT: The Format Score and Format Grade above are SYSTEM-COMPUTED and LOCKED. Do NOT change these numbers. Only fill in the narrative fields below.
+
 **Structural Assessment:**
-- Section Completeness: <Are all critical sections present? Which are missing?>
-- Contact Block: <Email, phone, LinkedIn, GitHub present?>
+- Section Completeness: <narrative only — do NOT include a score>
+- Contact Block: <narrative only>
 - Resume Length: {f"{format_data.get('word_count', 'N/A')} words — " + ("Optimal" if 300 <= (format_data.get('word_count') or 0) <= 1000 else "Too short" if (format_data.get('word_count') or 0) < 300 else "Too long") if format_data else "N/A"}
-- Action Verb Strength: <Are bullets led by strong, quantified action verbs?>
-- Quantification Quality: <Are achievements backed by numbers, %, $, scale?>
-- ATS Red Flags: <Multi-column layouts, tables, missing dates, outdated 'Objective' section?>
+- Action Verb Strength: <narrative only>
+- Quantification Quality: <narrative only>
+- ATS Red Flags: <narrative only>
 
 **Format Issues Detected:**
 {chr(10).join(f"- {issue}" for issue in (format_data.get("issues", []) or ["No issues detected"])) if format_data else "- Format data not available"}
@@ -3779,6 +3740,25 @@ Follow this EXACT structure. Do not skip any section:
    
     ats_result = call_llm(prompt, session=st.session_state).strip()
 
+    # ── CRITICAL: Overwrite any LLM-modified Format Score/Grade lines ────
+    # The LLM sometimes rewrites these despite instructions. Force the true
+    # system-computed values back in so UI and narrative always match.
+    _true_fmt_score = format_data.get("format_score", 75) if format_data else 75
+    _true_fmt_grade = format_data.get("letter_grade", "N/A") if format_data else "N/A"
+    _true_fmt_label = format_data.get("label", "") if format_data else ""
+
+    ats_result = re.sub(
+        r'\*\*Format Score:\*\*.*',
+        f'**Format Score:** {_true_fmt_score} / 100',
+        ats_result
+    )
+    ats_result = re.sub(
+        r'\*\*Format Grade:\*\*.*',
+        f'**Format Grade:** {_true_fmt_grade} — {_true_fmt_label}',
+        ats_result
+    )
+    # ─────────────────────────────────────────────────────────────────────
+
     def extract_section(pattern, text, default="N/A"):
         match = re.search(pattern, text, re.DOTALL)
         return match.group(1).strip() if match else default
@@ -3798,25 +3778,30 @@ Follow this EXACT structure. Do not skip any section:
     final_thoughts = extract_section(r"### ✅ Final Assessment(.*)", ats_result)
 
     # Extract scores with improved patterns (LLM now scores directly using sidebar weights)
-    edu_score = extract_score(r"\*\*Score:\*\*\s*(\d+)", edu_analysis)
-    exp_score = extract_score(r"\*\*Score:\*\*\s*(\d+)", exp_analysis)
-    skills_score = extract_score(r"\*\*Score:\*\*\s*(\d+)", skills_analysis)
+    edu_score     = extract_score(r"\*\*Score:\*\*\s*(\d+)", edu_analysis)
+    exp_score     = extract_score(r"\*\*Score:\*\*\s*(\d+)", exp_analysis)
+    skills_score  = extract_score(r"\*\*Score:\*\*\s*(\d+)", skills_analysis)
     keyword_score = extract_score(r"\*\*Score:\*\*\s*(\d+)", keyword_analysis)
-    lang_score = grammar_score  # Grammar score already uses lang_weight
+    lang_score    = grammar_score  # Grammar score already capped to lang_weight
 
-    # ✅ Apply minimum thresholds to avoid overly harsh penalties
-    edu_score = max(edu_score, int(edu_weight * 0.15))  # Minimum 15% of weight
-    exp_score = max(exp_score, int(exp_weight * 0.15))  # Minimum 15% of weight
-    skills_score = max(skills_score, int(skills_weight * 0.15))  # Minimum 15% of weight
-    keyword_score = max(keyword_score, int(keyword_weight * 0.10))  # Minimum 10% of weight
+    # ── Clamp every score: min floor + hard upper cap to its own weight ──
+    # Upper cap prevents LLM hallucinating over-max scores (e.g. 25/20)
+    # which would silently push content_score above 100.
+    edu_score     = max(int(edu_weight * 0.15),     min(edu_score,     edu_weight))
+    exp_score     = max(int(exp_weight * 0.15),     min(exp_score,     exp_weight))
+    skills_score  = max(int(skills_weight * 0.15),  min(skills_score,  skills_weight))
+    keyword_score = max(int(keyword_weight * 0.10), min(keyword_score, keyword_weight))
+    lang_score    = max(0,                          min(lang_score,    lang_weight))
 
     # Extract missing items with better parsing - now called "opportunities"
     missing_keywords_section = extract_section(r"\*\*Keyword Enhancement Opportunities:\*\*(.*?)(?:\*\*|###|\Z)", keyword_analysis)
-    missing_skills_section = extract_section(r"\*\*Skills Gaps \(Opportunities for Growth\):\*\*(.*?)(?:\*\*|###|\Z)", skills_analysis)
+    missing_skills_section = extract_section(r"\*\*Skills Gaps \(Development Opportunities\):\*\*(.*?)(?:\*\*|###|\Z)", skills_analysis)
     
     # Fallback to old patterns if new ones don't match
     if not missing_keywords_section.strip():
         missing_keywords_section = extract_section(r"\*\*Missing Critical Keywords:\*\*(.*?)(?:\*\*|###|\Z)", keyword_analysis)
+    if not missing_skills_section.strip():
+        missing_skills_section = extract_section(r"\*\*Skills Gaps \(Opportunities for Growth\):\*\*(.*?)(?:\*\*|###|\Z)", skills_analysis)
     if not missing_skills_section.strip():
         missing_skills_section = extract_section(r"\*\*Missing Critical Skills:\*\*(.*?)(?:\*\*|###|\Z)", skills_analysis)
     
@@ -3848,9 +3833,14 @@ Follow this EXACT structure. Do not skip any section:
     missing_skills = extract_list_items(missing_skills_section)
 
     # ── Score assembly — fully deterministic integer arithmetic ──────────
-    # Step 1: sum the five LLM-scored components (already capped to their weights above)
+    # Step 1: sum the five LLM-scored components (clamped to their individual weights)
     content_score = edu_score + exp_score + skills_score + lang_score + keyword_score
-    # content_score is naturally 0–100 because the weights sum to 100
+
+    # Normalise to 100-pt scale in case sidebar weights don't sum exactly to 100
+    weight_total = edu_weight + exp_weight + skills_weight + lang_weight + keyword_weight
+    if weight_total > 0 and weight_total != 100:
+        content_score = round(content_score / weight_total * 100)
+    content_score = max(0, min(100, content_score))
 
     # Step 2: format score (0–100) contributes a fixed 5-pt bonus/penalty
     # normalised to ±5 around a neutral midpoint of 75
@@ -4361,14 +4351,11 @@ if uploaded_files and job_description:
         missing_keywords = [kw.strip() for kw in missing_keywords_raw.split(",") if kw.strip()] if missing_keywords_raw != "N/A" else []
         missing_skills = [sk.strip() for sk in missing_skills_raw.split(",") if sk.strip()] if missing_skills_raw != "N/A" else []
 
-        domain = db_manager.detect_domain_llm(
-            job_title,
-            job_description,
-            session=st.session_state  # ✅ pass the Groq API key from session
-        )
+        bias_flag = "High Bias" if bias_score > 0.6 else "Fair"
+        ats_flag  = "Low ATS"   if ats_score < 50   else "Good ATS"
 
-        bias_flag = "🔴 High Bias" if bias_score > 0.6 else "🟢 Fair"
-        ats_flag = "⚠️ Low ATS" if ats_score < 50 else "✅ Good ATS"
+        # Reuse domain already detected inside ats_percentage_score — no extra LLM call
+        domain = ats_scores.get("Resume Domain", "Unknown")
 
         # ✅ Store everything in session state
         st.session_state.resume_data.append({
@@ -4925,6 +4912,68 @@ with tab1:
                 with col_d:
                     st.markdown(svg_ats_card("keyword", "Keywords", f"{resume.get('Keyword Score', 'N/A')} / {keyword_weight}"), unsafe_allow_html=True)
 
+                # ── Score cards row 3: bias + domain status ────────────────────
+                SVG_BIAS  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+                SVG_DOM   = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>'
+
+                bias_raw   = resume.get("Bias Score (0 = Fair, 1 = Biased)", 0)
+                bias_pct   = round(bias_raw * 100)
+                bias_label = "High Bias" if bias_raw > 0.6 else ("Moderate" if bias_raw > 0.3 else "Fair")
+                bias_color = "#ef4444" if bias_raw > 0.6 else ("#f59e0b" if bias_raw > 0.3 else "#22c55e")
+
+                dom_penalty = resume.get("Domain Penalty", 0) if isinstance(resume.get("Domain Penalty"), int) else 0
+                dom_sim     = resume.get("Domain Similarity Score", 1.0)
+                dom_pct     = round((dom_sim if isinstance(dom_sim, float) else 1.0) * 100)
+                dom_label   = resume.get("Resume Domain", resume.get("Domain", "Unknown"))
+
+                r3c1, r3c2, r3c3, r3c4 = st.columns(4)
+                with r3c1:
+                    st.markdown(f"""
+                    <div style="background:rgba(15,23,42,0.85);border:1px solid rgba(56,189,248,0.25);
+                                border-radius:12px;padding:14px 16px;margin-bottom:8px;height:86px;
+                                display:flex;flex-direction:column;justify-content:center;overflow:hidden;">
+                        <div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:#94a3b8;">
+                            <span style="color:{bias_color};flex-shrink:0;">{SVG_BIAS}</span>
+                            <span>Bias Status</span>
+                        </div>
+                        <div style="font-size:1.1rem;font-weight:700;color:{bias_color};margin-top:6px;">
+                            {bias_label} <span style="font-size:0.8rem;color:#64748b;">({bias_pct}%)</span>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+                with r3c2:
+                    st.markdown(f"""
+                    <div style="background:rgba(15,23,42,0.85);border:1px solid rgba(56,189,248,0.25);
+                                border-radius:12px;padding:14px 16px;margin-bottom:8px;height:86px;
+                                display:flex;flex-direction:column;justify-content:center;overflow:hidden;">
+                        <div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:#94a3b8;">
+                            <span style="color:#38bdf8;flex-shrink:0;">{SVG_DOM}</span>
+                            <span>Domain Match</span>
+                        </div>
+                        <div style="font-size:1.1rem;font-weight:700;color:#f0f4f8;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                            {dom_pct}% <span style="font-size:0.75rem;color:#64748b;">(-{dom_penalty} pts)</span>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+                with r3c3:
+                    st.markdown(svg_ats_card("format", "Format Score", f"{resume.get('Format Score', 'N/A')}/100 · {resume.get('Format Grade','N/A')}"), unsafe_allow_html=True)
+                with r3c4:
+                    masc_c = len(resume.get("Detected Masculine Words", []))
+                    fem_c  = len(resume.get("Detected Feminine Words", []))
+                    SVG_WORDS = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'
+                    st.markdown(f"""
+                    <div style="background:rgba(15,23,42,0.85);border:1px solid rgba(56,189,248,0.25);
+                                border-radius:12px;padding:14px 16px;margin-bottom:8px;height:86px;
+                                display:flex;flex-direction:column;justify-content:center;overflow:hidden;">
+                        <div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:#94a3b8;">
+                            <span style="color:#38bdf8;flex-shrink:0;">{SVG_WORDS}</span>
+                            <span>Gender Words</span>
+                        </div>
+                        <div style="font-size:0.95rem;font-weight:700;color:#f0f4f8;margin-top:6px;">
+                            <span style="color:#60a5fa;">{masc_c} M</span>
+                            <span style="color:#64748b;margin:0 4px;">/</span>
+                            <span style="color:#f87171;">{fem_c} F</span>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
                 # ── Format Checker Panel ───────────────────────────────────────
                 fmt_issues = resume.get("Format Issues", [])
                 fmt_passes = resume.get("Format Passes", [])
@@ -4980,24 +5029,27 @@ with tab1:
 
                 # ATS Chart
                 st.markdown("<p class='section-label'>ATS Score Breakdown</p>", unsafe_allow_html=True)
+                # Normalize each component score to 0–100 scale for fair visual comparison
+                def _pct(score, weight):
+                    return round(score / weight * 100) if weight > 0 else 0
                 ats_df = pd.DataFrame({
                     'Component': ['Education', 'Experience', 'Skills', 'Language', 'Keywords', 'Format'],
                     'Score': [
-                        resume.get("Education Score", 0),
-                        resume.get("Experience Score", 0),
-                        resume.get("Skills Score", 0),
-                        resume.get("Language Score", 0),
-                        resume.get("Keyword Score", 0),
-                        round(resume.get("Format Score", 0) / 10),  # Normalise to ~10-pt scale
+                        _pct(resume.get("Education Score", 0), edu_weight),
+                        _pct(resume.get("Experience Score", 0), exp_weight),
+                        _pct(resume.get("Skills Score", 0), skills_weight),
+                        _pct(resume.get("Language Score", 0), lang_weight) if lang_weight > 0 else 0,
+                        _pct(resume.get("Keyword Score", 0), keyword_weight),
+                        resume.get("Format Score", 0),  # Already on 0–100 scale
                     ]
                 })
                 ats_chart = alt.Chart(ats_df).mark_bar().encode(
                     x=alt.X('Component', sort=None),
-                    y=alt.Y('Score', scale=alt.Scale(domain=[0, 50])),
+                    y=alt.Y('Score', scale=alt.Scale(domain=[0, 100]), title='Score (% of weight)'),
                     color='Component',
                     tooltip=['Component', 'Score']
                 ).properties(
-                    title="ATS Evaluation Breakdown",
+                    title="ATS Evaluation Breakdown (All scores normalized to 0–100%)",
                     width=600,
                     height=300
                 )
