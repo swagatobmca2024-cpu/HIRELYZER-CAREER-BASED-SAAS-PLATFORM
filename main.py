@@ -2768,111 +2768,393 @@ def safe_extract_text(uploaded_file):
         return None
 
 # ============================================================
-# 📐 Industry-Standard Resume Format Checker
+# 📐 Industry-Standard Resume Format Checker (v2 — Enhanced)
 # ============================================================
-def check_resume_format(text: str, num_pages: int = 1) -> dict:
+
+def _detect_multicolumn_pdf(pdf_path: str) -> bool:
     """
-    Evaluates resume against ATS industry-standard formatting rules.
-    Returns a dict with score (0–100), letter_grade, issues list, passes list.
+    Detect multi-column layout by analysing raw text-block x-coordinates
+    from the first page of the PDF via PyMuPDF.
+    Returns True if two or more distinct horizontal content zones are found.
     """
-    issues = []
-    passes = []
+    try:
+        doc = fitz.open(pdf_path)
+        page = doc[0]
+        blocks = page.get_text("blocks")   # (x0, y0, x1, y1, text, block_no, block_type)
+        page_width = page.rect.width
+        doc.close()
+
+        # Only consider blocks with meaningful text content
+        x_starts = [b[0] for b in blocks if len(b[4].strip()) > 10]
+        if len(x_starts) < 6:
+            return False
+
+        # Split the page width into left zone (< 45 %) and right zone (> 52 %)
+        left_zone  = [x for x in x_starts if x < page_width * 0.45]
+        right_zone = [x for x in x_starts if x > page_width * 0.52]
+
+        # Multi-column confirmed when both zones carry real content
+        return len(left_zone) >= 3 and len(right_zone) >= 3
+    except Exception:
+        return False
+
+
+def check_resume_format(text: str, num_pages: int = 1, pdf_path: str = None) -> dict:
+    """
+    Evaluates a resume against industry-standard ATS formatting rules.
+
+    Scoring model (100 pts total, deduction-based):
+      Section presence       — up to −42 pts  (critical ATS sections)
+      Contact completeness   — up to −8  pts
+      Resume length          — up to −14 pts
+      Action verb quality    — up to −8  pts
+      Quantified achievements— up to −8  pts
+      ATS red flags          — up to −14 pts  (multi-column, dates, objective)
+      Bonus credits          — up to +4  pts  (certifications, portfolio)
+
+    Returns a dict compatible with all existing callers (same keys as v1).
+    """
+    issues  = []
+    passes  = []
     deductions = 0
+    bonuses    = 0
 
     text_lower = text.lower() if text else ""
 
-    # ── 1. Essential Section Presence (30 pts) ──────────────────────────
+    # ══════════════════════════════════════════════════════════════════════
+    # 1. CRITICAL SECTION PRESENCE  (max −42 pts)
+    #    Weights reflect real ATS auto-reject risk, not equal treatment.
+    # ══════════════════════════════════════════════════════════════════════
     section_checks = {
-        "contact / email":   bool(re.search(r'[\w.+-]+@[\w-]+\.[a-z]{2,}', text or "")),
-        "phone number":      bool(re.search(r'(\+?\d[\d\s\-\(\)]{7,}\d)', text or "")),
-        "experience":        any(w in text_lower for w in ["experience", "employment", "work history", "career"]),
-        "education":         any(w in text_lower for w in ["education", "university", "college", "degree", "bachelor", "master", "b.tech", "b.sc", "m.sc", "mca", "bca"]),
-        "skills":            any(w in text_lower for w in ["skills", "technologies", "tech stack", "competencies", "proficiencies"]),
-        "summary / objective": any(w in text_lower for w in ["summary", "objective", "profile", "about me", "overview"]),
+        # (label, detected, deduction_if_missing)
+        "Contact / Email": (
+            bool(re.search(r'[\w.+-]+@[\w.-]+\.[a-z]{2,}', text or "")),
+            15,   # ATS hard-rejects without contact info
+        ),
+        "Phone Number": (
+            bool(re.search(r'(\+?\d[\d\s\-\(\)]{7,}\d)', text or "")),
+            6,
+        ),
+        "Experience": (
+            any(w in text_lower for w in [
+                "experience", "employment", "work history", "career",
+                "professional experience", "work experience",
+                "positions held", "relevant experience", "professional background",
+            ]),
+            12,   # Core content section — high ATS weight
+        ),
+        "Education": (
+            any(w in text_lower for w in [
+                "education", "university", "college", "degree",
+                "bachelor", "master", "b.tech", "b.sc", "m.sc",
+                "mca", "bca", "phd", "diploma", "high school",
+                "graduated", "pursuing",
+            ]),
+            4,
+        ),
+        "Skills": (
+            any(w in text_lower for w in [
+                "skills", "technologies", "tech stack",
+                "competencies", "proficiencies", "tools",
+                "technical skills", "core competencies",
+            ]),
+            3,
+        ),
+        "Summary / Profile": (
+            any(w in text_lower for w in [
+                "summary", "objective", "profile",
+                "about me", "overview", "professional summary",
+                "career objective", "personal statement",
+            ]),
+            2,
+        ),
     }
-    for section_name, present in section_checks.items():
+
+    for section_name, (present, penalty) in section_checks.items():
         if present:
-            passes.append(f"Section present: {section_name.title()}")
+            passes.append(f"Section present: {section_name}")
         else:
-            issues.append(f"Missing section: '{section_name.title()}' — ATS may reject without it")
-            deductions += 5
+            issues.append(
+                f"Missing section: '{section_name}' — "
+                f"ATS {'will likely reject' if penalty >= 10 else 'may penalise'} without it"
+            )
+            deductions += penalty
 
-    # ── 2. Contact Completeness (20 pts) ────────────────────────────────
-    if not re.search(r'linkedin\.com/in/', text_lower):
-        issues.append("No LinkedIn URL — recruiters expect it for verification")
-        deductions += 5
-    else:
+    # ══════════════════════════════════════════════════════════════════════
+    # 2. CONTACT COMPLETENESS  (max −8 pts)
+    # ══════════════════════════════════════════════════════════════════════
+    if re.search(r'linkedin\.com/in/[\w\-]+', text_lower):
         passes.append("LinkedIn profile URL detected")
-
-    if not re.search(r'github\.com/', text_lower):
-        issues.append("No GitHub/Portfolio URL — especially important for tech roles")
-        deductions += 3
     else:
-        passes.append("GitHub/Portfolio URL detected")
-
-    # ── 3. Resume Length (15 pts) ───────────────────────────────────────
-    word_count = len(text.split()) if text else 0
-    if word_count < 200:
-        issues.append(f"Resume too short ({word_count} words) — ATS expects 400–900 words")
-        deductions += 10
-    elif word_count > 1200:
-        issues.append(f"Resume too long ({word_count} words) — trim to under 1,000 words for ATS")
+        issues.append("No LinkedIn URL — recruiters expect it; many ATS rank it as a signal")
         deductions += 5
+
+    if re.search(r'github\.com/[\w\-]+', text_lower):
+        passes.append("GitHub profile URL detected")
+        bonuses += 1   # bonus: shows technical proof of work
+    elif re.search(r'(portfolio|behance\.net|dribbble\.com|leetcode\.com|kaggle\.com)', text_lower):
+        passes.append("Portfolio / professional profile URL detected")
+        bonuses += 1
     else:
-        passes.append(f"Good length ({word_count} words)")
+        issues.append("No GitHub or portfolio URL — especially important for technical roles")
+        deductions += 3
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 3. RESUME LENGTH  (max −14 pts)
+    #    Sweet spot: 400–900 words for most roles.
+    # ══════════════════════════════════════════════════════════════════════
+    word_count = len(text.split()) if text else 0
+
+    if word_count < 150:
+        issues.append(
+            f"Resume critically short ({word_count} words) — "
+            "ATS expects 400–900 words; this will likely be filtered out"
+        )
+        deductions += 12
+    elif word_count < 400:
+        issues.append(
+            f"Resume too short ({word_count} words) — "
+            "aim for 400–900 words with detailed experience and skills"
+        )
+        deductions += 7
+    elif word_count > 1400:
+        issues.append(
+            f"Resume too long ({word_count} words) — "
+            "trim to under 1,000 words; ATS and recruiters prefer concise resumes"
+        )
+        deductions += 5
+    elif word_count > 1000:
+        issues.append(
+            f"Resume slightly long ({word_count} words) — "
+            "consider tightening to under 1,000 words"
+        )
+        deductions += 2
+    else:
+        passes.append(f"Optimal length ({word_count} words — within 400–1,000 word sweet spot)")
 
     if num_pages > 2:
-        issues.append(f"Resume is {num_pages} pages — 1–2 pages is ATS industry standard")
-        deductions += 5
+        issues.append(
+            f"Resume is {num_pages} pages — "
+            "ATS industry standard is 1–2 pages; longer resumes are often truncated"
+        )
+        deductions += 4
+    elif num_pages == 2:
+        passes.append("Page count acceptable (2 pages — standard for 5+ years experience)")
     else:
-        passes.append(f"Page count acceptable ({num_pages} page{'s' if num_pages > 1 else ''})")
+        passes.append("Page count ideal (1 page — strong for early-career candidates)")
 
-    # ── 4. Action Verb Usage (15 pts) ───────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════
+    # 4. ACTION VERB QUALITY  (max −8 pts)
+    #    Expanded to 54 verbs across all common resume categories.
+    # ══════════════════════════════════════════════════════════════════════
     strong_verbs = [
+        # Engineering / technical
         "architected", "engineered", "designed", "deployed", "optimized", "automated",
-        "reduced", "increased", "led", "built", "launched", "delivered", "developed",
-        "implemented", "managed", "created", "improved", "spearheaded", "streamlined",
-        "coordinated", "established", "negotiated", "transformed", "integrated",
-        "accelerated", "executed", "mentored", "analyzed", "resolved", "collaborated"
+        "built", "launched", "developed", "implemented", "integrated", "configured",
+        "migrated", "refactored", "debugged", "benchmarked", "containerized", "scaled",
+        "maintained", "upgraded", "tested", "validated",
+        # Leadership / management
+        "led", "managed", "directed", "oversaw", "supervised", "coordinated",
+        "spearheaded", "mentored", "trained", "guided", "facilitated",
+        # Business / impact
+        "reduced", "increased", "improved", "accelerated", "streamlined", "transformed",
+        "negotiated", "established", "executed", "delivered", "created",
+        "resolved", "analyzed", "collaborated", "authored", "published",
+        # Data / research
+        "researched", "evaluated", "identified", "modelled", "forecasted",
+        "presented", "reported", "drafted",
     ]
     found_verbs = [v for v in strong_verbs if re.search(rf'\b{v}\b', text_lower)]
-    if len(found_verbs) < 3:
-        issues.append(f"Weak action verb usage ({len(found_verbs)} found) — use verbs like 'Engineered', 'Optimized', 'Deployed'")
-        deductions += 8
-    else:
-        passes.append(f"Strong action verbs used ({len(found_verbs)} detected)")
+    verb_count = len(found_verbs)
 
-    # ── 5. Quantification (10 pts) ──────────────────────────────────────
-    quant_patterns = re.findall(r'\b\d+[\.,]?\d*\s*(%|percent|x|times|users|clients|projects|hrs|hours|days|weeks|months|years|ms|gb|tb|k\b|\$)', text_lower)
-    if len(quant_patterns) < 2:
-        issues.append("Lacks quantified achievements — add metrics (e.g., 'reduced latency by 35%', 'served 10K users')")
+    if verb_count == 0:
+        issues.append(
+            "No strong action verbs found — ATS and recruiters expect bullet points "
+            "starting with verbs like 'Engineered', 'Led', 'Optimized'"
+        )
         deductions += 8
-    else:
-        passes.append(f"Quantified achievements found ({len(quant_patterns)} metrics detected)")
-
-    # ── 6. ATS Red Flags (10 pts) ───────────────────────────────────────
-    # Check for table-like patterns (multiple tab/pipe chars)
-    if text and text.count('\t') > 10:
-        issues.append("Possible table/column layout detected — ATS often misreads multi-column resumes")
+    elif verb_count < 3:
+        issues.append(
+            f"Weak action verb usage ({verb_count} found) — "
+            "aim for 5+ distinct strong verbs across experience bullet points"
+        )
         deductions += 5
+    elif verb_count < 5:
+        issues.append(
+            f"Limited action verb variety ({verb_count} found) — "
+            "diversify verbs to better demonstrate range of contributions"
+        )
+        deductions += 2
     else:
-        passes.append("No table/column layout issues detected")
+        passes.append(f"Strong action verb usage ({verb_count} distinct verbs detected)")
 
-    # Check for objective vs summary (objective is outdated)
-    if "objective" in text_lower and "summary" not in text_lower:
-        issues.append("Uses 'Objective' section — replace with a modern 'Professional Summary'")
+    # ══════════════════════════════════════════════════════════════════════
+    # 5. QUANTIFIED ACHIEVEMENTS  (max −8 pts)
+    #    Broader pattern set captures $, %, x, K, M, large numbers, etc.
+    # ══════════════════════════════════════════════════════════════════════
+    quant_patterns = []
+
+    # Percentage metrics: 35%, 2.5 percent
+    quant_patterns += re.findall(
+        r'\b\d+[\.,]?\d*\s*(%|percent)\b', text_lower
+    )
+    # Multiplier / scale: 10x, 3 times
+    quant_patterns += re.findall(
+        r'\b\d+[\.,]?\d*\s*(x|times)\b', text_lower
+    )
+    # Counts with units: 10K users, 500 clients, 3 projects, 50 hours
+    quant_patterns += re.findall(
+        r'\b\d+[,.]?\d*\s*(k|m)?\s*(users|clients|customers|projects|tickets|'
+        r'requests|transactions|queries|hrs|hours|days|weeks|months|years|'
+        r'engineers|developers|members|students|candidates|submissions)\b',
+        text_lower
+    )
+    # Technical metrics: 200ms, 50GB, 1TB
+    quant_patterns += re.findall(
+        r'\b\d+[\.,]?\d*\s*(ms|gb|tb|mb|rpm|rps|qps|wpm|tps)\b', text_lower
+    )
+    # Dollar amounts: $50K, $1.2M, $500
+    quant_patterns += re.findall(
+        r'\$\s*\d+[\d,.]*\s*[kKmMbB]?\b', text_lower
+    )
+    # Large bare numbers (10,000+) — likely meaningful scale references
+    quant_patterns += re.findall(
+        r'\b\d{1,3}[,]\d{3}\b', text_lower
+    )
+    # Qualitative scale indicators
+    quant_patterns += re.findall(
+        r'\b(doubled|tripled|halved|10x|100x)\b', text_lower
+    )
+    # "3+ years" style
+    quant_patterns += re.findall(
+        r'\b\d+\+\s*(years|yrs|months)\b', text_lower
+    )
+
+    metric_count = len(quant_patterns)
+    if metric_count == 0:
+        issues.append(
+            "No quantified achievements detected — add measurable impact "
+            "(e.g., 'reduced latency by 35%', 'served 10K users', 'saved $50K annually')"
+        )
+        deductions += 8
+    elif metric_count < 3:
+        issues.append(
+            f"Few quantified achievements ({metric_count} found) — "
+            "aim for 4+ metrics across your experience to demonstrate concrete impact"
+        )
+        deductions += 4
+    else:
+        passes.append(f"Quantified achievements present ({metric_count} metrics detected)")
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 6. ATS RED FLAGS  (max −14 pts)
+    # ══════════════════════════════════════════════════════════════════════
+
+    # 6a. Multi-column layout detection
+    #     Priority: use real PDF block coordinates if pdf_path available,
+    #     fall back to tab-character heuristic for plain-text paths.
+    multicolumn_detected = False
+    if pdf_path:
+        try:
+            multicolumn_detected = _detect_multicolumn_pdf(pdf_path)
+        except Exception:
+            multicolumn_detected = False
+    if not multicolumn_detected and text:
+        # Fallback heuristic: heavy tab usage OR many pipe characters
+        multicolumn_detected = (
+            text.count('\t') > 8 or
+            text.count('|') > 12
+        )
+
+    if multicolumn_detected:
+        issues.append(
+            "Multi-column or table layout detected — "
+            "many ATS parsers read columns out of order, scrambling your resume content; "
+            "use a single-column layout"
+        )
+        deductions += 7
+    else:
+        passes.append("Single-column layout detected — ATS-safe structure")
+
+    # 6b. Outdated 'Objective' section
+    if "objective" in text_lower and "summary" not in text_lower and "professional summary" not in text_lower:
+        issues.append(
+            "Uses 'Objective' section — this is outdated; "
+            "replace with a modern 'Professional Summary' (2–3 targeted sentences)"
+        )
         deductions += 3
-    
-    # Check for date formats
+
+    # 6c. Employment dates
     has_dates = bool(re.search(r'\b(19|20)\d{2}\b', text or ""))
     if not has_dates:
-        issues.append("No dates detected — ATS expects employment dates for timeline parsing")
+        issues.append(
+            "No employment dates detected — "
+            "ATS requires dates to build a timeline; "
+            "add month/year ranges (e.g., 'Jan 2021 – Mar 2023')"
+        )
         deductions += 5
     else:
-        passes.append("Employment dates detected")
+        passes.append("Employment dates detected — ATS can parse your timeline")
 
-    # ── Final Score ──────────────────────────────────────────────────────
-    raw_score = max(0, 100 - deductions)
+    # 6d. Special characters / encoding issues that confuse ATS parsers
+    if text:
+        special_char_count = len(re.findall(r'[^\x00-\x7F]', text))
+        ratio = special_char_count / max(len(text), 1)
+        if ratio > 0.04:
+            issues.append(
+                f"High non-ASCII character density ({special_char_count} chars) — "
+                "special characters from stylised fonts or copy-paste can corrupt ATS parsing"
+            )
+            deductions += 3
+        else:
+            passes.append("Character encoding looks ATS-safe (low non-ASCII density)")
+
+    # 6e. Excessive repetition of buzzwords (keyword stuffing signal)
+    buzzwords = ["synergy", "passionate", "hardworking", "go-getter", "think outside the box",
+                 "detail-oriented", "team player", "results-driven", "dynamic", "proactive"]
+    stuffed = [bw for bw in buzzwords if text_lower.count(bw) >= 2]
+    if len(stuffed) >= 2:
+        issues.append(
+            f"Possible keyword stuffing detected ({', '.join(stuffed)}) — "
+            "overused buzzwords reduce credibility; replace with concrete examples"
+        )
+        deductions += 2
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 7. BONUS CREDITS  (up to +4 pts)
+    #    Reward genuine ATS positive signals.
+    # ══════════════════════════════════════════════════════════════════════
+
+    # Certifications section
+    if any(w in text_lower for w in [
+        "certification", "certified", "certificate", "aws certified",
+        "google certified", "microsoft certified", "pmp", "cpa",
+        "cissp", "ceh", "comptia", "coursera", "udemy", "edx",
+    ]):
+        passes.append("Certifications / credentials detected — strong ATS positive signal")
+        bonuses += 1
+
+    # Projects section
+    if any(w in text_lower for w in [
+        "projects", "personal projects", "side projects",
+        "open source", "github.com", "hackathon",
+    ]):
+        passes.append("Projects section detected — demonstrates initiative beyond job roles")
+        bonuses += 1
+
+    # Consistent date format (month year)
+    month_year_dates = re.findall(
+        r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(19|20)\d{2}\b',
+        text_lower
+    )
+    if len(month_year_dates) >= 2:
+        passes.append("Consistent Month-Year date format detected — preferred by ATS parsers")
+        bonuses += 1
+
+    # ══════════════════════════════════════════════════════════════════════
+    # 8. FINAL SCORE CALCULATION
+    # ══════════════════════════════════════════════════════════════════════
+    raw_score = max(0, min(100, 100 - deductions + bonuses))
 
     if raw_score >= 90:
         letter_grade = "A+"
@@ -2894,12 +3176,18 @@ def check_resume_format(text: str, num_pages: int = 1) -> dict:
         label = "Poor — Major Issues"
 
     return {
-        "format_score": raw_score,
-        "letter_grade": letter_grade,
-        "label": label,
-        "issues": issues,
-        "passes": passes,
-        "word_count": word_count,
+        "format_score":  raw_score,
+        "letter_grade":  letter_grade,
+        "label":         label,
+        "issues":        issues,
+        "passes":        passes,
+        "word_count":    word_count,
+        # Extended breakdown (available to callers that want sub-scores)
+        "deductions":    deductions,
+        "bonuses":       bonuses,
+        "verb_count":    verb_count,
+        "metric_count":  metric_count,
+        "multicolumn":   multicolumn_detected,
     }
 
 # Detect bias in resume
@@ -3455,7 +3743,7 @@ Suggestions:
     feedback_match = re.search(r"Feedback:\s*(.+)", response)
     suggestions = re.findall(r"- (.+)", response)
 
-    score = int(score_match.group(1)) if score_match else max(0, min(max_score, max(3, max_score-2)))  # More generous default, clamped to max_score
+    score = int(score_match.group(1)) if score_match else max(0, min(max_score, max(3, max_score - 2)))  # Generous default, clamped to max_score
     feedback = feedback_match.group(1).strip() if feedback_match else "Language quality appears adequate for professional communication."
     return score, feedback, suggestions
 
@@ -3796,7 +4084,7 @@ Follow this EXACT structure. Do not skip any section:
     # Extract missing items with better parsing - now called "opportunities"
     missing_keywords_section = extract_section(r"\*\*Keyword Enhancement Opportunities:\*\*(.*?)(?:\*\*|###|\Z)", keyword_analysis)
     missing_skills_section = extract_section(r"\*\*Skills Gaps \(Development Opportunities\):\*\*(.*?)(?:\*\*|###|\Z)", skills_analysis)
-    
+
     # Fallback to old patterns if new ones don't match
     if not missing_keywords_section.strip():
         missing_keywords_section = extract_section(r"\*\*Missing Critical Keywords:\*\*(.*?)(?:\*\*|###|\Z)", keyword_analysis)
@@ -3836,25 +4124,25 @@ Follow this EXACT structure. Do not skip any section:
     # Step 1: sum the five LLM-scored components (clamped to their individual weights)
     content_score = edu_score + exp_score + skills_score + lang_score + keyword_score
 
-    # Normalise to 100-pt scale in case sidebar weights don't sum exactly to 100
+    # Normalise LLM components to 90-pt scale (format takes the remaining 10 pts)
+    # This keeps total = 100 while giving format meaningful, visible weight.
     weight_total = edu_weight + exp_weight + skills_weight + lang_weight + keyword_weight
-    if weight_total > 0 and weight_total != 100:
-        content_score = round(content_score / weight_total * 100)
-    content_score = max(0, min(100, content_score))
+    if weight_total > 0:
+        content_score = round(content_score / weight_total * 90)
+    content_score = max(0, min(90, content_score))
 
-    # Step 2: format score (0–100) contributes a fixed 5-pt bonus/penalty
-    # normalised to ±5 around a neutral midpoint of 75
+    # Step 2: format score (0–100) contributes a fixed 10-pt component
+    # Scaled proportionally: 100 format → 10 pts, 0 format → 0 pts
     fmt_score_raw = format_data.get("format_score", 75) if format_data else 75
-    fmt_score_raw = max(0, min(100, int(fmt_score_raw)))   # clamp to 0–100
-    # delta: +5 if perfect format (100), 0 at 75, −5 if terrible format (25 or below)
-    format_delta = round((fmt_score_raw - 75) / 25 * 5)   # range: −10 … +5
-    format_delta = max(-10, min(5, format_delta))          # hard clamp
+    fmt_score_raw = max(0, min(100, int(fmt_score_raw)))
+    FORMAT_WEIGHT = 10
+    format_component = round(fmt_score_raw / 100 * FORMAT_WEIGHT)
 
-    # Step 3: add format delta to content score — this is the pre-penalty total
-    pre_penalty_score = content_score + format_delta
+    # Step 3: combine content + format → pre-penalty total (0–100)
+    pre_penalty_score = content_score + format_component
     pre_penalty_score = max(0, min(100, pre_penalty_score))
 
-    # Step 4: subtract domain mismatch penalty ONCE, straight subtraction — no floor tricks
+    # Step 4: subtract domain mismatch penalty ONCE — straight subtraction
     total_score = pre_penalty_score - domain_penalty
 
     # Step 5: clamp final result 15–100
@@ -3885,8 +4173,8 @@ Follow this EXACT structure. Do not skip any section:
     final_thoughts += f"""
 
 **Technical Evaluation Details:**
-- Content Score (pre-format): {content_score}/100
-- Format Delta Applied: {'+' if format_delta >= 0 else ''}{format_delta} pts (Format Score: {fmt_score_raw}/100)
+- Content Score (LLM components, 90-pt scale): {content_score}/90
+- Format Component (10-pt scale): {format_component}/10 (Format Score: {fmt_score_raw}/100)
 - Pre-Penalty Score: {pre_penalty_score}/100
 - Domain Penalty Applied: -{domain_penalty} pts (out of max -{MAX_DOMAIN_PENALTY} pts)
 - Final ATS Score: {total_score}/100
@@ -3904,9 +4192,10 @@ Follow this EXACT structure. Do not skip any section:
 - 0–24: Major misalignment — Not suitable for this specific role
 
 **ATS Scoring Notes:**
-- Minimum score thresholds applied to prevent unfair penalization
-- Format score contributes a ±5 to ±10 pt delta (neutral at 75/100)
-- Domain penalty is subtracted once as a flat deduction
+- Scoring model: LLM components (90 pts) + Format (10 pts) − Domain penalty
+- Format score is a real 10-pt component (not a delta) — poor formatting meaningfully lowers the score
+- Domain penalty subtracted once as a flat deduction (max {MAX_DOMAIN_PENALTY} pts)
+- Format checker v2: uses PDF block-coordinate multi-column detection, tiered deductions, bonus credits
 - Transferable skills, projects, and open-source contributions were credited
 - Career stage (entry/mid/senior) considered in experience scoring
 """
@@ -4007,16 +4296,22 @@ with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.
 
 # ---------------- Advanced Weights Dropdown ----------------
 with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/settings.png) Customize ATS Scoring Weights", expanded=False):
+    st.markdown(
+        "<div style='font-size:0.72rem;color:#64748b;margin-bottom:8px;font-family:-apple-system,sans-serif;'>"
+        "Format quality is scored automatically (10 pts fixed). "
+        "Adjust the remaining <b>90 pts</b> below.</div>",
+        unsafe_allow_html=True
+    )
     edu_weight = st.slider("![Education](https://img.icons8.com/ios-filled/20/graduation-cap.png) Education Weight", 0, 50, 20)
     exp_weight = st.slider("![Experience](https://img.icons8.com/ios-filled/20/portfolio.png) Experience Weight", 0, 50, 35)
-    skills_weight = st.slider("![Skills](https://img.icons8.com/ios-filled/20/gear.png) Skills Match Weight", 0, 50, 30)
+    skills_weight = st.slider("![Skills](https://img.icons8.com/ios-filled/20/gear.png) Skills Match Weight", 0, 50, 20)
     lang_weight = st.slider("![Language](https://img.icons8.com/ios-filled/20/language.png) Language Quality Weight", 0, 10, 5)
     keyword_weight = st.slider("![Keyword](https://img.icons8.com/ios-filled/20/key.png) Keyword Match Weight", 0, 20, 10)
 
     total_weight = edu_weight + exp_weight + skills_weight + lang_weight + keyword_weight
 
     # ---------------- Inline SVG Validation ----------------
-    if total_weight != 100:
+    if total_weight != 90:
         st.markdown(
             f"""
             <div style="display:flex;align-items:center;gap:8px;
@@ -4033,7 +4328,7 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
                              12 17zm1-4V7h-2v6h2z"/>
                 </svg>
                 <span style="color:#fca5a5;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;">
-                    Total = {total_weight}. Adjust to exactly 100.
+                    Total = {total_weight}. Adjust to exactly 90 (Format = 10 pts fixed).
                 </span>
             </div>
             """,
@@ -4053,7 +4348,7 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
                              19 20.3 7.7l-1.4-1.4z"/>
                 </svg>
                 <span style="color:#6ee7b7;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;">
-                    Weights balanced · Total = 100
+                    Weights balanced · Content = 90 pts · Format = 10 pts · Total = 100
                 </span>
             </div>
             """,
@@ -4318,7 +4613,7 @@ if uploaded_files and job_description:
             doc_check.close()
         except Exception:
             num_pages = 1
-        format_data = check_resume_format(full_text, num_pages)
+        format_data = check_resume_format(full_text, num_pages, pdf_path=file_path)
 
         # ✅ LLM-based ATS Evaluation
         ats_result, ats_scores = ats_percentage_score(
