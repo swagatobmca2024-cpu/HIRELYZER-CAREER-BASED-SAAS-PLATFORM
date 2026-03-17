@@ -1,4 +1,5 @@
 import os
+import os
 os.environ["STREAMLIT_WATCHDOG"] = "false"
 import json
 import random
@@ -2742,7 +2743,10 @@ def _strip_emoji(s: str) -> str:
 def _is_section_header(line: str) -> bool:
     """
     Returns True only for genuine section headers.
-    Correctly rejects contact label lines like 'PHONE NUMBER: +91-...'
+    Correctly rejects:
+    - Contact label lines like 'PHONE NUMBER: +91-...'
+    - Skill sub-category lines like 'DATABASES: MongoDB, MySQL'
+    - Any ALL-CAPS line that has content after a colon (it's a key:value, not a header)
     """
     s = line.strip()
     if not s:
@@ -2750,28 +2754,57 @@ def _is_section_header(line: str) -> bool:
     clean = _strip_emoji(s).strip('*#•-_ \t').strip()
     if not clean:
         return False
-    # Reject contact label lines that have a value after the colon
+
+    # ── Reject marker lines ───────────────────────────────────────────────
+    if clean.startswith('---') and clean.endswith('---'):
+        return False
+
+    # ── Reject ANY line that has a colon with content after it ───────────
+    # This covers: "DATABASES: MongoDB", "Programming Languages: Python",
+    # "PHONE: +91...", "EMAIL: x@y.com", etc.
+    # A real section header NEVER has a colon.
+    if ':' in clean:
+        colon_idx = clean.index(':')
+        after_colon = clean[colon_idx + 1:].strip()
+        if after_colon:  # there is content after the colon → key:value line, not a header
+            return False
+
+    # ── Reject known contact label lines ─────────────────────────────────
     if re.match(
-        r'^(FULL NAME|NAME|PHONE|MOBILE|EMAIL|LOCATION|CITY|LINKEDIN|GITHUB|PORTFOLIO)\s*[:\-]',
+        r'^(FULL NAME|NAME|PHONE|MOBILE|EMAIL|LOCATION|CITY|LINKEDIN|GITHUB|PORTFOLIO)',
         clean, re.I
     ):
         return False
-    # Must be ALL-CAPS
+
+    # ── Reject known skill sub-categories (should never be top-level headers) ─
+    _SKILL_SUBCATEGORIES = {
+        'PROGRAMMING LANGUAGES', 'FRAMEWORKS & LIBRARIES', 'FRAMEWORKS AND LIBRARIES',
+        'TOOLS & PLATFORMS', 'TOOLS AND PLATFORMS', 'SOFT SKILLS',
+        'DATABASES', 'DATABASE', 'TECHNICAL SKILLS SUMMARY',
+        'HARD SKILLS', 'KEY SKILLS',
+    }
+    if clean.upper() in _SKILL_SUBCATEGORIES:
+        return False
+
+    # ── Must be ALL-CAPS ──────────────────────────────────────────────────
     if clean.upper() != clean:
         return False
-    # Short enough for a section name
+    # ── Short enough for a section name ──────────────────────────────────
     if len(clean) > 65 or len(clean) < 3:
         return False
-    # Not a URL
+    # ── Not a URL ─────────────────────────────────────────────────────────
     if clean.startswith('HTTP') or '/' in clean:
         return False
-    # Not a phone / date / number string
+    # ── Not a phone / date / number string ───────────────────────────────
     if re.match(r'^[\d\s\-/|+()]+$', clean):
         return False
-    # Matches a known keyword OR is 1-5 all-caps words
+    # ── Not a pipe-separated contact/data row ────────────────────────────
+    if '|' in clean:
+        return False
+    # ── Matches a known keyword OR is 1-4 all-caps words ─────────────────
     if any(clean == kw or clean.startswith(kw) for kw in KNOWN_SECTION_HEADERS):
         return True
-    if 1 <= len(clean.split()) <= 5:
+    if 1 <= len(clean.split()) <= 4:
         return True
     return False
 
@@ -2790,15 +2823,30 @@ def _normalise_resume_text(raw: str) -> dict:
         "name": "", "title": "", "phone": "",
         "email": "", "linkedin": "", "github": "", "location": "",
     }
-    lines = raw.split('\n')
 
-    # ── Pass 1: scan first 20 lines for contact values ───────────────────
-    # Also handle the common pipe-separated contact line: Phone | Email | LinkedIn | GitHub | City
-    for raw_line in lines[:20]:
+    # ── Pre-process: strip structural marker lines ────────────────────────
+    # Also extract the pre-marker block (name/title/contact) separately
+    # so the parser always finds contact info regardless of marker position
+    pre_marker = raw
+    if "---RESUME_BODY_START---" in raw:
+        pre_marker = raw.split("---RESUME_BODY_START---", 1)[0]
+
+    # Clean lines: remove marker lines, strip trailing whitespace
+    all_lines = [l for l in raw.split('\n')
+                 if not (l.strip().startswith('---') and l.strip().endswith('---'))]
+    pre_lines = [l for l in pre_marker.split('\n')
+                 if not (l.strip().startswith('---') and l.strip().endswith('---'))]
+
+    # ── Pass 1A: extract contact from the pre-marker block (most reliable) ─
+    # This is the name/title/contact block the LLM outputs before the body
+    for raw_line in pre_lines[:15]:
         l = raw_line.strip()
         clean = _strip_emoji(l).strip()
-        # Detect pipe-separated contact row (e.g. "+91... | user@email.com | linkedin.com/... | github.com/... | City")
-        if '|' in clean and not contact["email"]:
+        if not clean:
+            continue
+
+        # Pipe-separated contact row: "+91... | email | linkedin | github | City"
+        if '|' in clean:
             pipe_parts = [p.strip() for p in clean.split('|')]
             for part in pipe_parts:
                 if not contact["email"]:
@@ -2810,18 +2858,28 @@ def _normalise_resume_text(raw: str) -> dict:
                     if m:
                         contact["phone"] = m.group().strip()
                 if not contact["linkedin"]:
-                    m = re.search(r'(https?://)?(?:www\.)?linkedin\.com/in/[\w\-]+/?', part, re.I)
-                    if m:
-                        url = m.group()
-                        contact["linkedin"] = url if url.startswith('http') else 'https://' + url
+                    if re.search(r'linkedin\.com', part, re.I):
+                        m = re.search(r'(https?://)?(?:www\.)?linkedin\.com/in/[\w\-]+/?', part, re.I)
+                        if m:
+                            url = m.group()
+                            contact["linkedin"] = url if url.startswith('http') else 'https://' + url
+                        elif 'n/a' not in part.lower():
+                            # store raw label if no structured URL
+                            pass
                 if not contact["github"]:
-                    m = re.search(r'(https?://)?(?:www\.)?github\.com/[\w\-]+/?', part, re.I)
-                    if m and 'linkedin' not in m.group().lower():
-                        url = m.group()
-                        contact["github"] = url if url.startswith('http') else 'https://' + url
+                    if re.search(r'github\.com', part, re.I):
+                        m = re.search(r'(https?://)?(?:www\.)?github\.com/[\w\-]+/?', part, re.I)
+                        if m and 'linkedin' not in m.group().lower():
+                            url = m.group()
+                            contact["github"] = url if url.startswith('http') else 'https://' + url
                 if not contact["location"]:
-                    if re.match(r'^[A-Za-z][A-Za-z\s]+,\s*[A-Za-z\s]+$', part) and not re.search(r'[@\d]', part):
-                        contact["location"] = part
+                    part_clean = part.strip()
+                    if (re.match(r'^[A-Za-z][A-Za-z\s]+,\s*[A-Za-z\s]+$', part_clean)
+                            and not re.search(r'[@\d]', part_clean)
+                            and 'n/a' not in part_clean.lower()):
+                        contact["location"] = part_clean
+            continue  # this whole line is the contact row, skip individual field parsing
+
         value = _CONTACT_LABEL_RE.sub('', clean).strip(' :\t')
 
         if not contact["email"]:
@@ -2857,8 +2915,18 @@ def _normalise_resume_text(raw: str) -> dict:
                   and not re.search(r'[@\d]', clean)):
                 contact["location"] = clean
 
-    # ── Pass 2: extract name (first non-contact, non-header short line) ──
-    for raw_line in lines[:12]:
+    # ── Pass 1B: fallback — scan first 20 lines of full text for contact ─
+    if not contact["email"]:
+        for raw_line in all_lines[:20]:
+            l = raw_line.strip()
+            m = re.search(r'[\w.+-]+@[\w.-]+\.[a-z]{2,}', l, re.I)
+            if m:
+                contact["email"] = m.group()
+                break
+
+    # ── Pass 2: extract name from pre-marker block ────────────────────────
+    # The name is the FIRST non-empty, non-contact, non-marker, short line
+    for raw_line in pre_lines[:8]:
         l = _strip_emoji(raw_line.strip()).strip('*#_ ').strip()
         if not l:
             continue
@@ -2866,22 +2934,24 @@ def _normalise_resume_text(raw: str) -> dict:
             continue
         if re.search(r'[@/\d]', l):
             continue
-        if _is_section_header(raw_line):
-            continue
         if '|' in l:
             continue
+        if l.startswith('---'):
+            continue
         words = l.split()
-        if 1 <= len(words) <= 5:
+        if 1 <= len(words) <= 6:
             contact["name"] = l
             break
 
     # ── Pass 3: extract title (first short line after the name) ──────────
     name_seen = False
-    for raw_line in lines[:12]:
+    for raw_line in pre_lines[:10]:
         l = _strip_emoji(raw_line.strip()).strip('*#_ ').strip()
         if not l:
             continue
-        if l == contact["name"]:
+        if l.startswith('---'):
+            break  # hit the body marker, stop
+        if contact["name"] and l.lower() == contact["name"].lower():
             name_seen = True
             continue
         if not name_seen:
@@ -2892,16 +2962,22 @@ def _normalise_resume_text(raw: str) -> dict:
             break
         if '|' in l:
             continue
-        if 1 <= len(l.split()) <= 7:
+        if 1 <= len(l.split()) <= 8:
             contact["title"] = l
             break
 
-    # ── Pass 4: build body, skip contact-only lines in first 15 ─────────
+    # ── Pass 4: build body — strip all contact/header lines ──────────────
     def _is_contact_only(raw_line: str, idx: int) -> bool:
-        if idx >= 15:
-            return False
+        """Returns True if this line is part of the contact block at the top."""
         l = raw_line.strip()
         clean = _strip_emoji(l).strip()
+
+        # Always strip marker lines
+        if clean.startswith('---') and clean.endswith('---'):
+            return True
+        # Only strip contact lines from the first 20 lines
+        if idx >= 20:
+            return False
         if _CONTACT_LABEL_RE.match(clean):
             return True
         if re.match(r'^[\w.+-]+@[\w.-]+\.[a-z]{2,}$', clean, re.I):
@@ -2914,16 +2990,21 @@ def _normalise_resume_text(raw: str) -> dict:
             return True
         if contact["title"] and clean.lower() == contact["title"].lower():
             return True
-        # Pipe-separated contact rows (common LLM output: Phone | Email | LinkedIn | GitHub | City)
-        if '|' in clean and idx < 12:
-            parts = [p.strip() for p in clean.split('|')]
-            if all(re.search(r'[@\d/]', p) or re.match(r'^[A-Za-z\s,]+$', p)
-                   for p in parts):
+        # Pipe-separated contact row (Phone | Email | LinkedIn | GitHub | City)
+        if '|' in clean and idx < 15:
+            pipe_parts = [p.strip() for p in clean.split('|')]
+            # It's a contact row if most parts contain contact-like data
+            contact_signals = sum(
+                1 for p in pipe_parts
+                if re.search(r'[@\d]', p) or re.search(r'linkedin|github', p, re.I)
+                or re.match(r'^[A-Za-z][A-Za-z\s,]+$', p)
+            )
+            if contact_signals >= len(pipe_parts) - 1:
                 return True
         return False
 
     body_lines = [
-        l for i, l in enumerate(lines)
+        l for i, l in enumerate(all_lines)
         if not _is_contact_only(l, i)
     ]
 
@@ -2944,7 +3025,8 @@ def _normalise_resume_text(raw: str) -> dict:
             if stripped:
                 # Strip emojis and markdown bold/italic from body lines
                 clean_line = _strip_emoji(stripped)
-                clean_line = re.sub(r'^\*{1,2}(.*?)\*{1,2}$', r'\1', clean_line).strip()
+                clean_line = re.sub(r'\*{1,2}(.*?)\*{1,2}', r'\1', clean_line).strip()
+                clean_line = re.sub(r'^#+\s*', '', clean_line).strip()
                 if clean_line:
                     current["lines"].append(clean_line)
             elif current["lines"]:
@@ -4204,6 +4286,8 @@ You are an expert resume writer for a professional HR platform. Your task is to 
 7. DO NOT fabricate companies, job titles, degrees, dates, or metrics not in the original resume
 8. Every resume you produce must follow the EXACT SAME structure and style — no variation
 9. CRITICAL: "Programming Languages", "Soft Skills", "Frameworks & Libraries", "Databases", "Tools & Platforms" are NOT section headers — they are SUB-ITEMS under TECHNICAL SKILLS. Never write them as standalone all-caps section headers.
+10. SPELLING: Copy the candidate's full name CHARACTER-FOR-CHARACTER exactly as it appears in the original resume. Do NOT alter, rearrange, or add letters to the name. If the name is "Sarbajit Roy", output exactly "Sarbajit Roy" — never "Sarabajit Roy" or any other variation.
+11. The contact line (Phone | Email | LinkedIn | GitHub | City) must ALWAYS be present as Line 3. If a field is missing from the original resume, write the literal text "N/A" for that field — do not skip the line or reorder fields.
 
 ═══════════════════════════════════════════════════
 📐 REQUIRED OUTPUT STRUCTURE — FOLLOW EXACTLY
@@ -4212,9 +4296,16 @@ You are an expert resume writer for a professional HR platform. Your task is to 
 Output the resume using ONLY this structure. Use plain text. No symbols, no markdown, no emojis.
 
 IMPORTANT CONTACT BLOCK RULES:
-- Line 1: Full name exactly as given (Title Case, e.g. "John Smith") — NEVER skip this
-- Line 2: Job title / professional role
-- Line 3: All contact details separated by | characters. Include ALL that are available from the original resume. If LinkedIn/GitHub are not in the original, write "N/A" for those fields. Format: Phone | Email | LinkedIn | GitHub | City, Country
+- Line 1: Full name EXACTLY as in the original resume — copy every letter without change (Title Case)
+- Line 2: Job title / professional role (1 line only)
+- Line 3: Exactly this format with | separators — NEVER omit this line:
+  Phone | Email | LinkedIn URL | GitHub URL | City, Country
+  If a field is not in the original resume, write N/A for it.
+
+EXAMPLE (follow this format exactly):
+Sarbajit Roy
+Full Stack Developer
++91 9876543210 | sarbajit@email.com | https://linkedin.com/in/sarbajit | N/A | Kolkata, India
 
 [Full Name]
 [Job Title / Role]
