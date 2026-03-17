@@ -2741,7 +2741,10 @@ def _strip_emoji(s: str) -> str:
 def _is_section_header(line: str) -> bool:
     """
     Returns True only for genuine section headers.
-    Correctly rejects contact label lines like 'PHONE NUMBER: +91-...'
+    Correctly rejects:
+      - contact label lines like 'PHONE NUMBER: +91-...'
+      - skill-category lines like 'PROGRAMMING LANGUAGES: C, Java'
+      - lines with content after a colon (key:value pairs are not headers)
     """
     s = line.strip()
     if not s:
@@ -2749,35 +2752,43 @@ def _is_section_header(line: str) -> bool:
     clean = _strip_emoji(s).strip('*#•-_ \t').strip()
     if not clean:
         return False
-    # Reject contact label lines that have a value after the colon
+
+    # Reject ANY "KEY: value" line — these are never section headers
+    # This covers both contact labels and skill categories
+    if re.search(r':\s*\S', clean):
+        return False
+
+    # Reject contact label lines (standalone, without value)
     if re.match(
-        r'^(FULL NAME|NAME|PHONE|MOBILE|EMAIL|LOCATION|CITY|LINKEDIN|GITHUB|PORTFOLIO)\s*[:\-]',
+        r'^(FULL NAME|NAME|PHONE|MOBILE|EMAIL|LOCATION|CITY|LINKEDIN|GITHUB|PORTFOLIO)\s*[:\-]?$',
         clean, re.I
     ):
         return False
-    # Reject skills/category lines: "PROGRAMMING LANGUAGES: C, JAVA"
-    # A real section header NEVER has inline content after a colon
-    if ':' in clean:
-        after_colon = clean[clean.index(':') + 1:].strip()
-        if after_colon:   # has content → it's a label:value line, not a header
-            return False
-    # Must be ALL-CAPS
-    if clean.upper() != clean:
+
+    # Must not be a URL
+    if re.match(r'^HTTPS?', clean) or '/' in clean:
         return False
-    # Short enough for a section name
-    if len(clean) > 65 or len(clean) < 3:
-        return False
-    # Not a URL
-    if clean.startswith('HTTP') or '/' in clean:
-        return False
-    # Not a phone / date / number string
+
+    # Must not be purely numeric / date / separator
     if re.match(r'^[\d\s\-/|+()]+$', clean):
         return False
-    # Matches a known keyword OR is 1-5 all-caps words
+
+    # Short enough for a section name (3–65 chars)
+    if len(clean) > 65 or len(clean) < 3:
+        return False
+
+    # Must be ALL-CAPS (section headers in our format are always ALL-CAPS)
+    if clean.upper() != clean:
+        return False
+
+    # Matches a known section keyword
     if any(clean == kw or clean.startswith(kw) for kw in KNOWN_SECTION_HEADERS):
         return True
-    if 1 <= len(clean.split()) <= 5:
+
+    # Generic: 1–5 all-caps words (no digits, no special chars)
+    if re.match(r'^[A-Z][A-Z\s&/\-]{1,}$', clean) and 1 <= len(clean.split()) <= 5:
         return True
+
     return False
 
 
@@ -2793,15 +2804,38 @@ def _normalise_resume_text(raw: str) -> dict:
     """
     contact = {
         "name": "", "title": "", "phone": "",
-        "email": "", "linkedin": "", "github": "", "location": "",
+        "email": "", "linkedin": "", "github": "",
+        "portfolio": "", "location": "",
     }
-    lines = raw.split('\n')
 
-    # ── Pass 1: scan first 15 lines for contact values ───────────────────
-    for raw_line in lines[:15]:
+    # ── Pre-process: when the LLM uses RESUME_BODY_START markers the
+    # name / title / contact block lives BEFORE the marker. Prepend those
+    # lines so every scanning pass (lines[:N]) always sees them.
+    header_prefix: list = []
+    body_raw = raw
+    if "---RESUME_BODY_START---" in raw:
+        pre, post = raw.split("---RESUME_BODY_START---", 1)
+        header_prefix = [ln for ln in pre.split('\n') if ln.strip()]
+        body_raw = post
+    lines = header_prefix + body_raw.split('\n')
+
+    # ── Pass 1: scan first 20 lines for contact values ───────────────────
+    for raw_line in lines[:20]:
         l = raw_line.strip()
         clean = _strip_emoji(l).strip()
         value = _CONTACT_LABEL_RE.sub('', clean).strip(' :\t')
+
+        # Name from explicit label: "Full Name: John Doe" or "Name: ..."
+        if not contact["name"]:
+            m = re.match(
+                r'^(?:full\s*name|name)\s*[:\-]\s*(.+)$', clean, re.I
+            )
+            if m:
+                candidate = m.group(1).strip().strip('*#_ ')
+                if (candidate
+                        and not re.search(r'[@\d/]', candidate)
+                        and 1 <= len(candidate.split()) <= 6):
+                    contact["name"] = candidate
 
         if not contact["email"]:
             m = re.search(r'[\w.+-]+@[\w.-]+\.[a-z]{2,}', l, re.I)
@@ -2811,7 +2845,7 @@ def _normalise_resume_text(raw: str) -> dict:
         if not contact["phone"]:
             if re.match(r'^[\+\d][\d\s\-\(\)]{6,}\d$', value):
                 contact["phone"] = value
-            elif re.search(r'(phone|mobile|contact)', clean, re.I):
+            elif re.search(r'(phone|mobile|contact|tel)', clean, re.I):
                 m = re.search(r'(\+?\d[\d\s\-\(\)]{6,}\d)', l)
                 if m:
                     contact["phone"] = m.group().strip()
@@ -2828,88 +2862,78 @@ def _normalise_resume_text(raw: str) -> dict:
                 url = m.group()
                 contact["github"] = url if url.startswith('http') else 'https://' + url
 
+        if not contact["portfolio"]:
+            # Portfolio/personal site that is neither LinkedIn nor GitHub
+            m = re.search(
+                r'(https?://[\w.\-/]+\.(?:com|io|dev|me|net|org)/[\w.\-/?=&%]*)',
+                l, re.I
+            )
+            if m:
+                url = m.group()
+                if 'linkedin' not in url.lower() and 'github' not in url.lower():
+                    contact["portfolio"] = url
+
         if not contact["location"]:
             if re.search(r'(location|city|address)\s*[:\-]', clean, re.I):
                 contact["location"] = value
-            elif (re.match(r'^[A-Za-z][A-Za-z\s]+,\s*[A-Za-z\s]+$', clean)
-                  and len(clean.split()) <= 5
+            elif (re.match(r'^[A-Za-z][A-Za-z\s\-]+,\s*[A-Za-z\s\-]+$', clean)
+                  and len(clean.split()) <= 6
                   and not re.search(r'[@\d]', clean)):
                 contact["location"] = clean
 
-    # ── Pass 2: extract name ──────────────────────────────────────────────
-    # Handle both formats:
-    # NEW: "DISHA MONDAL\nFULL STACK DEVELOPER\n+91-... | email | location"
-    # OLD emoji: "🏷️ Full Name\nDISHA MONDAL" or "🏷️ DISHA MONDAL"
-    for i, raw_line in enumerate(lines[:15]):
-        l_raw = raw_line.strip()
-        l = _strip_emoji(l_raw).strip('*#_ ').strip()
-        if not l:
-            continue
-
-        # Case A: emoji label line "🏷️ Full Name" or "🏷️ DISHA MONDAL"
-        # Check if this is a "Full Name" label — extract value or peek next line
-        if re.match(r'^(full\s*name|name)\s*[:\-]?\s*', l, re.I):
-            value = re.sub(r'^(full\s*name|name)\s*[:\-]?\s*', '', l, flags=re.I).strip()
-            if value and not re.search(r'[@\d/]', value) and 1 <= len(value.split()) <= 5:
-                contact["name"] = value
+    # ── Pass 2: extract name (first non-contact, non-header short line) ──
+    # Only run if label-based extraction didn't already find a name
+    if not contact["name"]:
+        for raw_line in lines[:15]:
+            l = _strip_emoji(raw_line.strip()).strip('*#_ ').strip()
+            if not l:
+                continue
+            # Skip lines that ARE contact labels (label only, no value yet)
+            if _CONTACT_LABEL_RE.match(l) and not re.search(r'\s{2,}|\|', l):
+                continue
+            # Skip lines containing contact-like content
+            if re.search(r'[@\d]', l):
+                continue
+            if re.search(r'linkedin|github|http', l, re.I):
+                continue
+            if _is_section_header(raw_line):
+                continue
+            # Pipe-separated lines are contact rows, not the name
+            if '|' in l:
+                continue
+            words = l.split()
+            # Names: 1–5 words, all word-chars (allow hyphens/apostrophes in names)
+            if 2 <= len(words) <= 5 and re.match(r"^[A-Za-z][A-Za-z '\-\.]+$", l):
+                contact["name"] = l
                 break
-            # Value is empty — name is on the next non-empty line
-            for next_line in lines[i+1:i+4]:
-                nv = _strip_emoji(next_line.strip()).strip('*#_ ').strip()
-                if nv and not re.search(r'[@\d/]', nv) and not _CONTACT_LABEL_RE.match(nv):
-                    if 1 <= len(nv.split()) <= 5:
-                        contact["name"] = nv
-                        break
-            if contact["name"]:
-                break
-            continue
+            elif len(words) == 1 and re.match(r"^[A-Z][a-z]+$", l):
+                # Single capitalised word unlikely to be a name alone — keep looking
+                continue
 
-        # Case B: plain contact field label (phone, email etc.) — skip
-        if _CONTACT_LABEL_RE.match(l):
-            continue
-        # Skip lines with contact data
-        if re.search(r'[@/]', l):
-            continue
-        # Skip pipe-separated lines (contact rows)
-        if '|' in l:
-            continue
-        # Skip lines that are section keywords (PROFESSIONAL SUMMARY, etc.)
-        if any(l.upper() == kw or l.upper().startswith(kw) for kw in KNOWN_SECTION_HEADERS):
-            continue
-        # Skip skills category lines like "PROGRAMMING LANGUAGES: C, JAVA"
-        if ':' in l and re.match(r'^[A-Z][A-Z\s&/]+:\s*\S', l):
-            continue
-        # Must be a short name-like string (1-5 words, no digits)
-        if not re.search(r'\d', l) and 1 <= len(l.split()) <= 5:
-            contact["name"] = l
-            break
-
-    # ── Pass 3: extract title ─────────────────────────────────────────────
+    # ── Pass 3: extract title (first short non-contact line after name) ───
     name_seen = False
-    for raw_line in lines[:20]:
+    for raw_line in lines[:18]:
         l = _strip_emoji(raw_line.strip()).strip('*#_ ').strip()
         if not l:
             continue
-        # Hit the name line
         if contact["name"] and l.lower() == contact["name"].lower():
             name_seen = True
             continue
         if not name_seen:
             continue
-        # Skip all contact fields
+        # Skip contact-info lines
         if _CONTACT_LABEL_RE.match(l):
             continue
-        if re.search(r'[@/\d]', l):
+        if re.search(r'[@\d]', l):
             continue
+        if re.search(r'linkedin|github|http', l, re.I):
+            continue
+        if _is_section_header(raw_line):
+            break
         if '|' in l:
             continue
-        # Stop at a real section header
-        if any(l.upper() == kw or l.upper().startswith(kw) for kw in KNOWN_SECTION_HEADERS):
-            break
-        # Skip skills category lines
-        if ':' in l and re.match(r'^[A-Z][A-Z\s&/]+:\s*\S', l):
-            continue
-        if 1 <= len(l.split()) <= 7:
+        # Title: 1–8 words, no special symbols
+        if 1 <= len(l.split()) <= 8 and not re.search(r'[/@]', l):
             contact["title"] = l
             break
 
@@ -2918,46 +2942,59 @@ def _normalise_resume_text(raw: str) -> dict:
         if idx >= 20:
             return False
         l = raw_line.strip()
-        clean = _strip_emoji(l).strip('*#_ ').strip()
+        clean = _strip_emoji(l).strip()
         if not clean:
-            return True  # blank/emoji-only lines → skip
+            return False
 
-        # Explicit contact label lines (with or without emoji prefix)
+        # Explicit contact label lines (with or without a value)
         if _CONTACT_LABEL_RE.match(clean):
             return True
-        # Pure email
+
+        # Bare email address
         if re.match(r'^[\w.+-]+@[\w.-]+\.[a-z]{2,}$', clean, re.I):
             return True
-        # URL lines
+
+        # LinkedIn / GitHub / portfolio URL
         if re.match(r'^(https?://)?(www\.)?(linkedin|github)\.com', clean, re.I):
             return True
-        # Pure phone
+        if re.match(r'^https?://', clean, re.I) and idx < 12:
+            return True
+
+        # Phone / mobile number line
         if re.match(r'^[\+\d][\d\s\-\(\)]{6,}\d$', clean):
             return True
-        # The extracted name line itself
+
+        # The extracted name line
         if contact["name"] and clean.lower() == contact["name"].lower():
             return True
-        # The extracted title line
-        if contact["title"] and clean.lower() == contact["title"].lower():
+
+        # The extracted title line — only skip if it clearly is a title replica,
+        # not a section header that happens to match
+        if (contact["title"]
+                and clean.lower() == contact["title"].lower()
+                and not _is_section_header(raw_line)):
             return True
-        # Pipe-separated contact rows: "phone | email | location"
-        if '|' in clean and idx < 12:
+
+        # Pipe-separated contact rows (phone | email | linkedin | location …)
+        if '|' in clean and idx < 10:
             parts = [p.strip() for p in clean.split('|')]
-            if all(
-                re.search(r'[@\d/]', p) or
-                re.match(r'^[A-Za-z][A-Za-z\s,]+$', p)
-                for p in parts if p
-            ):
+            contact_like = sum(
+                1 for p in parts
+                if re.search(r'[@\d/]', p)
+                or re.match(r'^https?://', p, re.I)
+                or re.match(r'^[A-Za-z\s,\-]+$', p)
+            )
+            if contact_like >= len(parts) - 1:   # allow 1 non-contact part
                 return True
-        # Lines that are ONLY a contact value inline with a label
-        # e.g. "Phone Number: +91-8334087119  Email Address: x@y.com  Location: Kolkata"
-        if re.search(r'(phone|email|location|linkedin|github)\s*[:\-]', clean, re.I):
-            return True
+
         return False
 
+    # body_lines: use only body_raw lines (after RESUME_BODY_START marker).
+    # header_prefix lines are contact/name only — never render them as sections.
+    n_prefix = len(header_prefix)
     body_lines = [
         l for i, l in enumerate(lines)
-        if not _is_contact_only(l, i)
+        if i >= n_prefix and not _is_contact_only(l, i)
     ]
 
     # ── Pass 5: parse body into sections ─────────────────────────────────
@@ -3073,7 +3110,8 @@ def generate_docx_classic(text: str) -> BytesIO:
     contact_parts = [
         x for x in [
             parsed["phone"], parsed["email"],
-            parsed["linkedin"], parsed["github"], parsed["location"],
+            parsed["linkedin"], parsed["github"],
+            parsed.get("portfolio", ""), parsed["location"],
         ]
         if x and x.lower().strip() not in ("not provided", "n/a", "none", "")
     ]
@@ -3203,7 +3241,8 @@ def generate_docx_modern(text: str) -> BytesIO:
     contact_parts = [
         x for x in [
             parsed["phone"], parsed["email"],
-            parsed["linkedin"], parsed["github"], parsed["location"],
+            parsed["linkedin"], parsed["github"],
+            parsed.get("portfolio", ""), parsed["location"],
         ]
         if x and x.lower().strip() not in ("not provided", "n/a", "none", "")
     ]
@@ -3326,7 +3365,8 @@ def generate_docx_executive(text: str) -> BytesIO:
     contact_parts = [
         x for x in [
             parsed["phone"], parsed["email"],
-            parsed["linkedin"], parsed["github"], parsed["location"],
+            parsed["linkedin"], parsed["github"],
+            parsed.get("portfolio", ""), parsed["location"],
         ]
         if x and x.lower().strip() not in ("not provided", "n/a", "none", "")
     ]
@@ -6150,34 +6190,14 @@ with tab1:
                     full_rewritten = resume["Rewritten Text"]
                     resume_body, job_titles_block = _split_resume_and_job_titles(full_rewritten)
 
-                    # ── Render clean structured preview ────────────────────
-                    parsed_preview = _normalise_resume_text(resume_body)
-                    preview_lines = []
-                    # Contact header
-                    if parsed_preview["name"]:
-                        preview_lines.append(f"**{parsed_preview['name'].upper()}**")
-                    if parsed_preview["title"]:
-                        preview_lines.append(parsed_preview["title"])
-                    contact_parts_p = [x for x in [
-                        parsed_preview["phone"], parsed_preview["email"],
-                        parsed_preview["linkedin"], parsed_preview["github"],
-                        parsed_preview["location"],
-                    ] if x and x.lower().strip() not in ("not provided","n/a","none","")]
-                    if contact_parts_p:
-                        preview_lines.append("  |  ".join(contact_parts_p))
-                    preview_lines.append("---")
-                    # Sections
-                    for sec in parsed_preview["sections"]:
-                        hdr = (sec["header"] or "").upper().strip()
-                        if hdr in _SKIP_SECTION_HEADERS:
-                            continue
-                        if hdr:
-                            preview_lines.append(f"\n**{hdr}**")
-                        for line in sec["lines"]:
-                            l = line.strip()
-                            if l:
-                                preview_lines.append(l)
-                    st.markdown("\n\n".join(preview_lines))
+                    # ── Show clean resume text ─────────────────────────────
+                    st.markdown("""
+                    <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(56,189,248,0.15);
+                                border-radius:12px;padding:18px 20px;font-size:0.88rem;
+                                line-height:1.7;color:#e2e8f0;white-space:pre-wrap;
+                                font-family:'Segoe UI',sans-serif;margin-bottom:14px;">
+                    """ + resume_body.replace("\n", "<br>") + "</div>",
+                    unsafe_allow_html=True)
 
                     # ── Job Titles block ───────────────────────────────────
                     if job_titles_block:
