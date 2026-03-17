@@ -2713,8 +2713,9 @@ KNOWN_SECTION_HEADERS = [
     'PROFESSIONAL SUMMARY', 'WORK EXPERIENCE', 'TECHNICAL SKILLS',
     'PROFESSIONAL COMPETENCIES', 'CERTIFICATIONS & TRAINING',
     'INTERESTS & EXTRACURRICULARS', 'CORE COMPETENCIES',
-    'PROGRAMMING LANGUAGES', 'FRAMEWORKS & LIBRARIES',
-    'TOOLS & PLATFORMS', 'SOFT SKILLS', 'DATABASES',
+    # NOTE: 'PROGRAMMING LANGUAGES', 'FRAMEWORKS & LIBRARIES',
+    # 'TOOLS & PLATFORMS', 'SOFT SKILLS', 'DATABASES' are intentionally
+    # excluded — they are sub-items under TECHNICAL SKILLS, never top-level headers.
     'SUMMARY', 'OBJECTIVE', 'PROFILE', 'ABOUT ME', 'OVERVIEW',
     'EXPERIENCE', 'EMPLOYMENT', 'WORK HISTORY',
     'SKILLS', 'COMPETENCIES', 'TECHNOLOGIES',
@@ -2791,10 +2792,36 @@ def _normalise_resume_text(raw: str) -> dict:
     }
     lines = raw.split('\n')
 
-    # ── Pass 1: scan first 15 lines for contact values ───────────────────
-    for raw_line in lines[:15]:
+    # ── Pass 1: scan first 20 lines for contact values ───────────────────
+    # Also handle the common pipe-separated contact line: Phone | Email | LinkedIn | GitHub | City
+    for raw_line in lines[:20]:
         l = raw_line.strip()
         clean = _strip_emoji(l).strip()
+        # Detect pipe-separated contact row (e.g. "+91... | user@email.com | linkedin.com/... | github.com/... | City")
+        if '|' in clean and not contact["email"]:
+            pipe_parts = [p.strip() for p in clean.split('|')]
+            for part in pipe_parts:
+                if not contact["email"]:
+                    m = re.search(r'[\w.+-]+@[\w.-]+\.[a-z]{2,}', part, re.I)
+                    if m:
+                        contact["email"] = m.group()
+                if not contact["phone"]:
+                    m = re.search(r'(\+?\d[\d\s\-\(\)]{6,}\d)', part)
+                    if m:
+                        contact["phone"] = m.group().strip()
+                if not contact["linkedin"]:
+                    m = re.search(r'(https?://)?(?:www\.)?linkedin\.com/in/[\w\-]+/?', part, re.I)
+                    if m:
+                        url = m.group()
+                        contact["linkedin"] = url if url.startswith('http') else 'https://' + url
+                if not contact["github"]:
+                    m = re.search(r'(https?://)?(?:www\.)?github\.com/[\w\-]+/?', part, re.I)
+                    if m and 'linkedin' not in m.group().lower():
+                        url = m.group()
+                        contact["github"] = url if url.startswith('http') else 'https://' + url
+                if not contact["location"]:
+                    if re.match(r'^[A-Za-z][A-Za-z\s]+,\s*[A-Za-z\s]+$', part) and not re.search(r'[@\d]', part):
+                        contact["location"] = part
         value = _CONTACT_LABEL_RE.sub('', clean).strip(' :\t')
 
         if not contact["email"]:
@@ -2831,7 +2858,7 @@ def _normalise_resume_text(raw: str) -> dict:
                 contact["location"] = clean
 
     # ── Pass 2: extract name (first non-contact, non-header short line) ──
-    for raw_line in lines[:10]:
+    for raw_line in lines[:12]:
         l = _strip_emoji(raw_line.strip()).strip('*#_ ').strip()
         if not l:
             continue
@@ -2887,8 +2914,8 @@ def _normalise_resume_text(raw: str) -> dict:
             return True
         if contact["title"] and clean.lower() == contact["title"].lower():
             return True
-        # Pipe-separated contact rows
-        if '|' in clean and idx < 8:
+        # Pipe-separated contact rows (common LLM output: Phone | Email | LinkedIn | GitHub | City)
+        if '|' in clean and idx < 12:
             parts = [p.strip() for p in clean.split('|')]
             if all(re.search(r'[@\d/]', p) or re.match(r'^[A-Za-z\s,]+$', p)
                    for p in parts):
@@ -2929,6 +2956,76 @@ def _normalise_resume_text(raw: str) -> dict:
         sections.append(current)
 
     return {**contact, "sections": sections}
+
+
+def _add_hyperlink(paragraph, text: str, url: str, color: RGBColor, font_size_pt: float):
+    """Add a clickable hyperlink run to an existing paragraph."""
+    part = paragraph.part
+    r_id = part.relate_to(url, RT.HYPERLINK, is_external=True)
+    hyperlink = OxmlElement('w:hyperlink')
+    hyperlink.set(qn('r:id'), r_id)
+    new_run = OxmlElement('w:r')
+    rPr = OxmlElement('w:rPr')
+    # Color
+    rColor = OxmlElement('w:color')
+    rColor.set(qn('w:val'), '{:02X}{:02X}{:02X}'.format(color[0], color[1], color[2]))
+    rPr.append(rColor)
+    # Underline
+    rU = OxmlElement('w:u')
+    rU.set(qn('w:val'), 'single')
+    rPr.append(rU)
+    # Font size
+    rSz = OxmlElement('w:sz')
+    rSz.set(qn('w:val'), str(int(font_size_pt * 2)))
+    rPr.append(rSz)
+    new_run.append(rPr)
+    rText = OxmlElement('w:t')
+    rText.text = text
+    rText.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+    new_run.append(rText)
+    hyperlink.append(new_run)
+    paragraph._p.append(hyperlink)
+
+
+def _build_contact_paragraph(doc, parsed: dict, separator: str, alignment: int,
+                              meta_color: RGBColor, link_color: RGBColor, font_size_pt: float = 9.0):
+    """
+    Build the contact line paragraph with proper hyperlinks for LinkedIn/GitHub.
+    Returns the paragraph or None if no contact info.
+    """
+    # Build parts list: (text_or_None, url_or_None)
+    parts = []
+    if parsed.get("phone") and parsed["phone"].lower() not in ("not provided", "n/a", "none", ""):
+        parts.append((parsed["phone"], None))
+    if parsed.get("email") and parsed["email"].lower() not in ("not provided", "n/a", "none", ""):
+        parts.append((parsed["email"], f'mailto:{parsed["email"]}'))
+    if parsed.get("linkedin") and parsed["linkedin"].lower() not in ("not provided", "n/a", "none", ""):
+        parts.append(("LinkedIn", parsed["linkedin"]))
+    if parsed.get("github") and parsed["github"].lower() not in ("not provided", "n/a", "none", ""):
+        parts.append(("GitHub", parsed["github"]))
+    if parsed.get("location") and parsed["location"].lower() not in ("not provided", "n/a", "none", ""):
+        parts.append((parsed["location"], None))
+
+    if not parts:
+        return None
+
+    cp = doc.add_paragraph()
+    cp.alignment = alignment
+    cp.paragraph_format.space_before = Pt(0)
+    cp.paragraph_format.space_after  = Pt(6)
+
+    for i, (label, url) in enumerate(parts):
+        if i > 0:
+            sep_run = cp.add_run(separator)
+            sep_run.font.size = Pt(font_size_pt)
+            sep_run.font.color.rgb = meta_color
+        if url:
+            _add_hyperlink(cp, label, url, (link_color[0], link_color[1], link_color[2]), font_size_pt)
+        else:
+            run = cp.add_run(label)
+            run.font.size = Pt(font_size_pt)
+            run.font.color.rgb = meta_color
+    return cp
 
 
 def _add_horizontal_rule(doc):
@@ -3009,22 +3106,9 @@ def generate_docx_classic(text: str) -> BytesIO:
         tr.font.size = Pt(11)
         tr.font.color.rgb = META_COLOR
 
-    # ── 3. Contact line (single centred line) ─────────────────────────────
-    contact_parts = [
-        x for x in [
-            parsed["phone"], parsed["email"],
-            parsed["linkedin"], parsed["github"], parsed["location"],
-        ]
-        if x and x.lower().strip() not in ("not provided", "n/a", "none", "")
-    ]
-    if contact_parts:
-        cp = doc.add_paragraph("  |  ".join(contact_parts))
-        cp.alignment = 1
-        cp.paragraph_format.space_before = Pt(0)
-        cp.paragraph_format.space_after  = Pt(6)
-        for run in cp.runs:
-            run.font.size = Pt(9)
-            run.font.color.rgb = META_COLOR
+    # ── 3. Contact line (single centred line with hyperlinks) ─────────────
+    LINK_COLOR = RGBColor(0x1F, 0x5C, 0xAB)   # clickable blue
+    _build_contact_paragraph(doc, parsed, "  |  ", 1, META_COLOR, LINK_COLOR, 9.0)
 
     # ── 4. Top divider ────────────────────────────────────────────────────
     _add_horizontal_rule(doc)
@@ -3139,22 +3223,9 @@ def generate_docx_modern(text: str) -> BytesIO:
         tr.font.size  = Pt(11)
         tr.font.color.rgb = ACCENT
 
-    # ── 3. Contact line (left-aligned, separated by  ·  dots) ────────────
-    contact_parts = [
-        x for x in [
-            parsed["phone"], parsed["email"],
-            parsed["linkedin"], parsed["github"], parsed["location"],
-        ]
-        if x and x.lower().strip() not in ("not provided", "n/a", "none", "")
-    ]
-    if contact_parts:
-        cp = doc.add_paragraph("   ·   ".join(contact_parts))
-        cp.alignment = 0
-        cp.paragraph_format.space_before = Pt(0)
-        cp.paragraph_format.space_after  = Pt(7)
-        for run in cp.runs:
-            run.font.size = Pt(9)
-            run.font.color.rgb = META_COLOR
+    # ── 3. Contact line (left-aligned, separated by · dots, with hyperlinks) ──
+    LINK_COLOR = RGBColor(0x00, 0x7A, 0x87)   # teal links
+    _build_contact_paragraph(doc, parsed, "   ·   ", 0, META_COLOR, LINK_COLOR, 9.0)
 
     _add_horizontal_rule(doc)
 
@@ -4125,28 +4196,34 @@ You are an expert resume writer for a professional HR platform. Your task is to 
 ═══════════════════════════════════════════════════
 
 1. NO emojis anywhere in the resume body (not in headers, not in bullets, nowhere)
-2. Contact information (name, phone, email, LinkedIn, GitHub, location) must appear EXACTLY ONCE — at the very top. NEVER repeat it in any other section.
+2. Contact information (name, phone, email, LinkedIn, GitHub, location) must appear EXACTLY ONCE — at the very top in the exact format shown below. NEVER repeat it in any other section.
 3. NO URLs, hyperlinks, or job search links anywhere inside the resume body
 4. NO markdown symbols like **, *, ##, or --- inside the resume body
-5. Section headers must be written in PLAIN ALL-CAPS text only (example: PROFESSIONAL SUMMARY, not **Professional Summary** or 🛠️ Technical Skills)
+5. Section headers must be written in PLAIN ALL-CAPS text only (example: PROFESSIONAL SUMMARY, not **Professional Summary** or Technical Skills)
 6. Bullet points use only the • character
 7. DO NOT fabricate companies, job titles, degrees, dates, or metrics not in the original resume
 8. Every resume you produce must follow the EXACT SAME structure and style — no variation
+9. CRITICAL: "Programming Languages", "Soft Skills", "Frameworks & Libraries", "Databases", "Tools & Platforms" are NOT section headers — they are SUB-ITEMS under TECHNICAL SKILLS. Never write them as standalone all-caps section headers.
 
 ═══════════════════════════════════════════════════
 📐 REQUIRED OUTPUT STRUCTURE — FOLLOW EXACTLY
 ═══════════════════════════════════════════════════
 
-Output the resume body using ONLY this structure. Use plain text. No symbols, no markdown, no emojis.
+Output the resume using ONLY this structure. Use plain text. No symbols, no markdown, no emojis.
 
-[FULL NAME]
+IMPORTANT CONTACT BLOCK RULES:
+- Line 1: Full name exactly as given (Title Case, e.g. "John Smith") — NEVER skip this
+- Line 2: Job title / professional role
+- Line 3: All contact details separated by | characters. Include ALL that are available from the original resume. If LinkedIn/GitHub are not in the original, write "N/A" for those fields. Format: Phone | Email | LinkedIn | GitHub | City, Country
+
+[Full Name]
 [Job Title / Role]
 [Phone] | [Email] | [LinkedIn URL] | [GitHub URL] | [City, Country]
 
 ---RESUME_BODY_START---
 
 PROFESSIONAL SUMMARY
-[3-4 sentences. Start with: role + years of experience. Highlight 2-3 technical strengths. End with value proposition.]
+[3-4 sentences. Start with: role + years of experience. Highlight 2-3 technical strengths. End with value proposition. No first-person pronouns.]
 
 TECHNICAL SKILLS
 Programming Languages: [comma-separated list]
@@ -4202,11 +4279,12 @@ INTERESTS
 
 - Professional Summary: 3-4 sentences, no first-person pronouns (no "I", "my", "me")
 - Experience bullets: Action Verb + Task + Technology + Impact. Example: "Engineered REST API using Node.js and Express, reducing response time by 30%"
-- Skills: group by category, list only skills actually mentioned in the original resume
+- Skills: group by category under TECHNICAL SKILLS only, list only skills actually mentioned in the original resume. Do NOT create separate section headers for skill categories.
 - Projects: include name, tech stack on first line, then 3 bullets
 - Education: degree, institution, years only
 - If a section has no data from the original resume, OMIT it entirely
 - NEVER add skills, certifications, or companies not in the original resume
+- If the original resume has 0 years of experience, state that honestly (e.g., "entry-level professional" or "recent graduate")
 
 ═══════════════════════════════════════════════════
 🧠 BIAS REPLACEMENT RULES — APPLY EXACTLY
@@ -6090,14 +6168,103 @@ with tab1:
                     full_rewritten = resume["Rewritten Text"]
                     resume_body, job_titles_block = _split_resume_and_job_titles(full_rewritten)
 
-                    # ── Show clean resume text ─────────────────────────────
-                    st.markdown("""
-                    <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(56,189,248,0.15);
-                                border-radius:12px;padding:18px 20px;font-size:0.88rem;
-                                line-height:1.7;color:#e2e8f0;white-space:pre-wrap;
-                                font-family:'Segoe UI',sans-serif;margin-bottom:14px;">
-                    """ + resume_body.replace("\n", "<br>") + "</div>",
-                    unsafe_allow_html=True)
+                    # ── Parse contact info from the rewritten text ─────────
+                    _parsed_preview = _normalise_resume_text(resume_body)
+
+                    # ── Build contact info line ────────────────────────────
+                    _contact_items = []
+                    if _parsed_preview.get("phone"):
+                        _contact_items.append(f'📞 {_parsed_preview["phone"]}')
+                    if _parsed_preview.get("email"):
+                        _contact_items.append(f'✉ <a href="mailto:{_parsed_preview["email"]}" style="color:#38bdf8;text-decoration:none;">{_parsed_preview["email"]}</a>')
+                    if _parsed_preview.get("linkedin") and _parsed_preview["linkedin"].lower() not in ("n/a", "none", ""):
+                        _contact_items.append(f'<a href="{_parsed_preview["linkedin"]}" style="color:#38bdf8;text-decoration:none;">LinkedIn</a>')
+                    if _parsed_preview.get("github") and _parsed_preview["github"].lower() not in ("n/a", "none", ""):
+                        _contact_items.append(f'<a href="{_parsed_preview["github"]}" style="color:#38bdf8;text-decoration:none;">GitHub</a>')
+                    if _parsed_preview.get("location"):
+                        _contact_items.append(f'📍 {_parsed_preview["location"]}')
+                    _contact_line = "  |  ".join(_contact_items)
+
+                    # ── Build structured HTML header ───────────────────────
+                    _preview_name  = _parsed_preview.get("name", "").upper() or "CANDIDATE NAME"
+                    _preview_title = _parsed_preview.get("title", "")
+
+                    _header_html = f"""
+<div style="background:rgba(15,23,42,0.85);border:1px solid rgba(56,189,248,0.2);
+            border-radius:12px;padding:20px 24px 16px;margin-bottom:2px;">
+  <div style="text-align:center;">
+    <div style="font-size:1.35rem;font-weight:800;color:#f0f4f8;letter-spacing:0.06em;
+                font-family:'Segoe UI',sans-serif;margin-bottom:4px;">{_preview_name}</div>
+    {"<div style='font-size:0.88rem;font-weight:600;color:#38bdf8;margin-bottom:8px;'>" + _preview_title + "</div>" if _preview_title else ""}
+    {"<div style='font-size:0.78rem;color:#94a3b8;line-height:1.8;'>" + _contact_line + "</div>" if _contact_line else ""}
+  </div>
+</div>
+"""
+                    st.markdown(_header_html, unsafe_allow_html=True)
+
+                    # ── Strip contact lines from body for clean display ────
+                    _body_lines = []
+                    _in_body = False
+                    for _bl in resume_body.split("\n"):
+                        _bls = _bl.strip()
+                        # Skip the top contact lines (name, title, pipe contact row)
+                        if not _in_body:
+                            if _bls == _parsed_preview.get("name", "~~NOMATCH~~"):
+                                continue
+                            if _bls == _parsed_preview.get("title", "~~NOMATCH~~"):
+                                continue
+                            if ('|' in _bls and any(
+                                x in _bls.lower() for x in ['@', 'linkedin', 'github', '+']
+                            )):
+                                continue
+                            if re.match(r'^[\w.+-]+@[\w.-]+\.[a-z]{2,}$', _bls, re.I):
+                                continue
+                        _in_body = True
+                        _body_lines.append(_bl)
+                    _clean_body = "\n".join(_body_lines).strip()
+
+                    # ── Render body sections with styled section headers ───
+                    _rendered_lines = []
+                    for _bl in _clean_body.split("\n"):
+                        _bls = _bl.strip()
+                        if _is_section_header(_bls):
+                            _rendered_lines.append(
+                                f'<div style="font-weight:700;font-size:0.78rem;color:#94a3b8;'
+                                f'letter-spacing:0.1em;text-transform:uppercase;margin:14px 0 4px;'
+                                f'border-bottom:1px solid rgba(148,163,184,0.2);padding-bottom:3px;">'
+                                f'{_bls}</div>'
+                            )
+                        elif _bls.startswith('•'):
+                            _rendered_lines.append(
+                                f'<div style="padding-left:14px;font-size:0.87rem;color:#cbd5e1;margin:2px 0;">'
+                                f'{_bls}</div>'
+                            )
+                        elif '|' in _bls and _bls and not _bls.startswith('•'):
+                            _rendered_lines.append(
+                                f'<div style="font-weight:600;font-size:0.88rem;color:#7dd3fc;margin:8px 0 2px;">'
+                                f'{_bls}</div>'
+                            )
+                        elif re.match(r'^[A-Za-z][A-Za-z\s&/]+:\s+\S', _bls):
+                            _colon = _bls.index(':')
+                            _rendered_lines.append(
+                                f'<div style="font-size:0.87rem;color:#e2e8f0;margin:2px 0;">'
+                                f'<span style="font-weight:600;color:#f0f4f8;">{_bls[:_colon+1]}</span>'
+                                f'{_bls[_colon+1:]}</div>'
+                            )
+                        elif _bls:
+                            _rendered_lines.append(
+                                f'<div style="font-size:0.87rem;color:#cbd5e1;margin:2px 0;">{_bls}</div>'
+                            )
+                        else:
+                            _rendered_lines.append('<div style="margin:4px 0;"></div>')
+
+                    st.markdown(
+                        '<div style="background:rgba(15,23,42,0.6);border:1px solid rgba(56,189,248,0.12);'
+                        'border-radius:12px;padding:18px 22px;margin-bottom:14px;">'
+                        + "\n".join(_rendered_lines)
+                        + "</div>",
+                        unsafe_allow_html=True
+                    )
 
                     # ── Job Titles block ───────────────────────────────────
                     if job_titles_block:
