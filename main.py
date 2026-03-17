@@ -2690,19 +2690,38 @@ SECTION_KEYWORDS = [
 
 def _split_resume_and_job_titles(full_text: str):
     """
-    Separates the resume body from the '### 🎯 Suggested Job Titles'
-    section that the LLM appends. Returns (resume_text, job_titles_text).
+    Separates the resume body from the job titles section.
+    Uses the structured markers ---RESUME_BODY_END--- and ---JOB_TITLES_START---
+    that the updated prompt guarantees. Falls back to keyword matching.
+    Returns (resume_text, job_titles_text).
     """
-    markers = [
+    # Primary: use the reliable structural markers from the new prompt
+    if "---RESUME_BODY_END---" in full_text:
+        parts = full_text.split("---RESUME_BODY_END---", 1)
+        resume_part = parts[0]
+        # Strip the opening marker if present
+        if "---RESUME_BODY_START---" in resume_part:
+            resume_part = resume_part.split("---RESUME_BODY_START---", 1)[-1]
+        job_part = parts[1] if len(parts) > 1 else ""
+        # Strip job titles markers
+        if "---JOB_TITLES_START---" in job_part:
+            job_part = job_part.split("---JOB_TITLES_START---", 1)[-1]
+        if "---JOB_TITLES_END---" in job_part:
+            job_part = job_part.split("---JOB_TITLES_END---", 1)[0]
+        return resume_part.strip(), job_part.strip()
+
+    # Fallback: old-style keyword markers
+    fallback_markers = [
         "### 🎯 Suggested Job Titles",
         "🎯 Suggested Job Titles",
         "### Suggested Job Titles",
         "Suggested Job Titles (Based on Resume)",
     ]
-    for marker in markers:
+    for marker in fallback_markers:
         if marker in full_text:
             parts = full_text.split(marker, 1)
             return parts[0].strip(), (marker + parts[1]).strip()
+
     return full_text.strip(), ""
 
 
@@ -2959,276 +2978,9 @@ def generate_docx_classic(text: str) -> BytesIO:
     return buf
 
 
-# ============================================================
-# 📄 TEMPLATE 2 — Modern Single-Column (Contemporary)
-#    Teal accent, left-aligned name block, subtle dividers.
-#    Suits tech, startups, product roles.
-# ============================================================
-def generate_docx_modern(text: str) -> BytesIO:
-    resume_text, _ = _split_resume_and_job_titles(text)
-    sections = _parse_resume_sections(resume_text)
-    contact  = _extract_contact_block(sections)
-
-    ACCENT   = RGBColor(0x00, 0x7A, 0x87)   # teal
-    NAME_CLR = RGBColor(0x1A, 0x1A, 0x2E)   # near-black
-
-    doc = Document()
-    sec = doc.sections[0]
-    sec.top_margin    = Inches(0.65)
-    sec.bottom_margin = Inches(0.65)
-    sec.left_margin   = Inches(0.85)
-    sec.right_margin  = Inches(0.85)
-
-    # ── Name ──
-    name_para = doc.add_paragraph()
-    name_para.paragraph_format.space_after = Pt(1)
-    nr = name_para.add_run(contact["name"] or "Candidate Name")
-    nr.bold = True
-    nr.font.size = Pt(22)
-    nr.font.color.rgb = NAME_CLR
-
-    # ── Title ──
-    if contact["title"]:
-        tp = doc.add_paragraph()
-        tp.paragraph_format.space_after = Pt(4)
-        tr = tp.add_run(contact["title"])
-        tr.font.size = Pt(12)
-        tr.bold = True
-        tr.font.color.rgb = ACCENT
-
-    # ── Contact row ──
-    contact_parts = [x for x in [
-        contact["phone"], contact["email"],
-        contact["linkedin"], contact["github"], contact["location"],
-    ] if x]
-    if contact_parts:
-        cp = doc.add_paragraph("   •   ".join(contact_parts))
-        cp.paragraph_format.space_after = Pt(8)
-        for run in cp.runs:
-            run.font.size = Pt(9)
-            run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
-
-    _render_sections_to_doc(doc, sections, skip_headers=set(), accent=ACCENT)
-
-    buf = BytesIO()
-    doc.save(buf)
-    buf.seek(0)
-    return buf
-
-
-# ============================================================
-# 📄 TEMPLATE 3 — Two-Column (Sidebar Layout)
-#    Left sidebar: contact, skills, education, certs, languages
-#    Right main: summary, experience, projects
-#    Suits designers, engineers, creative roles.
-#    Note: built as a single-column docx using a table with 2
-#    cells (Word's only reliable cross-version two-column method).
-# ============================================================
-def generate_docx_twocolumn(text: str) -> BytesIO:
-    from docx.oxml.ns import qn as _qn
-    from docx.oxml import OxmlElement as _OE
-
-    resume_text, _ = _split_resume_and_job_titles(text)
-    sections = _parse_resume_sections(resume_text)
-    contact  = _extract_contact_block(sections)
-
-    SIDEBAR_BG  = RGBColor(0x1E, 0x2A, 0x40)   # dark blue-gray (visual only via shading)
-    ACCENT_MAIN = RGBColor(0x00, 0x7A, 0x87)    # teal for main column headers
-    ACCENT_SIDE = RGBColor(0xFF, 0xFF, 0xFF)     # white for sidebar headers
-    SIDE_TEXT   = RGBColor(0xE0, 0xE8, 0xF0)    # light text for sidebar body
-
-    # Classify sections into sidebar vs main
-    SIDEBAR_SECTION_KEYS = {
-        'SKILLS', 'TECHNICAL SKILLS', 'CORE COMPETENCIES', 'COMPETENCIES',
-        'EDUCATION', 'CERTIFICATIONS', 'CERTIFICATIONS & TRAINING', 'TRAINING',
-        'LANGUAGES', 'INTERESTS', 'PROFESSIONAL COMPETENCIES',
-        'SOFT SKILLS', 'TOOLS', 'TECHNOLOGIES',
-    }
-    MAIN_SECTION_KEYS = {
-        'PROFESSIONAL SUMMARY', 'SUMMARY', 'OBJECTIVE', 'PROFILE',
-        'WORK EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT',
-        'PROJECTS', 'PROJECT', 'INTERNSHIPS',
-        'ACHIEVEMENTS', 'VOLUNTEERING',
-    }
-
-    sidebar_sections = []
-    main_sections    = []
-    for sec in sections:
-        hdr = (sec["header"] or "").upper().strip()
-        if any(k in hdr for k in SIDEBAR_SECTION_KEYS):
-            sidebar_sections.append(sec)
-        elif any(k in hdr for k in MAIN_SECTION_KEYS):
-            main_sections.append(sec)
-        else:
-            main_sections.append(sec)  # default to main
-
-    doc = Document()
-    page_sec = doc.sections[0]
-    page_sec.top_margin    = Inches(0)
-    page_sec.bottom_margin = Inches(0.5)
-    page_sec.left_margin   = Inches(0)
-    page_sec.right_margin  = Inches(0)
-
-    # ── Full-width name banner table ──
-    banner_tbl = doc.add_table(rows=1, cols=1)
-    banner_tbl.style = 'Table Grid'
-    banner_cell = banner_tbl.rows[0].cells[0]
-    # Shade the banner dark navy
-    tcPr = banner_cell._tc.get_or_add_tcPr()
-    shd = _OE('w:shd')
-    shd.set(_qn('w:val'), 'clear')
-    shd.set(_qn('w:color'), 'auto')
-    shd.set(_qn('w:fill'), '1E2A40')
-    tcPr.append(shd)
-    banner_cell.width = Inches(8.5)
-
-    # Name in banner
-    bp = banner_cell.paragraphs[0]
-    bp.paragraph_format.space_before = Pt(14)
-    bp.paragraph_format.space_after  = Pt(2)
-    bp.paragraph_format.left_indent  = Inches(0.25)
-    nr = bp.add_run(contact["name"].upper() or "CANDIDATE NAME")
-    nr.bold = True
-    nr.font.size  = Pt(22)
-    nr.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-
-    # Title in banner
-    if contact["title"]:
-        tp = banner_cell.add_paragraph()
-        tp.paragraph_format.space_before = Pt(0)
-        tp.paragraph_format.space_after  = Pt(14)
-        tp.paragraph_format.left_indent  = Inches(0.25)
-        tr = tp.add_run(contact["title"])
-        tr.font.size = Pt(11)
-        tr.font.color.rgb = RGBColor(0x7E, 0xC8, 0xD4)
-
-    # ── Two-column body table ──
-    body_tbl = doc.add_table(rows=1, cols=2)
-    body_tbl.style = 'Table Grid'
-    left_cell  = body_tbl.rows[0].cells[0]
-    right_cell = body_tbl.rows[0].cells[1]
-
-    # Set column widths (2.2" sidebar, 5.8" main)
-    left_cell._tc.get_or_add_tcPr()
-    right_cell._tc.get_or_add_tcPr()
-    for cell, width_emu in [(left_cell, int(2.2 * 914400)), (right_cell, int(5.8 * 914400))]:
-        tcW = _OE('w:tcW')
-        tcW.set(_qn('w:w'), str(width_emu // 914400 * 1440))
-        tcW.set(_qn('w:type'), 'dxa')
-        cell._tc.tcPr.append(tcW)
-
-    # Shade sidebar dark
-    left_shd = _OE('w:shd')
-    left_shd.set(_qn('w:val'), 'clear')
-    left_shd.set(_qn('w:color'), 'auto')
-    left_shd.set(_qn('w:fill'), '1E2A40')
-    left_cell._tc.tcPr.append(left_shd)
-
-    # ── Fill LEFT sidebar ──
-    def _sidebar_section_header(cell_para_target, title):
-        p = cell_para_target.add_paragraph()
-        p.paragraph_format.space_before = Pt(10)
-        p.paragraph_format.space_after  = Pt(3)
-        p.paragraph_format.left_indent  = Inches(0.15)
-        run = p.add_run(title.upper())
-        run.bold = True
-        run.font.size = Pt(9.5)
-        run.font.color.rgb = RGBColor(0x7E, 0xC8, 0xD4)
-        # underline rule via bottom border
-        pPr = p._p.get_or_add_pPr()
-        pBdr = _OE('w:pBdr')
-        bot = _OE('w:bottom')
-        bot.set(_qn('w:val'), 'single')
-        bot.set(_qn('w:sz'), '4')
-        bot.set(_qn('w:space'), '1')
-        bot.set(_qn('w:color'), '3A5F7A')
-        pBdr.append(bot)
-        pPr.append(pBdr)
-
-    def _sidebar_line(cell_para_target, line, bullet=False):
-        p = cell_para_target.add_paragraph()
-        p.paragraph_format.space_after  = Pt(1)
-        p.paragraph_format.space_before = Pt(0)
-        p.paragraph_format.left_indent  = Inches(0.15)
-        prefix = "• " if bullet else ""
-        run = p.add_run(prefix + line)
-        run.font.size = Pt(9)
-        run.font.color.rgb = SIDE_TEXT
-
-    # Contact block in sidebar
-    _sidebar_section_header(left_cell, "Contact")
-    for val in [contact["location"], contact["phone"], contact["email"],
-                contact["linkedin"], contact["github"]]:
-        if val:
-            _sidebar_line(left_cell, val)
-
-    # Sidebar content sections
-    for sec in sidebar_sections:
-        hdr = (sec["header"] or "").upper().strip()
-        if hdr:
-            _sidebar_section_header(left_cell, hdr)
-        for line in sec["lines"]:
-            l = line.strip()
-            if l:
-                is_bullet = l.startswith(('•', '-', '*'))
-                _sidebar_line(left_cell, l.lstrip('•-* ').strip(), bullet=is_bullet)
-
-    # ── Fill RIGHT main column ──
-    def _main_section_header(cell_para_target, title):
-        p = cell_para_target.add_paragraph()
-        p.paragraph_format.space_before = Pt(10)
-        p.paragraph_format.space_after  = Pt(3)
-        p.paragraph_format.left_indent  = Inches(0.2)
-        run = p.add_run(title.upper())
-        run.bold = True
-        run.font.size = Pt(10.5)
-        run.font.color.rgb = ACCENT_MAIN
-        pPr = p._p.get_or_add_pPr()
-        pBdr = _OE('w:pBdr')
-        bot = _OE('w:bottom')
-        bot.set(_qn('w:val'), 'single')
-        bot.set(_qn('w:sz'), '6')
-        bot.set(_qn('w:space'), '1')
-        bot.set(_qn('w:color'), '007A87')
-        pBdr.append(bot)
-        pPr.append(pBdr)
-
-    def _main_line(cell_para_target, line):
-        l = line.strip()
-        if not l:
-            return
-        p = cell_para_target.add_paragraph()
-        p.paragraph_format.space_after  = Pt(2)
-        p.paragraph_format.space_before = Pt(0)
-        p.paragraph_format.left_indent  = Inches(0.2)
-        if l.startswith(('•', '-', '*')):
-            run = p.add_run("• " + l.lstrip('•-* ').strip())
-            run.font.size = Pt(9.5)
-        elif l.isupper() and len(l.split()) <= 6:
-            run = p.add_run(l)
-            run.bold = True
-            run.font.size = Pt(10)
-            run.font.color.rgb = RGBColor(0x1A, 0x1A, 0x2E)
-        else:
-            run = p.add_run(l)
-            run.font.size = Pt(9.5)
-
-    for sec in main_sections:
-        hdr = (sec["header"] or "").upper().strip()
-        if hdr:
-            _main_section_header(right_cell, hdr)
-        for line in sec["lines"]:
-            _main_line(right_cell, line)
-
-    buf = BytesIO()
-    doc.save(buf)
-    buf.seek(0)
-    return buf
-
-
 # Backward-compatible alias — any code calling generate_docx() still works
 def generate_docx(text: str, filename: str = "bias_free_resume.docx") -> BytesIO:
-    """Default to Classic template for backward compatibility."""
+    """Default to Classic template."""
     return generate_docx_classic(text)
 
 # Extract text from PDF
@@ -3963,154 +3715,154 @@ replacement_mapping = {
 
 def rewrite_text_with_llm(text, replacement_mapping, user_location):
     """
-    Enhanced resume rewrite engine (backward compatible).
-    - Improves structure, clarity, and ATS readiness
-    - Fills missing sections using internal evidence
-    - Maintains bias-free language
-    - Preserves and ENFORCES suggested job titles output
+    Enhanced resume rewrite engine.
+    - Outputs a strict plain-text resume with a consistent single structure
+    - Job titles section is cleanly separated and never mixed into the resume body
+    - No emojis, no URLs, no special symbols inside the resume body
+    - Contact info appears exactly ONCE at the top
     """
 
-    # -----------------------------
-    # Format bias replacement rules
-    # -----------------------------
     formatted_mapping = "\n".join(
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
-    # -----------------------------
-    # MASTER PROMPT
-    # -----------------------------
     prompt = f"""
-You are an elite Resume Optimization Engine used by Fortune 500 recruiters and executive career coaches.
-
-You will receive:
-1. Original Resume Text
-2. Bias Replacement Rules
-3. Candidate Location
-
-Your goal is to TRANSFORM the resume into a top-1% recruiter-ready document:
-ATS-optimized, bias-free, quantification-rich, and professionally compelling.
+You are an expert resume writer for a professional HR platform. Your task is to rewrite the given resume into a clean, ATS-optimized, bias-free document.
 
 ═══════════════════════════════════════════════════
-🔒 ABSOLUTE RULES (NON-NEGOTIABLE)
+🔒 ABSOLUTE RULES — NEVER BREAK THESE
 ═══════════════════════════════════════════════════
 
-- DO NOT fabricate companies, job titles, degrees, institutions, or dates
-- DO NOT invent metrics or statistics not implied by the resume
-- DO NOT add certifications or skills that don't appear anywhere in the resume
-- You MAY:
-  ✅ Strengthen and expand existing bullet points with stronger action verbs
-  ✅ CREATE missing sections if clear evidence exists elsewhere in the resume
-  ✅ Move skills from projects/experience into the dedicated Skills section
-  ✅ Infer tool proficiency ONLY when strongly implied (e.g., "built Flask API" → Python/Flask listed)
-  ✅ Estimate impact framing ONLY when role implies it (e.g., "customer support" → "resolved X+ client issues")
-  ✅ Reorder sections for maximum ATS impact
+1. NO emojis anywhere in the resume body (not in headers, not in bullets, nowhere)
+2. Contact information (name, phone, email, LinkedIn, GitHub, location) must appear EXACTLY ONCE — at the very top. NEVER repeat it in any other section.
+3. NO URLs, hyperlinks, or job search links anywhere inside the resume body
+4. NO markdown symbols like **, *, ##, or --- inside the resume body
+5. Section headers must be written in PLAIN ALL-CAPS text only (example: PROFESSIONAL SUMMARY, not **Professional Summary** or 🛠️ Technical Skills)
+6. Bullet points use only the • character
+7. DO NOT fabricate companies, job titles, degrees, dates, or metrics not in the original resume
+8. Every resume you produce must follow the EXACT SAME structure and style — no variation
 
 ═══════════════════════════════════════════════════
-📌 OPTIMIZATION RULES
+📐 REQUIRED OUTPUT STRUCTURE — FOLLOW EXACTLY
 ═══════════════════════════════════════════════════
 
-1. **Professional Summary** — Write a 3–4 sentence executive-level summary that:
-   - Opens with seniority + core domain (e.g., "Results-driven Data Engineer with 3+ years...")
-   - Highlights top 2–3 technical strengths with specificity
-   - Closes with value proposition aligned to career goals
+Output the resume body using ONLY this structure. Use plain text. No symbols, no markdown, no emojis.
 
-2. **Experience Bullet Points** — Every bullet MUST follow:
-   → **Action Verb + Specific Task + Technology/Method Used + Quantified Impact**
-   → Example: "Engineered real-time data pipeline using Apache Kafka and Spark, reducing latency by 40%"
-   → Use STRONG action verbs: Architected, Engineered, Designed, Deployed, Optimized, Automated, Reduced, Increased, Led, Built, Launched, Delivered
+[FULL NAME]
+[Job Title / Role]
+[Phone] | [Email] | [LinkedIn URL] | [GitHub URL] | [City, Country]
 
-3. **Skills Section** — Must include ALL technologies, tools, frameworks, platforms, and methodologies mentioned ANYWHERE in the resume.
-   Format as clean ATS-friendly lists grouped by category:
-   - Programming Languages | Frameworks & Libraries | Cloud & DevOps | Databases | Tools & Platforms | Soft Skills
+---RESUME_BODY_START---
 
-4. **Projects Section** — Each project must include:
-   - Project name + brief (1 sentence) description
-   - Full tech stack used
-   - Your specific role/contribution
-   - Outcome, metric, or learning
+PROFESSIONAL SUMMARY
+[3-4 sentences. Start with: role + years of experience. Highlight 2-3 technical strengths. End with value proposition.]
 
-5. **Education** — Include: Degree, Institution, Year, GPA (if strong), Relevant Coursework (if applicable)
+TECHNICAL SKILLS
+Programming Languages: [comma-separated list]
+Frameworks & Libraries: [comma-separated list]
+Databases: [comma-separated list]
+Tools & Platforms: [comma-separated list]
+Soft Skills: [comma-separated list]
 
-6. **Certifications** — List ALL found in resume. Add plausible ones ONLY if tool names strongly imply them.
+WORK EXPERIENCE
 
-7. **Sections to create if evidence exists but are missing:**
-   🛠️ Skills | 📂 Projects | 🎓 Certifications | 🤝 Professional Competencies | 🌟 Interests
+[Company Name] | [Job Title] | [Start Date] - [End Date or Present]
+• [Action Verb] + task + technology + quantified impact
+• [Action Verb] + task + technology + quantified impact
+• [Action Verb] + task + technology + quantified impact
+
+[Repeat for each role]
+
+PROJECTS
+
+[Project Name] | [Tech Stack]
+• [One-line description of what you built]
+• [Your specific role and contribution]
+• [Outcome, metric, or key learning]
+
+[Repeat for each project]
+
+EDUCATION
+
+[Degree] | [Institution] | [Start Year] - [End Year]
+[Optional: Relevant coursework or academic achievement]
+
+CERTIFICATIONS
+
+• [Certification Name] | [Issuer] | [Date]
+
+LANGUAGES
+
+• [Language] ([Proficiency Level])
+
+INTERESTS
+
+• [Interest 1], [Interest 2], [Interest 3]
+
+---RESUME_BODY_END---
+
+---JOB_TITLES_START---
+[Job titles section goes here — see format below]
+---JOB_TITLES_END---
 
 ═══════════════════════════════════════════════════
-🧾 REQUIRED OUTPUT STRUCTURE
+📌 CONTENT RULES
 ═══════════════════════════════════════════════════
 
-Return a COMPLETE, polished resume with these sections (skip only if truly impossible):
-
-🏷️ Full Name  
-📞 Phone Number  
-📧 Email Address  
-📍 Location  
-🔗 LinkedIn Profile URL  
-🌐 GitHub / Portfolio URL  
-
-✍️ Professional Summary  
-🛠️ Technical Skills  
-💼 Work Experience  
-🧑‍💼 Internships (if applicable)  
-📂 Projects  
-🎓 Certifications & Training  
-🏫 Education  
-🤝 Professional Competencies  
-🌟 Interests & Extracurriculars  
-
-Formatting requirements:
-- Bullet points (•) for all list items
-- Clean spacing between sections
-- Section headers in CAPS or bold
-- ATS-safe formatting (no tables, columns, or special characters)
-- Tense: past for completed roles, present for current role
+- Professional Summary: 3-4 sentences, no first-person pronouns (no "I", "my", "me")
+- Experience bullets: Action Verb + Task + Technology + Impact. Example: "Engineered REST API using Node.js and Express, reducing response time by 30%"
+- Skills: group by category, list only skills actually mentioned in the original resume
+- Projects: include name, tech stack on first line, then 3 bullets
+- Education: degree, institution, years only
+- If a section has no data from the original resume, OMIT it entirely
+- NEVER add skills, certifications, or companies not in the original resume
 
 ═══════════════════════════════════════════════════
-🧠 BIAS REPLACEMENT RULES (APPLY EXACTLY)
+🧠 BIAS REPLACEMENT RULES — APPLY EXACTLY
 ═══════════════════════════════════════════════════
 {formatted_mapping}
 
 ═══════════════════════════════════════════════════
-📄 ORIGINAL RESUME
+📄 ORIGINAL RESUME TEXT
 ═══════════════════════════════════════════════════
 \"\"\"{text}\"\"\"
 
 ═══════════════════════════════════════════════════
-🎯 MANDATORY JOB TITLE SUGGESTIONS
+🎯 JOB TITLES SECTION — OUTPUT AFTER RESUME BODY
 ═══════════════════════════════════════════════════
 
-After the resume, include a clearly separated section:
+After ---RESUME_BODY_END---, output exactly this block:
 
+---JOB_TITLES_START---
 ### 🎯 Suggested Job Titles (Based on Resume)
 
-Provide EXACTLY **5 job titles** suited for a candidate in **{user_location}**.
+Provide EXACTLY 5 job titles suited for a candidate in {user_location}.
 
-For EACH job title, provide:
-- A specific reason why this role fits the candidate's background
-- A DIRECT LinkedIn job search URL using the exact format below
+For EACH title:
+- One sentence explaining why it fits this candidate's background
+- A direct LinkedIn search URL
 
-FORMAT STRICTLY AS:
-
-1. **[Job Title]** — [Specific reason based on resume content]  
+FORMAT:
+1. **[Job Title]** — [reason]
 🔗 https://www.linkedin.com/jobs/search/?keywords=[URL+encoded+title]&location={urllib.parse.quote(user_location)}
 
-2. **[Job Title]** — ...  
-🔗 ...
-
-(Continue for all 5)
+[Continue for all 5]
+---JOB_TITLES_END---
 
 ═══════════════════════════════════════════════════
-✅ FINAL OUTPUT
+✅ FINAL CHECKLIST BEFORE OUTPUTTING
 ═══════════════════════════════════════════════════
-1. Fully optimized, bias-free resume (complete, not a summary)
-2. Suggested Job Titles section (MANDATORY — 5 titles with URLs)
+Before you output, verify:
+[ ] Contact info appears only once at the top
+[ ] No emojis in the resume body
+[ ] No URLs inside the resume body (only in the job titles section)
+[ ] All section headers are plain ALL-CAPS
+[ ] Bullets use only •
+[ ] No markdown bold/italic inside the resume body
+[ ] ---RESUME_BODY_START--- and ---RESUME_BODY_END--- markers are present
+[ ] ---JOB_TITLES_START--- and ---JOB_TITLES_END--- markers are present
 """
 
-    # -----------------------------
-    # Call LLM
-    # -----------------------------
     response = call_llm(prompt, session=st.session_state)
     return response
 
@@ -5947,7 +5699,7 @@ with tab1:
                     full_rewritten = resume["Rewritten Text"]
                     resume_body, job_titles_block = _split_resume_and_job_titles(full_rewritten)
 
-                    # ── Show clean resume text (no job titles mixed in) ────
+                    # ── Show clean resume text ─────────────────────────────
                     st.markdown("""
                     <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(56,189,248,0.15);
                                 border-radius:12px;padding:18px 20px;font-size:0.88rem;
@@ -5956,7 +5708,7 @@ with tab1:
                     """ + resume_body.replace("\n", "<br>") + "</div>",
                     unsafe_allow_html=True)
 
-                    # ── Job Titles block (if present) ──────────────────────
+                    # ── Job Titles block ───────────────────────────────────
                     if job_titles_block:
                         st.markdown("""
                         <div style="margin:16px 0 6px;font-size:0.72rem;font-weight:700;color:#64748b;
@@ -5967,81 +5719,30 @@ with tab1:
 
                     st.divider()
 
-                    # ── Template selector ──────────────────────────────────
-                    st.markdown("""
-                    <div style="margin:4px 0 10px;font-size:0.72rem;font-weight:700;color:#64748b;
-                                letter-spacing:0.08em;text-transform:uppercase;">
-                        Choose Download Template
-                    </div>""", unsafe_allow_html=True)
-
-                    tmpl_col1, tmpl_col2, tmpl_col3 = st.columns(3)
-                    with tmpl_col1:
-                        st.markdown("""
-                        <div style="background:rgba(15,23,42,0.7);border:1px solid rgba(56,189,248,0.2);
-                                    border-radius:10px;padding:12px;text-align:center;margin-bottom:8px;">
-                            <div style="font-size:1.3rem;">📄</div>
-                            <div style="font-size:0.8rem;font-weight:700;color:#f0f4f8;margin:4px 0 2px;">Classic</div>
-                            <div style="font-size:0.72rem;color:#64748b;">Single-column · Navy · Traditional<br>Banking · Law · Consulting</div>
-                        </div>""", unsafe_allow_html=True)
-                        classic_file = generate_docx_classic(full_rewritten)
+                    # ── Single download button — one consistent template ───
+                    dl_col1, dl_col2 = st.columns(2)
+                    with dl_col1:
+                        docx_file = generate_docx_classic(full_rewritten)
                         st.download_button(
-                            label="⬇ Download Classic (.docx)",
-                            data=classic_file,
-                            file_name=f"{resume['Resume Name'].split('.')[0]}_classic.docx",
+                            label="⬇ Download Bias-Free Resume (.docx)",
+                            data=docx_file,
+                            file_name=f"{resume['Resume Name'].split('.')[0]}_bias_free.docx",
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                             use_container_width=True,
-                            key=f"dl_classic_{resume['Resume Name']}"
+                            key=f"download_docx_{resume['Resume Name']}"
                         )
-
-                    with tmpl_col2:
-                        st.markdown("""
-                        <div style="background:rgba(15,23,42,0.7);border:1px solid rgba(0,122,135,0.35);
-                                    border-radius:10px;padding:12px;text-align:center;margin-bottom:8px;">
-                            <div style="font-size:1.3rem;">🎨</div>
-                            <div style="font-size:0.8rem;font-weight:700;color:#f0f4f8;margin:4px 0 2px;">Modern</div>
-                            <div style="font-size:0.72rem;color:#64748b;">Single-column · Teal · Contemporary<br>Tech · Startups · Product</div>
-                        </div>""", unsafe_allow_html=True)
-                        modern_file = generate_docx_modern(full_rewritten)
+                    with dl_col2:
+                        # ── Full analysis PDF ──────────────────────────────
+                        html_report = generate_resume_report_html(resume)
+                        pdf_file = html_to_pdf_bytes(html_report)
                         st.download_button(
-                            label="⬇ Download Modern (.docx)",
-                            data=modern_file,
-                            file_name=f"{resume['Resume Name'].split('.')[0]}_modern.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            label="📊 Download Full Analysis Report (.pdf)",
+                            data=pdf_file,
+                            file_name=f"{resume['Resume Name'].split('.')[0]}_report.pdf",
+                            mime="application/pdf",
                             use_container_width=True,
-                            key=f"dl_modern_{resume['Resume Name']}"
+                            key=f"download_pdf_{resume['Resume Name']}"
                         )
-
-                    with tmpl_col3:
-                        st.markdown("""
-                        <div style="background:rgba(15,23,42,0.7);border:1px solid rgba(126,200,212,0.25);
-                                    border-radius:10px;padding:12px;text-align:center;margin-bottom:8px;">
-                            <div style="font-size:1.3rem;">🗂️</div>
-                            <div style="font-size:0.8rem;font-weight:700;color:#f0f4f8;margin:4px 0 2px;">Two-Column</div>
-                            <div style="font-size:0.72rem;color:#64748b;">Sidebar layout · Dark sidebar<br>Design · Engineering · Creative</div>
-                        </div>""", unsafe_allow_html=True)
-                        twocol_file = generate_docx_twocolumn(full_rewritten)
-                        st.download_button(
-                            label="⬇ Download Two-Column (.docx)",
-                            data=twocol_file,
-                            file_name=f"{resume['Resume Name'].split('.')[0]}_twocolumn.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True,
-                            key=f"dl_twocol_{resume['Resume Name']}"
-                        )
-
-                    st.markdown("<br>", unsafe_allow_html=True)
-
-                    # ── Full analysis PDF (unchanged) ──────────────────────
-                    html_report = generate_resume_report_html(resume)
-                    pdf_file = html_to_pdf_bytes(html_report)
-                    st.download_button(
-                        label="📊 Download Full Analysis Report (.pdf)",
-                        data=pdf_file,
-                        file_name=f"{resume['Resume Name'].split('.')[0]}_report.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                        key=f"download_pdf_{resume['Resume Name']}"
-                    )
 
     else:           
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
