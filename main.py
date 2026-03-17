@@ -2667,61 +2667,569 @@ def ensure_nltk():
 lemmatizer = ensure_nltk()
 reader = get_easyocr_reader()
 
-def generate_docx(text, filename="bias_free_resume.docx"):
-    doc = Document()
+# ============================================================
+# 📄 Resume Section Parser — splits LLM output into structured
+#    sections so all three templates can render them properly.
+# ============================================================
 
-    # ── Page margins (standard resume: 1 inch all sides) ──
+SECTION_EMOJIS = [
+    '🏷️','📞','📧','📍','🔗','🌐','✍️','🛠️','💼','🧑‍💼',
+    '📂','🎓','🏫','🤝','🌟','🎯','📋','🔑',
+]
+SECTION_KEYWORDS = [
+    'PROFESSIONAL SUMMARY', 'SUMMARY', 'OBJECTIVE', 'PROFILE',
+    'WORK EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT',
+    'TECHNICAL SKILLS', 'SKILLS', 'CORE COMPETENCIES',
+    'PROJECTS', 'PROJECT',
+    'EDUCATION',
+    'CERTIFICATIONS', 'TRAINING', 'CERTIFICATIONS & TRAINING',
+    'LANGUAGES', 'INTERESTS', 'EXTRACURRICULARS',
+    'PROFESSIONAL COMPETENCIES', 'COMPETENCIES',
+    'INTERNSHIPS', 'VOLUNTEERING', 'ACHIEVEMENTS',
+]
+
+def _split_resume_and_job_titles(full_text: str):
+    """
+    Separates the resume body from the '### 🎯 Suggested Job Titles'
+    section that the LLM appends. Returns (resume_text, job_titles_text).
+    """
+    markers = [
+        "### 🎯 Suggested Job Titles",
+        "🎯 Suggested Job Titles",
+        "### Suggested Job Titles",
+        "Suggested Job Titles (Based on Resume)",
+    ]
+    for marker in markers:
+        if marker in full_text:
+            parts = full_text.split(marker, 1)
+            return parts[0].strip(), (marker + parts[1]).strip()
+    return full_text.strip(), ""
+
+
+def _parse_resume_sections(text: str) -> list:
+    """
+    Parses the flat LLM resume text into a list of:
+      {"header": str | None, "lines": [str], "is_contact": bool}
+    Each dict represents one logical section.
+    """
+    lines = text.split('\n')
+    sections = []
+    current = {"header": None, "lines": [], "is_contact": False}
+
+    def _is_section_header(line: str) -> bool:
+        s = line.strip()
+        if not s:
+            return False
+        # Emoji-prefixed headers from the LLM output structure
+        if any(s.startswith(e) for e in SECTION_EMOJIS):
+            return True
+        # ALL-CAPS standalone lines (≥ 3 chars, not a bullet)
+        clean = s.lstrip('•-* #').strip()
+        if clean.isupper() and 3 < len(clean) < 60 and not clean.startswith('HTTP'):
+            return True
+        # Markdown bold all-caps  **SECTION NAME**
+        if re.match(r'^\*{1,2}[A-Z ]{3,}\*{1,2}$', s):
+            return True
+        return False
+
+    def _clean_header(raw: str) -> str:
+        """Strip emojis, markdown, bullets from header text."""
+        s = raw.strip()
+        s = re.sub(r'[^\x00-\x7F]', '', s)   # remove emoji / non-ASCII
+        s = s.strip('*#•-_ ').strip()
+        return s.upper()
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if _is_section_header(stripped):
+            if current["lines"] or current["header"]:
+                sections.append(current)
+            current = {
+                "header": _clean_header(stripped),
+                "lines": [],
+                "is_contact": False,
+            }
+        else:
+            if stripped:
+                current["lines"].append(stripped)
+            elif current["lines"]:  # preserve intentional blank lines
+                current["lines"].append("")
+
+    if current["lines"] or current["header"]:
+        sections.append(current)
+
+    return sections
+
+
+def _extract_contact_block(sections: list) -> dict:
+    """
+    Finds name, title, email, phone, linkedin, github, location
+    from the first section(s) of the parsed output.
+    """
+    contact = {
+        "name": "", "title": "", "email": "",
+        "phone": "", "linkedin": "", "github": "", "location": "",
+    }
+    # Collect all text from the first 2 sections for contact scanning
+    scan_lines = []
+    for sec in sections[:3]:
+        scan_lines += sec["lines"]
+        if sec["header"]:
+            scan_lines.append(sec["header"])
+
+    for line in scan_lines:
+        l = line.strip()
+        if not l:
+            continue
+        if not contact["email"] and re.search(r'[\w.+-]+@[\w.-]+\.[a-z]{2,}', l, re.I):
+            contact["email"] = re.search(r'[\w.+-]+@[\w.-]+\.[a-z]{2,}', l, re.I).group()
+        if not contact["phone"] and re.search(r'(\+?\d[\d\s\-\(\)]{7,}\d)', l):
+            contact["phone"] = re.search(r'(\+?\d[\d\s\-\(\)]{7,}\d)', l).group().strip()
+        if not contact["linkedin"] and re.search(r'linkedin\.com/in/[\w\-]+', l, re.I):
+            contact["linkedin"] = re.search(r'(https?://)?linkedin\.com/in/[\w\-/]+', l, re.I).group()
+        if not contact["github"] and re.search(r'github\.com/[\w\-]+', l, re.I):
+            contact["github"] = re.search(r'(https?://)?github\.com/[\w\-]+', l, re.I).group()
+        if not contact["location"] and re.search(r'\b(kolkata|mumbai|delhi|bangalore|chennai|hyderabad|pune|india|usa|uk|remote|[a-z]+,\s*[a-z]+)\b', l, re.I):
+            contact["location"] = l
+
+    # Name is usually the very first non-empty line
+    for sec in sections[:2]:
+        for line in sec["lines"]:
+            l = line.strip().lstrip('🏷️ ').strip()
+            if l and not re.search(r'[@\d/:]', l) and len(l.split()) <= 5:
+                contact["name"] = l
+                break
+        if contact["name"]:
+            break
+
+    # Title is usually the second short non-contact line
+    found_name = False
+    for sec in sections[:2]:
+        for line in sec["lines"]:
+            l = line.strip().lstrip('🏷️ ').strip()
+            if not l:
+                continue
+            if l == contact["name"]:
+                found_name = True
+                continue
+            if found_name and len(l.split()) <= 6 and not re.search(r'[@\d/]', l):
+                contact["title"] = l
+                break
+        if contact["title"]:
+            break
+
+    return contact
+
+
+def _add_horizontal_rule(doc):
+    """Add a thin horizontal line paragraph."""
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after  = Pt(2)
+    pPr = p._p.get_or_add_pPr()
+    pBdr = OxmlElement('w:pBdr')
+    bottom = OxmlElement('w:bottom')
+    bottom.set(qn('w:val'), 'single')
+    bottom.set(qn('w:sz'), '6')
+    bottom.set(qn('w:space'), '1')
+    bottom.set(qn('w:color'), 'AAAAAA')
+    pBdr.append(bottom)
+    pPr.append(pBdr)
+
+
+def _add_section_header_classic(doc, text: str, color: RGBColor):
+    """Section header: ALL CAPS, colored, with bottom border."""
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(8)
+    p.paragraph_format.space_after  = Pt(2)
+    run = p.add_run(text.upper())
+    run.bold = True
+    run.font.size  = Pt(10.5)
+    run.font.color.rgb = color
+    _add_horizontal_rule(doc)
+
+
+def _add_bullet_line(doc, text: str, size_pt: float = 10):
+    """Single bullet point line."""
+    p = doc.add_paragraph(style='List Bullet')
+    run = p.add_run(text)
+    run.font.size = Pt(size_pt)
+    p.paragraph_format.space_after  = Pt(2)
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.left_indent  = Inches(0.2)
+
+
+def _add_body_para(doc, text: str, size_pt: float = 10, bold: bool = False, italic: bool = False, color: RGBColor = None):
+    p = doc.add_paragraph()
+    p.paragraph_format.space_after  = Pt(2)
+    p.paragraph_format.space_before = Pt(0)
+    run = p.add_run(text)
+    run.bold   = bold
+    run.italic = italic
+    run.font.size = Pt(size_pt)
+    if color:
+        run.font.color.rgb = color
+
+
+def _render_sections_to_doc(doc, sections: list, skip_headers: set, accent: RGBColor):
+    """
+    Renders all parsed sections into `doc`, skipping any whose cleaned
+    header text is in `skip_headers` (contact block rendered separately).
+    """
+    contact_headers = {'', 'CONTACT', 'CONTACT INFORMATION', 'PERSONAL INFORMATION'}
+    for sec in sections:
+        hdr = (sec["header"] or "").upper().strip()
+        if hdr in skip_headers | contact_headers:
+            continue
+
+        # Section heading
+        if hdr:
+            _add_section_header_classic(doc, hdr, accent)
+
+        # Content lines
+        for line in sec["lines"]:
+            l = line.strip()
+            if not l:
+                continue
+            # Job title / company lines (bold if short, no bullet)
+            if l.isupper() and len(l.split()) <= 6:
+                _add_body_para(doc, l, size_pt=10, bold=True, color=accent)
+            elif l.startswith(('•', '-', '*')):
+                _add_bullet_line(doc, l.lstrip('•-* ').strip())
+            else:
+                _add_body_para(doc, l, size_pt=10)
+
+
+# ============================================================
+# 📄 TEMPLATE 1 — Classic Single-Column (Traditional)
+#    Clean, minimal, black/navy. Suits banking, law, consulting.
+# ============================================================
+def generate_docx_classic(text: str) -> BytesIO:
+    resume_text, _ = _split_resume_and_job_titles(text)
+    sections = _parse_resume_sections(resume_text)
+    contact  = _extract_contact_block(sections)
+
+    ACCENT = RGBColor(0x1F, 0x3A, 0x5F)   # dark navy
+
+    doc = Document()
+    sec = doc.sections[0]
+    sec.top_margin    = Inches(0.75)
+    sec.bottom_margin = Inches(0.75)
+    sec.left_margin   = Inches(1.0)
+    sec.right_margin  = Inches(1.0)
+
+    # ── Name ──
+    name_para = doc.add_paragraph()
+    name_para.alignment = 1
+    name_para.paragraph_format.space_after = Pt(2)
+    nr = name_para.add_run(contact["name"].upper() or "CANDIDATE NAME")
+    nr.bold = True
+    nr.font.size = Pt(20)
+    nr.font.color.rgb = ACCENT
+
+    # ── Job title ──
+    if contact["title"]:
+        t = doc.add_paragraph()
+        t.alignment = 1
+        t.paragraph_format.space_after = Pt(4)
+        tr = t.add_run(contact["title"])
+        tr.font.size = Pt(11)
+        tr.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+
+    # ── Contact line ──
+    contact_parts = [x for x in [
+        contact["phone"], contact["email"],
+        contact["linkedin"], contact["github"], contact["location"],
+    ] if x]
+    if contact_parts:
+        cp = doc.add_paragraph("  |  ".join(contact_parts))
+        cp.alignment = 1
+        cp.paragraph_format.space_after = Pt(6)
+        for run in cp.runs:
+            run.font.size = Pt(9)
+            run.font.color.rgb = RGBColor(0x44, 0x44, 0x44)
+
+    _add_horizontal_rule(doc)
+
+    _render_sections_to_doc(doc, sections, skip_headers=set(), accent=ACCENT)
+
+    buf = BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
+
+
+# ============================================================
+# 📄 TEMPLATE 2 — Modern Single-Column (Contemporary)
+#    Teal accent, left-aligned name block, subtle dividers.
+#    Suits tech, startups, product roles.
+# ============================================================
+def generate_docx_modern(text: str) -> BytesIO:
+    resume_text, _ = _split_resume_and_job_titles(text)
+    sections = _parse_resume_sections(resume_text)
+    contact  = _extract_contact_block(sections)
+
+    ACCENT   = RGBColor(0x00, 0x7A, 0x87)   # teal
+    NAME_CLR = RGBColor(0x1A, 0x1A, 0x2E)   # near-black
+
+    doc = Document()
+    sec = doc.sections[0]
+    sec.top_margin    = Inches(0.65)
+    sec.bottom_margin = Inches(0.65)
+    sec.left_margin   = Inches(0.85)
+    sec.right_margin  = Inches(0.85)
+
+    # ── Name ──
+    name_para = doc.add_paragraph()
+    name_para.paragraph_format.space_after = Pt(1)
+    nr = name_para.add_run(contact["name"] or "Candidate Name")
+    nr.bold = True
+    nr.font.size = Pt(22)
+    nr.font.color.rgb = NAME_CLR
+
+    # ── Title ──
+    if contact["title"]:
+        tp = doc.add_paragraph()
+        tp.paragraph_format.space_after = Pt(4)
+        tr = tp.add_run(contact["title"])
+        tr.font.size = Pt(12)
+        tr.bold = True
+        tr.font.color.rgb = ACCENT
+
+    # ── Contact row ──
+    contact_parts = [x for x in [
+        contact["phone"], contact["email"],
+        contact["linkedin"], contact["github"], contact["location"],
+    ] if x]
+    if contact_parts:
+        cp = doc.add_paragraph("   •   ".join(contact_parts))
+        cp.paragraph_format.space_after = Pt(8)
+        for run in cp.runs:
+            run.font.size = Pt(9)
+            run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+
+    _render_sections_to_doc(doc, sections, skip_headers=set(), accent=ACCENT)
+
+    buf = BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
+
+
+# ============================================================
+# 📄 TEMPLATE 3 — Two-Column (Sidebar Layout)
+#    Left sidebar: contact, skills, education, certs, languages
+#    Right main: summary, experience, projects
+#    Suits designers, engineers, creative roles.
+#    Note: built as a single-column docx using a table with 2
+#    cells (Word's only reliable cross-version two-column method).
+# ============================================================
+def generate_docx_twocolumn(text: str) -> BytesIO:
     from docx.oxml.ns import qn as _qn
     from docx.oxml import OxmlElement as _OE
-    section = doc.sections[0]
-    section.top_margin    = Inches(1.0)
-    section.bottom_margin = Inches(1.0)
-    section.left_margin   = Inches(1.0)
-    section.right_margin  = Inches(1.0)
 
-    # ── Document title heading ──
-    title = doc.add_heading('Bias-Free Resume', 0)
-    title.alignment = 1  # center
-    title_run = title.runs[0]
-    title_run.font.color.rgb = RGBColor(0x2F, 0x4F, 0x6F)
-    title_run.font.size = Pt(18)
+    resume_text, _ = _split_resume_and_job_titles(text)
+    sections = _parse_resume_sections(resume_text)
+    contact  = _extract_contact_block(sections)
 
-    doc.add_paragraph()  # spacer
+    SIDEBAR_BG  = RGBColor(0x1E, 0x2A, 0x40)   # dark blue-gray (visual only via shading)
+    ACCENT_MAIN = RGBColor(0x00, 0x7A, 0x87)    # teal for main column headers
+    ACCENT_SIDE = RGBColor(0xFF, 0xFF, 0xFF)     # white for sidebar headers
+    SIDE_TEXT   = RGBColor(0xE0, 0xE8, 0xF0)    # light text for sidebar body
 
-    # ── Process text: detect section headers and bullet points ──
-    lines = text.strip().split('\n')
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            doc.add_paragraph()
-            continue
+    # Classify sections into sidebar vs main
+    SIDEBAR_SECTION_KEYS = {
+        'SKILLS', 'TECHNICAL SKILLS', 'CORE COMPETENCIES', 'COMPETENCIES',
+        'EDUCATION', 'CERTIFICATIONS', 'CERTIFICATIONS & TRAINING', 'TRAINING',
+        'LANGUAGES', 'INTERESTS', 'PROFESSIONAL COMPETENCIES',
+        'SOFT SKILLS', 'TOOLS', 'TECHNOLOGIES',
+    }
+    MAIN_SECTION_KEYS = {
+        'PROFESSIONAL SUMMARY', 'SUMMARY', 'OBJECTIVE', 'PROFILE',
+        'WORK EXPERIENCE', 'EXPERIENCE', 'EMPLOYMENT',
+        'PROJECTS', 'PROJECT', 'INTERNSHIPS',
+        'ACHIEVEMENTS', 'VOLUNTEERING',
+    }
 
-        # Section headers (emoji + CAPS or all-caps lines)
-        if (stripped.isupper() and len(stripped) > 3) or \
-           any(stripped.startswith(e) for e in ['🏷️','📞','📧','📍','🔗','🌐','✍️','🛠️','💼','🧑‍💼','📂','🎓','🏫','🤝','🌟','🎯']):
-            p = doc.add_heading(stripped, level=2)
-            p.runs[0].font.color.rgb = RGBColor(0x2F, 0x4F, 0x6F)
-            p.runs[0].font.size = Pt(12)
-            continue
+    sidebar_sections = []
+    main_sections    = []
+    for sec in sections:
+        hdr = (sec["header"] or "").upper().strip()
+        if any(k in hdr for k in SIDEBAR_SECTION_KEYS):
+            sidebar_sections.append(sec)
+        elif any(k in hdr for k in MAIN_SECTION_KEYS):
+            main_sections.append(sec)
+        else:
+            main_sections.append(sec)  # default to main
 
-        # Bullet points
-        if stripped.startswith(('•', '-', '*')):
-            content = stripped.lstrip('•-* ').strip()
-            p = doc.add_paragraph(style='List Bullet')
-            run = p.add_run(content)
-            run.font.size = Pt(10.5)
-            p.paragraph_format.space_after = Pt(3)
-            continue
+    doc = Document()
+    page_sec = doc.sections[0]
+    page_sec.top_margin    = Inches(0)
+    page_sec.bottom_margin = Inches(0.5)
+    page_sec.left_margin   = Inches(0)
+    page_sec.right_margin  = Inches(0)
 
-        # Regular paragraph
-        p = doc.add_paragraph(stripped)
-        p.runs[0].font.size = Pt(10.5)
-        p.paragraph_format.space_after = Pt(4)
+    # ── Full-width name banner table ──
+    banner_tbl = doc.add_table(rows=1, cols=1)
+    banner_tbl.style = 'Table Grid'
+    banner_cell = banner_tbl.rows[0].cells[0]
+    # Shade the banner dark navy
+    tcPr = banner_cell._tc.get_or_add_tcPr()
+    shd = _OE('w:shd')
+    shd.set(_qn('w:val'), 'clear')
+    shd.set(_qn('w:color'), 'auto')
+    shd.set(_qn('w:fill'), '1E2A40')
+    tcPr.append(shd)
+    banner_cell.width = Inches(8.5)
 
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
+    # Name in banner
+    bp = banner_cell.paragraphs[0]
+    bp.paragraph_format.space_before = Pt(14)
+    bp.paragraph_format.space_after  = Pt(2)
+    bp.paragraph_format.left_indent  = Inches(0.25)
+    nr = bp.add_run(contact["name"].upper() or "CANDIDATE NAME")
+    nr.bold = True
+    nr.font.size  = Pt(22)
+    nr.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+
+    # Title in banner
+    if contact["title"]:
+        tp = banner_cell.add_paragraph()
+        tp.paragraph_format.space_before = Pt(0)
+        tp.paragraph_format.space_after  = Pt(14)
+        tp.paragraph_format.left_indent  = Inches(0.25)
+        tr = tp.add_run(contact["title"])
+        tr.font.size = Pt(11)
+        tr.font.color.rgb = RGBColor(0x7E, 0xC8, 0xD4)
+
+    # ── Two-column body table ──
+    body_tbl = doc.add_table(rows=1, cols=2)
+    body_tbl.style = 'Table Grid'
+    left_cell  = body_tbl.rows[0].cells[0]
+    right_cell = body_tbl.rows[0].cells[1]
+
+    # Set column widths (2.2" sidebar, 5.8" main)
+    left_cell._tc.get_or_add_tcPr()
+    right_cell._tc.get_or_add_tcPr()
+    for cell, width_emu in [(left_cell, int(2.2 * 914400)), (right_cell, int(5.8 * 914400))]:
+        tcW = _OE('w:tcW')
+        tcW.set(_qn('w:w'), str(width_emu // 914400 * 1440))
+        tcW.set(_qn('w:type'), 'dxa')
+        cell._tc.tcPr.append(tcW)
+
+    # Shade sidebar dark
+    left_shd = _OE('w:shd')
+    left_shd.set(_qn('w:val'), 'clear')
+    left_shd.set(_qn('w:color'), 'auto')
+    left_shd.set(_qn('w:fill'), '1E2A40')
+    left_cell._tc.tcPr.append(left_shd)
+
+    # ── Fill LEFT sidebar ──
+    def _sidebar_section_header(cell_para_target, title):
+        p = cell_para_target.add_paragraph()
+        p.paragraph_format.space_before = Pt(10)
+        p.paragraph_format.space_after  = Pt(3)
+        p.paragraph_format.left_indent  = Inches(0.15)
+        run = p.add_run(title.upper())
+        run.bold = True
+        run.font.size = Pt(9.5)
+        run.font.color.rgb = RGBColor(0x7E, 0xC8, 0xD4)
+        # underline rule via bottom border
+        pPr = p._p.get_or_add_pPr()
+        pBdr = _OE('w:pBdr')
+        bot = _OE('w:bottom')
+        bot.set(_qn('w:val'), 'single')
+        bot.set(_qn('w:sz'), '4')
+        bot.set(_qn('w:space'), '1')
+        bot.set(_qn('w:color'), '3A5F7A')
+        pBdr.append(bot)
+        pPr.append(pBdr)
+
+    def _sidebar_line(cell_para_target, line, bullet=False):
+        p = cell_para_target.add_paragraph()
+        p.paragraph_format.space_after  = Pt(1)
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.left_indent  = Inches(0.15)
+        prefix = "• " if bullet else ""
+        run = p.add_run(prefix + line)
+        run.font.size = Pt(9)
+        run.font.color.rgb = SIDE_TEXT
+
+    # Contact block in sidebar
+    _sidebar_section_header(left_cell, "Contact")
+    for val in [contact["location"], contact["phone"], contact["email"],
+                contact["linkedin"], contact["github"]]:
+        if val:
+            _sidebar_line(left_cell, val)
+
+    # Sidebar content sections
+    for sec in sidebar_sections:
+        hdr = (sec["header"] or "").upper().strip()
+        if hdr:
+            _sidebar_section_header(left_cell, hdr)
+        for line in sec["lines"]:
+            l = line.strip()
+            if l:
+                is_bullet = l.startswith(('•', '-', '*'))
+                _sidebar_line(left_cell, l.lstrip('•-* ').strip(), bullet=is_bullet)
+
+    # ── Fill RIGHT main column ──
+    def _main_section_header(cell_para_target, title):
+        p = cell_para_target.add_paragraph()
+        p.paragraph_format.space_before = Pt(10)
+        p.paragraph_format.space_after  = Pt(3)
+        p.paragraph_format.left_indent  = Inches(0.2)
+        run = p.add_run(title.upper())
+        run.bold = True
+        run.font.size = Pt(10.5)
+        run.font.color.rgb = ACCENT_MAIN
+        pPr = p._p.get_or_add_pPr()
+        pBdr = _OE('w:pBdr')
+        bot = _OE('w:bottom')
+        bot.set(_qn('w:val'), 'single')
+        bot.set(_qn('w:sz'), '6')
+        bot.set(_qn('w:space'), '1')
+        bot.set(_qn('w:color'), '007A87')
+        pBdr.append(bot)
+        pPr.append(pBdr)
+
+    def _main_line(cell_para_target, line):
+        l = line.strip()
+        if not l:
+            return
+        p = cell_para_target.add_paragraph()
+        p.paragraph_format.space_after  = Pt(2)
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.left_indent  = Inches(0.2)
+        if l.startswith(('•', '-', '*')):
+            run = p.add_run("• " + l.lstrip('•-* ').strip())
+            run.font.size = Pt(9.5)
+        elif l.isupper() and len(l.split()) <= 6:
+            run = p.add_run(l)
+            run.bold = True
+            run.font.size = Pt(10)
+            run.font.color.rgb = RGBColor(0x1A, 0x1A, 0x2E)
+        else:
+            run = p.add_run(l)
+            run.font.size = Pt(9.5)
+
+    for sec in main_sections:
+        hdr = (sec["header"] or "").upper().strip()
+        if hdr:
+            _main_section_header(right_cell, hdr)
+        for line in sec["lines"]:
+            _main_line(right_cell, line)
+
+    buf = BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
+
+
+# Backward-compatible alias — any code calling generate_docx() still works
+def generate_docx(text: str, filename: str = "bias_free_resume.docx") -> BytesIO:
+    """Default to Classic template for backward compatibility."""
+    return generate_docx_classic(text)
 
 # Extract text from PDF
 def extract_text_from_pdf(file_path):
@@ -5434,20 +5942,100 @@ with tab1:
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                         <span class='section-label' style="margin:0;">Bias-Free Rewritten Resume</span>
                     </div>""", unsafe_allow_html=True)
-                    st.write(resume["Rewritten Text"])
-                    docx_file = generate_docx(resume["Rewritten Text"])
-                    st.download_button(
-                        label="Download Bias-Free Resume (.docx)",
-                        data=docx_file,
-                        file_name=f"{resume['Resume Name'].split('.')[0]}_bias_free.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        use_container_width=True,
-                        key=f"download_docx_{resume['Resume Name']}"
-                    )
+
+                    # ── Split resume body from job titles ──────────────────
+                    full_rewritten = resume["Rewritten Text"]
+                    resume_body, job_titles_block = _split_resume_and_job_titles(full_rewritten)
+
+                    # ── Show clean resume text (no job titles mixed in) ────
+                    st.markdown("""
+                    <div style="background:rgba(15,23,42,0.6);border:1px solid rgba(56,189,248,0.15);
+                                border-radius:12px;padding:18px 20px;font-size:0.88rem;
+                                line-height:1.7;color:#e2e8f0;white-space:pre-wrap;
+                                font-family:'Segoe UI',sans-serif;margin-bottom:14px;">
+                    """ + resume_body.replace("\n", "<br>") + "</div>",
+                    unsafe_allow_html=True)
+
+                    # ── Job Titles block (if present) ──────────────────────
+                    if job_titles_block:
+                        st.markdown("""
+                        <div style="margin:16px 0 6px;font-size:0.72rem;font-weight:700;color:#64748b;
+                                    letter-spacing:0.08em;text-transform:uppercase;">
+                            🎯 Suggested Job Titles
+                        </div>""", unsafe_allow_html=True)
+                        st.markdown(job_titles_block)
+
+                    st.divider()
+
+                    # ── Template selector ──────────────────────────────────
+                    st.markdown("""
+                    <div style="margin:4px 0 10px;font-size:0.72rem;font-weight:700;color:#64748b;
+                                letter-spacing:0.08em;text-transform:uppercase;">
+                        Choose Download Template
+                    </div>""", unsafe_allow_html=True)
+
+                    tmpl_col1, tmpl_col2, tmpl_col3 = st.columns(3)
+                    with tmpl_col1:
+                        st.markdown("""
+                        <div style="background:rgba(15,23,42,0.7);border:1px solid rgba(56,189,248,0.2);
+                                    border-radius:10px;padding:12px;text-align:center;margin-bottom:8px;">
+                            <div style="font-size:1.3rem;">📄</div>
+                            <div style="font-size:0.8rem;font-weight:700;color:#f0f4f8;margin:4px 0 2px;">Classic</div>
+                            <div style="font-size:0.72rem;color:#64748b;">Single-column · Navy · Traditional<br>Banking · Law · Consulting</div>
+                        </div>""", unsafe_allow_html=True)
+                        classic_file = generate_docx_classic(full_rewritten)
+                        st.download_button(
+                            label="⬇ Download Classic (.docx)",
+                            data=classic_file,
+                            file_name=f"{resume['Resume Name'].split('.')[0]}_classic.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True,
+                            key=f"dl_classic_{resume['Resume Name']}"
+                        )
+
+                    with tmpl_col2:
+                        st.markdown("""
+                        <div style="background:rgba(15,23,42,0.7);border:1px solid rgba(0,122,135,0.35);
+                                    border-radius:10px;padding:12px;text-align:center;margin-bottom:8px;">
+                            <div style="font-size:1.3rem;">🎨</div>
+                            <div style="font-size:0.8rem;font-weight:700;color:#f0f4f8;margin:4px 0 2px;">Modern</div>
+                            <div style="font-size:0.72rem;color:#64748b;">Single-column · Teal · Contemporary<br>Tech · Startups · Product</div>
+                        </div>""", unsafe_allow_html=True)
+                        modern_file = generate_docx_modern(full_rewritten)
+                        st.download_button(
+                            label="⬇ Download Modern (.docx)",
+                            data=modern_file,
+                            file_name=f"{resume['Resume Name'].split('.')[0]}_modern.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True,
+                            key=f"dl_modern_{resume['Resume Name']}"
+                        )
+
+                    with tmpl_col3:
+                        st.markdown("""
+                        <div style="background:rgba(15,23,42,0.7);border:1px solid rgba(126,200,212,0.25);
+                                    border-radius:10px;padding:12px;text-align:center;margin-bottom:8px;">
+                            <div style="font-size:1.3rem;">🗂️</div>
+                            <div style="font-size:0.8rem;font-weight:700;color:#f0f4f8;margin:4px 0 2px;">Two-Column</div>
+                            <div style="font-size:0.72rem;color:#64748b;">Sidebar layout · Dark sidebar<br>Design · Engineering · Creative</div>
+                        </div>""", unsafe_allow_html=True)
+                        twocol_file = generate_docx_twocolumn(full_rewritten)
+                        st.download_button(
+                            label="⬇ Download Two-Column (.docx)",
+                            data=twocol_file,
+                            file_name=f"{resume['Resume Name'].split('.')[0]}_twocolumn.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True,
+                            key=f"dl_twocol_{resume['Resume Name']}"
+                        )
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    # ── Full analysis PDF (unchanged) ──────────────────────
                     html_report = generate_resume_report_html(resume)
                     pdf_file = html_to_pdf_bytes(html_report)
                     st.download_button(
-                        label="Download Full Analysis Report (.pdf)",
+                        label="📊 Download Full Analysis Report (.pdf)",
                         data=pdf_file,
                         file_name=f"{resume['Resume Name'].split('.')[0]}_report.pdf",
                         mime="application/pdf",
