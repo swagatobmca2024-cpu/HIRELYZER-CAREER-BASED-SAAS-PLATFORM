@@ -3634,7 +3634,7 @@ CRITICAL RULES:
 - "soft_skills" = flat array of soft skill strings extracted from resume.
 - "languages" = flat array of spoken language strings (e.g. "English (Professional)", "Bengali (Native)").
 - "interests" = flat array of interest/hobby strings.
-- "certifications" = flat array of certification strings with dates if available.
+- "certifications" = array of objects, each with "name", "issuer", and "duration". NEVER use flat strings.
 - Experience bullets: rewrite with Action Verb + Task + Technology + Quantified Impact format.
 - Project "url" = GitHub or live link for that project if found in the resume.
 - Education "bullets" = array of notable coursework, achievements, or activities for that institution.
@@ -3662,12 +3662,14 @@ Return ONLY this exact JSON structure (no extra keys outside this schema):
       "role": "",
       "company": "",
       "duration": "",
+      "description": "",
       "bullets": []
     }}
   ],
   "projects": [
     {{
       "name": "",
+      "duration": "",
       "tech_stack": "",
       "url": "",
       "description": "",
@@ -3682,9 +3684,25 @@ Return ONLY this exact JSON structure (no extra keys outside this schema):
       "bullets": []
     }}
   ],
-  "certifications": [],
+  "certifications": [
+    {{
+      "name": "",
+      "issuer": "",
+      "duration": ""
+    }}
+  ],
   "additional": []
 }}
+
+FIELD RULES:
+- experience[].description = 1-sentence role summary (rewritten). Do NOT leave blank.
+- experience[].bullets = 3-5 ATS-optimized achievement bullets with strong action verbs.
+- projects[].duration = date range (e.g. "Mar 2025 – Aug 2025"). Extract from resume or "[Not Provided]".
+- projects[].description = 1-sentence project summary. Rewrite from resume content.
+- projects[].bullets = 3-5 achievement/feature bullets.
+- certifications[].name = exact certification or training program name.
+- certifications[].issuer = issuing org/platform. Use "[Not Provided]" if unknown.
+- certifications[].duration = date or date range (e.g. "Jul 2025 – Oct 2025"). Extract from resume.
 
 RESUME TEXT:
 \"\"\"{raw_text}\"\"\"
@@ -3743,20 +3761,40 @@ def extract_resume_json(llm_response: str) -> dict:
         for field, default in CONTACT_DEFAULTS.items():
             if field not in data["contact"]:
                 data["contact"][field] = default
+        # Backfill missing experience fields
+        for exp in data.get("experience", []):
+            for f in ["role", "company", "duration", "description"]:
+                if f not in exp:
+                    exp[f] = ""
+            if "bullets" not in exp:
+                exp["bullets"] = []
         # Backfill missing project fields
         for proj in data.get("projects", []):
-            if "tech_stack" not in proj:
-                proj["tech_stack"] = ""
-            if "url" not in proj:
-                proj["url"] = ""
+            for f in ["name", "duration", "tech_stack", "url", "description"]:
+                if f not in proj:
+                    proj[f] = ""
             if "bullets" not in proj:
                 proj["bullets"] = []
-            if "description" not in proj:
-                proj["description"] = ""
         # Backfill missing education fields
         for edu in data.get("education", []):
+            for f in ["degree", "institution", "year"]:
+                if f not in edu:
+                    edu[f] = ""
             if "bullets" not in edu:
                 edu["bullets"] = []
+        # Normalise certifications — accept both flat strings and objects
+        raw_certs = data.get("certifications", [])
+        norm_certs = []
+        for c in raw_certs:
+            if isinstance(c, dict):
+                norm_certs.append({
+                    "name":     c.get("name", ""),
+                    "issuer":   c.get("issuer", ""),
+                    "duration": c.get("duration", ""),
+                })
+            elif isinstance(c, str) and c.strip():
+                norm_certs.append({"name": c.strip(), "issuer": "", "duration": ""})
+        data["certifications"] = norm_certs
         return data
     except (json.JSONDecodeError, ValueError):
         return EMPTY
@@ -3779,8 +3817,10 @@ def _build_contact_header(doc, data: dict, name_size: int, name_color_rgb: tuple
       Line 4 (centered, if github/portfolio exist): github | portfolio
     """
     contact = data.get("contact", {})
-    name = contact.get("name", "") or "[Your Name]"
-    title = contact.get("title", "")
+    raw_name = contact.get("name", "") or ""
+    name = raw_name if raw_name and raw_name != "[Not Provided]" else "[Your Name]"
+    raw_title = contact.get("title", "") or ""
+    title = raw_title if raw_title != "[Not Provided]" else ""
 
     # --- Name ---
     p_name = doc.add_paragraph()
@@ -3931,7 +3971,7 @@ def _add_role_line(doc, role: str, company: str, duration: str,
         r2.font.size = Pt(role_size - 1)
         r2.font.name = font_name
         r2.font.color.rgb = RGBColor(*company_color)
-    if duration:
+    if duration and duration not in ("", "[Not Provided]"):
         r3 = p.add_run(f"   [{duration}]")
         r3.italic = True
         r3.font.size = Pt(meta_size)
@@ -3942,12 +3982,12 @@ def _add_role_line(doc, role: str, company: str, duration: str,
     return p
 
 
-def _add_project_header(doc, name: str, tech_stack: str, url: str,
+def _add_project_header(doc, name: str, duration: str, tech_stack: str, url: str,
                          font_name: str, name_size: int = 11,
                          name_color: tuple = (0, 0, 0),
-                         tech_color: tuple = (74, 74, 74),
+                         meta_color: tuple = (74, 74, 74),
                          url_color: tuple = (30, 58, 95)):
-    """Add project name + tech stack + URL header."""
+    """Add project name | duration | tech stack | URL header row."""
     p = doc.add_paragraph()
     p.clear()
     if name:
@@ -3956,12 +3996,18 @@ def _add_project_header(doc, name: str, tech_stack: str, url: str,
         r1.font.size = Pt(name_size)
         r1.font.name = font_name
         r1.font.color.rgb = RGBColor(*name_color)
-    if tech_stack and tech_stack != "[Not Provided]":
+    if duration and duration not in ("", "[Not Provided]"):
+        rd = p.add_run(f"   [{duration}]")
+        rd.italic = True
+        rd.font.size = Pt(name_size - 2)
+        rd.font.name = font_name
+        rd.font.color.rgb = RGBColor(128, 128, 128)
+    if tech_stack and tech_stack not in ("", "[Not Provided]"):
         r2 = p.add_run(f"  |  Tech: {tech_stack}")
         r2.font.size = Pt(name_size - 2)
         r2.font.name = font_name
-        r2.font.color.rgb = RGBColor(*tech_color)
-    if url and url != "[Not Provided]":
+        r2.font.color.rgb = RGBColor(*meta_color)
+    if url and url not in ("", "[Not Provided]"):
         r3 = p.add_run(f"  |  {url}")
         r3.font.size = Pt(name_size - 2)
         r3.font.name = font_name
@@ -3987,12 +4033,12 @@ def _add_education_row(doc, degree: str, institution: str, year: str,
         r1.font.size = Pt(degree_size)
         r1.font.name = font_name
         r1.font.color.rgb = RGBColor(*degree_color)
-    if institution:
+    if institution and institution not in ("", "[Not Provided]"):
         r2 = p.add_run(f"  —  {institution}")
         r2.font.size = Pt(degree_size)
         r2.font.name = font_name
         r2.font.color.rgb = RGBColor(*inst_color)
-    if year:
+    if year and year not in ("", "[Not Provided]"):
         r3 = p.add_run(f"  ({year})")
         r3.italic = True
         r3.font.size = Pt(meta_size)
@@ -4075,11 +4121,16 @@ def generate_modern_docx(data: dict) -> BytesIO:
     if data.get("experience"):
         _heading("Work Experience")
         for exp in data["experience"]:
-            if not exp.get("role") and not exp.get("company"):
+            _role = exp.get("role",""); _company = exp.get("company","")
+            if (not _role or _role == "[Not Provided]") and (not _company or _company == "[Not Provided]"):
                 continue
-            _add_role_line(doc, exp.get("role", ""), exp.get("company", ""),
+            _role = _role if _role != "[Not Provided]" else ""
+            _company = _company if _company != "[Not Provided]" else ""
+            _add_role_line(doc, _role, _company,
                            exp.get("duration", ""), FONT,
                            role_color=NAVY, company_color=(74, 74, 74))
+            if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
+                _para(exp["description"], italic=True, color_rgb=(80, 80, 80))
             for b in exp.get("bullets", []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY, font_name=FONT)
@@ -4090,10 +4141,10 @@ def generate_modern_docx(data: dict) -> BytesIO:
         if valid_proj:
             _heading("Projects")
             for proj in valid_proj:
-                _add_project_header(doc, proj.get("name", ""), proj.get("tech_stack", ""),
-                                    proj.get("url", ""), FONT,
-                                    name_color=NAVY, url_color=NAVY)
-                if proj.get("description") and proj["description"] != "[Not Provided]":
+                _add_project_header(doc, proj.get("name", ""), proj.get("duration", ""),
+                                    proj.get("tech_stack", ""), proj.get("url", ""),
+                                    FONT, name_color=NAVY, url_color=NAVY)
+                if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
                     _para(proj["description"], italic=True, color_rgb=(80, 80, 80))
                 for b in proj.get("bullets", []):
                     if b and b != "[Not Provided]":
@@ -4111,11 +4162,16 @@ def generate_modern_docx(data: dict) -> BytesIO:
 
     # ── Certifications ──
     if data.get("certifications"):
-        valid_certs = [c for c in data["certifications"] if c and c != "[Not Provided]"]
+        valid_certs = [c for c in data["certifications"] if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
         if valid_certs:
             _heading("Certifications")
             for cert in valid_certs:
-                _add_bullet(doc, cert, font_size=BODY, font_name=FONT)
+                parts = [cert["name"]]
+                if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
+                    parts.append(cert["issuer"])
+                if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
+                    parts.append(cert["duration"])
+                _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT)
 
     # ── Languages ──
     if data.get("languages"):
@@ -4207,15 +4263,18 @@ def generate_minimal_docx(data: dict) -> BytesIO:
     if data.get("experience"):
         _heading("Work Experience")
         for exp in data["experience"]:
-            if not exp.get("role") and not exp.get("company"):
+            _role = exp.get("role",""); _company = exp.get("company","")
+            if (not _role or _role == "[Not Provided]") and (not _company or _company == "[Not Provided]"):
                 continue
+            _role = _role if _role != "[Not Provided]" else ""
+            _company = _company if _company != "[Not Provided]" else ""
             p = doc.add_paragraph()
             p.clear()
             parts = []
-            if exp.get("role"):
-                parts.append(exp["role"])
-            if exp.get("company"):
-                parts.append(exp["company"])
+            if _role:
+                parts.append(_role)
+            if _company:
+                parts.append(_company)
             r1 = p.add_run(" | ".join(parts))
             r1.bold = True
             r1.font.size = Pt(BODY)
@@ -4227,6 +4286,8 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 r2.font.color.rgb = RGBColor(100, 100, 100)
             p.paragraph_format.space_before = Pt(5)
             p.paragraph_format.space_after = Pt(1)
+            if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
+                _para(exp["description"], italic=True)
             for b in exp.get("bullets", []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY, font_name=FONT)
@@ -4242,19 +4303,25 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 r1.bold = True
                 r1.font.size = Pt(BODY)
                 r1.font.name = FONT
-                if proj.get("tech_stack") and proj["tech_stack"] != "[Not Provided]":
-                    r2 = p.add_run(f"  |  {proj['tech_stack']}")
+                if proj.get("duration") and proj["duration"] not in ("", "[Not Provided]"):
+                    rd = p.add_run(f"   [{proj['duration']}]")
+                    rd.italic = True
+                    rd.font.size = Pt(BODY - 1)
+                    rd.font.name = FONT
+                    rd.font.color.rgb = RGBColor(128, 128, 128)
+                if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
+                    r2 = p.add_run(f"  |  Tech: {proj['tech_stack']}")
                     r2.font.size = Pt(BODY - 1)
                     r2.font.name = FONT
                     r2.font.color.rgb = RGBColor(80, 80, 80)
-                if proj.get("url") and proj["url"] != "[Not Provided]":
+                if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
                     r3 = p.add_run(f"  |  {proj['url']}")
                     r3.font.size = Pt(BODY - 1)
                     r3.font.name = FONT
                     r3.underline = True
                 p.paragraph_format.space_before = Pt(5)
                 p.paragraph_format.space_after = Pt(1)
-                if proj.get("description") and proj["description"] != "[Not Provided]":
+                if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
                     _para(proj["description"], italic=True)
                 for b in proj.get("bullets", []):
                     if b and b != "[Not Provided]":
@@ -4270,11 +4337,16 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                                FONT, degree_size=BODY)
 
     if data.get("certifications"):
-        valid_certs = [c for c in data["certifications"] if c and c != "[Not Provided]"]
+        valid_certs = [c for c in data["certifications"] if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
         if valid_certs:
             _heading("Certifications")
             for cert in valid_certs:
-                _add_bullet(doc, cert, font_size=BODY, font_name=FONT)
+                parts = [cert["name"]]
+                if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
+                    parts.append(cert["issuer"])
+                if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
+                    parts.append(cert["duration"])
+                _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT)
 
     if data.get("languages"):
         valid_lang = [l for l in data["languages"] if l and l != "[Not Provided]"]
@@ -4379,29 +4451,35 @@ def generate_creative_docx(data: dict) -> BytesIO:
     if data.get("experience"):
         _heading("Experience")
         for exp in data["experience"]:
-            if not exp.get("role") and not exp.get("company"):
+            _role = exp.get("role",""); _company = exp.get("company","")
+            if (not _role or _role == "[Not Provided]") and (not _company or _company == "[Not Provided]"):
                 continue
+            _role = _role if _role != "[Not Provided]" else ""
+            _company = _company if _company != "[Not Provided]" else ""
             p = doc.add_paragraph()
             p.clear()
-            if exp.get("role"):
-                r1 = p.add_run(exp["role"])
+            if _role:
+                r1 = p.add_run(_role)
                 r1.bold = True
                 r1.font.size = Pt(BODY + 1)
                 r1.font.name = FONT_HEAD
                 r1.font.color.rgb = RGBColor(*DARK)
-            if exp.get("company"):
-                r2 = p.add_run(f"  @  {exp['company']}")
+            if _company:
+                r2 = p.add_run(f"  @  {_company}")
                 r2.font.size = Pt(BODY)
                 r2.font.name = FONT_BODY
                 r2.font.color.rgb = RGBColor(*TEAL)
-            if exp.get("duration"):
-                r3 = p.add_run(f"   {exp['duration']}")
+            _dur = exp.get("duration","")
+            if _dur and _dur not in ("", "[Not Provided]"):
+                r3 = p.add_run(f"   {_dur}")
                 r3.italic = True
                 r3.font.size = Pt(BODY - 1)
                 r3.font.name = FONT_BODY
                 r3.font.color.rgb = RGBColor(128, 128, 128)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(2)
+            if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
+                _para(exp["description"], italic=True, color_rgb=(80, 80, 80))
             for b in exp.get("bullets", []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY, font_name=FONT_BODY)
@@ -4418,12 +4496,18 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 r1.font.size = Pt(BODY + 1)
                 r1.font.name = FONT_HEAD
                 r1.font.color.rgb = RGBColor(*DARK)
-                if proj.get("tech_stack") and proj["tech_stack"] != "[Not Provided]":
-                    r2 = p.add_run(f"  |  {proj['tech_stack']}")
+                if proj.get("duration") and proj["duration"] not in ("", "[Not Provided]"):
+                    rd = p.add_run(f"   [{proj['duration']}]")
+                    rd.italic = True
+                    rd.font.size = Pt(BODY - 1)
+                    rd.font.name = FONT_BODY
+                    rd.font.color.rgb = RGBColor(128, 128, 128)
+                if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
+                    r2 = p.add_run(f"  |  Tech: {proj['tech_stack']}")
                     r2.font.size = Pt(BODY - 1)
                     r2.font.name = FONT_BODY
                     r2.font.color.rgb = RGBColor(*TEAL)
-                if proj.get("url") and proj["url"] != "[Not Provided]":
+                if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
                     r3 = p.add_run(f"  |  {proj['url']}")
                     r3.font.size = Pt(BODY - 1)
                     r3.font.name = FONT_BODY
@@ -4431,7 +4515,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
                     r3.underline = True
                 p.paragraph_format.space_before = Pt(6)
                 p.paragraph_format.space_after = Pt(2)
-                if proj.get("description") and proj["description"] != "[Not Provided]":
+                if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
                     _para(proj["description"], italic=True, color_rgb=(80, 80, 80))
                 for b in proj.get("bullets", []):
                     if b and b != "[Not Provided]":
@@ -4468,11 +4552,16 @@ def generate_creative_docx(data: dict) -> BytesIO:
                     _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT_BODY)
 
     if data.get("certifications"):
-        valid_certs = [c for c in data["certifications"] if c and c != "[Not Provided]"]
+        valid_certs = [c for c in data["certifications"] if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
         if valid_certs:
             _heading("Certifications")
             for cert in valid_certs:
-                _add_bullet(doc, cert, font_size=BODY, font_name=FONT_BODY)
+                parts = [cert["name"]]
+                if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
+                    parts.append(cert["issuer"])
+                if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
+                    parts.append(cert["duration"])
+                _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT_BODY)
 
     if data.get("languages"):
         valid_lang = [l for l in data["languages"] if l and l != "[Not Provided]"]
