@@ -3613,34 +3613,76 @@ FORMAT STRICTLY AS:
 
 def optimize_resume_to_json(raw_text: str) -> str:
     """
-    Calls the LLM with a strict JSON-only prompt.
+    Calls the LLM with a strict ATS-compliant JSON-only prompt.
     Returns raw LLM response string (JSON extraction handled separately).
     MUST NOT include suggestions, reasoning, or explanations.
     Used EXCLUSIVELY for DOCX generation.
+
+    ATS COMPLIANCE TARGET: Workday, Greenhouse, Lever, iCIMS, Taleo, SmartRecruiters.
+    These systems require: single-column layout, plain section headers, no tables/graphics,
+    consistent bullet formatting, strong action verbs, and keyword-rich descriptions.
     """
-    prompt = f"""You are a professional resume structuring and rewriting engine.
+    prompt = f"""You are an enterprise-grade ATS resume optimization engine trained on hiring pipeline
+standards used by Workday, Greenhouse, Lever, iCIMS, Taleo, and SmartRecruiters.
 
-Your task is to parse, REWRITE, and rebuild the following resume into a strict JSON object.
+Your task is to parse, REWRITE, and rebuild the following resume into a strict ATS-compliant JSON object.
 
-CRITICAL RULES:
+═══════════════════════════════════════════════════════
+ATS COMPLIANCE RULES (NON-NEGOTIABLE)
+═══════════════════════════════════════════════════════
+OUTPUT FORMAT:
 - Return ONLY valid JSON. No preamble, no explanation, no markdown fences, no code blocks.
-- Do NOT include job title suggestions, reasoning, or commentary anywhere.
-- REWRITE every bullet point and summary using stronger ATS-optimized language — preserve all original facts, companies, dates, and technologies exactly, but improve phrasing.
-- If a section is missing but can be inferred from context, reconstruct it intelligently.
-- If a field truly has no data and cannot be inferred, use the placeholder string "[Not Provided]" for text fields, or [] for arrays.
-- For contact fields: extract email, phone, location, LinkedIn URL, GitHub URL, and portfolio URL separately.
-- "title" = the candidate's current job title or most relevant role label (e.g. "Python Developer", "Software Engineer").
-- "skills" = flat array of individual skill strings — include ALL technical skills, tools, languages, frameworks found anywhere in the resume.
-- "soft_skills" = flat array of soft skill strings extracted from resume.
-- "languages" = flat array of spoken language strings (e.g. "English (Professional)", "Bengali (Native)").
-- "interests" = flat array of interest/hobby strings.
-- "certifications" = array of objects, each with "name", "issuer", and "duration". NEVER use flat strings.
-- Experience bullets: rewrite with Action Verb + Task + Technology + Quantified Impact format.
-- Project "url" = GitHub or live link for that project if found in the resume.
-- Education "bullets" = array of notable coursework, achievements, or activities for that institution.
-- "additional" = array of objects for remaining items (training, awards, volunteering, publications, etc.) not covered by experience/projects/certifications. Each object MUST have exactly: "name" (title of item), "description" (1-sentence detail), "duration" (date/range or ""). NEVER put raw dict strings. NEVER use flat strings. ALWAYS use the object format.
+- Do NOT include job title suggestions, reasoning, or commentary anywhere in the output.
 
-Return ONLY this exact JSON structure (no extra keys outside this schema):
+SECTION STRUCTURE — Use ONLY these standardized ATS section headers (in this order):
+  Professional Summary → Skills → Work Experience → Projects → Education → Certifications
+  Languages → Interests → Additional
+  These match the exact parsing categories used by enterprise ATS platforms.
+
+CONTENT REWRITING — ATS OPTIMIZATION:
+- REWRITE every bullet point using the formula: [Strong Action Verb] + [Task/Responsibility] + [Tool/Technology] + [Quantified Impact]
+  Example: "Engineered a real-time data pipeline using Apache Kafka and Spark, reducing ETL latency by 40%"
+- REWRITE the Professional Summary as 2-3 sentences: Role Identity + Core Competencies + Value Proposition
+  Example: "Results-driven Python Developer with 3+ years of experience building scalable APIs and ML pipelines.
+  Proficient in FastAPI, PostgreSQL, and Docker. Delivered production systems serving 100K+ daily active users."
+- Use industry-standard action verbs: Architected, Engineered, Developed, Implemented, Optimized, Automated,
+  Spearheaded, Deployed, Designed, Collaborated, Reduced, Increased, Achieved, Led, Managed, Streamlined.
+- NEVER use weak verbs: "helped", "assisted", "worked on", "involved in", "responsible for".
+- Every experience bullet MUST end with a measurable impact wherever inferable (%, $, time, scale, count).
+  If original resume has no metrics, use plausible range estimates marked with "~" (e.g., "~30% faster").
+- Preserve ALL original facts: company names, dates, job titles, technologies, project names, institutions.
+
+KEYWORD OPTIMIZATION:
+- Extract ALL technical keywords from the resume and ensure they appear in the skills array.
+- Include both abbreviated and full forms where applicable (e.g., "ML" and "Machine Learning").
+- Skills array must be comprehensive — ATS keyword scanners parse this section first.
+
+CONTACT FIELDS:
+- ALL contact fields MUST be inside the "contact" object. NEVER put them at the top level.
+- "contact.location" = city and country only (e.g., "Kolkata, India").
+- "contact.linkedin" = full URL starting with https://www.linkedin.com/. Extract exactly as written.
+- "contact.github" = full URL starting with https://github.com/ OR portfolio URL. Extract exactly.
+- If linkedin or github URL appears ANYWHERE in the resume, it MUST appear in contact.linkedin / contact.github.
+- Use "" (empty string) — NEVER null — for any contact field with no data.
+- "contact.title" = candidate's primary job title or most relevant role label.
+
+DATA TYPES:
+- "skills" = flat array of individual skill strings (ALL technical tools, languages, frameworks, platforms).
+- "soft_skills" = flat array of professional competency strings (e.g., "Cross-functional Collaboration").
+- "languages" = flat array of spoken language strings (e.g., "English (Professional Proficiency)").
+- "interests" = flat array of interest/hobby strings.
+- "certifications" = array of objects with "name", "issuer", "duration". NEVER flat strings.
+- "additional" = array of objects for training, awards, volunteering, publications. Each MUST have
+  exactly: "name" (item title), "description" (1-sentence ATS-optimized detail), "duration" (date/range or "").
+  NEVER put raw dict strings. NEVER use flat strings. ALWAYS use the object format.
+
+MISSING DATA:
+- If a section is absent but inferable from context, reconstruct it intelligently.
+- If a field truly has no data, use "[Not Provided]" for text fields, or [] for arrays.
+
+═══════════════════════════════════════════════════════
+RETURN ONLY THIS EXACT JSON STRUCTURE (no extra keys):
+═══════════════════════════════════════════════════════
 {{
   "contact": {{
     "name": "",
@@ -3700,15 +3742,22 @@ Return ONLY this exact JSON structure (no extra keys outside this schema):
   ]
 }}
 
-FIELD RULES:
-- experience[].description = 1-sentence role summary (rewritten). Do NOT leave blank.
-- experience[].bullets = 3-5 ATS-optimized achievement bullets with strong action verbs.
-- projects[].duration = date range (e.g. "Mar 2025 – Aug 2025"). Extract from resume or "[Not Provided]".
-- projects[].description = 1-sentence project summary. Rewrite from resume content.
-- projects[].bullets = 3-5 achievement/feature bullets.
-- certifications[].name = exact certification or training program name.
-- certifications[].issuer = issuing org/platform. Use "[Not Provided]" if unknown.
-- certifications[].duration = date or date range (e.g. "Jul 2025 – Oct 2025"). Extract from resume.
+═══════════════════════════════════════════════════════
+FIELD-LEVEL ATS RULES:
+═══════════════════════════════════════════════════════
+- summary = 2-3 sentences. Role identity + skills + value proposition. Max 60 words. No personal pronouns.
+- experience[].description = 1-sentence role scope summary (rewritten, no pronouns). Do NOT leave blank.
+- experience[].bullets = 3-5 bullets. Each: Action Verb + Task + Technology + Quantified Impact. No pronouns.
+- projects[].duration = "MMM YYYY – MMM YYYY" format. Extract from resume or "[Not Provided]".
+- projects[].description = 1-sentence project purpose summary. Rewrite from resume content. No pronouns.
+- projects[].bullets = 3-5 achievement/feature bullets with action verbs and impact metrics.
+- projects[].tech_stack = comma-separated list of all technologies used (e.g., "Python, FastAPI, PostgreSQL").
+- education[].bullets = notable coursework, GPA (if >= 3.5), academic achievements, relevant activities.
+- certifications[].name = exact certification name as it appears on the credential.
+- certifications[].issuer = issuing organization or platform. "[Not Provided]" if unknown.
+- certifications[].duration = "MMM YYYY" or "MMM YYYY – MMM YYYY". Extract from resume.
+- skills array MUST include every technology, tool, language, and framework found anywhere in the resume.
+  Minimum 8 skills. Group similar items but keep as individual array entries (not comma-joined strings).
 
 RESUME TEXT:
 \"\"\"{raw_text}\"\"\"
@@ -3818,6 +3867,51 @@ def extract_resume_json(llm_response: str) -> dict:
         for field, default in CONTACT_DEFAULTS.items():
             if field not in data["contact"]:
                 data["contact"][field] = default
+
+        # ── Contact field rescue: fix all LLM inconsistencies ───────────────
+        ct = data["contact"]
+
+        # 1. Null/None/"null"/"undefined" → empty string for ALL contact fields
+        for field in list(ct.keys()):
+            v = ct[field]
+            if v is None or str(v).strip() in ("null", "None", "undefined", "N/A", "n/a"):
+                ct[field] = ""
+
+        # 2. LLM put location/linkedin/github at top level instead of inside contact
+        for top_key, contact_key in [
+            ("location",  "location"),
+            ("linkedin",  "linkedin"),
+            ("github",    "github"),
+            ("portfolio", "portfolio"),
+            ("github_url","github"),
+            ("linkedin_url","linkedin"),
+            ("profile",   "linkedin"),
+            ("website",   "portfolio"),
+        ]:
+            top_val = data.get(top_key, "") or ""
+            if top_val and not ct.get(contact_key):
+                ct[contact_key] = str(top_val).strip()
+
+        # 3. LLM used alternate key names inside contact block
+        ALT_KEYS = {
+            "linkedin": ["linkedin_url", "linkedin_profile", "linkedin_profile_url",
+                         "linkedIn", "linked_in", "profile_url", "profile"],
+            "github":   ["github_url", "github_profile", "github_link",
+                         "portfolio_url", "portfolio", "website", "repo"],
+            "location": ["city", "address", "city_country", "current_location"],
+        }
+        for canonical, alts in ALT_KEYS.items():
+            if not ct.get(canonical):
+                for alt in alts:
+                    v = ct.get(alt, "") or ""
+                    if v and str(v).strip():
+                        ct[canonical] = str(v).strip()
+                        break
+
+        # 4. Final null/empty cleanup — ensure every field is a string
+        for field in CONTACT_DEFAULTS:
+            if not isinstance(ct.get(field), str) or ct[field] is None:
+                ct[field] = ""
         # Backfill missing experience fields
         for exp in data.get("experience", []):
             for f in ["role", "company", "duration", "description"]:
@@ -3886,11 +3980,14 @@ def extract_resume_json(llm_response: str) -> dict:
 # 📄 DOCX TEMPLATE GENERATORS — Three professional styles
 # ============================================================
 
-def _val(v: str) -> str:
-    """Return value or 'Not Provided' placeholder — never empty, never '[Not Provided]'."""
-    if not v or str(v).strip() in ("", "[Not Provided]"):
+def _val(v) -> str:
+    """Return value or 'Not Provided' placeholder — never empty, never None, never '[Not Provided]'."""
+    if v is None:
         return "Not Provided"
-    return str(v).strip()
+    s = str(v).strip()
+    if not s or s in ("[Not Provided]", "null", "None", "undefined"):
+        return "Not Provided"
+    return s
 
 
 def _build_contact_header(doc, data: dict, name_size: int, name_color_rgb: tuple,
@@ -3901,38 +3998,28 @@ def _build_contact_header(doc, data: dict, name_size: int, name_color_rgb: tuple
                            label_color_hex: str = None,
                            accent_color_hex: str = None):
     """
-    Builds the FULL header block — matches sample template exactly.
+    Builds the header block matching the exact sample template format:
 
-    Structure:
-      ① Name          — centered, large bold
-      ② Job Title     — centered, smaller uppercase (always shown)
-      ③ Inline row    — email  |  phone  (centered, small)
-      ④ CONTACT INFO section (labeled rows, NEVER omitted):
-             LOCATION          <value or Not Provided>
-             LINKEDIN          <value or Not Provided>
-             GITHUB / PORTFOLIO  <value or Not Provided>
+      Line 1:  FULL NAME  (large bold centered)
+      Line 2:  JOB TITLE  (smaller bold/normal centered uppercase)
+      Line 3:  email  |  phone  |  LOCATION  |  linkedin_url  |  github_url
+               (single pipe-separated line, centered, all fields always present)
 
-    Every field is ALWAYS rendered. Missing values show "Not Provided".
+    Every field always appears. Missing values show "Not Provided".
+    No separate labeled rows. No dividers. Single clean contact line.
     """
-    from docx.oxml import OxmlElement
-    from docx.oxml.ns import qn
-
     contact = data.get("contact", {})
 
-    # ── Resolve colors ──────────────────────────────────────────────────────
+    # ── Resolve contact color ────────────────────────────────────────────────
     cc = RGBColor(
         int(contact_color_hex[0:2], 16),
         int(contact_color_hex[2:4], 16),
         int(contact_color_hex[4:6], 16),
     )
-    lc_hex = label_color_hex or contact_color_hex
-    lc = RGBColor(int(lc_hex[0:2], 16), int(lc_hex[2:4], 16), int(lc_hex[4:6], 16))
-    ac_hex = accent_color_hex or contact_color_hex
-    ac = RGBColor(int(ac_hex[0:2], 16), int(ac_hex[2:4], 16), int(ac_hex[4:6], 16))
 
     # ── ① Name ──────────────────────────────────────────────────────────────
     raw_name = contact.get("name", "") or ""
-    name = raw_name if raw_name and raw_name != "[Not Provided]" else "Your Name"
+    name = raw_name if raw_name and raw_name not in ("", "[Not Provided]") else "Your Name"
     p_name = doc.add_paragraph()
     p_name.clear()
     r_name = p_name.add_run(name)
@@ -3942,87 +4029,52 @@ def _build_contact_header(doc, data: dict, name_size: int, name_color_rgb: tuple
     r_name.font.color.rgb = RGBColor(*name_color_rgb)
     p_name.alignment = 1
     p_name.paragraph_format.space_before = Pt(0)
-    p_name.paragraph_format.space_after = Pt(2)
+    p_name.paragraph_format.space_after = Pt(4)
 
-    # ── ② Job Title (always shown — placeholder if missing) ─────────────────
+    # ── ② Job Title — always shown, placeholder if missing ──────────────────
     raw_title = contact.get("title", "") or ""
-    title_text = raw_title if raw_title and raw_title != "[Not Provided]" else "Job Title"
+    title_text = raw_title if raw_title and raw_title not in ("", "[Not Provided]") else "Job Title"
     p_title = doc.add_paragraph()
     p_title.clear()
     r_title = p_title.add_run(title_text.upper())
     r_title.font.size = Pt(title_size)
     r_title.font.name = title_font or name_font
-    r_title.bold = False
+    r_title.bold = True
     if title_color_rgb:
         r_title.font.color.rgb = RGBColor(*title_color_rgb)
     p_title.alignment = 1
-    p_title.paragraph_format.space_after = Pt(3)
+    p_title.paragraph_format.space_after = Pt(4)
 
-    # ── ③ Inline contact row: email  |  phone ───────────────────────────────
-    email_val = _val(contact.get("email", ""))
-    phone_val = _val(contact.get("phone", ""))
-    inline_text = f"{email_val}  |  {phone_val}"
-    p_inline = doc.add_paragraph()
-    p_inline.clear()
-    r_inline = p_inline.add_run(inline_text)
-    r_inline.font.size = Pt(contact_size)
-    r_inline.font.name = contact_font
-    r_inline.font.color.rgb = cc
-    p_inline.alignment = 1
-    p_inline.paragraph_format.space_after = Pt(8)
+    # ── ③ Single pipe-separated contact line ────────────────────────────────
+    # Build parts in order: email | phone | location | linkedin | github
+    # Every field always included — "Not Provided" if missing
+    def _clean(v):
+        """Return value or 'Not Provided' — never None or empty."""
+        if v is None:
+            return "Not Provided"
+        s = str(v).strip()
+        return s if s and s not in ("[Not Provided]", "null", "None", "undefined") else "Not Provided"
 
-    # ── ④ Labeled CONTACT INFO rows (always all 3 — never omitted) ──────────
-    # Thin border divider before contact block
-    def _add_contact_divider():
-        p = doc.add_paragraph()
-        p.clear()
-        r = p.add_run("")
-        pPr = p._p.get_or_add_pPr()
-        pBdr = OxmlElement("w:pBdr")
-        top = OxmlElement("w:top")
-        top.set(qn("w:val"), "single")
-        top.set(qn("w:sz"), "4")
-        top.set(qn("w:space"), "1")
-        top.set(qn("w:color"), ac_hex)
-        pBdr.append(top)
-        pPr.append(pBdr)
-        p.paragraph_format.space_before = Pt(0)
-        p.paragraph_format.space_after = Pt(4)
+    email_val    = _clean(contact.get("email", ""))
+    phone_val    = _clean(contact.get("phone", ""))
+    location_val = _clean(contact.get("location", ""))
+    linkedin_val = _clean(contact.get("linkedin", ""))
+    github_raw   = contact.get("github", "") or ""
+    portfolio_raw= contact.get("portfolio", "") or ""
+    github_val   = _clean(github_raw if github_raw and github_raw not in ("", "[Not Provided]") else portfolio_raw)
 
-    _add_contact_divider()
+    parts = [email_val, phone_val, location_val, linkedin_val, github_val]
+    contact_line = "  |  ".join(parts)
 
-    def _labeled_row(label: str, value: str, is_link: bool = False):
-        """Render:  LABEL (bold)   value"""
-        p = doc.add_paragraph()
-        p.clear()
-        r_lbl = p.add_run(f"{label.upper()}   ")
-        r_lbl.bold = True
-        r_lbl.font.size = Pt(contact_size)
-        r_lbl.font.name = contact_font
-        r_lbl.font.color.rgb = lc
-        r_val = p.add_run(value)
-        r_val.font.size = Pt(contact_size)
-        r_val.font.name = contact_font
-        if is_link and value != "Not Provided":
-            r_val.font.color.rgb = ac   # accent colour for links
-            r_val.underline = True
-        else:
-            r_val.font.color.rgb = cc
-        p.paragraph_format.space_before = Pt(1)
-        p.paragraph_format.space_after = Pt(3)
-        return p
-
-    _labeled_row("Location",            _val(contact.get("location", "")))
-    _labeled_row("LinkedIn Profile URL", _val(contact.get("linkedin", "")), is_link=True)
-
-    # GitHub takes priority; fall back to portfolio; always shown
-    github_raw  = contact.get("github", "") or ""
-    portfolio_raw = contact.get("portfolio", "") or ""
-    github_val = github_raw if github_raw and github_raw != "[Not Provided]" else portfolio_raw
-    _labeled_row("GitHub / Portfolio URL", _val(github_val), is_link=True)
-
-    # Bottom divider after contact block
-    _add_contact_divider()
+    p_contact = doc.add_paragraph()
+    p_contact.clear()
+    r_contact = p_contact.add_run(contact_line)
+    r_contact.font.size = Pt(contact_size)
+    r_contact.font.name = contact_font
+    r_contact.font.color.rgb = cc
+    p_contact.alignment = 1
+    p_contact.paragraph_format.space_before = Pt(2)
+    p_contact.paragraph_format.space_after = Pt(10)
 
 
 def _section_heading_bordered(doc, text: str, font_name: str,
@@ -4257,10 +4309,13 @@ def _render_additional(doc, data: dict, font_name: str, font_size: int,
 # ─── MODERN TEMPLATE ──────────────────────────────────────────────────────────
 def generate_modern_docx(data: dict) -> BytesIO:
     """
-    Modern template — mirrors sample template layout:
-    Centered name (navy bold) → job title → two-row contact block
-    (email | phone | location | linkedin on line 1; github | portfolio on line 2)
-    → navy bordered section headings → clean single-column body.
+    Modern ATS-Optimized template — single-column, Calibri font, navy headings.
+    Strictly follows ATS section ordering used by Workday, Greenhouse, and Lever:
+      Header → Professional Summary → Skills → Work Experience →
+      Projects → Education → Certifications → Languages → Interests → Additional
+
+    All formatting decisions prioritize machine readability over visual design.
+    No tables, no columns, no text boxes — pure linear paragraph flow for ATS parsers.
     """
     doc = Document()
     for sec in doc.sections:
@@ -4274,24 +4329,27 @@ def generate_modern_docx(data: dict) -> BytesIO:
     FONT = "Calibri"
     BODY = 10
 
-    # ── Header + Contact section ──
+    # ── ATS RULE: Single-column header block — centered plain text, no tables ──
     _build_contact_header(
         doc, data,
-        name_size=22, name_color_rgb=NAVY, name_font=FONT,
+        name_size=20, name_color_rgb=NAVY, name_font=FONT,
         contact_font=FONT, contact_color_hex="4A4A4A", contact_size=9,
-        title_font=FONT, title_size=11, title_color_rgb=(100, 100, 100),
-        separator="  |  ",
-        label_color_hex=NAVY_HEX,
-        accent_color_hex=NAVY_HEX,
+        title_font=FONT, title_size=11, title_color_rgb=NAVY,
     )
 
     def _heading(text):
+        """
+        ATS-standard section heading: ALL CAPS, bold, bottom-bordered.
+        Border signals section boundary to ATS parsers without using tables.
+        Matches heading labels expected by Workday/Greenhouse parsers.
+        """
         _section_heading_bordered(doc, text, font_name=FONT, font_size=BODY,
                                    bold=True, color_hex=NAVY_HEX,
                                    border_color=NAVY_HEX, border_sz="6",
                                    space_before=10, space_after=4)
 
-    def _para(text, italic=False, color_rgb=None):
+    def _body_para(text, italic=False, color_rgb=None):
+        """Standard body paragraph — consistent 10pt Calibri, minimal spacing."""
         p = doc.add_paragraph()
         p.clear()
         run = p.add_run(text)
@@ -4300,102 +4358,178 @@ def generate_modern_docx(data: dict) -> BytesIO:
         run.italic = italic
         if color_rgb:
             run.font.color.rgb = RGBColor(*color_rgb)
+        p.paragraph_format.space_before = Pt(1)
         p.paragraph_format.space_after = Pt(3)
         return p
 
-    # ── Professional Summary ──
-    if data.get("summary") and data["summary"] != "[Not Provided]":
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 1: PROFESSIONAL SUMMARY
+    # ATS parsers (Workday, iCIMS) actively scan this section for role fit.
+    # 2-3 sentences: Role identity + core competencies + value proposition.
+    # ══════════════════════════════════════════════════════════════════════
+    if data.get("summary") and data["summary"] not in ("", "[Not Provided]"):
         _heading("Professional Summary")
-        _para(data["summary"])
+        _body_para(data["summary"])
 
-    # ── Technical Skills ──
-    if data.get("skills"):
-        valid_skills = [s for s in data["skills"] if s and s != "[Not Provided]"]
-        if valid_skills:
-            _heading("Technical Skills")
-            _para("  •  ".join(valid_skills))
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 2: SKILLS
+    # ATS keyword scanners parse Skills first for job description matching.
+    # Pipe-separated inline format is universally ATS-parseable.
+    # Technical and soft skills separated into distinct labeled lines.
+    # ══════════════════════════════════════════════════════════════════════
+    tech_skills = [s for s in data.get("skills", []) if s and s != "[Not Provided]"]
+    soft_skills = [s for s in data.get("soft_skills", []) if s and s != "[Not Provided]"]
+    if tech_skills or soft_skills:
+        _heading("Skills")
+        if tech_skills:
+            p = doc.add_paragraph()
+            p.clear()
+            label_run = p.add_run("Technical: ")
+            label_run.bold = True
+            label_run.font.size = Pt(BODY)
+            label_run.font.name = FONT
+            label_run.font.color.rgb = RGBColor(*NAVY)
+            skills_run = p.add_run("  |  ".join(tech_skills))
+            skills_run.font.size = Pt(BODY)
+            skills_run.font.name = FONT
+            p.paragraph_format.space_before = Pt(1)
+            p.paragraph_format.space_after = Pt(2)
+        if soft_skills:
+            p = doc.add_paragraph()
+            p.clear()
+            label_run = p.add_run("Professional: ")
+            label_run.bold = True
+            label_run.font.size = Pt(BODY)
+            label_run.font.name = FONT
+            label_run.font.color.rgb = RGBColor(*NAVY)
+            ss_run = p.add_run("  |  ".join(soft_skills))
+            ss_run.font.size = Pt(BODY)
+            ss_run.font.name = FONT
+            p.paragraph_format.space_before = Pt(1)
+            p.paragraph_format.space_after = Pt(3)
 
-    # ── Soft Skills ──
-    if data.get("soft_skills"):
-        valid_ss = [s for s in data["soft_skills"] if s and s != "[Not Provided]"]
-        if valid_ss:
-            _heading("Soft Skills")
-            _para("  •  ".join(valid_ss))
-
-    # ── Work Experience ──
-    if data.get("experience"):
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 3: WORK EXPERIENCE
+    # ATS standard: Role Title (bold) → Company  |  Date Range
+    # 3-5 bullet points per role using Action Verb + Task + Tool + Impact.
+    # Consistent bullet indentation (360 twips left, 180 twips hanging).
+    # ══════════════════════════════════════════════════════════════════════
+    valid_exp = [e for e in data.get("experience", [])
+                 if (e.get("role") and e["role"] not in ("", "[Not Provided]"))
+                 or (e.get("company") and e["company"] not in ("", "[Not Provided]"))]
+    if valid_exp:
         _heading("Work Experience")
-        for exp in data["experience"]:
-            _role = exp.get("role",""); _company = exp.get("company","")
-            if (not _role or _role == "[Not Provided]") and (not _company or _company == "[Not Provided]"):
-                continue
-            _role = _role if _role != "[Not Provided]" else ""
-            _company = _company if _company != "[Not Provided]" else ""
-            _add_role_line(doc, _role, _company,
-                           exp.get("duration", ""), FONT,
-                           role_color=NAVY, company_color=(74, 74, 74))
+        for exp in valid_exp:
+            _role = exp.get("role", "") if exp.get("role", "") not in ("", "[Not Provided]") else ""
+            _company = exp.get("company", "") if exp.get("company", "") not in ("", "[Not Provided]") else ""
+            _duration = exp.get("duration", "") if exp.get("duration", "") not in ("", "[Not Provided]") else ""
+
+            # Role title line: Role (bold navy) — Company  [Duration]
+            p = doc.add_paragraph()
+            p.clear()
+            if _role:
+                r_role = p.add_run(_role)
+                r_role.bold = True
+                r_role.font.size = Pt(BODY + 1)
+                r_role.font.name = FONT
+                r_role.font.color.rgb = RGBColor(*NAVY)
+            if _company:
+                sep = "  —  " if _role else ""
+                r_co = p.add_run(f"{sep}{_company}")
+                r_co.font.size = Pt(BODY)
+                r_co.font.name = FONT
+                r_co.font.color.rgb = RGBColor(74, 74, 74)
+            if _duration:
+                r_dur = p.add_run(f"  |  {_duration}")
+                r_dur.italic = True
+                r_dur.font.size = Pt(BODY - 1)
+                r_dur.font.name = FONT
+                r_dur.font.color.rgb = RGBColor(110, 110, 110)
+            p.paragraph_format.space_before = Pt(6)
+            p.paragraph_format.space_after = Pt(2)
+
+            # Role scope summary (italic, gray) — parsed by ATS as context
             if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
-                _para(exp["description"], italic=True, color_rgb=(80, 80, 80))
+                _body_para(exp["description"], italic=True, color_rgb=(80, 80, 80))
+
+            # Achievement bullets — ATS keyword density maximized here
             for b in exp.get("bullets", []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY, font_name=FONT)
 
-    # ── Projects ──
-    if data.get("projects"):
-        valid_proj = [p for p in data["projects"] if p.get("name") and p["name"] != "[Not Provided]"]
-        if valid_proj:
-            _heading("Projects")
-            for proj in valid_proj:
-                _add_project_header(doc, proj.get("name", ""), proj.get("duration", ""),
-                                    proj.get("tech_stack", ""), proj.get("url", ""),
-                                    FONT, name_color=NAVY, url_color=NAVY)
-                if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
-                    _para(proj["description"], italic=True, color_rgb=(80, 80, 80))
-                for b in proj.get("bullets", []):
-                    if b and b != "[Not Provided]":
-                        _add_bullet(doc, b, font_size=BODY, font_name=FONT)
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 4: PROJECTS
+    # Project Name (bold) → Tech Stack → URL (plain text, not hyperlink)
+    # ATS parsers cannot follow hyperlinks — URLs must be plain text.
+    # ══════════════════════════════════════════════════════════════════════
+    valid_proj = [p for p in data.get("projects", [])
+                  if p.get("name") and p["name"] not in ("", "[Not Provided]")]
+    if valid_proj:
+        _heading("Projects")
+        for proj in valid_proj:
+            _add_project_header(doc, proj.get("name", ""), proj.get("duration", ""),
+                                proj.get("tech_stack", ""), proj.get("url", ""),
+                                FONT, name_color=NAVY, url_color=NAVY)
+            if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
+                _body_para(proj["description"], italic=True, color_rgb=(80, 80, 80))
+            for b in proj.get("bullets", []):
+                if b and b != "[Not Provided]":
+                    _add_bullet(doc, b, font_size=BODY, font_name=FONT)
 
-    # ── Education ──
-    if data.get("education"):
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 5: EDUCATION
+    # Degree (bold) — Institution  (Year)
+    # ATS parsers match degree keywords: "Bachelor", "Master", "B.Tech", etc.
+    # ══════════════════════════════════════════════════════════════════════
+    valid_edu = [e for e in data.get("education", [])
+                 if e.get("degree") or e.get("institution")]
+    if valid_edu:
         _heading("Education")
-        for edu in data["education"]:
-            if not edu.get("degree") and not edu.get("institution"):
-                continue
+        for edu in valid_edu:
             _add_education_row(doc, edu.get("degree", ""), edu.get("institution", ""),
                                edu.get("year", ""), edu.get("bullets", []),
                                FONT, degree_color=NAVY)
 
-    # ── Certifications ──
-    if data.get("certifications"):
-        valid_certs = [c for c in data["certifications"] if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
-        if valid_certs:
-            _heading("Certifications")
-            for cert in valid_certs:
-                parts = [cert["name"]]
-                if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
-                    parts.append(cert["issuer"])
-                if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
-                    parts.append(cert["duration"])
-                _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT)
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 6: CERTIFICATIONS
+    # Each certification on its own bullet: Name  |  Issuer  |  Date
+    # ATS systems (LinkedIn, Workday) match certification keywords directly.
+    # ══════════════════════════════════════════════════════════════════════
+    valid_certs = [c for c in data.get("certifications", [])
+                   if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
+    if valid_certs:
+        _heading("Certifications")
+        for cert in valid_certs:
+            parts = [cert["name"]]
+            if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
+                parts.append(cert["issuer"])
+            if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
+                parts.append(cert["duration"])
+            _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT)
 
-    # ── Languages ──
-    if data.get("languages"):
-        valid_lang = [l for l in data["languages"] if l and l != "[Not Provided]"]
-        if valid_lang:
-            _heading("Languages")
-            _para("  •  ".join(valid_lang))
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 7: LANGUAGES
+    # ══════════════════════════════════════════════════════════════════════
+    valid_lang = [l for l in data.get("languages", []) if l and l != "[Not Provided]"]
+    if valid_lang:
+        _heading("Languages")
+        _body_para("  |  ".join(valid_lang))
 
-    # ── Interests ──
-    if data.get("interests"):
-        valid_int = [i for i in data["interests"] if i and i != "[Not Provided]"]
-        if valid_int:
-            _heading("Interests")
-            _para("  •  ".join(valid_int))
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 8: INTERESTS
+    # ══════════════════════════════════════════════════════════════════════
+    valid_int = [i for i in data.get("interests", []) if i and i != "[Not Provided]"]
+    if valid_int:
+        _heading("Interests")
+        _body_para("  |  ".join(valid_int))
 
-    # ── Additional ──
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 9: ADDITIONAL (Awards, Training, Volunteering, Publications)
+    # ══════════════════════════════════════════════════════════════════════
     _render_additional(doc, data, font_name=FONT, font_size=BODY,
-                       heading_fn=_heading, bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT),
-                       name_color_rgb=NAVY, desc_color_rgb=(80,80,80))
+                       heading_fn=_heading,
+                       bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT),
+                       name_color_rgb=NAVY, desc_color_rgb=(80, 80, 80))
 
     buf = BytesIO()
     doc.save(buf)
@@ -4406,8 +4540,14 @@ def generate_modern_docx(data: dict) -> BytesIO:
 # ─── MINIMAL TEMPLATE ─────────────────────────────────────────────────────────
 def generate_minimal_docx(data: dict) -> BytesIO:
     """
-    Minimal template — pure black/white Arial, ultra-clean, max ATS compatibility.
-    Same two-row contact structure as sample template.
+    Minimal ATS-Optimized template — pure black/white Arial, maximum machine readability.
+    Highest ATS parse accuracy of all three templates.
+    Follows identical section ordering to Modern template for ATS consistency:
+      Header → Professional Summary → Skills → Work Experience →
+      Projects → Education → Certifications → Languages → Interests → Additional
+
+    No color, no decoration, no graphics — every byte serves ATS keyword matching.
+    Preferred by Taleo, SmartRecruiters, and legacy HRIS systems.
     """
     doc = Document()
     for sec in doc.sections:
@@ -4419,59 +4559,94 @@ def generate_minimal_docx(data: dict) -> BytesIO:
     FONT = "Arial"
     BODY = 10
     BLACK_HEX = "000000"
-    GRAY = (100, 100, 100)
+    BLACK = (0, 0, 0)
+    DARK_GRAY = (60, 60, 60)
+    MID_GRAY = (100, 100, 100)
 
-    # ── Header + Contact section ──
+    # ── ATS RULE: Plain-text header — no color, no decoration ──
     _build_contact_header(
         doc, data,
-        name_size=18, name_color_rgb=(0, 0, 0), name_font=FONT,
+        name_size=18, name_color_rgb=BLACK, name_font=FONT,
         contact_font=FONT, contact_color_hex="333333", contact_size=9,
-        title_font=FONT, title_size=10, title_color_rgb=GRAY,
-        separator="  |  ",
-        label_color_hex="000000",
-        accent_color_hex="000000",
+        title_font=FONT, title_size=10, title_color_rgb=DARK_GRAY,
     )
 
     def _heading(text):
+        """
+        Pure black bold ALL-CAPS heading with bottom rule.
+        Maximum compatibility with legacy ATS parsers that strip color.
+        """
         _section_heading_bordered(doc, text, font_name=FONT, font_size=BODY,
                                    bold=True, color_hex=BLACK_HEX,
                                    border_color=BLACK_HEX, border_sz="4",
                                    space_before=10, space_after=3)
 
-    def _para(text, italic=False):
+    def _body_para(text, italic=False):
         p = doc.add_paragraph()
         p.clear()
         run = p.add_run(text)
         run.font.size = Pt(BODY)
         run.font.name = FONT
         run.italic = italic
+        p.paragraph_format.space_before = Pt(1)
         p.paragraph_format.space_after = Pt(3)
         return p
 
-    if data.get("summary") and data["summary"] != "[Not Provided]":
-        _heading("Summary")
-        _para(data["summary"])
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 1: PROFESSIONAL SUMMARY
+    # ══════════════════════════════════════════════════════════════════════
+    if data.get("summary") and data["summary"] not in ("", "[Not Provided]"):
+        _heading("Professional Summary")
+        _body_para(data["summary"])
 
-    if data.get("skills"):
-        valid_skills = [s for s in data["skills"] if s and s != "[Not Provided]"]
-        if valid_skills:
-            _heading("Technical Skills")
-            _para(", ".join(valid_skills))
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 2: SKILLS
+    # Comma-separated format — most compatible with all ATS keyword parsers.
+    # Labeled "Technical" and "Professional" for Greenhouse/Lever field mapping.
+    # ══════════════════════════════════════════════════════════════════════
+    tech_skills = [s for s in data.get("skills", []) if s and s != "[Not Provided]"]
+    soft_skills = [s for s in data.get("soft_skills", []) if s and s != "[Not Provided]"]
+    if tech_skills or soft_skills:
+        _heading("Skills")
+        if tech_skills:
+            p = doc.add_paragraph()
+            p.clear()
+            lbl = p.add_run("Technical: ")
+            lbl.bold = True
+            lbl.font.size = Pt(BODY)
+            lbl.font.name = FONT
+            skills_run = p.add_run(", ".join(tech_skills))
+            skills_run.font.size = Pt(BODY)
+            skills_run.font.name = FONT
+            p.paragraph_format.space_before = Pt(1)
+            p.paragraph_format.space_after = Pt(2)
+        if soft_skills:
+            p = doc.add_paragraph()
+            p.clear()
+            lbl = p.add_run("Professional: ")
+            lbl.bold = True
+            lbl.font.size = Pt(BODY)
+            lbl.font.name = FONT
+            ss_run = p.add_run(", ".join(soft_skills))
+            ss_run.font.size = Pt(BODY)
+            ss_run.font.name = FONT
+            p.paragraph_format.space_before = Pt(1)
+            p.paragraph_format.space_after = Pt(3)
 
-    if data.get("soft_skills"):
-        valid_ss = [s for s in data["soft_skills"] if s and s != "[Not Provided]"]
-        if valid_ss:
-            _heading("Soft Skills")
-            _para(", ".join(valid_ss))
-
-    if data.get("experience"):
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 3: WORK EXPERIENCE
+    # Minimal styling: bold role title, plain company/date, standard bullets.
+    # ══════════════════════════════════════════════════════════════════════
+    valid_exp = [e for e in data.get("experience", [])
+                 if (e.get("role") and e["role"] not in ("", "[Not Provided]"))
+                 or (e.get("company") and e["company"] not in ("", "[Not Provided]"))]
+    if valid_exp:
         _heading("Work Experience")
-        for exp in data["experience"]:
-            _role = exp.get("role",""); _company = exp.get("company","")
-            if (not _role or _role == "[Not Provided]") and (not _company or _company == "[Not Provided]"):
-                continue
-            _role = _role if _role != "[Not Provided]" else ""
-            _company = _company if _company != "[Not Provided]" else ""
+        for exp in valid_exp:
+            _role = exp.get("role", "") if exp.get("role", "") not in ("", "[Not Provided]") else ""
+            _company = exp.get("company", "") if exp.get("company", "") not in ("", "[Not Provided]") else ""
+            _duration = exp.get("duration", "") if exp.get("duration", "") not in ("", "[Not Provided]") else ""
+
             p = doc.add_paragraph()
             p.clear()
             parts = []
@@ -4483,90 +4658,108 @@ def generate_minimal_docx(data: dict) -> BytesIO:
             r1.bold = True
             r1.font.size = Pt(BODY)
             r1.font.name = FONT
-            if exp.get("duration"):
-                r2 = p.add_run(f"  {exp['duration']}")
+            if _duration:
+                r2 = p.add_run(f"  {_duration}")
                 r2.font.size = Pt(BODY - 1)
                 r2.font.name = FONT
-                r2.font.color.rgb = RGBColor(100, 100, 100)
-            p.paragraph_format.space_before = Pt(5)
-            p.paragraph_format.space_after = Pt(1)
+                r2.font.color.rgb = RGBColor(*MID_GRAY)
+            p.paragraph_format.space_before = Pt(6)
+            p.paragraph_format.space_after = Pt(2)
+
             if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
-                _para(exp["description"], italic=True)
+                _body_para(exp["description"], italic=True)
             for b in exp.get("bullets", []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY, font_name=FONT)
 
-    if data.get("projects"):
-        valid_proj = [p for p in data["projects"] if p.get("name") and p["name"] != "[Not Provided]"]
-        if valid_proj:
-            _heading("Projects")
-            for proj in valid_proj:
-                p = doc.add_paragraph()
-                p.clear()
-                r1 = p.add_run(proj.get("name", ""))
-                r1.bold = True
-                r1.font.size = Pt(BODY)
-                r1.font.name = FONT
-                if proj.get("duration") and proj["duration"] not in ("", "[Not Provided]"):
-                    rd = p.add_run(f"   [{proj['duration']}]")
-                    rd.italic = True
-                    rd.font.size = Pt(BODY - 1)
-                    rd.font.name = FONT
-                    rd.font.color.rgb = RGBColor(128, 128, 128)
-                if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
-                    r2 = p.add_run(f"  |  Tech: {proj['tech_stack']}")
-                    r2.font.size = Pt(BODY - 1)
-                    r2.font.name = FONT
-                    r2.font.color.rgb = RGBColor(80, 80, 80)
-                if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
-                    r3 = p.add_run(f"  |  {proj['url']}")
-                    r3.font.size = Pt(BODY - 1)
-                    r3.font.name = FONT
-                    r3.underline = True
-                p.paragraph_format.space_before = Pt(5)
-                p.paragraph_format.space_after = Pt(1)
-                if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
-                    _para(proj["description"], italic=True)
-                for b in proj.get("bullets", []):
-                    if b and b != "[Not Provided]":
-                        _add_bullet(doc, b, font_size=BODY, font_name=FONT)
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 4: PROJECTS
+    # ══════════════════════════════════════════════════════════════════════
+    valid_proj = [p for p in data.get("projects", [])
+                  if p.get("name") and p["name"] not in ("", "[Not Provided]")]
+    if valid_proj:
+        _heading("Projects")
+        for proj in valid_proj:
+            p = doc.add_paragraph()
+            p.clear()
+            r1 = p.add_run(proj.get("name", ""))
+            r1.bold = True
+            r1.font.size = Pt(BODY)
+            r1.font.name = FONT
+            if proj.get("duration") and proj["duration"] not in ("", "[Not Provided]"):
+                rd = p.add_run(f"   [{proj['duration']}]")
+                rd.italic = True
+                rd.font.size = Pt(BODY - 1)
+                rd.font.name = FONT
+                rd.font.color.rgb = RGBColor(*MID_GRAY)
+            if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
+                r2 = p.add_run(f"  |  Tech: {proj['tech_stack']}")
+                r2.font.size = Pt(BODY - 1)
+                r2.font.name = FONT
+                r2.font.color.rgb = RGBColor(80, 80, 80)
+            if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
+                r3 = p.add_run(f"  |  {proj['url']}")
+                r3.font.size = Pt(BODY - 1)
+                r3.font.name = FONT
+                r3.underline = True
+            p.paragraph_format.space_before = Pt(5)
+            p.paragraph_format.space_after = Pt(2)
+            if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
+                _body_para(proj["description"], italic=True)
+            for b in proj.get("bullets", []):
+                if b and b != "[Not Provided]":
+                    _add_bullet(doc, b, font_size=BODY, font_name=FONT)
 
-    if data.get("education"):
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 5: EDUCATION
+    # ══════════════════════════════════════════════════════════════════════
+    valid_edu = [e for e in data.get("education", [])
+                 if e.get("degree") or e.get("institution")]
+    if valid_edu:
         _heading("Education")
-        for edu in data["education"]:
-            if not edu.get("degree") and not edu.get("institution"):
-                continue
+        for edu in valid_edu:
             _add_education_row(doc, edu.get("degree", ""), edu.get("institution", ""),
                                edu.get("year", ""), edu.get("bullets", []),
                                FONT, degree_size=BODY)
 
-    if data.get("certifications"):
-        valid_certs = [c for c in data["certifications"] if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
-        if valid_certs:
-            _heading("Certifications")
-            for cert in valid_certs:
-                parts = [cert["name"]]
-                if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
-                    parts.append(cert["issuer"])
-                if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
-                    parts.append(cert["duration"])
-                _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT)
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 6: CERTIFICATIONS
+    # ══════════════════════════════════════════════════════════════════════
+    valid_certs = [c for c in data.get("certifications", [])
+                   if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
+    if valid_certs:
+        _heading("Certifications")
+        for cert in valid_certs:
+            parts = [cert["name"]]
+            if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
+                parts.append(cert["issuer"])
+            if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
+                parts.append(cert["duration"])
+            _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT)
 
-    if data.get("languages"):
-        valid_lang = [l for l in data["languages"] if l and l != "[Not Provided]"]
-        if valid_lang:
-            _heading("Languages")
-            _para(", ".join(valid_lang))
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 7: LANGUAGES
+    # ══════════════════════════════════════════════════════════════════════
+    valid_lang = [l for l in data.get("languages", []) if l and l != "[Not Provided]"]
+    if valid_lang:
+        _heading("Languages")
+        _body_para(", ".join(valid_lang))
 
-    if data.get("interests"):
-        valid_int = [i for i in data["interests"] if i and i != "[Not Provided]"]
-        if valid_int:
-            _heading("Interests")
-            _para(", ".join(valid_int))
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 8: INTERESTS
+    # ══════════════════════════════════════════════════════════════════════
+    valid_int = [i for i in data.get("interests", []) if i and i != "[Not Provided]"]
+    if valid_int:
+        _heading("Interests")
+        _body_para(", ".join(valid_int))
 
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 9: ADDITIONAL
+    # ══════════════════════════════════════════════════════════════════════
     _render_additional(doc, data, font_name=FONT, font_size=BODY,
-                       heading_fn=_heading, bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT),
-                       name_color_rgb=(0,0,0), desc_color_rgb=(80,80,80))
+                       heading_fn=_heading,
+                       bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT),
+                       name_color_rgb=BLACK, desc_color_rgb=(80, 80, 80))
 
     buf = BytesIO()
     doc.save(buf)
@@ -4577,43 +4770,54 @@ def generate_minimal_docx(data: dict) -> BytesIO:
 # ─── CREATIVE TEMPLATE ────────────────────────────────────────────────────────
 def generate_creative_docx(data: dict) -> BytesIO:
     """
-    Creative template — teal/dark-navy accents, Georgia name, Calibri body.
-    Same two-row contact structure as sample template.
+    Executive ATS-Optimized template — teal/dark-navy Calibri, polished yet ATS-safe.
+    Replaces design-heavy elements (decorative symbols, multi-font mixing, ◆/▌ glyphs)
+    with ATS-safe equivalents that retain visual appeal without breaking parsers.
+    Identical section ordering to Modern and Minimal templates for ATS consistency:
+      Header → Professional Summary → Skills → Work Experience →
+      Projects → Education → Certifications → Languages → Interests → Additional
+
+    ATS COMPLIANCE NOTES:
+    - All Unicode decorative characters (◆, ▌, @) removed from section headings/bullets.
+    - Single font family (Calibri) used throughout body — multi-font mixing confuses some parsers.
+    - Teal color is display-only; ATS parsers read plain text, not colors.
+    - Georgia used ONLY for candidate name (header) — never in parseable body sections.
     """
     doc = Document()
     for sec in doc.sections:
-        sec.top_margin = Inches(0.7)
-        sec.bottom_margin = Inches(0.7)
-        sec.left_margin = Inches(0.9)
-        sec.right_margin = Inches(0.9)
+        sec.top_margin = Inches(0.75)
+        sec.bottom_margin = Inches(0.75)
+        sec.left_margin = Inches(0.95)
+        sec.right_margin = Inches(0.95)
 
     TEAL_HEX = "0D7377"
     DARK_HEX = "14213D"
     TEAL = (0x0D, 0x73, 0x77)
     DARK = (0x14, 0x21, 0x3D)
-    FONT_HEAD = "Georgia"
-    FONT_BODY = "Calibri"
+    FONT_NAME = "Georgia"   # Name display only — ATS ignores header fonts
+    FONT_BODY = "Calibri"   # Consistent body font — required for ATS parsing
     BODY = 10
 
-    # ── Header + Contact section ──
+    # ── Header: Name in Georgia (display), contact in Calibri (parseable) ──
     _build_contact_header(
         doc, data,
-        name_size=24, name_color_rgb=DARK, name_font=FONT_HEAD,
+        name_size=22, name_color_rgb=DARK, name_font=FONT_NAME,
         contact_font=FONT_BODY, contact_color_hex="444444", contact_size=9,
-        title_font=FONT_HEAD, title_size=11, title_color_rgb=TEAL,
-        separator="  |  ",
-        label_color_hex=DARK_HEX,
-        accent_color_hex=TEAL_HEX,
+        title_font=FONT_BODY, title_size=11, title_color_rgb=TEAL,
     )
 
     def _heading(text):
-        _section_heading_bordered(doc, text, font_name=FONT_HEAD, font_size=BODY + 1,
+        """
+        ATS-safe teal heading — NO prefix symbols (◆/▌ break some ATS parsers).
+        Teal color preserved for human readers; ATS reads underlying plain text.
+        """
+        _section_heading_bordered(doc, text, font_name=FONT_BODY, font_size=BODY + 1,
                                    bold=True, color_hex=TEAL_HEX,
                                    border_color=TEAL_HEX, border_sz="6",
-                                   space_before=10, space_after=4,
-                                   prefix="\u258c ")
+                                   space_before=10, space_after=4)
+        # NOTE: prefix="\u258c " removed — block character disrupts ATS text extraction
 
-    def _para(text, italic=False, color_rgb=None):
+    def _body_para(text, italic=False, color_rgb=None):
         p = doc.add_paragraph()
         p.clear()
         run = p.add_run(text)
@@ -4622,110 +4826,153 @@ def generate_creative_docx(data: dict) -> BytesIO:
         run.italic = italic
         if color_rgb:
             run.font.color.rgb = RGBColor(*color_rgb)
+        p.paragraph_format.space_before = Pt(1)
         p.paragraph_format.space_after = Pt(3)
         return p
 
-    if data.get("summary") and data["summary"] != "[Not Provided]":
-        _heading("Profile")
-        _para(data["summary"], italic=True)
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 1: PROFESSIONAL SUMMARY
+    # "Profile" renamed to "Professional Summary" — standard ATS label.
+    # Some older ATS systems (Taleo) fail to map "Profile" to summary field.
+    # ══════════════════════════════════════════════════════════════════════
+    if data.get("summary") and data["summary"] not in ("", "[Not Provided]"):
+        _heading("Professional Summary")
+        _body_para(data["summary"], italic=False)  # Not italic — ATS reads italic as emphasis, not content
 
-    if data.get("skills"):
-        valid_skills = [s for s in data["skills"] if s and s != "[Not Provided]"]
-        if valid_skills:
-            _heading("Technical Skills")
-            _para("  ◆  ".join(valid_skills))
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 2: SKILLS
+    # Pipe-separated with bold labels: "Technical:" and "Professional:"
+    # ══════════════════════════════════════════════════════════════════════
+    tech_skills = [s for s in data.get("skills", []) if s and s != "[Not Provided]"]
+    soft_skills = [s for s in data.get("soft_skills", []) if s and s != "[Not Provided]"]
+    if tech_skills or soft_skills:
+        _heading("Skills")
+        if tech_skills:
+            p = doc.add_paragraph()
+            p.clear()
+            lbl = p.add_run("Technical: ")
+            lbl.bold = True
+            lbl.font.size = Pt(BODY)
+            lbl.font.name = FONT_BODY
+            lbl.font.color.rgb = RGBColor(*TEAL)
+            skills_run = p.add_run("  |  ".join(tech_skills))
+            skills_run.font.size = Pt(BODY)
+            skills_run.font.name = FONT_BODY
+            p.paragraph_format.space_before = Pt(1)
+            p.paragraph_format.space_after = Pt(2)
+        if soft_skills:
+            p = doc.add_paragraph()
+            p.clear()
+            lbl = p.add_run("Professional: ")
+            lbl.bold = True
+            lbl.font.size = Pt(BODY)
+            lbl.font.name = FONT_BODY
+            lbl.font.color.rgb = RGBColor(*TEAL)
+            ss_run = p.add_run("  |  ".join(soft_skills))
+            ss_run.font.size = Pt(BODY)
+            ss_run.font.name = FONT_BODY
+            p.paragraph_format.space_before = Pt(1)
+            p.paragraph_format.space_after = Pt(3)
 
-    if data.get("soft_skills"):
-        valid_ss = [s for s in data["soft_skills"] if s and s != "[Not Provided]"]
-        if valid_ss:
-            _heading("Soft Skills")
-            _para("  ◆  ".join(valid_ss))
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 3: WORK EXPERIENCE
+    # ATS-safe: "  @  " company separator replaced with "  —  "
+    # The "@" symbol triggers social-media false positives in some ATS parsers.
+    # ══════════════════════════════════════════════════════════════════════
+    valid_exp = [e for e in data.get("experience", [])
+                 if (e.get("role") and e["role"] not in ("", "[Not Provided]"))
+                 or (e.get("company") and e["company"] not in ("", "[Not Provided]"))]
+    if valid_exp:
+        _heading("Work Experience")
+        for exp in valid_exp:
+            _role = exp.get("role", "") if exp.get("role", "") not in ("", "[Not Provided]") else ""
+            _company = exp.get("company", "") if exp.get("company", "") not in ("", "[Not Provided]") else ""
+            _duration = exp.get("duration", "") if exp.get("duration", "") not in ("", "[Not Provided]") else ""
 
-    if data.get("experience"):
-        _heading("Experience")
-        for exp in data["experience"]:
-            _role = exp.get("role",""); _company = exp.get("company","")
-            if (not _role or _role == "[Not Provided]") and (not _company or _company == "[Not Provided]"):
-                continue
-            _role = _role if _role != "[Not Provided]" else ""
-            _company = _company if _company != "[Not Provided]" else ""
             p = doc.add_paragraph()
             p.clear()
             if _role:
                 r1 = p.add_run(_role)
                 r1.bold = True
                 r1.font.size = Pt(BODY + 1)
-                r1.font.name = FONT_HEAD
+                r1.font.name = FONT_BODY
                 r1.font.color.rgb = RGBColor(*DARK)
             if _company:
-                r2 = p.add_run(f"  @  {_company}")
+                sep = "  —  " if _role else ""   # ATS-safe dash, not "@"
+                r2 = p.add_run(f"{sep}{_company}")
                 r2.font.size = Pt(BODY)
                 r2.font.name = FONT_BODY
                 r2.font.color.rgb = RGBColor(*TEAL)
-            _dur = exp.get("duration","")
-            if _dur and _dur not in ("", "[Not Provided]"):
-                r3 = p.add_run(f"   {_dur}")
+            if _duration:
+                r3 = p.add_run(f"   {_duration}")
                 r3.italic = True
                 r3.font.size = Pt(BODY - 1)
                 r3.font.name = FONT_BODY
-                r3.font.color.rgb = RGBColor(128, 128, 128)
+                r3.font.color.rgb = RGBColor(110, 110, 110)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(2)
+
             if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
-                _para(exp["description"], italic=True, color_rgb=(80, 80, 80))
+                _body_para(exp["description"], italic=True, color_rgb=(80, 80, 80))
             for b in exp.get("bullets", []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY, font_name=FONT_BODY)
 
-    if data.get("projects"):
-        valid_proj = [pr for pr in data["projects"] if pr.get("name") and pr["name"] != "[Not Provided]"]
-        if valid_proj:
-            _heading("Projects")
-            for proj in valid_proj:
-                p = doc.add_paragraph()
-                p.clear()
-                r1 = p.add_run(proj.get("name", ""))
-                r1.bold = True
-                r1.font.size = Pt(BODY + 1)
-                r1.font.name = FONT_HEAD
-                r1.font.color.rgb = RGBColor(*DARK)
-                if proj.get("duration") and proj["duration"] not in ("", "[Not Provided]"):
-                    rd = p.add_run(f"   [{proj['duration']}]")
-                    rd.italic = True
-                    rd.font.size = Pt(BODY - 1)
-                    rd.font.name = FONT_BODY
-                    rd.font.color.rgb = RGBColor(128, 128, 128)
-                if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
-                    r2 = p.add_run(f"  |  Tech: {proj['tech_stack']}")
-                    r2.font.size = Pt(BODY - 1)
-                    r2.font.name = FONT_BODY
-                    r2.font.color.rgb = RGBColor(*TEAL)
-                if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
-                    r3 = p.add_run(f"  |  {proj['url']}")
-                    r3.font.size = Pt(BODY - 1)
-                    r3.font.name = FONT_BODY
-                    r3.font.color.rgb = RGBColor(*TEAL)
-                    r3.underline = True
-                p.paragraph_format.space_before = Pt(6)
-                p.paragraph_format.space_after = Pt(2)
-                if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
-                    _para(proj["description"], italic=True, color_rgb=(80, 80, 80))
-                for b in proj.get("bullets", []):
-                    if b and b != "[Not Provided]":
-                        _add_bullet(doc, b, font_size=BODY, font_name=FONT_BODY)
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 4: PROJECTS
+    # ══════════════════════════════════════════════════════════════════════
+    valid_proj = [pr for pr in data.get("projects", [])
+                  if pr.get("name") and pr["name"] not in ("", "[Not Provided]")]
+    if valid_proj:
+        _heading("Projects")
+        for proj in valid_proj:
+            p = doc.add_paragraph()
+            p.clear()
+            r1 = p.add_run(proj.get("name", ""))
+            r1.bold = True
+            r1.font.size = Pt(BODY + 1)
+            r1.font.name = FONT_BODY
+            r1.font.color.rgb = RGBColor(*DARK)
+            if proj.get("duration") and proj["duration"] not in ("", "[Not Provided]"):
+                rd = p.add_run(f"   [{proj['duration']}]")
+                rd.italic = True
+                rd.font.size = Pt(BODY - 1)
+                rd.font.name = FONT_BODY
+                rd.font.color.rgb = RGBColor(110, 110, 110)
+            if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
+                r2 = p.add_run(f"  |  Tech: {proj['tech_stack']}")
+                r2.font.size = Pt(BODY - 1)
+                r2.font.name = FONT_BODY
+                r2.font.color.rgb = RGBColor(*TEAL)
+            if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
+                r3 = p.add_run(f"  |  {proj['url']}")
+                r3.font.size = Pt(BODY - 1)
+                r3.font.name = FONT_BODY
+                r3.font.color.rgb = RGBColor(*TEAL)
+                r3.underline = True
+            p.paragraph_format.space_before = Pt(6)
+            p.paragraph_format.space_after = Pt(2)
+            if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
+                _body_para(proj["description"], italic=True, color_rgb=(80, 80, 80))
+            for b in proj.get("bullets", []):
+                if b and b != "[Not Provided]":
+                    _add_bullet(doc, b, font_size=BODY, font_name=FONT_BODY)
 
-    if data.get("education"):
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 5: EDUCATION
+    # ══════════════════════════════════════════════════════════════════════
+    valid_edu = [e for e in data.get("education", [])
+                 if e.get("degree") or e.get("institution")]
+    if valid_edu:
         _heading("Education")
-        for edu in data["education"]:
-            if not edu.get("degree") and not edu.get("institution"):
-                continue
+        for edu in valid_edu:
             p = doc.add_paragraph()
             p.clear()
             if edu.get("degree"):
                 r1 = p.add_run(edu["degree"])
                 r1.bold = True
                 r1.font.size = Pt(BODY)
-                r1.font.name = FONT_HEAD
+                r1.font.name = FONT_BODY
                 r1.font.color.rgb = RGBColor(*DARK)
             if edu.get("institution"):
                 r2 = p.add_run(f"  —  {edu['institution']}")
@@ -4737,40 +4984,51 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 r3.italic = True
                 r3.font.size = Pt(BODY - 1)
                 r3.font.name = FONT_BODY
-                r3.font.color.rgb = RGBColor(128, 128, 128)
+                r3.font.color.rgb = RGBColor(110, 110, 110)
             p.paragraph_format.space_before = Pt(5)
             p.paragraph_format.space_after = Pt(1)
             for b in (edu.get("bullets") or []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT_BODY)
 
-    if data.get("certifications"):
-        valid_certs = [c for c in data["certifications"] if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
-        if valid_certs:
-            _heading("Certifications")
-            for cert in valid_certs:
-                parts = [cert["name"]]
-                if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
-                    parts.append(cert["issuer"])
-                if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
-                    parts.append(cert["duration"])
-                _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT_BODY)
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 6: CERTIFICATIONS
+    # ══════════════════════════════════════════════════════════════════════
+    valid_certs = [c for c in data.get("certifications", [])
+                   if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
+    if valid_certs:
+        _heading("Certifications")
+        for cert in valid_certs:
+            parts = [cert["name"]]
+            if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
+                parts.append(cert["issuer"])
+            if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
+                parts.append(cert["duration"])
+            _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT_BODY)
 
-    if data.get("languages"):
-        valid_lang = [l for l in data["languages"] if l and l != "[Not Provided]"]
-        if valid_lang:
-            _heading("Languages")
-            _para("  ◆  ".join(valid_lang))
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 7: LANGUAGES
+    # ══════════════════════════════════════════════════════════════════════
+    valid_lang = [l for l in data.get("languages", []) if l and l != "[Not Provided]"]
+    if valid_lang:
+        _heading("Languages")
+        _body_para("  |  ".join(valid_lang))
 
-    if data.get("interests"):
-        valid_int = [i for i in data["interests"] if i and i != "[Not Provided]"]
-        if valid_int:
-            _heading("Interests")
-            _para("  ◆  ".join(valid_int))
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 8: INTERESTS
+    # ══════════════════════════════════════════════════════════════════════
+    valid_int = [i for i in data.get("interests", []) if i and i != "[Not Provided]"]
+    if valid_int:
+        _heading("Interests")
+        _body_para("  |  ".join(valid_int))
 
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION 9: ADDITIONAL
+    # ══════════════════════════════════════════════════════════════════════
     _render_additional(doc, data, font_name=FONT_BODY, font_size=BODY,
-                       heading_fn=_heading, bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT_BODY),
-                       name_color_rgb=DARK, desc_color_rgb=(80,80,80))
+                       heading_fn=_heading,
+                       bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT_BODY),
+                       name_color_rgb=DARK, desc_color_rgb=(80, 80, 80))
 
     buf = BytesIO()
     doc.save(buf)
@@ -6659,13 +6917,13 @@ with tab1:
                         try:
                             modern_buf = generate_modern_docx(optimized_data)
                             st.download_button(
-                                label="⬇ Modern Resume",
+                                label="⬇ Modern (ATS)",
                                 data=modern_buf,
-                                file_name=f"{base_name}_modern.docx",
+                                file_name=f"{base_name}_modern_ats.docx",
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                 use_container_width=True,
                                 key=f"dl_modern_{resume['Resume Name']}",
-                                help="Clean navy blue headings, single-column, ATS-optimized"
+                                help="Navy headings · Calibri · Labeled Skills block · ATS section order · Workday/Greenhouse optimized"
                             )
                         except Exception as e:
                             st.error(f"Modern template error: {e}")
@@ -6674,13 +6932,13 @@ with tab1:
                         try:
                             minimal_buf = generate_minimal_docx(optimized_data)
                             st.download_button(
-                                label="⬇ Minimal Resume",
+                                label="⬇ Minimal (ATS)",
                                 data=minimal_buf,
-                                file_name=f"{base_name}_minimal.docx",
+                                file_name=f"{base_name}_minimal_ats.docx",
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                 use_container_width=True,
                                 key=f"dl_minimal_{resume['Resume Name']}",
-                                help="Pure black & white, ultra-clean, maximum ATS compatibility"
+                                help="Pure black/white Arial · Maximum parse accuracy · Taleo/iCIMS/SmartRecruiters compatible"
                             )
                         except Exception as e:
                             st.error(f"Minimal template error: {e}")
@@ -6689,16 +6947,16 @@ with tab1:
                         try:
                             creative_buf = generate_creative_docx(optimized_data)
                             st.download_button(
-                                label="⬇ Creative Resume",
+                                label="⬇ Executive (ATS)",
                                 data=creative_buf,
-                                file_name=f"{base_name}_creative.docx",
+                                file_name=f"{base_name}_executive_ats.docx",
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                 use_container_width=True,
                                 key=f"dl_creative_{resume['Resume Name']}",
-                                help="Teal/emerald accents, bold typography, visual hierarchy"
+                                help="Teal/navy accents · ATS-safe symbols · Consistent Calibri body · Standard section labels"
                             )
                         except Exception as e:
-                            st.error(f"Creative template error: {e}")
+                            st.error(f"Executive template error: {e}")
 
                     html_report = generate_resume_report_html(resume)
                     pdf_file = html_to_pdf_bytes(html_report)
