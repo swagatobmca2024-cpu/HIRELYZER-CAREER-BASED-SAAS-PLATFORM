@@ -3618,33 +3618,45 @@ def optimize_resume_to_json(raw_text: str) -> str:
     MUST NOT include suggestions, reasoning, or explanations.
     Used EXCLUSIVELY for DOCX generation.
     """
-    prompt = f"""You are a professional resume structuring engine.
+    prompt = f"""You are a professional resume structuring and rewriting engine.
 
-Your ONLY task is to parse and rebuild the following resume into a strict JSON object.
+Your task is to parse, REWRITE, and rebuild the following resume into a strict JSON object.
 
-RULES:
-- Return ONLY valid JSON. No preamble, no explanation, no markdown fences.
+CRITICAL RULES:
+- Return ONLY valid JSON. No preamble, no explanation, no markdown fences, no code blocks.
 - Do NOT include job title suggestions, reasoning, or commentary anywhere.
-- Rebuild structure intelligently from ANY resume format — messy, incomplete, or unstructured.
-- Fill sections from evidence in the text. Do NOT fabricate data.
-- If a field has no data, use an empty string "" or empty array [].
-- Skills must be a flat array of individual skill strings.
-- Certifications and additional must be flat arrays of strings.
-- Experience bullets must be strong ATS-optimized action-verb sentences.
-- Preserve all real dates, companies, institutions, and contact info exactly.
+- REWRITE every bullet point and summary using stronger ATS-optimized language — preserve all original facts, companies, dates, and technologies exactly, but improve phrasing.
+- If a section is missing but can be inferred from context, reconstruct it intelligently.
+- If a field truly has no data and cannot be inferred, use the placeholder string "[Not Provided]" for text fields, or [] for arrays.
+- For contact fields: extract email, phone, location, LinkedIn URL, GitHub URL, and portfolio URL separately.
+- "title" = the candidate's current job title or most relevant role label (e.g. "Python Developer", "Software Engineer").
+- "skills" = flat array of individual skill strings — include ALL technical skills, tools, languages, frameworks found anywhere in the resume.
+- "soft_skills" = flat array of soft skill strings extracted from resume.
+- "languages" = flat array of spoken language strings (e.g. "English (Professional)", "Bengali (Native)").
+- "interests" = flat array of interest/hobby strings.
+- "certifications" = flat array of certification strings with dates if available.
+- Experience bullets: rewrite with Action Verb + Task + Technology + Quantified Impact format.
+- Project "url" = GitHub or live link for that project if found in the resume.
+- Education "bullets" = array of notable coursework, achievements, or activities for that institution.
+- "additional" = any remaining sections not covered above (awards, publications, volunteering, etc.).
 
-Return ONLY this JSON structure:
+Return ONLY this exact JSON structure (no extra keys outside this schema):
 {{
   "contact": {{
     "name": "",
+    "title": "",
     "email": "",
     "phone": "",
     "location": "",
     "linkedin": "",
+    "github": "",
     "portfolio": ""
   }},
   "summary": "",
   "skills": [],
+  "soft_skills": [],
+  "languages": [],
+  "interests": [],
   "experience": [
     {{
       "role": "",
@@ -3656,6 +3668,8 @@ Return ONLY this JSON structure:
   "projects": [
     {{
       "name": "",
+      "tech_stack": "",
+      "url": "",
       "description": "",
       "bullets": []
     }}
@@ -3664,7 +3678,8 @@ Return ONLY this JSON structure:
     {{
       "degree": "",
       "institution": "",
-      "year": ""
+      "year": "",
+      "bullets": []
     }}
   ],
   "certifications": [],
@@ -3685,14 +3700,24 @@ def extract_resume_json(llm_response: str) -> dict:
     Returns a dict. Falls back to empty skeleton on any parse failure.
     """
     EMPTY = {
-        "contact": {"name": "", "email": "", "phone": "", "location": "", "linkedin": "", "portfolio": ""},
+        "contact": {
+            "name": "", "title": "", "email": "", "phone": "",
+            "location": "", "linkedin": "", "github": "", "portfolio": ""
+        },
         "summary": "",
         "skills": [],
+        "soft_skills": [],
+        "languages": [],
+        "interests": [],
         "experience": [],
         "projects": [],
         "education": [],
         "certifications": [],
         "additional": [],
+    }
+    CONTACT_DEFAULTS = {
+        "name": "", "title": "", "email": "", "phone": "",
+        "location": "", "linkedin": "", "github": "", "portfolio": ""
     }
     if not llm_response:
         return EMPTY
@@ -3714,10 +3739,24 @@ def extract_resume_json(llm_response: str) -> dict:
             if key not in data:
                 data[key] = EMPTY[key]
         if not isinstance(data.get("contact"), dict):
-            data["contact"] = EMPTY["contact"]
-        for field in EMPTY["contact"]:
+            data["contact"] = CONTACT_DEFAULTS.copy()
+        for field, default in CONTACT_DEFAULTS.items():
             if field not in data["contact"]:
-                data["contact"][field] = ""
+                data["contact"][field] = default
+        # Backfill missing project fields
+        for proj in data.get("projects", []):
+            if "tech_stack" not in proj:
+                proj["tech_stack"] = ""
+            if "url" not in proj:
+                proj["url"] = ""
+            if "bullets" not in proj:
+                proj["bullets"] = []
+            if "description" not in proj:
+                proj["description"] = ""
+        # Backfill missing education fields
+        for edu in data.get("education", []):
+            if "bullets" not in edu:
+                edu["bullets"] = []
         return data
     except (json.JSONDecodeError, ValueError):
         return EMPTY
@@ -3727,37 +3766,134 @@ def extract_resume_json(llm_response: str) -> dict:
 # 📄 DOCX TEMPLATE GENERATORS — Three professional styles
 # ============================================================
 
-def _add_section_heading(doc, text: str, color_hex: str = "2E4057"):
-    """Helper: Add a styled section heading with a bottom border."""
+def _build_contact_header(doc, data: dict, name_size: int, name_color_rgb: tuple,
+                           name_font: str, contact_font: str, contact_color_hex: str,
+                           contact_size: int = 9, title_font: str = None,
+                           title_size: int = 11, title_color_rgb: tuple = None,
+                           separator: str = "  |  "):
+    """
+    Builds the header block matching the sample template:
+      Line 1 (centered, large bold): Full Name
+      Line 2 (centered, smaller, title/headline): Job Title
+      Line 3 (centered): email | phone | location | linkedin
+      Line 4 (centered, if github/portfolio exist): github | portfolio
+    """
+    contact = data.get("contact", {})
+    name = contact.get("name", "") or "[Your Name]"
+    title = contact.get("title", "")
+
+    # --- Name ---
+    p_name = doc.add_paragraph()
+    p_name.clear()
+    run = p_name.add_run(name)
+    run.bold = True
+    run.font.size = Pt(name_size)
+    run.font.name = name_font
+    run.font.color.rgb = RGBColor(*name_color_rgb)
+    p_name.alignment = 1  # CENTER
+    p_name.paragraph_format.space_before = Pt(0)
+    p_name.paragraph_format.space_after = Pt(2)
+
+    # --- Title / Headline ---
+    if title and title != "[Not Provided]":
+        p_title = doc.add_paragraph()
+        p_title.clear()
+        r_title = p_title.add_run(title.upper())
+        r_title.font.size = Pt(title_size)
+        r_title.font.name = title_font or name_font
+        r_title.bold = False
+        r_title.font.letter_spacing = Pt(1)
+        if title_color_rgb:
+            r_title.font.color.rgb = RGBColor(*title_color_rgb)
+        p_title.alignment = 1
+        p_title.paragraph_format.space_after = Pt(4)
+
+    # --- Contact line 1: email | phone | location | linkedin ---
+    cc = RGBColor(
+        int(contact_color_hex[0:2], 16),
+        int(contact_color_hex[2:4], 16),
+        int(contact_color_hex[4:6], 16),
+    )
+    line1_parts = []
+    if contact.get("email") and contact["email"] != "[Not Provided]":
+        line1_parts.append(contact["email"])
+    if contact.get("phone") and contact["phone"] != "[Not Provided]":
+        line1_parts.append(contact["phone"])
+    if contact.get("location") and contact["location"] != "[Not Provided]":
+        line1_parts.append(contact["location"])
+    if contact.get("linkedin") and contact["linkedin"] != "[Not Provided]":
+        line1_parts.append(contact["linkedin"])
+
+    if line1_parts:
+        p1 = doc.add_paragraph()
+        p1.clear()
+        r1 = p1.add_run(separator.join(line1_parts))
+        r1.font.size = Pt(contact_size)
+        r1.font.name = contact_font
+        r1.font.color.rgb = cc
+        p1.alignment = 1
+        p1.paragraph_format.space_after = Pt(1)
+
+    # --- Contact line 2: github | portfolio (separate line like sample) ---
+    line2_parts = []
+    if contact.get("github") and contact["github"] != "[Not Provided]":
+        line2_parts.append(contact["github"])
+    if contact.get("portfolio") and contact["portfolio"] != "[Not Provided]":
+        line2_parts.append(contact["portfolio"])
+
+    if line2_parts:
+        p2 = doc.add_paragraph()
+        p2.clear()
+        r2 = p2.add_run(separator.join(line2_parts))
+        r2.font.size = Pt(contact_size)
+        r2.font.name = contact_font
+        r2.font.color.rgb = cc
+        p2.alignment = 1
+        p2.paragraph_format.space_after = Pt(6)
+    elif line1_parts:
+        # Add trailing space after contact block
+        doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
+
+
+def _section_heading_bordered(doc, text: str, font_name: str,
+                               font_size: int, bold: bool,
+                               color_hex: str, border_color: str,
+                               border_sz: str = "6",
+                               space_before: float = 10, space_after: float = 4,
+                               prefix: str = ""):
+    """Universal bordered section heading."""
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
     p = doc.add_paragraph()
     p.clear()
-    run = p.add_run(text.upper())
-    run.bold = True
-    run.font.size = Pt(10)
+    label = f"{prefix}{text.upper()}" if prefix else text.upper()
+    run = p.add_run(label)
+    run.bold = bold
+    run.font.size = Pt(font_size)
+    run.font.name = font_name
     run.font.color.rgb = RGBColor(
         int(color_hex[0:2], 16),
         int(color_hex[2:4], 16),
         int(color_hex[4:6], 16),
     )
-    run.font.name = "Arial"
     pPr = p._p.get_or_add_pPr()
     pBdr = OxmlElement('w:pBdr')
     bottom = OxmlElement('w:bottom')
     bottom.set(qn('w:val'), 'single')
-    bottom.set(qn('w:sz'), '6')
+    bottom.set(qn('w:sz'), border_sz)
     bottom.set(qn('w:space'), '1')
-    bottom.set(qn('w:color'), color_hex)
+    bottom.set(qn('w:color'), border_color)
     pBdr.append(bottom)
     pPr.append(pBdr)
-    p.paragraph_format.space_before = Pt(10)
-    p.paragraph_format.space_after = Pt(4)
+    p.paragraph_format.space_before = Pt(space_before)
+    p.paragraph_format.space_after = Pt(space_after)
     return p
 
 
-def _add_bullet(doc, text: str, font_size: int = 10, font_name: str = "Arial", indent_left: int = 360, indent_hanging: int = 180):
-    """Helper: Add a properly formatted bullet point paragraph."""
+def _add_bullet(doc, text: str, font_size: int = 10, font_name: str = "Arial",
+                indent_left: int = 360, indent_hanging: int = 180,
+                color_rgb: tuple = None):
+    """Add a properly formatted bullet point paragraph."""
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
     p = doc.add_paragraph(style="Normal")
@@ -3765,6 +3901,8 @@ def _add_bullet(doc, text: str, font_size: int = 10, font_name: str = "Arial", i
     run = p.add_run(f"\u2022  {text}")
     run.font.size = Pt(font_size)
     run.font.name = font_name
+    if color_rgb:
+        run.font.color.rgb = RGBColor(*color_rgb)
     pPr = p._p.get_or_add_pPr()
     ind = OxmlElement('w:ind')
     ind.set(qn('w:left'), str(indent_left))
@@ -3775,176 +3913,231 @@ def _add_bullet(doc, text: str, font_size: int = 10, font_name: str = "Arial", i
     return p
 
 
-def _add_contact_line(doc, data: dict, font_name: str = "Arial", color_hex: str = "000000"):
-    """Helper: Add a formatted contact info line."""
-    contact = data.get("contact", {})
-    parts = []
-    if contact.get("email"):
-        parts.append(contact["email"])
-    if contact.get("phone"):
-        parts.append(contact["phone"])
-    if contact.get("location"):
-        parts.append(contact["location"])
-    if contact.get("linkedin"):
-        parts.append(contact["linkedin"])
-    if contact.get("portfolio"):
-        parts.append(contact["portfolio"])
-    if parts:
-        p = doc.add_paragraph()
-        p.clear()
-        run = p.add_run("  |  ".join(parts))
-        run.font.size = Pt(9)
-        run.font.name = font_name
-        run.font.color.rgb = RGBColor(
-            int(color_hex[0:2], 16),
-            int(color_hex[2:4], 16),
-            int(color_hex[4:6], 16),
-        )
-        p.alignment = 1  # CENTER
-        p.paragraph_format.space_after = Pt(6)
+def _add_role_line(doc, role: str, company: str, duration: str,
+                   font_name: str, role_size: int = 11, meta_size: int = 9,
+                   role_color: tuple = (0, 0, 0), company_color: tuple = (74, 74, 74),
+                   duration_color: tuple = (128, 128, 128), separator: str = "  —  "):
+    """Add role | company | duration header row for experience."""
+    p = doc.add_paragraph()
+    p.clear()
+    if role:
+        r1 = p.add_run(role)
+        r1.bold = True
+        r1.font.size = Pt(role_size)
+        r1.font.name = font_name
+        r1.font.color.rgb = RGBColor(*role_color)
+    if company:
+        r2 = p.add_run(f"{separator}{company}")
+        r2.font.size = Pt(role_size - 1)
+        r2.font.name = font_name
+        r2.font.color.rgb = RGBColor(*company_color)
+    if duration:
+        r3 = p.add_run(f"   [{duration}]")
+        r3.italic = True
+        r3.font.size = Pt(meta_size)
+        r3.font.name = font_name
+        r3.font.color.rgb = RGBColor(*duration_color)
+    p.paragraph_format.space_before = Pt(6)
+    p.paragraph_format.space_after = Pt(2)
+    return p
 
 
+def _add_project_header(doc, name: str, tech_stack: str, url: str,
+                         font_name: str, name_size: int = 11,
+                         name_color: tuple = (0, 0, 0),
+                         tech_color: tuple = (74, 74, 74),
+                         url_color: tuple = (30, 58, 95)):
+    """Add project name + tech stack + URL header."""
+    p = doc.add_paragraph()
+    p.clear()
+    if name:
+        r1 = p.add_run(name)
+        r1.bold = True
+        r1.font.size = Pt(name_size)
+        r1.font.name = font_name
+        r1.font.color.rgb = RGBColor(*name_color)
+    if tech_stack and tech_stack != "[Not Provided]":
+        r2 = p.add_run(f"  |  Tech: {tech_stack}")
+        r2.font.size = Pt(name_size - 2)
+        r2.font.name = font_name
+        r2.font.color.rgb = RGBColor(*tech_color)
+    if url and url != "[Not Provided]":
+        r3 = p.add_run(f"  |  {url}")
+        r3.font.size = Pt(name_size - 2)
+        r3.font.name = font_name
+        r3.font.color.rgb = RGBColor(*url_color)
+        r3.underline = True
+    p.paragraph_format.space_before = Pt(6)
+    p.paragraph_format.space_after = Pt(2)
+    return p
+
+
+def _add_education_row(doc, degree: str, institution: str, year: str,
+                        edu_bullets: list, font_name: str,
+                        degree_size: int = 10, meta_size: int = 9,
+                        degree_color: tuple = (0, 0, 0),
+                        inst_color: tuple = (74, 74, 74),
+                        year_color: tuple = (128, 128, 128)):
+    """Add degree | institution | year + optional bullets."""
+    p = doc.add_paragraph()
+    p.clear()
+    if degree:
+        r1 = p.add_run(degree)
+        r1.bold = True
+        r1.font.size = Pt(degree_size)
+        r1.font.name = font_name
+        r1.font.color.rgb = RGBColor(*degree_color)
+    if institution:
+        r2 = p.add_run(f"  —  {institution}")
+        r2.font.size = Pt(degree_size)
+        r2.font.name = font_name
+        r2.font.color.rgb = RGBColor(*inst_color)
+    if year:
+        r3 = p.add_run(f"  ({year})")
+        r3.italic = True
+        r3.font.size = Pt(meta_size)
+        r3.font.name = font_name
+        r3.font.color.rgb = RGBColor(*year_color)
+    p.paragraph_format.space_before = Pt(5)
+    p.paragraph_format.space_after = Pt(1)
+    for b in (edu_bullets or []):
+        if b and b != "[Not Provided]":
+            _add_bullet(doc, b, font_size=degree_size - 1, font_name=font_name)
+
+
+# ─── MODERN TEMPLATE ──────────────────────────────────────────────────────────
 def generate_modern_docx(data: dict) -> BytesIO:
     """
-    Modern template: clean navy blue headings, single-column, ATS-optimized.
-    Uses structured JSON data only — no plain text, no suggestions.
+    Modern template — mirrors sample template layout:
+    Centered name (navy bold) → job title → two-row contact block
+    (email | phone | location | linkedin on line 1; github | portfolio on line 2)
+    → navy bordered section headings → clean single-column body.
     """
     doc = Document()
-    # Page margins
-    for section in doc.sections:
-        section.top_margin = Inches(0.75)
-        section.bottom_margin = Inches(0.75)
-        section.left_margin = Inches(1.0)
-        section.right_margin = Inches(1.0)
+    for sec in doc.sections:
+        sec.top_margin = Inches(0.75)
+        sec.bottom_margin = Inches(0.75)
+        sec.left_margin = Inches(1.0)
+        sec.right_margin = Inches(1.0)
 
-    ACCENT = "1E3A5F"
+    NAVY = (0x1E, 0x3A, 0x5F)
+    NAVY_HEX = "1E3A5F"
     FONT = "Calibri"
+    BODY = 10
 
-    # Name
-    contact = data.get("contact", {})
-    name = contact.get("name", "Resume")
-    p_name = doc.add_paragraph()
-    p_name.clear()
-    run = p_name.add_run(name)
-    run.bold = True
-    run.font.size = Pt(22)
-    run.font.name = FONT
-    run.font.color.rgb = RGBColor(0x1E, 0x3A, 0x5F)
-    p_name.alignment = 1
-    p_name.paragraph_format.space_after = Pt(2)
+    # ── Header ──
+    _build_contact_header(
+        doc, data,
+        name_size=22, name_color_rgb=NAVY, name_font=FONT,
+        contact_font=FONT, contact_color_hex="4A4A4A", contact_size=9,
+        title_font=FONT, title_size=11, title_color_rgb=(100, 100, 100),
+        separator="  |  "
+    )
 
-    _add_contact_line(doc, data, font_name=FONT, color_hex="4A4A4A")
+    def _heading(text):
+        _section_heading_bordered(doc, text, font_name=FONT, font_size=BODY,
+                                   bold=True, color_hex=NAVY_HEX,
+                                   border_color=NAVY_HEX, border_sz="6",
+                                   space_before=10, space_after=4)
 
-    # Summary
-    if data.get("summary"):
-        _add_section_heading(doc, "Professional Summary", ACCENT)
+    def _para(text, italic=False, color_rgb=None):
         p = doc.add_paragraph()
         p.clear()
-        run = p.add_run(data["summary"])
-        run.font.size = Pt(10)
+        run = p.add_run(text)
+        run.font.size = Pt(BODY)
         run.font.name = FONT
-        p.paragraph_format.space_after = Pt(4)
+        run.italic = italic
+        if color_rgb:
+            run.font.color.rgb = RGBColor(*color_rgb)
+        p.paragraph_format.space_after = Pt(3)
+        return p
 
-    # Skills
+    # ── Professional Summary ──
+    if data.get("summary") and data["summary"] != "[Not Provided]":
+        _heading("Professional Summary")
+        _para(data["summary"])
+
+    # ── Technical Skills ──
     if data.get("skills"):
-        _add_section_heading(doc, "Technical Skills", ACCENT)
-        skills_line = "  •  ".join([s for s in data["skills"] if s])
-        p = doc.add_paragraph()
-        p.clear()
-        run = p.add_run(skills_line)
-        run.font.size = Pt(10)
-        run.font.name = FONT
-        p.paragraph_format.space_after = Pt(4)
+        valid_skills = [s for s in data["skills"] if s and s != "[Not Provided]"]
+        if valid_skills:
+            _heading("Technical Skills")
+            _para("  •  ".join(valid_skills))
 
-    # Experience
+    # ── Soft Skills ──
+    if data.get("soft_skills"):
+        valid_ss = [s for s in data["soft_skills"] if s and s != "[Not Provided]"]
+        if valid_ss:
+            _heading("Soft Skills")
+            _para("  •  ".join(valid_ss))
+
+    # ── Work Experience ──
     if data.get("experience"):
-        _add_section_heading(doc, "Work Experience", ACCENT)
+        _heading("Work Experience")
         for exp in data["experience"]:
             if not exp.get("role") and not exp.get("company"):
                 continue
-            p = doc.add_paragraph()
-            p.clear()
-            r1 = p.add_run(exp.get("role", ""))
-            r1.bold = True
-            r1.font.size = Pt(11)
-            r1.font.name = FONT
-            if exp.get("company"):
-                r2 = p.add_run(f"  —  {exp['company']}")
-                r2.font.size = Pt(10)
-                r2.font.name = FONT
-                r2.font.color.rgb = RGBColor(0x4A, 0x4A, 0x4A)
-            if exp.get("duration"):
-                r3 = p.add_run(f"   [{exp['duration']}]")
-                r3.italic = True
-                r3.font.size = Pt(9)
-                r3.font.name = FONT
-                r3.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
-            p.paragraph_format.space_before = Pt(6)
-            p.paragraph_format.space_after = Pt(2)
-            for bullet in exp.get("bullets", []):
-                if bullet:
-                    _add_bullet(doc, bullet, font_size=10, font_name=FONT)
+            _add_role_line(doc, exp.get("role", ""), exp.get("company", ""),
+                           exp.get("duration", ""), FONT,
+                           role_color=NAVY, company_color=(74, 74, 74))
+            for b in exp.get("bullets", []):
+                if b and b != "[Not Provided]":
+                    _add_bullet(doc, b, font_size=BODY, font_name=FONT)
 
-    # Projects
+    # ── Projects ──
     if data.get("projects"):
-        _add_section_heading(doc, "Projects", ACCENT)
-        for proj in data["projects"]:
-            if not proj.get("name"):
-                continue
-            p = doc.add_paragraph()
-            p.clear()
-            r1 = p.add_run(proj.get("name", ""))
-            r1.bold = True
-            r1.font.size = Pt(11)
-            r1.font.name = FONT
-            if proj.get("description"):
-                r2 = p.add_run(f"  —  {proj['description']}")
-                r2.font.size = Pt(10)
-                r2.font.name = FONT
-            p.paragraph_format.space_before = Pt(6)
-            p.paragraph_format.space_after = Pt(2)
-            for bullet in proj.get("bullets", []):
-                if bullet:
-                    _add_bullet(doc, bullet, font_size=10, font_name=FONT)
+        valid_proj = [p for p in data["projects"] if p.get("name") and p["name"] != "[Not Provided]"]
+        if valid_proj:
+            _heading("Projects")
+            for proj in valid_proj:
+                _add_project_header(doc, proj.get("name", ""), proj.get("tech_stack", ""),
+                                    proj.get("url", ""), FONT,
+                                    name_color=NAVY, url_color=NAVY)
+                if proj.get("description") and proj["description"] != "[Not Provided]":
+                    _para(proj["description"], italic=True, color_rgb=(80, 80, 80))
+                for b in proj.get("bullets", []):
+                    if b and b != "[Not Provided]":
+                        _add_bullet(doc, b, font_size=BODY, font_name=FONT)
 
-    # Education
+    # ── Education ──
     if data.get("education"):
-        _add_section_heading(doc, "Education", ACCENT)
+        _heading("Education")
         for edu in data["education"]:
             if not edu.get("degree") and not edu.get("institution"):
                 continue
-            p = doc.add_paragraph()
-            p.clear()
-            r1 = p.add_run(edu.get("degree", ""))
-            r1.bold = True
-            r1.font.size = Pt(10)
-            r1.font.name = FONT
-            if edu.get("institution"):
-                r2 = p.add_run(f"  —  {edu['institution']}")
-                r2.font.size = Pt(10)
-                r2.font.name = FONT
-            if edu.get("year"):
-                r3 = p.add_run(f"  ({edu['year']})")
-                r3.italic = True
-                r3.font.size = Pt(9)
-                r3.font.name = FONT
-                r3.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
-            p.paragraph_format.space_before = Pt(4)
-            p.paragraph_format.space_after = Pt(2)
+            _add_education_row(doc, edu.get("degree", ""), edu.get("institution", ""),
+                               edu.get("year", ""), edu.get("bullets", []),
+                               FONT, degree_color=NAVY)
 
-    # Certifications
+    # ── Certifications ──
     if data.get("certifications"):
-        _add_section_heading(doc, "Certifications", ACCENT)
-        for cert in data["certifications"]:
-            if cert:
-                _add_bullet(doc, cert, font_size=10, font_name=FONT)
+        valid_certs = [c for c in data["certifications"] if c and c != "[Not Provided]"]
+        if valid_certs:
+            _heading("Certifications")
+            for cert in valid_certs:
+                _add_bullet(doc, cert, font_size=BODY, font_name=FONT)
 
-    # Additional
+    # ── Languages ──
+    if data.get("languages"):
+        valid_lang = [l for l in data["languages"] if l and l != "[Not Provided]"]
+        if valid_lang:
+            _heading("Languages")
+            _para("  •  ".join(valid_lang))
+
+    # ── Interests ──
+    if data.get("interests"):
+        valid_int = [i for i in data["interests"] if i and i != "[Not Provided]"]
+        if valid_int:
+            _heading("Interests")
+            _para("  •  ".join(valid_int))
+
+    # ── Additional ──
     if data.get("additional"):
-        _add_section_heading(doc, "Additional", ACCENT)
-        for item in data["additional"]:
-            if item:
-                _add_bullet(doc, item, font_size=10, font_name=FONT)
+        valid_add = [a for a in data["additional"] if a and a != "[Not Provided]"]
+        if valid_add:
+            _heading("Additional")
+            for item in valid_add:
+                _add_bullet(doc, item, font_size=BODY, font_name=FONT)
 
     buf = BytesIO()
     doc.save(buf)
@@ -3952,154 +4145,155 @@ def generate_modern_docx(data: dict) -> BytesIO:
     return buf
 
 
+# ─── MINIMAL TEMPLATE ─────────────────────────────────────────────────────────
 def generate_minimal_docx(data: dict) -> BytesIO:
     """
-    Minimal template: pure black & white, ultra-clean, maximum ATS compatibility.
-    Uses structured JSON data only.
+    Minimal template — pure black/white Arial, ultra-clean, max ATS compatibility.
+    Same two-row contact structure as sample template.
     """
     doc = Document()
-    for section in doc.sections:
-        section.top_margin = Inches(0.8)
-        section.bottom_margin = Inches(0.8)
-        section.left_margin = Inches(1.1)
-        section.right_margin = Inches(1.1)
+    for sec in doc.sections:
+        sec.top_margin = Inches(0.8)
+        sec.bottom_margin = Inches(0.8)
+        sec.left_margin = Inches(1.1)
+        sec.right_margin = Inches(1.1)
 
     FONT = "Arial"
+    BODY = 10
+    BLACK_HEX = "000000"
+    GRAY = (100, 100, 100)
 
-    contact = data.get("contact", {})
-    name = contact.get("name", "Resume")
-    p_name = doc.add_paragraph()
-    p_name.clear()
-    run = p_name.add_run(name)
-    run.bold = True
-    run.font.size = Pt(18)
-    run.font.name = FONT
-    p_name.alignment = 1
-    p_name.paragraph_format.space_after = Pt(2)
+    # ── Header ──
+    _build_contact_header(
+        doc, data,
+        name_size=18, name_color_rgb=(0, 0, 0), name_font=FONT,
+        contact_font=FONT, contact_color_hex="333333", contact_size=9,
+        title_font=FONT, title_size=10, title_color_rgb=GRAY,
+        separator="  |  "
+    )
 
-    _add_contact_line(doc, data, font_name=FONT, color_hex="333333")
+    def _heading(text):
+        _section_heading_bordered(doc, text, font_name=FONT, font_size=BODY,
+                                   bold=True, color_hex=BLACK_HEX,
+                                   border_color=BLACK_HEX, border_sz="4",
+                                   space_before=10, space_after=3)
 
-    def _minimal_heading(doc, text):
+    def _para(text, italic=False):
         p = doc.add_paragraph()
         p.clear()
-        run = p.add_run(text.upper())
-        run.bold = True
-        run.font.size = Pt(10)
+        run = p.add_run(text)
+        run.font.size = Pt(BODY)
         run.font.name = FONT
-        p.paragraph_format.space_before = Pt(10)
-        p.paragraph_format.space_after = Pt(2)
-        from docx.oxml import OxmlElement
-        from docx.oxml.ns import qn
-        pPr = p._p.get_or_add_pPr()
-        pBdr = OxmlElement('w:pBdr')
-        bottom = OxmlElement('w:bottom')
-        bottom.set(qn('w:val'), 'single')
-        bottom.set(qn('w:sz'), '4')
-        bottom.set(qn('w:space'), '1')
-        bottom.set(qn('w:color'), '000000')
-        pBdr.append(bottom)
-        pPr.append(pBdr)
-
-    if data.get("summary"):
-        _minimal_heading(doc, "Summary")
-        p = doc.add_paragraph()
-        p.clear()
-        run = p.add_run(data["summary"])
-        run.font.size = Pt(10)
-        run.font.name = FONT
+        run.italic = italic
         p.paragraph_format.space_after = Pt(3)
+        return p
+
+    if data.get("summary") and data["summary"] != "[Not Provided]":
+        _heading("Summary")
+        _para(data["summary"])
 
     if data.get("skills"):
-        _minimal_heading(doc, "Skills")
-        p = doc.add_paragraph()
-        p.clear()
-        run = p.add_run(", ".join([s for s in data["skills"] if s]))
-        run.font.size = Pt(10)
-        run.font.name = FONT
-        p.paragraph_format.space_after = Pt(3)
+        valid_skills = [s for s in data["skills"] if s and s != "[Not Provided]"]
+        if valid_skills:
+            _heading("Technical Skills")
+            _para(", ".join(valid_skills))
+
+    if data.get("soft_skills"):
+        valid_ss = [s for s in data["soft_skills"] if s and s != "[Not Provided]"]
+        if valid_ss:
+            _heading("Soft Skills")
+            _para(", ".join(valid_ss))
 
     if data.get("experience"):
-        _minimal_heading(doc, "Experience")
+        _heading("Work Experience")
         for exp in data["experience"]:
             if not exp.get("role") and not exp.get("company"):
-                continue
-            p = doc.add_paragraph()
-            p.clear()
-            role_str = exp.get("role", "")
-            company_str = exp.get("company", "")
-            duration_str = exp.get("duration", "")
-            header_parts = []
-            if role_str:
-                header_parts.append(role_str)
-            if company_str:
-                header_parts.append(company_str)
-            r1 = p.add_run(" | ".join(header_parts))
-            r1.bold = True
-            r1.font.size = Pt(10)
-            r1.font.name = FONT
-            if duration_str:
-                r2 = p.add_run(f"  {duration_str}")
-                r2.font.size = Pt(9)
-                r2.font.name = FONT
-                r2.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
-            p.paragraph_format.space_before = Pt(5)
-            p.paragraph_format.space_after = Pt(1)
-            for bullet in exp.get("bullets", []):
-                if bullet:
-                    _add_bullet(doc, bullet, font_size=10, font_name=FONT)
-
-    if data.get("projects"):
-        _minimal_heading(doc, "Projects")
-        for proj in data["projects"]:
-            if not proj.get("name"):
-                continue
-            p = doc.add_paragraph()
-            p.clear()
-            r1 = p.add_run(proj.get("name", ""))
-            r1.bold = True
-            r1.font.size = Pt(10)
-            r1.font.name = FONT
-            if proj.get("description"):
-                r2 = p.add_run(f": {proj['description']}")
-                r2.font.size = Pt(10)
-                r2.font.name = FONT
-            p.paragraph_format.space_before = Pt(4)
-            p.paragraph_format.space_after = Pt(1)
-            for bullet in proj.get("bullets", []):
-                if bullet:
-                    _add_bullet(doc, bullet, font_size=10, font_name=FONT)
-
-    if data.get("education"):
-        _minimal_heading(doc, "Education")
-        for edu in data["education"]:
-            if not edu.get("degree") and not edu.get("institution"):
                 continue
             p = doc.add_paragraph()
             p.clear()
             parts = []
-            if edu.get("degree"):
-                parts.append(edu["degree"])
-            if edu.get("institution"):
-                parts.append(edu["institution"])
-            if edu.get("year"):
-                parts.append(edu["year"])
+            if exp.get("role"):
+                parts.append(exp["role"])
+            if exp.get("company"):
+                parts.append(exp["company"])
             r1 = p.add_run(" | ".join(parts))
-            r1.font.size = Pt(10)
+            r1.bold = True
+            r1.font.size = Pt(BODY)
             r1.font.name = FONT
-            p.paragraph_format.space_before = Pt(3)
+            if exp.get("duration"):
+                r2 = p.add_run(f"  {exp['duration']}")
+                r2.font.size = Pt(BODY - 1)
+                r2.font.name = FONT
+                r2.font.color.rgb = RGBColor(100, 100, 100)
+            p.paragraph_format.space_before = Pt(5)
             p.paragraph_format.space_after = Pt(1)
+            for b in exp.get("bullets", []):
+                if b and b != "[Not Provided]":
+                    _add_bullet(doc, b, font_size=BODY, font_name=FONT)
+
+    if data.get("projects"):
+        valid_proj = [p for p in data["projects"] if p.get("name") and p["name"] != "[Not Provided]"]
+        if valid_proj:
+            _heading("Projects")
+            for proj in valid_proj:
+                p = doc.add_paragraph()
+                p.clear()
+                r1 = p.add_run(proj.get("name", ""))
+                r1.bold = True
+                r1.font.size = Pt(BODY)
+                r1.font.name = FONT
+                if proj.get("tech_stack") and proj["tech_stack"] != "[Not Provided]":
+                    r2 = p.add_run(f"  |  {proj['tech_stack']}")
+                    r2.font.size = Pt(BODY - 1)
+                    r2.font.name = FONT
+                    r2.font.color.rgb = RGBColor(80, 80, 80)
+                if proj.get("url") and proj["url"] != "[Not Provided]":
+                    r3 = p.add_run(f"  |  {proj['url']}")
+                    r3.font.size = Pt(BODY - 1)
+                    r3.font.name = FONT
+                    r3.underline = True
+                p.paragraph_format.space_before = Pt(5)
+                p.paragraph_format.space_after = Pt(1)
+                if proj.get("description") and proj["description"] != "[Not Provided]":
+                    _para(proj["description"], italic=True)
+                for b in proj.get("bullets", []):
+                    if b and b != "[Not Provided]":
+                        _add_bullet(doc, b, font_size=BODY, font_name=FONT)
+
+    if data.get("education"):
+        _heading("Education")
+        for edu in data["education"]:
+            if not edu.get("degree") and not edu.get("institution"):
+                continue
+            _add_education_row(doc, edu.get("degree", ""), edu.get("institution", ""),
+                               edu.get("year", ""), edu.get("bullets", []),
+                               FONT, degree_size=BODY)
 
     if data.get("certifications"):
-        _minimal_heading(doc, "Certifications")
-        for cert in data["certifications"]:
-            if cert:
-                _add_bullet(doc, cert, font_size=10, font_name=FONT)
+        valid_certs = [c for c in data["certifications"] if c and c != "[Not Provided]"]
+        if valid_certs:
+            _heading("Certifications")
+            for cert in valid_certs:
+                _add_bullet(doc, cert, font_size=BODY, font_name=FONT)
+
+    if data.get("languages"):
+        valid_lang = [l for l in data["languages"] if l and l != "[Not Provided]"]
+        if valid_lang:
+            _heading("Languages")
+            _para(", ".join(valid_lang))
+
+    if data.get("interests"):
+        valid_int = [i for i in data["interests"] if i and i != "[Not Provided]"]
+        if valid_int:
+            _heading("Interests")
+            _para(", ".join(valid_int))
 
     if data.get("additional"):
-        _minimal_heading(doc, "Additional")
-        for item in data["additional"]:
-            if item:
-                _add_bullet(doc, item, font_size=10, font_name=FONT)
+        valid_add = [a for a in data["additional"] if a and a != "[Not Provided]"]
+        if valid_add:
+            _heading("Additional")
+            for item in valid_add:
+                _add_bullet(doc, item, font_size=BODY, font_name=FONT)
 
     buf = BytesIO()
     doc.save(buf)
@@ -4107,166 +4301,197 @@ def generate_minimal_docx(data: dict) -> BytesIO:
     return buf
 
 
+# ─── CREATIVE TEMPLATE ────────────────────────────────────────────────────────
 def generate_creative_docx(data: dict) -> BytesIO:
     """
-    Creative template: teal/emerald accents, bold name, slightly more visual hierarchy.
-    Uses structured JSON data only.
+    Creative template — teal/dark-navy accents, Georgia name, Calibri body.
+    Same two-row contact structure as sample template.
     """
     doc = Document()
-    for section in doc.sections:
-        section.top_margin = Inches(0.7)
-        section.bottom_margin = Inches(0.7)
-        section.left_margin = Inches(0.9)
-        section.right_margin = Inches(0.9)
+    for sec in doc.sections:
+        sec.top_margin = Inches(0.7)
+        sec.bottom_margin = Inches(0.7)
+        sec.left_margin = Inches(0.9)
+        sec.right_margin = Inches(0.9)
 
-    ACCENT = "0D7377"
-    DARK = "14213D"
-    FONT = "Georgia"
+    TEAL_HEX = "0D7377"
+    DARK_HEX = "14213D"
+    TEAL = (0x0D, 0x73, 0x77)
+    DARK = (0x14, 0x21, 0x3D)
+    FONT_HEAD = "Georgia"
     FONT_BODY = "Calibri"
+    BODY = 10
 
-    contact = data.get("contact", {})
-    name = contact.get("name", "Resume")
+    # ── Header ──
+    _build_contact_header(
+        doc, data,
+        name_size=24, name_color_rgb=DARK, name_font=FONT_HEAD,
+        contact_font=FONT_BODY, contact_color_hex=TEAL_HEX, contact_size=9,
+        title_font=FONT_HEAD, title_size=11, title_color_rgb=TEAL,
+        separator="  |  "
+    )
 
-    p_name = doc.add_paragraph()
-    p_name.clear()
-    run = p_name.add_run(name)
-    run.bold = True
-    run.font.size = Pt(24)
-    run.font.name = FONT
-    run.font.color.rgb = RGBColor(0x14, 0x21, 0x3D)
-    p_name.alignment = 1
-    p_name.paragraph_format.space_after = Pt(2)
-
-    _add_contact_line(doc, data, font_name=FONT_BODY, color_hex="0D7377")
-
-    # Accent divider
+    # Teal accent divider after header
     p_div = doc.add_paragraph()
     p_div.clear()
-    run_div = p_div.add_run("─" * 80)
-    run_div.font.size = Pt(8)
-    run_div.font.color.rgb = RGBColor(0x0D, 0x73, 0x77)
+    r_div = p_div.add_run("─" * 90)
+    r_div.font.size = Pt(7)
+    r_div.font.color.rgb = RGBColor(*TEAL)
     p_div.alignment = 1
-    p_div.paragraph_format.space_before = Pt(2)
+    p_div.paragraph_format.space_before = Pt(0)
     p_div.paragraph_format.space_after = Pt(6)
 
-    def _creative_heading(doc, text):
-        p = doc.add_paragraph()
-        p.clear()
-        run = p.add_run(f"▌ {text.upper()}")
-        run.bold = True
-        run.font.size = Pt(11)
-        run.font.name = FONT
-        run.font.color.rgb = RGBColor(0x0D, 0x73, 0x77)
-        p.paragraph_format.space_before = Pt(10)
-        p.paragraph_format.space_after = Pt(4)
+    def _heading(text):
+        _section_heading_bordered(doc, text, font_name=FONT_HEAD, font_size=BODY + 1,
+                                   bold=True, color_hex=TEAL_HEX,
+                                   border_color=TEAL_HEX, border_sz="6",
+                                   space_before=10, space_after=4,
+                                   prefix="\u258c ")
 
-    if data.get("summary"):
-        _creative_heading(doc, "Profile")
+    def _para(text, italic=False, color_rgb=None):
         p = doc.add_paragraph()
         p.clear()
-        run = p.add_run(data["summary"])
-        run.font.size = Pt(10)
+        run = p.add_run(text)
+        run.font.size = Pt(BODY)
         run.font.name = FONT_BODY
-        run.italic = True
-        p.paragraph_format.space_after = Pt(4)
+        run.italic = italic
+        if color_rgb:
+            run.font.color.rgb = RGBColor(*color_rgb)
+        p.paragraph_format.space_after = Pt(3)
+        return p
+
+    if data.get("summary") and data["summary"] != "[Not Provided]":
+        _heading("Profile")
+        _para(data["summary"], italic=True)
 
     if data.get("skills"):
-        _creative_heading(doc, "Core Skills")
-        skills_text = "  ◆  ".join([s for s in data["skills"] if s])
-        p = doc.add_paragraph()
-        p.clear()
-        run = p.add_run(skills_text)
-        run.font.size = Pt(10)
-        run.font.name = FONT_BODY
-        p.paragraph_format.space_after = Pt(4)
+        valid_skills = [s for s in data["skills"] if s and s != "[Not Provided]"]
+        if valid_skills:
+            _heading("Technical Skills")
+            _para("  ◆  ".join(valid_skills))
+
+    if data.get("soft_skills"):
+        valid_ss = [s for s in data["soft_skills"] if s and s != "[Not Provided]"]
+        if valid_ss:
+            _heading("Soft Skills")
+            _para("  ◆  ".join(valid_ss))
 
     if data.get("experience"):
-        _creative_heading(doc, "Experience")
+        _heading("Experience")
         for exp in data["experience"]:
             if not exp.get("role") and not exp.get("company"):
                 continue
             p = doc.add_paragraph()
             p.clear()
-            r1 = p.add_run(exp.get("role", ""))
-            r1.bold = True
-            r1.font.size = Pt(11)
-            r1.font.name = FONT
-            r1.font.color.rgb = RGBColor(0x14, 0x21, 0x3D)
+            if exp.get("role"):
+                r1 = p.add_run(exp["role"])
+                r1.bold = True
+                r1.font.size = Pt(BODY + 1)
+                r1.font.name = FONT_HEAD
+                r1.font.color.rgb = RGBColor(*DARK)
             if exp.get("company"):
                 r2 = p.add_run(f"  @  {exp['company']}")
-                r2.font.size = Pt(10)
+                r2.font.size = Pt(BODY)
                 r2.font.name = FONT_BODY
-                r2.font.color.rgb = RGBColor(0x0D, 0x73, 0x77)
+                r2.font.color.rgb = RGBColor(*TEAL)
             if exp.get("duration"):
                 r3 = p.add_run(f"   {exp['duration']}")
                 r3.italic = True
-                r3.font.size = Pt(9)
+                r3.font.size = Pt(BODY - 1)
                 r3.font.name = FONT_BODY
-                r3.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+                r3.font.color.rgb = RGBColor(128, 128, 128)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(2)
-            for bullet in exp.get("bullets", []):
-                if bullet:
-                    _add_bullet(doc, bullet, font_size=10, font_name=FONT_BODY)
+            for b in exp.get("bullets", []):
+                if b and b != "[Not Provided]":
+                    _add_bullet(doc, b, font_size=BODY, font_name=FONT_BODY)
 
     if data.get("projects"):
-        _creative_heading(doc, "Projects")
-        for proj in data["projects"]:
-            if not proj.get("name"):
-                continue
-            p = doc.add_paragraph()
-            p.clear()
-            r1 = p.add_run(proj.get("name", ""))
-            r1.bold = True
-            r1.font.size = Pt(11)
-            r1.font.name = FONT
-            r1.font.color.rgb = RGBColor(0x14, 0x21, 0x3D)
-            if proj.get("description"):
-                r2 = p.add_run(f"  —  {proj['description']}")
-                r2.font.size = Pt(10)
-                r2.font.name = FONT_BODY
-            p.paragraph_format.space_before = Pt(6)
-            p.paragraph_format.space_after = Pt(2)
-            for bullet in proj.get("bullets", []):
-                if bullet:
-                    _add_bullet(doc, bullet, font_size=10, font_name=FONT_BODY)
+        valid_proj = [pr for pr in data["projects"] if pr.get("name") and pr["name"] != "[Not Provided]"]
+        if valid_proj:
+            _heading("Projects")
+            for proj in valid_proj:
+                p = doc.add_paragraph()
+                p.clear()
+                r1 = p.add_run(proj.get("name", ""))
+                r1.bold = True
+                r1.font.size = Pt(BODY + 1)
+                r1.font.name = FONT_HEAD
+                r1.font.color.rgb = RGBColor(*DARK)
+                if proj.get("tech_stack") and proj["tech_stack"] != "[Not Provided]":
+                    r2 = p.add_run(f"  |  {proj['tech_stack']}")
+                    r2.font.size = Pt(BODY - 1)
+                    r2.font.name = FONT_BODY
+                    r2.font.color.rgb = RGBColor(*TEAL)
+                if proj.get("url") and proj["url"] != "[Not Provided]":
+                    r3 = p.add_run(f"  |  {proj['url']}")
+                    r3.font.size = Pt(BODY - 1)
+                    r3.font.name = FONT_BODY
+                    r3.font.color.rgb = RGBColor(*TEAL)
+                    r3.underline = True
+                p.paragraph_format.space_before = Pt(6)
+                p.paragraph_format.space_after = Pt(2)
+                if proj.get("description") and proj["description"] != "[Not Provided]":
+                    _para(proj["description"], italic=True, color_rgb=(80, 80, 80))
+                for b in proj.get("bullets", []):
+                    if b and b != "[Not Provided]":
+                        _add_bullet(doc, b, font_size=BODY, font_name=FONT_BODY)
 
     if data.get("education"):
-        _creative_heading(doc, "Education")
+        _heading("Education")
         for edu in data["education"]:
             if not edu.get("degree") and not edu.get("institution"):
                 continue
             p = doc.add_paragraph()
             p.clear()
-            r1 = p.add_run(edu.get("degree", ""))
-            r1.bold = True
-            r1.font.size = Pt(10)
-            r1.font.name = FONT
-            r1.font.color.rgb = RGBColor(0x14, 0x21, 0x3D)
+            if edu.get("degree"):
+                r1 = p.add_run(edu["degree"])
+                r1.bold = True
+                r1.font.size = Pt(BODY)
+                r1.font.name = FONT_HEAD
+                r1.font.color.rgb = RGBColor(*DARK)
             if edu.get("institution"):
                 r2 = p.add_run(f"  —  {edu['institution']}")
-                r2.font.size = Pt(10)
+                r2.font.size = Pt(BODY)
                 r2.font.name = FONT_BODY
+                r2.font.color.rgb = RGBColor(*TEAL)
             if edu.get("year"):
                 r3 = p.add_run(f"  ({edu['year']})")
                 r3.italic = True
-                r3.font.size = Pt(9)
+                r3.font.size = Pt(BODY - 1)
                 r3.font.name = FONT_BODY
-                r3.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
-            p.paragraph_format.space_before = Pt(4)
-            p.paragraph_format.space_after = Pt(2)
+                r3.font.color.rgb = RGBColor(128, 128, 128)
+            p.paragraph_format.space_before = Pt(5)
+            p.paragraph_format.space_after = Pt(1)
+            for b in (edu.get("bullets") or []):
+                if b and b != "[Not Provided]":
+                    _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT_BODY)
 
     if data.get("certifications"):
-        _creative_heading(doc, "Certifications")
-        for cert in data["certifications"]:
-            if cert:
-                _add_bullet(doc, cert, font_size=10, font_name=FONT_BODY)
+        valid_certs = [c for c in data["certifications"] if c and c != "[Not Provided]"]
+        if valid_certs:
+            _heading("Certifications")
+            for cert in valid_certs:
+                _add_bullet(doc, cert, font_size=BODY, font_name=FONT_BODY)
+
+    if data.get("languages"):
+        valid_lang = [l for l in data["languages"] if l and l != "[Not Provided]"]
+        if valid_lang:
+            _heading("Languages")
+            _para("  ◆  ".join(valid_lang))
+
+    if data.get("interests"):
+        valid_int = [i for i in data["interests"] if i and i != "[Not Provided]"]
+        if valid_int:
+            _heading("Interests")
+            _para("  ◆  ".join(valid_int))
 
     if data.get("additional"):
-        _creative_heading(doc, "Additional")
-        for item in data["additional"]:
-            if item:
-                _add_bullet(doc, item, font_size=10, font_name=FONT_BODY)
+        valid_add = [a for a in data["additional"] if a and a != "[Not Provided]"]
+        if valid_add:
+            _heading("Additional")
+            for item in valid_add:
+                _add_bullet(doc, item, font_size=BODY, font_name=FONT_BODY)
 
     buf = BytesIO()
     doc.save(buf)
