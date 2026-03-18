@@ -3625,37 +3625,7 @@ def optimize_resume_to_json(raw_text: str) -> str:
     prompt = f"""You are an enterprise-grade ATS resume optimization engine trained on hiring pipeline
 standards used by Workday, Greenhouse, Lever, iCIMS, Taleo, and SmartRecruiters.
 
-Your task is to parse, REWRITE, and CONDENSE the following resume into a strict ATS-compliant JSON object
-that will fit within a MAXIMUM 2-PAGE resume when rendered in a standard DOCX template (10pt Calibri, 1" margins).
-
-═══════════════════════════════════════════════════════
-CRITICAL: 2-PAGE CONTENT BUDGET — STRICTLY ENFORCED
-═══════════════════════════════════════════════════════
-A standard 2-page resume at 10pt Calibri with 1" margins fits approximately 900–1000 words of body content.
-You MUST trim and condense content to stay within this budget. Violating this is the #1 failure mode.
-
-STRICT CONTENT LIMITS PER SECTION:
-- summary: MAX 3 sentences, MAX 60 words. No pronouns. Cut ruthlessly.
-- experience[].bullets: MAX 3 bullets per role (4 ONLY for the most recent/relevant role).
-  Each bullet: MAX 20 words. Tight, impactful, no filler phrases.
-- experience[].description: MAX 12 words. One-line scope only.
-- projects: Include MAX 3 projects total. Drop least relevant ones if more exist.
-  Each project: MAX 3 bullets, MAX 18 words per bullet.
-- education[].bullets: MAX 2 items per institution (GPA if ≥3.5, one achievement only).
-- skills: MAX 18 skills total across the skills array. Keep only the most relevant/modern ones.
-  Drop redundant or obsolete tools. No duplicates. Individual strings, not grouped.
-- soft_skills: MAX 5 items.
-- certifications: MAX 5. Keep most recent and most relevant. Drop expired or irrelevant ones.
-- additional: MAX 3 items. Only awards, publications, or notable achievements. Skip generic entries.
-- languages: Include all (usually short, no trimming needed).
-- interests: MAX 4 items, or omit entirely if space is tight.
-
-PRIORITIZATION RULES (when trimming):
-1. Most recent 2–3 roles get more bullets than older roles.
-2. Roles older than 7 years: keep only role title, company, dates — no bullets unless unique achievement.
-3. Projects: keep only those with clear technical depth or measurable outcomes.
-4. Cut any bullet that doesn't contain at least one technology AND one outcome.
-5. Never cut: contact info, education degrees, job titles, company names, dates.
+Your task is to parse, REWRITE, and rebuild the following resume into a strict ATS-compliant JSON object.
 
 ═══════════════════════════════════════════════════════
 ATS COMPLIANCE RULES (NON-NEGOTIABLE)
@@ -3670,22 +3640,22 @@ SECTION STRUCTURE — Use ONLY these standardized ATS section headers (in this o
   These match the exact parsing categories used by enterprise ATS platforms.
 
 CONTENT REWRITING — ATS OPTIMIZATION:
-- REWRITE every bullet using: [Strong Action Verb] + [Task] + [Tool/Technology] + [Quantified Impact]
-  Example (20 words max): "Engineered real-time ETL pipeline using Apache Kafka and Spark, cutting data latency by 40%"
-- REWRITE Professional Summary: Role Identity + Core Competencies + Value Proposition (3 sentences max, 60 words max)
-  Example: "Results-driven Python Developer with 3+ years building scalable APIs and ML pipelines.
-  Proficient in FastAPI, PostgreSQL, and Docker. Delivered production systems serving 100K+ daily users."
-- Use strong action verbs: Architected, Engineered, Developed, Implemented, Optimized, Automated,
-  Spearheaded, Deployed, Designed, Reduced, Increased, Led, Managed, Streamlined, Delivered, Built.
+- REWRITE every bullet point using the formula: [Strong Action Verb] + [Task/Responsibility] + [Tool/Technology] + [Quantified Impact]
+  Example: "Engineered a real-time data pipeline using Apache Kafka and Spark, reducing ETL latency by 40%"
+- REWRITE the Professional Summary as 2-3 sentences: Role Identity + Core Competencies + Value Proposition
+  Example: "Results-driven Python Developer with 3+ years of experience building scalable APIs and ML pipelines.
+  Proficient in FastAPI, PostgreSQL, and Docker. Delivered production systems serving 100K+ daily active users."
+- Use industry-standard action verbs: Architected, Engineered, Developed, Implemented, Optimized, Automated,
+  Spearheaded, Deployed, Designed, Collaborated, Reduced, Increased, Achieved, Led, Managed, Streamlined.
 - NEVER use weak verbs: "helped", "assisted", "worked on", "involved in", "responsible for".
-- Every bullet MUST include a metric wherever inferable. If none exists, estimate with "~" prefix.
+- Every experience bullet MUST end with a measurable impact wherever inferable (%, $, time, scale, count).
+  If original resume has no metrics, use plausible range estimates marked with "~" (e.g., "~30% faster").
 - Preserve ALL original facts: company names, dates, job titles, technologies, project names, institutions.
-- No personal pronouns anywhere (no "I", "my", "we").
 
 KEYWORD OPTIMIZATION:
-- Extract the most important technical keywords from the resume — include in skills array.
-- Include abbreviated and full forms only when both are genuinely distinct (e.g., "ML", "Machine Learning").
-- Skills array must be keyword-rich but MAX 18 items — quality over quantity.
+- Extract ALL technical keywords from the resume and ensure they appear in the skills array.
+- Include both abbreviated and full forms where applicable (e.g., "ML" and "Machine Learning").
+- Skills array must be comprehensive — ATS keyword scanners parse this section first.
 
 CONTACT FIELDS:
 - ALL contact fields MUST be inside the "contact" object. NEVER put them at the top level.
@@ -3697,46 +3667,97 @@ CONTACT FIELDS:
 - "contact.title" = candidate's primary job title or most relevant role label.
 
 DATA TYPES:
-- "skills" = flat array of individual skill strings. MAX 18 items. No grouped strings.
-- "soft_skills" = flat array. MAX 5 items.
+- "skills" = flat array of individual skill strings (ALL technical tools, languages, frameworks, platforms).
+- "soft_skills" = flat array of professional competency strings (e.g., "Cross-functional Collaboration").
 - "languages" = flat array of spoken language strings (e.g., "English (Professional Proficiency)").
-- "interests" = flat array. MAX 4 items.
-- "certifications" = array of objects with "name", "issuer", "duration". NEVER flat strings. MAX 5 items.
-- "additional" = array of objects. MAX 3 items. Each MUST have: "name", "description" (MAX 15 words), "duration".
-  NEVER raw dict strings. NEVER flat strings. ALWAYS object format.
+- "interests" = flat array of interest/hobby strings.
+- "certifications" = array of objects with "name", "issuer", "duration". NEVER flat strings.
+- "additional" = array of objects for training, awards, volunteering, publications. Each MUST have
+  exactly: "name" (item title), "description" (1-sentence ATS-optimized detail), "duration" (date/range or "").
+  NEVER put raw dict strings. NEVER use flat strings. ALWAYS use the object format.
 
 MISSING DATA:
-- If a section is absent but clearly inferable, reconstruct it intelligently.
+- If a section is absent but inferable from context, reconstruct it intelligently.
 - If a field truly has no data, use "[Not Provided]" for text fields, or [] for arrays.
 
 ═══════════════════════════════════════════════════════
 RETURN ONLY THIS EXACT JSON STRUCTURE (no extra keys):
 ═══════════════════════════════════════════════════════
+{{
+  "contact": {{
+    "name": "",
+    "title": "",
+    "email": "",
+    "phone": "",
+    "location": "",
+    "linkedin": "",
+    "github": "",
+    "portfolio": ""
+  }},
+  "summary": "",
+  "skills": [],
+  "soft_skills": [],
+  "languages": [],
+  "interests": [],
+  "experience": [
+    {{
+      "role": "",
+      "company": "",
+      "duration": "",
+      "description": "",
+      "bullets": []
+    }}
+  ],
+  "projects": [
+    {{
+      "name": "",
+      "duration": "",
+      "tech_stack": "",
+      "url": "",
+      "description": "",
+      "bullets": []
+    }}
+  ],
+  "education": [
+    {{
+      "degree": "",
+      "institution": "",
+      "year": "",
+      "bullets": []
+    }}
+  ],
+  "certifications": [
+    {{
+      "name": "",
+      "issuer": "",
+      "duration": ""
+    }}
+  ],
+  "additional": [
+    {{
+      "name": "",
+      "description": "",
+      "duration": ""
+    }}
+  ]
+}}
 
 ═══════════════════════════════════════════════════════
-FIELD-LEVEL ATS RULES (CONSOLIDATED — THESE OVERRIDE ALL ABOVE IF CONFLICT):
+FIELD-LEVEL ATS RULES:
 ═══════════════════════════════════════════════════════
-- summary: 2–3 sentences. Role identity + core skills + value prop. HARD CAP: 60 words. No pronouns. No filler.
-- experience entries: cap by seniority — 0-3 yrs: max 2 roles; 3-7 yrs: max 3 roles; 7+ yrs: max 4 roles.
-- experience[].description: 1 sentence. MAX 12 words. Role scope only. No pronouns.
-- experience[].bullets: EXACTLY 3 per role (4 only for current/most recent role if space allows).
-  Format: Action Verb + Task + Technology + Quantified Impact. HARD CAP: 20 words per bullet. No pronouns.
-- projects: MAX 3 total. If 3–4 experience entries exist, reduce to MAX 2 projects.
-- projects[].duration: "MMM YYYY – MMM YYYY". Extract from resume or "[Not Provided]".
-- projects[].description: 1 sentence. MAX 15 words. No pronouns.
-- projects[].bullets: EXACTLY 2 per project. Action verb + outcome. MAX 18 words each.
-- projects[].tech_stack: comma-separated technologies only (e.g., "Python, FastAPI, PostgreSQL, Redis").
-- education[].bullets: GPA only if >= 3.5/4.0. Max 1 academic achievement. Use [] if nothing qualifies.
-- skills: MAX 18 individual strings. Most relevant and modern tools only. No grouped strings. No duplicates.
-- soft_skills: MAX 5 strings.
-- certifications: MAX 5. Keep most recent and most relevant. "[Not Provided]" for unknown issuers.
-- certifications[].duration: "MMM YYYY" or "MMM YYYY – MMM YYYY".
-- additional: MAX 3 objects. Only if content is genuinely notable (award, publication, patent).
-  Each description: MAX 15 words.
-- interests: MAX 4 items. Omit entirely if resume is already content-dense.
-- languages: include all (no trimming needed — these are short).
-
-UNIVERSAL BULLET RULE: Every bullet = 15–20 words. Trim ruthlessly. Use "~" for estimated metrics.
+- summary = 2-3 sentences. Role identity + skills + value proposition. Max 60 words. No personal pronouns.
+- experience[].description = 1-sentence role scope summary (rewritten, no pronouns). Do NOT leave blank.
+- experience[].bullets = 3-5 bullets. Each: Action Verb + Task + Technology + Quantified Impact. No pronouns.
+- projects[].duration = "MMM YYYY – MMM YYYY" format. Extract from resume or "[Not Provided]".
+- projects[].description = 1-sentence project purpose summary. Rewrite from resume content. No pronouns.
+- projects[].bullets = 3-5 achievement/feature bullets with action verbs and impact metrics.
+- projects[].tech_stack = comma-separated list of all technologies used (e.g., "Python, FastAPI, PostgreSQL").
+- education[].bullets = notable coursework, GPA (if >= 3.5), academic achievements, relevant activities.
+- certifications[].name = exact certification name as it appears on the credential.
+- certifications[].issuer = issuing organization or platform. "[Not Provided]" if unknown.
+- certifications[].duration = "MMM YYYY" or "MMM YYYY – MMM YYYY". Extract from resume.
+- skills array MUST include every technology, tool, language, and framework found anywhere in the resume.
+  Minimum 8 skills. Group similar items but keep as individual array entries (not comma-joined strings).
 
 RESUME TEXT:
 \"\"\"{raw_text}\"\"\"
@@ -3958,165 +3979,6 @@ def extract_resume_json(llm_response: str) -> dict:
 # ============================================================
 # 📄 DOCX TEMPLATE GENERATORS — Three professional styles
 # ============================================================
-
-def _enforce_2page_budget(data: dict) -> dict:
-    """
-    Post-LLM content budget enforcer. Trims the structured resume data so the
-    final DOCX fits within 2 pages at 10pt / 1-inch margins.
-
-    This runs AFTER extract_resume_json() and BEFORE any template generator.
-    It is a deterministic safety net — the LLM prompt already asks for tight
-    content, but LLMs can still overgenerate. This function hard-caps everything.
-
-    2-PAGE BUDGET LOGIC (based on empirical line-count estimation):
-      - Header block           ≈ 4 lines
-      - Summary                ≈ 3 lines
-      - Skills block           ≈ 2-3 lines
-      - Each experience entry  ≈ 1 (role) + 1 (desc) + 3 (bullets) = 5 lines
-      - Each project entry     ≈ 1 (header) + 1 (desc) + 2 (bullets) = 4 lines
-      - Education entry        ≈ 2 lines
-      - Certifications         ≈ 1 line each
-      - Languages/Interests    ≈ 1 line each
-
-    Total target: ≤ 105 effective lines (2 pages × ~52 lines/page with spacing).
-    """
-    import re as _re
-
-    def _word_count(s: str) -> int:
-        return len(s.split()) if s else 0
-
-    def _trim_to_words(s: str, max_words: int) -> str:
-        """Trim a string to at most max_words words, appending ellipsis if cut."""
-        if not s:
-            return s
-        words = s.split()
-        if len(words) <= max_words:
-            return s
-        return " ".join(words[:max_words]).rstrip(",.;:") + "."
-
-    def _trim_bullet(b: str, max_words: int = 20) -> str:
-        return _trim_to_words(b, max_words)
-
-    # ── 1. Summary: hard cap 50 words ───────────────────────────────────────
-    if data.get("summary") and data["summary"] not in ("", "[Not Provided]"):
-        data["summary"] = _trim_to_words(data["summary"], 50)
-
-    # ── 2. Determine experience years to set entry limit ─────────────────────
-    # Parse years from duration strings to estimate total experience
-    exp_list = [e for e in data.get("experience", [])
-                if e.get("role", "") not in ("", "[Not Provided]")
-                or e.get("company", "") not in ("", "[Not Provided]")]
-
-    # Estimate years of experience from number of roles and date ranges
-    def _extract_year(s):
-        m = _re.search(r'\b(19|20)\d{2}\b', str(s))
-        return int(m.group()) if m else None
-
-    all_years = []
-    for e in exp_list:
-        y = _extract_year(e.get("duration", ""))
-        if y:
-            all_years.append(y)
-
-    if all_years:
-        span = max(all_years) - min(all_years)
-    else:
-        span = len(exp_list) * 1  # rough fallback
-
-    if span <= 3:
-        max_exp = 2
-        max_proj = 3
-        exp_bullets = 3
-        proj_bullets = 2
-    elif span <= 7:
-        max_exp = 3
-        max_proj = 3
-        exp_bullets = 3
-        proj_bullets = 2
-    else:
-        max_exp = 4
-        max_proj = 2   # senior = more exp entries, fewer projects
-        exp_bullets = 3
-        proj_bullets = 2
-
-    # ── 3. Trim experience entries ───────────────────────────────────────────
-    # Sort by recency: entries with later years first, then trim to max_exp
-    def _entry_sort_year(e):
-        y = _extract_year(e.get("duration", ""))
-        return y if y else 0
-
-    exp_list_sorted = sorted(exp_list, key=_entry_sort_year, reverse=True)
-    exp_list_trimmed = exp_list_sorted[:max_exp]
-
-    for exp in exp_list_trimmed:
-        # Trim description
-        if exp.get("description"):
-            exp["description"] = _trim_to_words(exp["description"], 18)
-        # Hard-cap bullets: keep exactly exp_bullets most impactful (first N)
-        bullets = [b for b in exp.get("bullets", []) if b and b != "[Not Provided]"]
-        bullets = bullets[:exp_bullets]
-        exp["bullets"] = [_trim_bullet(b, 20) for b in bullets]
-
-    data["experience"] = exp_list_trimmed
-
-    # ── 4. Trim projects ─────────────────────────────────────────────────────
-    proj_list = [p for p in data.get("projects", [])
-                 if p.get("name", "") not in ("", "[Not Provided]")]
-
-    # Sort by recency
-    proj_list_sorted = sorted(proj_list, key=_entry_sort_year, reverse=True)
-    proj_list_trimmed = proj_list_sorted[:max_proj]
-
-    for proj in proj_list_trimmed:
-        if proj.get("description"):
-            proj["description"] = _trim_to_words(proj["description"], 15)
-        bullets = [b for b in proj.get("bullets", []) if b and b != "[Not Provided]"]
-        bullets = bullets[:proj_bullets]
-        proj["bullets"] = [_trim_bullet(b, 18) for b in bullets]
-
-    data["projects"] = proj_list_trimmed
-
-    # ── 5. Soft skills: max 5 ────────────────────────────────────────────────
-    ss = [s for s in data.get("soft_skills", []) if s and s != "[Not Provided]"]
-    data["soft_skills"] = ss[:5]
-
-    # ── 6. Interests: max 3 ──────────────────────────────────────────────────
-    interests = [i for i in data.get("interests", []) if i and i != "[Not Provided]"]
-    data["interests"] = interests[:3]
-
-    # ── 7. Certifications: max 5 ─────────────────────────────────────────────
-    certs = [c for c in data.get("certifications", [])
-             if isinstance(c, dict) and c.get("name", "") not in ("", "[Not Provided]")]
-    data["certifications"] = certs[:5]
-
-    # ── 8. Additional: max 3 ─────────────────────────────────────────────────
-    add = data.get("additional", [])
-    data["additional"] = add[:3]
-
-    # ── 9. Education bullets: max 2, GPA filter ───────────────────────────────
-    for edu in data.get("education", []):
-        raw_bullets = [b for b in edu.get("bullets", []) if b and b != "[Not Provided]"]
-        # Keep only bullets that mention GPA >= 3.5 or are very short achievements
-        filtered = []
-        for b in raw_bullets:
-            b_lower = b.lower()
-            # Keep GPA bullets only if >= 3.5
-            gpa_match = _re.search(r'gpa[:\s]*([0-9]+\.[0-9]+)', b_lower)
-            if gpa_match:
-                try:
-                    gpa_val = float(gpa_match.group(1))
-                    if gpa_val >= 3.5:
-                        filtered.append(_trim_bullet(b, 15))
-                except ValueError:
-                    pass
-            elif "gpa" not in b_lower:
-                # Non-GPA achievement bullet — keep max 1
-                if len(filtered) < 1:
-                    filtered.append(_trim_bullet(b, 15))
-        edu["bullets"] = filtered[:2]
-
-    return data
-
 
 def _val(v) -> str:
     """Return value or 'Not Provided' placeholder — never empty, never None, never '[Not Provided]'."""
@@ -4455,9 +4317,6 @@ def generate_modern_docx(data: dict) -> BytesIO:
     All formatting decisions prioritize machine readability over visual design.
     No tables, no columns, no text boxes — pure linear paragraph flow for ATS parsers.
     """
-    # ── Apply 2-page content budget before rendering ──────────────────────────
-    data = _enforce_2page_budget(data)
-
     doc = Document()
     for sec in doc.sections:
         sec.top_margin = Inches(0.75)
@@ -4690,9 +4549,6 @@ def generate_minimal_docx(data: dict) -> BytesIO:
     No color, no decoration, no graphics — every byte serves ATS keyword matching.
     Preferred by Taleo, SmartRecruiters, and legacy HRIS systems.
     """
-    # ── Apply 2-page content budget before rendering ──────────────────────────
-    data = _enforce_2page_budget(data)
-
     doc = Document()
     for sec in doc.sections:
         sec.top_margin = Inches(0.8)
@@ -4927,9 +4783,6 @@ def generate_creative_docx(data: dict) -> BytesIO:
     - Teal color is display-only; ATS parsers read plain text, not colors.
     - Georgia used ONLY for candidate name (header) — never in parseable body sections.
     """
-    # ── Apply 2-page content budget before rendering ──────────────────────────
-    data = _enforce_2page_budget(data)
-
     doc = Document()
     for sec in doc.sections:
         sec.top_margin = Inches(0.75)
