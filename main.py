@@ -3455,154 +3455,157 @@ replacement_mapping = {
 
 def rewrite_text_with_llm(text, replacement_mapping, user_location):
     """
-    Enhanced resume rewrite engine (backward compatible).
-    - Improves structure, clarity, and ATS readiness
-    - Fills missing sections using internal evidence
-    - Maintains bias-free language
+    Industry-standard ATS resume rewrite engine.
+    - Produces Enhancv/Jobscan-quality structured output
+    - Strictly follows ATS section ordering (Workday, Greenhouse, Lever)
+    - Eliminates repetition across sections
+    - Bias-free language throughout
     - Preserves and ENFORCES suggested job titles output
     """
 
-    # -----------------------------
-    # Format bias replacement rules
-    # -----------------------------
     formatted_mapping = "\n".join(
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
-    # -----------------------------
-    # MASTER PROMPT
-    # -----------------------------
-    prompt = f"""
-You are an elite Resume Optimization Engine used by Fortune 500 recruiters and executive career coaches.
+    prompt = f"""You are a senior ATS resume optimization specialist trained on hiring standards from
+Workday, Greenhouse, Lever, iCIMS, Taleo, and SmartRecruiters. Your output quality matches
+professional resume platforms like Enhancv and Jobscan.
 
-You will receive:
-1. Original Resume Text
-2. Bias Replacement Rules
-3. Candidate Location
+INPUT: Original resume text, bias replacement rules, candidate location.
+TASK: Rewrite the resume into an industry-standard ATS-optimized document — bias-free,
+quantification-rich, and recruiter-ready.
 
-Your goal is to TRANSFORM the resume into a top-1% recruiter-ready document:
-ATS-optimized, bias-free, quantification-rich, and professionally compelling.
+═══════════════════════════════════════════════════════════════════
+ABSOLUTE RULES — NEVER VIOLATE
+═══════════════════════════════════════════════════════════════════
+• DO NOT fabricate companies, job titles, degrees, institutions, or dates.
+• DO NOT invent statistics or metrics not implied by the resume content.
+• DO NOT add certifications, tools, or skills absent from the resume.
+• DO NOT use personal pronouns (I, my, me, we, our) anywhere.
+• DO NOT repeat the same phrase or word across multiple sections.
+• EVERY section must contain unique, non-overlapping content.
 
-═══════════════════════════════════════════════════
-🔒 ABSOLUTE RULES (NON-NEGOTIABLE)
-═══════════════════════════════════════════════════
+YOU MAY:
+✓ Strengthen bullet points with stronger action verbs and tighter phrasing.
+✓ Reconstruct missing sections when clear evidence exists in the resume.
+✓ Consolidate skills scattered across experience/projects into the Skills section.
+✓ Infer tool proficiency when strongly implied (e.g., "built Flask API" → Python, Flask).
+✓ Add plausible impact framing using "~" when the role implies measurable output.
 
-- DO NOT fabricate companies, job titles, degrees, institutions, or dates
-- DO NOT invent metrics or statistics not implied by the resume
-- DO NOT add certifications or skills that don't appear anywhere in the resume
-- You MAY:
-  ✅ Strengthen and expand existing bullet points with stronger action verbs
-  ✅ CREATE missing sections if clear evidence exists elsewhere in the resume
-  ✅ Move skills from projects/experience into the dedicated Skills section
-  ✅ Infer tool proficiency ONLY when strongly implied (e.g., "built Flask API" → Python/Flask listed)
-  ✅ Estimate impact framing ONLY when role implies it (e.g., "customer support" → "resolved X+ client issues")
-  ✅ Reorder sections for maximum ATS impact
+═══════════════════════════════════════════════════════════════════
+SECTION-BY-SECTION REWRITING RULES
+═══════════════════════════════════════════════════════════════════
 
-═══════════════════════════════════════════════════
-📌 OPTIMIZATION RULES
-═══════════════════════════════════════════════════
+CONTACT HEADER (always first)
+  Full Name | Job Title | Email | Phone | Location | LinkedIn URL | GitHub/Portfolio URL
+  — All on separate lines or cleanly separated. No icons or symbols.
 
-1. **Professional Summary** — Write a 3–4 sentence executive-level summary that:
-   - Opens with seniority + core domain (e.g., "Results-driven Data Engineer with 3+ years...")
-   - Highlights top 2–3 technical strengths with specificity
-   - Closes with value proposition aligned to career goals
+PROFESSIONAL SUMMARY (2–3 sentences, max 60 words)
+  Sentence 1: [Seniority level] + [core domain] + [years of experience]
+  Sentence 2: [Top 2–3 specific technical or functional strengths]
+  Sentence 3: [Career value proposition — what the candidate delivers]
+  Example: "Results-driven Python Developer with 4+ years building scalable APIs and ML pipelines.
+  Proficient in FastAPI, PostgreSQL, Docker, and AWS. Delivered production systems serving 50K+ daily users."
+  — No pronouns. No buzzwords. No repetition of skills already listed in Skills section.
 
-2. **Experience Bullet Points** — Every bullet MUST follow:
-   → **Action Verb + Specific Task + Technology/Method Used + Quantified Impact**
-   → Example: "Engineered real-time data pipeline using Apache Kafka and Spark, reducing latency by 40%"
-   → Use STRONG action verbs: Architected, Engineered, Designed, Deployed, Optimized, Automated, Reduced, Increased, Led, Built, Launched, Delivered
+CORE SKILLS (comprehensive, categorized)
+  Format as labeled lines:
+    Technical Skills: [comma-separated list of tools, languages, frameworks, platforms]
+    Professional Skills: [comma-separated list of soft competencies]
+  — Include EVERY technology mentioned anywhere in the resume.
+  — Do NOT repeat skill names already used verbatim in the Summary.
+  — Minimum 8 technical skills. Group similar items; keep as individual entries.
 
-3. **Skills Section** — Must include ALL technologies, tools, frameworks, platforms, and methodologies mentioned ANYWHERE in the resume.
-   Format as clean ATS-friendly lists grouped by category:
-   - Programming Languages | Frameworks & Libraries | Cloud & DevOps | Databases | Tools & Platforms | Soft Skills
+WORK EXPERIENCE (reverse chronological)
+  For each role:
+    Job Title | Company Name | MMM YYYY – MMM YYYY (or Present)
+    [1-sentence role scope — unique context NOT in the summary]
+    • [Action Verb] + [Specific task] + [Technology/method] + [Quantified impact]
+    • [Action Verb] + [Specific task] + [Technology/method] + [Quantified impact]
+    (3–5 bullets per role)
+  — Strong action verbs ONLY: Architected, Engineered, Developed, Implemented, Optimized,
+    Automated, Spearheaded, Deployed, Designed, Reduced, Increased, Streamlined, Led, Built.
+  — NEVER use: helped, assisted, worked on, involved in, responsible for, collaborated on (as a standalone).
+  — Every bullet must end with a quantified impact where inferable (%, $, time, users, scale).
+    If no metric exists, add a plausible range marked "~" (e.g., "~30% reduction in load time").
+  — Bullets must NOT repeat phrases already used in the Summary or Skills sections.
 
-4. **Projects Section** — Each project must include:
-   - Project name + brief (1 sentence) description
-   - Full tech stack used
-   - Your specific role/contribution
-   - Outcome, metric, or learning
+PROJECTS (if present)
+  For each project:
+    Project Name | Tech Stack: [comma-separated] | [MMM YYYY – MMM YYYY or duration]
+    [URL if available — plain text, not hyperlink]
+    [1-sentence project purpose]
+    • [Achievement/feature bullet with action verb and measurable outcome]
+    (3–5 bullets)
+  — Project bullets must use DIFFERENT action verbs from experience bullets where possible.
+  — Do NOT restate the tech stack items already listed in the Skills section header line.
 
-5. **Education** — Include: Degree, Institution, Year, GPA (if strong), Relevant Coursework (if applicable)
+EDUCATION (reverse chronological)
+  Degree, Major | Institution | Graduation Year (or Expected YYYY)
+  [GPA if 3.5+] | [Relevant coursework or academic honors if notable]
+  — No bullets unless listing coursework or honors.
 
-6. **Certifications** — List ALL found in resume. Add plausible ones ONLY if tool names strongly imply them.
+CERTIFICATIONS & LINKS (if present)
+  • Certification Name | Issuing Body | MMM YYYY
+  • LinkedIn: [URL] | GitHub: [URL] | Portfolio: [URL]
+  — List only certifications that appear in the original resume.
 
-7. **Sections to create if evidence exists but are missing:**
-   🛠️ Skills | 📂 Projects | 🎓 Certifications | 🤝 Professional Competencies | 🌟 Interests
+═══════════════════════════════════════════════════════════════════
+ATS FORMATTING REQUIREMENTS
+═══════════════════════════════════════════════════════════════════
+• Single-column structure — no tables, columns, text boxes, or graphics.
+• Bullet points: use "•" character only. No dashes, stars, or numbered lists for bullets.
+• Section headings: ALL CAPS, followed by a line of dashes (e.g., "WORK EXPERIENCE\\n─────────────").
+• Consistent spacing: one blank line between sections, no blank lines within a section entry.
+• Tense: past tense for completed roles, present tense for current role only.
+• Dates: MMM YYYY format (e.g., "Jan 2022 – Mar 2024"). Use "Present" for current role.
+• No emojis, icons, or special Unicode symbols in the resume body.
+• No personal pronouns (I, my, we, our) anywhere.
 
-═══════════════════════════════════════════════════
-🧾 REQUIRED OUTPUT STRUCTURE
-═══════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════
+ANTI-REPETITION RULES
+═══════════════════════════════════════════════════════════════════
+• The Professional Summary must NOT repeat exact phrases from Skills or Experience bullets.
+• Skills listed in the Skills section must NOT be restated verbatim in bullet points.
+• Each work experience entry must use DISTINCT action verbs from other entries where possible.
+• Project descriptions must NOT restate content already covered in Work Experience.
+• Certifications section must NOT duplicate tool names already fully described elsewhere.
 
-Return a COMPLETE, polished resume with these sections (skip only if truly impossible):
-
-🏷️ Full Name  
-📞 Phone Number  
-📧 Email Address  
-📍 Location  
-🔗 LinkedIn Profile URL  
-🌐 GitHub / Portfolio URL  
-
-✍️ Professional Summary  
-🛠️ Technical Skills  
-💼 Work Experience  
-🧑‍💼 Internships (if applicable)  
-📂 Projects  
-🎓 Certifications & Training  
-🏫 Education  
-🤝 Professional Competencies  
-🌟 Interests & Extracurriculars  
-
-Formatting requirements:
-- Bullet points (•) for all list items
-- Clean spacing between sections
-- Section headers in CAPS or bold
-- ATS-safe formatting (no tables, columns, or special characters)
-- Tense: past for completed roles, present for current role
-
-═══════════════════════════════════════════════════
-🧠 BIAS REPLACEMENT RULES (APPLY EXACTLY)
-═══════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════
+BIAS REPLACEMENT RULES — APPLY EXACTLY
+═══════════════════════════════════════════════════════════════════
 {formatted_mapping}
 
-═══════════════════════════════════════════════════
-📄 ORIGINAL RESUME
-═══════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════
+ORIGINAL RESUME TEXT
+═══════════════════════════════════════════════════════════════════
 \"\"\"{text}\"\"\"
 
-═══════════════════════════════════════════════════
-🎯 MANDATORY JOB TITLE SUGGESTIONS
-═══════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════════
+OUTPUT INSTRUCTIONS
+═══════════════════════════════════════════════════════════════════
+1. Output the COMPLETE rewritten resume first — all sections, no truncation.
+2. Use the EXACT section order: Contact Header → Professional Summary → Core Skills →
+   Work Experience → Projects → Education → Certifications & Links.
+3. Skip a section ONLY if the original resume contains zero evidence for it.
+4. After the resume, append the job title suggestions block below.
 
-After the resume, include a clearly separated section:
+═══════════════════════════════════════════════════════════════════
+MANDATORY JOB TITLE SUGGESTIONS (append after resume)
+═══════════════════════════════════════════════════════════════════
 
 ### 🎯 Suggested Job Titles (Based on Resume)
 
-Provide EXACTLY **5 job titles** suited for a candidate in **{user_location}**.
+Provide EXACTLY 5 job titles suited for a candidate in {user_location}.
+For each, provide a specific reason tied to resume content and a LinkedIn search URL.
 
-For EACH job title, provide:
-- A specific reason why this role fits the candidate's background
-- A DIRECT LinkedIn job search URL using the exact format below
-
-FORMAT STRICTLY AS:
-
-1. **[Job Title]** — [Specific reason based on resume content]  
+FORMAT:
+1. **[Job Title]** — [Specific reason based on resume evidence]
 🔗 https://www.linkedin.com/jobs/search/?keywords=[URL+encoded+title]&location={urllib.parse.quote(user_location)}
 
-2. **[Job Title]** — ...  
-🔗 ...
-
-(Continue for all 5)
-
-═══════════════════════════════════════════════════
-✅ FINAL OUTPUT
-═══════════════════════════════════════════════════
-1. Fully optimized, bias-free resume (complete, not a summary)
-2. Suggested Job Titles section (MANDATORY — 5 titles with URLs)
+(Repeat for all 5 titles)
 """
 
-    # -----------------------------
-    # Call LLM
-    # -----------------------------
     response = call_llm(prompt, session=st.session_state)
     return response
 
@@ -3624,6 +3627,7 @@ def optimize_resume_to_json(raw_text: str) -> str:
     """
     prompt = f"""You are an enterprise-grade ATS resume optimization engine trained on hiring pipeline
 standards used by Workday, Greenhouse, Lever, iCIMS, Taleo, and SmartRecruiters.
+Your output quality must match the standard set by professional platforms like Enhancv and Jobscan.
 
 Your task is to parse, REWRITE, and rebuild the following resume into a strict ATS-compliant JSON object.
 
@@ -3639,23 +3643,40 @@ SECTION STRUCTURE — Use ONLY these standardized ATS section headers (in this o
   Languages → Interests → Additional
   These match the exact parsing categories used by enterprise ATS platforms.
 
-CONTENT REWRITING — ATS OPTIMIZATION:
-- REWRITE every bullet point using the formula: [Strong Action Verb] + [Task/Responsibility] + [Tool/Technology] + [Quantified Impact]
+CONTENT REWRITING — INDUSTRY-STANDARD ATS OPTIMIZATION:
+- REWRITE every bullet point using the formula:
+  [Strong Action Verb] + [Specific Task/Responsibility] + [Tool/Technology] + [Quantified Impact]
   Example: "Engineered a real-time data pipeline using Apache Kafka and Spark, reducing ETL latency by 40%"
-- REWRITE the Professional Summary as 2-3 sentences: Role Identity + Core Competencies + Value Proposition
-  Example: "Results-driven Python Developer with 3+ years of experience building scalable APIs and ML pipelines.
-  Proficient in FastAPI, PostgreSQL, and Docker. Delivered production systems serving 100K+ daily active users."
-- Use industry-standard action verbs: Architected, Engineered, Developed, Implemented, Optimized, Automated,
-  Spearheaded, Deployed, Designed, Collaborated, Reduced, Increased, Achieved, Led, Managed, Streamlined.
-- NEVER use weak verbs: "helped", "assisted", "worked on", "involved in", "responsible for".
-- Every experience bullet MUST end with a measurable impact wherever inferable (%, $, time, scale, count).
-  If original resume has no metrics, use plausible range estimates marked with "~" (e.g., "~30% faster").
+  Example: "Automated deployment workflows using GitHub Actions and Docker, cutting release time by ~50%"
+- REWRITE the Professional Summary as exactly 2–3 sentences (max 60 words):
+  Sentence 1: [Seniority] + [Core domain] + [Years of experience]
+  Sentence 2: [Top 2–3 specific technical strengths — NOT repeated verbatim in skills array]
+  Sentence 3: [Value proposition — what was delivered or achieved]
+  Example: "Results-driven Python Developer with 4+ years building scalable APIs and ML pipelines.
+  Specialized in FastAPI, PostgreSQL, and containerized deployments on AWS.
+  Delivered production systems processing 100K+ daily transactions with 99.9% uptime."
+- STRONG action verbs ONLY: Architected, Engineered, Developed, Implemented, Optimized, Automated,
+  Spearheaded, Deployed, Designed, Reduced, Increased, Achieved, Led, Managed, Streamlined,
+  Launched, Migrated, Integrated, Refactored, Scaled, Analyzed, Delivered, Coordinated.
+- NEVER use weak verbs: "helped", "assisted", "worked on", "involved in", "responsible for",
+  "participated in", "contributed to" (as a standalone without specifics).
+- Every experience bullet MUST end with a measurable impact wherever inferable.
+  If original resume has no metrics, use plausible range estimates marked "~" (e.g., "~30% faster").
 - Preserve ALL original facts: company names, dates, job titles, technologies, project names, institutions.
+- NO personal pronouns anywhere (I, my, me, we, our, their).
+
+ANTI-REPETITION ENFORCEMENT:
+- The "summary" field must NOT repeat exact phrases or skill names already in the "skills" array.
+- Each experience entry's "bullets" must use DISTINCT action verbs from other experience entries where possible.
+- Project "bullets" must NOT restate content already fully described in experience "bullets".
+- "soft_skills" array must NOT duplicate items already present in "skills" array.
+- Each bullet point within a single experience entry must describe a DIFFERENT achievement or task.
 
 KEYWORD OPTIMIZATION:
 - Extract ALL technical keywords from the resume and ensure they appear in the skills array.
 - Include both abbreviated and full forms where applicable (e.g., "ML" and "Machine Learning").
 - Skills array must be comprehensive — ATS keyword scanners parse this section first.
+- Minimum 8 skills required. Add widely-known variants of tools found (e.g., "React" → also "React.js").
 
 CONTACT FIELDS:
 - ALL contact fields MUST be inside the "contact" object. NEVER put them at the top level.
@@ -3669,12 +3690,16 @@ CONTACT FIELDS:
 DATA TYPES:
 - "skills" = flat array of individual skill strings (ALL technical tools, languages, frameworks, platforms).
 - "soft_skills" = flat array of professional competency strings (e.g., "Cross-functional Collaboration").
+  Must NOT duplicate items in the "skills" array.
 - "languages" = flat array of spoken language strings (e.g., "English (Professional Proficiency)").
 - "interests" = flat array of interest/hobby strings.
 - "certifications" = array of objects with "name", "issuer", "duration". NEVER flat strings.
 - "additional" = array of objects for training, awards, volunteering, publications. Each MUST have
   exactly: "name" (item title), "description" (1-sentence ATS-optimized detail), "duration" (date/range or "").
   NEVER put raw dict strings. NEVER use flat strings. ALWAYS use the object format.
+- "experience[].description" = 1-sentence role scope. Must be UNIQUE context not covered in bullets.
+  Do NOT restate the job title or company name. Do NOT duplicate bullet content.
+- "projects[].description" = 1-sentence project purpose. Must be distinct from experience descriptions.
 
 MISSING DATA:
 - If a section is absent but inferable from context, reconstruct it intelligently.
@@ -3745,19 +3770,26 @@ RETURN ONLY THIS EXACT JSON STRUCTURE (no extra keys):
 ═══════════════════════════════════════════════════════
 FIELD-LEVEL ATS RULES:
 ═══════════════════════════════════════════════════════
-- summary = 2-3 sentences. Role identity + skills + value proposition. Max 60 words. No personal pronouns.
-- experience[].description = 1-sentence role scope summary (rewritten, no pronouns). Do NOT leave blank.
-- experience[].bullets = 3-5 bullets. Each: Action Verb + Task + Technology + Quantified Impact. No pronouns.
+- summary = 2–3 sentences. Role identity + specific strengths + value proposition. Max 60 words.
+  No personal pronouns. Must NOT duplicate exact phrases from the skills array.
+- experience[].description = 1-sentence role scope (unique context; not a restatement of bullets).
+  Rewritten in plain language. No pronouns. Do NOT leave blank.
+- experience[].bullets = 3–5 bullets per role. Each: Strong Action Verb + Specific Task + Technology + Impact.
+  No pronouns. Each bullet must describe a DIFFERENT achievement. No weak openers (responsible for, etc.).
+  Use DISTINCT action verbs across roles where possible (avoid repeating "Developed" in every entry).
 - projects[].duration = "MMM YYYY – MMM YYYY" format. Extract from resume or "[Not Provided]".
-- projects[].description = 1-sentence project purpose summary. Rewrite from resume content. No pronouns.
-- projects[].bullets = 3-5 achievement/feature bullets with action verbs and impact metrics.
+- projects[].description = 1-sentence project purpose. MUST be distinct from any experience description.
+  Rewrite from resume content. No pronouns.
+- projects[].bullets = 3–5 bullets with action verbs and impact metrics. Must NOT restate experience bullets.
 - projects[].tech_stack = comma-separated list of all technologies used (e.g., "Python, FastAPI, PostgreSQL").
 - education[].bullets = notable coursework, GPA (if >= 3.5), academic achievements, relevant activities.
 - certifications[].name = exact certification name as it appears on the credential.
 - certifications[].issuer = issuing organization or platform. "[Not Provided]" if unknown.
 - certifications[].duration = "MMM YYYY" or "MMM YYYY – MMM YYYY". Extract from resume.
 - skills array MUST include every technology, tool, language, and framework found anywhere in the resume.
-  Minimum 8 skills. Group similar items but keep as individual array entries (not comma-joined strings).
+  Minimum 8 skills. Keep as individual array entries (not comma-joined strings). No duplicates.
+- soft_skills array must NOT duplicate items already present in the skills array.
+  Use competency-level phrases (e.g., "Agile Project Management", "Cross-functional Leadership").
 
 RESUME TEXT:
 \"\"\"{raw_text}\"\"\"
@@ -4074,7 +4106,23 @@ def _build_contact_header(doc, data: dict, name_size: int, name_color_rgb: tuple
     r_contact.font.color.rgb = cc
     p_contact.alignment = 1
     p_contact.paragraph_format.space_before = Pt(2)
-    p_contact.paragraph_format.space_after = Pt(10)
+    p_contact.paragraph_format.space_after = Pt(6)
+
+    # ── ④ Thin bottom rule below contact block ────────────────────────────
+    # Signals end of header to ATS parsers and improves recruiter readability.
+    from docx.oxml import OxmlElement as _OE
+    from docx.oxml.ns import qn as _qn
+    pPr = p_contact._p.get_or_add_pPr()
+    pBdr = _OE('w:pBdr')
+    btm = _OE('w:bottom')
+    btm.set(_qn('w:val'), 'single')
+    btm.set(_qn('w:sz'), '4')
+    btm.set(_qn('w:space'), '1')
+    # Use accent color if provided, else dark gray
+    _border_col = accent_color_hex if accent_color_hex else "555555"
+    btm.set(_qn('w:color'), _border_col)
+    pBdr.append(btm)
+    pPr.append(pBdr)
 
 
 def _section_heading_bordered(doc, text: str, font_name: str,
@@ -4115,12 +4163,22 @@ def _section_heading_bordered(doc, text: str, font_name: str,
 def _add_bullet(doc, text: str, font_size: int = 10, font_name: str = "Arial",
                 indent_left: int = 360, indent_hanging: int = 180,
                 color_rgb: tuple = None):
-    """Add a properly formatted bullet point paragraph."""
+    """
+    Add a properly formatted ATS-compliant bullet point paragraph.
+    Uses standard hanging indent matching Jobscan/Enhancv output.
+    Bullet character is plain Unicode bullet (U+2022) — universally parsed by all ATS.
+    """
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
+    # Strip any leading bullet/dash the LLM may have prepended to avoid double-bullets
+    clean_text = text.strip()
+    for prefix in ("\u2022", "-", "*", "\u25aa", "\u25cf"):
+        if clean_text.startswith(prefix):
+            clean_text = clean_text[len(prefix):].lstrip()
+            break
     p = doc.add_paragraph(style="Normal")
     p.clear()
-    run = p.add_run(f"\u2022  {text}")
+    run = p.add_run(f"\u2022  {clean_text}")
     run.font.size = Pt(font_size)
     run.font.name = font_name
     if color_rgb:
@@ -4131,7 +4189,7 @@ def _add_bullet(doc, text: str, font_size: int = 10, font_name: str = "Arial",
     ind.set(qn('w:hanging'), str(indent_hanging))
     pPr.append(ind)
     p.paragraph_format.space_before = Pt(1)
-    p.paragraph_format.space_after = Pt(1)
+    p.paragraph_format.space_after = Pt(1.5)
     return p
 
 
@@ -4335,6 +4393,7 @@ def generate_modern_docx(data: dict) -> BytesIO:
         name_size=20, name_color_rgb=NAVY, name_font=FONT,
         contact_font=FONT, contact_color_hex="4A4A4A", contact_size=9,
         title_font=FONT, title_size=11, title_color_rgb=NAVY,
+        accent_color_hex=NAVY_HEX,
     )
 
     def _heading(text):
@@ -4372,32 +4431,34 @@ def generate_modern_docx(data: dict) -> BytesIO:
         _body_para(data["summary"])
 
     # ══════════════════════════════════════════════════════════════════════
-    # SECTION 2: SKILLS
+    # SECTION 2: CORE SKILLS
     # ATS keyword scanners parse Skills first for job description matching.
-    # Pipe-separated inline format is universally ATS-parseable.
-    # Technical and soft skills separated into distinct labeled lines.
+    # Categorized format (Technical / Professional) with pipe-separated values
+    # is the industry standard used by Jobscan, Enhancv, and Greenhouse parsers.
     # ══════════════════════════════════════════════════════════════════════
     tech_skills = [s for s in data.get("skills", []) if s and s != "[Not Provided]"]
     soft_skills = [s for s in data.get("soft_skills", []) if s and s != "[Not Provided]"]
     if tech_skills or soft_skills:
-        _heading("Skills")
+        _heading("Core Skills")
         if tech_skills:
             p = doc.add_paragraph()
             p.clear()
-            label_run = p.add_run("Technical: ")
+            label_run = p.add_run("Technical:  ")
             label_run.bold = True
             label_run.font.size = Pt(BODY)
             label_run.font.name = FONT
             label_run.font.color.rgb = RGBColor(*NAVY)
-            skills_run = p.add_run("  |  ".join(tech_skills))
+            # Group into rows of max 6 skills for readability — ATS reads all as flat text
+            skills_text = "  |  ".join(tech_skills)
+            skills_run = p.add_run(skills_text)
             skills_run.font.size = Pt(BODY)
             skills_run.font.name = FONT
-            p.paragraph_format.space_before = Pt(1)
-            p.paragraph_format.space_after = Pt(2)
+            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.space_after = Pt(3)
         if soft_skills:
             p = doc.add_paragraph()
             p.clear()
-            label_run = p.add_run("Professional: ")
+            label_run = p.add_run("Professional:  ")
             label_run.bold = True
             label_run.font.size = Pt(BODY)
             label_run.font.name = FONT
@@ -4406,13 +4467,16 @@ def generate_modern_docx(data: dict) -> BytesIO:
             ss_run.font.size = Pt(BODY)
             ss_run.font.name = FONT
             p.paragraph_format.space_before = Pt(1)
-            p.paragraph_format.space_after = Pt(3)
+            p.paragraph_format.space_after = Pt(4)
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 3: WORK EXPERIENCE
-    # ATS standard: Role Title (bold) → Company  |  Date Range
-    # 3-5 bullet points per role using Action Verb + Task + Tool + Impact.
-    # Consistent bullet indentation (360 twips left, 180 twips hanging).
+    # Industry-standard layout (Enhancv/Jobscan):
+    #   Line 1: Job Title (bold, navy, larger)  |  Company Name
+    #   Line 2: MMM YYYY – MMM YYYY  (italic, right-aligned)
+    #   Line 3: 1-sentence role scope (italic gray) — optional
+    #   Lines 4+: • Bullet points (action verb + task + tech + impact)
+    # ATS parsers map Role Title and Company as separate parsed fields.
     # ══════════════════════════════════════════════════════════════════════
     valid_exp = [e for e in data.get("experience", [])
                  if (e.get("role") and e["role"] not in ("", "[Not Provided]"))
@@ -4420,11 +4484,11 @@ def generate_modern_docx(data: dict) -> BytesIO:
     if valid_exp:
         _heading("Work Experience")
         for exp in valid_exp:
-            _role = exp.get("role", "") if exp.get("role", "") not in ("", "[Not Provided]") else ""
-            _company = exp.get("company", "") if exp.get("company", "") not in ("", "[Not Provided]") else ""
+            _role     = exp.get("role", "")     if exp.get("role", "")     not in ("", "[Not Provided]") else ""
+            _company  = exp.get("company", "")  if exp.get("company", "")  not in ("", "[Not Provided]") else ""
             _duration = exp.get("duration", "") if exp.get("duration", "") not in ("", "[Not Provided]") else ""
 
-            # Role title line: Role (bold navy) — Company  [Duration]
+            # ── Row 1: Role Title (bold navy) — Company (regular gray) ──────
             p = doc.add_paragraph()
             p.clear()
             if _role:
@@ -4434,32 +4498,42 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 r_role.font.name = FONT
                 r_role.font.color.rgb = RGBColor(*NAVY)
             if _company:
-                sep = "  —  " if _role else ""
+                sep = "  \u2014  " if _role else ""   # em-dash separator — ATS-safe
                 r_co = p.add_run(f"{sep}{_company}")
                 r_co.font.size = Pt(BODY)
                 r_co.font.name = FONT
                 r_co.font.color.rgb = RGBColor(74, 74, 74)
+            p.paragraph_format.space_before = Pt(7)
+            p.paragraph_format.space_after = Pt(0)
+
+            # ── Row 2: Duration (italic, smaller, dark-gray) ─────────────────
             if _duration:
-                r_dur = p.add_run(f"  |  {_duration}")
+                p_dur = doc.add_paragraph()
+                p_dur.clear()
+                r_dur = p_dur.add_run(_duration)
                 r_dur.italic = True
                 r_dur.font.size = Pt(BODY - 1)
                 r_dur.font.name = FONT
                 r_dur.font.color.rgb = RGBColor(110, 110, 110)
-            p.paragraph_format.space_before = Pt(6)
-            p.paragraph_format.space_after = Pt(2)
+                p_dur.paragraph_format.space_before = Pt(0)
+                p_dur.paragraph_format.space_after = Pt(2)
 
-            # Role scope summary (italic, gray) — parsed by ATS as context
+            # ── Row 3: Role scope summary (italic gray) ────────────────────
             if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
-                _body_para(exp["description"], italic=True, color_rgb=(80, 80, 80))
+                _body_para(exp["description"], italic=True, color_rgb=(90, 90, 90))
 
-            # Achievement bullets — ATS keyword density maximized here
+            # ── Rows 4+: Achievement bullets ───────────────────────────────
             for b in exp.get("bullets", []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY, font_name=FONT)
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 4: PROJECTS
-    # Project Name (bold) → Tech Stack → URL (plain text, not hyperlink)
+    # Industry-standard project entry format (Jobscan/Enhancv):
+    #   Line 1: Project Name (bold navy) | [Duration] (italic gray)
+    #   Line 2: Tech Stack: ... (smaller, plain) | URL (plain text — no hyperlink)
+    #   Line 3: 1-sentence project purpose (italic)
+    #   Lines 4+: Achievement bullets
     # ATS parsers cannot follow hyperlinks — URLs must be plain text.
     # ══════════════════════════════════════════════════════════════════════
     valid_proj = [p for p in data.get("projects", [])
@@ -4467,9 +4541,37 @@ def generate_modern_docx(data: dict) -> BytesIO:
     if valid_proj:
         _heading("Projects")
         for proj in valid_proj:
-            _add_project_header(doc, proj.get("name", ""), proj.get("duration", ""),
-                                proj.get("tech_stack", ""), proj.get("url", ""),
-                                FONT, name_color=NAVY, url_color=NAVY)
+            # Line 1: Project Name + Duration
+            p = doc.add_paragraph()
+            p.clear()
+            r_name = p.add_run(proj.get("name", ""))
+            r_name.bold = True
+            r_name.font.size = Pt(BODY + 1)
+            r_name.font.name = FONT
+            r_name.font.color.rgb = RGBColor(*NAVY)
+            if proj.get("duration") and proj["duration"] not in ("", "[Not Provided]"):
+                r_dur = p.add_run(f"   [{proj['duration']}]")
+                r_dur.italic = True
+                r_dur.font.size = Pt(BODY - 1)
+                r_dur.font.name = FONT
+                r_dur.font.color.rgb = RGBColor(110, 110, 110)
+            p.paragraph_format.space_before = Pt(6)
+            p.paragraph_format.space_after = Pt(1)
+            # Line 2: Tech Stack + URL (plain text, ATS-safe)
+            meta_parts = []
+            if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
+                meta_parts.append(f"Tech: {proj['tech_stack']}")
+            if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
+                meta_parts.append(proj["url"])
+            if meta_parts:
+                p_meta = doc.add_paragraph()
+                p_meta.clear()
+                r_meta = p_meta.add_run("  |  ".join(meta_parts))
+                r_meta.font.size = Pt(BODY - 1)
+                r_meta.font.name = FONT
+                r_meta.font.color.rgb = RGBColor(74, 74, 74)
+                p_meta.paragraph_format.space_before = Pt(0)
+                p_meta.paragraph_format.space_after = Pt(2)
             if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
                 _body_para(proj["description"], italic=True, color_rgb=(80, 80, 80))
             for b in proj.get("bullets", []):
@@ -4478,27 +4580,56 @@ def generate_modern_docx(data: dict) -> BytesIO:
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 5: EDUCATION
-    # Degree (bold) — Institution  (Year)
-    # ATS parsers match degree keywords: "Bachelor", "Master", "B.Tech", etc.
+    # Two-line entry: Degree + Institution on line 1, Year on line 2.
+    # ATS parsers match: "Bachelor", "Master", "B.Tech", "MBA", "Ph.D".
     # ══════════════════════════════════════════════════════════════════════
     valid_edu = [e for e in data.get("education", [])
                  if e.get("degree") or e.get("institution")]
     if valid_edu:
         _heading("Education")
         for edu in valid_edu:
-            _add_education_row(doc, edu.get("degree", ""), edu.get("institution", ""),
-                               edu.get("year", ""), edu.get("bullets", []),
-                               FONT, degree_color=NAVY)
+            p = doc.add_paragraph()
+            p.clear()
+            if edu.get("degree") and edu["degree"] not in ("", "[Not Provided]"):
+                r_deg = p.add_run(edu["degree"])
+                r_deg.bold = True
+                r_deg.font.size = Pt(BODY + 1)
+                r_deg.font.name = FONT
+                r_deg.font.color.rgb = RGBColor(*NAVY)
+            if edu.get("institution") and edu["institution"] not in ("", "[Not Provided]"):
+                r_inst = p.add_run(f"  —  {edu['institution']}")
+                r_inst.font.size = Pt(BODY)
+                r_inst.font.name = FONT
+                r_inst.font.color.rgb = RGBColor(74, 74, 74)
+            p.paragraph_format.space_before = Pt(6)
+            p.paragraph_format.space_after = Pt(0)
+            if edu.get("year") and edu["year"] not in ("", "[Not Provided]"):
+                p_yr = doc.add_paragraph()
+                p_yr.clear()
+                r_yr = p_yr.add_run(edu["year"])
+                r_yr.italic = True
+                r_yr.font.size = Pt(BODY - 1)
+                r_yr.font.name = FONT
+                r_yr.font.color.rgb = RGBColor(110, 110, 110)
+                p_yr.paragraph_format.space_before = Pt(0)
+                p_yr.paragraph_format.space_after = Pt(2)
+            for b in (edu.get("bullets") or []):
+                if b and b != "[Not Provided]":
+                    _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT)
 
     # ══════════════════════════════════════════════════════════════════════
-    # SECTION 6: CERTIFICATIONS
-    # Each certification on its own bullet: Name  |  Issuer  |  Date
-    # ATS systems (LinkedIn, Workday) match certification keywords directly.
+    # SECTION 6: CERTIFICATIONS & LINKS
+    # Each cert: Name (bold) | Issuer | Date — one bullet per credential.
+    # Followed by LinkedIn / GitHub / Portfolio as plain-text URL bullets.
+    # ATS systems (LinkedIn, Workday) match cert keywords directly.
     # ══════════════════════════════════════════════════════════════════════
     valid_certs = [c for c in data.get("certifications", [])
                    if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
-    if valid_certs:
-        _heading("Certifications")
+    contact = data.get("contact", {})
+    has_links = any(contact.get(k, "") not in ("", "[Not Provided]", "Not Provided")
+                    for k in ("linkedin", "github", "portfolio"))
+    if valid_certs or has_links:
+        _heading("Certifications & Links")
         for cert in valid_certs:
             parts = [cert["name"]]
             if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
@@ -4506,6 +4637,11 @@ def generate_modern_docx(data: dict) -> BytesIO:
             if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
                 parts.append(cert["duration"])
             _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT)
+        # Profile links as plain-text bullets (ATS-safe)
+        for label, key in [("LinkedIn", "linkedin"), ("GitHub", "github"), ("Portfolio", "portfolio")]:
+            val = contact.get(key, "")
+            if val and val not in ("", "[Not Provided]", "Not Provided"):
+                _add_bullet(doc, f"{label}: {val}", font_size=BODY, font_name=FONT)
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 7: LANGUAGES
@@ -4600,30 +4736,31 @@ def generate_minimal_docx(data: dict) -> BytesIO:
         _body_para(data["summary"])
 
     # ══════════════════════════════════════════════════════════════════════
-    # SECTION 2: SKILLS
-    # Comma-separated format — most compatible with all ATS keyword parsers.
-    # Labeled "Technical" and "Professional" for Greenhouse/Lever field mapping.
+    # SECTION 2: CORE SKILLS
+    # Comma-separated — maximum ATS keyword parser compatibility.
+    # Taleo, SmartRecruiters, and legacy HRIS systems parse comma lists best.
+    # Labeled "Technical" and "Professional" — matches Greenhouse/Lever field names.
     # ══════════════════════════════════════════════════════════════════════
     tech_skills = [s for s in data.get("skills", []) if s and s != "[Not Provided]"]
     soft_skills = [s for s in data.get("soft_skills", []) if s and s != "[Not Provided]"]
     if tech_skills or soft_skills:
-        _heading("Skills")
+        _heading("Core Skills")
         if tech_skills:
             p = doc.add_paragraph()
             p.clear()
-            lbl = p.add_run("Technical: ")
+            lbl = p.add_run("Technical:  ")
             lbl.bold = True
             lbl.font.size = Pt(BODY)
             lbl.font.name = FONT
             skills_run = p.add_run(", ".join(tech_skills))
             skills_run.font.size = Pt(BODY)
             skills_run.font.name = FONT
-            p.paragraph_format.space_before = Pt(1)
-            p.paragraph_format.space_after = Pt(2)
+            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.space_after = Pt(3)
         if soft_skills:
             p = doc.add_paragraph()
             p.clear()
-            lbl = p.add_run("Professional: ")
+            lbl = p.add_run("Professional:  ")
             lbl.bold = True
             lbl.font.size = Pt(BODY)
             lbl.font.name = FONT
@@ -4631,11 +4768,16 @@ def generate_minimal_docx(data: dict) -> BytesIO:
             ss_run.font.size = Pt(BODY)
             ss_run.font.name = FONT
             p.paragraph_format.space_before = Pt(1)
-            p.paragraph_format.space_after = Pt(3)
+            p.paragraph_format.space_after = Pt(4)
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 3: WORK EXPERIENCE
-    # Minimal styling: bold role title, plain company/date, standard bullets.
+    # Industry-standard two-line layout for maximum ATS field recognition:
+    #   Line 1: Job Title (bold, black)  |  Duration (italic, gray)
+    #   Line 2: Company Name (plain)
+    #   Line 3: Role scope (italic, optional)
+    #   Lines 4+: Bullet achievements
+    # Plain black/white — preferred by Taleo and legacy HRIS parsers.
     # ══════════════════════════════════════════════════════════════════════
     valid_exp = [e for e in data.get("experience", [])
                  if (e.get("role") and e["role"] not in ("", "[Not Provided]"))
@@ -4643,28 +4785,37 @@ def generate_minimal_docx(data: dict) -> BytesIO:
     if valid_exp:
         _heading("Work Experience")
         for exp in valid_exp:
-            _role = exp.get("role", "") if exp.get("role", "") not in ("", "[Not Provided]") else ""
-            _company = exp.get("company", "") if exp.get("company", "") not in ("", "[Not Provided]") else ""
+            _role     = exp.get("role", "")     if exp.get("role", "")     not in ("", "[Not Provided]") else ""
+            _company  = exp.get("company", "")  if exp.get("company", "")  not in ("", "[Not Provided]") else ""
             _duration = exp.get("duration", "") if exp.get("duration", "") not in ("", "[Not Provided]") else ""
 
+            # Line 1: Job Title + Duration
             p = doc.add_paragraph()
             p.clear()
-            parts = []
             if _role:
-                parts.append(_role)
-            if _company:
-                parts.append(_company)
-            r1 = p.add_run(" | ".join(parts))
-            r1.bold = True
-            r1.font.size = Pt(BODY)
-            r1.font.name = FONT
+                r1 = p.add_run(_role)
+                r1.bold = True
+                r1.font.size = Pt(BODY + 1)
+                r1.font.name = FONT
             if _duration:
-                r2 = p.add_run(f"  {_duration}")
+                r2 = p.add_run(f"  |  {_duration}")
+                r2.italic = True
                 r2.font.size = Pt(BODY - 1)
                 r2.font.name = FONT
                 r2.font.color.rgb = RGBColor(*MID_GRAY)
-            p.paragraph_format.space_before = Pt(6)
-            p.paragraph_format.space_after = Pt(2)
+            p.paragraph_format.space_before = Pt(7)
+            p.paragraph_format.space_after = Pt(1)
+
+            # Line 2: Company Name
+            if _company:
+                p_co = doc.add_paragraph()
+                p_co.clear()
+                r_co = p_co.add_run(_company)
+                r_co.font.size = Pt(BODY)
+                r_co.font.name = FONT
+                r_co.font.color.rgb = RGBColor(*DARK_GRAY)
+                p_co.paragraph_format.space_before = Pt(0)
+                p_co.paragraph_format.space_after = Pt(2)
 
             if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
                 _body_para(exp["description"], italic=True)
@@ -4674,17 +4825,20 @@ def generate_minimal_docx(data: dict) -> BytesIO:
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 4: PROJECTS
+    # Plain black project header: Name (bold) + [Duration] + tech + URL
+    # Each on its own line for maximum ATS field parsing accuracy.
     # ══════════════════════════════════════════════════════════════════════
     valid_proj = [p for p in data.get("projects", [])
                   if p.get("name") and p["name"] not in ("", "[Not Provided]")]
     if valid_proj:
         _heading("Projects")
         for proj in valid_proj:
+            # Line 1: Project Name + Duration
             p = doc.add_paragraph()
             p.clear()
             r1 = p.add_run(proj.get("name", ""))
             r1.bold = True
-            r1.font.size = Pt(BODY)
+            r1.font.size = Pt(BODY + 1)
             r1.font.name = FONT
             if proj.get("duration") and proj["duration"] not in ("", "[Not Provided]"):
                 rd = p.add_run(f"   [{proj['duration']}]")
@@ -4692,18 +4846,23 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 rd.font.size = Pt(BODY - 1)
                 rd.font.name = FONT
                 rd.font.color.rgb = RGBColor(*MID_GRAY)
+            p.paragraph_format.space_before = Pt(6)
+            p.paragraph_format.space_after = Pt(1)
+            # Line 2: Tech Stack + URL
+            meta_parts = []
             if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
-                r2 = p.add_run(f"  |  Tech: {proj['tech_stack']}")
-                r2.font.size = Pt(BODY - 1)
-                r2.font.name = FONT
-                r2.font.color.rgb = RGBColor(80, 80, 80)
+                meta_parts.append(f"Tech: {proj['tech_stack']}")
             if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
-                r3 = p.add_run(f"  |  {proj['url']}")
-                r3.font.size = Pt(BODY - 1)
-                r3.font.name = FONT
-                r3.underline = True
-            p.paragraph_format.space_before = Pt(5)
-            p.paragraph_format.space_after = Pt(2)
+                meta_parts.append(proj["url"])
+            if meta_parts:
+                p_meta = doc.add_paragraph()
+                p_meta.clear()
+                r_meta = p_meta.add_run("  |  ".join(meta_parts))
+                r_meta.font.size = Pt(BODY - 1)
+                r_meta.font.name = FONT
+                r_meta.font.color.rgb = RGBColor(*DARK_GRAY)
+                p_meta.paragraph_format.space_before = Pt(0)
+                p_meta.paragraph_format.space_after = Pt(2)
             if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
                 _body_para(proj["description"], italic=True)
             for b in proj.get("bullets", []):
@@ -4712,23 +4871,54 @@ def generate_minimal_docx(data: dict) -> BytesIO:
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 5: EDUCATION
+    # Degree (bold) — Institution — Year (italic)
+    # ATS parsers match: "Bachelor", "Master", "B.Tech", "MBA", "Ph.D".
     # ══════════════════════════════════════════════════════════════════════
     valid_edu = [e for e in data.get("education", [])
                  if e.get("degree") or e.get("institution")]
     if valid_edu:
         _heading("Education")
         for edu in valid_edu:
-            _add_education_row(doc, edu.get("degree", ""), edu.get("institution", ""),
-                               edu.get("year", ""), edu.get("bullets", []),
-                               FONT, degree_size=BODY)
+            p = doc.add_paragraph()
+            p.clear()
+            if edu.get("degree") and edu["degree"] not in ("", "[Not Provided]"):
+                r_deg = p.add_run(edu["degree"])
+                r_deg.bold = True
+                r_deg.font.size = Pt(BODY + 1)
+                r_deg.font.name = FONT
+            if edu.get("institution") and edu["institution"] not in ("", "[Not Provided]"):
+                r_inst = p.add_run(f"  —  {edu['institution']}")
+                r_inst.font.size = Pt(BODY)
+                r_inst.font.name = FONT
+                r_inst.font.color.rgb = RGBColor(*DARK_GRAY)
+            p.paragraph_format.space_before = Pt(6)
+            p.paragraph_format.space_after = Pt(0)
+            if edu.get("year") and edu["year"] not in ("", "[Not Provided]"):
+                p_yr = doc.add_paragraph()
+                p_yr.clear()
+                r_yr = p_yr.add_run(edu["year"])
+                r_yr.italic = True
+                r_yr.font.size = Pt(BODY - 1)
+                r_yr.font.name = FONT
+                r_yr.font.color.rgb = RGBColor(*MID_GRAY)
+                p_yr.paragraph_format.space_before = Pt(0)
+                p_yr.paragraph_format.space_after = Pt(2)
+            for b in (edu.get("bullets") or []):
+                if b and b != "[Not Provided]":
+                    _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT)
 
     # ══════════════════════════════════════════════════════════════════════
-    # SECTION 6: CERTIFICATIONS
+    # SECTION 6: CERTIFICATIONS & LINKS
+    # Plain-text bullet per cert: Name | Issuer | Date
+    # Profile URLs added as plain-text bullets — ATS-safe (no hyperlinks).
     # ══════════════════════════════════════════════════════════════════════
     valid_certs = [c for c in data.get("certifications", [])
                    if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
-    if valid_certs:
-        _heading("Certifications")
+    contact_min = data.get("contact", {})
+    has_links_min = any(contact_min.get(k, "") not in ("", "[Not Provided]", "Not Provided")
+                        for k in ("linkedin", "github", "portfolio"))
+    if valid_certs or has_links_min:
+        _heading("Certifications & Links")
         for cert in valid_certs:
             parts = [cert["name"]]
             if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
@@ -4736,6 +4926,10 @@ def generate_minimal_docx(data: dict) -> BytesIO:
             if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
                 parts.append(cert["duration"])
             _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT)
+        for label, key in [("LinkedIn", "linkedin"), ("GitHub", "github"), ("Portfolio", "portfolio")]:
+            val = contact_min.get(key, "")
+            if val and val not in ("", "[Not Provided]", "Not Provided"):
+                _add_bullet(doc, f"{label}: {val}", font_size=BODY, font_name=FONT)
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 7: LANGUAGES
@@ -4804,6 +4998,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
         name_size=22, name_color_rgb=DARK, name_font=FONT_NAME,
         contact_font=FONT_BODY, contact_color_hex="444444", contact_size=9,
         title_font=FONT_BODY, title_size=11, title_color_rgb=TEAL,
+        accent_color_hex=TEAL_HEX,
     )
 
     def _heading(text):
@@ -4840,17 +5035,18 @@ def generate_creative_docx(data: dict) -> BytesIO:
         _body_para(data["summary"], italic=False)  # Not italic — ATS reads italic as emphasis, not content
 
     # ══════════════════════════════════════════════════════════════════════
-    # SECTION 2: SKILLS
-    # Pipe-separated with bold labels: "Technical:" and "Professional:"
+    # SECTION 2: CORE SKILLS
+    # Teal labels + pipe-separated values — visually distinctive, ATS-safe.
+    # Georgia used ONLY for name; Calibri throughout body for ATS compatibility.
     # ══════════════════════════════════════════════════════════════════════
     tech_skills = [s for s in data.get("skills", []) if s and s != "[Not Provided]"]
     soft_skills = [s for s in data.get("soft_skills", []) if s and s != "[Not Provided]"]
     if tech_skills or soft_skills:
-        _heading("Skills")
+        _heading("Core Skills")
         if tech_skills:
             p = doc.add_paragraph()
             p.clear()
-            lbl = p.add_run("Technical: ")
+            lbl = p.add_run("Technical:  ")
             lbl.bold = True
             lbl.font.size = Pt(BODY)
             lbl.font.name = FONT_BODY
@@ -4858,12 +5054,12 @@ def generate_creative_docx(data: dict) -> BytesIO:
             skills_run = p.add_run("  |  ".join(tech_skills))
             skills_run.font.size = Pt(BODY)
             skills_run.font.name = FONT_BODY
-            p.paragraph_format.space_before = Pt(1)
-            p.paragraph_format.space_after = Pt(2)
+            p.paragraph_format.space_before = Pt(2)
+            p.paragraph_format.space_after = Pt(3)
         if soft_skills:
             p = doc.add_paragraph()
             p.clear()
-            lbl = p.add_run("Professional: ")
+            lbl = p.add_run("Professional:  ")
             lbl.bold = True
             lbl.font.size = Pt(BODY)
             lbl.font.name = FONT_BODY
@@ -4872,12 +5068,16 @@ def generate_creative_docx(data: dict) -> BytesIO:
             ss_run.font.size = Pt(BODY)
             ss_run.font.name = FONT_BODY
             p.paragraph_format.space_before = Pt(1)
-            p.paragraph_format.space_after = Pt(3)
+            p.paragraph_format.space_after = Pt(4)
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 3: WORK EXPERIENCE
-    # ATS-safe: "  @  " company separator replaced with "  —  "
-    # The "@" symbol triggers social-media false positives in some ATS parsers.
+    # Two-line entry (Enhancv/Jobscan standard):
+    #   Line 1: Job Title (bold dark-navy, 11pt)  |  Duration (italic gray)
+    #   Line 2: Company Name (teal, 10pt)
+    #   Line 3: Role scope (italic, optional)
+    #   Lines 4+: Achievement bullets
+    # ATS-safe: "@" separator replaced with " — " (em-dash).
     # ══════════════════════════════════════════════════════════════════════
     valid_exp = [e for e in data.get("experience", [])
                  if (e.get("role") and e["role"] not in ("", "[Not Provided]"))
@@ -4885,10 +5085,11 @@ def generate_creative_docx(data: dict) -> BytesIO:
     if valid_exp:
         _heading("Work Experience")
         for exp in valid_exp:
-            _role = exp.get("role", "") if exp.get("role", "") not in ("", "[Not Provided]") else ""
-            _company = exp.get("company", "") if exp.get("company", "") not in ("", "[Not Provided]") else ""
+            _role     = exp.get("role", "")     if exp.get("role", "")     not in ("", "[Not Provided]") else ""
+            _company  = exp.get("company", "")  if exp.get("company", "")  not in ("", "[Not Provided]") else ""
             _duration = exp.get("duration", "") if exp.get("duration", "") not in ("", "[Not Provided]") else ""
 
+            # Line 1: Job Title + Duration
             p = doc.add_paragraph()
             p.clear()
             if _role:
@@ -4897,20 +5098,25 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 r1.font.size = Pt(BODY + 1)
                 r1.font.name = FONT_BODY
                 r1.font.color.rgb = RGBColor(*DARK)
-            if _company:
-                sep = "  —  " if _role else ""   # ATS-safe dash, not "@"
-                r2 = p.add_run(f"{sep}{_company}")
-                r2.font.size = Pt(BODY)
-                r2.font.name = FONT_BODY
-                r2.font.color.rgb = RGBColor(*TEAL)
             if _duration:
                 r3 = p.add_run(f"   {_duration}")
                 r3.italic = True
                 r3.font.size = Pt(BODY - 1)
                 r3.font.name = FONT_BODY
                 r3.font.color.rgb = RGBColor(110, 110, 110)
-            p.paragraph_format.space_before = Pt(6)
-            p.paragraph_format.space_after = Pt(2)
+            p.paragraph_format.space_before = Pt(7)
+            p.paragraph_format.space_after = Pt(1)
+
+            # Line 2: Company Name (teal)
+            if _company:
+                p_co = doc.add_paragraph()
+                p_co.clear()
+                r_co = p_co.add_run(_company)
+                r_co.font.size = Pt(BODY)
+                r_co.font.name = FONT_BODY
+                r_co.font.color.rgb = RGBColor(*TEAL)
+                p_co.paragraph_format.space_before = Pt(0)
+                p_co.paragraph_format.space_after = Pt(2)
 
             if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
                 _body_para(exp["description"], italic=True, color_rgb=(80, 80, 80))
@@ -4920,12 +5126,15 @@ def generate_creative_docx(data: dict) -> BytesIO:
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 4: PROJECTS
+    # Project Name (bold dark-navy, 11pt) + [Duration] (italic gray)
+    # Tech Stack line (teal, 9pt) + URL as plain text (ATS-safe — no hyperlink)
     # ══════════════════════════════════════════════════════════════════════
     valid_proj = [pr for pr in data.get("projects", [])
                   if pr.get("name") and pr["name"] not in ("", "[Not Provided]")]
     if valid_proj:
         _heading("Projects")
         for proj in valid_proj:
+            # Line 1: Project Name + Duration
             p = doc.add_paragraph()
             p.clear()
             r1 = p.add_run(proj.get("name", ""))
@@ -4939,19 +5148,23 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 rd.font.size = Pt(BODY - 1)
                 rd.font.name = FONT_BODY
                 rd.font.color.rgb = RGBColor(110, 110, 110)
-            if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
-                r2 = p.add_run(f"  |  Tech: {proj['tech_stack']}")
-                r2.font.size = Pt(BODY - 1)
-                r2.font.name = FONT_BODY
-                r2.font.color.rgb = RGBColor(*TEAL)
-            if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
-                r3 = p.add_run(f"  |  {proj['url']}")
-                r3.font.size = Pt(BODY - 1)
-                r3.font.name = FONT_BODY
-                r3.font.color.rgb = RGBColor(*TEAL)
-                r3.underline = True
             p.paragraph_format.space_before = Pt(6)
-            p.paragraph_format.space_after = Pt(2)
+            p.paragraph_format.space_after = Pt(1)
+            # Line 2: Tech + URL (plain text, teal color — no underline/hyperlink)
+            meta_parts = []
+            if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
+                meta_parts.append(f"Tech: {proj['tech_stack']}")
+            if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
+                meta_parts.append(proj["url"])
+            if meta_parts:
+                p_meta = doc.add_paragraph()
+                p_meta.clear()
+                r_meta = p_meta.add_run("  |  ".join(meta_parts))
+                r_meta.font.size = Pt(BODY - 1)
+                r_meta.font.name = FONT_BODY
+                r_meta.font.color.rgb = RGBColor(*TEAL)
+                p_meta.paragraph_format.space_before = Pt(0)
+                p_meta.paragraph_format.space_after = Pt(2)
             if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
                 _body_para(proj["description"], italic=True, color_rgb=(80, 80, 80))
             for b in proj.get("bullets", []):
@@ -4960,6 +5173,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 5: EDUCATION
+    # Degree (bold dark-navy) — Institution (teal) — Year (italic gray)
     # ══════════════════════════════════════════════════════════════════════
     valid_edu = [e for e in data.get("education", [])
                  if e.get("degree") or e.get("institution")]
@@ -4968,36 +5182,45 @@ def generate_creative_docx(data: dict) -> BytesIO:
         for edu in valid_edu:
             p = doc.add_paragraph()
             p.clear()
-            if edu.get("degree"):
+            if edu.get("degree") and edu["degree"] not in ("", "[Not Provided]"):
                 r1 = p.add_run(edu["degree"])
                 r1.bold = True
-                r1.font.size = Pt(BODY)
+                r1.font.size = Pt(BODY + 1)
                 r1.font.name = FONT_BODY
                 r1.font.color.rgb = RGBColor(*DARK)
-            if edu.get("institution"):
+            if edu.get("institution") and edu["institution"] not in ("", "[Not Provided]"):
                 r2 = p.add_run(f"  —  {edu['institution']}")
                 r2.font.size = Pt(BODY)
                 r2.font.name = FONT_BODY
                 r2.font.color.rgb = RGBColor(*TEAL)
-            if edu.get("year"):
-                r3 = p.add_run(f"  ({edu['year']})")
+            p.paragraph_format.space_before = Pt(6)
+            p.paragraph_format.space_after = Pt(0)
+            if edu.get("year") and edu["year"] not in ("", "[Not Provided]"):
+                p_yr = doc.add_paragraph()
+                p_yr.clear()
+                r3 = p_yr.add_run(edu["year"])
                 r3.italic = True
                 r3.font.size = Pt(BODY - 1)
                 r3.font.name = FONT_BODY
                 r3.font.color.rgb = RGBColor(110, 110, 110)
-            p.paragraph_format.space_before = Pt(5)
-            p.paragraph_format.space_after = Pt(1)
+                p_yr.paragraph_format.space_before = Pt(0)
+                p_yr.paragraph_format.space_after = Pt(2)
             for b in (edu.get("bullets") or []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT_BODY)
 
     # ══════════════════════════════════════════════════════════════════════
-    # SECTION 6: CERTIFICATIONS
+    # SECTION 6: CERTIFICATIONS & LINKS
+    # Cert bullets: Name | Issuer | Date  (teal heading, plain bullets)
+    # Profile URLs as plain-text bullets — no hyperlinks (ATS-safe).
     # ══════════════════════════════════════════════════════════════════════
     valid_certs = [c for c in data.get("certifications", [])
                    if isinstance(c, dict) and c.get("name") and c["name"] not in ("", "[Not Provided]")]
-    if valid_certs:
-        _heading("Certifications")
+    contact_exec = data.get("contact", {})
+    has_links_exec = any(contact_exec.get(k, "") not in ("", "[Not Provided]", "Not Provided")
+                         for k in ("linkedin", "github", "portfolio"))
+    if valid_certs or has_links_exec:
+        _heading("Certifications & Links")
         for cert in valid_certs:
             parts = [cert["name"]]
             if cert.get("issuer") and cert["issuer"] not in ("", "[Not Provided]"):
@@ -5005,6 +5228,10 @@ def generate_creative_docx(data: dict) -> BytesIO:
             if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
                 parts.append(cert["duration"])
             _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT_BODY)
+        for label, key in [("LinkedIn", "linkedin"), ("GitHub", "github"), ("Portfolio", "portfolio")]:
+            val = contact_exec.get(key, "")
+            if val and val not in ("", "[Not Provided]", "Not Provided"):
+                _add_bullet(doc, f"{label}: {val}", font_size=BODY, font_name=FONT_BODY)
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 7: LANGUAGES
@@ -8652,6 +8879,891 @@ def render_template_terracotta(session_state, profile_img_html=""):
 </body></html>"""
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 10 — Navy Prestige (Two Column)
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_navy_prestige(session_state, profile_img_html=""):
+    """Navy Prestige — two-column, deep navy sidebar, gold accents, ATS-friendly."""
+    import re as _renp
+
+    fixed_img = ""
+    if profile_img_html:
+        m = _renp.search(r'<img[^>]*>', profile_img_html)
+        if m:
+            tag = _renp.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+            tag = tag.replace("<img ", "<img style='width:108px;height:108px;border-radius:50%;"
+                              "object-fit:cover;object-position:center;border:3px solid #b8972a;"
+                              "display:block;margin:0 auto;' ")
+            fixed_img = tag
+
+    def _badge_np(item):
+        return (f"<span style='display:inline-block;background:rgba(184,151,42,0.20);color:#f5e6b2;"
+                f"border:1px solid rgba(184,151,42,0.45);border-radius:4px;padding:3px 10px;"
+                f"margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{item.strip()}</span>")
+
+    def _badges_np(s):
+        return "".join(_badge_np(x) for x in s.split(',') if x.strip())
+
+    def _side_np(title, body):
+        return (f"<div style='margin-bottom:22px;'>"
+                f"<h3 style='font-size:10px;letter-spacing:2px;text-transform:uppercase;"
+                f"color:#b8972a;font-weight:800;border-bottom:1px solid rgba(184,151,42,0.4);"
+                f"padding-bottom:5px;margin-bottom:10px;'>{title}</h3>"
+                f"{body}</div>")
+
+    def _main_np(title, body):
+        return (f"<div style='margin-bottom:26px;'>"
+                f"<h3 style='font-size:13px;letter-spacing:1.5px;text-transform:uppercase;"
+                f"font-weight:700;color:#0d1b3e;border-bottom:2px solid #b8972a;"
+                f"padding-bottom:5px;margin-bottom:14px;'>{title}</h3>"
+                f"{body}</div>")
+
+    SVG_NP = {
+        'email':    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+        'phone':    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+        'location': '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+        'linkedin': '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>',
+        'portfolio':'<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+    }
+    contact_html_np = ""
+    for _key in ['location', 'phone', 'email', 'linkedin', 'portfolio']:
+        val = session_state.get(_key, '')
+        if not val:
+            continue
+        if _key == 'email':
+            v = f"<a href='mailto:{val}' style='color:#f5e6b2;text-decoration:none;font-weight:500;word-break:break-all;'>{val}</a>"
+        elif _key in ('linkedin', 'portfolio'):
+            href = val if val.startswith('http') else f"https://{val}"
+            v = f"<a href='{href}' target='_blank' style='color:#f5e6b2;text-decoration:none;font-weight:500;word-break:break-all;'>{val}</a>"
+        else:
+            v = f"<span style='color:#f5e6b2;word-break:break-all;'>{val}</span>"
+        contact_html_np += (f"<div style='margin-bottom:8px;font-size:12px;color:#f5e6b2;display:flex;align-items:center;gap:7px;'>"
+                            f"<span style='opacity:0.85;flex-shrink:0;'>{SVG_NP.get(_key,'')}</span>{v}</div>")
+
+    cert_html_np = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html_np += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(184,151,42,0.12);"
+                             f"border-radius:5px;border:1px solid rgba(184,151,42,0.3);'>"
+                             f"<a href='{cert.get('link','#')}' style='color:#f5e6b2;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
+                             f"<div style='font-size:11px;color:rgba(245,230,178,0.75);'>{cert.get('duration','')}</div></div>")
+
+    proj_links_html_np = ""
+    if session_state.project_links:
+        proj_links_html_np = "".join(
+            f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#f5e6b2;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
+            for i, lnk in enumerate(session_state.project_links))
+
+    exp_html_np = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description', ''), font_size='13px', color='#1f2937', line_height='1.75')
+            exp_html_np += (
+                f"<div style='margin-bottom:18px;padding-left:12px;border-left:3px solid #b8972a;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:14px;color:#0d1b3e;'>{exp.get('company','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;background:#fef9ec;padding:2px 8px;border-radius:6px;border:1px solid #e8d58a;'>{exp.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#374151;font-weight:700;margin-bottom:4px;'>{exp.get('title','')}</div>"
+                f"<div>{desc}</div></div>"
+                f"<div style='border-bottom:1px dashed #d1d5db;margin-bottom:10px;'></div>"
+            )
+
+    edu_html_np = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution'):
+            dv = edu.get('degree', '')
+            if isinstance(dv, list):
+                dv = ", ".join(dv)
+            edu_html_np += (
+                f"<div style='margin-bottom:12px;padding-left:12px;border-left:3px solid #b8972a;'>"
+                f"<strong style='font-size:13px;color:#0d1b3e;'>{edu.get('institution','')}</strong>"
+                f"<span style='float:right;font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>"
+                f"<div style='clear:both;font-size:13px;color:#374151;font-style:italic;font-weight:600;'>{dv}</div>"
+                f"<div style='font-size:12px;color:#6b7280;'>{edu.get('details','')}</div></div>"
+            )
+
+    proj_html_np = ""
+    proj_links_all_np = getattr(session_state, 'project_links', []) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description', ''), font_size='13px', color='#1f2937', line_height='1.75')
+            pl = ""
+            if idx < len(proj_links_all_np) and proj_links_all_np[idx]:
+                pl = (f"<div style='margin-top:4px;'><a href='{proj_links_all_np[idx]}' target='_blank' "
+                      f"style='color:#b8972a;font-size:12px;font-weight:600;'>&#128279; View Project</a></div>")
+            proj_html_np += (
+                f"<div style='margin-bottom:14px;padding:10px 12px;background:#fffdf4;"
+                f"border-radius:6px;border-left:3px solid #b8972a;'>"
+                f"<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:13px;color:#0d1b3e;'>{proj.get('title','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:12px;color:#374151;font-weight:600;margin-bottom:3px;'>{proj.get('tech','')}</div>"
+                f"<div>{desc}</div>{pl}</div>"
+            )
+
+    summary_html_np = _fmt_desc(session_state.get('summary', ''), font_size='13px', color='#1f2937', line_height='1.8')
+
+    html_content = f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
+</head>
+<body>
+<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<tr>
+  <td style='width:290px;background:linear-gradient(180deg,#0d1b3e,#1a2f6b);color:#f5e6b2;padding:34px 22px;vertical-align:top;'>
+    {'<div style="margin:0 auto 12px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
+    <h1 style='font-size:20px;font-weight:800;color:#f5e6b2;text-align:center;margin-bottom:3px;'>{session_state.get('name','')}</h1>
+    <div style='font-size:12px;color:#b8972a;text-align:center;margin-bottom:22px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;'>{session_state.get('job_title','')}</div>
+    {_side_np("Contact", contact_html_np)}
+    {_side_np("Technical Skills", _badges_np(session_state.get('skills',''))) if session_state.get('skills') else ''}
+    {_side_np("Soft Skills", _badges_np(session_state.get('Softskills',''))) if session_state.get('Softskills') else ''}
+    {_side_np("Languages", _badges_np(session_state.get('languages',''))) if session_state.get('languages') else ''}
+    {_side_np("Interests", _badges_np(session_state.get('interests',''))) if session_state.get('interests') else ''}
+    {_side_np("Certifications", cert_html_np) if cert_html_np else ''}
+    {_side_np("Project Links", proj_links_html_np) if proj_links_html_np else ''}
+  </td>
+  <td style='padding:38px 42px;background:#ffffff;vertical-align:top;'>
+    {_main_np("Professional Summary", summary_html_np) if summary_html_np else ''}
+    {_main_np("Work Experience", exp_html_np) if exp_html_np else ''}
+    {_main_np("Education", edu_html_np) if edu_html_np else ''}
+    {_main_np("Projects", proj_html_np) if proj_html_np else ''}
+  </td>
+</tr>
+</table>
+</body></html>"""
+
+    return html_content
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 11 — Slate Gray (Single Column)
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_slate_gray(session_state, profile_img_html=""):
+    """Slate Gray — single-column, charcoal headings, light gray accents, highly ATS-friendly."""
+    import re as _resg
+
+    fixed_img = ""
+    if profile_img_html:
+        m = _resg.search(r'<img[^>]*>', profile_img_html)
+        if m:
+            tag = _resg.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+            tag = tag.replace("<img ", "<img style='width:96px;height:96px;border-radius:50%;"
+                              "object-fit:cover;object-position:center;border:3px solid #64748b;"
+                              "display:block;margin:0 auto 12px;' ")
+            fixed_img = tag
+
+    def _sec_sg(title, body):
+        return (f"<div style='margin-bottom:26px;'>"
+                f"<h3 style='font-size:14px;font-weight:700;color:#1e293b;text-transform:uppercase;"
+                f"letter-spacing:1.5px;border-bottom:2px solid #64748b;padding-bottom:5px;margin-bottom:14px;'>{title}</h3>"
+                f"{body}</div>")
+
+    def _tags_sg(s, bg="#f1f5f9", color="#1e293b", border="#cbd5e1"):
+        return "".join(
+            f"<span style='display:inline-block;background:{bg};color:{color};border:1px solid {border};"
+            f"border-radius:4px;padding:4px 11px;margin:3px 4px 3px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            for x in s.split(',') if x.strip())
+
+    contact_parts_sg = []
+    for key, label in [('location',''),('phone',''),('email',''),('linkedin','LinkedIn'),('portfolio','Portfolio')]:
+        val = session_state.get(key, '')
+        if not val:
+            continue
+        if key == 'email':
+            contact_parts_sg.append(f"<a href='mailto:{val}' style='color:#1e293b;text-decoration:none;font-weight:500;'>{val}</a>")
+        elif key in ('linkedin','portfolio'):
+            href = val if val.startswith('http') else f"https://{val}"
+            contact_parts_sg.append(f"<a href='{href}' target='_blank' style='color:#1e293b;text-decoration:none;font-weight:500;'>{label}: {val}</a>")
+        else:
+            contact_parts_sg.append(f"<span style='color:#334155;'>{val}</span>")
+    contact_html_sg = " &nbsp;|&nbsp; ".join(contact_parts_sg)
+
+    exp_html_sg = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#334155', line_height='1.75')
+            exp_html_sg += (
+                f"<div style='margin-bottom:18px;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:14px;color:#1e293b;'>{exp.get('title','')}</strong>"
+                f"<span style='font-size:12px;color:#64748b;background:#f1f5f9;padding:2px 8px;border-radius:5px;border:1px solid #e2e8f0;'>{exp.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#475569;font-weight:600;margin-bottom:5px;'>{exp.get('company','')}</div>"
+                f"<div>{desc}</div></div>"
+                f"<div style='border-bottom:1px solid #e2e8f0;margin-bottom:10px;'></div>"
+            )
+
+    edu_html_sg = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list):
+                dv = ", ".join(dv)
+            edu_html_sg += (
+                f"<div style='margin-bottom:12px;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:13px;color:#1e293b;'>{edu.get('institution','')}</strong>"
+                f"<span style='font-size:12px;color:#64748b;'>{edu.get('year','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#475569;font-style:italic;font-weight:600;'>{dv}</div>"
+                f"<div style='font-size:12px;color:#64748b;'>{edu.get('details','')}</div></div>"
+            )
+
+    proj_html_sg = ""
+    proj_links_all_sg = getattr(session_state, 'project_links', []) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#334155', line_height='1.75')
+            pl = ""
+            if idx < len(proj_links_all_sg) and proj_links_all_sg[idx]:
+                pl = (f"<div style='margin-top:4px;'><a href='{proj_links_all_sg[idx]}' target='_blank' "
+                      f"style='color:#475569;font-size:12px;font-weight:600;'>&#128279; View Project</a></div>")
+            proj_html_sg += (
+                f"<div style='margin-bottom:16px;padding:12px;background:#f8fafc;"
+                f"border-radius:6px;border:1px solid #e2e8f0;'>"
+                f"<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:13px;color:#1e293b;'>{proj.get('title','')}</strong>"
+                f"<span style='font-size:12px;color:#64748b;'>{proj.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:12px;color:#475569;font-weight:600;margin-bottom:3px;'>Tech: {proj.get('tech','')}</div>"
+                f"<div>{desc}</div>{pl}</div>"
+            )
+
+    cert_html_sg = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html_sg += (
+                f"<div style='margin-bottom:10px;'>"
+                f"<a href='{cert.get('link','#')}' target='_blank' style='font-size:13px;font-weight:700;color:#1e293b;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<span style='font-size:12px;color:#64748b;'> — {cert.get('duration','')}</span></div>"
+            )
+
+    proj_links_sec_sg = ""
+    if session_state.project_links:
+        proj_links_sec_sg = "".join(
+            f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#475569;font-size:13px;font-weight:600;'>&#128279; Project {i+1}: {lnk}</a></div>"
+            for i, lnk in enumerate(session_state.project_links) if lnk)
+
+    summary_html_sg = _fmt_desc(session_state.get('summary',''), font_size='13px', color='#334155', line_height='1.8')
+
+    html_content = f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title></head>
+<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1e293b;background:#ffffff;max-width:860px;margin:0 auto;padding:36px 40px;">
+  {fixed_img if fixed_img else ''}
+  <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #64748b;">
+    <h1 style="font-size:28px;font-weight:800;color:#1e293b;margin-bottom:4px;">{session_state.get('name','')}</h1>
+    <div style="font-size:15px;color:#475569;font-weight:600;margin-bottom:10px;">{session_state.get('job_title','')}</div>
+    <div style="font-size:12px;color:#334155;line-height:2;">{contact_html_sg}</div>
+  </div>
+  {_sec_sg("Professional Summary", f"<div style='font-size:13px;color:#334155;line-height:1.8;padding:12px 14px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;'>{summary_html_sg}</div>") if summary_html_sg else ''}
+  {_sec_sg("Work Experience", exp_html_sg) if exp_html_sg else ''}
+  {_sec_sg("Education", edu_html_sg) if edu_html_sg else ''}
+  {_sec_sg("Projects", proj_html_sg) if proj_html_sg else ''}
+  {_sec_sg("Technical Skills", f"<div style='padding:6px 0;'>{_tags_sg(session_state.get('skills',''))}</div>") if session_state.get('skills','').strip() else ''}
+  {_sec_sg("Core Competencies", f"<div style='padding:6px 0;'>{_tags_sg(session_state.get('Softskills',''),'#f0f9ff','#0c4a6e','#bae6fd')}</div>") if session_state.get('Softskills','').strip() else ''}
+  {_sec_sg("Languages", f"<div style='padding:6px 0;'>{_tags_sg(session_state.get('languages',''),'#f0fdf4','#14532d','#bbf7d0')}</div>") if session_state.get('languages','').strip() else ''}
+  {_sec_sg("Interests", f"<div style='padding:6px 0;'>{_tags_sg(session_state.get('interests',''),'#fdf4ff','#581c87','#e9d5ff')}</div>") if session_state.get('interests','').strip() else ''}
+  {_sec_sg("Certifications", cert_html_sg) if cert_html_sg else ''}
+  {_sec_sg("Project Links", proj_links_sec_sg) if proj_links_sec_sg else ''}
+</body></html>"""
+
+    return html_content
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 12 — Teal Impact (Two Column)
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_teal_impact(session_state, profile_img_html=""):
+    """Teal Impact — two-column, teal sidebar, clean white main panel, ATS-friendly."""
+    import re as _reti
+
+    fixed_img = ""
+    if profile_img_html:
+        m = _reti.search(r'<img[^>]*>', profile_img_html)
+        if m:
+            tag = _reti.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+            tag = tag.replace("<img ", "<img style='width:108px;height:108px;border-radius:50%;"
+                              "object-fit:cover;object-position:center;border:3px solid rgba(255,255,255,0.5);"
+                              "display:block;margin:0 auto;' ")
+            fixed_img = tag
+
+    def _badge_ti(item):
+        return (f"<span style='display:inline-block;background:rgba(255,255,255,0.18);color:#ffffff;"
+                f"border:1px solid rgba(255,255,255,0.35);border-radius:4px;padding:3px 10px;"
+                f"margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{item.strip()}</span>")
+
+    def _badges_ti(s):
+        return "".join(_badge_ti(x) for x in s.split(',') if x.strip())
+
+    def _side_ti(title, body):
+        return (f"<div style='margin-bottom:22px;'>"
+                f"<h3 style='font-size:10px;letter-spacing:2px;text-transform:uppercase;"
+                f"color:#ffffff;font-weight:800;border-bottom:1px solid rgba(255,255,255,0.35);"
+                f"padding-bottom:5px;margin-bottom:10px;'>{title}</h3>"
+                f"{body}</div>")
+
+    def _main_ti(title, body):
+        return (f"<div style='margin-bottom:26px;'>"
+                f"<h3 style='font-size:13px;letter-spacing:1.5px;text-transform:uppercase;"
+                f"font-weight:700;color:#0f4c4c;border-bottom:2px solid #0d9488;"
+                f"padding-bottom:5px;margin-bottom:14px;'>{title}</h3>"
+                f"{body}</div>")
+
+    SVG_TI = {
+        'email':    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+        'phone':    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+        'location': '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+        'linkedin': '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>',
+        'portfolio':'<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+    }
+    contact_html_ti = ""
+    for _key in ['location', 'phone', 'email', 'linkedin', 'portfolio']:
+        val = session_state.get(_key, '')
+        if not val:
+            continue
+        if _key == 'email':
+            v = f"<a href='mailto:{val}' style='color:#ccfbf1;text-decoration:none;font-weight:500;word-break:break-all;'>{val}</a>"
+        elif _key in ('linkedin', 'portfolio'):
+            href = val if val.startswith('http') else f"https://{val}"
+            v = f"<a href='{href}' target='_blank' style='color:#ccfbf1;text-decoration:none;font-weight:500;word-break:break-all;'>{val}</a>"
+        else:
+            v = f"<span style='color:#ccfbf1;word-break:break-all;'>{val}</span>"
+        contact_html_ti += (f"<div style='margin-bottom:8px;font-size:12px;color:#ccfbf1;display:flex;align-items:center;gap:7px;'>"
+                            f"<span style='opacity:0.85;flex-shrink:0;'>{SVG_TI.get(_key,'')}</span>{v}</div>")
+
+    cert_html_ti = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html_ti += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(255,255,255,0.1);"
+                             f"border-radius:5px;border:1px solid rgba(255,255,255,0.2);'>"
+                             f"<a href='{cert.get('link','#')}' style='color:#ccfbf1;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
+                             f"<div style='font-size:11px;color:rgba(204,251,241,0.75);'>{cert.get('duration','')}</div></div>")
+
+    proj_links_html_ti = ""
+    if session_state.project_links:
+        proj_links_html_ti = "".join(
+            f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#ccfbf1;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
+            for i, lnk in enumerate(session_state.project_links))
+
+    exp_html_ti = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#1f2937', line_height='1.75')
+            exp_html_ti += (
+                f"<div style='margin-bottom:18px;padding-left:12px;border-left:3px solid #0d9488;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:14px;color:#0f4c4c;'>{exp.get('company','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;background:#f0fdfa;padding:2px 8px;border-radius:6px;border:1px solid #99f6e4;'>{exp.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#374151;font-weight:700;margin-bottom:4px;'>{exp.get('title','')}</div>"
+                f"<div>{desc}</div></div>"
+                f"<div style='border-bottom:1px dashed #d1fae5;margin-bottom:10px;'></div>"
+            )
+
+    edu_html_ti = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list):
+                dv = ", ".join(dv)
+            edu_html_ti += (
+                f"<div style='margin-bottom:12px;padding-left:12px;border-left:3px solid #0d9488;'>"
+                f"<strong style='font-size:13px;color:#0f4c4c;'>{edu.get('institution','')}</strong>"
+                f"<span style='float:right;font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>"
+                f"<div style='clear:both;font-size:13px;color:#374151;font-style:italic;font-weight:600;'>{dv}</div>"
+                f"<div style='font-size:12px;color:#6b7280;'>{edu.get('details','')}</div></div>"
+            )
+
+    proj_html_ti = ""
+    proj_links_all_ti = getattr(session_state, 'project_links', []) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#1f2937', line_height='1.75')
+            pl = ""
+            if idx < len(proj_links_all_ti) and proj_links_all_ti[idx]:
+                pl = (f"<div style='margin-top:4px;'><a href='{proj_links_all_ti[idx]}' target='_blank' "
+                      f"style='color:#0d9488;font-size:12px;font-weight:600;'>&#128279; View Project</a></div>")
+            proj_html_ti += (
+                f"<div style='margin-bottom:14px;padding:10px 12px;background:#f0fdfa;"
+                f"border-radius:6px;border-left:3px solid #0d9488;'>"
+                f"<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:13px;color:#0f4c4c;'>{proj.get('title','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:12px;color:#374151;font-weight:600;margin-bottom:3px;'>{proj.get('tech','')}</div>"
+                f"<div>{desc}</div>{pl}</div>"
+            )
+
+    summary_html_ti = _fmt_desc(session_state.get('summary',''), font_size='13px', color='#1f2937', line_height='1.8')
+
+    html_content = f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
+</head>
+<body>
+<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<tr>
+  <td style='width:290px;background:linear-gradient(180deg,#0f766e,#0d9488);color:#ccfbf1;padding:34px 22px;vertical-align:top;'>
+    {'<div style="margin:0 auto 12px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
+    <h1 style='font-size:20px;font-weight:800;color:#ffffff;text-align:center;margin-bottom:3px;'>{session_state.get('name','')}</h1>
+    <div style='font-size:12px;color:#ccfbf1;text-align:center;margin-bottom:22px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;'>{session_state.get('job_title','')}</div>
+    {_side_ti("Contact", contact_html_ti)}
+    {_side_ti("Technical Skills", _badges_ti(session_state.get('skills',''))) if session_state.get('skills') else ''}
+    {_side_ti("Soft Skills", _badges_ti(session_state.get('Softskills',''))) if session_state.get('Softskills') else ''}
+    {_side_ti("Languages", _badges_ti(session_state.get('languages',''))) if session_state.get('languages') else ''}
+    {_side_ti("Interests", _badges_ti(session_state.get('interests',''))) if session_state.get('interests') else ''}
+    {_side_ti("Certifications", cert_html_ti) if cert_html_ti else ''}
+    {_side_ti("Project Links", proj_links_html_ti) if proj_links_html_ti else ''}
+  </td>
+  <td style='padding:38px 42px;background:#ffffff;vertical-align:top;'>
+    {_main_ti("Professional Summary", summary_html_ti) if summary_html_ti else ''}
+    {_main_ti("Work Experience", exp_html_ti) if exp_html_ti else ''}
+    {_main_ti("Education", edu_html_ti) if edu_html_ti else ''}
+    {_main_ti("Projects", proj_html_ti) if proj_html_ti else ''}
+  </td>
+</tr>
+</table>
+</body></html>"""
+
+    return html_content
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 13 — Burgundy Classic (Single Column)
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_burgundy_classic(session_state, profile_img_html=""):
+    """Burgundy Classic — single-column, deep burgundy headers, ivory background, ATS-friendly."""
+    import re as _rebc
+
+    fixed_img = ""
+    if profile_img_html:
+        m = _rebc.search(r'<img[^>]*>', profile_img_html)
+        if m:
+            tag = _rebc.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+            tag = tag.replace("<img ", "<img style='width:96px;height:96px;border-radius:50%;"
+                              "object-fit:cover;object-position:center;border:3px solid #7f1d1d;"
+                              "display:block;margin:0 auto 12px;' ")
+            fixed_img = tag
+
+    def _sec_bc(title, body):
+        return (f"<div style='margin-bottom:26px;'>"
+                f"<h3 style='font-size:14px;font-weight:700;color:#7f1d1d;text-transform:uppercase;"
+                f"letter-spacing:2px;border-bottom:2px solid #991b1b;padding-bottom:5px;margin-bottom:14px;'>{title}</h3>"
+                f"{body}</div>")
+
+    def _tags_bc(s, bg="#fef2f2", color="#7f1d1d", border="#fecaca"):
+        return "".join(
+            f"<span style='display:inline-block;background:{bg};color:{color};border:1px solid {border};"
+            f"border-radius:4px;padding:4px 11px;margin:3px 4px 3px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            for x in s.split(',') if x.strip())
+
+    contact_parts_bc = []
+    for key, label in [('location',''),('phone',''),('email',''),('linkedin','LinkedIn'),('portfolio','Portfolio')]:
+        val = session_state.get(key, '')
+        if not val:
+            continue
+        if key == 'email':
+            contact_parts_bc.append(f"<a href='mailto:{val}' style='color:#7f1d1d;text-decoration:none;font-weight:500;'>{val}</a>")
+        elif key in ('linkedin','portfolio'):
+            href = val if val.startswith('http') else f"https://{val}"
+            contact_parts_bc.append(f"<a href='{href}' target='_blank' style='color:#7f1d1d;text-decoration:none;font-weight:500;'>{label}: {val}</a>")
+        else:
+            contact_parts_bc.append(f"<span style='color:#3f1212;'>{val}</span>")
+    contact_html_bc = " &nbsp;|&nbsp; ".join(contact_parts_bc)
+
+    exp_html_bc = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#1c1c1c', line_height='1.75')
+            exp_html_bc += (
+                f"<div style='margin-bottom:18px;padding-left:12px;border-left:3px solid #991b1b;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:14px;color:#7f1d1d;'>{exp.get('title','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;background:#fef2f2;padding:2px 8px;border-radius:5px;border:1px solid #fecaca;'>{exp.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#374151;font-weight:600;margin-bottom:5px;'>{exp.get('company','')}</div>"
+                f"<div>{desc}</div></div>"
+                f"<div style='border-bottom:1px solid #fde8e8;margin-bottom:10px;'></div>"
+            )
+
+    edu_html_bc = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list):
+                dv = ", ".join(dv)
+            edu_html_bc += (
+                f"<div style='margin-bottom:12px;padding-left:12px;border-left:3px solid #991b1b;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:13px;color:#7f1d1d;'>{edu.get('institution','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#374151;font-style:italic;font-weight:600;'>{dv}</div>"
+                f"<div style='font-size:12px;color:#6b7280;'>{edu.get('details','')}</div></div>"
+            )
+
+    proj_html_bc = ""
+    proj_links_all_bc = getattr(session_state, 'project_links', []) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#1c1c1c', line_height='1.75')
+            pl = ""
+            if idx < len(proj_links_all_bc) and proj_links_all_bc[idx]:
+                pl = (f"<div style='margin-top:4px;'><a href='{proj_links_all_bc[idx]}' target='_blank' "
+                      f"style='color:#991b1b;font-size:12px;font-weight:600;'>&#128279; View Project</a></div>")
+            proj_html_bc += (
+                f"<div style='margin-bottom:14px;padding:10px 12px;background:#fffafa;"
+                f"border-radius:6px;border:1px solid #fde8e8;'>"
+                f"<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:13px;color:#7f1d1d;'>{proj.get('title','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:12px;color:#374151;font-weight:600;margin-bottom:3px;'>Tech: {proj.get('tech','')}</div>"
+                f"<div>{desc}</div>{pl}</div>"
+            )
+
+    cert_html_bc = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html_bc += (
+                f"<div style='margin-bottom:10px;padding-left:10px;border-left:2px solid #fca5a5;'>"
+                f"<a href='{cert.get('link','#')}' target='_blank' style='font-size:13px;font-weight:700;color:#7f1d1d;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<span style='font-size:12px;color:#6b7280;'> — {cert.get('duration','')}</span></div>"
+            )
+
+    proj_links_sec_bc = ""
+    if session_state.project_links:
+        proj_links_sec_bc = "".join(
+            f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#991b1b;font-size:13px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
+            for i, lnk in enumerate(session_state.project_links) if lnk)
+
+    summary_html_bc = _fmt_desc(session_state.get('summary',''), font_size='13px', color='#1c1c1c', line_height='1.8')
+
+    html_content = f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title></head>
+<body style="font-family:'Georgia',serif;line-height:1.6;color:#1c1c1c;background:#fffafa;max-width:860px;margin:0 auto;padding:36px 40px;">
+  {fixed_img if fixed_img else ''}
+  <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:3px double #991b1b;">
+    <h1 style="font-size:28px;font-weight:800;color:#7f1d1d;margin-bottom:4px;font-family:'Georgia',serif;">{session_state.get('name','')}</h1>
+    <div style="font-size:15px;color:#374151;font-weight:600;margin-bottom:10px;letter-spacing:1px;">{session_state.get('job_title','')}</div>
+    <div style="font-size:12px;color:#3f1212;line-height:2;">{contact_html_bc}</div>
+  </div>
+  {_sec_bc("Professional Summary", f"<div style='font-size:13px;color:#1c1c1c;line-height:1.8;padding:12px 14px;background:#fff5f5;border-radius:6px;border:1px solid #fecaca;'>{summary_html_bc}</div>") if summary_html_bc else ''}
+  {_sec_bc("Work Experience", exp_html_bc) if exp_html_bc else ''}
+  {_sec_bc("Education", edu_html_bc) if edu_html_bc else ''}
+  {_sec_bc("Projects", proj_html_bc) if proj_html_bc else ''}
+  {_sec_bc("Technical Skills", f"<div style='padding:6px 0;'>{_tags_bc(session_state.get('skills',''))}</div>") if session_state.get('skills','').strip() else ''}
+  {_sec_bc("Core Competencies", f"<div style='padding:6px 0;'>{_tags_bc(session_state.get('Softskills',''),'#fff7ed','#78350f','#fed7aa')}</div>") if session_state.get('Softskills','').strip() else ''}
+  {_sec_bc("Languages", f"<div style='padding:6px 0;'>{_tags_bc(session_state.get('languages',''),'#f0fdf4','#14532d','#bbf7d0')}</div>") if session_state.get('languages','').strip() else ''}
+  {_sec_bc("Interests", f"<div style='padding:6px 0;'>{_tags_bc(session_state.get('interests',''),'#fdf4ff','#581c87','#e9d5ff')}</div>") if session_state.get('interests','').strip() else ''}
+  {_sec_bc("Certifications", cert_html_bc) if cert_html_bc else ''}
+  {_sec_bc("Project Links", proj_links_sec_bc) if proj_links_sec_bc else ''}
+</body></html>"""
+
+    return html_content
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 14 — Indigo Tech (Two Column)
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_indigo_tech(session_state, profile_img_html=""):
+    """Indigo Tech — two-column, dark indigo sidebar with cyan accents, modern tech feel, ATS-friendly."""
+    import re as _reit
+
+    fixed_img = ""
+    if profile_img_html:
+        m = _reit.search(r'<img[^>]*>', profile_img_html)
+        if m:
+            tag = _reit.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+            tag = tag.replace("<img ", "<img style='width:108px;height:108px;border-radius:50%;"
+                              "object-fit:cover;object-position:center;border:3px solid #22d3ee;"
+                              "display:block;margin:0 auto;' ")
+            fixed_img = tag
+
+    def _badge_it(item):
+        return (f"<span style='display:inline-block;background:rgba(34,211,238,0.18);color:#a5f3fc;"
+                f"border:1px solid rgba(34,211,238,0.4);border-radius:4px;padding:3px 10px;"
+                f"margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{item.strip()}</span>")
+
+    def _badges_it(s):
+        return "".join(_badge_it(x) for x in s.split(',') if x.strip())
+
+    def _side_it(title, body):
+        return (f"<div style='margin-bottom:22px;'>"
+                f"<h3 style='font-size:10px;letter-spacing:2px;text-transform:uppercase;"
+                f"color:#22d3ee;font-weight:800;border-bottom:1px solid rgba(34,211,238,0.35);"
+                f"padding-bottom:5px;margin-bottom:10px;'>{title}</h3>"
+                f"{body}</div>")
+
+    def _main_it(title, body):
+        return (f"<div style='margin-bottom:26px;'>"
+                f"<h3 style='font-size:13px;letter-spacing:1.5px;text-transform:uppercase;"
+                f"font-weight:700;color:#1e1b4b;border-bottom:2px solid #4f46e5;"
+                f"padding-bottom:5px;margin-bottom:14px;'>{title}</h3>"
+                f"{body}</div>")
+
+    SVG_IT = {
+        'email':    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+        'phone':    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.37 2 2 0 0 1 3.64 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6.29 6.29l.98-.98a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+        'location': '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>',
+        'linkedin': '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>',
+        'portfolio':'<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+    }
+    contact_html_it = ""
+    for _key in ['location', 'phone', 'email', 'linkedin', 'portfolio']:
+        val = session_state.get(_key, '')
+        if not val:
+            continue
+        if _key == 'email':
+            v = f"<a href='mailto:{val}' style='color:#a5f3fc;text-decoration:none;font-weight:500;word-break:break-all;'>{val}</a>"
+        elif _key in ('linkedin', 'portfolio'):
+            href = val if val.startswith('http') else f"https://{val}"
+            v = f"<a href='{href}' target='_blank' style='color:#a5f3fc;text-decoration:none;font-weight:500;word-break:break-all;'>{val}</a>"
+        else:
+            v = f"<span style='color:#a5f3fc;word-break:break-all;'>{val}</span>"
+        contact_html_it += (f"<div style='margin-bottom:8px;font-size:12px;color:#a5f3fc;display:flex;align-items:center;gap:7px;'>"
+                            f"<span style='opacity:0.85;flex-shrink:0;'>{SVG_IT.get(_key,'')}</span>{v}</div>")
+
+    cert_html_it = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html_it += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(34,211,238,0.1);"
+                             f"border-radius:5px;border:1px solid rgba(34,211,238,0.3);'>"
+                             f"<a href='{cert.get('link','#')}' style='color:#a5f3fc;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
+                             f"<div style='font-size:11px;color:rgba(165,243,252,0.75);'>{cert.get('duration','')}</div></div>")
+
+    proj_links_html_it = ""
+    if session_state.project_links:
+        proj_links_html_it = "".join(
+            f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#a5f3fc;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
+            for i, lnk in enumerate(session_state.project_links))
+
+    exp_html_it = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#1f2937', line_height='1.75')
+            exp_html_it += (
+                f"<div style='margin-bottom:18px;padding-left:12px;border-left:3px solid #4f46e5;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:14px;color:#1e1b4b;'>{exp.get('company','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;background:#eef2ff;padding:2px 8px;border-radius:6px;border:1px solid #c7d2fe;'>{exp.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#374151;font-weight:700;margin-bottom:4px;'>{exp.get('title','')}</div>"
+                f"<div>{desc}</div></div>"
+                f"<div style='border-bottom:1px dashed #e0e7ff;margin-bottom:10px;'></div>"
+            )
+
+    edu_html_it = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list):
+                dv = ", ".join(dv)
+            edu_html_it += (
+                f"<div style='margin-bottom:12px;padding-left:12px;border-left:3px solid #4f46e5;'>"
+                f"<strong style='font-size:13px;color:#1e1b4b;'>{edu.get('institution','')}</strong>"
+                f"<span style='float:right;font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>"
+                f"<div style='clear:both;font-size:13px;color:#374151;font-style:italic;font-weight:600;'>{dv}</div>"
+                f"<div style='font-size:12px;color:#6b7280;'>{edu.get('details','')}</div></div>"
+            )
+
+    proj_html_it = ""
+    proj_links_all_it = getattr(session_state, 'project_links', []) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#1f2937', line_height='1.75')
+            pl = ""
+            if idx < len(proj_links_all_it) and proj_links_all_it[idx]:
+                pl = (f"<div style='margin-top:4px;'><a href='{proj_links_all_it[idx]}' target='_blank' "
+                      f"style='color:#4f46e5;font-size:12px;font-weight:600;'>&#128279; View Project</a></div>")
+            proj_html_it += (
+                f"<div style='margin-bottom:14px;padding:10px 12px;background:#eef2ff;"
+                f"border-radius:6px;border-left:3px solid #4f46e5;'>"
+                f"<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:13px;color:#1e1b4b;'>{proj.get('title','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:12px;color:#374151;font-weight:600;margin-bottom:3px;'>{proj.get('tech','')}</div>"
+                f"<div>{desc}</div>{pl}</div>"
+            )
+
+    summary_html_it = _fmt_desc(session_state.get('summary',''), font_size='13px', color='#1f2937', line_height='1.8')
+
+    html_content = f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
+</head>
+<body>
+<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<tr>
+  <td style='width:290px;background:linear-gradient(180deg,#1e1b4b,#312e81);color:#a5f3fc;padding:34px 22px;vertical-align:top;'>
+    {'<div style="margin:0 auto 12px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
+    <h1 style='font-size:20px;font-weight:800;color:#ffffff;text-align:center;margin-bottom:3px;'>{session_state.get('name','')}</h1>
+    <div style='font-size:12px;color:#22d3ee;text-align:center;margin-bottom:22px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;'>{session_state.get('job_title','')}</div>
+    {_side_it("Contact", contact_html_it)}
+    {_side_it("Technical Skills", _badges_it(session_state.get('skills',''))) if session_state.get('skills') else ''}
+    {_side_it("Soft Skills", _badges_it(session_state.get('Softskills',''))) if session_state.get('Softskills') else ''}
+    {_side_it("Languages", _badges_it(session_state.get('languages',''))) if session_state.get('languages') else ''}
+    {_side_it("Interests", _badges_it(session_state.get('interests',''))) if session_state.get('interests') else ''}
+    {_side_it("Certifications", cert_html_it) if cert_html_it else ''}
+    {_side_it("Project Links", proj_links_html_it) if proj_links_html_it else ''}
+  </td>
+  <td style='padding:38px 42px;background:#ffffff;vertical-align:top;'>
+    {_main_it("Professional Summary", summary_html_it) if summary_html_it else ''}
+    {_main_it("Work Experience", exp_html_it) if exp_html_it else ''}
+    {_main_it("Education", edu_html_it) if edu_html_it else ''}
+    {_main_it("Projects", proj_html_it) if proj_html_it else ''}
+  </td>
+</tr>
+</table>
+</body></html>"""
+
+    return html_content
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 15 — Forest Green (Single Column)
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_forest_green(session_state, profile_img_html=""):
+    """Forest Green — single-column, deep forest green headings, cream background, ATS-friendly."""
+    import re as _refg
+
+    fixed_img = ""
+    if profile_img_html:
+        m = _refg.search(r'<img[^>]*>', profile_img_html)
+        if m:
+            tag = _refg.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+            tag = tag.replace("<img ", "<img style='width:96px;height:96px;border-radius:50%;"
+                              "object-fit:cover;object-position:center;border:3px solid #166534;"
+                              "display:block;margin:0 auto 12px;' ")
+            fixed_img = tag
+
+    def _sec_fg(title, body):
+        return (f"<div style='margin-bottom:26px;'>"
+                f"<h3 style='font-size:14px;font-weight:700;color:#14532d;text-transform:uppercase;"
+                f"letter-spacing:2px;border-bottom:2px solid #166534;padding-bottom:5px;margin-bottom:14px;'>{title}</h3>"
+                f"{body}</div>")
+
+    def _tags_fg(s, bg="#f0fdf4", color="#14532d", border="#bbf7d0"):
+        return "".join(
+            f"<span style='display:inline-block;background:{bg};color:{color};border:1px solid {border};"
+            f"border-radius:4px;padding:4px 11px;margin:3px 4px 3px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            for x in s.split(',') if x.strip())
+
+    contact_parts_fg = []
+    for key, label in [('location',''),('phone',''),('email',''),('linkedin','LinkedIn'),('portfolio','Portfolio')]:
+        val = session_state.get(key, '')
+        if not val:
+            continue
+        if key == 'email':
+            contact_parts_fg.append(f"<a href='mailto:{val}' style='color:#14532d;text-decoration:none;font-weight:500;'>{val}</a>")
+        elif key in ('linkedin','portfolio'):
+            href = val if val.startswith('http') else f"https://{val}"
+            contact_parts_fg.append(f"<a href='{href}' target='_blank' style='color:#14532d;text-decoration:none;font-weight:500;'>{label}: {val}</a>")
+        else:
+            contact_parts_fg.append(f"<span style='color:#1a3328;'>{val}</span>")
+    contact_html_fg = " &nbsp;|&nbsp; ".join(contact_parts_fg)
+
+    exp_html_fg = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#1c1c1c', line_height='1.75')
+            exp_html_fg += (
+                f"<div style='margin-bottom:18px;padding-left:12px;border-left:3px solid #16a34a;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:14px;color:#14532d;'>{exp.get('title','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;background:#f0fdf4;padding:2px 8px;border-radius:5px;border:1px solid #bbf7d0;'>{exp.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#374151;font-weight:600;margin-bottom:5px;'>{exp.get('company','')}</div>"
+                f"<div>{desc}</div></div>"
+                f"<div style='border-bottom:1px solid #dcfce7;margin-bottom:10px;'></div>"
+            )
+
+    edu_html_fg = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list):
+                dv = ", ".join(dv)
+            edu_html_fg += (
+                f"<div style='margin-bottom:12px;padding-left:12px;border-left:3px solid #16a34a;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:13px;color:#14532d;'>{edu.get('institution','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>"
+                f"</div>"
+                f"<div style='font-size:13px;color:#374151;font-style:italic;font-weight:600;'>{dv}</div>"
+                f"<div style='font-size:12px;color:#6b7280;'>{edu.get('details','')}</div></div>"
+            )
+
+    proj_html_fg = ""
+    proj_links_all_fg = getattr(session_state, 'project_links', []) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#1c1c1c', line_height='1.75')
+            pl = ""
+            if idx < len(proj_links_all_fg) and proj_links_all_fg[idx]:
+                pl = (f"<div style='margin-top:4px;'><a href='{proj_links_all_fg[idx]}' target='_blank' "
+                      f"style='color:#16a34a;font-size:12px;font-weight:600;'>&#128279; View Project</a></div>")
+            proj_html_fg += (
+                f"<div style='margin-bottom:14px;padding:10px 12px;background:#f0fdf4;"
+                f"border-radius:6px;border:1px solid #bbf7d0;'>"
+                f"<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>"
+                f"<strong style='font-size:13px;color:#14532d;'>{proj.get('title','')}</strong>"
+                f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
+                f"</div>"
+                f"<div style='font-size:12px;color:#374151;font-weight:600;margin-bottom:3px;'>Tech: {proj.get('tech','')}</div>"
+                f"<div>{desc}</div>{pl}</div>"
+            )
+
+    cert_html_fg = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html_fg += (
+                f"<div style='margin-bottom:10px;padding-left:10px;border-left:2px solid #86efac;'>"
+                f"<a href='{cert.get('link','#')}' target='_blank' style='font-size:13px;font-weight:700;color:#14532d;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<span style='font-size:12px;color:#6b7280;'> — {cert.get('duration','')}</span></div>"
+            )
+
+    proj_links_sec_fg = ""
+    if session_state.project_links:
+        proj_links_sec_fg = "".join(
+            f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#16a34a;font-size:13px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
+            for i, lnk in enumerate(session_state.project_links) if lnk)
+
+    summary_html_fg = _fmt_desc(session_state.get('summary',''), font_size='13px', color='#1c1c1c', line_height='1.8')
+
+    html_content = f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title></head>
+<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;max-width:860px;margin:0 auto;padding:36px 40px;">
+  {fixed_img if fixed_img else ''}
+  <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #166534;">
+    <h1 style="font-size:28px;font-weight:800;color:#14532d;margin-bottom:4px;">{session_state.get('name','')}</h1>
+    <div style="font-size:15px;color:#374151;font-weight:600;margin-bottom:10px;letter-spacing:1px;">{session_state.get('job_title','')}</div>
+    <div style="font-size:12px;color:#1a3328;line-height:2;">{contact_html_fg}</div>
+  </div>
+  {_sec_fg("Professional Summary", f"<div style='font-size:13px;color:#1c1c1c;line-height:1.8;padding:12px 14px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0;'>{summary_html_fg}</div>") if summary_html_fg else ''}
+  {_sec_fg("Work Experience", exp_html_fg) if exp_html_fg else ''}
+  {_sec_fg("Education", edu_html_fg) if edu_html_fg else ''}
+  {_sec_fg("Projects", proj_html_fg) if proj_html_fg else ''}
+  {_sec_fg("Technical Skills", f"<div style='padding:6px 0;'>{_tags_fg(session_state.get('skills',''))}</div>") if session_state.get('skills','').strip() else ''}
+  {_sec_fg("Core Competencies", f"<div style='padding:6px 0;'>{_tags_fg(session_state.get('Softskills',''),'#fefce8','#713f12','#fde68a')}</div>") if session_state.get('Softskills','').strip() else ''}
+  {_sec_fg("Languages", f"<div style='padding:6px 0;'>{_tags_fg(session_state.get('languages',''),'#eff6ff','#1e3a8a','#bfdbfe')}</div>") if session_state.get('languages','').strip() else ''}
+  {_sec_fg("Interests", f"<div style='padding:6px 0;'>{_tags_fg(session_state.get('interests',''),'#fdf4ff','#581c87','#e9d5ff')}</div>") if session_state.get('interests','').strip() else ''}
+  {_sec_fg("Certifications", cert_html_fg) if cert_html_fg else ''}
+  {_sec_fg("Project Links", proj_links_sec_fg) if proj_links_sec_fg else ''}
+</body></html>"""
+
+    return html_content
+
+
 def generate_cover_letter_from_resume_builder():
     import streamlit as st
     from datetime import datetime
@@ -8983,6 +10095,12 @@ with tab2:
             "Corporate Blue (Two Column)",
             "Creative Green (Two Column)",
             "Warm Terracotta (Two Column)",
+            "Navy Prestige (Two Column)",
+            "Slate Gray (Single Column)",
+            "Teal Impact (Two Column)",
+            "Burgundy Classic (Single Column)",
+            "Indigo Tech (Two Column)",
+            "Forest Green (Single Column)",
         ],
         key="template_selector"
     )
@@ -9736,6 +10854,18 @@ with tab2:
             html_content = render_template_creative_green(st.session_state, profile_img_html)
         elif selected_template == "Warm Terracotta (Two Column)":
             html_content = render_template_terracotta(st.session_state, profile_img_html)
+        elif selected_template == "Navy Prestige (Two Column)":
+            html_content = render_template_navy_prestige(st.session_state, profile_img_html)
+        elif selected_template == "Slate Gray (Single Column)":
+            html_content = render_template_slate_gray(st.session_state, profile_img_html)
+        elif selected_template == "Teal Impact (Two Column)":
+            html_content = render_template_teal_impact(st.session_state, profile_img_html)
+        elif selected_template == "Burgundy Classic (Single Column)":
+            html_content = render_template_burgundy_classic(st.session_state, profile_img_html)
+        elif selected_template == "Indigo Tech (Two Column)":
+            html_content = render_template_indigo_tech(st.session_state, profile_img_html)
+        elif selected_template == "Forest Green (Single Column)":
+            html_content = render_template_forest_green(st.session_state, profile_img_html)
         else:
             # Fallback to default
             html_content = render_template_default(st.session_state, profile_img_html)
