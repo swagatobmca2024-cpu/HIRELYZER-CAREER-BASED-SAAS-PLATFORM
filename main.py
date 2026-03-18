@@ -3638,7 +3638,7 @@ CRITICAL RULES:
 - Experience bullets: rewrite with Action Verb + Task + Technology + Quantified Impact format.
 - Project "url" = GitHub or live link for that project if found in the resume.
 - Education "bullets" = array of notable coursework, achievements, or activities for that institution.
-- "additional" = any remaining sections not covered above (awards, publications, volunteering, etc.).
+- "additional" = array of objects for remaining items (training, awards, volunteering, publications, etc.) not covered by experience/projects/certifications. Each object MUST have exactly: "name" (title of item), "description" (1-sentence detail), "duration" (date/range or ""). NEVER put raw dict strings. NEVER use flat strings. ALWAYS use the object format.
 
 Return ONLY this exact JSON structure (no extra keys outside this schema):
 {{
@@ -3691,7 +3691,13 @@ Return ONLY this exact JSON structure (no extra keys outside this schema):
       "duration": ""
     }}
   ],
-  "additional": []
+  "additional": [
+    {{
+      "name": "",
+      "description": "",
+      "duration": ""
+    }}
+  ]
 }}
 
 FIELD RULES:
@@ -3709,6 +3715,57 @@ RESUME TEXT:
 """
     response = call_llm(prompt, session=st.session_state)
     return response
+
+
+def _salvage_additional_str(s):
+    """
+    Extract name/description/duration from a leaked dict/JSON string.
+    Handles JSON double-quoted, Python single-quoted, and mixed formats.
+    Returns a clean dict or None.
+    """
+    import json as _j, re as _r
+    if not s or not s.strip():
+        return None
+    s = s.strip()
+    # Attempt 1: valid JSON double-quoted keys
+    try:
+        sub = _j.loads(s)
+        if isinstance(sub, dict):
+            n = str(sub.get("name", "") or "").strip()
+            d = str(sub.get("description", "") or "").strip()
+            r = str(sub.get("duration", "") or "").strip()
+            if n or d:
+                return {"name": n, "description": d, "duration": r}
+    except Exception:
+        pass
+    # Attempt 2: replace single quotes -> double quotes and try JSON parse
+    try:
+        # Preserve escaped single quotes, swap bare ones to double quotes
+        converted = s.replace("\\'", "\x01").replace("'", '"').replace("\x01", "\\'")
+        sub = _j.loads(converted)
+        if isinstance(sub, dict):
+            n = str(sub.get("name", "") or "").strip()
+            d = str(sub.get("description", "") or "").strip()
+            r = str(sub.get("duration", "") or "").strip()
+            if n or d:
+                return {"name": n, "description": d, "duration": r}
+    except Exception:
+        pass
+    # Attempt 3: brute-force regex — key can be single OR double quoted
+    def _extract(key, text):
+        for q in ('"', "'"):
+            pat = q + key + q + r"\s*:\s*" + q + r"(.*?)" + q + r'(?=\s*,\s*[\'"{]|\s*\})'
+            m = _r.search(pat, text, _r.DOTALL)
+            if m:
+                return m.group(1).strip()
+        return ""
+    n = _extract("name", s)
+    d = _extract("description", s)
+    r = _extract("duration", s)
+    if n or d:
+        return {"name": n, "description": d, "duration": r}
+    return None
+
 
 
 def extract_resume_json(llm_response: str) -> dict:
@@ -3782,6 +3839,31 @@ def extract_resume_json(llm_response: str) -> dict:
                     edu[f] = ""
             if "bullets" not in edu:
                 edu["bullets"] = []
+        # Normalise additional — accept dicts, strings, or malformed objects
+        raw_add = data.get("additional", [])
+        norm_add = []
+        for item in raw_add:
+            if isinstance(item, dict):
+                name = str(item.get("name", "") or "").strip()
+                desc = str(item.get("description", "") or "").strip()
+                dur  = str(item.get("duration", "") or "").strip()
+                if not name and not desc:
+                    continue
+                norm_add.append({"name": name, "description": desc, "duration": dur})
+            elif isinstance(item, str):
+                s = item.strip()
+                if not s or s in ("[Not Provided]",):
+                    continue
+                # If it looks like a leaked dict/JSON string, try to parse or salvage it
+                if s.startswith("{") or ("name" in s and "description" in s):
+                    salvaged = _salvage_additional_str(s)
+                    if salvaged:
+                        norm_add.append(salvaged)
+                    # else discard entirely — do NOT render raw string
+                else:
+                    norm_add.append({"name": s, "description": "", "duration": ""})
+        data["additional"] = norm_add
+
         # Normalise certifications — accept both flat strings and objects
         raw_certs = data.get("certifications", [])
         norm_certs = []
@@ -3804,95 +3886,143 @@ def extract_resume_json(llm_response: str) -> dict:
 # 📄 DOCX TEMPLATE GENERATORS — Three professional styles
 # ============================================================
 
+def _val(v: str) -> str:
+    """Return value or 'Not Provided' placeholder — never empty, never '[Not Provided]'."""
+    if not v or str(v).strip() in ("", "[Not Provided]"):
+        return "Not Provided"
+    return str(v).strip()
+
+
 def _build_contact_header(doc, data: dict, name_size: int, name_color_rgb: tuple,
                            name_font: str, contact_font: str, contact_color_hex: str,
                            contact_size: int = 9, title_font: str = None,
                            title_size: int = 11, title_color_rgb: tuple = None,
-                           separator: str = "  |  "):
+                           separator: str = "  |  ",
+                           label_color_hex: str = None,
+                           accent_color_hex: str = None):
     """
-    Builds the header block matching the sample template:
-      Line 1 (centered, large bold): Full Name
-      Line 2 (centered, smaller, title/headline): Job Title
-      Line 3 (centered): email | phone | location | linkedin
-      Line 4 (centered, if github/portfolio exist): github | portfolio
+    Builds the FULL header block — matches sample template exactly.
+
+    Structure:
+      ① Name          — centered, large bold
+      ② Job Title     — centered, smaller uppercase (always shown)
+      ③ Inline row    — email  |  phone  (centered, small)
+      ④ CONTACT INFO section (labeled rows, NEVER omitted):
+             LOCATION          <value or Not Provided>
+             LINKEDIN          <value or Not Provided>
+             GITHUB / PORTFOLIO  <value or Not Provided>
+
+    Every field is ALWAYS rendered. Missing values show "Not Provided".
     """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
     contact = data.get("contact", {})
-    raw_name = contact.get("name", "") or ""
-    name = raw_name if raw_name and raw_name != "[Not Provided]" else "[Your Name]"
-    raw_title = contact.get("title", "") or ""
-    title = raw_title if raw_title != "[Not Provided]" else ""
 
-    # --- Name ---
-    p_name = doc.add_paragraph()
-    p_name.clear()
-    run = p_name.add_run(name)
-    run.bold = True
-    run.font.size = Pt(name_size)
-    run.font.name = name_font
-    run.font.color.rgb = RGBColor(*name_color_rgb)
-    p_name.alignment = 1  # CENTER
-    p_name.paragraph_format.space_before = Pt(0)
-    p_name.paragraph_format.space_after = Pt(2)
-
-    # --- Title / Headline ---
-    if title and title != "[Not Provided]":
-        p_title = doc.add_paragraph()
-        p_title.clear()
-        r_title = p_title.add_run(title.upper())
-        r_title.font.size = Pt(title_size)
-        r_title.font.name = title_font or name_font
-        r_title.bold = False
-        r_title.font.letter_spacing = Pt(1)
-        if title_color_rgb:
-            r_title.font.color.rgb = RGBColor(*title_color_rgb)
-        p_title.alignment = 1
-        p_title.paragraph_format.space_after = Pt(4)
-
-    # --- Contact line 1: email | phone | location | linkedin ---
+    # ── Resolve colors ──────────────────────────────────────────────────────
     cc = RGBColor(
         int(contact_color_hex[0:2], 16),
         int(contact_color_hex[2:4], 16),
         int(contact_color_hex[4:6], 16),
     )
-    line1_parts = []
-    if contact.get("email") and contact["email"] != "[Not Provided]":
-        line1_parts.append(contact["email"])
-    if contact.get("phone") and contact["phone"] != "[Not Provided]":
-        line1_parts.append(contact["phone"])
-    if contact.get("location") and contact["location"] != "[Not Provided]":
-        line1_parts.append(contact["location"])
-    if contact.get("linkedin") and contact["linkedin"] != "[Not Provided]":
-        line1_parts.append(contact["linkedin"])
+    lc_hex = label_color_hex or contact_color_hex
+    lc = RGBColor(int(lc_hex[0:2], 16), int(lc_hex[2:4], 16), int(lc_hex[4:6], 16))
+    ac_hex = accent_color_hex or contact_color_hex
+    ac = RGBColor(int(ac_hex[0:2], 16), int(ac_hex[2:4], 16), int(ac_hex[4:6], 16))
 
-    if line1_parts:
-        p1 = doc.add_paragraph()
-        p1.clear()
-        r1 = p1.add_run(separator.join(line1_parts))
-        r1.font.size = Pt(contact_size)
-        r1.font.name = contact_font
-        r1.font.color.rgb = cc
-        p1.alignment = 1
-        p1.paragraph_format.space_after = Pt(1)
+    # ── ① Name ──────────────────────────────────────────────────────────────
+    raw_name = contact.get("name", "") or ""
+    name = raw_name if raw_name and raw_name != "[Not Provided]" else "Your Name"
+    p_name = doc.add_paragraph()
+    p_name.clear()
+    r_name = p_name.add_run(name)
+    r_name.bold = True
+    r_name.font.size = Pt(name_size)
+    r_name.font.name = name_font
+    r_name.font.color.rgb = RGBColor(*name_color_rgb)
+    p_name.alignment = 1
+    p_name.paragraph_format.space_before = Pt(0)
+    p_name.paragraph_format.space_after = Pt(2)
 
-    # --- Contact line 2: github | portfolio (separate line like sample) ---
-    line2_parts = []
-    if contact.get("github") and contact["github"] != "[Not Provided]":
-        line2_parts.append(contact["github"])
-    if contact.get("portfolio") and contact["portfolio"] != "[Not Provided]":
-        line2_parts.append(contact["portfolio"])
+    # ── ② Job Title (always shown — placeholder if missing) ─────────────────
+    raw_title = contact.get("title", "") or ""
+    title_text = raw_title if raw_title and raw_title != "[Not Provided]" else "Job Title"
+    p_title = doc.add_paragraph()
+    p_title.clear()
+    r_title = p_title.add_run(title_text.upper())
+    r_title.font.size = Pt(title_size)
+    r_title.font.name = title_font or name_font
+    r_title.bold = False
+    if title_color_rgb:
+        r_title.font.color.rgb = RGBColor(*title_color_rgb)
+    p_title.alignment = 1
+    p_title.paragraph_format.space_after = Pt(3)
 
-    if line2_parts:
-        p2 = doc.add_paragraph()
-        p2.clear()
-        r2 = p2.add_run(separator.join(line2_parts))
-        r2.font.size = Pt(contact_size)
-        r2.font.name = contact_font
-        r2.font.color.rgb = cc
-        p2.alignment = 1
-        p2.paragraph_format.space_after = Pt(6)
-    elif line1_parts:
-        # Add trailing space after contact block
-        doc.paragraphs[-1].paragraph_format.space_after = Pt(6)
+    # ── ③ Inline contact row: email  |  phone ───────────────────────────────
+    email_val = _val(contact.get("email", ""))
+    phone_val = _val(contact.get("phone", ""))
+    inline_text = f"{email_val}  |  {phone_val}"
+    p_inline = doc.add_paragraph()
+    p_inline.clear()
+    r_inline = p_inline.add_run(inline_text)
+    r_inline.font.size = Pt(contact_size)
+    r_inline.font.name = contact_font
+    r_inline.font.color.rgb = cc
+    p_inline.alignment = 1
+    p_inline.paragraph_format.space_after = Pt(8)
+
+    # ── ④ Labeled CONTACT INFO rows (always all 3 — never omitted) ──────────
+    # Thin border divider before contact block
+    def _add_contact_divider():
+        p = doc.add_paragraph()
+        p.clear()
+        r = p.add_run("")
+        pPr = p._p.get_or_add_pPr()
+        pBdr = OxmlElement("w:pBdr")
+        top = OxmlElement("w:top")
+        top.set(qn("w:val"), "single")
+        top.set(qn("w:sz"), "4")
+        top.set(qn("w:space"), "1")
+        top.set(qn("w:color"), ac_hex)
+        pBdr.append(top)
+        pPr.append(pBdr)
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(4)
+
+    _add_contact_divider()
+
+    def _labeled_row(label: str, value: str, is_link: bool = False):
+        """Render:  LABEL (bold)   value"""
+        p = doc.add_paragraph()
+        p.clear()
+        r_lbl = p.add_run(f"{label.upper()}   ")
+        r_lbl.bold = True
+        r_lbl.font.size = Pt(contact_size)
+        r_lbl.font.name = contact_font
+        r_lbl.font.color.rgb = lc
+        r_val = p.add_run(value)
+        r_val.font.size = Pt(contact_size)
+        r_val.font.name = contact_font
+        if is_link and value != "Not Provided":
+            r_val.font.color.rgb = ac   # accent colour for links
+            r_val.underline = True
+        else:
+            r_val.font.color.rgb = cc
+        p.paragraph_format.space_before = Pt(1)
+        p.paragraph_format.space_after = Pt(3)
+        return p
+
+    _labeled_row("Location",            _val(contact.get("location", "")))
+    _labeled_row("LinkedIn Profile URL", _val(contact.get("linkedin", "")), is_link=True)
+
+    # GitHub takes priority; fall back to portfolio; always shown
+    github_raw  = contact.get("github", "") or ""
+    portfolio_raw = contact.get("portfolio", "") or ""
+    github_val = github_raw if github_raw and github_raw != "[Not Provided]" else portfolio_raw
+    _labeled_row("GitHub / Portfolio URL", _val(github_val), is_link=True)
+
+    # Bottom divider after contact block
+    _add_contact_divider()
 
 
 def _section_heading_bordered(doc, text: str, font_name: str,
@@ -4051,6 +4181,79 @@ def _add_education_row(doc, degree: str, institution: str, year: str,
             _add_bullet(doc, b, font_size=degree_size - 1, font_name=font_name)
 
 
+def _render_additional(doc, data: dict, font_name: str, font_size: int,
+                        heading_fn, bullet_fn,
+                        name_color_rgb: tuple = (0,0,0),
+                        desc_color_rgb: tuple = (80,80,80),
+                        dur_color_rgb: tuple = (128,128,128)):
+    """
+    Render the Additional section from structured objects.
+    Each item: bold name + optional [duration] on one line, description below.
+    Handles dicts, flat strings, and completely skips raw leaked JSON strings.
+    """
+    raw = data.get("additional", [])
+    # Final safety normalisation at render time
+    items = []
+    for item in raw:
+        if isinstance(item, dict):
+            name = str(item.get("name", "") or "").strip()
+            desc = str(item.get("description", "") or "").strip()
+            dur  = str(item.get("duration", "") or "").strip()
+            # Skip if both name and desc are empty or placeholder
+            if not name and not desc:
+                continue
+            if name in ("[Not Provided]", "") and desc in ("[Not Provided]", ""):
+                continue
+            items.append({"name": name, "description": desc, "duration": dur})
+        elif isinstance(item, str):
+            s = item.strip()
+            if not s or s == "[Not Provided]":
+                continue
+            # Discard any raw dict/JSON leak silently
+            if s.startswith("{") or ("'name'" in s and "'description'" in s) or s.startswith("["):
+                continue
+            items.append({"name": s, "description": "", "duration": ""})
+
+    if not items:
+        return
+
+    heading_fn("Additional")
+
+    for item in items:
+        name = item.get("name", "")
+        desc = item.get("description", "")
+        dur  = item.get("duration", "")
+
+        # Name line: bold name + italic [duration]
+        p = doc.add_paragraph()
+        p.clear()
+        if name and name not in ("[Not Provided]", ""):
+            r1 = p.add_run(name)
+            r1.bold = True
+            r1.font.size = Pt(font_size)
+            r1.font.name = font_name
+            r1.font.color.rgb = RGBColor(*name_color_rgb)
+        if dur and dur not in ("[Not Provided]", ""):
+            rd = p.add_run(f"   [{dur}]")
+            rd.italic = True
+            rd.font.size = Pt(font_size - 1)
+            rd.font.name = font_name
+            rd.font.color.rgb = RGBColor(*dur_color_rgb)
+        p.paragraph_format.space_before = Pt(4)
+        p.paragraph_format.space_after = Pt(1)
+
+        # Description line (if present)
+        if desc and desc not in ("[Not Provided]", ""):
+            pd = doc.add_paragraph()
+            pd.clear()
+            rd2 = pd.add_run(desc)
+            rd2.font.size = Pt(font_size - 1)
+            rd2.font.name = font_name
+            rd2.font.color.rgb = RGBColor(*desc_color_rgb)
+            pd.paragraph_format.space_before = Pt(0)
+            pd.paragraph_format.space_after = Pt(2)
+
+
 # ─── MODERN TEMPLATE ──────────────────────────────────────────────────────────
 def generate_modern_docx(data: dict) -> BytesIO:
     """
@@ -4071,13 +4274,15 @@ def generate_modern_docx(data: dict) -> BytesIO:
     FONT = "Calibri"
     BODY = 10
 
-    # ── Header ──
+    # ── Header + Contact section ──
     _build_contact_header(
         doc, data,
         name_size=22, name_color_rgb=NAVY, name_font=FONT,
         contact_font=FONT, contact_color_hex="4A4A4A", contact_size=9,
         title_font=FONT, title_size=11, title_color_rgb=(100, 100, 100),
-        separator="  |  "
+        separator="  |  ",
+        label_color_hex=NAVY_HEX,
+        accent_color_hex=NAVY_HEX,
     )
 
     def _heading(text):
@@ -4188,12 +4393,9 @@ def generate_modern_docx(data: dict) -> BytesIO:
             _para("  •  ".join(valid_int))
 
     # ── Additional ──
-    if data.get("additional"):
-        valid_add = [a for a in data["additional"] if a and a != "[Not Provided]"]
-        if valid_add:
-            _heading("Additional")
-            for item in valid_add:
-                _add_bullet(doc, item, font_size=BODY, font_name=FONT)
+    _render_additional(doc, data, font_name=FONT, font_size=BODY,
+                       heading_fn=_heading, bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT),
+                       name_color_rgb=NAVY, desc_color_rgb=(80,80,80))
 
     buf = BytesIO()
     doc.save(buf)
@@ -4219,13 +4421,15 @@ def generate_minimal_docx(data: dict) -> BytesIO:
     BLACK_HEX = "000000"
     GRAY = (100, 100, 100)
 
-    # ── Header ──
+    # ── Header + Contact section ──
     _build_contact_header(
         doc, data,
         name_size=18, name_color_rgb=(0, 0, 0), name_font=FONT,
         contact_font=FONT, contact_color_hex="333333", contact_size=9,
         title_font=FONT, title_size=10, title_color_rgb=GRAY,
-        separator="  |  "
+        separator="  |  ",
+        label_color_hex="000000",
+        accent_color_hex="000000",
     )
 
     def _heading(text):
@@ -4360,12 +4564,9 @@ def generate_minimal_docx(data: dict) -> BytesIO:
             _heading("Interests")
             _para(", ".join(valid_int))
 
-    if data.get("additional"):
-        valid_add = [a for a in data["additional"] if a and a != "[Not Provided]"]
-        if valid_add:
-            _heading("Additional")
-            for item in valid_add:
-                _add_bullet(doc, item, font_size=BODY, font_name=FONT)
+    _render_additional(doc, data, font_name=FONT, font_size=BODY,
+                       heading_fn=_heading, bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT),
+                       name_color_rgb=(0,0,0), desc_color_rgb=(80,80,80))
 
     buf = BytesIO()
     doc.save(buf)
@@ -4394,24 +4595,16 @@ def generate_creative_docx(data: dict) -> BytesIO:
     FONT_BODY = "Calibri"
     BODY = 10
 
-    # ── Header ──
+    # ── Header + Contact section ──
     _build_contact_header(
         doc, data,
         name_size=24, name_color_rgb=DARK, name_font=FONT_HEAD,
-        contact_font=FONT_BODY, contact_color_hex=TEAL_HEX, contact_size=9,
+        contact_font=FONT_BODY, contact_color_hex="444444", contact_size=9,
         title_font=FONT_HEAD, title_size=11, title_color_rgb=TEAL,
-        separator="  |  "
+        separator="  |  ",
+        label_color_hex=DARK_HEX,
+        accent_color_hex=TEAL_HEX,
     )
-
-    # Teal accent divider after header
-    p_div = doc.add_paragraph()
-    p_div.clear()
-    r_div = p_div.add_run("─" * 90)
-    r_div.font.size = Pt(7)
-    r_div.font.color.rgb = RGBColor(*TEAL)
-    p_div.alignment = 1
-    p_div.paragraph_format.space_before = Pt(0)
-    p_div.paragraph_format.space_after = Pt(6)
 
     def _heading(text):
         _section_heading_bordered(doc, text, font_name=FONT_HEAD, font_size=BODY + 1,
@@ -4575,12 +4768,9 @@ def generate_creative_docx(data: dict) -> BytesIO:
             _heading("Interests")
             _para("  ◆  ".join(valid_int))
 
-    if data.get("additional"):
-        valid_add = [a for a in data["additional"] if a and a != "[Not Provided]"]
-        if valid_add:
-            _heading("Additional")
-            for item in valid_add:
-                _add_bullet(doc, item, font_size=BODY, font_name=FONT_BODY)
+    _render_additional(doc, data, font_name=FONT_BODY, font_size=BODY,
+                       heading_fn=_heading, bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT_BODY),
+                       name_color_rgb=DARK, desc_color_rgb=(80,80,80))
 
     buf = BytesIO()
     doc.save(buf)
