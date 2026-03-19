@@ -244,7 +244,12 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
 """
 
         # ✅ Call LLM
-        cover_letter = call_llm(prompt, session=st.session_state).strip()
+        with st.spinner("✉️ Generating cover letter..."):
+            try:
+                cover_letter = call_llm(prompt, session=st.session_state).strip()
+            except Exception as e:
+                st.error(f"❌ Failed to generate cover letter: {e}")
+                return
 
         # ✅ Store plain text
         st.session_state["cover_letter"] = cover_letter
@@ -3453,31 +3458,41 @@ replacement_mapping = {
     }
 }
 
-def rewrite_text_with_llm(text, replacement_mapping, user_location):
+def rewrite_and_optimize_resume(text, replacement_mapping, user_location):
     """
-    Industry-standard ATS resume rewrite engine.
-    - Produces Enhancv/Jobscan-quality structured output
-    - Strictly follows ATS section ordering (Workday, Greenhouse, Lever)
-    - Eliminates repetition across sections
-    - Bias-free language throughout
-    - Preserves and ENFORCES suggested job titles output
+    ⚡ MERGED FUNCTION — replaces rewrite_text_with_llm() + optimize_resume_to_json()
+    Single LLM call that returns BOTH:
+      - rewritten_text : plain-text ATS-optimised resume + job title suggestions (for UI display)
+      - json_str       : strict JSON object (for DOCX generation)
+    Saves 1 API key call per resume analysis (6 → 5 calls total).
     """
 
     formatted_mapping = "\n".join(
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
-    prompt = f"""You are a senior ATS resume optimization specialist trained on hiring standards from
-Workday, Greenhouse, Lever, iCIMS, Taleo, and SmartRecruiters. Your output quality matches
-professional resume platforms like Enhancv and Jobscan.
+    prompt = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
 
-INPUT: Original resume text, bias replacement rules, candidate location.
-TASK: Rewrite the resume into an industry-standard ATS-optimized document — bias-free,
-quantification-rich, and recruiter-ready.
+Your task is to process the resume below and return TWO outputs in a single response, separated by the exact delimiter shown.
 
-═══════════════════════════════════════════════════════════════════
-ABSOLUTE RULES — NEVER VIOLATE
-═══════════════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════
+OUTPUT STRUCTURE (return EXACTLY this — no deviation):
+════════════════════════════════════════════════════════
+
+===REWRITTEN_RESUME_START===
+<full plain-text ATS-optimised resume here>
+<followed by job title suggestions block>
+===REWRITTEN_RESUME_END===
+
+===JSON_START===
+<strict JSON object here — no markdown fences, no explanation>
+===JSON_END===
+
+════════════════════════════════════════════════════════
+PART 1 — PLAIN TEXT REWRITE (inside REWRITTEN_RESUME tags)
+════════════════════════════════════════════════════════
+
+ABSOLUTE RULES — NEVER VIOLATE:
 • DO NOT fabricate companies, job titles, degrees, institutions, or dates.
 • DO NOT invent statistics or metrics not implied by the resume content.
 • DO NOT add certifications, tools, or skills absent from the resume.
@@ -3492,222 +3507,62 @@ YOU MAY:
 ✓ Infer tool proficiency when strongly implied (e.g., "built Flask API" → Python, Flask).
 ✓ Add plausible impact framing using "~" when the role implies measurable output.
 
-═══════════════════════════════════════════════════════════════════
-SECTION-BY-SECTION REWRITING RULES
-═══════════════════════════════════════════════════════════════════
+SECTION ORDER: Contact Header → Professional Summary → Core Skills →
+Work Experience → Projects → Education → Certifications & Links
 
-CONTACT HEADER (always first)
-  Full Name | Job Title | Email | Phone | Location | LinkedIn URL | GitHub/Portfolio URL
-  — All on separate lines or cleanly separated. No icons or symbols.
+CONTACT HEADER: Full Name | Job Title | Email | Phone | Location | LinkedIn URL | GitHub/Portfolio URL
 
-PROFESSIONAL SUMMARY (2–3 sentences, max 60 words)
+PROFESSIONAL SUMMARY (2–3 sentences, max 60 words):
   Sentence 1: [Seniority level] + [core domain] + [years of experience]
   Sentence 2: [Top 2–3 specific technical or functional strengths]
   Sentence 3: [Career value proposition — what the candidate delivers]
-  Example: "Results-driven Python Developer with 4+ years building scalable APIs and ML pipelines.
-  Proficient in FastAPI, PostgreSQL, Docker, and AWS. Delivered production systems serving 50K+ daily users."
-  — No pronouns. No buzzwords. No repetition of skills already listed in Skills section.
 
-CORE SKILLS (comprehensive, categorized)
-  Format as labeled lines:
-    Technical Skills: [comma-separated list of tools, languages, frameworks, platforms]
-    Professional Skills: [comma-separated list of soft competencies]
-  — Include EVERY technology mentioned anywhere in the resume.
-  — Do NOT repeat skill names already used verbatim in the Summary.
-  — Minimum 8 technical skills. Group similar items; keep as individual entries.
+CORE SKILLS: labeled lines — Technical Skills: [...] and Professional Skills: [...]
 
-WORK EXPERIENCE (reverse chronological)
-  For each role:
-    Job Title | Company Name | MMM YYYY – MMM YYYY (or Present)
-    [1-sentence role scope — unique context NOT in the summary]
-    • [Action Verb] + [Specific task] + [Technology/method] + [Quantified impact]
-    • [Action Verb] + [Specific task] + [Technology/method] + [Quantified impact]
-    (3–5 bullets per role)
-  — Strong action verbs ONLY: Architected, Engineered, Developed, Implemented, Optimized,
-    Automated, Spearheaded, Deployed, Designed, Reduced, Increased, Streamlined, Led, Built.
-  — NEVER use: helped, assisted, worked on, involved in, responsible for, collaborated on (as a standalone).
-  — Every bullet must end with a quantified impact where inferable (%, $, time, users, scale).
-    If no metric exists, add a plausible range marked "~" (e.g., "~30% reduction in load time").
-  — Bullets must NOT repeat phrases already used in the Summary or Skills sections.
+WORK EXPERIENCE (reverse chronological):
+  Job Title | Company Name | MMM YYYY – MMM YYYY
+  [1-sentence role scope]
+  • [Action Verb] + [Task] + [Technology] + [Quantified impact]
+  (3–5 bullets per role)
+  Strong verbs ONLY: Architected, Engineered, Developed, Implemented, Optimized, Automated,
+  Spearheaded, Deployed, Designed, Reduced, Increased, Streamlined, Led, Built.
+  NEVER: helped, assisted, worked on, involved in, responsible for.
 
-PROJECTS (if present)
-  For each project:
-    Project Name | Tech Stack: [comma-separated] | [MMM YYYY – MMM YYYY or duration]
-    [URL if available — plain text, not hyperlink]
-    [1-sentence project purpose]
-    • [Achievement/feature bullet with action verb and measurable outcome]
-    (3–5 bullets)
-  — Project bullets must use DIFFERENT action verbs from experience bullets where possible.
-  — Do NOT restate the tech stack items already listed in the Skills section header line.
+PROJECTS: Name | Tech Stack | Duration
+  [1-sentence purpose]
+  • [Achievement bullet with action verb and metric]
+  (3–5 bullets)
 
-EDUCATION (reverse chronological)
-  Degree, Major | Institution | Graduation Year (or Expected YYYY)
-  [GPA if 3.5+] | [Relevant coursework or academic honors if notable]
-  — No bullets unless listing coursework or honors.
+EDUCATION: Degree, Major | Institution | Graduation Year
+CERTIFICATIONS: • Name | Issuing Body | MMM YYYY
 
-CERTIFICATIONS & LINKS (if present)
-  • Certification Name | Issuing Body | MMM YYYY
-  • LinkedIn: [URL] | GitHub: [URL] | Portfolio: [URL]
-  — List only certifications that appear in the original resume.
+ATS FORMATTING:
+• Single-column structure — no tables, columns, text boxes.
+• Bullet points: "•" only. Section headings: ALL CAPS.
+• No emojis, no personal pronouns.
 
-═══════════════════════════════════════════════════════════════════
-ATS FORMATTING REQUIREMENTS
-═══════════════════════════════════════════════════════════════════
-• Single-column structure — no tables, columns, text boxes, or graphics.
-• Bullet points: use "•" character only. No dashes, stars, or numbered lists for bullets.
-• Section headings: ALL CAPS, followed by a line of dashes (e.g., "WORK EXPERIENCE\\n─────────────").
-• Consistent spacing: one blank line between sections, no blank lines within a section entry.
-• Tense: past tense for completed roles, present tense for current role only.
-• Dates: MMM YYYY format (e.g., "Jan 2022 – Mar 2024"). Use "Present" for current role.
-• No emojis, icons, or special Unicode symbols in the resume body.
-• No personal pronouns (I, my, we, our) anywhere.
-
-═══════════════════════════════════════════════════════════════════
-ANTI-REPETITION RULES
-═══════════════════════════════════════════════════════════════════
-• The Professional Summary must NOT repeat exact phrases from Skills or Experience bullets.
-• Skills listed in the Skills section must NOT be restated verbatim in bullet points.
-• Each work experience entry must use DISTINCT action verbs from other entries where possible.
-• Project descriptions must NOT restate content already covered in Work Experience.
-• Certifications section must NOT duplicate tool names already fully described elsewhere.
-
-═══════════════════════════════════════════════════════════════════
-BIAS REPLACEMENT RULES — APPLY EXACTLY
-═══════════════════════════════════════════════════════════════════
+BIAS REPLACEMENT RULES — APPLY EXACTLY:
 {formatted_mapping}
 
-═══════════════════════════════════════════════════════════════════
-ORIGINAL RESUME TEXT
-═══════════════════════════════════════════════════════════════════
-\"\"\"{text}\"\"\"
-
-═══════════════════════════════════════════════════════════════════
-OUTPUT INSTRUCTIONS
-═══════════════════════════════════════════════════════════════════
-1. Output the COMPLETE rewritten resume first — all sections, no truncation.
-2. Use the EXACT section order: Contact Header → Professional Summary → Core Skills →
-   Work Experience → Projects → Education → Certifications & Links.
-3. Skip a section ONLY if the original resume contains zero evidence for it.
-4. After the resume, append the job title suggestions block below.
-
-═══════════════════════════════════════════════════════════════════
-MANDATORY JOB TITLE SUGGESTIONS (append after resume)
-═══════════════════════════════════════════════════════════════════
+MANDATORY JOB TITLE SUGGESTIONS (append after the resume text):
 
 ### 🎯 Suggested Job Titles (Based on Resume)
 
 Provide EXACTLY 5 job titles suited for a candidate in {user_location}.
-For each, provide a specific reason tied to resume content and a LinkedIn search URL.
-
 FORMAT:
-1. **[Job Title]** — [Specific reason based on resume evidence]
+1. **[Job Title]** — [Specific reason tied to resume evidence]
 🔗 https://www.linkedin.com/jobs/search/?keywords=[URL+encoded+title]&location={urllib.parse.quote(user_location)}
 
-(Repeat for all 5 titles)
-"""
+════════════════════════════════════════════════════════
+PART 2 — JSON OBJECT (inside JSON tags)
+════════════════════════════════════════════════════════
 
-    response = call_llm(prompt, session=st.session_state)
-    return response
+Return ONLY valid JSON. No preamble, no explanation, no markdown fences.
 
+CONTENT REWRITING — same ATS rules as Part 1 apply to all bullet fields.
+Strong verbs only. Quantified impact. No pronouns. No repetition across sections.
 
-# ============================================================
-# 📦 RESUME OPTIMIZATION ENGINE — Structured JSON Output
-# ============================================================
-
-def optimize_resume_to_json(raw_text: str) -> str:
-    """
-    Calls the LLM with a strict ATS-compliant JSON-only prompt.
-    Returns raw LLM response string (JSON extraction handled separately).
-    MUST NOT include suggestions, reasoning, or explanations.
-    Used EXCLUSIVELY for DOCX generation.
-
-    ATS COMPLIANCE TARGET: Workday, Greenhouse, Lever, iCIMS, Taleo, SmartRecruiters.
-    These systems require: single-column layout, plain section headers, no tables/graphics,
-    consistent bullet formatting, strong action verbs, and keyword-rich descriptions.
-    """
-    prompt = f"""You are an enterprise-grade ATS resume optimization engine trained on hiring pipeline
-standards used by Workday, Greenhouse, Lever, iCIMS, Taleo, and SmartRecruiters.
-Your output quality must match the standard set by professional platforms like Enhancv and Jobscan.
-
-Your task is to parse, REWRITE, and rebuild the following resume into a strict ATS-compliant JSON object.
-
-═══════════════════════════════════════════════════════
-ATS COMPLIANCE RULES (NON-NEGOTIABLE)
-═══════════════════════════════════════════════════════
-OUTPUT FORMAT:
-- Return ONLY valid JSON. No preamble, no explanation, no markdown fences, no code blocks.
-- Do NOT include job title suggestions, reasoning, or commentary anywhere in the output.
-
-SECTION STRUCTURE — Use ONLY these standardized ATS section headers (in this order):
-  Professional Summary → Skills → Work Experience → Projects → Education → Certifications
-  Languages → Interests → Additional
-  These match the exact parsing categories used by enterprise ATS platforms.
-
-CONTENT REWRITING — INDUSTRY-STANDARD ATS OPTIMIZATION:
-- REWRITE every bullet point using the formula:
-  [Strong Action Verb] + [Specific Task/Responsibility] + [Tool/Technology] + [Quantified Impact]
-  Example: "Engineered a real-time data pipeline using Apache Kafka and Spark, reducing ETL latency by 40%"
-  Example: "Automated deployment workflows using GitHub Actions and Docker, cutting release time by ~50%"
-- REWRITE the Professional Summary as exactly 2–3 sentences (max 60 words):
-  Sentence 1: [Seniority] + [Core domain] + [Years of experience]
-  Sentence 2: [Top 2–3 specific technical strengths — NOT repeated verbatim in skills array]
-  Sentence 3: [Value proposition — what was delivered or achieved]
-  Example: "Results-driven Python Developer with 4+ years building scalable APIs and ML pipelines.
-  Specialized in FastAPI, PostgreSQL, and containerized deployments on AWS.
-  Delivered production systems processing 100K+ daily transactions with 99.9% uptime."
-- STRONG action verbs ONLY: Architected, Engineered, Developed, Implemented, Optimized, Automated,
-  Spearheaded, Deployed, Designed, Reduced, Increased, Achieved, Led, Managed, Streamlined,
-  Launched, Migrated, Integrated, Refactored, Scaled, Analyzed, Delivered, Coordinated.
-- NEVER use weak verbs: "helped", "assisted", "worked on", "involved in", "responsible for",
-  "participated in", "contributed to" (as a standalone without specifics).
-- Every experience bullet MUST end with a measurable impact wherever inferable.
-  If original resume has no metrics, use plausible range estimates marked "~" (e.g., "~30% faster").
-- Preserve ALL original facts: company names, dates, job titles, technologies, project names, institutions.
-- NO personal pronouns anywhere (I, my, me, we, our, their).
-
-ANTI-REPETITION ENFORCEMENT:
-- The "summary" field must NOT repeat exact phrases or skill names already in the "skills" array.
-- Each experience entry's "bullets" must use DISTINCT action verbs from other experience entries where possible.
-- Project "bullets" must NOT restate content already fully described in experience "bullets".
-- "soft_skills" array must NOT duplicate items already present in "skills" array.
-- Each bullet point within a single experience entry must describe a DIFFERENT achievement or task.
-
-KEYWORD OPTIMIZATION:
-- Extract ALL technical keywords from the resume and ensure they appear in the skills array.
-- Include both abbreviated and full forms where applicable (e.g., "ML" and "Machine Learning").
-- Skills array must be comprehensive — ATS keyword scanners parse this section first.
-- Minimum 8 skills required. Add widely-known variants of tools found (e.g., "React" → also "React.js").
-
-CONTACT FIELDS:
-- ALL contact fields MUST be inside the "contact" object. NEVER put them at the top level.
-- "contact.location" = city and country only (e.g., "Kolkata, India").
-- "contact.linkedin" = full URL starting with https://www.linkedin.com/. Extract exactly as written.
-- "contact.github" = full URL starting with https://github.com/ OR portfolio URL. Extract exactly.
-- If linkedin or github URL appears ANYWHERE in the resume, it MUST appear in contact.linkedin / contact.github.
-- Use "" (empty string) — NEVER null — for any contact field with no data.
-- "contact.title" = candidate's primary job title or most relevant role label.
-
-DATA TYPES:
-- "skills" = flat array of individual skill strings (ALL technical tools, languages, frameworks, platforms).
-- "soft_skills" = flat array of professional competency strings (e.g., "Cross-functional Collaboration").
-  Must NOT duplicate items in the "skills" array.
-- "languages" = flat array of spoken language strings (e.g., "English (Professional Proficiency)").
-- "interests" = flat array of interest/hobby strings.
-- "certifications" = array of objects with "name", "issuer", "duration". NEVER flat strings.
-- "additional" = array of objects for training, awards, volunteering, publications. Each MUST have
-  exactly: "name" (item title), "description" (1-sentence ATS-optimized detail), "duration" (date/range or "").
-  NEVER put raw dict strings. NEVER use flat strings. ALWAYS use the object format.
-- "experience[].description" = 1-sentence role scope. Must be UNIQUE context not covered in bullets.
-  Do NOT restate the job title or company name. Do NOT duplicate bullet content.
-- "projects[].description" = 1-sentence project purpose. Must be distinct from experience descriptions.
-
-MISSING DATA:
-- If a section is absent but inferable from context, reconstruct it intelligently.
-- If a field truly has no data, use "[Not Provided]" for text fields, or [] for arrays.
-
-═══════════════════════════════════════════════════════
-RETURN ONLY THIS EXACT JSON STRUCTURE (no extra keys):
-═══════════════════════════════════════════════════════
+RETURN ONLY THIS EXACT JSON STRUCTURE:
 {{
   "contact": {{
     "name": "",
@@ -3767,35 +3622,64 @@ RETURN ONLY THIS EXACT JSON STRUCTURE (no extra keys):
   ]
 }}
 
-═══════════════════════════════════════════════════════
-FIELD-LEVEL ATS RULES:
-═══════════════════════════════════════════════════════
-- summary = 2–3 sentences. Role identity + specific strengths + value proposition. Max 60 words.
-  No personal pronouns. Must NOT duplicate exact phrases from the skills array.
-- experience[].description = 1-sentence role scope (unique context; not a restatement of bullets).
-  Rewritten in plain language. No pronouns. Do NOT leave blank.
-- experience[].bullets = 3–5 bullets per role. Each: Strong Action Verb + Specific Task + Technology + Impact.
-  No pronouns. Each bullet must describe a DIFFERENT achievement. No weak openers (responsible for, etc.).
-  Use DISTINCT action verbs across roles where possible (avoid repeating "Developed" in every entry).
-- projects[].duration = "MMM YYYY – MMM YYYY" format. Extract from resume or "[Not Provided]".
-- projects[].description = 1-sentence project purpose. MUST be distinct from any experience description.
-  Rewrite from resume content. No pronouns.
-- projects[].bullets = 3–5 bullets with action verbs and impact metrics. Must NOT restate experience bullets.
-- projects[].tech_stack = comma-separated list of all technologies used (e.g., "Python, FastAPI, PostgreSQL").
-- education[].bullets = notable coursework, GPA (if >= 3.5), academic achievements, relevant activities.
-- certifications[].name = exact certification name as it appears on the credential.
-- certifications[].issuer = issuing organization or platform. "[Not Provided]" if unknown.
-- certifications[].duration = "MMM YYYY" or "MMM YYYY – MMM YYYY". Extract from resume.
-- skills array MUST include every technology, tool, language, and framework found anywhere in the resume.
-  Minimum 8 skills. Keep as individual array entries (not comma-joined strings). No duplicates.
-- soft_skills array must NOT duplicate items already present in the skills array.
-  Use competency-level phrases (e.g., "Agile Project Management", "Cross-functional Leadership").
+FIELD RULES:
+- "skills" = flat array of individual skill strings. Minimum 8. No duplicates.
+- "soft_skills" = professional competency phrases. Must NOT duplicate items in "skills".
+- "contact.*" = extract exactly as written. Use "" not null for missing fields.
+- "summary" = 2–3 sentences, max 60 words, no pronouns.
+- "experience[].description" = 1-sentence role scope, unique from bullets.
+- "experience[].bullets" = 3–5 bullets each. Strong verb + task + tech + impact.
+- "projects[].bullets" = must NOT restate experience bullets.
+- "additional" items MUST use object format: {{"name":"","description":"","duration":""}}.
+- Missing fields: use "[Not Provided]" for text, [] for arrays.
 
 RESUME TEXT:
-\"\"\"{raw_text}\"\"\"
+\"\"\"{text}\"\"\"
 """
-    response = call_llm(prompt, session=st.session_state)
-    return response
+
+    raw_response = call_llm(prompt, session=st.session_state)
+
+    # ── Parse the two sections out of the combined response ──────────────
+    rewritten_text = ""
+    json_str = ""
+
+    rewrite_match = re.search(
+        r"===REWRITTEN_RESUME_START===(.*?)===REWRITTEN_RESUME_END===",
+        raw_response, re.DOTALL
+    )
+    json_match = re.search(
+        r"===JSON_START===(.*?)===JSON_END===",
+        raw_response, re.DOTALL
+    )
+
+    if rewrite_match:
+        rewritten_text = rewrite_match.group(1).strip()
+    else:
+        # fallback: use everything before JSON block
+        rewritten_text = raw_response.split("===JSON_START===")[0].strip()
+
+    if json_match:
+        json_str = json_match.group(1).strip()
+    else:
+        # fallback: try to extract JSON object from anywhere in the response
+        json_fallback = re.search(r'\{[\s\S]*\}', raw_response)
+        json_str = json_fallback.group(0).strip() if json_fallback else ""
+
+    return rewritten_text, json_str
+
+
+# ── Thin compatibility wrappers — keep callers working without changes ────────
+
+def rewrite_text_with_llm(text, replacement_mapping, user_location):
+    """Compatibility wrapper — calls merged rewrite_and_optimize_resume()."""
+    rewritten_text, _ = rewrite_and_optimize_resume(text, replacement_mapping, user_location)
+    return rewritten_text
+
+
+def optimize_resume_to_json(raw_text: str) -> str:
+    """Compatibility wrapper — calls merged rewrite_and_optimize_resume()."""
+    _, json_str = rewrite_and_optimize_resume(raw_text, {}, "")
+    return json_str
 
 
 def _salvage_additional_str(s):
@@ -5354,14 +5238,17 @@ def rewrite_and_highlight(text, replacement_mapping, user_location):
                 })
             break  # Only one match per word
 
-    # Rewrite text with neutral terms
-    rewritten_text = rewrite_text_with_llm(
+    # ⚡ Single LLM call — returns BOTH plain-text rewrite (for UI) AND JSON (for DOCX)
+    # Replaces the old rewrite_text_with_llm call which discarded the JSON half.
+    rewritten_text, json_str = rewrite_and_optimize_resume(
         text,
         replacement_mapping["masculine"] | replacement_mapping["feminine"],
         user_location
     )
 
-    return highlighted_text, rewritten_text, masculine_count, feminine_count, detected_masculine_words, detected_feminine_words
+    # Return json_str as 7th value so the caller can reuse it directly
+    # without triggering a second optimize_resume_to_json() LLM call.
+    return highlighted_text, rewritten_text, masculine_count, feminine_count, detected_masculine_words, detected_feminine_words, json_str
 
 # ✅ Enhanced Grammar evaluation using LLM with suggestions
 def get_grammar_score_with_llm(text, max_score=5):
@@ -5427,23 +5314,45 @@ def ats_percentage_score(
 ):
     import datetime
 
-    # ✅ Grammar evaluation
-    grammar_score, grammar_feedback, grammar_suggestions = get_grammar_score_with_llm(
-        resume_text, max_score=lang_weight
-    )
+    # ⚡ MERGED: detect both domains in a single LLM call (saves 1 API call vs 2 separate detect_domain_llm calls)
+    _valid_domains = [
+        "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
+        "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
+        "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
+        "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
+        "Networking", "Site Reliability Engineering", "Product Management", "Project Management",
+        "Business Analysis", "Technical Writing", "Digital Marketing", "E-commerce", "Fintech",
+        "Healthcare Tech", "EdTech", "IoT Development", "AR/VR Development", "Technical Sales",
+        "Agile Coaching", "Software Engineering"
+    ]
+    _domain_list = ", ".join(_valid_domains)
+    _domain_prompt = f"""Classify the two texts below into professional domains.
+Return ONLY this exact format on one line, nothing else:
+RESUME_DOMAIN | JOB_DOMAIN
 
-    # ✅ Domain similarity detection using LLM
-    resume_domain = db_manager.detect_domain_llm(
-        "Unknown", 
-        resume_text, 
-        session=st.session_state  # ✅ pass the Groq API key from session
-    )
-    job_domain = db_manager.detect_domain_llm(
-        job_title, 
-        job_description, 
-        session=st.session_state  # ✅ pass the Groq API key from session
-    )
+Choose each domain from ONLY this list: {_domain_list}
+
+RESUME TEXT (first 600 chars):
+{resume_text[:600]}
+
+JOB TEXT (first 600 chars):
+{job_description[:600]}
+"""
+    try:
+        _domain_raw = call_llm(_domain_prompt, session=st.session_state).strip()
+        _parts = [p.strip() for p in _domain_raw.split("|")]
+        resume_domain = _parts[0] if len(_parts) == 2 and _parts[0] in _valid_domains else "Software Engineering"
+        job_domain    = _parts[1] if len(_parts) == 2 and _parts[1] in _valid_domains else "Software Engineering"
+    except Exception:
+        resume_domain = "Software Engineering"
+        job_domain    = "Software Engineering"
+
     similarity_score = get_domain_similarity(resume_domain, job_domain)
+
+    # Grammar defaults — overwritten by values parsed from the ATS prompt response below
+    grammar_score       = max(0, min(lang_weight, lang_weight - 2))
+    grammar_feedback    = "Language quality appears adequate for professional communication."
+    grammar_suggestions = []
 
     # ✅ Balanced domain penalty
     MAX_DOMAIN_PENALTY = 15
@@ -5602,9 +5511,22 @@ Follow this EXACT structure. Do not skip any section:
 **Score Justification:** <Explain with matched vs. required skills ratio>
 
 ### 🗣 Language Quality Analysis
-**Score:** {grammar_score} / {lang_weight}
-**Grammar & Professional Tone:** {grammar_feedback}
+**Score:** <evaluate and provide a score 0–{lang_weight}> / {lang_weight}
+**Grammar & Professional Tone:** <single sentence summarising overall language quality>
+**Suggestions:**
+- <Actionable suggestion 1>
+- <Actionable suggestion 2>
+- <Actionable suggestion 3>
+- <Actionable suggestion 4>
+- <Actionable suggestion 5>
 **Assessment:** <Specific feedback on action verb usage, clarity, tense consistency, and ATS language>
+
+SCORING SCALE for language ({lang_weight} pts max):
+- {lang_weight}: Exceptional — Flawless grammar, powerful action verbs, crystal-clear and professional throughout
+- {lang_weight-1}: Very Good — Minor stylistic issues; highly professional and readable
+- {lang_weight-2}: Good — Some grammar or clarity issues but largely professional
+- {lang_weight-3}: Fair — Noticeable grammar or clarity problems
+- 0-1: Poor — Significant language issues
 
 ### 🔑 Keyword Analysis
 **Score:** <0–{keyword_weight}> / {keyword_weight}
@@ -5673,7 +5595,6 @@ Follow this EXACT structure. Do not skip any section:
 
 **EVALUATION CONTEXT:**
 - Current Date: {datetime.datetime.now().strftime('%B %Y')} (Year: {current_year}, Month: {current_month})
-- Grammar Score Pre-evaluated: {grammar_score} / {lang_weight} — {grammar_feedback}
 - Resume Domain Detected: {resume_domain}
 - Target Job Domain: {job_domain}
 - Domain Similarity Score: {similarity_score:.2f}/1.0
@@ -5735,7 +5656,23 @@ Follow this EXACT structure. Do not skip any section:
     exp_score     = extract_score(r"\*\*Score:\*\*\s*(\d+)", exp_analysis)
     skills_score  = extract_score(r"\*\*Score:\*\*\s*(\d+)", skills_analysis)
     keyword_score = extract_score(r"\*\*Score:\*\*\s*(\d+)", keyword_analysis)
-    lang_score    = grammar_score  # Grammar score already capped to lang_weight
+    # ⚡ Parse grammar score + feedback from ATS result (no separate LLM call needed)
+    _grammar_score_match    = re.search(r"\*\*Score:\*\*\s*<evaluate.*?(\d+)>|Score.*?(\d+)\s*/\s*" + str(lang_weight), lang_analysis)
+    _grammar_score_match2   = re.search(r"\*\*Score:\*\*\s*(\d+)", lang_analysis)
+    _grammar_feedback_match = re.search(r"\*\*Grammar & Professional Tone:\*\*\s*(.+)", lang_analysis)
+    _grammar_sugg_raw       = re.findall(r"^- (.+)", lang_analysis, re.MULTILINE)
+
+    if _grammar_score_match2:
+        grammar_score = int(_grammar_score_match2.group(1))
+    # else keep the safe default already set above
+
+    if _grammar_feedback_match:
+        grammar_feedback = _grammar_feedback_match.group(1).strip()
+
+    if _grammar_sugg_raw:
+        grammar_suggestions = _grammar_sugg_raw
+
+    lang_score = grammar_score  # use value parsed from ATS result
 
     # ── Clamp every score: min floor + hard upper cap to its own weight ──
     # Upper cap prevents LLM hallucinating over-max scores (e.g. 25/20)
@@ -6266,19 +6203,25 @@ if uploaded_files and job_description:
         # ✅ Bias detection
         bias_score, masc_count, fem_count, detected_masc, detected_fem = detect_bias(full_text)
 
-        # ✅ Rewrite and highlight gender-biased words (Analysis Module — UI display only)
-        highlighted_text, rewritten_text, _, _, _, _ = rewrite_and_highlight(
-            full_text, replacement_mapping, user_location
-        )
+        # ⚡ MERGED: single LLM call returns BOTH plain-text rewrite AND JSON.
+        # json_str is the structured JSON for DOCX generation — no second call needed.
+        with st.spinner("✍️ Rewriting resume & generating optimised structure..."):
+            try:
+                highlighted_text, rewritten_text, _, _, _, _, json_str = rewrite_and_highlight(
+                    full_text, replacement_mapping, user_location
+                )
+            except Exception:
+                highlighted_text = full_text
+                rewritten_text   = full_text
+                json_str         = ""
 
-        # ✅ Resume Optimization Module — Structured JSON for DOCX generation ONLY
+        # ✅ Resume Optimization Module — reuse JSON already produced above (0 extra LLM calls)
         try:
-            raw_json_response = optimize_resume_to_json(full_text)
-            optimized_resume_data = extract_resume_json(raw_json_response)
+            optimized_resume_data = extract_resume_json(json_str)
         except Exception:
             optimized_resume_data = extract_resume_json("")  # falls back to empty skeleton
 
-        # ✅ Format check (industry standard)
+        # ✅ Format check (industry standard — no LLM call)
         try:
             doc_check = fitz.open(file_path)
             num_pages = doc_check.page_count
@@ -6287,18 +6230,19 @@ if uploaded_files and job_description:
             num_pages = 1
         format_data = check_resume_format(full_text, num_pages, pdf_path=file_path)
 
-        # ✅ LLM-based ATS Evaluation
-        ats_result, ats_scores = ats_percentage_score(
-            resume_text=full_text,
-            job_description=job_description,
-            logic_profile_score=None,
-            edu_weight=edu_weight,
-            exp_weight=exp_weight,
-            skills_weight=skills_weight,
-            lang_weight=lang_weight,
-            keyword_weight=keyword_weight,
-            format_data=format_data,
-        )
+        # ✅ LLM-based ATS Evaluation (includes domain detection + grammar scoring internally)
+        with st.spinner("🔍 Running ATS evaluation..."):
+            ats_result, ats_scores = ats_percentage_score(
+                resume_text=full_text,
+                job_description=job_description,
+                logic_profile_score=None,
+                edu_weight=edu_weight,
+                exp_weight=exp_weight,
+                skills_weight=skills_weight,
+                lang_weight=lang_weight,
+                keyword_weight=keyword_weight,
+                format_data=format_data,
+            )
 
         # ✅ Extract structured ATS values
         candidate_name = ats_scores.get("Candidate Name", "Not Found")
