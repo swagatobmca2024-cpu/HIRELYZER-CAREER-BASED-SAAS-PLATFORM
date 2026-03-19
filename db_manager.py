@@ -129,7 +129,7 @@ class DatabaseManager:
             format_score  INTEGER NOT NULL DEFAULT 0 CHECK (format_score BETWEEN 0 AND 100),
             bias_score    REAL    NOT NULL CHECK (bias_score BETWEEN 0.0 AND 1.0),
             domain        TEXT NOT NULL,
-            timestamp     TIMESTAMP NOT NULL DEFAULT NOW()
+            timestamp     TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
         ALTER TABLE candidates ADD COLUMN IF NOT EXISTS
             format_score INTEGER NOT NULL DEFAULT 0;
@@ -646,8 +646,8 @@ Agile Coaching, Software Engineering]
 
     def insert_candidate(self, data: Tuple, job_title: str = "", job_description: str = "") -> int:
         try:
-            local_tz = pytz.timezone("Asia/Kolkata")
-            local_time = datetime.now(local_tz).strftime("%Y-%m-%d %H:%M:%S")
+            local_tz   = pytz.timezone("Asia/Kolkata")
+            local_time = datetime.now(local_tz)  # timezone-aware IST datetime — NOT strftime string
             detected_domain = self.detect_domain_from_title_and_description(job_title, job_description)
 
             if len(data) < 9:
