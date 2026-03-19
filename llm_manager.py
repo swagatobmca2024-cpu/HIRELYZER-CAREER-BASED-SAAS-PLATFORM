@@ -4,19 +4,12 @@ import random
 import psycopg2
 import psycopg2.extras
 from datetime import datetime, timedelta, timezone, date
+from langchain_groq import ChatGroq
 
-# ---- CONFIG ----
-CACHE_EXPIRY_HOURS      = 24
-FAILURE_COOLDOWN_MINUTES = 5
-QUOTA_COOLDOWN_MINUTES  = 60
-DAILY_KEY_LIMIT         = 800
-DEAD_KEY_REMOVE_DAYS    = 3
-
-# ── Timezone fix ──────────────────────────────────────────────────────────────
-# Supabase stores TIMESTAMPTZ in UTC. The dashboard was showing timestamps
-# 5h 30m behind IST because Python was writing naive UTC datetimes while the
-# dashboard renders in the browser's local timezone.
-# Fix: always work in IST-aware datetimes. Supabase converts automatically.
+# ── IST Timezone helpers ──────────────────────────────────────────────────────
+# Supabase stores TIMESTAMPTZ in UTC. All timestamps are written as IST-aware
+# so the Supabase dashboard shows correct IST times, and daily quota resets
+# happen at IST midnight (not UTC midnight = 5:30 AM IST).
 IST = timezone(timedelta(hours=5, minutes=30))
 
 def now_ist() -> datetime:
@@ -27,13 +20,24 @@ def today_ist() -> date:
     """Today's date in IST."""
     return now_ist().date()
 
+# ---- CONFIG ----
+CACHE_EXPIRY_HOURS = 24
+FAILURE_COOLDOWN_MINUTES = 5
+QUOTA_COOLDOWN_MINUTES = 60
+DAILY_KEY_LIMIT = 800
+DEAD_KEY_REMOVE_DAYS = 3
 
-# ---- Cached Connection -------------------------------------------------------
+
+# ---- Cached Connection (own singleton, no import from db_manager) ----
+# Uses the same @st.cache_resource pattern as db_manager to avoid
+# opening a new connection on every call, without causing a circular import.
+
 def _get_llm_connection():
     """
     Returns a single cached psycopg2 connection for llm_manager.
     @st.cache_resource ensures it is NOT recreated on every Streamlit rerun.
-    Kept separate from db_manager to avoid circular imports.
+    Kept separate from db_manager's connection to avoid circular imports,
+    but uses the same pattern and credentials.
     """
     import streamlit as st
     conn = psycopg2.connect(
@@ -60,7 +64,10 @@ except Exception:
 
 
 def get_conn():
-    """Returns the cached connection, reconnecting if dropped."""
+    """
+    Returns the cached connection.
+    Reconnects automatically if the connection was dropped.
+    """
     conn = _get_llm_connection()
     try:
         conn.isolation_level  # lightweight liveness check
@@ -74,7 +81,7 @@ def get_conn():
     return conn
 
 
-# ---- Table Setup -------------------------------------------------------------
+# ---- Table Setup ----
 # Run once via init_tables() OR paste into Supabase SQL Editor:
 #
 # CREATE TABLE IF NOT EXISTS llm_cache (
@@ -121,7 +128,7 @@ def init_tables():
         raise e
 
 
-# ---- Auto-clean expired cache ------------------------------------------------
+# ---- Auto-clean expired cache ----
 def cleanup_cache():
     """Delete expired cache rows and permanently dead key records."""
     cutoff      = now_ist() - timedelta(hours=CACHE_EXPIRY_HOURS)
@@ -136,7 +143,7 @@ def cleanup_cache():
         conn.rollback()
 
 
-# ---- Load API Keys -----------------------------------------------------------
+# ---- Load API Keys ----
 def load_groq_api_keys():
     try:
         import streamlit as st
@@ -155,12 +162,12 @@ def load_groq_api_keys():
     raise ValueError("❌ No Groq API keys found.")
 
 
-# ---- Hash Prompt -------------------------------------------------------------
+# ---- Hash Prompt ----
 def hash_prompt(prompt: str, model: str) -> str:
     return hashlib.sha256(f"{model}|{prompt}".encode("utf-8")).hexdigest()
 
 
-# ---- Cache Handling ----------------------------------------------------------
+# ---- Cache Handling ----
 def get_cached_response(prompt: str, model: str):
     """Return a valid cached LLM response, or None if not found / expired."""
     key    = hash_prompt(prompt, model)
@@ -196,7 +203,7 @@ def set_cached_response(prompt: str, model: str, response: str):
         conn.rollback()
 
 
-# ---- Key Tracking ------------------------------------------------------------
+# ---- Key Tracking ----
 def increment_key_usage(api_key: str):
     """Increment daily usage for a key, resetting count if it's a new IST day."""
     today = today_ist()
@@ -262,7 +269,7 @@ def clear_key_failure(api_key: str):
 
 def get_healthy_keys(api_keys: list) -> list:
     """
-    Return keys not in active cooldown and under daily IST quota.
+    Return keys not in active cooldown and under daily quota.
     Uses 2 bulk queries to avoid N+1 database calls.
     """
     now   = now_ist()
@@ -289,7 +296,7 @@ def get_healthy_keys(api_keys: list) -> list:
             reason    = failures[key]["reason"]
             if isinstance(fail_time, str):
                 fail_time = datetime.fromisoformat(fail_time)
-            # Normalise to IST-aware for comparison
+            # Normalise to IST-aware for correct comparison
             if fail_time.tzinfo is None:
                 fail_time = fail_time.replace(tzinfo=timezone.utc).astimezone(IST)
             else:
@@ -314,21 +321,20 @@ def get_healthy_keys(api_keys: list) -> list:
     return healthy
 
 
-# ---- LLM Call ----------------------------------------------------------------
+# ---- LLM Call ----
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
     """Make a single LLM call via Groq."""
     llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key)
     return llm.invoke(prompt).content
 
 
-# ---- Main Entry Point --------------------------------------------------------
+# ---- Main Entry Point ----
 def call_llm(prompt: str, session, model: str = "llama-3.3-70b-versatile", temperature: float = 0) -> str:
     """
     Main LLM call with:
     1. Cache check       (Supabase llm_cache table)
     2. User key attempt  (from session["user_groq_key"])
     3. Admin key rotation with per-key cooldown + daily quota tracking
-    All timestamps written in IST (UTC+5:30) so Supabase dashboard shows correct time.
     """
     # Step 1: Cleanup once per session
     if not session.get("_cache_cleaned"):
