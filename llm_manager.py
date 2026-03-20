@@ -80,11 +80,37 @@ _cleanup_lock    = Lock()
 
 
 # ── Timezone ──────────────────────────────────────────────────────────────────
+# All internal DB operations use UTC — avoids naive-datetime mismatches when
+# Supabase stores TIMESTAMP WITHOUT TIME ZONE (always UTC internally).
+# IST is kept only for display / logging purposes.
+_UTC = pytz.utc
 _IST = pytz.timezone("Asia/Kolkata")
 
 
+def get_utc_time() -> datetime:
+    """UTC-aware datetime — used for all DB writes and comparisons."""
+    return datetime.now(_UTC)
+
+
 def get_ist_time() -> datetime:
+    """IST-aware datetime — kept for display/logging only."""
     return datetime.now(_IST)
+
+
+def _to_utc(dt: datetime) -> datetime:
+    """
+    Normalise any datetime to UTC-aware.
+    Supabase returns TIMESTAMP columns as naive datetimes — they are always
+    stored in UTC regardless of server timezone setting, so we just attach
+    the UTC tzinfo without conversion.
+    """
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        dt = datetime.strptime(dt[:19], "%Y-%m-%d %H:%M:%S")
+    if dt.tzinfo is None:
+        return _UTC.localize(dt)   # naive from Supabase => UTC
+    return dt.astimezone(_UTC)     # already aware => convert to UTC
 
 
 # ── Supabase connection (one per Streamlit worker) ────────────────────────────
@@ -208,8 +234,8 @@ def maybe_cleanup():
         _last_cleanup_ts = now
 
     try:
-        cutoff_cache = get_ist_time() - timedelta(hours=CACHE_EXPIRY_HOURS)
-        cutoff_dead  = get_ist_time() - timedelta(days=DEAD_KEY_REMOVE_DAYS)
+        cutoff_cache = get_utc_time() - timedelta(hours=CACHE_EXPIRY_HOURS)
+        cutoff_dead  = get_utc_time() - timedelta(days=DEAD_KEY_REMOVE_DAYS)
         _execute("DELETE FROM llm_cache    WHERE timestamp < %s", (cutoff_cache,))
         _execute("DELETE FROM key_failures WHERE fail_time < %s", (cutoff_dead,))
         logger.info("LLM Manager: cleanup complete.")
@@ -269,18 +295,14 @@ def get_cached_response(prompt: str, model: str) -> str | None:
         return hit
 
     # L2 hit — read from Supabase
-    cutoff = get_ist_time() - timedelta(hours=CACHE_EXPIRY_HOURS)
+    cutoff = get_utc_time() - timedelta(hours=CACHE_EXPIRY_HOURS)
     row = _execute(
         "SELECT response, timestamp FROM llm_cache WHERE prompt_hash = %s",
         (key,),
         fetch="one",
     )
     if row:
-        ts = row["timestamp"]
-        if isinstance(ts, str):
-            ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
-        if ts.tzinfo is None:
-            ts = _IST.localize(ts)
+        ts = _to_utc(row["timestamp"])
         if ts >= cutoff:
             # Promote to L1 and increment hit counter (fire-and-forget)
             _mem_set(key, row["response"])
@@ -361,8 +383,8 @@ def pick_best_key(api_keys: list[str]) -> str | None:
     if not api_keys:
         return None
 
-    now   = get_ist_time()
-    today = now.date()
+    now   = get_utc_time()
+    today = now.date()   # UTC date — matches CURRENT_DATE in Supabase (UTC)
 
     # Pull failure + usage state for all keys in 2 queries
     failures_rows = _execute(
@@ -385,11 +407,7 @@ def pick_best_key(api_keys: list[str]) -> str | None:
         # ── cooldown check ────────────────────────────────────────────────────
         if key in failures:
             f       = failures[key]
-            fail_dt = f["fail_time"]
-            if isinstance(fail_dt, str):
-                fail_dt = datetime.strptime(fail_dt, "%Y-%m-%d %H:%M:%S")
-            if fail_dt.tzinfo is None:
-                fail_dt = _IST.localize(fail_dt)
+            fail_dt = _to_utc(f["fail_time"])
             cooldown_mins = (
                 QUOTA_COOLDOWN_MINUTES
                 if f["reason"] == "quota"
@@ -404,12 +422,13 @@ def pick_best_key(api_keys: list[str]) -> str | None:
         if key in usages:
             u          = usages[key]
             last_reset = u["last_reset"]
-            if hasattr(last_reset, "isoformat"):
-                last_reset = last_reset.isoformat() if hasattr(last_reset, "isoformat") else str(last_reset)
+            # Normalise to a date object regardless of what psycopg2 returns
             if isinstance(last_reset, str):
                 lr_date = datetime.strptime(last_reset[:10], "%Y-%m-%d").date()
+            elif isinstance(last_reset, datetime):
+                lr_date = last_reset.date()
             else:
-                lr_date = last_reset
+                lr_date = last_reset   # already a date object
             usage_today = u["usage_count"] if lr_date == today else 0
 
         if usage_today >= DAILY_KEY_LIMIT:
@@ -590,8 +609,8 @@ def get_key_health_report() -> list[dict]:
 
     usages   = {r["api_key"]: r for r in usage_rows}
     failures = {r["api_key"]: r for r in failure_rows}
-    today    = get_ist_time().date()
-    now      = get_ist_time()
+    today    = get_utc_time().date()
+    now      = get_utc_time()
 
     report = []
     for key in all_keys:
@@ -610,12 +629,8 @@ def get_key_health_report() -> list[dict]:
         in_cooldown = False
         cooldown_reason = None
         if f:
-            fail_dt = f.get("fail_time")
+            fail_dt = _to_utc(f.get("fail_time"))
             if fail_dt:
-                if isinstance(fail_dt, str):
-                    fail_dt = datetime.strptime(fail_dt, "%Y-%m-%d %H:%M:%S")
-                if fail_dt.tzinfo is None:
-                    fail_dt = _IST.localize(fail_dt)
                 cd_mins = QUOTA_COOLDOWN_MINUTES if f.get("reason") == "quota" else FAILURE_COOLDOWN_MINUTES
                 if (now - fail_dt).total_seconds() < cd_mins * 60:
                     in_cooldown = True
