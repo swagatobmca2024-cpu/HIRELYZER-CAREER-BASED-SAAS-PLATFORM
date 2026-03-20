@@ -59,7 +59,7 @@ from langchain_groq import ChatGroq  # optional if you're using it
 
 
 # Local project imports
-from llm_manager import call_llm, load_groq_api_keys, get_key_health_report, get_cache_stats
+from llm_manager import call_llm, load_groq_api_keys
 from db_manager import (
     db_manager,
     insert_candidate,
@@ -4389,15 +4389,11 @@ def setup_vectorstore(documents):
 
 # Create Conversational Chain
 def create_chain(vectorstore):
-    # ✅ Use llm_manager.pick_best_key — respects cooldowns, daily limits,
-    #    and least-used selection across all concurrent sessions.
-    #    Falls back to a random key only if pick_best_key returns None.
-    from llm_manager import pick_best_key
+    # 🔁 Get a rotated admin key
     keys = load_groq_api_keys()
-    groq_api_key = pick_best_key(keys) or (keys[0] if keys else None)
-    if not groq_api_key:
-        st.error("❌ No healthy API keys available. Please try again later.")
-        return None
+    index = st.session_state.get("key_index", 0)
+    groq_api_key = keys[index % len(keys)]
+    st.session_state["key_index"] = index + 1
 
     # ✅ Create the ChatGroq object
     llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=groq_api_key)
