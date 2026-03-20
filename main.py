@@ -19242,8 +19242,8 @@ if tab5:
 				login_clicked = st.button("🚀 Login", use_container_width=True)
 
 				if login_clicked:
-					valid_email = "admin@example.com"
-					valid_password = "Swagato@2002"
+					valid_email = st.secrets["ADMIN_EMAIL"]
+					valid_password = st.secrets["ADMIN_PASSWORD"]
 
 					if email == valid_email and password == valid_password:
 						st.session_state.admin_logged_in = True
