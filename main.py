@@ -19242,8 +19242,8 @@ if tab5:
 				login_clicked = st.button("🚀 Login", use_container_width=True)
 
 				if login_clicked:
-					valid_email = st.secrets["ADMIN_EMAIL"]
-					valid_password = st.secrets["ADMIN_PASSWORD"]
+					valid_email = "admin@example.com"
+					valid_password = "Swagato@2002"
 
 					if email == valid_email and password == valid_password:
 						st.session_state.admin_logged_in = True
@@ -19898,6 +19898,9 @@ if tab5:
 		st.markdown("""
 		<div style='text-align: center; color: #666; font-size: 0.9em; padding: 1rem;'>
 			<p>🛡️ Enhanced Admin Dashboard | Powered by Advanced Database Manager</p>
+			<p>Last updated: {}</p>
+		</div>
+		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
 			<p>Last updated: {}</p>
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
