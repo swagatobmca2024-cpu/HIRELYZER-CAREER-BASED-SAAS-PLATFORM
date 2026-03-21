@@ -16713,6 +16713,12 @@ def analyze_resume_and_generate_questions(
       2. generate_resume_based_questions_domain_aware() — resume-based questions
       3. generate_domain_questions_with_llm()           — generic domain questions
 
+    Cost: 1 API call (vs 3 in tab4__2_).
+    Quality: Full difficulty contract + domain authority block injected (same depth as tab4__2_).
+      - Uses get_difficulty_instruction_block() with structural templates, forbidden patterns,
+        cognitive load rules, and scoring calibration.
+      - Uses build_domain_authority_block() for domain-specific keyword enforcement.
+
     Returns dict with keys:
       resume_context   : dict  (skills, projects, experience, technologies)
       resume_questions : list  (num_resume_qs items)
@@ -16722,37 +16728,49 @@ def analyze_resume_and_generate_questions(
     import json, re, random
     import streamlit as st
 
-    # ── Build difficulty block inline (mirrors get_difficulty_instruction_block) ──
-    difficulty_guidance = {
-        "Easy": "CONCEPT CLARITY — ask what, why, and give a real-world example. 3-5 paragraphs to answer.",
-        "Medium": "SCENARIO REASONING — one realistic scenario with one constraint/decision. 5-6 paragraphs to answer.",
-        "Hard": "FOCUSED TECHNICAL DEPTH — one tradeoff, one failure mode, or one optimisation constraint. 6-8 paragraphs to answer.",
-    }
-    diff_block = difficulty_guidance.get(difficulty, difficulty_guidance["Medium"])
+    # ── Full difficulty + domain blocks (same as tab4__2_ separate calls) ──────
+    diff_block   = get_difficulty_instruction_block(difficulty)
+    domain_block = build_domain_authority_block(domain, role)
 
-    interview_type_note = (
-        "TECHNICAL interview — focus on implementation, tradeoffs, depth."
+    # ── Filter resume context for domain relevance (mirrors tab4__2_) ──────────
+    filtered_context = filter_resume_for_domain({
+        "skills": [],
+        "projects": [],
+        "experience": [],
+        "technologies": [],
+    }, domain)  # placeholder — real context parsed after Task 1; used for resume_qs below
+
+    interview_type_block = (
+        "⚙️ This is a TECHNICAL interview. Focus on technical depth, implementation details, tradeoffs, and reasoning."
         if interview_type.lower() == "technical"
-        else "BEHAVIORAL interview — focus on past experiences, judgment, teamwork."
+        else "💬 This is a BEHAVIORAL interview. Focus on past experiences, teamwork, challenges, leadership, decision-making, and communication."
         if interview_type.lower() == "behavioral"
-        else "MIXED interview — blend technical depth with behavioral judgment."
+        else "🔀 This is a MIXED interview. Blend technical depth with behavioral judgment."
     )
 
-    bias_note = {
-        "technical depth": "Bias resume questions toward internal mechanics and edge cases.",
-        "explanation clarity": "Bias resume questions toward step-by-step explanations.",
-        "answer precision": "Bias resume questions toward very specific, targeted answers tied to resume.",
-        "balanced": "",
-    }.get(weakness_bias, "")
+    bias_map = {
+        "technical depth":     "Prioritize questions that expose gaps in technical depth — ask about internals, edge cases, and implementation specifics.",
+        "explanation clarity": "Prioritize questions that require the candidate to explain complex concepts step-by-step.",
+        "answer precision":    "Prioritize questions that require very specific, targeted answers directly tied to their resume.",
+        "balanced":            "",
+    }
+    bias_note = bias_map.get(weakness_bias, "")
 
     variation_hint = random.choice([
         "For generic questions, include one scenario referencing real-world constraints.",
         "For generic questions, add one question about debugging or diagnosing a failure.",
         "For generic questions, include one question about a specific tradeoff in this domain.",
         "For generic questions, add one question about collaboration or technical decision-making.",
+        "For generic questions, add one reflective question about learning or adapting to new technologies.",
     ])
 
     prompt = f"""You are a senior technical interviewer. Complete THREE tasks and return ONLY the JSON shown below.
+
+{interview_type_block}
+
+{domain_block}
+
+{diff_block}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TASK 1 — RESUME ANALYSIS
@@ -16769,22 +16787,28 @@ TASK 2 — {num_resume_qs} RESUME-BASED QUESTIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generate EXACTLY {num_resume_qs} interview questions grounded in the resume above.
 Target role: {role} | Domain: {domain} | Difficulty: {difficulty}
-{interview_type_note}
-{diff_block}
-{bias_note}
-Every question MUST reference a skill, project, or technology from the resume.
-Each question: 1-2 sentences, self-contained.
+
+RULES:
+- Every question MUST reference a skill, project, or technology from the resume
+- Every question MUST be about {domain} — not the candidate's previous domain if it differs
+- Match the DIFFICULTY CONTRACT and structural templates above exactly
+- Reflect the interview type above — technical questions probe implementation/tradeoffs; behavioral questions probe experience/judgment
+{f"- {bias_note}" if bias_note else ""}
+- Each question: 1-2 sentences, self-contained
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TASK 3 — {num_generic_qs} GENERIC DOMAIN QUESTIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Generate EXACTLY {num_generic_qs} domain-general interview questions.
 Domain: {domain} | Role: {role} | Difficulty: {difficulty}
-{interview_type_note}
-{diff_block}
-{variation_hint}
-Questions must be about {domain} — not the candidate's background.
-Each question: 1-2 sentences, no overlap with resume questions.
+
+RULES:
+- Every question MUST be about {domain} — no exceptions
+- Match the DIFFICULTY CONTRACT and structural templates above exactly
+- Reflect the interview type above
+- No overlap with resume questions; no numbering or prefixes
+- Each question: 1-2 sentences
+- {variation_hint}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT FORMAT — return ONLY this JSON, no markdown, no extra text:
