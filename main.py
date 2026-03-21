@@ -18653,16 +18653,18 @@ Generate {num_questions} questions now:
                     resume_text = extract_resume_text_from_pdf(uploaded_resume)
 
                     if resume_text and len(resume_text.strip()) > 50:
-                        # ⚡ Store raw text only — resume analysis is deferred to
-                        # the Start Interview button where it is merged with question
-                        # generation into a single LLM call (saves 1 API key here).
                         st.session_state.resume_file = uploaded_resume.name
                         st.session_state.resume_raw_text = resume_text
-                        st.session_state.resume_context = None  # populated on Start
                         st.session_state.interview_phase = "resume"
                         st.session_state.resume_questions_answered = 0
 
-                        st.success("✅ Resume uploaded successfully!")
+                        # Analyze resume immediately so "Key topics in scope" card
+                        # is visible during interview setup (before Start Interview).
+                        with st.spinner("Analyzing your resume with AI..."):
+                            resume_context = analyze_resume_with_llm(resume_text)
+                        st.session_state.resume_context = resume_context
+
+                        st.success("✅ Resume uploaded and analyzed successfully!")
                         
                         time.sleep(1)
                         st.rerun()
@@ -18974,10 +18976,7 @@ Generate {num_questions} questions now:
                     )
 
                 if st.button("🚀 Start Mock Interview"):
-                    with st.spinner("Analysing resume & generating personalised questions..."):
-                        # ⚡ SINGLE merged LLM call — replaces 3 separate calls:
-                        #   analyze_resume_with_llm + generate_resume_based_questions_domain_aware
-                        #   + generate_domain_questions_with_llm
+                    with st.spinner("Generating personalised interview questions..."):
                         _username_for_bias = st.session_state.get("username", "Guest")
                         _weakness_data = get_user_weakness_history(_username_for_bias)
                         _bias = _weakness_data.get("bias", "balanced")
@@ -18986,6 +18985,8 @@ Generate {num_questions} questions now:
                         _num_resume_qs = 2 if _resume_raw else 0
                         _num_generic_qs = num_questions - _num_resume_qs
 
+                        # resume_context already populated at upload time —
+                        # pass it directly; no re-analysis needed.
                         merged = analyze_resume_and_generate_questions(
                             resume_text=_resume_raw,
                             role=selected_role,
@@ -18997,8 +18998,9 @@ Generate {num_questions} questions now:
                             weakness_bias=_bias,
                         )
 
-                        # Populate session state from merged result
-                        st.session_state.resume_context = merged["resume_context"]
+                        # Keep existing resume_context (set at upload); only update questions
+                        if not st.session_state.get("resume_context"):
+                            st.session_state.resume_context = merged["resume_context"]
                         resume_based_qs = merged["resume_questions"] if _resume_raw else []
                         generic_qs = merged["generic_questions"]
 
