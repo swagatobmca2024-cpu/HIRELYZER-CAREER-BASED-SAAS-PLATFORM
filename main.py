@@ -2667,730 +2667,6 @@ def ensure_nltk():
 lemmatizer = ensure_nltk()
 reader = get_easyocr_reader()
 
-
-# ============================================================
-# 📄 DOCX TEMPLATE HELPERS & GENERATORS
-# ============================================================
-
-def _salvage_additional_str(s):
-    import json as _j, re as _r
-    if not s or not s.strip():
-        return None
-    s = s.strip()
-    try:
-        sub = _j.loads(s)
-        if isinstance(sub, dict):
-            n = str(sub.get("name", "") or "").strip()
-            d = str(sub.get("description", "") or "").strip()
-            r = str(sub.get("duration", "") or "").strip()
-            if n or d:
-                return {"name": n, "description": d, "duration": r}
-    except Exception:
-        pass
-    try:
-        converted = s.replace("\\'", "\x01").replace("'", '"').replace("\x01", "\\'")
-        sub = _j.loads(converted)
-        if isinstance(sub, dict):
-            n = str(sub.get("name", "") or "").strip()
-            d = str(sub.get("description", "") or "").strip()
-            r = str(sub.get("duration", "") or "").strip()
-            if n or d:
-                return {"name": n, "description": d, "duration": r}
-    except Exception:
-        pass
-    def _extract(key, text):
-        for q in ('"', "'"):
-            pat = q + key + q + r"\s*:\s*" + q + r"(.*?)" + q + r'(?=\s*,\s*[\'"{]|\s*\})'
-            m = _r.search(pat, text, _r.DOTALL)
-            if m:
-                return m.group(1).strip()
-        return ""
-    n = _extract("name", s)
-    d = _extract("description", s)
-    r = _extract("duration", s)
-    if n or d:
-        return {"name": n, "description": d, "duration": r}
-    return None
-
-
-def extract_resume_json(llm_response: str) -> dict:
-    EMPTY = {
-        "contact": {"name":"","title":"","email":"","phone":"","location":"","linkedin":"","github":"","portfolio":""},
-        "summary": "", "skills": [], "soft_skills": [], "languages": [], "interests": [],
-        "experience": [], "projects": [], "education": [], "certifications": [], "additional": [],
-    }
-    CONTACT_DEFAULTS = {"name":"","title":"","email":"","phone":"","location":"","linkedin":"","github":"","portfolio":""}
-    if not llm_response:
-        return EMPTY
-    text = llm_response.strip()
-    text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\s*```$', '', text)
-    text = text.strip()
-    start = text.find('{')
-    end = text.rfind('}')
-    if start == -1 or end == -1:
-        return EMPTY
-    text = text[start:end + 1]
-    try:
-        data = json.loads(text)
-        for key in EMPTY:
-            if key not in data:
-                data[key] = EMPTY[key]
-        if not isinstance(data.get("contact"), dict):
-            data["contact"] = CONTACT_DEFAULTS.copy()
-        for field, default in CONTACT_DEFAULTS.items():
-            if field not in data["contact"]:
-                data["contact"][field] = default
-        ct = data["contact"]
-        for field in list(ct.keys()):
-            v = ct[field]
-            if v is None or str(v).strip() in ("null","None","undefined","N/A","n/a"):
-                ct[field] = ""
-        for top_key, contact_key in [
-            ("location","location"),("linkedin","linkedin"),("github","github"),
-            ("portfolio","portfolio"),("github_url","github"),("linkedin_url","linkedin"),
-            ("profile","linkedin"),("website","portfolio"),
-        ]:
-            top_val = data.get(top_key, "") or ""
-            if top_val and not ct.get(contact_key):
-                ct[contact_key] = str(top_val).strip()
-        ALT_KEYS = {
-            "linkedin": ["linkedin_url","linkedin_profile","linkedIn","linked_in","profile_url","profile"],
-            "github":   ["github_url","github_profile","github_link","portfolio_url","portfolio","website","repo"],
-            "location": ["city","address","city_country","current_location"],
-        }
-        for canonical, alts in ALT_KEYS.items():
-            if not ct.get(canonical):
-                for alt in alts:
-                    v = ct.get(alt, "") or ""
-                    if v and str(v).strip():
-                        ct[canonical] = str(v).strip()
-                        break
-        for field in CONTACT_DEFAULTS:
-            if not isinstance(ct.get(field), str) or ct[field] is None:
-                ct[field] = ""
-        for exp in data.get("experience", []):
-            for f in ["role","company","duration","description"]:
-                if f not in exp: exp[f] = ""
-            if "bullets" not in exp: exp["bullets"] = []
-        for proj in data.get("projects", []):
-            for f in ["name","duration","tech_stack","url","description"]:
-                if f not in proj: proj[f] = ""
-            if "bullets" not in proj: proj["bullets"] = []
-        for edu in data.get("education", []):
-            for f in ["degree","institution","year"]:
-                if f not in edu: edu[f] = ""
-            if "bullets" not in edu: edu["bullets"] = []
-        raw_add = data.get("additional", [])
-        norm_add = []
-        for item in raw_add:
-            if isinstance(item, dict):
-                name = str(item.get("name","") or "").strip()
-                desc = str(item.get("description","") or "").strip()
-                dur  = str(item.get("duration","") or "").strip()
-                if not name and not desc: continue
-                norm_add.append({"name": name, "description": desc, "duration": dur})
-            elif isinstance(item, str):
-                s = item.strip()
-                if not s or s in ("[Not Provided]",): continue
-                if s.startswith("{") or ("name" in s and "description" in s):
-                    salvaged = _salvage_additional_str(s)
-                    if salvaged: norm_add.append(salvaged)
-                else:
-                    norm_add.append({"name": s, "description": "", "duration": ""})
-        data["additional"] = norm_add
-        raw_certs = data.get("certifications", [])
-        norm_certs = []
-        for c in raw_certs:
-            if isinstance(c, dict):
-                norm_certs.append({"name": c.get("name",""), "issuer": c.get("issuer",""), "duration": c.get("duration","")})
-            elif isinstance(c, str) and c.strip():
-                norm_certs.append({"name": c.strip(), "issuer": "", "duration": ""})
-        data["certifications"] = norm_certs
-        return data
-    except (json.JSONDecodeError, ValueError):
-        return EMPTY
-
-
-def _val(v) -> str:
-    if v is None: return "Not Provided"
-    s = str(v).strip()
-    if not s or s in ("[Not Provided]","null","None","undefined"): return "Not Provided"
-    return s
-
-
-def _build_contact_header(doc, data, name_size, name_color_rgb, name_font,
-                           contact_font, contact_color_hex, contact_size=9,
-                           title_font=None, title_size=11, title_color_rgb=None,
-                           separator="  |  ", label_color_hex=None, accent_color_hex=None):
-    contact = data.get("contact", {})
-    cc = RGBColor(int(contact_color_hex[0:2],16), int(contact_color_hex[2:4],16), int(contact_color_hex[4:6],16))
-    raw_name = contact.get("name","") or ""
-    name = raw_name if raw_name and raw_name not in ("","[Not Provided]") else "Your Name"
-    p_name = doc.add_paragraph(); p_name.clear()
-    r_name = p_name.add_run(name)
-    r_name.bold = True; r_name.font.size = Pt(name_size); r_name.font.name = name_font
-    r_name.font.color.rgb = RGBColor(*name_color_rgb)
-    p_name.alignment = 1; p_name.paragraph_format.space_before = Pt(0); p_name.paragraph_format.space_after = Pt(4)
-
-    raw_title = contact.get("title","") or ""
-    title_text = raw_title if raw_title and raw_title not in ("","[Not Provided]") else "Job Title"
-    p_title = doc.add_paragraph(); p_title.clear()
-    r_title = p_title.add_run(title_text.upper())
-    r_title.font.size = Pt(title_size); r_title.font.name = title_font or name_font; r_title.bold = True
-    if title_color_rgb: r_title.font.color.rgb = RGBColor(*title_color_rgb)
-    p_title.alignment = 1; p_title.paragraph_format.space_after = Pt(4)
-
-    def _clean(v):
-        if v is None: return "Not Provided"
-        s = str(v).strip()
-        return s if s and s not in ("[Not Provided]","null","None","undefined") else "Not Provided"
-
-    email_val    = _clean(contact.get("email",""))
-    phone_val    = _clean(contact.get("phone",""))
-    location_val = _clean(contact.get("location",""))
-    linkedin_val = _clean(contact.get("linkedin",""))
-    github_raw   = contact.get("github","") or ""
-    portfolio_raw= contact.get("portfolio","") or ""
-    github_val   = _clean(github_raw if github_raw and github_raw not in ("","[Not Provided]") else portfolio_raw)
-
-    contact_line = "  |  ".join([email_val, phone_val, location_val, linkedin_val, github_val])
-    p_contact = doc.add_paragraph(); p_contact.clear()
-    r_contact = p_contact.add_run(contact_line)
-    r_contact.font.size = Pt(contact_size); r_contact.font.name = contact_font; r_contact.font.color.rgb = cc
-    p_contact.alignment = 1; p_contact.paragraph_format.space_before = Pt(2); p_contact.paragraph_format.space_after = Pt(6)
-
-    from docx.oxml import OxmlElement as _OE
-    from docx.oxml.ns import qn as _qn
-    pPr = p_contact._p.get_or_add_pPr()
-    pBdr = _OE('w:pBdr'); btm = _OE('w:bottom')
-    btm.set(_qn('w:val'),'single'); btm.set(_qn('w:sz'),'4'); btm.set(_qn('w:space'),'1')
-    _border_col = accent_color_hex if accent_color_hex else "555555"
-    btm.set(_qn('w:color'), _border_col)
-    pBdr.append(btm); pPr.append(pBdr)
-
-
-def _section_heading_bordered(doc, text, font_name, font_size, bold, color_hex, border_color,
-                               border_sz="6", space_before=10, space_after=4, prefix=""):
-    p = doc.add_paragraph(); p.clear()
-    label = f"{prefix}{text.upper()}" if prefix else text.upper()
-    run = p.add_run(label); run.bold = bold; run.font.size = Pt(font_size); run.font.name = font_name
-    run.font.color.rgb = RGBColor(int(color_hex[0:2],16), int(color_hex[2:4],16), int(color_hex[4:6],16))
-    pPr = p._p.get_or_add_pPr()
-    pBdr = OxmlElement('w:pBdr'); bottom = OxmlElement('w:bottom')
-    bottom.set(qn('w:val'),'single'); bottom.set(qn('w:sz'),border_sz)
-    bottom.set(qn('w:space'),'1'); bottom.set(qn('w:color'),border_color)
-    pBdr.append(bottom); pPr.append(pBdr)
-    p.paragraph_format.space_before = Pt(space_before); p.paragraph_format.space_after = Pt(space_after)
-    return p
-
-
-def _add_bullet(doc, text, font_size=10, font_name="Arial",
-                indent_left=360, indent_hanging=180, color_rgb=None):
-    clean_text = text.strip()
-    for prefix in ("\u2022","-","*","\u25aa","\u25cf"):
-        if clean_text.startswith(prefix):
-            clean_text = clean_text[len(prefix):].lstrip()
-            break
-    p = doc.add_paragraph(style="Normal"); p.clear()
-    run = p.add_run(f"\u2022  {clean_text}")
-    run.font.size = Pt(font_size); run.font.name = font_name
-    if color_rgb: run.font.color.rgb = RGBColor(*color_rgb)
-    pPr = p._p.get_or_add_pPr()
-    ind = OxmlElement('w:ind')
-    ind.set(qn('w:left'), str(indent_left)); ind.set(qn('w:hanging'), str(indent_hanging))
-    pPr.append(ind)
-    p.paragraph_format.space_before = Pt(1); p.paragraph_format.space_after = Pt(1.5)
-    return p
-
-
-def _render_additional(doc, data, font_name, font_size, heading_fn, bullet_fn,
-                        name_color_rgb=(0,0,0), desc_color_rgb=(80,80,80), dur_color_rgb=(128,128,128)):
-    raw = data.get("additional", [])
-    items = []
-    for item in raw:
-        if isinstance(item, dict):
-            name = str(item.get("name","") or "").strip()
-            desc = str(item.get("description","") or "").strip()
-            dur  = str(item.get("duration","") or "").strip()
-            if not name and not desc: continue
-            if name in ("[Not Provided]","") and desc in ("[Not Provided]",""): continue
-            items.append({"name": name, "description": desc, "duration": dur})
-        elif isinstance(item, str):
-            s = item.strip()
-            if not s or s == "[Not Provided]": continue
-            if s.startswith("{") or ("'name'" in s and "'description'" in s) or s.startswith("["): continue
-            items.append({"name": s, "description": "", "duration": ""})
-    if not items: return
-    heading_fn("Additional")
-    for item in items:
-        name = item.get("name",""); desc = item.get("description",""); dur = item.get("duration","")
-        p = doc.add_paragraph(); p.clear()
-        if name and name not in ("[Not Provided]",""):
-            r1 = p.add_run(name); r1.bold = True
-            r1.font.size = Pt(font_size); r1.font.name = font_name; r1.font.color.rgb = RGBColor(*name_color_rgb)
-        if dur and dur not in ("[Not Provided]",""):
-            rd = p.add_run(f"   [{dur}]"); rd.italic = True
-            rd.font.size = Pt(font_size - 1); rd.font.name = font_name; rd.font.color.rgb = RGBColor(*dur_color_rgb)
-        p.paragraph_format.space_before = Pt(4); p.paragraph_format.space_after = Pt(1)
-        if desc and desc not in ("[Not Provided]",""):
-            pd = doc.add_paragraph(); pd.clear()
-            rd2 = pd.add_run(desc); rd2.font.size = Pt(font_size - 1)
-            rd2.font.name = font_name; rd2.font.color.rgb = RGBColor(*desc_color_rgb)
-            pd.paragraph_format.space_before = Pt(0); pd.paragraph_format.space_after = Pt(2)
-
-
-def generate_modern_docx(data: dict) -> BytesIO:
-    """Modern ATS template — navy headings, Calibri, Workday/Greenhouse optimized."""
-    doc = Document()
-    for sec in doc.sections:
-        sec.top_margin = Inches(0.75); sec.bottom_margin = Inches(0.75)
-        sec.left_margin = Inches(1.0);  sec.right_margin  = Inches(1.0)
-
-    FONT = "Calibri"; BODY = 10
-    NAVY = (30, 58, 95); DARK = (30, 30, 30); GRAY = (100, 100, 100)
-    NAVY_HEX = "1E3A5F"; DARK_HEX = "1E1E1E"
-
-    _build_contact_header(doc, data, name_size=20, name_color_rgb=NAVY, name_font=FONT,
-                          contact_font=FONT, contact_color_hex="444444", contact_size=9,
-                          title_font=FONT, title_size=11, title_color_rgb=(60,60,60),
-                          accent_color_hex=NAVY_HEX)
-
-    def _heading(text):
-        _section_heading_bordered(doc, text, font_name=FONT, font_size=BODY, bold=True,
-                                   color_hex=NAVY_HEX, border_color=NAVY_HEX, border_sz="6",
-                                   space_before=10, space_after=4)
-
-    def _body_para(text, italic=False, color_rgb=None):
-        p = doc.add_paragraph(); p.clear()
-        run = p.add_run(text); run.font.size = Pt(BODY); run.font.name = FONT
-        run.italic = italic
-        if color_rgb: run.font.color.rgb = RGBColor(*color_rgb)
-        p.paragraph_format.space_before = Pt(1); p.paragraph_format.space_after = Pt(3)
-        return p
-
-    if data.get("summary") and data["summary"] not in ("","[Not Provided]"):
-        _heading("Professional Summary"); _body_para(data["summary"])
-
-    tech_skills = [s for s in data.get("skills",[]) if s and s != "[Not Provided]"]
-    soft_skills = [s for s in data.get("soft_skills",[]) if s and s != "[Not Provided]"]
-    if tech_skills or soft_skills:
-        _heading("Core Skills")
-        if tech_skills:
-            p = doc.add_paragraph(); p.clear()
-            lbl = p.add_run("Technical:  "); lbl.bold = True; lbl.font.size = Pt(BODY); lbl.font.name = FONT
-            lbl.font.color.rgb = RGBColor(*NAVY)
-            sr = p.add_run(", ".join(tech_skills)); sr.font.size = Pt(BODY); sr.font.name = FONT
-            p.paragraph_format.space_before = Pt(2); p.paragraph_format.space_after = Pt(3)
-        if soft_skills:
-            p = doc.add_paragraph(); p.clear()
-            lbl = p.add_run("Professional:  "); lbl.bold = True; lbl.font.size = Pt(BODY); lbl.font.name = FONT
-            lbl.font.color.rgb = RGBColor(*NAVY)
-            sr = p.add_run(", ".join(soft_skills)); sr.font.size = Pt(BODY); sr.font.name = FONT
-            p.paragraph_format.space_before = Pt(1); p.paragraph_format.space_after = Pt(4)
-
-    valid_exp = [e for e in data.get("experience",[])
-                 if (e.get("role") and e["role"] not in ("","[Not Provided]"))
-                 or (e.get("company") and e["company"] not in ("","[Not Provided]"))]
-    if valid_exp:
-        _heading("Work Experience")
-        for exp in valid_exp:
-            _role = exp.get("role","") if exp.get("role","") not in ("","[Not Provided]") else ""
-            _company = exp.get("company","") if exp.get("company","") not in ("","[Not Provided]") else ""
-            _duration = exp.get("duration","") if exp.get("duration","") not in ("","[Not Provided]") else ""
-            p = doc.add_paragraph(); p.clear()
-            if _role:
-                r1 = p.add_run(_role); r1.bold = True; r1.font.size = Pt(BODY+1); r1.font.name = FONT
-                r1.font.color.rgb = RGBColor(*NAVY)
-            p_dur = doc.add_paragraph(); p_dur.clear()
-            if _duration:
-                r_dur = p_dur.add_run(_duration); r_dur.italic = True
-                r_dur.font.size = Pt(BODY-1); r_dur.font.name = FONT; r_dur.font.color.rgb = RGBColor(*GRAY)
-                p_dur.paragraph_format.space_before = Pt(0); p_dur.paragraph_format.space_after = Pt(2)
-            if _company:
-                p_co = doc.add_paragraph(); p_co.clear()
-                r_co = p_co.add_run(_company); r_co.font.size = Pt(BODY); r_co.font.name = FONT
-                r_co.font.color.rgb = RGBColor(*NAVY)
-                p_co.paragraph_format.space_before = Pt(0); p_co.paragraph_format.space_after = Pt(2)
-            if exp.get("description") and exp["description"] not in ("","[Not Provided]"):
-                _body_para(exp["description"], italic=True, color_rgb=(90,90,90))
-            for b in exp.get("bullets",[]):
-                if b and b != "[Not Provided]": _add_bullet(doc, b, font_size=BODY, font_name=FONT)
-
-    valid_proj = [p for p in data.get("projects",[]) if p.get("name") and p["name"] not in ("","[Not Provided]")]
-    if valid_proj:
-        _heading("Projects")
-        for proj in valid_proj:
-            p = doc.add_paragraph(); p.clear()
-            r1 = p.add_run(proj.get("name","")); r1.bold = True
-            r1.font.size = Pt(BODY+1); r1.font.name = FONT; r1.font.color.rgb = RGBColor(*NAVY)
-            if proj.get("duration") and proj["duration"] not in ("","[Not Provided]"):
-                rd = p.add_run(f"   [{proj['duration']}]"); rd.italic = True
-                rd.font.size = Pt(BODY-1); rd.font.name = FONT; rd.font.color.rgb = RGBColor(*GRAY)
-            p.paragraph_format.space_before = Pt(6); p.paragraph_format.space_after = Pt(1)
-            meta_parts = []
-            if proj.get("tech_stack") and proj["tech_stack"] not in ("","[Not Provided]"):
-                meta_parts.append(f"Tech: {proj['tech_stack']}")
-            if proj.get("url") and proj["url"] not in ("","[Not Provided]"):
-                meta_parts.append(proj["url"])
-            if meta_parts:
-                p_meta = doc.add_paragraph(); p_meta.clear()
-                r_meta = p_meta.add_run("  |  ".join(meta_parts))
-                r_meta.font.size = Pt(BODY-1); r_meta.font.name = FONT; r_meta.font.color.rgb = RGBColor(74,74,74)
-                p_meta.paragraph_format.space_before = Pt(0); p_meta.paragraph_format.space_after = Pt(2)
-            if proj.get("description") and proj["description"] not in ("","[Not Provided]"):
-                _body_para(proj["description"], italic=True, color_rgb=(80,80,80))
-            for b in proj.get("bullets",[]):
-                if b and b != "[Not Provided]": _add_bullet(doc, b, font_size=BODY, font_name=FONT)
-
-    valid_edu = [e for e in data.get("education",[]) if e.get("degree") or e.get("institution")]
-    if valid_edu:
-        _heading("Education")
-        for edu in valid_edu:
-            p = doc.add_paragraph(); p.clear()
-            if edu.get("degree") and edu["degree"] not in ("","[Not Provided]"):
-                r_deg = p.add_run(edu["degree"]); r_deg.bold = True
-                r_deg.font.size = Pt(BODY+1); r_deg.font.name = FONT; r_deg.font.color.rgb = RGBColor(*NAVY)
-            if edu.get("institution") and edu["institution"] not in ("","[Not Provided]"):
-                r_inst = p.add_run(f"  —  {edu['institution']}")
-                r_inst.font.size = Pt(BODY); r_inst.font.name = FONT; r_inst.font.color.rgb = RGBColor(74,74,74)
-            p.paragraph_format.space_before = Pt(6); p.paragraph_format.space_after = Pt(0)
-            if edu.get("year") and edu["year"] not in ("","[Not Provided]"):
-                p_yr = doc.add_paragraph(); p_yr.clear()
-                r_yr = p_yr.add_run(edu["year"]); r_yr.italic = True
-                r_yr.font.size = Pt(BODY-1); r_yr.font.name = FONT; r_yr.font.color.rgb = RGBColor(110,110,110)
-                p_yr.paragraph_format.space_before = Pt(0); p_yr.paragraph_format.space_after = Pt(2)
-            for b in (edu.get("bullets") or []):
-                if b and b != "[Not Provided]": _add_bullet(doc, b, font_size=BODY-1, font_name=FONT)
-
-    valid_certs = [c for c in data.get("certifications",[])
-                   if isinstance(c,dict) and c.get("name") and c["name"] not in ("","[Not Provided]")]
-    contact = data.get("contact",{})
-    has_links = any(contact.get(k,"") not in ("","[Not Provided]","Not Provided") for k in ("linkedin","github","portfolio"))
-    if valid_certs or has_links:
-        _heading("Certifications & Links")
-        for cert in valid_certs:
-            parts = [cert["name"]]
-            if cert.get("issuer") and cert["issuer"] not in ("","[Not Provided]"): parts.append(cert["issuer"])
-            if cert.get("duration") and cert["duration"] not in ("","[Not Provided]"): parts.append(cert["duration"])
-            _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT)
-        for label, key in [("LinkedIn","linkedin"),("GitHub","github"),("Portfolio","portfolio")]:
-            val = contact.get(key,"")
-            if val and val not in ("","[Not Provided]","Not Provided"):
-                _add_bullet(doc, f"{label}: {val}", font_size=BODY, font_name=FONT)
-
-    valid_lang = [l for l in data.get("languages",[]) if l and l != "[Not Provided]"]
-    if valid_lang:
-        _heading("Languages"); _body_para("  |  ".join(valid_lang))
-
-    valid_int = [i for i in data.get("interests",[]) if i and i != "[Not Provided]"]
-    if valid_int:
-        _heading("Interests"); _body_para("  |  ".join(valid_int))
-
-    _render_additional(doc, data, font_name=FONT, font_size=BODY, heading_fn=_heading,
-                       bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT),
-                       name_color_rgb=NAVY, desc_color_rgb=(80,80,80))
-
-    buf = BytesIO(); doc.save(buf); buf.seek(0); return buf
-
-
-def generate_minimal_docx(data: dict) -> BytesIO:
-    """Minimal ATS template — pure black/white Arial, maximum machine readability."""
-    doc = Document()
-    for sec in doc.sections:
-        sec.top_margin = Inches(0.8); sec.bottom_margin = Inches(0.8)
-        sec.left_margin = Inches(1.1); sec.right_margin  = Inches(1.1)
-
-    FONT = "Arial"; BODY = 10
-    BLACK_HEX = "000000"; BLACK = (0,0,0); DARK_GRAY = (60,60,60); MID_GRAY = (100,100,100)
-
-    _build_contact_header(doc, data, name_size=18, name_color_rgb=BLACK, name_font=FONT,
-                          contact_font=FONT, contact_color_hex="333333", contact_size=9,
-                          title_font=FONT, title_size=10, title_color_rgb=DARK_GRAY)
-
-    def _heading(text):
-        _section_heading_bordered(doc, text, font_name=FONT, font_size=BODY, bold=True,
-                                   color_hex=BLACK_HEX, border_color=BLACK_HEX, border_sz="4",
-                                   space_before=10, space_after=3)
-
-    def _body_para(text, italic=False):
-        p = doc.add_paragraph(); p.clear()
-        run = p.add_run(text); run.font.size = Pt(BODY); run.font.name = FONT; run.italic = italic
-        p.paragraph_format.space_before = Pt(1); p.paragraph_format.space_after = Pt(3)
-        return p
-
-    if data.get("summary") and data["summary"] not in ("","[Not Provided]"):
-        _heading("Professional Summary"); _body_para(data["summary"])
-
-    tech_skills = [s for s in data.get("skills",[]) if s and s != "[Not Provided]"]
-    soft_skills = [s for s in data.get("soft_skills",[]) if s and s != "[Not Provided]"]
-    if tech_skills or soft_skills:
-        _heading("Core Skills")
-        if tech_skills:
-            p = doc.add_paragraph(); p.clear()
-            lbl = p.add_run("Technical:  "); lbl.bold = True; lbl.font.size = Pt(BODY); lbl.font.name = FONT
-            sr = p.add_run(", ".join(tech_skills)); sr.font.size = Pt(BODY); sr.font.name = FONT
-            p.paragraph_format.space_before = Pt(2); p.paragraph_format.space_after = Pt(3)
-        if soft_skills:
-            p = doc.add_paragraph(); p.clear()
-            lbl = p.add_run("Professional:  "); lbl.bold = True; lbl.font.size = Pt(BODY); lbl.font.name = FONT
-            ss_run = p.add_run(", ".join(soft_skills)); ss_run.font.size = Pt(BODY); ss_run.font.name = FONT
-            p.paragraph_format.space_before = Pt(1); p.paragraph_format.space_after = Pt(4)
-
-    valid_exp = [e for e in data.get("experience",[])
-                 if (e.get("role") and e["role"] not in ("","[Not Provided]"))
-                 or (e.get("company") and e["company"] not in ("","[Not Provided]"))]
-    if valid_exp:
-        _heading("Work Experience")
-        for exp in valid_exp:
-            _role = exp.get("role","") if exp.get("role","") not in ("","[Not Provided]") else ""
-            _company = exp.get("company","") if exp.get("company","") not in ("","[Not Provided]") else ""
-            _duration = exp.get("duration","") if exp.get("duration","") not in ("","[Not Provided]") else ""
-            p = doc.add_paragraph(); p.clear()
-            if _role:
-                r1 = p.add_run(_role); r1.bold = True; r1.font.size = Pt(BODY+1); r1.font.name = FONT
-            if _duration:
-                r2 = p.add_run(f"  |  {_duration}"); r2.italic = True
-                r2.font.size = Pt(BODY-1); r2.font.name = FONT; r2.font.color.rgb = RGBColor(*MID_GRAY)
-            p.paragraph_format.space_before = Pt(7); p.paragraph_format.space_after = Pt(1)
-            if _company:
-                p_co = doc.add_paragraph(); p_co.clear()
-                r_co = p_co.add_run(_company); r_co.font.size = Pt(BODY); r_co.font.name = FONT
-                r_co.font.color.rgb = RGBColor(*DARK_GRAY)
-                p_co.paragraph_format.space_before = Pt(0); p_co.paragraph_format.space_after = Pt(2)
-            if exp.get("description") and exp["description"] not in ("","[Not Provided]"):
-                _body_para(exp["description"], italic=True)
-            for b in exp.get("bullets",[]):
-                if b and b != "[Not Provided]": _add_bullet(doc, b, font_size=BODY, font_name=FONT)
-
-    valid_proj = [p for p in data.get("projects",[]) if p.get("name") and p["name"] not in ("","[Not Provided]")]
-    if valid_proj:
-        _heading("Projects")
-        for proj in valid_proj:
-            p = doc.add_paragraph(); p.clear()
-            r1 = p.add_run(proj.get("name","")); r1.bold = True; r1.font.size = Pt(BODY+1); r1.font.name = FONT
-            if proj.get("duration") and proj["duration"] not in ("","[Not Provided]"):
-                rd = p.add_run(f"   [{proj['duration']}]"); rd.italic = True
-                rd.font.size = Pt(BODY-1); rd.font.name = FONT; rd.font.color.rgb = RGBColor(*MID_GRAY)
-            p.paragraph_format.space_before = Pt(6); p.paragraph_format.space_after = Pt(1)
-            meta_parts = []
-            if proj.get("tech_stack") and proj["tech_stack"] not in ("","[Not Provided]"):
-                meta_parts.append(f"Tech: {proj['tech_stack']}")
-            if proj.get("url") and proj["url"] not in ("","[Not Provided]"):
-                meta_parts.append(proj["url"])
-            if meta_parts:
-                p_meta = doc.add_paragraph(); p_meta.clear()
-                r_meta = p_meta.add_run("  |  ".join(meta_parts))
-                r_meta.font.size = Pt(BODY-1); r_meta.font.name = FONT; r_meta.font.color.rgb = RGBColor(*DARK_GRAY)
-                p_meta.paragraph_format.space_before = Pt(0); p_meta.paragraph_format.space_after = Pt(2)
-            if proj.get("description") and proj["description"] not in ("","[Not Provided]"):
-                _body_para(proj["description"], italic=True)
-            for b in proj.get("bullets",[]):
-                if b and b != "[Not Provided]": _add_bullet(doc, b, font_size=BODY, font_name=FONT)
-
-    valid_edu = [e for e in data.get("education",[]) if e.get("degree") or e.get("institution")]
-    if valid_edu:
-        _heading("Education")
-        for edu in valid_edu:
-            p = doc.add_paragraph(); p.clear()
-            if edu.get("degree") and edu["degree"] not in ("","[Not Provided]"):
-                r_deg = p.add_run(edu["degree"]); r_deg.bold = True
-                r_deg.font.size = Pt(BODY+1); r_deg.font.name = FONT
-            if edu.get("institution") and edu["institution"] not in ("","[Not Provided]"):
-                r_inst = p.add_run(f"  —  {edu['institution']}")
-                r_inst.font.size = Pt(BODY); r_inst.font.name = FONT; r_inst.font.color.rgb = RGBColor(*DARK_GRAY)
-            p.paragraph_format.space_before = Pt(6); p.paragraph_format.space_after = Pt(0)
-            if edu.get("year") and edu["year"] not in ("","[Not Provided]"):
-                p_yr = doc.add_paragraph(); p_yr.clear()
-                r_yr = p_yr.add_run(edu["year"]); r_yr.italic = True
-                r_yr.font.size = Pt(BODY-1); r_yr.font.name = FONT; r_yr.font.color.rgb = RGBColor(*MID_GRAY)
-                p_yr.paragraph_format.space_before = Pt(0); p_yr.paragraph_format.space_after = Pt(2)
-            for b in (edu.get("bullets") or []):
-                if b and b != "[Not Provided]": _add_bullet(doc, b, font_size=BODY-1, font_name=FONT)
-
-    valid_certs = [c for c in data.get("certifications",[])
-                   if isinstance(c,dict) and c.get("name") and c["name"] not in ("","[Not Provided]")]
-    contact_min = data.get("contact",{})
-    has_links_min = any(contact_min.get(k,"") not in ("","[Not Provided]","Not Provided") for k in ("linkedin","github","portfolio"))
-    if valid_certs or has_links_min:
-        _heading("Certifications & Links")
-        for cert in valid_certs:
-            parts = [cert["name"]]
-            if cert.get("issuer") and cert["issuer"] not in ("","[Not Provided]"): parts.append(cert["issuer"])
-            if cert.get("duration") and cert["duration"] not in ("","[Not Provided]"): parts.append(cert["duration"])
-            _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT)
-        for label, key in [("LinkedIn","linkedin"),("GitHub","github"),("Portfolio","portfolio")]:
-            val = contact_min.get(key,"")
-            if val and val not in ("","[Not Provided]","Not Provided"):
-                _add_bullet(doc, f"{label}: {val}", font_size=BODY, font_name=FONT)
-
-    valid_lang = [l for l in data.get("languages",[]) if l and l != "[Not Provided]"]
-    if valid_lang:
-        _heading("Languages"); _body_para(", ".join(valid_lang))
-
-    valid_int = [i for i in data.get("interests",[]) if i and i != "[Not Provided]"]
-    if valid_int:
-        _heading("Interests"); _body_para(", ".join(valid_int))
-
-    _render_additional(doc, data, font_name=FONT, font_size=BODY, heading_fn=_heading,
-                       bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT),
-                       name_color_rgb=BLACK, desc_color_rgb=(80,80,80))
-
-    buf = BytesIO(); doc.save(buf); buf.seek(0); return buf
-
-
-def generate_creative_docx(data: dict) -> BytesIO:
-    """Executive ATS template — teal/dark-navy Calibri, polished yet ATS-safe."""
-    doc = Document()
-    for sec in doc.sections:
-        sec.top_margin = Inches(0.75); sec.bottom_margin = Inches(0.75)
-        sec.left_margin = Inches(1.0);  sec.right_margin  = Inches(1.0)
-
-    FONT_BODY = "Calibri"; BODY = 10
-    TEAL = (0, 128, 128); DARK = (20, 20, 40)
-    TEAL_HEX = "008080"; DARK_HEX = "141428"
-
-    _build_contact_header(doc, data, name_size=20, name_color_rgb=DARK, name_font=FONT_BODY,
-                          contact_font=FONT_BODY, contact_color_hex="444444", contact_size=9,
-                          title_font=FONT_BODY, title_size=11, title_color_rgb=TEAL,
-                          accent_color_hex=TEAL_HEX)
-
-    def _heading(text):
-        _section_heading_bordered(doc, text, font_name=FONT_BODY, font_size=BODY, bold=True,
-                                   color_hex=TEAL_HEX, border_color=TEAL_HEX, border_sz="6",
-                                   space_before=10, space_after=4)
-
-    def _body_para(text, italic=False, color_rgb=None):
-        p = doc.add_paragraph(); p.clear()
-        run = p.add_run(text); run.font.size = Pt(BODY); run.font.name = FONT_BODY; run.italic = italic
-        if color_rgb: run.font.color.rgb = RGBColor(*color_rgb)
-        p.paragraph_format.space_before = Pt(1); p.paragraph_format.space_after = Pt(3)
-        return p
-
-    if data.get("summary") and data["summary"] not in ("","[Not Provided]"):
-        _heading("Professional Summary"); _body_para(data["summary"])
-
-    tech_skills = [s for s in data.get("skills",[]) if s and s != "[Not Provided]"]
-    soft_skills = [s for s in data.get("soft_skills",[]) if s and s != "[Not Provided]"]
-    if tech_skills or soft_skills:
-        _heading("Core Skills")
-        if tech_skills:
-            p = doc.add_paragraph(); p.clear()
-            lbl = p.add_run("Technical:  "); lbl.bold = True; lbl.font.size = Pt(BODY); lbl.font.name = FONT_BODY
-            lbl.font.color.rgb = RGBColor(*TEAL)
-            sr = p.add_run(", ".join(tech_skills)); sr.font.size = Pt(BODY); sr.font.name = FONT_BODY
-            p.paragraph_format.space_before = Pt(2); p.paragraph_format.space_after = Pt(3)
-        if soft_skills:
-            p = doc.add_paragraph(); p.clear()
-            lbl = p.add_run("Professional:  "); lbl.bold = True; lbl.font.size = Pt(BODY); lbl.font.name = FONT_BODY
-            lbl.font.color.rgb = RGBColor(*TEAL)
-            ss_run = p.add_run(", ".join(soft_skills)); ss_run.font.size = Pt(BODY); ss_run.font.name = FONT_BODY
-            p.paragraph_format.space_before = Pt(1); p.paragraph_format.space_after = Pt(4)
-
-    valid_exp = [e for e in data.get("experience",[])
-                 if (e.get("role") and e["role"] not in ("","[Not Provided]"))
-                 or (e.get("company") and e["company"] not in ("","[Not Provided]"))]
-    if valid_exp:
-        _heading("Work Experience")
-        for exp in valid_exp:
-            _role = exp.get("role","") if exp.get("role","") not in ("","[Not Provided]") else ""
-            _company = exp.get("company","") if exp.get("company","") not in ("","[Not Provided]") else ""
-            _duration = exp.get("duration","") if exp.get("duration","") not in ("","[Not Provided]") else ""
-            p = doc.add_paragraph(); p.clear()
-            if _role:
-                r1 = p.add_run(_role); r1.bold = True; r1.font.size = Pt(BODY+1); r1.font.name = FONT_BODY
-                r1.font.color.rgb = RGBColor(*DARK)
-            if _duration:
-                r3 = p.add_run(f"   [{_duration}]"); r3.italic = True
-                r3.font.size = Pt(BODY-1); r3.font.name = FONT_BODY; r3.font.color.rgb = RGBColor(110,110,110)
-            p.paragraph_format.space_before = Pt(7); p.paragraph_format.space_after = Pt(1)
-            if _company:
-                p_co = doc.add_paragraph(); p_co.clear()
-                r_co = p_co.add_run(_company); r_co.font.size = Pt(BODY); r_co.font.name = FONT_BODY
-                r_co.font.color.rgb = RGBColor(*TEAL)
-                p_co.paragraph_format.space_before = Pt(0); p_co.paragraph_format.space_after = Pt(2)
-            if exp.get("description") and exp["description"] not in ("","[Not Provided]"):
-                _body_para(exp["description"], italic=True, color_rgb=(80,80,80))
-            for b in exp.get("bullets",[]):
-                if b and b != "[Not Provided]": _add_bullet(doc, b, font_size=BODY, font_name=FONT_BODY)
-
-    valid_proj = [p for p in data.get("projects",[]) if p.get("name") and p["name"] not in ("","[Not Provided]")]
-    if valid_proj:
-        _heading("Projects")
-        for proj in valid_proj:
-            p = doc.add_paragraph(); p.clear()
-            r1 = p.add_run(proj.get("name","")); r1.bold = True
-            r1.font.size = Pt(BODY+1); r1.font.name = FONT_BODY; r1.font.color.rgb = RGBColor(*DARK)
-            if proj.get("duration") and proj["duration"] not in ("","[Not Provided]"):
-                rd = p.add_run(f"   [{proj['duration']}]"); rd.italic = True
-                rd.font.size = Pt(BODY-1); rd.font.name = FONT_BODY; rd.font.color.rgb = RGBColor(110,110,110)
-            p.paragraph_format.space_before = Pt(6); p.paragraph_format.space_after = Pt(1)
-            meta_parts = []
-            if proj.get("tech_stack") and proj["tech_stack"] not in ("","[Not Provided]"):
-                meta_parts.append(f"Tech: {proj['tech_stack']}")
-            if proj.get("url") and proj["url"] not in ("","[Not Provided]"):
-                meta_parts.append(proj["url"])
-            if meta_parts:
-                p_meta = doc.add_paragraph(); p_meta.clear()
-                r_meta = p_meta.add_run("  |  ".join(meta_parts))
-                r_meta.font.size = Pt(BODY-1); r_meta.font.name = FONT_BODY; r_meta.font.color.rgb = RGBColor(*TEAL)
-                p_meta.paragraph_format.space_before = Pt(0); p_meta.paragraph_format.space_after = Pt(2)
-            if proj.get("description") and proj["description"] not in ("","[Not Provided]"):
-                _body_para(proj["description"], italic=True, color_rgb=(80,80,80))
-            for b in proj.get("bullets",[]):
-                if b and b != "[Not Provided]": _add_bullet(doc, b, font_size=BODY, font_name=FONT_BODY)
-
-    valid_edu = [e for e in data.get("education",[]) if e.get("degree") or e.get("institution")]
-    if valid_edu:
-        _heading("Education")
-        for edu in valid_edu:
-            p = doc.add_paragraph(); p.clear()
-            if edu.get("degree") and edu["degree"] not in ("","[Not Provided]"):
-                r1 = p.add_run(edu["degree"]); r1.bold = True
-                r1.font.size = Pt(BODY+1); r1.font.name = FONT_BODY; r1.font.color.rgb = RGBColor(*DARK)
-            if edu.get("institution") and edu["institution"] not in ("","[Not Provided]"):
-                r2 = p.add_run(f"  —  {edu['institution']}")
-                r2.font.size = Pt(BODY); r2.font.name = FONT_BODY; r2.font.color.rgb = RGBColor(*TEAL)
-            p.paragraph_format.space_before = Pt(6); p.paragraph_format.space_after = Pt(0)
-            if edu.get("year") and edu["year"] not in ("","[Not Provided]"):
-                p_yr = doc.add_paragraph(); p_yr.clear()
-                r3 = p_yr.add_run(edu["year"]); r3.italic = True
-                r3.font.size = Pt(BODY-1); r3.font.name = FONT_BODY; r3.font.color.rgb = RGBColor(110,110,110)
-                p_yr.paragraph_format.space_before = Pt(0); p_yr.paragraph_format.space_after = Pt(2)
-            for b in (edu.get("bullets") or []):
-                if b and b != "[Not Provided]": _add_bullet(doc, b, font_size=BODY-1, font_name=FONT_BODY)
-
-    valid_certs = [c for c in data.get("certifications",[])
-                   if isinstance(c,dict) and c.get("name") and c["name"] not in ("","[Not Provided]")]
-    contact_exec = data.get("contact",{})
-    has_links_exec = any(contact_exec.get(k,"") not in ("","[Not Provided]","Not Provided") for k in ("linkedin","github","portfolio"))
-    if valid_certs or has_links_exec:
-        _heading("Certifications & Links")
-        for cert in valid_certs:
-            parts = [cert["name"]]
-            if cert.get("issuer") and cert["issuer"] not in ("","[Not Provided]"): parts.append(cert["issuer"])
-            if cert.get("duration") and cert["duration"] not in ("","[Not Provided]"): parts.append(cert["duration"])
-            _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT_BODY)
-        for label, key in [("LinkedIn","linkedin"),("GitHub","github"),("Portfolio","portfolio")]:
-            val = contact_exec.get(key,"")
-            if val and val not in ("","[Not Provided]","Not Provided"):
-                _add_bullet(doc, f"{label}: {val}", font_size=BODY, font_name=FONT_BODY)
-
-    valid_lang = [l for l in data.get("languages",[]) if l and l != "[Not Provided]"]
-    if valid_lang:
-        _heading("Languages"); _body_para("  |  ".join(valid_lang))
-
-    valid_int = [i for i in data.get("interests",[]) if i and i != "[Not Provided]"]
-    if valid_int:
-        _heading("Interests"); _body_para("  |  ".join(valid_int))
-
-    _render_additional(doc, data, font_name=FONT_BODY, font_size=BODY, heading_fn=_heading,
-                       bullet_fn=lambda t: _add_bullet(doc, t, font_size=BODY, font_name=FONT_BODY),
-                       name_color_rgb=DARK, desc_color_rgb=(80,80,80))
-
-    buf = BytesIO(); doc.save(buf); buf.seek(0); return buf
-
-
 def generate_docx(text, filename="bias_free_resume.docx"):
     doc = Document()
 
@@ -3448,78 +2724,10 @@ def generate_docx(text, filename="bias_free_resume.docx"):
     return buffer
 
 # Extract text from PDF
-def _extract_page_text_smart(page) -> str:
-    """
-    Extract text from a single fitz page in correct reading order,
-    handling both simple single-column and complex multi-column / graphic
-    resume layouts (like sidebar designs, blue-header templates, etc.).
-
-    Strategy:
-      1. Pull raw text blocks with full bounding-box coordinates.
-      2. Detect whether the page has a multi-column layout by checking
-         whether meaningful content exists in both the left (<45%) and
-         right (>52%) horizontal zones.
-      3. Single-column  → sort blocks top-to-bottom (y0), then left-to-right.
-      4. Multi-column   → split blocks into left/right columns,
-                          sort each column top-to-bottom independently,
-                          then concatenate left column first (the main body
-                          on most sidebar resume designs sits on the right,
-                          but the name/header almost always spans full width
-                          or sits at the very top — so we sort by y0 first
-                          for the header region, then by column).
-    This ensures the candidate name — which is always the topmost block —
-    is the very first text we see regardless of layout.
-    """
-    blocks = page.get_text("blocks")  # (x0, y0, x1, y1, text, block_no, block_type)
-    page_width = page.rect.width
-
-    # Filter: only text blocks (block_type == 0) with real content
-    text_blocks = [b for b in blocks if b[6] == 0 and b[4].strip()]
-
-    if not text_blocks:
-        return ""
-
-    # ── Detect multi-column layout ────────────────────────────────────────
-    x_starts = [b[0] for b in text_blocks if len(b[4].strip()) > 10]
-    left_zone  = [x for x in x_starts if x < page_width * 0.45]
-    right_zone = [x for x in x_starts if x > page_width * 0.52]
-    is_multicolumn = len(left_zone) >= 3 and len(right_zone) >= 3
-
-    if not is_multicolumn:
-        # ── Single-column: simple top-to-bottom sort ──────────────────────
-        sorted_blocks = sorted(text_blocks, key=lambda b: (round(b[1] / 10) * 10, b[0]))
-        return "\n".join(b[4].strip() for b in sorted_blocks)
-
-    # ── Multi-column: split into header + left + right zones ─────────────
-    page_height  = page.rect.height
-    header_zone  = page_height * 0.15
-
-    header_blocks = [b for b in text_blocks if b[1] < header_zone]
-    body_blocks   = [b for b in text_blocks if b[1] >= header_zone]
-
-    header_sorted = sorted(header_blocks, key=lambda b: (b[1], b[0]))
-
-    left_blocks  = sorted(
-        [b for b in body_blocks if b[0] < page_width * 0.48],
-        key=lambda b: b[1]
-    )
-    right_blocks = sorted(
-        [b for b in body_blocks if b[0] >= page_width * 0.48],
-        key=lambda b: b[1]
-    )
-
-    all_sorted = header_sorted + left_blocks + right_blocks
-    return "\n".join(b[4].strip() for b in all_sorted)
-
-
 def extract_text_from_pdf(file_path):
     try:
         doc = fitz.open(file_path)
-        text_list = []
-        for page in doc:
-            page_text = _extract_page_text_smart(page)
-            if page_text.strip():
-                text_list.append(page_text)
+        text_list = [page.get_text("text") for page in doc if page.get_text("text").strip()]
         doc.close()
         return text_list if text_list else extract_text_from_images(file_path)
     except Exception as e:
@@ -3558,109 +2766,6 @@ def safe_extract_text(uploaded_file):
     except Exception as e:
         st.error(f"⚠️ Could not process this file: {e}")
         return None
-
-
-# ============================================================
-# 🏷️ Deterministic Candidate Name Extractor
-# ============================================================
-
-def extract_candidate_name_from_text(resume_text: str) -> str:
-    """
-    Extract candidate name from raw resume text using a deterministic
-    regex pipeline.  Returns the best match, or empty string on failure.
-
-    Strategy (in priority order):
-    1. First non-empty line of the resume (most resumes put name at top)
-    2. Line immediately before the first contact-info line (email/phone/LinkedIn)
-    3. Regex scan of the first 30 lines for a Proper Case / ALL CAPS name token
-    4. Fallback: empty string (LLM will handle it)
-
-    Rules for a valid name token:
-    - 2-5 words
-    - Each word starts with a capital letter OR the whole thing is ALL CAPS
-    - No digits, no common section-header words, no URLs
-    - At least one word is 3+ characters
-    """
-    if not resume_text:
-        return ""
-
-    SECTION_KEYWORDS = {
-        "summary", "objective", "profile", "experience", "education",
-        "skills", "projects", "contact", "references", "certifications",
-        "achievements", "awards", "publications", "languages", "interests",
-        "work", "history", "career", "professional", "about", "curriculum",
-        "vitae", "resume", "cv", "address", "phone", "email", "linkedin",
-        "github", "portfolio", "website", "declaration", "hobbies",
-        "engineer", "developer", "designer", "analyst", "manager",
-        "architect", "consultant", "specialist", "intern", "lead",
-        "senior", "junior", "associate", "director", "officer",
-        "scientist", "researcher", "administrator", "coordinator",
-        "technician", "executive", "head", "chief", "vice", "president",
-        "graduate", "undergraduate", "student", "fresher", "trainee",
-        "btech", "mtech", "bsc", "msc", "bca", "mca", "bcom", "mcom",
-        "phd", "mba", "pgdm", "diploma", "bachelor", "master",
-    }
-
-    def _is_valid_name(token: str) -> bool:
-        token = token.strip()
-        if not token:
-            return False
-        words = token.split()
-        if not (2 <= len(words) <= 5):
-            return False
-        if any(c.isdigit() for c in token):
-            return False
-        if any(c in token for c in ["@", "http", "/", "|", "_", "+"]):
-            return False
-        if any("." in w for w in words):
-            return False
-        lower_words = [w.lower() for w in words]
-        if any(w in SECTION_KEYWORDS for w in lower_words):
-            return False
-        all_caps = token.replace(" ", "").isupper()
-        proper_case = all(w[0].isupper() for w in words if w)
-        if not (all_caps or proper_case):
-            return False
-        if not any(len(w) >= 3 for w in words):
-            return False
-        return True
-
-    def _clean(line: str) -> str:
-        return re.sub(r"^[\s\-\u2022|\u25ba\u25b8\u25aa*]+|[\s\-\u2022|\u25ba\u25b8\u25aa*]+$", "", line).strip()
-
-    def _title_case_name(name: str) -> str:
-        if name.replace(" ", "").isupper():
-            return name.title()
-        return name
-
-    lines = [l for l in resume_text.splitlines() if l.strip()]
-    first_30 = lines[:30]
-
-    CONTACT_RE = re.compile(
-        r"(@|linkedin\.com|github\.com|\+\d|\(\d{3}\)|\d{3}[-.\s]\d{3}|http)", re.IGNORECASE
-    )
-    ALL_CAPS_RE = re.compile(r"^([A-Z]{2,20}(?:\s+[A-Z]{2,20}){1,3})$")
-
-    # Pass 1: scan first 30 lines - return first valid name
-    for line in first_30:
-        candidate = _clean(line)
-        if _is_valid_name(candidate):
-            return _title_case_name(candidate)
-
-    # Pass 2: line immediately before any contact-info line
-    for i, line in enumerate(first_30):
-        if CONTACT_RE.search(line) and i > 0:
-            candidate = _clean(first_30[i - 1])
-            if _is_valid_name(candidate):
-                return _title_case_name(candidate)
-
-    # Pass 3: ALL CAPS name anywhere in first 30 lines
-    for line in first_30:
-        candidate = _clean(line)
-        if ALL_CAPS_RE.match(candidate) and _is_valid_name(candidate):
-            return _title_case_name(candidate)
-
-    return ""
 
 # ============================================================
 # 📐 Industry-Standard Resume Format Checker (v2 — Enhanced)
@@ -4348,202 +3453,158 @@ replacement_mapping = {
     }
 }
 
-def rewrite_and_optimize_resume(text, replacement_mapping, user_location):
+def rewrite_text_with_llm(text, replacement_mapping, user_location):
     """
-    MERGED FUNCTION — single LLM call returning BOTH:
-      - rewritten_text : plain-text ATS-optimised resume + job title suggestions (for UI display)
-      - json_str       : strict JSON object (for DOCX generation)
-    Saves 1 API call per resume (replaces old rewrite_text_with_llm + separate optimize call).
+    Enhanced resume rewrite engine (backward compatible).
+    - Improves structure, clarity, and ATS readiness
+    - Fills missing sections using internal evidence
+    - Maintains bias-free language
+    - Preserves and ENFORCES suggested job titles output
     """
-    import urllib.parse as _up
+
+    # -----------------------------
+    # Format bias replacement rules
+    # -----------------------------
     formatted_mapping = "\n".join(
-        [f'- "{key}" -> "{value}"' for key, value in replacement_mapping.items()]
+        [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
-    loc = user_location or "your region"
-    prompt = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
 
-Your task is to process the resume below and return TWO outputs in a single response, separated by the exact delimiter shown.
+    # -----------------------------
+    # MASTER PROMPT
+    # -----------------------------
+    prompt = f"""
+You are an elite Resume Optimization Engine used by Fortune 500 recruiters and executive career coaches.
 
-OUTPUT STRUCTURE (return EXACTLY this — no deviation):
+You will receive:
+1. Original Resume Text
+2. Bias Replacement Rules
+3. Candidate Location
 
-===REWRITTEN_RESUME_START===
-<full plain-text ATS-optimised resume here>
-<followed by job title suggestions block>
-===REWRITTEN_RESUME_END===
+Your goal is to TRANSFORM the resume into a top-1% recruiter-ready document:
+ATS-optimized, bias-free, quantification-rich, and professionally compelling.
 
-===JSON_START===
-<strict JSON object here — no markdown fences, no explanation>
-===JSON_END===
+═══════════════════════════════════════════════════
+🔒 ABSOLUTE RULES (NON-NEGOTIABLE)
+═══════════════════════════════════════════════════
 
-PART 1 — PLAIN TEXT REWRITE (inside REWRITTEN_RESUME tags)
+- DO NOT fabricate companies, job titles, degrees, institutions, or dates
+- DO NOT invent metrics or statistics not implied by the resume
+- DO NOT add certifications or skills that don't appear anywhere in the resume
+- You MAY:
+  ✅ Strengthen and expand existing bullet points with stronger action verbs
+  ✅ CREATE missing sections if clear evidence exists elsewhere in the resume
+  ✅ Move skills from projects/experience into the dedicated Skills section
+  ✅ Infer tool proficiency ONLY when strongly implied (e.g., "built Flask API" → Python/Flask listed)
+  ✅ Estimate impact framing ONLY when role implies it (e.g., "customer support" → "resolved X+ client issues")
+  ✅ Reorder sections for maximum ATS impact
 
-ABSOLUTE RULES:
-- DO NOT fabricate companies, job titles, degrees, institutions, or dates.
-- DO NOT invent statistics or metrics not implied by the resume content.
-- DO NOT add certifications, tools, or skills absent from the resume.
-- DO NOT use personal pronouns (I, my, me, we, our) anywhere.
-- DO NOT repeat the same phrase or word across multiple sections.
+═══════════════════════════════════════════════════
+📌 OPTIMIZATION RULES
+═══════════════════════════════════════════════════
 
-YOU MAY:
-- Strengthen bullet points with stronger action verbs and tighter phrasing.
-- Consolidate skills scattered across experience/projects into the Skills section.
-- Infer tool proficiency when strongly implied (e.g., "built Flask API" -> Python, Flask).
-- Add plausible impact framing using "~" when the role implies measurable output.
+1. **Professional Summary** — Write a 3–4 sentence executive-level summary that:
+   - Opens with seniority + core domain (e.g., "Results-driven Data Engineer with 3+ years...")
+   - Highlights top 2–3 technical strengths with specificity
+   - Closes with value proposition aligned to career goals
 
-SECTION ORDER: Contact Header -> Professional Summary -> Core Skills ->
-Work Experience -> Projects -> Education -> Certifications & Links
+2. **Experience Bullet Points** — Every bullet MUST follow:
+   → **Action Verb + Specific Task + Technology/Method Used + Quantified Impact**
+   → Example: "Engineered real-time data pipeline using Apache Kafka and Spark, reducing latency by 40%"
+   → Use STRONG action verbs: Architected, Engineered, Designed, Deployed, Optimized, Automated, Reduced, Increased, Led, Built, Launched, Delivered
 
-CONTACT HEADER: Full Name | Job Title | Email | Phone | Location | LinkedIn URL | GitHub/Portfolio URL
+3. **Skills Section** — Must include ALL technologies, tools, frameworks, platforms, and methodologies mentioned ANYWHERE in the resume.
+   Format as clean ATS-friendly lists grouped by category:
+   - Programming Languages | Frameworks & Libraries | Cloud & DevOps | Databases | Tools & Platforms | Soft Skills
 
-PROFESSIONAL SUMMARY (2-3 sentences, max 60 words):
-  Sentence 1: [Seniority level] + [core domain] + [years of experience]
-  Sentence 2: [Top 2-3 specific technical or functional strengths]
-  Sentence 3: [Career value proposition]
+4. **Projects Section** — Each project must include:
+   - Project name + brief (1 sentence) description
+   - Full tech stack used
+   - Your specific role/contribution
+   - Outcome, metric, or learning
 
-CORE SKILLS: Technical Skills: [...] and Professional Skills: [...]
+5. **Education** — Include: Degree, Institution, Year, GPA (if strong), Relevant Coursework (if applicable)
 
-WORK EXPERIENCE (reverse chronological):
-  Job Title | Company Name | MMM YYYY - MMM YYYY
-  [1-sentence role scope]
-  * [Action Verb] + [Task] + [Technology] + [Quantified impact]
-  (3-5 bullets per role)
-  Strong verbs ONLY: Architected, Engineered, Developed, Implemented, Optimized, Automated,
-  Spearheaded, Deployed, Designed, Reduced, Increased, Streamlined, Led, Built.
-  NEVER: helped, assisted, worked on, involved in, responsible for.
+6. **Certifications** — List ALL found in resume. Add plausible ones ONLY if tool names strongly imply them.
 
-PROJECTS: Name | Tech Stack | Duration
-  [1-sentence purpose]
-  * [Achievement bullet with action verb and metric]
+7. **Sections to create if evidence exists but are missing:**
+   🛠️ Skills | 📂 Projects | 🎓 Certifications | 🤝 Professional Competencies | 🌟 Interests
 
-EDUCATION: Degree, Major | Institution | Graduation Year
-CERTIFICATIONS: * Name | Issuing Body | MMM YYYY
+═══════════════════════════════════════════════════
+🧾 REQUIRED OUTPUT STRUCTURE
+═══════════════════════════════════════════════════
 
-ATS FORMATTING:
-- Single-column structure — no tables, columns, text boxes.
-- Bullet points: "*" only. Section headings: ALL CAPS.
-- No emojis, no personal pronouns.
+Return a COMPLETE, polished resume with these sections (skip only if truly impossible):
 
-BIAS REPLACEMENT RULES — APPLY EXACTLY:
+🏷️ Full Name  
+📞 Phone Number  
+📧 Email Address  
+📍 Location  
+🔗 LinkedIn Profile URL  
+🌐 GitHub / Portfolio URL  
+
+✍️ Professional Summary  
+🛠️ Technical Skills  
+💼 Work Experience  
+🧑‍💼 Internships (if applicable)  
+📂 Projects  
+🎓 Certifications & Training  
+🏫 Education  
+🤝 Professional Competencies  
+🌟 Interests & Extracurriculars  
+
+Formatting requirements:
+- Bullet points (•) for all list items
+- Clean spacing between sections
+- Section headers in CAPS or bold
+- ATS-safe formatting (no tables, columns, or special characters)
+- Tense: past for completed roles, present for current role
+
+═══════════════════════════════════════════════════
+🧠 BIAS REPLACEMENT RULES (APPLY EXACTLY)
+═══════════════════════════════════════════════════
 {formatted_mapping}
 
-MANDATORY JOB TITLE SUGGESTIONS (append after the resume text):
-
-### Suggested Job Titles (Based on Resume)
-
-Provide EXACTLY 5 job titles suited for a candidate in {loc}.
-FORMAT:
-1. **[Job Title]** — [Specific reason tied to resume evidence]
-https://www.linkedin.com/jobs/search/?keywords=[URL+encoded+title]&location={_up.quote(loc)}
-
-PART 2 — JSON OBJECT (inside JSON tags)
-
-Return ONLY valid JSON. No preamble, no explanation, no markdown fences.
-Same ATS rules as Part 1. Strong verbs only. No pronouns. No repetition.
-
-RETURN ONLY THIS EXACT JSON STRUCTURE:
-{{
-  "contact": {{
-    "name": "",
-    "title": "",
-    "email": "",
-    "phone": "",
-    "location": "",
-    "linkedin": "",
-    "github": "",
-    "portfolio": ""
-  }},
-  "summary": "",
-  "skills": [],
-  "soft_skills": [],
-  "languages": [],
-  "interests": [],
-  "experience": [
-    {{
-      "role": "",
-      "company": "",
-      "duration": "",
-      "description": "",
-      "bullets": []
-    }}
-  ],
-  "projects": [
-    {{
-      "name": "",
-      "duration": "",
-      "tech_stack": "",
-      "url": "",
-      "description": "",
-      "bullets": []
-    }}
-  ],
-  "education": [
-    {{
-      "degree": "",
-      "institution": "",
-      "year": "",
-      "bullets": []
-    }}
-  ],
-  "certifications": [
-    {{
-      "name": "",
-      "issuer": "",
-      "duration": ""
-    }}
-  ],
-  "additional": [
-    {{
-      "name": "",
-      "description": "",
-      "duration": ""
-    }}
-  ]
-}}
-
-FIELD RULES:
-- "skills" = flat array of individual skill strings. Minimum 8. No duplicates.
-- "soft_skills" = professional competency phrases. Must NOT duplicate items in "skills".
-- "contact.*" = extract exactly as written. Use "" not null for missing fields.
-- "summary" = 2-3 sentences, max 60 words, no pronouns.
-- "experience[].bullets" = 3-5 bullets each. Strong verb + task + tech + impact.
-- "additional" items MUST use object format: {{"name":"","description":"","duration":""}}.
-- Missing fields: use "[Not Provided]" for text, [] for arrays.
-
-RESUME TEXT:
+═══════════════════════════════════════════════════
+📄 ORIGINAL RESUME
+═══════════════════════════════════════════════════
 \"\"\"{text}\"\"\"
+
+═══════════════════════════════════════════════════
+🎯 MANDATORY JOB TITLE SUGGESTIONS
+═══════════════════════════════════════════════════
+
+After the resume, include a clearly separated section:
+
+### 🎯 Suggested Job Titles (Based on Resume)
+
+Provide EXACTLY **5 job titles** suited for a candidate in **{user_location}**.
+
+For EACH job title, provide:
+- A specific reason why this role fits the candidate's background
+- A DIRECT LinkedIn job search URL using the exact format below
+
+FORMAT STRICTLY AS:
+
+1. **[Job Title]** — [Specific reason based on resume content]  
+🔗 https://www.linkedin.com/jobs/search/?keywords=[URL+encoded+title]&location={urllib.parse.quote(user_location)}
+
+2. **[Job Title]** — ...  
+🔗 ...
+
+(Continue for all 5)
+
+═══════════════════════════════════════════════════
+✅ FINAL OUTPUT
+═══════════════════════════════════════════════════
+1. Fully optimized, bias-free resume (complete, not a summary)
+2. Suggested Job Titles section (MANDATORY — 5 titles with URLs)
 """
-    raw_response = call_llm(prompt, session=st.session_state)
 
-    rewritten_text = ""
-    json_str = ""
-
-    rewrite_match = re.search(
-        r"===REWRITTEN_RESUME_START===(.*?)===REWRITTEN_RESUME_END===",
-        raw_response, re.DOTALL
-    )
-    json_match = re.search(
-        r"===JSON_START===(.*?)===JSON_END===",
-        raw_response, re.DOTALL
-    )
-
-    if rewrite_match:
-        rewritten_text = rewrite_match.group(1).strip()
-    else:
-        rewritten_text = raw_response.split("===JSON_START===")[0].strip()
-
-    if json_match:
-        json_str = json_match.group(1).strip()
-    else:
-        json_fallback = re.search(r'\{[\s\S]*\}', raw_response)
-        json_str = json_fallback.group(0).strip() if json_fallback else ""
-
-    return rewritten_text, json_str
-
-
-def rewrite_text_with_llm(text, replacement_mapping, user_location):
-    """Compatibility wrapper — calls merged rewrite_and_optimize_resume()."""
-    rewritten_text, _ = rewrite_and_optimize_resume(text, replacement_mapping, user_location)
-    return rewritten_text
+    # -----------------------------
+    # Call LLM
+    # -----------------------------
+    response = call_llm(prompt, session=st.session_state)
+    return response
 
 
 def rewrite_and_highlight(text, replacement_mapping, user_location):
@@ -4628,14 +3689,14 @@ def rewrite_and_highlight(text, replacement_mapping, user_location):
                 })
             break  # Only one match per word
 
-    # Rewrite text with neutral terms — single call returns plain text + JSON
-    rewritten_text, json_str = rewrite_and_optimize_resume(
+    # Rewrite text with neutral terms
+    rewritten_text = rewrite_text_with_llm(
         text,
         replacement_mapping["masculine"] | replacement_mapping["feminine"],
         user_location
     )
 
-    return highlighted_text, rewritten_text, masculine_count, feminine_count, detected_masculine_words, detected_feminine_words, json_str
+    return highlighted_text, rewritten_text, masculine_count, feminine_count, detected_masculine_words, detected_feminine_words
 
 # ✅ Combined pre-evaluation: grammar + both domain detections in ONE LLM call
 # This replaces 3 separate call_llm calls with a single request, cutting API key
@@ -5689,14 +4750,10 @@ if uploaded_files and job_description:
         # ✅ Bias detection
         bias_score, masc_count, fem_count, detected_masc, detected_fem = detect_bias(full_text)
 
-        # ✅ Deterministic name extraction (before LLM — improves accuracy)
-        _det_name = extract_candidate_name_from_text(full_text)
-
-        # ✅ Rewrite and highlight gender-biased words (returns json_str for 3-template DOCX)
-        highlighted_text, rewritten_text, _, _, _, _, json_str = rewrite_and_highlight(
+        # ✅ Rewrite and highlight gender-biased words
+        highlighted_text, rewritten_text, _, _, _, _ = rewrite_and_highlight(
             full_text, replacement_mapping, user_location
         )
-        optimized_resume_data = extract_resume_json(json_str)
 
         # ✅ Format check (industry standard)
         try:
@@ -5735,19 +4792,9 @@ if uploaded_files and job_description:
         )
 
         # ✅ Extract structured ATS values
-        _llm_name = ats_scores.get("Candidate Name", "Not Found")
+        candidate_name = ats_scores.get("Candidate Name", "Not Found")
 
-        # ── 3-tier name resolution: regex → LLM → filename fallback ──────────
-        # _det_name was extracted before LLM call using deterministic regex pipeline
-        _bad = {"not found","n/a","unknown","none",""}
-        if _det_name:
-            candidate_name = _det_name          # regex result — most reliable
-        elif _llm_name.lower() not in _bad:
-            candidate_name = _llm_name          # LLM result
-        else:
-            candidate_name = "Not Found"        # will be overridden by filename below
-
-        # ── Filename-based name extraction (safety net / cross-check) ─────────
+        # ── Filename-based name extraction (reliable ground truth) ────────────
         def _name_from_filename(fname: str) -> str:
             """
             Turn 'SARBAJIT_PAUL_Resume (3) (1).pdf' -> 'Sarbajit Paul'
@@ -5772,16 +4819,16 @@ if uploaded_files and job_description:
 
         _filename_name = _name_from_filename(uploaded_file.name)
 
-        # Use filename name when all other methods returned nothing useful
+        # Use filename name when LLM returned nothing useful
         _bad_name_values = {"not found", "n/a", "unknown", "none", ""}
         if candidate_name.lower() in _bad_name_values and _filename_name:
             candidate_name = _filename_name
         elif _filename_name and candidate_name.lower() not in _bad_name_values:
-            # Cross-check: if resolved name shares fewer than 40% characters with
-            # filename name it may be hallucinated — trust the filename.
-            resolved_chars = set(candidate_name.lower().replace(" ", ""))
-            file_chars     = set(_filename_name.lower().replace(" ", ""))
-            overlap = len(resolved_chars & file_chars) / max(len(file_chars), 1)
+            # Cross-check: if LLM name shares fewer than 40% characters with
+            # filename name it is likely hallucinated — trust the filename.
+            llm_chars  = set(candidate_name.lower().replace(" ", ""))
+            file_chars = set(_filename_name.lower().replace(" ", ""))
+            overlap = len(llm_chars & file_chars) / max(len(file_chars), 1)
             if overlap < 0.4:
                 candidate_name = _filename_name
         # ─────────────────────────────────────────────────────────────────────
@@ -5842,7 +4889,6 @@ if uploaded_files and job_description:
             "Text Preview": full_text[:300] + "...",
             "Highlighted Text": highlighted_text,
             "Rewritten Text": rewritten_text,
-            "Optimized Resume Data": optimized_resume_data,
             "Domain": domain,
             "Domain Penalty": ats_scores.get("Domain Penalty", 0),
             "Domain Similarity Score": ats_scores.get("Domain Similarity Score", 1.0),
@@ -6590,90 +5636,22 @@ with tab1:
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                         <span class='section-label' style="margin:0;">Bias-Free Rewritten Resume</span>
                     </div>""", unsafe_allow_html=True)
-
-                    # ── Job Title Suggestions (display only — not in DOCX) ──────────
-                    rewritten_raw = resume.get("Rewritten Text", "")
-                    if "### Suggested Job Titles" in rewritten_raw:
-                        split_parts = rewritten_raw.split("### Suggested Job Titles")
-                        resume_text_display = split_parts[0].strip()
-                        job_suggestions_display = "### Suggested Job Titles" + split_parts[1]
-                    else:
-                        resume_text_display = rewritten_raw
-                        job_suggestions_display = ""
-
-                    st.write(resume_text_display)
-
-                    if job_suggestions_display:
-                        st.markdown("""
-                        <div style="margin:18px 0 8px;font-size:0.72rem;font-weight:700;color:#64748b;
-                                    letter-spacing:0.08em;text-transform:uppercase;font-family:-apple-system,sans-serif;">
-                            Job Title Suggestions (for reference only — not included in resume files)
-                        </div>""", unsafe_allow_html=True)
-                        st.markdown(job_suggestions_display)
-
-                    # ── 3-Template DOCX Download Buttons ──────────────────────────
-                    st.markdown("""
-                    <div style="margin:20px 0 10px;font-size:0.72rem;font-weight:700;color:#64748b;
-                                letter-spacing:0.08em;text-transform:uppercase;font-family:-apple-system,sans-serif;">
-                        Download Optimized Resume — Choose Template
-                    </div>""", unsafe_allow_html=True)
-
-                    optimized_data = resume.get("Optimized Resume Data", {})
-                    base_name = resume["Resume Name"].split(".")[0]
-
-                    dl_col1, dl_col2, dl_col3 = st.columns(3)
-
-                    with dl_col1:
-                        try:
-                            modern_buf = generate_modern_docx(optimized_data)
-                            st.download_button(
-                                label="⬇ Modern (ATS)",
-                                data=modern_buf,
-                                file_name=f"{base_name}_modern_ats.docx",
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                use_container_width=True,
-                                key=f"dl_modern_{resume['Resume Name']}",
-                                help="Navy headings · Calibri · Labeled Skills block · Workday/Greenhouse optimized"
-                            )
-                        except Exception as e:
-                            st.error(f"Modern template error: {e}")
-
-                    with dl_col2:
-                        try:
-                            minimal_buf = generate_minimal_docx(optimized_data)
-                            st.download_button(
-                                label="⬇ Minimal (ATS)",
-                                data=minimal_buf,
-                                file_name=f"{base_name}_minimal_ats.docx",
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                use_container_width=True,
-                                key=f"dl_minimal_{resume['Resume Name']}",
-                                help="Pure black/white Arial · Maximum parse accuracy · Taleo/iCIMS/SmartRecruiters"
-                            )
-                        except Exception as e:
-                            st.error(f"Minimal template error: {e}")
-
-                    with dl_col3:
-                        try:
-                            creative_buf = generate_creative_docx(optimized_data)
-                            st.download_button(
-                                label="⬇ Executive (ATS)",
-                                data=creative_buf,
-                                file_name=f"{base_name}_executive_ats.docx",
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                use_container_width=True,
-                                key=f"dl_creative_{resume['Resume Name']}",
-                                help="Teal/navy accents · ATS-safe symbols · Calibri body · Standard section labels"
-                            )
-                        except Exception as e:
-                            st.error(f"Executive template error: {e}")
-
+                    st.write(resume["Rewritten Text"])
+                    docx_file = generate_docx(resume["Rewritten Text"])
+                    st.download_button(
+                        label="Download Bias-Free Resume (.docx)",
+                        data=docx_file,
+                        file_name=f"{resume['Resume Name'].split('.')[0]}_bias_free.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                        key=f"download_docx_{resume['Resume Name']}"
+                    )
                     html_report = generate_resume_report_html(resume)
                     pdf_file = html_to_pdf_bytes(html_report)
                     st.download_button(
                         label="Download Full Analysis Report (.pdf)",
                         data=pdf_file,
-                        file_name=f"{base_name}_report.pdf",
+                        file_name=f"{resume['Resume Name'].split('.')[0]}_report.pdf",
                         mime="application/pdf",
                         use_container_width=True,
                         key=f"download_pdf_{resume['Resume Name']}"
