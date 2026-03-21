@@ -2729,10 +2729,78 @@ def generate_docx(text, filename="bias_free_resume.docx"):
     return buffer
 
 # Extract text from PDF
+def _extract_page_text_layout_aware(page) -> str:
+    """
+    Extract text from a single PDF page in a layout-aware manner.
+
+    Strategy:
+    1. Detect multi-column layout via x-coordinate clustering of text blocks.
+    2. Single-column  → plain PyMuPDF "text" mode (fastest, most accurate).
+    3. Multi-column   → sort blocks by (row-band, x0) so left column always
+       precedes right column on the same visual row.
+    4. Graphic header → blocks in the top 15 % of the page are surfaced first,
+       guaranteeing the candidate name (large text in a colour band) appears
+       before any section headers extracted from the body.
+
+    Handles: single-column, two-column/sidebar, graphic header, mixed layouts.
+    """
+    page_width  = page.rect.width
+    page_height = page.rect.height
+
+    blocks = page.get_text("blocks")  # (x0,y0,x1,y1,text,block_no,type)
+    text_blocks = [
+        (b[0], b[1], b[2], b[3], b[4].strip())
+        for b in blocks if b[6] == 0 and b[4].strip()   # type 0 = text
+    ]
+
+    if not text_blocks:
+        return page.get_text("text")
+
+    # Detect multi-column by checking if significant content sits in both
+    # the left (<45 %) and right (>52 %) horizontal zones of the page.
+    x_starts   = [b[0] for b in text_blocks if len(b[4]) > 5]
+    left_zone  = [x for x in x_starts if x < page_width * 0.45]
+    right_zone = [x for x in x_starts if x > page_width * 0.52]
+    is_multicolumn = len(left_zone) >= 3 and len(right_zone) >= 3
+
+    if not is_multicolumn:
+        return page.get_text("text")   # single-column: default order is correct
+
+    # Multi-column: group blocks into horizontal bands and sort left-to-right
+    # within each band so columns are interleaved correctly.
+    BAND_HEIGHT = 20   # pt tolerance — blocks within 20 pt share the same row
+
+    def _band(y0):
+        return round(y0 / BAND_HEIGHT)
+
+    sorted_blocks = sorted(text_blocks, key=lambda b: (_band(b[1]), b[0]))
+
+    # Graphic header band: top 15 % of page (usually contains candidate name)
+    header_threshold = page_height * 0.15
+    header_blocks = [b for b in sorted_blocks if b[1] < header_threshold]
+    body_blocks   = [b for b in sorted_blocks if b[1] >= header_threshold]
+
+    return "\n".join(b[4] for b in (header_blocks + body_blocks))
+
+
 def extract_text_from_pdf(file_path):
+    """
+    Extract text from every page using layout-aware extraction.
+    Falls back to OCR if the PDF has no embedded text.
+
+    Compatible with all common resume formats:
+      - Standard single-column (ATS-safe)
+      - Two-column / sidebar
+      - Graphic / coloured-header band
+      - Mixed (full-width header + two-column body)
+    """
     try:
         doc = fitz.open(file_path)
-        text_list = [page.get_text("text") for page in doc if page.get_text("text").strip()]
+        text_list = []
+        for page in doc:
+            page_text = _extract_page_text_layout_aware(page)
+            if page_text.strip():
+                text_list.append(page_text)
         doc.close()
         return text_list if text_list else extract_text_from_images(file_path)
     except Exception as e:
@@ -2865,25 +2933,33 @@ def extract_candidate_name_from_text(resume_text: str) -> str:
     lines = [l for l in resume_text.splitlines() if l.strip()]
     first_20 = lines[:20]
 
-    # ── Pass 1: first non-empty line ─────────────────────────────────────────
-    if first_20:
-        candidate = _clean(first_20[0])
+    # ── Pass 1: scan first 5 lines (not just line 0) ─────────────────────────
+    # Multi-column / graphic-header PDFs may emit a section header like
+    # "GENERAL INFO" on line 0 before the candidate name. Scanning up to 5
+    # lines ensures we catch the name without false-positives from headers.
+    for line in first_20[:5]:
+        candidate = _clean(line)
         if _is_valid_name(candidate):
             return _title_case_name(candidate)
 
-    # ── Pass 2: line before the first contact-info line ──────────────────────
+    # ── Pass 2: line before OR after the first contact-info line ─────────────
     CONTACT_RE = re.compile(
         r"(@|linkedin\.com|github\.com|\+\d|\(\d{3}\)|\d{3}[-.\s]\d{3}|http)", re.IGNORECASE
     )
     for i, line in enumerate(first_20):
-        if CONTACT_RE.search(line) and i > 0:
-            candidate = _clean(first_20[i - 1])
-            if _is_valid_name(candidate):
-                return _title_case_name(candidate)
-            break  # only check the line immediately before contact
+        if CONTACT_RE.search(line):
+            if i > 0:
+                candidate = _clean(first_20[i - 1])
+                if _is_valid_name(candidate):
+                    return _title_case_name(candidate)
+            # Some layouts put the name after the contact block
+            for j in range(i + 1, min(i + 4, len(first_20))):
+                candidate = _clean(first_20[j])
+                if _is_valid_name(candidate):
+                    return _title_case_name(candidate)
+            break
 
-    # ── Pass 3: scan first 20 lines for a proper-name pattern ────────────────
-    # Matches "Firstname Lastname" or "First Middle Last" style
+    # ── Pass 3: scan all 20 lines for a proper-name pattern ──────────────────
     NAME_RE = re.compile(r"^([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{0,20}){1,3})$")
     ALL_CAPS_RE = re.compile(r"^([A-Z]{2,20}(?:\s+[A-Z]{2,20}){1,3})$")
     for line in first_20:
@@ -2891,6 +2967,13 @@ def extract_candidate_name_from_text(resume_text: str) -> str:
         if NAME_RE.match(cleaned) or ALL_CAPS_RE.match(cleaned):
             if _is_valid_name(cleaned):
                 return _title_case_name(cleaned)
+
+    # ── Pass 4: adjacent-line combination (split name across two lines) ───────
+    # Handles PDFs where "MANABI" is on one line and "SADHUKHAN" on the next.
+    for i in range(len(first_20) - 1):
+        combined = (_clean(first_20[i]) + " " + _clean(first_20[i + 1])).strip()
+        if _is_valid_name(combined):
+            return _title_case_name(combined)
 
     return ""  # nothing found — let LLM handle it
 
