@@ -2729,76 +2729,83 @@ def generate_docx(text, filename="bias_free_resume.docx"):
     return buffer
 
 # Extract text from PDF
-def _extract_page_text_layout_aware(page) -> str:
+def _extract_page_text_smart(page) -> str:
     """
-    Extract text from a single PDF page in a layout-aware manner.
+    Extract text from a single fitz page in correct reading order,
+    handling both simple single-column and complex multi-column / graphic
+    resume layouts (like sidebar designs, blue-header templates, etc.).
 
     Strategy:
-    1. Detect multi-column layout via x-coordinate clustering of text blocks.
-    2. Single-column  → plain PyMuPDF "text" mode (fastest, most accurate).
-    3. Multi-column   → sort blocks by (row-band, x0) so left column always
-       precedes right column on the same visual row.
-    4. Graphic header → blocks in the top 15 % of the page are surfaced first,
-       guaranteeing the candidate name (large text in a colour band) appears
-       before any section headers extracted from the body.
-
-    Handles: single-column, two-column/sidebar, graphic header, mixed layouts.
+      1. Pull raw text blocks with full bounding-box coordinates.
+      2. Detect whether the page has a multi-column layout by checking
+         whether meaningful content exists in both the left (<45%) and
+         right (>52%) horizontal zones.
+      3. Single-column  → sort blocks top-to-bottom (y0), then left-to-right.
+      4. Multi-column   → split blocks into left/right columns,
+                          sort each column top-to-bottom independently,
+                          then concatenate left column first (the main body
+                          on most sidebar resume designs sits on the right,
+                          but the name/header almost always spans full width
+                          or sits at the very top — so we sort by y0 first
+                          for the header region, then by column).
+    This ensures the candidate name — which is always the topmost block —
+    is the very first text we see regardless of layout.
     """
-    page_width  = page.rect.width
-    page_height = page.rect.height
+    blocks = page.get_text("blocks")  # (x0, y0, x1, y1, text, block_no, block_type)
+    page_width = page.rect.width
 
-    blocks = page.get_text("blocks")  # (x0,y0,x1,y1,text,block_no,type)
-    text_blocks = [
-        (b[0], b[1], b[2], b[3], b[4].strip())
-        for b in blocks if b[6] == 0 and b[4].strip()   # type 0 = text
-    ]
+    # Filter: only text blocks (block_type == 0) with real content
+    text_blocks = [b for b in blocks if b[6] == 0 and b[4].strip()]
 
     if not text_blocks:
-        return page.get_text("text")
+        return ""
 
-    # Detect multi-column by checking if significant content sits in both
-    # the left (<45 %) and right (>52 %) horizontal zones of the page.
-    x_starts   = [b[0] for b in text_blocks if len(b[4]) > 5]
+    # ── Detect multi-column layout ────────────────────────────────────────
+    x_starts = [b[0] for b in text_blocks if len(b[4].strip()) > 10]
     left_zone  = [x for x in x_starts if x < page_width * 0.45]
     right_zone = [x for x in x_starts if x > page_width * 0.52]
     is_multicolumn = len(left_zone) >= 3 and len(right_zone) >= 3
 
     if not is_multicolumn:
-        return page.get_text("text")   # single-column: default order is correct
+        # ── Single-column: simple top-to-bottom sort ──────────────────────
+        sorted_blocks = sorted(text_blocks, key=lambda b: (round(b[1] / 10) * 10, b[0]))
+        return "
+".join(b[4].strip() for b in sorted_blocks)
 
-    # Multi-column: group blocks into horizontal bands and sort left-to-right
-    # within each band so columns are interleaved correctly.
-    BAND_HEIGHT = 20   # pt tolerance — blocks within 20 pt share the same row
+    # ── Multi-column: split into header + left + right zones ─────────────
+    # Blocks in the top 15% of page height are "header" — name, title, etc.
+    # They are sorted purely by y0 so the name always comes first.
+    page_height  = page.rect.height
+    header_zone  = page_height * 0.15
 
-    def _band(y0):
-        return round(y0 / BAND_HEIGHT)
+    header_blocks = [b for b in text_blocks if b[1] < header_zone]
+    body_blocks   = [b for b in text_blocks if b[1] >= header_zone]
 
-    sorted_blocks = sorted(text_blocks, key=lambda b: (_band(b[1]), b[0]))
+    # Sort header top-to-bottom
+    header_sorted = sorted(header_blocks, key=lambda b: (b[1], b[0]))
 
-    # Graphic header band: top 15 % of page (usually contains candidate name)
-    header_threshold = page_height * 0.15
-    header_blocks = [b for b in sorted_blocks if b[1] < header_threshold]
-    body_blocks   = [b for b in sorted_blocks if b[1] >= header_threshold]
+    # Split body into left / right columns and sort each top-to-bottom
+    left_blocks  = sorted(
+        [b for b in body_blocks if b[0] < page_width * 0.48],
+        key=lambda b: b[1]
+    )
+    right_blocks = sorted(
+        [b for b in body_blocks if b[0] >= page_width * 0.48],
+        key=lambda b: b[1]
+    )
 
-    return "\n".join(b[4] for b in (header_blocks + body_blocks))
+    # Concatenate: header → left column → right column
+    all_sorted = header_sorted + left_blocks + right_blocks
+    return "
+".join(b[4].strip() for b in all_sorted)
 
 
 def extract_text_from_pdf(file_path):
-    """
-    Extract text from every page using layout-aware extraction.
-    Falls back to OCR if the PDF has no embedded text.
-
-    Compatible with all common resume formats:
-      - Standard single-column (ATS-safe)
-      - Two-column / sidebar
-      - Graphic / coloured-header band
-      - Mixed (full-width header + two-column body)
-    """
     try:
         doc = fitz.open(file_path)
         text_list = []
         for page in doc:
-            page_text = _extract_page_text_layout_aware(page)
+            page_text = _extract_page_text_smart(page)
             if page_text.strip():
                 text_list.append(page_text)
         doc.close()
@@ -2931,49 +2938,42 @@ def extract_candidate_name_from_text(resume_text: str) -> str:
         return name
 
     lines = [l for l in resume_text.splitlines() if l.strip()]
-    first_20 = lines[:20]
+    first_30 = lines[:30]   # scan deeper for graphic/sidebar layouts
 
-    # ── Pass 1: scan first 5 lines (not just line 0) ─────────────────────────
-    # Multi-column / graphic-header PDFs may emit a section header like
-    # "GENERAL INFO" on line 0 before the candidate name. Scanning up to 5
-    # lines ensures we catch the name without false-positives from headers.
-    for line in first_20[:5]:
+    CONTACT_RE = re.compile(
+        r"(@|linkedin\.com|github\.com|\+\d|\(\d{3}\)|\d{3}[-.\s]\d{3}|http)", re.IGNORECASE
+    )
+    NAME_RE     = re.compile(r"^([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{0,20}){1,3})$")
+    ALL_CAPS_RE = re.compile(r"^([A-Z]{2,20}(?:\s+[A-Z]{2,20}){1,3})$")
+
+    # ── Pass 1: scan all first 30 lines in order — return first valid name ───
+    # This handles graphic layouts where "GENERAL INFO" or a section label
+    # appears before the name in raw DOM order — smart extraction now puts
+    # the name first, but we also skip section keywords explicitly here.
+    for line in first_30:
         candidate = _clean(line)
         if _is_valid_name(candidate):
             return _title_case_name(candidate)
 
-    # ── Pass 2: line before OR after the first contact-info line ─────────────
-    CONTACT_RE = re.compile(
-        r"(@|linkedin\.com|github\.com|\+\d|\(\d{3}\)|\d{3}[-.\s]\d{3}|http)", re.IGNORECASE
-    )
-    for i, line in enumerate(first_20):
-        if CONTACT_RE.search(line):
-            if i > 0:
-                candidate = _clean(first_20[i - 1])
-                if _is_valid_name(candidate):
-                    return _title_case_name(candidate)
-            # Some layouts put the name after the contact block
-            for j in range(i + 1, min(i + 4, len(first_20))):
-                candidate = _clean(first_20[j])
+    # ── Pass 2: line immediately before any contact-info line ────────────────
+    for i, line in enumerate(first_30):
+        if CONTACT_RE.search(line) and i > 0:
+            candidate = _clean(first_30[i - 1])
+            if _is_valid_name(candidate):
+                return _title_case_name(candidate)
+            # Also try two lines back (some layouts have a blank between)
+            if i > 1:
+                candidate = _clean(first_30[i - 2])
                 if _is_valid_name(candidate):
                     return _title_case_name(candidate)
             break
 
-    # ── Pass 3: scan all 20 lines for a proper-name pattern ──────────────────
-    NAME_RE = re.compile(r"^([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{0,20}){1,3})$")
-    ALL_CAPS_RE = re.compile(r"^([A-Z]{2,20}(?:\s+[A-Z]{2,20}){1,3})$")
-    for line in first_20:
+    # ── Pass 3: strict regex scan for proper-name pattern in first 30 lines ──
+    for line in first_30:
         cleaned = _clean(line)
         if NAME_RE.match(cleaned) or ALL_CAPS_RE.match(cleaned):
             if _is_valid_name(cleaned):
                 return _title_case_name(cleaned)
-
-    # ── Pass 4: adjacent-line combination (split name across two lines) ───────
-    # Handles PDFs where "MANABI" is on one line and "SADHUKHAN" on the next.
-    for i in range(len(first_20) - 1):
-        combined = (_clean(first_20[i]) + " " + _clean(first_20[i + 1])).strip()
-        if _is_valid_name(combined):
-            return _title_case_name(combined)
 
     return ""  # nothing found — let LLM handle it
 
