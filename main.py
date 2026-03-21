@@ -59,7 +59,7 @@ from langchain_groq import ChatGroq  # optional if you're using it
 
 
 # Local project imports
-from llm_manager import call_llm, load_groq_api_keys
+from llm_manager import call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage, mark_key_failure
 from db_manager import (
     db_manager,
     insert_candidate,
@@ -5936,24 +5936,29 @@ def setup_vectorstore(documents):
 def create_chain(vectorstore):
     # ✅ Use get_healthy_keys() so dead/quota keys are skipped (reads key_failures
     #    and key_usage from Supabase — same tables that call_llm() maintains).
-    from llm_manager import get_healthy_keys
     all_keys    = load_groq_api_keys()
     healthy     = get_healthy_keys(all_keys)
     if not healthy:
         raise ValueError("❌ No healthy Groq API keys available for chat chain.")
     # healthy list is already shuffled by get_healthy_keys — just take the first
     groq_api_key = healthy[0]
+    increment_key_usage(groq_api_key)   # keep usage count in sync with call_llm
 
     # ✅ Create the ChatGroq object
     llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=groq_api_key)
 
-    # ✅ Build the chain
-    chain = ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=vectorstore.as_retriever(),
-        return_source_documents=True
-    )
-    return chain
+    # ✅ Build the chain — report failures back so llm_manager skips this key next time
+    try:
+        chain = ConversationalRetrievalChain.from_llm(
+            llm=llm,
+            retriever=vectorstore.as_retriever(),
+            return_source_documents=True
+        )
+        return chain
+    except Exception as e:
+        reason = "quota" if any(w in str(e).lower() for w in ["quota", "rate limit", "429"]) else "error"
+        mark_key_failure(groq_api_key, reason)
+        raise
 
 # Chat history
 if "chat_history" not in st.session_state:
