@@ -2769,8 +2769,7 @@ def _extract_page_text_smart(page) -> str:
     if not is_multicolumn:
         # ── Single-column: simple top-to-bottom sort ──────────────────────
         sorted_blocks = sorted(text_blocks, key=lambda b: (round(b[1] / 10) * 10, b[0]))
-        return "
-".join(b[4].strip() for b in sorted_blocks)
+        return "\n".join(b[4].strip() for b in sorted_blocks)
 
     # ── Multi-column: split into header + left + right zones ─────────────
     # Blocks in the top 15% of page height are "header" — name, title, etc.
@@ -2796,8 +2795,7 @@ def _extract_page_text_smart(page) -> str:
 
     # Concatenate: header → left column → right column
     all_sorted = header_sorted + left_blocks + right_blocks
-    return "
-".join(b[4].strip() for b in all_sorted)
+    return "\n".join(b[4].strip() for b in all_sorted)
 
 
 def extract_text_from_pdf(file_path):
@@ -7381,6 +7379,7 @@ with tab1:
 
     else:           
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
+		
 from xhtml2pdf import pisa
 from io import BytesIO
 
