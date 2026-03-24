@@ -11380,13 +11380,13 @@ RAPID_API_KEY = st.secrets["rapidapi"]["key"]
 RAPID_API_HOST = st.secrets["rapidapi"]["host"]
 
 def clean_html(raw_html: str) -> str:
-    """Remove HTML tags and comments from API descriptions."""
+    """Remove HTML tags, comments and decode HTML entities from API descriptions."""
+    import html as _html
     if not raw_html:
         return ""
-    # Remove comments
     raw_html = re.sub(r"<!--.*?-->", "", raw_html, flags=re.DOTALL)
-    # Remove all tags
-    return re.sub(r"<.*?>", "", raw_html).strip()
+    cleaned = re.sub(r"<.*?>", "", raw_html).strip()
+    return _html.unescape(cleaned)
 
 def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, results=10):
     url = f"https://{RAPID_API_HOST}/search"
@@ -12351,16 +12351,36 @@ def _job_search_interactive():
                     job_type = job.get("job_employment_type", "N/A")
                     job_mode = "Remote" if job.get("job_is_remote") else "On-site"
                     job_publisher = clean_html(job.get("job_publisher", "N/A"))
-                    job_description = clean_html(job.get("job_description", ""))[:250] + "..."
+                    # --- Description: robust fallback, never shows bare "..." ---
+                    _highlights = job.get("job_highlights") or {}
+                    _raw_desc = (
+                        job.get("job_description")
+                        or " ".join(_highlights.get("Qualifications", []))
+                        or " ".join(_highlights.get("Responsibilities", []))
+                        or " ".join(_highlights.get("Benefits", []))
+                        or ""
+                    )
+                    job_description = clean_html(_raw_desc).strip()
+                    if len(job_description) < 10:
+                        job_description = "No description available for this listing."
+                    elif len(job_description) > 350:
+                        job_description = job_description[:350].rsplit(' ', 1)[0] + "..."
 
-                    # Format date
+                    # --- Date: robust fallback chain ---
                     formatted_date = "N/A"
-                    if job.get("job_posted_at_datetime_utc") and job["job_posted_at_datetime_utc"] != "N/A":
+                    raw_date = (
+                        job.get("job_posted_at_datetime_utc")
+                        or job.get("job_posted_at_timestamp_friendly")
+                        or ""
+                    )
+                    if raw_date and str(raw_date).strip() not in ("N/A", "None", "null", ""):
                         try:
-                            date_obj = datetime.datetime.fromisoformat(job["job_posted_at_datetime_utc"].replace('Z', '+00:00'))
+                            date_obj = datetime.datetime.fromisoformat(
+                                str(raw_date).replace("Z", "+00:00")
+                            )
                             formatted_date = date_obj.strftime("%b %d, %Y")
-                        except:
-                            formatted_date = job["job_posted_at_datetime_utc"]
+                        except (ValueError, AttributeError):
+                            formatted_date = str(raw_date)[:10]
 
                     # Colors
                     btn_color = "#00ff88"
