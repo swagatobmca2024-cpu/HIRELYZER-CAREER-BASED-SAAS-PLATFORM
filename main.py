@@ -12351,7 +12351,9 @@ def _job_search_interactive():
                     job_type = job.get("job_employment_type", "N/A")
                     job_mode = "Remote" if job.get("job_is_remote") else "On-site"
                     job_publisher = clean_html(job.get("job_publisher", "N/A"))
-                    job_description = clean_html(job.get("job_description", ""))[:250] + "..."
+                    raw_desc = job.get("job_description") or job.get("job_description_html") or ""
+                    cleaned_desc = clean_html(raw_desc).strip()
+                    job_description = (cleaned_desc[:250] + "...") if cleaned_desc else "No description available."
 
                     # Format date
                     formatted_date = "N/A"
