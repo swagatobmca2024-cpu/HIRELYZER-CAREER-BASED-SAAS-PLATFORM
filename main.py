@@ -12353,7 +12353,7 @@ def _job_search_interactive():
                     job_publisher = clean_html(job.get("job_publisher", "N/A"))
                     raw_desc = job.get("job_description") or job.get("job_description_html") or ""
                     cleaned_desc = clean_html(raw_desc).strip()
-                    job_description = (cleaned_desc[:250] + "...") if cleaned_desc else "No description available."
+                    job_description = (cleaned_desc[:250] + "...") if cleaned_desc else None
 
                     # Format date
                     formatted_date = "N/A"
@@ -12367,6 +12367,19 @@ def _job_search_interactive():
                     # Colors
                     btn_color = "#00ff88"
                     platform_gradient = "linear-gradient(135deg, #00ff88 0%, #00cc6f 100%)"
+
+                    # Build description HTML — show clickable fallback if API didn't return one
+                    apply_link = job.get("job_apply_link", "#")
+                    if job_description:
+                        desc_html = f"""<div style="color: #999999; font-size: 14px; margin-bottom: 20px; line-height: 1.6;">
+    {job_description}
+</div>"""
+                    else:
+                        desc_html = f"""<div style="color: #555; font-size: 13px; margin-bottom: 20px; font-style: italic; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    Description not provided by API —
+    <a href="{apply_link}" target="_blank" style="color:#00ff88; text-decoration:underline; font-style:normal; font-weight:600;">View full details on {job_publisher} ↗</a>
+</div>"""
 
                     # Custom HTML card
                     job_card_html = f"""
@@ -12410,9 +12423,7 @@ def _job_search_interactive():
     </div>
 
     <!-- Description -->
-    <div style="color: #999999; font-size: 14px; margin-bottom: 20px; line-height: 1.6;">
-        {job_description}
-    </div>
+    {desc_html}
 
     <!-- Apply Button -->
     <a href="{job.get('job_apply_link', '#')}" target="_blank" style="text-decoration: none;">
