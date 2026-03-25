@@ -11454,7 +11454,7 @@ def unified_search(job_role, location, experience_level=None, job_type=None, fou
             "type": job.get("job_employment_type","N/A"),
             "remote": "Remote" if job.get("job_is_remote") else "On-site",
             "publisher": clean_html(job.get("job_publisher","N/A")),
-            "description": clean_html(job.get("job_description",""))[:200] + "...",
+            "description": (lambda d: d[:200].rsplit(" ",1)[0]+"..." if len(d)>200 else d if len(d)>=10 else "preview unavailable")(clean_html(job.get("job_description","") or ""  )),
             "apply_link": job.get("job_apply_link", "#")
         })
 
@@ -12361,9 +12361,8 @@ def _job_search_interactive():
                         or ""
                     )
                     job_description = clean_html(_raw_desc).strip()
-                    if len(job_description) < 10:
-                        job_description = "No description available for this listing."
-                    elif len(job_description) > 350:
+                    _desc_missing = len(job_description) < 10
+                    if not _desc_missing and len(job_description) > 350:
                         job_description = job_description[:350].rsplit(' ', 1)[0] + "..."
 
                     # --- Date: robust fallback chain ---
@@ -12427,10 +12426,23 @@ def _job_search_interactive():
         <div style="color: #cccccc; font-size: 14px; display:flex; align-items:center; gap:5px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg> <b>Source:</b> {job_publisher}</div>
     </div>
 
-    <!-- Description -->
-    <div style="color: #999999; font-size: 14px; margin-bottom: 20px; line-height: 1.6;">
-        {job_description}
-    </div>
+    <!-- Description / Smart CTA -->
+    {(
+        f'''<div style="color:#999;font-size:14px;margin-bottom:20px;line-height:1.6;">{job_description}</div>'''
+        if not _desc_missing else
+        f'''<a href="{job.get("job_apply_link","#")}" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:10px;
+            background:linear-gradient(135deg,rgba(0,255,136,0.08),rgba(0,255,136,0.03));
+            border:1px dashed rgba(0,255,136,0.35);border-radius:12px;
+            padding:12px 18px;margin-bottom:20px;cursor:pointer;
+            transition:all 0.25s ease;width:fit-content;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span style="color:#aaa;font-size:13px;">Description not available in preview —</span>
+            <span style="color:#00ff88;font-size:13px;font-weight:600;display:flex;align-items:center;gap:5px;">
+                View full details on site
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </span>
+        </a>'''
+    )}
 
     <!-- Apply Button -->
     <a href="{job.get('job_apply_link', '#')}" target="_blank" style="text-decoration: none;">
