@@ -6348,36 +6348,98 @@ if uploaded_files and job_description:
         # ✅ Extract structured ATS values
         candidate_name = ats_scores.get("Candidate Name", "Not Found")
 
-        # ── Filename-based name fallback (reliable ground truth) ─────────────
-        def _name_from_filename(fname: str) -> str:
-            stop_words = {
-                "resume", "cv", "curriculum", "vitae", "updated", "final",
-                "new", "latest", "copy", "draft", "version", "doc",
-                "v1", "v2", "v3", "v4", "v5",
-                "2022", "2023", "2024", "2025", "2026",
+        # ── Candidate name resolution (LLM-first, filename as validated fallback) ──
+        #
+        # Design: neither source is blindly trusted. Both are run through the
+        # same _looks_like_person_name() validator before use. LLM always wins
+        # when valid; filename is only used when the LLM result fails validation.
+        #
+        # Fixes:
+        #   1. Job-title filenames (e.g. "mobile_app_developer_resume.pdf") no
+        #      longer override a correct LLM name.
+        #   2. Low character-overlap no longer triggers a blind filename override.
+        #   3. Single-word extractions from either source are rejected.
+
+        # Comprehensive set of words that appear in job-title filenames but are
+        # never part of a person's name. Extend as needed.
+        _NAME_STOP_WORDS: set[str] = {
+            # document meta
+            "resume", "cv", "curriculum", "vitae", "updated", "final",
+            "new", "latest", "copy", "draft", "version", "doc",
+            "v1", "v2", "v3", "v4", "v5",
+            "2022", "2023", "2024", "2025", "2026",
+            # seniority / role qualifiers
+            "senior", "junior", "lead", "principal", "staff", "associate",
+            "intern", "entry", "mid", "level",
+            # job-title nouns
+            "developer", "engineer", "designer", "manager", "analyst",
+            "consultant", "architect", "director", "officer", "specialist",
+            "coordinator", "executive", "recruiter", "advisor", "strategist",
+            "scientist", "researcher", "administrator", "technician",
+            # tech-domain prefixes that appear in filenames
+            "mobile", "app", "web", "data", "software", "frontend", "backend",
+            "fullstack", "full", "stack", "cloud", "devops", "qa", "product",
+            "project", "platform", "site", "ui", "ux", "ml", "ai", "it",
+            "cyber", "security", "network", "systems", "database", "infra",
+        }
+
+        def _looks_like_person_name(name: str) -> bool:
+            """Return True only if *name* plausibly looks like a human full name.
+
+            Rules (all must pass):
+              • 2–4 tokens (first + last, optionally middle / suffix)
+              • Every token is letters-only, length 2-25
+              • No token is a known job-title / document-meta stop word
+              • Not a bare placeholder string
+            """
+            _placeholder_values = {
+                "not found", "n/a", "unknown", "none", "", "name not found",
+                "candidate name not found",
+                "extract full name from resume header or contact section",
+                "copy the candidate's full name exactly as it appears in the resume",
+                "copy the candidates full name exactly as it appears in the resume",
             }
+            if name.lower().strip() in _placeholder_values:
+                return False
+            tokens = name.strip().split()
+            if not (2 <= len(tokens) <= 4):
+                return False
+            for tok in tokens:
+                tok_l = tok.lower()
+                if tok_l in _NAME_STOP_WORDS:
+                    return False
+                if not re.match(r"^[a-zA-Z]{2,25}$", tok):
+                    return False
+            return True
+
+        def _name_from_filename(fname: str) -> str:
+            """Extract a candidate name from the filename, or return '' if none found.
+
+            Stops at the first stop-word or digit token; requires ≥ 2 name tokens
+            so that single-word job titles (e.g. 'Engineer.pdf') are rejected.
+            """
             base = os.path.splitext(fname)[0]
             base = re.sub(r"[\(\)\[\]_\-\.]", " ", base)
             base = re.sub(r"\s+", " ", base).strip()
-            parts = []
+            parts: list[str] = []
             for word in base.split():
-                if word.lower() in stop_words or word.isdigit():
+                if word.lower() in _NAME_STOP_WORDS or word.isdigit():
                     break
-                if re.match(r"^[A-Za-z]+$", word):
+                if re.match(r"^[A-Za-z]{2,25}$", word):
                     parts.append(word.title())
-            return " ".join(parts) if len(parts) >= 1 else ""
+            return " ".join(parts) if len(parts) >= 2 else ""
 
-        _filename_name = _name_from_filename(uploaded_file.name)
-        _bad_name_values = {"not found", "n/a", "unknown", "none", ""}
+        # ── Resolution logic ──────────────────────────────────────────────────
+        _llm_valid      = _looks_like_person_name(candidate_name)
+        _filename_name  = _name_from_filename(uploaded_file.name)
+        _filename_valid = _looks_like_person_name(_filename_name)
 
-        if candidate_name.lower() in _bad_name_values and _filename_name:
-            candidate_name = _filename_name
-        elif _filename_name and candidate_name.lower() not in _bad_name_values:
-            llm_chars  = set(candidate_name.lower().replace(" ", ""))
-            file_chars = set(_filename_name.lower().replace(" ", ""))
-            overlap = len(llm_chars & file_chars) / max(len(file_chars), 1)
-            if overlap < 0.4:
-                candidate_name = _filename_name
+        if _llm_valid:
+            pass                            # LLM passed validation — keep it
+        elif _filename_valid:
+            candidate_name = _filename_name  # LLM failed, filename looks real
+        else:
+            candidate_name = "Not Found"    # both unreliable
         # ─────────────────────────────────────────────────────────────────────
 
         ats_score = ats_scores.get("ATS Match %", 0)
