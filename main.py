@@ -13208,14 +13208,16 @@ def _analytics_dashboard():
             _section_header("🕐", "Peak Search Time — 30-Minute Buckets (IST)", "when you search most, at half-hour precision", "#f87171")
 
             # Build all 48 half-hour slots
+            def _slot_label(s):
+                h = s // 2
+                if s % 2 == 0:          # e.g. slot 23 → "11:00–11:30"
+                    return f"{h:02d}:00–{h:02d}:30"
+                else:                   # e.g. slot 23 → "11:30–12:00"
+                    return f"{h:02d}:30–{(h+1)%24:02d}:00"
+
             all_slots = pd.DataFrame({
-                'half_slot': range(48),
-                'half_bucket': [
-                    f"{s//2:02d}:{'00' if s%2==0 else '30'}–"
-                    f"{s//2:02d if s%2==0 else (s//2+1)%24:02d}:"
-                    f"{'30' if s%2==0 else '00'}"
-                    for s in range(48)
-                ]
+                'half_slot':   list(range(48)),
+                'half_bucket': [_slot_label(s) for s in range(48)],
             })
             if 'half_slot' in df_analytics.columns:
                 half_counts = df_analytics.groupby('half_slot').size().reset_index(name='Searches')
