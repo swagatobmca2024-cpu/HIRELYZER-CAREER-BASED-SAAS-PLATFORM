@@ -13203,6 +13203,7 @@ def _analytics_dashboard():
             )
             hour_dist['Label'] = hour_dist['hour'].apply(lambda h: f"{h:02d}:00–{h:02d}:59")
             peak_hour = int(hour_dist.loc[hour_dist['Searches'].idxmax(), 'hour'])
+            peak_label = f"{peak_hour:02d}:00–{peak_hour:02d}:59"
 
             # Color bars: highlight peak hour in bright red
             bar_colors = [
@@ -13227,7 +13228,7 @@ def _analytics_dashboard():
                 # Annotation for peak
                 if hour_dist['Searches'].max() > 0:
                     fig_hour.add_annotation(
-                        x=f"{peak_hour:02d}:00",
+                        x=peak_label,
                         y=hour_dist['Searches'].max(),
                         text=f"⚡ Peak: {peak_hour:02d}:00 IST",
                         showarrow=True, arrowhead=2, arrowcolor='#f87171',
@@ -13257,7 +13258,7 @@ def _analytics_dashboard():
                 ))
                 if hour_dist['Searches'].max() > 0:
                     fig_hour.add_annotation(
-                        y=f"{peak_hour:02d}:00",
+                        y=peak_label,
                         x=hour_dist['Searches'].max(),
                         text=f"⚡ Peak: {peak_hour:02d}:00 IST",
                         showarrow=True, arrowhead=2, arrowcolor='#f87171',
