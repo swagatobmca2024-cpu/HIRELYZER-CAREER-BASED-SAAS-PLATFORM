@@ -22009,6 +22009,4 @@ if tab5:
 			</p>
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d  %H:%M:%S")), unsafe_allow_html=True)
-		</div>
-		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
-				
+		
