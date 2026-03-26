@@ -11675,6 +11675,7 @@ def delete_saved_job_search(search_id):
         get_saved_job_searches.clear()
         get_total_saved_searches_count.clear()
         get_available_platforms.clear()
+        fetch_analytics_data.clear()   # ← analytics reflects deletions immediately
     except Exception as e:
         st.error(f"Error deleting job search: {e}")
 
@@ -12838,13 +12839,29 @@ def _analytics_dashboard():
     """, unsafe_allow_html=True)
 
     # ── Analytics Scope Toggle ────────────────────────────────────
-    analytics_scope = st.radio(
-        "📡 Analytics Scope",
-        ["🙋 My Analytics", "🌐 Global Analytics"],
-        horizontal=True,
-        key="analytics_scope_toggle"
-    )
+    # Track previous scope so we can bust the cache the moment scope changes
+    if "_prev_analytics_scope" not in st.session_state:
+        st.session_state["_prev_analytics_scope"] = "🙋 My Analytics"
+
+    _scope_col, _refresh_col = st.columns([5, 1])
+    with _scope_col:
+        analytics_scope = st.radio(
+            "📡 Analytics Scope",
+            ["🙋 My Analytics", "🌐 Global Analytics"],
+            horizontal=True,
+            key="analytics_scope_toggle"
+        )
+    with _refresh_col:
+        if st.button("🔄 Refresh", key="analytics_refresh_btn", help="Force-fetch latest data"):
+            fetch_analytics_data.clear()
+
     is_my_analytics = analytics_scope == "🙋 My Analytics"
+
+    # If the user just switched scope, clear the cache so the new scope
+    # fetches fresh data immediately instead of returning the cached value
+    if analytics_scope != st.session_state["_prev_analytics_scope"]:
+        fetch_analytics_data.clear()
+        st.session_state["_prev_analytics_scope"] = analytics_scope
 
     # Determine scope
     current_user = st.session_state.username if hasattr(st.session_state, 'username') and st.session_state.username else None
