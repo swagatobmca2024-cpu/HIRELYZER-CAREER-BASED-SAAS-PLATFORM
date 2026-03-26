@@ -11167,7 +11167,18 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
-JOB_TITLES = [
+
+def evaluate_interview_answer(answer: str, question: str = None):
+    """
+    Uses an LLM to strictly evaluate an interview answer.
+    Returns (score out of 5, feedback string).
+    """
+    from llm_manager import call_llm
+    import re
+    import streamlit as st
+
+    # Empty check
+    if not answer.strip():JOB_TITLES = [
     "Software Engineering",
     "Full Stack Development",
     "Frontend Development",
@@ -13260,11 +13271,15 @@ def _analytics_dashboard():
             _half_max = int(half_dist['Searches'].max()) if half_dist['Searches'].max() > 0 else 1
             fig_half.update_layout(
                 **_PLOTLY_BASE, height=300, showlegend=False, bargap=0.1,
-                xaxis=dict(**_XAXIS, tickangle=-60, tickfont=dict(size=8, color="#999"),
-                           # Show every 4th label (every 2 hours) to avoid crowding
-                           tickmode='array',
-                           tickvals=half_dist['half_bucket'].tolist()[::4],
-                           ticktext=half_dist['half_bucket'].tolist()[::4]),
+                xaxis=dict(
+                    gridcolor="rgba(255,255,255,0.06)",
+                    zerolinecolor="rgba(255,255,255,0.08)",
+                    tickangle=-60,
+                    tickfont=dict(size=8, color="#999"),
+                    tickmode='array',
+                    tickvals=half_dist['half_bucket'].tolist()[::4],
+                    ticktext=half_dist['half_bucket'].tolist()[::4],
+                ),
                 yaxis=dict(**_YAXIS, range=[0, _half_max * 1.35]),
             )
             st.plotly_chart(fig_half, use_container_width=True, config={
@@ -13920,17 +13935,6 @@ with tab3:
             <p>Salary Range: <span style="color:#34d399; font-weight:700;">{role['range']}</span></p>
         </div>
         """, unsafe_allow_html=True)
-def evaluate_interview_answer(answer: str, question: str = None):
-    """
-    Uses an LLM to strictly evaluate an interview answer.
-    Returns (score out of 5, feedback string).
-    """
-    from llm_manager import call_llm
-    import re
-    import streamlit as st
-
-    # Empty check
-    if not answer.strip():
         return 0, "⚠️ No answer provided."
 
     # 🔹 LLM Prompt (STRICTER)
