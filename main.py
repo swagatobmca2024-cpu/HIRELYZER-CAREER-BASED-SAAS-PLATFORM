@@ -21129,26 +21129,12 @@ if tab5:
 				st.metric("Unique Domains", df['domain'].nunique())
 
 			# Enhanced data display with sorting
-			sort_col1, sort_col2, sort_col3 = st.columns([2, 2, 1])
-			with sort_col1:
-				sort_column = st.selectbox("📊 Sort by", 
-									options=['timestamp', 'ats_score', 'bias_score', 'candidate_name', 'domain'])
-			with sort_col2:
-				sort_order = st.radio("Sort Order", ["Descending", "Ascending"], horizontal=True)
-			with sort_col3:
-				st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-				# Toggle zoom/full-table view
-				if "table_zoomed" not in st.session_state:
-					st.session_state.table_zoomed = False
-				zoom_label = "🔍 Collapse View" if st.session_state.table_zoomed else "🔍 Full Table View"
-				if st.button(zoom_label, use_container_width=True):
-					st.session_state.table_zoomed = not st.session_state.table_zoomed
-					st.rerun()
-
+			sort_column = st.selectbox("📊 Sort by", 
+								options=['timestamp', 'ats_score', 'bias_score', 'candidate_name', 'domain'])
+			sort_order = st.radio("Sort Order", ["Descending", "Ascending"], horizontal=True)
+			
 			df_sorted = df.sort_values(by=sort_column, ascending=(sort_order == "Ascending"))
-
-			table_height = 700 if st.session_state.get("table_zoomed", False) else 400
-
+			
 			# Display with enhanced formatting
 			st.dataframe(
 				df_sorted.style.format({
@@ -21162,13 +21148,12 @@ if tab5:
 					'bias_score': '{:.3f}'
 				}),
 				use_container_width=True,
-				height=table_height
+				height=400
 			)
 
-			# Enhanced Export Options — properly aligned row
-			st.markdown("<div style='margin-top: 0.75rem;'></div>", unsafe_allow_html=True)
-			exp_col1, exp_col2 = st.columns(2)
-			with exp_col1:
+			# Enhanced Export Options
+			col1, col2 = st.columns(2)
+			with col1:
 				csv_data = df_sorted.to_csv(index=False)
 				st.download_button(
 					label="📥 Download Filtered Data (CSV)",
@@ -21177,8 +21162,8 @@ if tab5:
 					mime="text/csv",
 					use_container_width=True
 				)
-			with exp_col2:
-				if st.button("📤 Export All Data", use_container_width=True, key="export_all_btn"):
+			with col2:
+				if st.button("📤 Export All Data", use_container_width=True):
 					try:
 						filename = f"full_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 						if export_to_csv(filename):
