@@ -11167,18 +11167,7 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
-
-def evaluate_interview_answer(answer: str, question: str = None):
-    """
-    Uses an LLM to strictly evaluate an interview answer.
-    Returns (score out of 5, feedback string).
-    """
-    from llm_manager import call_llm
-    import re
-    import streamlit as st
-
-    # Empty check
-    if not answer.strip():JOB_TITLES = [
+JOB_TITLES = [
     "Software Engineering",
     "Full Stack Development",
     "Frontend Development",
@@ -11803,25 +11792,12 @@ def fetch_analytics_data(scope_username=None):
             df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
             df = df.dropna(subset=['timestamp'])
             df['timestamp_ist'] = df['timestamp'].dt.tz_convert('Asia/Kolkata')
-            df['date']         = df['timestamp_ist'].dt.date.astype(str)
-            df['hour']         = df['timestamp_ist'].dt.hour
-            df['minute']       = df['timestamp_ist'].dt.minute
-            # 30-min bucket label: "11:00–11:30" or "11:30–12:00"
-            def _half_label(t):
-                if t.minute < 30:
-                    return f"{t.hour:02d}:00–{t.hour:02d}:30"
-                else:
-                    next_h = (t.hour + 1) % 24
-                    return f"{t.hour:02d}:30–{next_h:02d}:00"
-            df['half_bucket']  = df['timestamp_ist'].apply(_half_label)
-            df['half_slot']    = df['hour'] * 2 + (df['minute'] >= 30).astype(int)
-            df['weekday']      = df['timestamp_ist'].dt.day_name()
-            df['weekday_num']  = df['timestamp_ist'].dt.dayofweek  # 0=Mon
+            df['date']    = df['timestamp_ist'].dt.date.astype(str)
+            df['hour']    = df['timestamp_ist'].dt.hour
+            df['weekday'] = df['timestamp_ist'].dt.day_name()
         return df
     except Exception:
-        return pd.DataFrame(columns=['role', 'location', 'platform', 'timestamp',
-                                     'date', 'hour', 'minute', 'half_bucket',
-                                     'half_slot', 'weekday', 'weekday_num'])
+        return pd.DataFrame(columns=['role', 'location', 'platform', 'timestamp', 'date', 'hour', 'weekday'])
 
 
 def slugify(text: str) -> str:
@@ -13215,150 +13191,91 @@ def _analytics_dashboard():
                                     "scrollZoom": False,
                                 })
 
-            # ── ROW 3a: 30-Minute Bucket Peak Time ───────────────
-            _section_header("🕐", "Peak Search Time — 30-Minute Buckets (IST)", "when you search most, at half-hour precision", "#f87171")
+            # ── ROW 3: Peak Hour (IST, full width) ───────────────
+            _section_header("🕐", "Peak Search Hour — IST (0–23 Distribution)", "when you search most — converted to Indian Standard Time", "#f87171")
+            hour_orient = st.radio("Orientation", ["↕ Vertical", "↔ Horizontal"], index=0, horizontal=True, key="hour_orient")
 
-            # Build all 48 half-hour slots
-            def _slot_label(s):
-                h = s // 2
-                if s % 2 == 0:          # e.g. slot 23 → "11:00–11:30"
-                    return f"{h:02d}:00–{h:02d}:30"
-                else:                   # e.g. slot 23 → "11:30–12:00"
-                    return f"{h:02d}:30–{(h+1)%24:02d}:00"
-
-            all_slots = pd.DataFrame({
-                'half_slot':   list(range(48)),
-                'half_bucket': [_slot_label(s) for s in range(48)],
-            })
-            if 'half_slot' in df_analytics.columns:
-                half_counts = df_analytics.groupby('half_slot').size().reset_index(name='Searches')
-                half_dist = all_slots.merge(half_counts, on='half_slot', how='left').fillna(0).astype({'Searches': int})
-            else:
-                half_dist = all_slots.copy()
-                half_dist['Searches'] = 0
-
-            peak_slot = int(half_dist.loc[half_dist['Searches'].idxmax(), 'half_slot'])
-            peak_label = half_dist.loc[half_dist['Searches'].idxmax(), 'half_bucket']
-
-            bar_colors_half = [
-                '#f87171' if s == peak_slot else '#4a1515'
-                for s in half_dist['half_slot']
-            ]
-            bar_opacities_half = [1.0 if s == peak_slot else 0.6 for s in half_dist['half_slot']]
-
-            fig_half = go.Figure(go.Bar(
-                x=half_dist['half_bucket'],
-                y=half_dist['Searches'],
-                marker_color=bar_colors_half,
-                marker_opacity=bar_opacities_half,
-                marker_line=dict(color='rgba(248,113,113,0.25)', width=0.3),
-                text=[str(v) if v > 0 else '' for v in half_dist['Searches']],
-                textposition='outside',
-                textfont=dict(color='#f87171', size=9, family='Inter'),
-                hovertemplate='<b>%{x} IST</b><br>Searches: %{y}<extra></extra>',
-                cliponaxis=False,
-            ))
-            if half_dist['Searches'].max() > 0:
-                fig_half.add_annotation(
-                    x=peak_label,
-                    y=half_dist['Searches'].max(),
-                    text=f"⚡ Peak: {peak_label} IST",
-                    showarrow=True, arrowhead=2, arrowcolor='#f87171',
-                    font=dict(color='#f87171', size=12, family='Inter'),
-                    bgcolor='rgba(248,113,113,0.15)',
-                    bordercolor='#f87171', borderwidth=1, borderpad=5, yshift=12,
-                )
-            _half_max = int(half_dist['Searches'].max()) if half_dist['Searches'].max() > 0 else 1
-            fig_half.update_layout(
-                **_PLOTLY_BASE, height=300, showlegend=False, bargap=0.1,
-                xaxis=dict(
-                    gridcolor="rgba(255,255,255,0.06)",
-                    zerolinecolor="rgba(255,255,255,0.08)",
-                    tickangle=-60,
-                    tickfont=dict(size=8, color="#999"),
-                    tickmode='array',
-                    tickvals=half_dist['half_bucket'].tolist()[::4],
-                    ticktext=half_dist['half_bucket'].tolist()[::4],
-                ),
-                yaxis=dict(**_YAXIS, range=[0, _half_max * 1.35]),
+            # Build full 0-23 with IST hours
+            hour_counts = df_analytics.groupby('hour').size().reset_index(name='Searches')
+            all_hours   = pd.DataFrame({'hour': range(24)})
+            hour_dist   = (
+                all_hours.merge(hour_counts, on='hour', how='left').fillna(0).astype({'Searches': int})
             )
-            st.plotly_chart(fig_half, use_container_width=True, config={
-                "displayModeBar": True,
-                "displaylogo": False,
-                "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
-                "toImageButtonOptions": {"format": "png", "filename": "peak_30min"},
-                "scrollZoom": False,
-            })
+            hour_dist['Label'] = hour_dist['hour'].apply(lambda h: f"{h:02d}:00")
+            peak_hour = int(hour_dist.loc[hour_dist['Searches'].idxmax(), 'hour'])
 
-            # ── ROW 3b: Day × Hour Heatmap ───────────────────────
-            _section_header("🗓️", "Search Heatmap — Day × Hour (IST)", "see which day+time combos you search most", "#a78bfa")
+            # Color bars: highlight peak hour in bright red
+            bar_colors = [
+                '#f87171' if h == peak_hour else '#4a1515'
+                for h in hour_dist['hour']
+            ]
+            bar_opacities = [1.0 if h == peak_hour else 0.65 for h in hour_dist['hour']]
 
-            DAYS_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            DAY_NUM    = {d: i for i, d in enumerate(DAYS_ORDER)}
-
-            if 'weekday' in df_analytics.columns and 'hour' in df_analytics.columns:
-                heat_counts = (
-                    df_analytics.groupby(['weekday', 'hour'])
-                    .size().reset_index(name='Searches')
-                )
-                # Build full 7×24 grid
-                heat_grid = pd.DataFrame(
-                    [(d, h) for d in DAYS_ORDER for h in range(24)],
-                    columns=['weekday', 'hour']
-                ).merge(heat_counts, on=['weekday', 'hour'], how='left').fillna(0)
-                heat_grid['Searches'] = heat_grid['Searches'].astype(int)
-                heat_grid['day_num']  = heat_grid['weekday'].map(DAY_NUM)
-                heat_grid = heat_grid.sort_values(['day_num', 'hour'])
-
-                z_matrix   = heat_grid.pivot(index='weekday', columns='hour', values='Searches').reindex(DAYS_ORDER).fillna(0)
-                hour_labels = [f"{h:02d}:00" for h in range(24)]
-
-                fig_heat = go.Figure(go.Heatmap(
-                    z=z_matrix.values,
-                    x=hour_labels,
-                    y=DAYS_ORDER,
-                    colorscale=[
-                        [0.0,  'rgba(15,15,26,0.8)'],
-                        [0.2,  'rgba(109,40,217,0.35)'],
-                        [0.5,  'rgba(139,92,246,0.65)'],
-                        [0.8,  'rgba(167,139,250,0.85)'],
-                        [1.0,  '#a78bfa'],
-                    ],
-                    showscale=True,
-                    colorbar=dict(
-                        title=dict(text="Searches", font=dict(color="#999", size=11)),
-                        tickfont=dict(color="#999", size=10),
-                        thickness=12, len=0.8,
-                    ),
-                    hovertemplate='<b>%{y} %{x} IST</b><br>Searches: %{z}<extra></extra>',
-                    xgap=2, ygap=2,
+            if hour_orient == "↕ Vertical":
+                fig_hour = go.Figure(go.Bar(
+                    x=hour_dist['Label'],
+                    y=hour_dist['Searches'],
+                    marker_color=bar_colors,
+                    marker_opacity=bar_opacities,
+                    marker_line=dict(color='rgba(248,113,113,0.3)', width=0.5),
+                    text=[str(v) if v > 0 else '' for v in hour_dist['Searches']],
+                    textposition='outside',
+                    textfont=dict(color='#f87171', size=10, family='Inter'),
+                    hovertemplate='<b>%{x} IST</b><br>Searches: %{y}<extra></extra>',
+                    cliponaxis=False,
                 ))
-                fig_heat.update_layout(
-                    **_PLOTLY_BASE, height=300,
-                    xaxis=dict(
-                        **_XAXIS,
-                        tickmode='array',
-                        tickvals=hour_labels[::2],
-                        ticktext=hour_labels[::2],
-                        tickangle=-45,
-                        tickfont=dict(size=9, color="#999"),
-                        title=None,
-                    ),
-                    yaxis=dict(**_YAXIS, tickfont=dict(size=11, color="#ccc"), title=None),
-                    margin=dict(l=80, r=60, t=20, b=50),
+                # Annotation for peak
+                if hour_dist['Searches'].max() > 0:
+                    fig_hour.add_annotation(
+                        x=f"{peak_hour:02d}:00",
+                        y=hour_dist['Searches'].max(),
+                        text=f"⚡ Peak: {peak_hour:02d}:00 IST",
+                        showarrow=True, arrowhead=2, arrowcolor='#f87171',
+                        font=dict(color='#f87171', size=12, family='Inter'),
+                        bgcolor='rgba(248,113,113,0.15)',
+                        bordercolor='#f87171', borderwidth=1, borderpad=5, yshift=10,
+                    )
+                _hour_v_max = int(hour_dist['Searches'].max()) if hour_dist['Searches'].max() > 0 else 1
+                fig_hour.update_layout(
+                    **_PLOTLY_BASE, height=290, showlegend=False, bargap=0.15,
+                    xaxis=dict(**{**_XAXIS, "tickfont": dict(size=10, color="#999"), "tickangle": -45}),
+                    yaxis=dict(**_YAXIS, range=[0, _hour_v_max * 1.3]),
                 )
             else:
-                fig_heat = go.Figure()
-                fig_heat.add_annotation(text="Not enough data yet", x=0.5, y=0.5,
-                                        xref="paper", yref="paper", showarrow=False,
-                                        font=dict(color="#666", size=14))
-                fig_heat.update_layout(**_PLOTLY_BASE, height=280)
-
-            st.plotly_chart(fig_heat, use_container_width=True, config={
+                fig_hour = go.Figure(go.Bar(
+                    x=hour_dist['Searches'],
+                    y=hour_dist['Label'],
+                    orientation='h',
+                    marker_color=bar_colors,
+                    marker_opacity=bar_opacities,
+                    marker_line=dict(color='rgba(248,113,113,0.3)', width=0.5),
+                    text=[str(v) if v > 0 else '' for v in hour_dist['Searches']],
+                    textposition='outside',
+                    textfont=dict(color='#f87171', size=10, family='Inter'),
+                    hovertemplate='<b>%{y} IST</b><br>Searches: %{x}<extra></extra>',
+                    cliponaxis=False,
+                ))
+                if hour_dist['Searches'].max() > 0:
+                    fig_hour.add_annotation(
+                        y=f"{peak_hour:02d}:00",
+                        x=hour_dist['Searches'].max(),
+                        text=f"⚡ Peak: {peak_hour:02d}:00 IST",
+                        showarrow=True, arrowhead=2, arrowcolor='#f87171',
+                        font=dict(color='#f87171', size=12, family='Inter'),
+                        bgcolor='rgba(248,113,113,0.15)',
+                        bordercolor='#f87171', borderwidth=1, borderpad=5, xshift=10,
+                    )
+                _hour_h_max = int(hour_dist['Searches'].max()) if hour_dist['Searches'].max() > 0 else 1
+                fig_hour.update_layout(
+                    **_PLOTLY_BASE, height=600, showlegend=False, bargap=0.15,
+                    xaxis=dict(**_XAXIS, showgrid=True, range=[0, _hour_h_max * 1.25]),
+                    yaxis=dict(**{**_YAXIS, "tickfont": dict(size=10, color="#999")}),
+                )
+            st.plotly_chart(fig_hour, use_container_width=True, config={
                 "displayModeBar": True,
                 "displaylogo": False,
                 "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
-                "toImageButtonOptions": {"format": "png", "filename": "day_hour_heatmap"},
+                "toImageButtonOptions": {"format": "png", "filename": "peak_hour"},
                 "scrollZoom": False,
             })
 
@@ -13935,6 +13852,17 @@ with tab3:
             <p>Salary Range: <span style="color:#34d399; font-weight:700;">{role['range']}</span></p>
         </div>
         """, unsafe_allow_html=True)
+def evaluate_interview_answer(answer: str, question: str = None):
+    """
+    Uses an LLM to strictly evaluate an interview answer.
+    Returns (score out of 5, feedback string).
+    """
+    from llm_manager import call_llm
+    import re
+    import streamlit as st
+
+    # Empty check
+    if not answer.strip():
         return 0, "⚠️ No answer provided."
 
     # 🔹 LLM Prompt (STRICTER)
