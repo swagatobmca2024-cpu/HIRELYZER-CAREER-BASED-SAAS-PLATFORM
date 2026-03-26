@@ -13201,7 +13201,7 @@ def _analytics_dashboard():
             hour_dist   = (
                 all_hours.merge(hour_counts, on='hour', how='left').fillna(0).astype({'Searches': int})
             )
-            hour_dist['Label'] = hour_dist['hour'].apply(lambda h: f"{h:02d}:00")
+            hour_dist['Label'] = hour_dist['hour'].apply(lambda h: f"{h:02d}:00–{h:02d}:59")
             peak_hour = int(hour_dist.loc[hour_dist['Searches'].idxmax(), 'hour'])
 
             # Color bars: highlight peak hour in bright red
