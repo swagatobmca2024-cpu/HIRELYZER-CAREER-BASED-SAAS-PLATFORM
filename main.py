@@ -11613,30 +11613,38 @@ def save_job_search(username, role, location, results):
     if not username:
         return
 
-    try:
-        cur = _pg().cursor()
-        now = datetime.datetime.now(ZoneInfo('UTC'))
-        psycopg2.extras.execute_batch(
-            cur,
-            """
-            INSERT INTO user_jobs (username, role, location, platform, url, timestamp)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            [
-                (username, role, location,
-                 r.get("platform", "Unknown"),
-                 r.get("apply_link", "#"),
-                 now)
-                for r in results
-            ],
-            page_size=50,
-        )
-        # Invalidate cached reads for this user so next fetch is fresh
-        get_saved_job_searches.clear()
-        get_total_saved_searches_count.clear()
-        get_available_platforms.clear()
-    except Exception as e:
-        st.error(f"Error saving job search: {e}")
+    for attempt in range(2):  # retry once on stale connection
+        try:
+            cur = _pg().cursor()
+            now = datetime.datetime.now(ZoneInfo('UTC'))
+            psycopg2.extras.execute_batch(
+                cur,
+                """
+                INSERT INTO user_jobs (username, role, location, platform, url, timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                [
+                    (username, role, location,
+                     r.get("platform", "Unknown"),
+                     r.get("apply_link", "#"),
+                     now)
+                    for r in results
+                ],
+                page_size=50,
+            )
+            # Invalidate ALL cached reads so dashboard updates immediately
+            get_saved_job_searches.clear()
+            get_total_saved_searches_count.clear()
+            get_available_platforms.clear()
+            fetch_analytics_data.clear()   # ← clears both My + Global analytics
+            return  # success — exit retry loop
+        except psycopg2.OperationalError:
+            _get_pg_conn.clear()           # force reconnect on next attempt
+            if attempt == 1:
+                st.error("Database connection lost while saving. Please retry the search.")
+        except Exception as e:
+            st.error(f"Error saving job search: {e}")
+            return
 
 def prune_old_searches(username):
     """Keep only the last 50 saved job searches per user (optional cleanup)."""
@@ -11756,6 +11764,40 @@ def get_available_platforms(username):
     except Exception as e:
         st.error(f"Error fetching platforms: {e}")
         return []
+
+import pandas as pd
+
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_analytics_data(scope_username=None):
+    """
+    Fetch user_jobs rows and convert timestamps to IST (UTC+5:30).
+    Cached for 60 s at MODULE LEVEL so the cache actually persists across reruns.
+    Returns a pandas DataFrame or empty DataFrame on error.
+    """
+    try:
+        cur = _pg().cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        if scope_username:
+            cur.execute(
+                "SELECT role, location, platform, timestamp FROM user_jobs WHERE username = %s",
+                (scope_username,)
+            )
+        else:
+            cur.execute(
+                "SELECT role, location, platform, timestamp FROM user_jobs"
+            )
+        rows = cur.fetchall()
+        df = pd.DataFrame(rows, columns=['role', 'location', 'platform', 'timestamp'])
+        if not df.empty:
+            df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
+            df = df.dropna(subset=['timestamp'])
+            df['timestamp_ist'] = df['timestamp'].dt.tz_convert('Asia/Kolkata')
+            df['date']    = df['timestamp_ist'].dt.date.astype(str)
+            df['hour']    = df['timestamp_ist'].dt.hour
+            df['weekday'] = df['timestamp_ist'].dt.day_name()
+        return df
+    except Exception:
+        return pd.DataFrame(columns=['role', 'location', 'platform', 'timestamp', 'date', 'hour', 'weekday'])
+
 
 def slugify(text: str) -> str:
     """Convert text into a safe slug (lowercase, hyphenated, no special chars)."""
@@ -12754,10 +12796,15 @@ def _job_search_interactive():
 </div>
 """, unsafe_allow_html=True)
 
-    # ============================================================
-    # 📊 SEARCH ANALYTICS DASHBOARD  (v2 — IST time + Advanced UI)
-    # ============================================================
-    import pandas as pd
+# ============================================================
+# 📊 SEARCH ANALYTICS DASHBOARD — standalone @st.fragment
+#    Isolated so chart interactions (orientation toggles, scope
+#    radio) do NOT rerun the job-search form above, and a fresh
+#    search clears fetch_analytics_data cache so this fragment
+#    re-fetches immediately on its next rerun.
+# ============================================================
+@st.fragment
+def _analytics_dashboard():
     import plotly.graph_objects as go
     import plotly.express as px
 
@@ -12798,42 +12845,6 @@ def _job_search_interactive():
         key="analytics_scope_toggle"
     )
     is_my_analytics = analytics_scope == "🙋 My Analytics"
-
-    # ── Helper: fetch analytics data from Supabase with IST conversion ──────────
-    @st.cache_data(ttl=60, show_spinner=False)
-    def fetch_analytics_data(scope_username=None):
-        """
-        Fetch user_jobs rows and convert timestamps to IST (UTC+5:30).
-        Cached for 60 s — prevents hammering the DB on every chart interaction.
-        Returns a pandas DataFrame or empty DataFrame on error.
-        """
-        try:
-            import pandas as pd
-            cur = _pg().cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            if scope_username:
-                cur.execute(
-                    "SELECT role, location, platform, timestamp FROM user_jobs WHERE username = %s",
-                    (scope_username,)
-                )
-            else:
-                cur.execute(
-                    "SELECT role, location, platform, timestamp FROM user_jobs"
-                )
-            rows = cur.fetchall()
-            df = pd.DataFrame(rows, columns=['role', 'location', 'platform', 'timestamp'])
-
-            if not df.empty:
-                # psycopg2 returns TIMESTAMPTZ as tz-aware datetimes; convert to IST
-                df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
-                df = df.dropna(subset=['timestamp'])
-                df['timestamp_ist'] = df['timestamp'].dt.tz_convert('Asia/Kolkata')
-                df['date']    = df['timestamp_ist'].dt.date.astype(str)
-                df['hour']    = df['timestamp_ist'].dt.hour
-                df['weekday'] = df['timestamp_ist'].dt.day_name()
-            return df
-        except Exception:
-            import pandas as pd
-            return pd.DataFrame(columns=['role', 'location', 'platform', 'timestamp', 'date', 'hour', 'weekday'])
 
     # Determine scope
     current_user = st.session_state.username if hasattr(st.session_state, 'username') and st.session_state.username else None
@@ -13263,8 +13274,12 @@ def _job_search_interactive():
     # ============================================================
     # END OF SEARCH ANALYTICS DASHBOARD
     # ============================================================
+# ← _analytics_dashboard() fragment ends here (dedented back to module level)
 
-    # ── Premium Apple-style CSS for Job Search tab ──────────────
+
+# ── Premium Apple-style CSS for Job Search tab ──────────────
+# (Injected once at module level before tab3 is rendered)
+def _inject_tab3_css():
     st.markdown("""
     <style>
     /* ═══════════════════════════════════════════════════════════
@@ -13716,10 +13731,13 @@ def _job_search_interactive():
     }
     </style>
     """, unsafe_allow_html=True)
+# ← end of _inject_tab3_css()
 
 
 with tab3:
+    _inject_tab3_css()
     _job_search_interactive()
+    _analytics_dashboard()          # ← separate fragment: updates instantly after search
     # ---------- Company Lookup by Domain ----------
 
 
