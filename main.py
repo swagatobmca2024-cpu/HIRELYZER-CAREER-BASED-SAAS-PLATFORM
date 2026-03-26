@@ -11454,11 +11454,11 @@ def _get_pg_conn():
     autocommit=True avoids dangling transactions on cached connections.
     """
     conn = psycopg2.connect(
-        host=st.secrets["supabase"]["SUPABASE_HOST"],
-        dbname=st.secrets["supabase"]["SUPABASE_DB"],
-        user=st.secrets["supabase"]["SUPABASE_USER"],
-        password=st.secrets["supabase"]["SUPABASE_PASSWORD"],
-        port=int(st.secrets["supabase"]["SUPABASE_PORT"]),
+        host=st.secrets["SUPABASE_HOST"],
+        dbname=st.secrets["SUPABASE_DB"],
+        user=st.secrets["SUPABASE_USER"],
+        password=st.secrets["SUPABASE_PASSWORD"],
+        port=int(st.secrets["SUPABASE_PORT"]),
         sslmode="require",
         connect_timeout=10,
     )
