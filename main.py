@@ -21135,42 +21135,21 @@ if tab5:
 			
 			df_sorted = df.sort_values(by=sort_column, ascending=(sort_order == "Ascending"))
 			
-			# Display with enhanced formatting + zoom/full-view toggle
-			if "zoom_main_table" not in st.session_state:
-				st.session_state.zoom_main_table = False
-
-			col_tbl1, col_tbl2 = st.columns([6, 1])
-			with col_tbl1:
-				st.markdown(f"**Showing {len(df_sorted)} rows**")
-			with col_tbl2:
-				btn_label = "🔲 Collapse" if st.session_state.zoom_main_table else "⛶ Full View"
-				if st.button(btn_label, key="zoom_main_table_btn", use_container_width=True):
-					st.session_state.zoom_main_table = not st.session_state.zoom_main_table
-					st.rerun()
-
-			styled_df = df_sorted.style.format({
-				'ats_score': '{:.0f}',
-				'edu_score': '{:.0f}',
-				'exp_score': '{:.0f}',
-				'skills_score': '{:.0f}',
-				'lang_score': '{:.0f}',
-				'keyword_score': '{:.0f}',
-				'format_score': '{:.0f}',
-				'bias_score': '{:.3f}'
-			})
-
-			if st.session_state.zoom_main_table:
-				st.dataframe(
-					styled_df,
-					use_container_width=True,
-					height=min(50 + len(df_sorted) * 35, 800)
-				)
-			else:
-				st.dataframe(
-					styled_df,
-					use_container_width=True,
-					height=400
-				)
+			# Display with enhanced formatting
+			st.dataframe(
+				df_sorted.style.format({
+					'ats_score': '{:.0f}',
+					'edu_score': '{:.0f}',
+					'exp_score': '{:.0f}',
+					'skills_score': '{:.0f}',
+					'lang_score': '{:.0f}',
+					'keyword_score': '{:.0f}',
+					'format_score': '{:.0f}',
+					'bias_score': '{:.3f}'
+				}),
+				use_container_width=True,
+				height=400
+			)
 
 			# Enhanced Export Options
 			col1, col2 = st.columns(2)
@@ -21597,25 +21576,12 @@ if tab5:
 					# Enhanced flagged candidates display
 					display_df = flagged_df.copy()
 					display_df = display_df.sort_values('bias_score', ascending=False)
-
-					if "zoom_flagged_table" not in st.session_state:
-						st.session_state.zoom_flagged_table = False
-
-					col_f1, col_f2 = st.columns([6, 1])
-					with col_f1:
-						st.markdown(f"**Showing {len(display_df)} flagged rows**")
-					with col_f2:
-						f_btn_label = "🔲 Collapse" if st.session_state.zoom_flagged_table else "⛶ Full View"
-						if st.button(f_btn_label, key="zoom_flagged_table_btn", use_container_width=True):
-							st.session_state.zoom_flagged_table = not st.session_state.zoom_flagged_table
-							st.rerun()
-
-					styled_flagged = display_df.style.format({'bias_score': '{:.3f}', 'ats_score': '{:.0f}'})
-					if st.session_state.zoom_flagged_table:
-						st.dataframe(styled_flagged, use_container_width=True,
-									height=min(50 + len(display_df) * 35, 800))
-					else:
-						st.dataframe(styled_flagged, use_container_width=True, height=300)
+					
+					st.dataframe(
+						display_df.style.format({'bias_score': '{:.3f}', 'ats_score': '{:.0f}'}),
+						use_container_width=True,
+						height=300
+					)
 					
 					# Flagged candidates statistics
 					col1, col2, col3 = st.columns(3)
@@ -21653,26 +21619,12 @@ if tab5:
 						st.plotly_chart(fig, use_container_width=True)
 					
 					# Detailed performance table
-					if "zoom_perf_table" not in st.session_state:
-						st.session_state.zoom_perf_table = False
-
-					col_p1, col_p2 = st.columns([6, 1])
-					with col_p1:
-						st.markdown("**Detailed Performance Metrics**")
-					with col_p2:
-						p_btn_label = "🔲 Collapse" if st.session_state.zoom_perf_table else "⛶ Full View"
-						if st.button(p_btn_label, key="zoom_perf_table_btn", use_container_width=True):
-							st.session_state.zoom_perf_table = not st.session_state.zoom_perf_table
-							st.rerun()
-
-					styled_perf = df_performance.style.format({
-						col: '{:.2f}' for col in performance_cols + ['avg_bias_score']
-					})
-					if st.session_state.zoom_perf_table:
-						st.dataframe(styled_perf, use_container_width=True,
-									height=min(50 + len(df_performance) * 35, 800))
-					else:
-						st.dataframe(styled_perf, use_container_width=True)
+					st.dataframe(
+						df_performance.style.format({
+							col: '{:.2f}' for col in performance_cols + ['avg_bias_score']
+						}),
+						use_container_width=True
+					)
 				else:
 					st.info("ℹ️ No detailed performance data available.")
 			except Exception as e:
