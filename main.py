@@ -11430,16 +11430,56 @@ def get_companies_by_industry(industry):
 # Sample job search function
 import uuid
 import urllib.parse
-import sqlite3
 import datetime
 import streamlit as st
 from zoneinfo import ZoneInfo
 import requests
 import re
 
+# ── psycopg2 for Supabase PostgreSQL ──────────────────────────────────────────
+import psycopg2
+import psycopg2.extras
+
 # ✅ RapidAPI Configuration (from Streamlit secrets)
 RAPID_API_KEY = st.secrets["rapidapi"]["key"]
 RAPID_API_HOST = st.secrets["rapidapi"]["host"]
+
+# ── Supabase / PostgreSQL connection (cached for the entire app lifetime) ─────
+@st.cache_resource(show_spinner=False)
+def _get_pg_conn():
+    """
+    Return a *persistent* psycopg2 connection that is reused across reruns.
+    st.cache_resource guarantees this is created only once per server process,
+    eliminating the repeated-connection anti-pattern that plagues Streamlit apps.
+    autocommit=True avoids dangling transactions on cached connections.
+    """
+    conn = psycopg2.connect(
+        host=st.secrets["supabase"]["SUPABASE_HOST"],
+        dbname=st.secrets["supabase"]["SUPABASE_DB"],
+        user=st.secrets["supabase"]["SUPABASE_USER"],
+        password=st.secrets["supabase"]["SUPABASE_PASSWORD"],
+        port=int(st.secrets["supabase"]["SUPABASE_PORT"]),
+        sslmode="require",
+        connect_timeout=10,
+    )
+    conn.autocommit = True
+    return conn
+
+
+def _pg():
+    """
+    Return the cached connection, transparently reconnecting if the server
+    closed the socket (e.g. after idle timeout on Supabase's pooler).
+    """
+    conn = _get_pg_conn()
+    try:
+        # lightweight liveness probe — raises if connection is dead
+        conn.cursor().execute("SELECT 1")
+    except Exception:
+        # evict stale cached resource so next call re-connects
+        _get_pg_conn.clear()
+        conn = _get_pg_conn()
+    return conn
 
 def clean_html(raw_html: str) -> str:
     """Remove HTML tags, comments and decode HTML entities from API descriptions."""
@@ -11542,175 +11582,177 @@ def unified_search(job_role, location, experience_level=None, job_type=None, fou
 
 # Database functions for job search history
 def init_job_search_db():
-    """Initialize the job search database and create user_jobs table if not exists"""
+    """
+    Ensure user_jobs table exists in Supabase PostgreSQL.
+    Uses SERIAL (auto-increment) and TIMESTAMPTZ so all timestamps are UTC-aware.
+    Safe to call on every startup — CREATE TABLE IF NOT EXISTS is idempotent.
+    """
     try:
-        conn = sqlite3.connect('resume_data.db')
-        cursor = conn.cursor()
-
-        cursor.execute('''
+        cur = _pg().cursor()
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS user_jobs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL,
-                role TEXT NOT NULL,
-                location TEXT NOT NULL,
-                platform TEXT NOT NULL,
-                url TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                id        SERIAL PRIMARY KEY,
+                username  TEXT        NOT NULL,
+                role      TEXT        NOT NULL,
+                location  TEXT        NOT NULL,
+                platform  TEXT        NOT NULL,
+                url       TEXT        NOT NULL,
+                timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
-        ''')
-
-        conn.commit()
-        conn.close()
+        """)
+        # Index for fast per-user lookups (ignored if already exists)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_jobs_username
+            ON user_jobs (username)
+        """)
     except Exception as e:
         st.error(f"Database initialization error: {e}")
 
 def save_job_search(username, role, location, results):
-    """Save job search results to database for logged-in user"""
+    """Save job search results to Supabase PostgreSQL for the logged-in user."""
     if not username:
         return
 
     try:
-        conn = sqlite3.connect('resume_data.db')
-        cursor = conn.cursor()
-
-        for result in results:
-            # Extract platform name from title or use platform field
-            platform = result.get("platform", "Unknown")
-            url = result.get("apply_link", "#")
-
-            cursor.execute('''
-                INSERT INTO user_jobs (username, role, location, platform, url, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (username, role, location, platform, url, datetime.datetime.now()))
-
-        conn.commit()
-        conn.close()
-
+        cur = _pg().cursor()
+        now = datetime.datetime.now(ZoneInfo('UTC'))
+        psycopg2.extras.execute_batch(
+            cur,
+            """
+            INSERT INTO user_jobs (username, role, location, platform, url, timestamp)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            [
+                (username, role, location,
+                 r.get("platform", "Unknown"),
+                 r.get("apply_link", "#"),
+                 now)
+                for r in results
+            ],
+            page_size=50,
+        )
+        # Invalidate cached reads for this user so next fetch is fresh
+        get_saved_job_searches.clear()
+        get_total_saved_searches_count.clear()
+        get_available_platforms.clear()
     except Exception as e:
         st.error(f"Error saving job search: {e}")
 
 def prune_old_searches(username):
-    """Keep only the last 50 saved job searches per user (optional cleanup)"""
+    """Keep only the last 50 saved job searches per user (optional cleanup)."""
     if not username:
         return
 
     try:
-        conn = sqlite3.connect('resume_data.db')
-        cursor = conn.cursor()
-
-        # Delete all but the most recent 50 searches for this user
-        cursor.execute('''
+        cur = _pg().cursor()
+        cur.execute("""
             DELETE FROM user_jobs
-            WHERE username = ? AND id NOT IN (
+            WHERE username = %s AND id NOT IN (
                 SELECT id FROM user_jobs
-                WHERE username = ?
+                WHERE username = %s
                 ORDER BY timestamp DESC
                 LIMIT 50
             )
-        ''', (username, username))
-
-        conn.commit()
-        conn.close()
-
+        """, (username, username))
+        get_saved_job_searches.clear()
+        get_total_saved_searches_count.clear()
     except Exception as e:
         st.error(f"Error pruning old searches: {e}")
 
 def delete_saved_job_search(search_id):
-    """Delete a saved job search by its ID"""
+    """Delete a saved job search by its ID."""
     try:
-        conn = sqlite3.connect('resume_data.db')
-        cursor = conn.cursor()
-
-        cursor.execute('DELETE FROM user_jobs WHERE id = ?', (search_id,))
-
-        conn.commit()
-        conn.close()
-
+        cur = _pg().cursor()
+        cur.execute("DELETE FROM user_jobs WHERE id = %s", (search_id,))
+        get_saved_job_searches.clear()
+        get_total_saved_searches_count.clear()
+        get_available_platforms.clear()
     except Exception as e:
         st.error(f"Error deleting job search: {e}")
 
+@st.cache_data(ttl=30, show_spinner=False)
 def get_saved_job_searches(username, limit=10, offset=0, platform_filter=None):
-    """Get saved job searches for a user with filtering and pagination"""
+    """
+    Get saved job searches for a user with filtering and pagination.
+    Results are cached for 30 s to prevent repeated DB calls on widget interaction /
+    Streamlit reruns that don't change the arguments.
+    """
     if not username:
         return []
 
     try:
-        conn = sqlite3.connect('resume_data.db')
-        cursor = conn.cursor()
+        cur = _pg().cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-        # Build the query with optional platform filter
         if platform_filter and platform_filter != "All":
-            cursor.execute('''
+            cur.execute("""
                 SELECT id, role, location, platform, url, timestamp
                 FROM user_jobs
-                WHERE username = ? AND platform = ?
+                WHERE username = %s AND platform = %s
                 ORDER BY timestamp DESC
-                LIMIT ? OFFSET ?
-            ''', (username, platform_filter, limit, offset))
+                LIMIT %s OFFSET %s
+            """, (username, platform_filter, limit, offset))
         else:
-            cursor.execute('''
+            cur.execute("""
                 SELECT id, role, location, platform, url, timestamp
                 FROM user_jobs
-                WHERE username = ?
+                WHERE username = %s
                 ORDER BY timestamp DESC
-                LIMIT ? OFFSET ?
-            ''', (username, limit, offset))
+                LIMIT %s OFFSET %s
+            """, (username, limit, offset))
 
-        results = cursor.fetchall()
-        conn.close()
-
+        rows = cur.fetchall()
         return [
             {
-                "id": row[0],
-                "role": row[1],
-                "location": row[2],
-                "platform": row[3],
-                "url": row[4],
-                "timestamp": row[5]
+                "id":        row["id"],
+                "role":      row["role"],
+                "location":  row["location"],
+                "platform":  row["platform"],
+                "url":       row["url"],
+                # Normalise to a plain UTC-aware datetime for downstream formatting
+                "timestamp": row["timestamp"].astimezone(ZoneInfo('UTC')) if row["timestamp"] else None,
             }
-            for row in results
+            for row in rows
         ]
     except Exception as e:
         st.error(f"Error fetching saved searches: {e}")
         return []
 
+@st.cache_data(ttl=30, show_spinner=False)
 def get_total_saved_searches_count(username, platform_filter=None):
-    """Get total count of saved searches for pagination"""
+    """Get total count of saved searches for pagination (cached 30 s)."""
     if not username:
         return 0
 
     try:
-        conn = sqlite3.connect('resume_data.db')
-        cursor = conn.cursor()
-
+        cur = _pg().cursor()
         if platform_filter and platform_filter != "All":
-            cursor.execute('SELECT COUNT(*) FROM user_jobs WHERE username = ? AND platform = ?', (username, platform_filter))
+            cur.execute(
+                "SELECT COUNT(*) FROM user_jobs WHERE username = %s AND platform = %s",
+                (username, platform_filter)
+            )
         else:
-            cursor.execute('SELECT COUNT(*) FROM user_jobs WHERE username = ?', (username,))
-
-        count = cursor.fetchone()[0]
-        conn.close()
-
-        return count
+            cur.execute(
+                "SELECT COUNT(*) FROM user_jobs WHERE username = %s",
+                (username,)
+            )
+        return cur.fetchone()[0]
     except Exception as e:
         st.error(f"Error getting search count: {e}")
         return 0
 
+@st.cache_data(ttl=60, show_spinner=False)
 def get_available_platforms(username):
-    """Get list of platforms that the user has searched on"""
+    """Get distinct platforms the user has searched on (cached 60 s)."""
     if not username:
         return []
 
     try:
-        conn = sqlite3.connect('resume_data.db')
-        cursor = conn.cursor()
-
-        cursor.execute('SELECT DISTINCT platform FROM user_jobs WHERE username = ? ORDER BY platform', (username,))
-
-        platforms = [row[0] for row in cursor.fetchall()]
-        conn.close()
-
-        return platforms
+        cur = _pg().cursor()
+        cur.execute(
+            "SELECT DISTINCT platform FROM user_jobs WHERE username = %s ORDER BY platform",
+            (username,)
+        )
+        return [row[0] for row in cur.fetchall()]
     except Exception as e:
         st.error(f"Error fetching platforms: {e}")
         return []
@@ -12013,8 +12055,13 @@ def add_hyperlink(paragraph, url, text, color="0000FF", underline=True):
     paragraph._p.append(hyperlink)
     return hyperlink
 
-# Initialize database
-init_job_search_db()
+# Initialize database — runs only once per server process.
+# The flag lives in st.session_state so it is skipped on all subsequent reruns
+# within the same browser session, and the @st.cache_resource connection already
+# ensures the psycopg2 connect() call itself is not repeated either.
+if not st.session_state.get("_db_initialized"):
+    init_job_search_db()
+    st.session_state["_db_initialized"] = True
 
 # Your existing tab3 code with enhanced CSS styling
 
@@ -12596,12 +12643,13 @@ def _job_search_interactive():
                     st.markdown(f"**Showing {start_index}-{end_index} of {filtered_count} searches**")
 
                 for search in saved_searches:
-                    # Format timestamp - Convert UTC to IST
-                    timestamp = datetime.datetime.strptime(search["timestamp"], "%Y-%m-%d %H:%M:%S.%f")
-                    # Assume stored timestamp is in UTC, convert to IST
-                    timestamp_utc = timestamp.replace(tzinfo=ZoneInfo('UTC'))
-                    timestamp_ist = timestamp_utc.astimezone(ZoneInfo('Asia/Kolkata'))
-                    formatted_time = timestamp_ist.strftime("%b %d, %Y at %I:%M %p IST")
+                    # timestamp is already a UTC-aware datetime from get_saved_job_searches
+                    timestamp_utc = search["timestamp"]
+                    if timestamp_utc is None:
+                        formatted_time = "Unknown time"
+                    else:
+                        timestamp_ist = timestamp_utc.astimezone(ZoneInfo('Asia/Kolkata'))
+                        formatted_time = timestamp_ist.strftime("%b %d, %Y at %I:%M %p IST")
 
                     # Platform styling
                     platform_lower = search["platform"].lower()
@@ -12751,32 +12799,40 @@ def _job_search_interactive():
     )
     is_my_analytics = analytics_scope == "🙋 My Analytics"
 
-    # ── Helper: fetch data from DB with IST conversion ───────────
+    # ── Helper: fetch analytics data from Supabase with IST conversion ──────────
+    @st.cache_data(ttl=60, show_spinner=False)
     def fetch_analytics_data(scope_username=None):
         """
         Fetch user_jobs rows and convert timestamps to IST (UTC+5:30).
+        Cached for 60 s — prevents hammering the DB on every chart interaction.
         Returns a pandas DataFrame or empty DataFrame on error.
         """
         try:
-            conn = sqlite3.connect('resume_data.db')
+            import pandas as pd
+            cur = _pg().cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             if scope_username:
-                query = "SELECT role, location, platform, timestamp FROM user_jobs WHERE username = ?"
-                df = pd.read_sql_query(query, conn, params=(scope_username,))
+                cur.execute(
+                    "SELECT role, location, platform, timestamp FROM user_jobs WHERE username = %s",
+                    (scope_username,)
+                )
             else:
-                query = "SELECT role, location, platform, timestamp FROM user_jobs"
-                df = pd.read_sql_query(query, conn)
-            conn.close()
+                cur.execute(
+                    "SELECT role, location, platform, timestamp FROM user_jobs"
+                )
+            rows = cur.fetchall()
+            df = pd.DataFrame(rows, columns=['role', 'location', 'platform', 'timestamp'])
 
             if not df.empty:
-                # Parse as UTC then convert to IST (+05:30) — fixes 5-6 hour offset
-                df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce', utc=True)
+                # psycopg2 returns TIMESTAMPTZ as tz-aware datetimes; convert to IST
+                df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
                 df = df.dropna(subset=['timestamp'])
                 df['timestamp_ist'] = df['timestamp'].dt.tz_convert('Asia/Kolkata')
-                df['date'] = df['timestamp_ist'].dt.date.astype(str)
-                df['hour'] = df['timestamp_ist'].dt.hour          # IST hour (0-23)
-                df['weekday'] = df['timestamp_ist'].dt.day_name() # IST weekday
+                df['date']    = df['timestamp_ist'].dt.date.astype(str)
+                df['hour']    = df['timestamp_ist'].dt.hour
+                df['weekday'] = df['timestamp_ist'].dt.day_name()
             return df
         except Exception:
+            import pandas as pd
             return pd.DataFrame(columns=['role', 'location', 'platform', 'timestamp', 'date', 'hour', 'weekday'])
 
     # Determine scope
@@ -13200,7 +13256,7 @@ def _job_search_interactive():
             ist_now = datetime.datetime.now(ZoneInfo('Asia/Kolkata')).strftime("%b %d, %Y %I:%M %p IST")
             st.markdown(f"""
             <div class="analytics-footer">
-                {total_searches:,} records · {scope_label} · Updated {ist_now} · resume_data.db
+                {total_searches:,} records · {scope_label} · Updated {ist_now} · Supabase PostgreSQL
             </div>
             """, unsafe_allow_html=True)
 
