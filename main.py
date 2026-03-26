@@ -21327,7 +21327,7 @@ if tab5:
 				login_clicked = st.button("Sign In", use_container_width=True)
 
 				if login_clicked:
-					valid_email = "admin@example.com"
+					valid_email = "swagato_bmca2024@msit.edu.in"
 					valid_password = "Swagato@2002"
 
 					if email == valid_email and password == valid_password:
