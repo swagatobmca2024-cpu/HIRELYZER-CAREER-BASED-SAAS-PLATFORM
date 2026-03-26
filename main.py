@@ -20877,86 +20877,433 @@ if tab5:
 				st.error(f"Error loading candidates: {e}")
 				return pd.DataFrame()
 
-		# -------- Glassmorphism Styles with Shimmer --------
+		# -------- Apple-Level Design System --------
 		st.markdown("""
 		<style>
-		.glass-box {
-			background: rgba(10, 20, 40, 0.55);
-			border-radius: 18px;
-			padding: 2rem;
-			backdrop-filter: blur(14px);
-			border: 1px solid rgba(0, 200, 255, 0.35);
-			box-shadow: 0 8px 32px rgba(0, 200, 255, 0.25);
-			position: relative;
-			overflow: hidden;
+		@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+		:root {
+			--bg-base:       #08080E;
+			--bg-surface:    #111118;
+			--bg-elevated:   #18181F;
+			--border-subtle: rgba(255,255,255,0.07);
+			--border-mid:    rgba(255,255,255,0.12);
+			--border-focus:  rgba(255,255,255,0.35);
+			--accent:        #3B82F6;
+			--accent-dim:    rgba(59,130,246,0.15);
+			--accent-border: rgba(59,130,246,0.35);
+			--text-primary:  #F0F0F5;
+			--text-secondary:#9899A6;
+			--text-muted:    #55566A;
+			--success:       #22C55E;
+			--danger:        #EF4444;
+			--warn:          #F59E0B;
+			--radius-sm:     8px;
+			--radius-md:     12px;
+			--radius-lg:     16px;
+		}
+
+		/* ── Global font override ── */
+		html, body, [class*="css"], .stApp, .stMarkdown, label,
+		.stTextInput input, .stSelectbox, .stButton button,
+		.stRadio, .stSlider, .stMetric, .stDataFrame {
+			font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+		}
+
+		/* ── App background ── */
+		.stApp {
+			background: var(--bg-base) !important;
+		}
+		.block-container {
+			padding-top: 2rem !important;
+			padding-bottom: 4rem !important;
+		}
+
+		/* ── Hero header box ── */
+		.ap-hero {
+			background: var(--bg-surface);
+			border: 1px solid var(--border-subtle);
+			border-top: 1px solid var(--border-mid);
+			border-radius: var(--radius-lg);
+			padding: 2.5rem 2rem;
 			text-align: center;
 			margin-bottom: 2rem;
+			position: relative;
+			overflow: hidden;
 		}
-		.glass-box::before {
+		.ap-hero::after {
 			content: "";
 			position: absolute;
-			top: -50%;
-			left: -50%;
-			width: 200%;
-			height: 200%;
-			background: linear-gradient(
-				120deg,
-				rgba(255,255,255,0.15) 0%,
-				rgba(255,255,255,0.05) 40%,
-				transparent 60%
-			);
-			transform: rotate(25deg);
-			animation: shimmer 6s infinite;
+			inset: 0;
+			background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(59,130,246,0.08) 0%, transparent 70%);
+			pointer-events: none;
 		}
-		@keyframes shimmer {
-			0% { top: -50%; left: -50%; }
-			50% { top: 100%; left: 100%; }
-			100% { top: -50%; left: -50%; }
+		.ap-hero .ap-eyebrow {
+			font-size: 0.7rem;
+			font-weight: 500;
+			letter-spacing: 0.18em;
+			text-transform: uppercase;
+			color: var(--accent);
+			margin-bottom: 0.6rem;
 		}
-		.glass-box h1, .glass-box h2 {
-			color: #4da6ff;
-			text-shadow: 0 0 12px rgba(0,200,255,0.7);
-			margin: 0 0 0.5rem 0;
+		.ap-hero h1 {
+			font-size: 1.75rem;
 			font-weight: 600;
+			color: var(--text-primary);
+			margin: 0 0 0.4rem 0;
+			letter-spacing: -0.02em;
 		}
-		.glass-box p {
-			color: #cce6ff;
+		.ap-hero p {
+			color: var(--text-secondary);
 			margin: 0;
-			font-size: 0.95rem;
+			font-size: 0.9rem;
+			font-weight: 400;
 		}
 
-		/* Glassy input fields */
-		.stTextInput > div > div > input {
-			background: rgba(255, 255, 255, 0.08) !important;
-			border: 1px solid rgba(0, 200, 255, 0.3) !important;
-			border-radius: 12px !important;
-			padding: 10px !important;
-			color: #e6f7ff !important;
-			font-weight: 500 !important;
-			backdrop-filter: blur(10px) !important;
+		/* ── Login card ── */
+		.ap-login {
+			background: var(--bg-surface);
+			border: 1px solid var(--border-subtle);
+			border-radius: var(--radius-lg);
+			padding: 2.5rem 2rem;
+			text-align: center;
+			margin-bottom: 1.5rem;
 		}
-		.stTextInput > div > div > input:focus {
-			border: 1px solid rgba(0, 200, 255, 0.8) !important;
-			box-shadow: 0 0 12px rgba(0, 200, 255, 0.6) !important;
+		.ap-login .ap-eyebrow {
+			font-size: 0.7rem;
+			font-weight: 500;
+			letter-spacing: 0.18em;
+			text-transform: uppercase;
+			color: var(--accent);
+			margin-bottom: 0.6rem;
+		}
+		.ap-login h2 {
+			font-size: 1.4rem;
+			font-weight: 600;
+			color: var(--text-primary);
+			margin: 0 0 0.35rem 0;
+			letter-spacing: -0.01em;
+		}
+		.ap-login p {
+			color: var(--text-secondary);
+			margin: 0;
+			font-size: 0.875rem;
+		}
+
+		/* ── Section heading ── */
+		.ap-section {
+			display: flex;
+			align-items: center;
+			gap: 0.75rem;
+			margin: 2.5rem 0 1.25rem 0;
+		}
+		.ap-section-bar {
+			width: 3px;
+			height: 20px;
+			background: var(--accent);
+			border-radius: 2px;
+			flex-shrink: 0;
+		}
+		.ap-section-text {
+			font-size: 0.65rem;
+			font-weight: 500;
+			letter-spacing: 0.16em;
+			text-transform: uppercase;
+			color: var(--text-muted);
+			line-height: 1;
+		}
+		.ap-section-title {
+			font-size: 1.1rem;
+			font-weight: 600;
+			color: var(--text-primary);
+			letter-spacing: -0.015em;
+			line-height: 1.2;
+		}
+
+		/* ── Divider ── */
+		.ap-divider {
+			border: none;
+			border-top: 1px solid var(--border-subtle);
+			margin: 2.5rem 0;
+		}
+
+		/* ── Metric cards ── */
+		.ap-metric-row {
+			display: grid;
+			grid-template-columns: repeat(4, 1fr);
+			gap: 1px;
+			background: var(--border-subtle);
+			border: 1px solid var(--border-subtle);
+			border-radius: var(--radius-md);
+			overflow: hidden;
+			margin-bottom: 1.5rem;
+		}
+		.ap-metric-row.two-col { grid-template-columns: repeat(2, 1fr); }
+		.ap-metric-row.three-col { grid-template-columns: repeat(3, 1fr); }
+		.ap-metric-row.six-col { grid-template-columns: repeat(6, 1fr); }
+		.ap-metric {
+			background: var(--bg-surface);
+			padding: 1.25rem 1.25rem 1rem;
+		}
+		.ap-metric-label {
+			font-size: 0.68rem;
+			font-weight: 500;
+			letter-spacing: 0.1em;
+			text-transform: uppercase;
+			color: var(--text-muted);
+			margin-bottom: 0.4rem;
+		}
+		.ap-metric-value {
+			font-family: 'DM Mono', monospace !important;
+			font-size: 1.6rem;
+			font-weight: 500;
+			color: var(--text-primary);
+			letter-spacing: -0.03em;
+			line-height: 1;
+		}
+		.ap-metric-value.accent { color: var(--accent); }
+		.ap-metric-value.success { color: var(--success); }
+		.ap-metric-value.warn { color: var(--warn); }
+
+		/* ── Domain cards (refined) ── */
+		.ap-domain-card {
+			background: var(--bg-surface);
+			border: 1px solid var(--border-subtle);
+			border-radius: var(--radius-md);
+			padding: 1rem 1.25rem;
+			margin-bottom: 0.6rem;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			transition: border-color 0.2s ease, background 0.2s ease;
+		}
+		.ap-domain-card:hover {
+			border-color: var(--border-mid);
+			background: var(--bg-elevated);
+		}
+		.ap-domain-left {
+			display: flex;
+			align-items: center;
+			gap: 1rem;
+			flex: 1;
+		}
+		.ap-domain-rank {
+			font-family: 'DM Mono', monospace !important;
+			font-size: 0.7rem;
+			color: var(--text-muted);
+			width: 20px;
+			text-align: right;
+			flex-shrink: 0;
+		}
+		.ap-domain-bar-wrap {
+			flex: 1;
+			height: 3px;
+			background: var(--border-subtle);
+			border-radius: 2px;
+			overflow: hidden;
+			max-width: 120px;
+		}
+		.ap-domain-bar-fill {
+			height: 100%;
+			background: var(--accent);
+			border-radius: 2px;
+			opacity: 0.7;
+		}
+		.ap-domain-name {
+			font-size: 0.875rem;
+			font-weight: 500;
+			color: var(--text-primary);
+			min-width: 140px;
+		}
+		.ap-domain-right {
+			display: flex;
+			gap: 2rem;
+			align-items: center;
+		}
+		.ap-domain-stat {
+			text-align: right;
+		}
+		.ap-domain-stat-label {
+			font-size: 0.6rem;
+			text-transform: uppercase;
+			letter-spacing: 0.1em;
+			color: var(--text-muted);
+			margin-bottom: 2px;
+		}
+		.ap-domain-stat-val {
+			font-family: 'DM Mono', monospace !important;
+			font-size: 0.95rem;
+			font-weight: 500;
+			color: var(--text-primary);
+		}
+
+		/* ── Info / error banners ── */
+		.ap-banner {
+			border-radius: var(--radius-sm);
+			padding: 0.75rem 1rem;
+			font-size: 0.875rem;
+			margin: 0.5rem 0;
+			border: 1px solid;
+		}
+		.ap-banner.error {
+			background: rgba(239,68,68,0.08);
+			border-color: rgba(239,68,68,0.25);
+			color: #FCA5A5;
+		}
+		.ap-banner.info {
+			background: rgba(59,130,246,0.07);
+			border-color: var(--accent-border);
+			color: #93C5FD;
+		}
+
+		/* ── Streamlit widget overrides ── */
+		/* Input */
+		.stTextInput > div > div > input,
+		.stNumberInput > div > div > input {
+			background: var(--bg-elevated) !important;
+			border: 1px solid var(--border-mid) !important;
+			border-radius: var(--radius-sm) !important;
+			color: var(--text-primary) !important;
+			font-size: 0.875rem !important;
+			padding: 0.55rem 0.75rem !important;
+			transition: border-color 0.15s ease !important;
+		}
+		.stTextInput > div > div > input:focus,
+		.stNumberInput > div > div > input:focus {
+			border-color: var(--border-focus) !important;
+			box-shadow: none !important;
 			outline: none !important;
 		}
-
-		/* Glassy button */
+		/* Label */
+		.stTextInput label, .stSelectbox label,
+		.stDateInput label, .stNumberInput label,
+		.stSlider label, .stRadio label {
+			font-size: 0.75rem !important;
+			font-weight: 500 !important;
+			letter-spacing: 0.06em !important;
+			color: var(--text-secondary) !important;
+			text-transform: uppercase !important;
+		}
+		/* Selectbox */
+		.stSelectbox > div > div {
+			background: var(--bg-elevated) !important;
+			border: 1px solid var(--border-mid) !important;
+			border-radius: var(--radius-sm) !important;
+			color: var(--text-primary) !important;
+		}
+		/* Radio */
+		.stRadio > div {
+			gap: 0.5rem !important;
+		}
+		.stRadio > div > label {
+			background: var(--bg-elevated) !important;
+			border: 1px solid var(--border-mid) !important;
+			border-radius: var(--radius-sm) !important;
+			padding: 0.35rem 0.8rem !important;
+			font-size: 0.8rem !important;
+			color: var(--text-secondary) !important;
+			text-transform: none !important;
+			letter-spacing: 0 !important;
+			transition: all 0.15s ease !important;
+			cursor: pointer !important;
+		}
+		.stRadio > div > label:has(input:checked) {
+			background: var(--accent-dim) !important;
+			border-color: var(--accent-border) !important;
+			color: #93C5FD !important;
+		}
+		/* Buttons */
 		.stButton > button {
-			background: rgba(0, 200, 255, 0.15);
-			border: 1px solid rgba(0, 200, 255, 0.4);
-			border-radius: 12px;
-			color: #e6f7ff;
-			padding: 0.6rem 1.2rem;
-			font-weight: bold;
-			backdrop-filter: blur(8px);
-			transition: all 0.3s ease;
+			background: var(--bg-elevated) !important;
+			border: 1px solid var(--border-mid) !important;
+			border-radius: var(--radius-sm) !important;
+			color: var(--text-primary) !important;
+			font-size: 0.8rem !important;
+			font-weight: 500 !important;
+			letter-spacing: 0.02em !important;
+			padding: 0.5rem 1rem !important;
+			transition: background 0.15s ease, border-color 0.15s ease !important;
+			box-shadow: none !important;
 		}
 		.stButton > button:hover {
-			background: rgba(0, 200, 255, 0.3);
-			box-shadow: 0 0 16px rgba(0, 200, 255, 0.7);
-			transform: translateY(-2px);
+			background: var(--bg-surface) !important;
+			border-color: var(--border-focus) !important;
+			transform: none !important;
+			box-shadow: none !important;
 		}
+		/* Download button — accent fill */
+		.stDownloadButton > button {
+			background: var(--accent-dim) !important;
+			border: 1px solid var(--accent-border) !important;
+			border-radius: var(--radius-sm) !important;
+			color: #93C5FD !important;
+			font-size: 0.8rem !important;
+			font-weight: 500 !important;
+			padding: 0.5rem 1rem !important;
+			transition: background 0.15s ease !important;
+		}
+		.stDownloadButton > button:hover {
+			background: rgba(59,130,246,0.25) !important;
+		}
+		/* Slider */
+		.stSlider > div > div > div > div {
+			background: var(--accent) !important;
+		}
+		/* Expander */
+		.streamlit-expanderHeader {
+			background: var(--bg-surface) !important;
+			border: 1px solid var(--border-subtle) !important;
+			border-radius: var(--radius-sm) !important;
+			color: var(--text-secondary) !important;
+			font-size: 0.825rem !important;
+			font-weight: 500 !important;
+		}
+		.streamlit-expanderContent {
+			background: var(--bg-surface) !important;
+			border: 1px solid var(--border-subtle) !important;
+			border-top: none !important;
+			border-radius: 0 0 var(--radius-sm) var(--radius-sm) !important;
+		}
+		/* Dataframe */
+		.stDataFrame {
+			border: 1px solid var(--border-subtle) !important;
+			border-radius: var(--radius-md) !important;
+			overflow: hidden !important;
+		}
+		/* Metrics (default Streamlit) — hide default, we use custom */
+		[data-testid="metric-container"] {
+			background: var(--bg-surface) !important;
+			border: 1px solid var(--border-subtle) !important;
+			border-radius: var(--radius-md) !important;
+			padding: 1rem !important;
+		}
+		[data-testid="metric-container"] label {
+			font-size: 0.68rem !important;
+			letter-spacing: 0.1em !important;
+			text-transform: uppercase !important;
+			color: var(--text-muted) !important;
+		}
+		[data-testid="metric-container"] [data-testid="stMetricValue"] {
+			font-family: 'DM Mono', monospace !important;
+			font-size: 1.5rem !important;
+			font-weight: 500 !important;
+			color: var(--text-primary) !important;
+		}
+		/* Success/info/warning/error toasts */
+		.stSuccess, .stInfo, .stWarning, .stError {
+			border-radius: var(--radius-sm) !important;
+			font-size: 0.85rem !important;
+		}
+		/* Toggle */
+		.stToggle > label {
+			font-size: 0.75rem !important;
+			font-weight: 500 !important;
+			color: var(--text-secondary) !important;
+			text-transform: uppercase !important;
+			letter-spacing: 0.06em !important;
+		}
+		/* HR override */
+		hr { border-color: var(--border-subtle) !important; }
 		</style>
 		""", unsafe_allow_html=True)
 
@@ -20966,17 +21313,18 @@ if tab5:
 
 		if not st.session_state.admin_logged_in:
 			st.markdown("""
-			<div class="glass-box">
-				<h2>🔐 Admin Authentication Required</h2>
-				<p>Please enter your email and password to access the admin dashboard</p>
+			<div class="ap-login">
+				<div class="ap-eyebrow">Secure Access</div>
+				<h2>Admin Authentication</h2>
+				<p>Enter your credentials to access the dashboard</p>
 			</div>
 			""", unsafe_allow_html=True)
 			
 			col1, col2, col3 = st.columns([1, 2, 1])
 			with col2:
-				email = st.text_input("📧 Enter Admin Email", placeholder="Enter email...")
-				password = st.text_input("🔑 Enter Admin Password", type="password", placeholder="Enter password...")
-				login_clicked = st.button("🚀 Login", use_container_width=True)
+				email = st.text_input("Email", placeholder="admin@example.com")
+				password = st.text_input("Password", type="password", placeholder="••••••••••")
+				login_clicked = st.button("Sign In", use_container_width=True)
 
 				if login_clicked:
 					valid_email = "admin@example.com"
@@ -21011,33 +21359,34 @@ if tab5:
 
 		# ---------------- Enhanced Header with Database Stats ----------------
 		st.markdown("""
-		<div class="glass-box">
-			<h1>🛡️ Enhanced Admin Database Panel</h1>
-			<p>Advanced Resume Analysis System Dashboard</p>
+		<div class="ap-hero">
+			<div class="ap-eyebrow">Admin Panel</div>
+			<h1>Resume Analysis Dashboard</h1>
+			<p>Advanced candidate intelligence &amp; database management</p>
 		</div>
 		""", unsafe_allow_html=True)
 
 		# Enhanced Control Panel
 		col1, col2, col3, col4 = st.columns(4)
 		with col1:
-			if st.button("🔄 Refresh All Data", use_container_width=True):
+			if st.button("↺  Refresh Data", use_container_width=True):
 				st.cache_data.clear()
 				st.rerun()
 		with col2:
-			if st.button("📊 Database Stats", use_container_width=True):
+			if st.button("⊞  Database Stats", use_container_width=True):
 				st.session_state.show_db_stats = True
 		with col3:
-			if st.button("🧹 Cleanup Old Records", use_container_width=True):
+			if st.button("⌫  Cleanup Records", use_container_width=True):
 				st.session_state.show_cleanup = True
 		with col4:
-			if st.button("🚪 Secure Logout", use_container_width=True):
+			if st.button("→  Logout", use_container_width=True):
 				st.session_state.admin_logged_in = False
-				st.success("👋 Logged out successfully.")
+				st.success("Logged out successfully.")
 				st.rerun()
 
 		# Database Statistics Panel
 		if st.session_state.get('show_db_stats', False):
-			with st.expander("📈 Database Statistics", expanded=True):
+			with st.expander("Database Statistics", expanded=True):
 				try:
 					stats = get_database_stats()
 					if stats:
@@ -21061,9 +21410,9 @@ if tab5:
 
 		# Cleanup Panel
 		if st.session_state.get('show_cleanup', False):
-			with st.expander("🧹 Database Cleanup", expanded=True):
+			with st.expander("Database Cleanup", expanded=True):
 				days_to_keep = st.slider("Days to Keep", 30, 730, 365)
-				if st.button("⚠️ Cleanup Old Records"):
+				if st.button("Confirm Cleanup"):
 					try:
 						deleted_count = cleanup_old_records(days_to_keep)
 						if deleted_count > 0:
@@ -21073,34 +21422,42 @@ if tab5:
 					except Exception as e:
 						st.error(f"Error during cleanup: {e}")
 
-		st.markdown("<hr style='border-top: 2px solid #bbb; margin: 2rem 0;'>", unsafe_allow_html=True)
+		st.markdown("<hr class='ap-divider'>", unsafe_allow_html=True)
 
 		df = load_all_candidates()
 
 		# Enhanced Search and Filter Section
-		st.markdown("### 🔍 Advanced Search & Filters")
+		st.markdown("""
+		<div class="ap-section">
+			<div class="ap-section-bar"></div>
+			<div>
+				<div class="ap-section-text">Filter</div>
+				<div class="ap-section-title">Search &amp; Filters</div>
+			</div>
+		</div>
+		""", unsafe_allow_html=True)
 		
 		col1, col2 = st.columns(2)
 		with col1:
-			search = st.text_input("🔍 Search by Candidate Name", placeholder="Enter candidate name...")
+			search = st.text_input("Search by Candidate Name", placeholder="Enter candidate name...")
 			if search:
 				df = df[df["candidate_name"].str.contains(search, case=False, na=False)]
 		
 		with col2:
-			domain_filter = st.selectbox("🏢 Filter by Domain", 
+			domain_filter = st.selectbox("Filter by Domain", 
 									options=["All Domains"] + list(df["domain"].unique()) if not df.empty else ["All Domains"])
 			if domain_filter != "All Domains":
 				df = df[df["domain"] == domain_filter]
 
 		# Enhanced Date Filter
-		st.markdown("#### 📅 Date Range Filter")
+		st.markdown("<p style='font-size:0.72rem;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:#55566A;margin:1rem 0 0.5rem'>Date Range</p>", unsafe_allow_html=True)
 		col1, col2, col3 = st.columns(3)
 		with col1:
-			start_date = st.date_input("📅 Start Date", value=datetime.now() - timedelta(days=30))
+			start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=30))
 		with col2:
-			end_date = st.date_input("📅 End Date", value=datetime.now())
+			end_date = st.date_input("End Date", value=datetime.now())
 		with col3:
-			if st.button("🎯 Apply Filters", use_container_width=True):
+			if st.button("Apply Filters", use_container_width=True):
 				try:
 					df = filter_candidates_by_date(str(start_date), str(end_date))
 					if domain_filter != "All Domains":
@@ -21115,7 +21472,15 @@ if tab5:
 		if df.empty:
 			st.info("ℹ️ No candidate data available with current filters.")
 		else:
-			st.markdown(f"### 📋 Candidates Overview ({len(df)} records)")
+			st.markdown(f"""
+			<div class="ap-section">
+				<div class="ap-section-bar"></div>
+				<div>
+					<div class="ap-section-text">Records</div>
+					<div class="ap-section-title">Candidates Overview <span style="font-weight:400;color:#55566A;font-size:0.9rem">— {len(df)} entries</span></div>
+				</div>
+			</div>
+			""", unsafe_allow_html=True)
 			
 			# Enhanced metrics
 			col1, col2, col3, col4 = st.columns(4)
@@ -21129,12 +21494,18 @@ if tab5:
 				st.metric("Unique Domains", df['domain'].nunique())
 
 			# Enhanced data display with sorting
-			sort_column = st.selectbox("📊 Sort by", 
+			col_sort1, col_sort2, col_sort3 = st.columns([2, 2, 1])
+			with col_sort1:
+				sort_column = st.selectbox("Sort by",
 								options=['timestamp', 'ats_score', 'bias_score', 'candidate_name', 'domain'])
-			sort_order = st.radio("Sort Order", ["Descending", "Ascending"], horizontal=True)
-			
+			with col_sort2:
+				sort_order = st.radio("Order", ["Descending", "Ascending"], horizontal=True)
+			with col_sort3:
+				expand_table = st.toggle("Expand Table", value=False)
+
 			df_sorted = df.sort_values(by=sort_column, ascending=(sort_order == "Ascending"))
-			
+			table_height = None if expand_table else 400
+
 			# Display with enhanced formatting
 			st.dataframe(
 				df_sorted.style.format({
@@ -21148,7 +21519,7 @@ if tab5:
 					'bias_score': '{:.3f}'
 				}),
 				use_container_width=True,
-				height=400
+				height=table_height
 			)
 
 			# Enhanced Export Options
@@ -21163,7 +21534,7 @@ if tab5:
 					use_container_width=True
 				)
 			with col2:
-				if st.button("📤 Export All Data", use_container_width=True):
+				if st.button("Export All Data", use_container_width=True):
 					try:
 						filename = f"full_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
 						if export_to_csv(filename):
@@ -21173,7 +21544,15 @@ if tab5:
 					except Exception as e:
 						st.error(f"Export error: {e}")
 
-			st.markdown("### 📂 Export Archive")
+			st.markdown("""
+			<div class="ap-section" style="margin-top:1.5rem">
+				<div class="ap-section-bar"></div>
+				<div>
+					<div class="ap-section-text">Archive</div>
+					<div class="ap-section-title">Export Files</div>
+				</div>
+			</div>
+			""", unsafe_allow_html=True)
 			export_files = sorted(glob.glob("full_export_*.csv"), reverse=True)
 
 			if export_files:
@@ -21190,7 +21569,7 @@ if tab5:
 				st.info("📭 No export files found yet.")
 
 			# Enhanced Delete Functionality
-			with st.expander("🗑️ Delete Candidate", expanded=False):
+			with st.expander("Delete Candidate", expanded=False):
 				st.warning("⚠️ This action cannot be undone!")
 				delete_id = st.number_input("Enter Candidate ID", min_value=1, step=1, key="delete_id")
 				
@@ -21200,7 +21579,7 @@ if tab5:
 						st.info("📄 Candidate to be deleted:")
 						st.dataframe(candidate_info, use_container_width=True)
 						
-						if st.button("❌ Confirm Delete", type="primary"):
+						if st.button("Confirm Delete", type="primary"):
 							try:
 								if delete_candidate_by_id(delete_id):
 									st.success(f"✅ Candidate with ID {delete_id} deleted successfully.")
@@ -21214,11 +21593,28 @@ if tab5:
 					st.error("❌ Candidate ID not found.")
 
 		# Enhanced Analytics Section
-		st.markdown("<hr style='border-top: 2px solid #bbb; margin: 2rem 0;'>", unsafe_allow_html=True)
-		st.markdown("## 📊 Advanced Analytics Dashboard")
+		st.markdown("<hr class='ap-divider'>", unsafe_allow_html=True)
 
-		# Enhanced Top Domains Analysis
-		st.markdown("### 🏆 Top Performing Domains")
+		# Enhanced Analytics Section
+		st.markdown("""
+		<div class="ap-section">
+			<div class="ap-section-bar"></div>
+			<div>
+				<div class="ap-section-text">Analytics</div>
+				<div class="ap-section-title">Advanced Analytics Dashboard</div>
+			</div>
+		</div>
+		""", unsafe_allow_html=True)
+
+		st.markdown("""
+		<div class="ap-section">
+			<div class="ap-section-bar"></div>
+			<div>
+				<div class="ap-section-text">Performance</div>
+				<div class="ap-section-title">Top Performing Domains</div>
+			</div>
+		</div>
+		""", unsafe_allow_html=True)
 		
 		try:
 			top_domains = get_top_domains_by_score(limit=10)
@@ -21227,10 +21623,10 @@ if tab5:
 				
 				col1, col2 = st.columns([1, 2])
 				with col1:
-					sort_order = st.radio("📊 Sort by ATS", ["⬆️ High to Low", "⬇️ Low to High"], horizontal=True)
+					sort_order = st.radio("Sort by ATS", ["↑ High to Low", "↓ Low to High"], horizontal=True)
 					limit = st.slider("Show Top N Domains", 1, len(df_top), value=min(8, len(df_top)))
 				
-				ascending = sort_order == "⬇️ Low to High"
+				ascending = sort_order == "↓ Low to High"
 				df_sorted = df_top.sort_values(by="avg_ats", ascending=ascending).head(limit)
 				
 				# Interactive chart
@@ -21238,92 +21634,31 @@ if tab5:
 										"Average ATS Score by Domain", orientation='h')
 				st.plotly_chart(fig, use_container_width=True)
 				
-				# Enhanced domain cards with glassmorphism
-				st.markdown("""
-				<style>
-				@keyframes tab5-shimmer {
-					0% { background-position: -200% 0; }
-					100% { background-position: 200% 0; }
-				}
-				.tab5-domain-card {
-					background: rgba(10, 20, 40, 0.3);
-					backdrop-filter: blur(10px);
-					border: 1px solid rgba(0, 200, 255, 0.2);
-					box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-					border-radius: 15px;
-					padding: 15px;
-					margin-bottom: 15px;
-					transition: all 0.3s ease;
-					cursor: pointer;
-					position: relative;
-					overflow: hidden;
-				}
-				.tab5-domain-card::before {
-					content: "";
-					position: absolute;
-					top: 0;
-					left: 0;
-					width: 100%;
-					height: 100%;
-					background: linear-gradient(
-						120deg,
-						transparent 0%,
-						rgba(255, 255, 255, 0.08) 50%,
-						transparent 100%
-					);
-					background-size: 200% 100%;
-					opacity: 0;
-					transition: opacity 0.3s ease;
-				}
-				.tab5-domain-card:hover::before {
-					opacity: 1;
-					animation: tab5-shimmer 1.5s ease-in-out infinite;
-				}
-				.tab5-domain-card:hover {
-					transform: translateY(-2px);
-					border-color: rgba(0, 200, 255, 0.35);
-					background: rgba(10, 20, 40, 0.4);
-				}
-				</style>
-				""", unsafe_allow_html=True)
+				# Refined domain cards
+				st.markdown("""<style>
+				.ap-domain-card:hover { border-color: var(--border-mid) !important; }
+				</style>""", unsafe_allow_html=True)
 
 				for i, row in df_sorted.iterrows():
-					progress_value = row['avg_ats'] / 100
+					progress_pct = min(int(row['avg_ats']), 100)
 					st.markdown(f"""
-					<div class="tab5-domain-card">
-						<div style="display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1;">
-							<h4 style="margin: 0; color: #5eb8ff;">📁 {row['domain']}</h4>
-							<span style="
-								background: rgba(0, 200, 255, 0.1);
-								border: 1px solid rgba(0, 200, 255, 0.25);
-								color: #5eb8ff;
-								padding: 5px 10px;
-								border-radius: 20px;
-								font-size: 12px;
-								font-weight: bold;
-								backdrop-filter: blur(8px);
-							">
-								Rank #{i+1}
-							</span>
-						</div>
-						<div style="margin: 10px 0; position: relative; z-index: 1;">
-							<div style="
-								background: rgba(255, 255, 255, 0.05);
-								border-radius: 10px;
-								height: 8px;
-								overflow: hidden;
-							">
-								<div style="
-									background: linear-gradient(90deg, rgba(0, 200, 255, 0.4), rgba(0, 255, 200, 0.5));
-									height: 100%;
-									width: {progress_value*100}%;
-									transition: width 0.3s ease;
-								"></div>
+					<div class="ap-domain-card">
+						<div class="ap-domain-left">
+							<span class="ap-domain-rank">{i+1}</span>
+							<span class="ap-domain-name">{row['domain']}</span>
+							<div class="ap-domain-bar-wrap">
+								<div class="ap-domain-bar-fill" style="width:{progress_pct}%"></div>
 							</div>
 						</div>
-						<div style="display: flex; justify-content: space-between; margin-top: 10px; position: relative; z-index: 1;">
-							<span style="color: #cce6ff;"><b>🧠 Avg ATS:</b> <span style="color: #5eb8ff; font-weight: bold;">{row['avg_ats']:.2f}</span></span>
-							<span style="color: #cce6ff;"><b>📄 Resumes:</b> <span style="color: #5eb8ff; font-weight: bold;">{row['count']}</span></span>
+						<div class="ap-domain-right">
+							<div class="ap-domain-stat">
+								<div class="ap-domain-stat-label">Avg ATS</div>
+								<div class="ap-domain-stat-val">{row['avg_ats']:.1f}</div>
+							</div>
+							<div class="ap-domain-stat">
+								<div class="ap-domain-stat-label">Resumes</div>
+								<div class="ap-domain-stat-val">{row['count']}</div>
+							</div>
 						</div>
 					</div>
 					""", unsafe_allow_html=True)
@@ -21333,7 +21668,15 @@ if tab5:
 			st.error(f"Error loading top domains: {e}")
 
 		# Enhanced Domain Distribution
-		st.markdown("### 📊 Domain Distribution Analysis")
+		st.markdown("""
+		<div class="ap-section">
+			<div class="ap-section-bar"></div>
+			<div>
+				<div class="ap-section-text">Distribution</div>
+				<div class="ap-section-title">Domain Distribution Analysis</div>
+			</div>
+		</div>
+		""", unsafe_allow_html=True)
 
 		try:
 			df_domain_dist = load_domain_distribution()
@@ -21341,8 +21684,8 @@ if tab5:
 				col1, col2 = st.columns(2)
 				with col1:
 					chart_type = st.radio(
-						"📊 Visualization Type:",
-						["📈 Interactive Bar Chart", "🥧 Interactive Pie Chart"],
+						"Visualization",
+						["Bar Chart", "Pie Chart"],
 						horizontal=True
 					)
 				with col2:
@@ -21359,7 +21702,7 @@ if tab5:
 
 				df_top_domains = df_domain_dist.head(show_top_n)
 
-				if chart_type == "📈 Interactive Bar Chart":
+				if chart_type == "Bar Chart":
 					fig = create_enhanced_bar_chart(df_top_domains, "domain", "count", 
 											"Resume Count by Domain")
 					st.plotly_chart(fig, use_container_width=True)
@@ -21369,7 +21712,7 @@ if tab5:
 					st.plotly_chart(fig, use_container_width=True)
 
 				# Summary statistics
-				with st.expander("📋 Domain Statistics Summary"):
+				with st.expander("Domain Statistics Summary"):
 					st.dataframe(
 						df_domain_dist.style.format({'percentage': '{:.2f}%'}),
 						use_container_width=True
@@ -21380,7 +21723,15 @@ if tab5:
 			st.error(f"Error loading domain distribution: {e}")
 
 		# Enhanced ATS Performance Analysis
-		st.markdown("### 📈 ATS Performance Analysis")
+		st.markdown("""
+		<div class="ap-section">
+			<div class="ap-section-bar"></div>
+			<div>
+				<div class="ap-section-text">Scoring</div>
+				<div class="ap-section-title">ATS Performance Analysis</div>
+			</div>
+		</div>
+		""", unsafe_allow_html=True)
 		
 		try:
 			df_ats = get_average_ats_by_domain()
@@ -21432,7 +21783,15 @@ if tab5:
 			st.error(f"Error loading ATS performance data: {e}")
 
 		# Enhanced Timeline Analysis
-		st.markdown("### 📈 Resume Upload Timeline & Trends")
+		st.markdown("""
+		<div class="ap-section">
+			<div class="ap-section-bar"></div>
+			<div>
+				<div class="ap-section-text">Trends</div>
+				<div class="ap-section-title">Resume Upload Timeline &amp; Trends</div>
+			</div>
+		</div>
+		""", unsafe_allow_html=True)
 		
 		try:
 			df_timeline = get_resume_count_by_day()
@@ -21539,7 +21898,15 @@ if tab5:
 			st.error(f"Error loading timeline data: {e}")
 
 		# Enhanced Bias Analysis
-		st.markdown("### 🧠 Advanced Bias Analysis")
+		st.markdown("""
+		<div class="ap-section">
+			<div class="ap-section-bar"></div>
+			<div>
+				<div class="ap-section-text">Fairness</div>
+				<div class="ap-section-title">Advanced Bias Analysis</div>
+			</div>
+		</div>
+		""", unsafe_allow_html=True)
 		
 		col1, col2 = st.columns(2)
 		with col1:
@@ -21571,7 +21938,7 @@ if tab5:
 			else:  # Flagged Candidates
 				flagged_df = get_flagged_candidates(threshold=bias_threshold_pie)
 				if not flagged_df.empty:
-					st.markdown(f"**🚩 {len(flagged_df)} candidates flagged with bias score > {bias_threshold_pie}**")
+					st.markdown(f"<p style='font-size:0.82rem;color:#9899A6;margin:0.5rem 0'><span style='color:#F0F0F5;font-weight:600'>{len(flagged_df)}</span> candidates flagged with bias score above {bias_threshold_pie}</p>", unsafe_allow_html=True)
 					
 					# Enhanced flagged candidates display
 					display_df = flagged_df.copy()
@@ -21597,7 +21964,7 @@ if tab5:
 			st.error(f"Error in bias analysis: {e}")
 
 		# Enhanced Domain Performance Deep Dive
-		with st.expander("🔍 Domain Performance Deep Dive", expanded=False):
+		with st.expander("Domain Performance Deep Dive", expanded=False):
 			try:
 				df_performance = get_domain_performance_stats()
 				if not df_performance.empty:
@@ -21631,11 +21998,17 @@ if tab5:
 				st.error(f"Error loading performance deep dive: {e}")
 
 		# Footer with system information
-		st.markdown("<hr style='border-top: 1px solid #ddd; margin: 2rem 0;'>", unsafe_allow_html=True)
+		st.markdown("<hr class='ap-divider'>", unsafe_allow_html=True)
 		st.markdown("""
-		<div style='text-align: center; color: #666; font-size: 0.9em; padding: 1rem;'>
-			<p>🛡️ Enhanced Admin Dashboard | Powered by Advanced Database Manager</p>
-			<p>Last updated: {}</p>
+		<div style='text-align:center; padding: 1rem 0 0.5rem;'>
+			<p style='font-size:0.72rem; font-weight:500; letter-spacing:0.12em; text-transform:uppercase; color:#55566A; margin:0 0 0.3rem'>
+				Resume Analysis System &nbsp;·&nbsp; Admin Dashboard
+			</p>
+			<p style='font-family:"DM Mono",monospace; font-size:0.7rem; color:#3A3A52; margin:0'>
+				{}
+			</p>
+		</div>
+		""".format(datetime.now().strftime("%Y-%m-%d  %H:%M:%S")), unsafe_allow_html=True)
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
 				
