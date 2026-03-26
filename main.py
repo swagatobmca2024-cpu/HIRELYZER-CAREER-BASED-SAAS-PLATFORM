@@ -21504,7 +21504,7 @@ if tab5:
 				expand_table = st.toggle("Expand Table", value=False)
 
 			df_sorted = df.sort_values(by=sort_column, ascending=(sort_order == "Ascending"))
-			table_height = None if expand_table else 400
+			table_height = 4000 if expand_table else 400
 
 			# Display with enhanced formatting
 			st.dataframe(
@@ -21999,14 +21999,15 @@ if tab5:
 
 		# Footer with system information
 		st.markdown("<hr class='ap-divider'>", unsafe_allow_html=True)
-		st.markdown("""
+		_footer_ts = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
+		st.markdown(f"""
 		<div style='text-align:center; padding: 1rem 0 0.5rem;'>
 			<p style='font-size:0.72rem; font-weight:500; letter-spacing:0.12em; text-transform:uppercase; color:#55566A; margin:0 0 0.3rem'>
-				Resume Analysis System &nbsp;·&nbsp; Admin Dashboard
+				Resume Analysis System &nbsp;&middot;&nbsp; Admin Dashboard
 			</p>
-			<p style='font-family:"DM Mono",monospace; font-size:0.7rem; color:#3A3A52; margin:0'>
-				{}
+			<p style='font-family:monospace; font-size:0.7rem; color:#3A3A52; margin:0'>
+				{_footer_ts}
 			</p>
 		</div>
-		""".format(datetime.now().strftime("%Y-%m-%d  %H:%M:%S")), unsafe_allow_html=True)
+		""", unsafe_allow_html=True)
 		
