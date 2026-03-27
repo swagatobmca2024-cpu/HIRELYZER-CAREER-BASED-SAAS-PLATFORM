@@ -10485,6 +10485,15 @@ def generate_cover_letter_from_resume_builder():
     location = st.session_state.get("location", "")
     today_date = datetime.today().strftime("%B %d, %Y")
 
+    # ✅ Cover Letter Template Selector
+    cover_letter_template = st.selectbox(
+        "🎨 Choose Cover Letter Template",
+        options=list(COVER_LETTER_TEMPLATES.keys()),
+        index=0,
+        key="cover_letter_template_select",
+        help="Select the style/format for your cover letter"
+    )
+
     # ✅ Input boxes for contact info
     company = st.text_input("🏢 Target Company", placeholder="e.g., Google")
     linkedin = st.text_input("🔗 LinkedIn URL", placeholder="e.g., https://linkedin.com/in/username")
@@ -10534,26 +10543,30 @@ Hiring Manager, {company}, {location}
         # ✅ Store plain text
         st.session_state["cover_letter"] = cover_letter
 
-        # ✅ Build HTML wrapper for preview (safe)
-        cover_letter_html = f"""
-        <div style="font-family: Georgia, serif; font-size: 13pt; line-height: 1.6; 
-                    color: #000; background: #fff; padding: 25px; 
-                    border-radius: 8px; box-shadow: 0px 2px 6px rgba(0,0,0,0.1); 
-                    max-width: 800px; margin: auto;">
-            <div style="text-align:center; margin-bottom:15px;">
-                <div style="font-size:18pt; font-weight:bold; color:#003366;">{name}</div>
-                <div style="font-size:14pt; color:#555;">{job_title}</div>
-                <div style="font-size:10pt; margin-top:5px;">
-                    <a href="{linkedin}" style="color:#003366;">{linkedin}</a><br/>
-                    📧 {email} | 📞 {mobile}
-                </div>
-            </div>
-            <hr/>
-            <pre style="white-space: pre-wrap; font-family: Georgia, serif; font-size: 12pt; color:#000;">
-{cover_letter}
-            </pre>
-        </div>
-        """
+        # ✅ Build paragraphs list for structured templates
+        body_paragraphs = [p.strip() for p in cover_letter.split("\n\n") if p.strip()]
+
+        # ✅ Build data dict for template renderers
+        cl_data = {
+            "name":            name,
+            "job_title":       job_title,
+            "email":           email,
+            "phone":           mobile,
+            "location":        location,
+            "linkedin":        linkedin,
+            "portfolio":       "",
+            "company":         company,
+            "hiring_manager":  "Hiring Manager",
+            "role":            job_title,
+            "date":            today_date,
+            "body_paragraphs": body_paragraphs,
+            "key_skills":      skills,        # used by ATS template
+            "accent_color":    "#003366",     # used by Creative template
+        }
+
+        # ✅ Render using the chosen template
+        selected_cl_template = st.session_state.get("cover_letter_template_select", "Professional / Corporate")
+        cover_letter_html = render_cover_letter(selected_cl_template, cl_data)
 
         st.session_state["cover_letter_html"] = cover_letter_html
 
