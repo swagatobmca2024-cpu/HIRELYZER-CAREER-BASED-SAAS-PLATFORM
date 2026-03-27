@@ -9196,15 +9196,15 @@ def render_template_slate_gray(session_state, profile_img_html=""):
             fixed_img = tag
 
     def _sec_sg(title, body):
-        return (f"<div style='margin-bottom:26px;'>"
-                f"<h3 style='font-size:14px;font-weight:700;color:#1e293b;text-transform:uppercase;"
-                f"letter-spacing:1.5px;border-bottom:2px solid #64748b;padding-bottom:5px;margin-bottom:14px;'>{title}</h3>"
+        return (f"<div style='margin-bottom:24px;'>"
+                f"<h2 style='font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;"
+                f"color:#1e293b;border-bottom:2px solid #64748b;padding-bottom:4px;margin-bottom:14px;'>{title}</h2>"
                 f"{body}</div>")
 
     def _tags_sg(s, bg="#f1f5f9", color="#1e293b", border="#cbd5e1"):
         return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};border:1px solid {border};"
-            f"border-radius:4px;padding:4px 11px;margin:3px 4px 3px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            f"border-radius:4px;padding:4px 12px;margin:4px 4px 4px 0;font-size:13px;font-weight:600;'>{x.strip()}</span>"
             for x in s.split(',') if x.strip())
 
     contact_parts_sg = []
@@ -9224,16 +9224,16 @@ def render_template_slate_gray(session_state, profile_img_html=""):
     exp_html_sg = ""
     for exp in session_state.experience_entries:
         if exp.get('company') or exp.get('title'):
-            desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#334155', line_height='1.75')
+            desc = _fmt_desc(exp.get('description',''), font_size='14px', color='#334155', line_height='1.7')
             exp_html_sg += (
                 f"<div style='margin-bottom:18px;'>"
-                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
-                f"<strong style='font-size:14px;color:#1e293b;'>{exp.get('title','')}</strong>"
-                f"<span style='font-size:12px;color:#64748b;background:#f1f5f9;padding:2px 8px;border-radius:5px;border:1px solid #e2e8f0;'>{exp.get('duration','')}</span>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;'>"
+                f"<strong style='font-size:16px;color:#1e293b;'>{exp.get('company','')}</strong>"
+                f"<span style='font-size:13px;color:#64748b;'>{exp.get('duration','')}</span>"
                 f"</div>"
-                f"<div style='font-size:13px;color:#475569;font-weight:600;margin-bottom:5px;'>{exp.get('company','')}</div>"
-                f"<div>{desc}</div></div>"
-                f"<div style='border-bottom:1px solid #e2e8f0;margin-bottom:10px;'></div>"
+                f"<div style='font-size:14px;color:#475569;font-weight:600;font-style:italic;margin-bottom:6px;'>{exp.get('title','')}</div>"
+                f"<div style='font-size:14px;color:#334155;line-height:1.7;'>{desc}</div></div>"
+                f"<hr style='border:none;border-top:1px solid #e2e8f0;margin:12px 0;'>"
             )
 
     edu_html_sg = ""
@@ -9243,72 +9243,75 @@ def render_template_slate_gray(session_state, profile_img_html=""):
             if isinstance(dv, list):
                 dv = ", ".join(dv)
             edu_html_sg += (
-                f"<div style='margin-bottom:12px;'>"
-                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
-                f"<strong style='font-size:13px;color:#1e293b;'>{edu.get('institution','')}</strong>"
-                f"<span style='font-size:12px;color:#64748b;'>{edu.get('year','')}</span>"
+                f"<div style='margin-bottom:14px;'>"
+                f"<div style='display:flex;justify-content:space-between;'>"
+                f"<strong style='font-size:15px;'>{edu.get('institution','')}</strong>"
+                f"<span style='font-size:13px;color:#64748b;'>{edu.get('year','')}</span>"
                 f"</div>"
-                f"<div style='font-size:13px;color:#475569;font-style:italic;font-weight:600;'>{dv}</div>"
-                f"<div style='font-size:12px;color:#64748b;'>{edu.get('details','')}</div></div>"
+                f"<div style='font-size:14px;color:#475569;font-style:italic;'>{dv}</div>"
+                f"<div style='font-size:13px;color:#64748b;'>{edu.get('details','')}</div></div>"
             )
 
     proj_html_sg = ""
     proj_links_all_sg = getattr(session_state, 'project_links', []) or []
     for idx, proj in enumerate(session_state.project_entries):
         if proj.get('title'):
-            desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#334155', line_height='1.75')
+            desc = _fmt_desc(proj.get('description',''), font_size='14px', color='#334155', line_height='1.75')
             pl = ""
             if idx < len(proj_links_all_sg) and proj_links_all_sg[idx]:
-                pl = (f"<div style='margin-top:4px;'><a href='{proj_links_all_sg[idx]}' target='_blank' "
-                      f"style='color:#475569;font-size:12px;font-weight:600;'>&#128279; View Project</a></div>")
+                pl = (f"<div style='margin-top:5px;font-size:13px;'><a href='{proj_links_all_sg[idx]}' target='_blank' "
+                      f"style='color:#1e293b;font-weight:600;'>&#128279; View Project / GitHub</a></div>")
             proj_html_sg += (
-                f"<div style='margin-bottom:16px;padding:12px;background:#f8fafc;"
-                f"border-radius:6px;border:1px solid #e2e8f0;'>"
-                f"<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>"
-                f"<strong style='font-size:13px;color:#1e293b;'>{proj.get('title','')}</strong>"
-                f"<span style='font-size:12px;color:#64748b;'>{proj.get('duration','')}</span>"
+                f"<div style='margin-bottom:16px;'>"
+                f"<div style='display:flex;justify-content:space-between;'>"
+                f"<strong style='font-size:15px;color:#1e293b;'>{proj.get('title','')}</strong>"
+                f"<span style='font-size:13px;color:#64748b;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"<div style='font-size:12px;color:#475569;font-weight:600;margin-bottom:3px;'>Tech: {proj.get('tech','')}</div>"
-                f"<div>{desc}</div>{pl}</div>"
+                f"<div style='font-size:13px;color:#64748b;margin-bottom:4px;'><b>Tech:</b> {proj.get('tech','')}</div>"
+                f"<div style='font-size:14px;color:#334155;line-height:1.6;'>{desc}</div>"
+                f"{pl}</div>"
             )
 
     cert_html_sg = ""
     for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_html_sg += (
-                f"<div style='margin-bottom:10px;'>"
-                f"<a href='{cert.get('link','#')}' target='_blank' style='font-size:13px;font-weight:700;color:#1e293b;text-decoration:none;'>{cert.get('name','')}</a>"
-                f"<span style='font-size:12px;color:#64748b;'> — {cert.get('duration','')}</span></div>"
+                f"<div style='margin-bottom:12px;'>"
+                f"<div style='display:flex;justify-content:space-between;'>"
+                f"<a href='{cert.get('link','#')}' target='_blank' style='font-weight:600;color:#1e293b;font-size:15px;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<span style='font-size:13px;color:#64748b;'>{cert.get('duration','')}</span>"
+                f"</div></div>"
             )
 
     proj_links_sec_sg = ""
     if session_state.project_links:
         proj_links_sec_sg = "".join(
-            f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#475569;font-size:13px;font-weight:600;'>&#128279; Project {i+1}: {lnk}</a></div>"
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#1e293b;font-weight:600;font-size:14px;'>&#128279; Project {i+1}: {lnk}</a></div>"
             for i, lnk in enumerate(session_state.project_links) if lnk)
 
-    summary_html_sg = _fmt_desc(session_state.get('summary',''), font_size='13px', color='#334155', line_height='1.8')
+    summary_html_sg = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#334155', line_height='1.8')
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title></head>
-<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1e293b;background:#ffffff;max-width:860px;margin:0 auto;padding:36px 40px;">
-  {fixed_img if fixed_img else ''}
-  <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #64748b;">
-    <h1 style="font-size:28px;font-weight:800;color:#1e293b;margin-bottom:4px;">{session_state.get('name','')}</h1>
-    <div style="font-size:15px;color:#475569;font-weight:600;margin-bottom:10px;">{session_state.get('job_title','')}</div>
-    <div style="font-size:12px;color:#334155;line-height:2;">{contact_html_sg}</div>
+<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1e293b;background:#ffffff;max-width:860px;margin:0 auto;padding:40px 60px;">
+  <div style="text-align:center;margin-bottom:6px;">
+    {fixed_img if fixed_img else ''}
+    <h1 style="font-size:32px;font-weight:700;letter-spacing:1px;color:#1e293b;">{session_state.get('name','')}</h1>
+    <div style="font-size:16px;color:#475569;font-weight:600;margin-top:4px;">{session_state.get('job_title','')}</div>
+    <div style="font-size:13px;color:#334155;margin-top:6px;">{contact_html_sg}</div>
   </div>
-  {_sec_sg("Professional Summary", f"<div style='font-size:13px;color:#334155;line-height:1.8;padding:12px 14px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;'>{summary_html_sg}</div>") if summary_html_sg else ''}
+  <hr style='border:none;border-top:3px solid #64748b;margin:16px 0 24px 0;'>
+  {_sec_sg("Professional Summary", f"<div style='font-size:14px;color:#334155;line-height:1.8;padding:12px 14px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;'>{summary_html_sg}</div>") if summary_html_sg else ''}
   {_sec_sg("Work Experience", exp_html_sg) if exp_html_sg else ''}
   {_sec_sg("Education", edu_html_sg) if edu_html_sg else ''}
-  {_sec_sg("Projects", proj_html_sg) if proj_html_sg else ''}
   {_sec_sg("Technical Skills", f"<div style='padding:6px 0;'>{_tags_sg(session_state.get('skills',''))}</div>") if session_state.get('skills','').strip() else ''}
   {_sec_sg("Core Competencies", f"<div style='padding:6px 0;'>{_tags_sg(session_state.get('Softskills',''),'#f0f9ff','#0c4a6e','#bae6fd')}</div>") if session_state.get('Softskills','').strip() else ''}
   {_sec_sg("Languages", f"<div style='padding:6px 0;'>{_tags_sg(session_state.get('languages',''),'#f0fdf4','#14532d','#bbf7d0')}</div>") if session_state.get('languages','').strip() else ''}
   {_sec_sg("Interests", f"<div style='padding:6px 0;'>{_tags_sg(session_state.get('interests',''),'#fdf4ff','#581c87','#e9d5ff')}</div>") if session_state.get('interests','').strip() else ''}
-  {_sec_sg("Certifications", cert_html_sg) if cert_html_sg else ''}
+  {_sec_sg("Projects", proj_html_sg) if proj_html_sg else ''}
   {_sec_sg("Project Links", proj_links_sec_sg) if proj_links_sec_sg else ''}
+  {_sec_sg("Certifications", cert_html_sg) if cert_html_sg else ''}
 </body></html>"""
 
     return html_content
@@ -9491,15 +9494,15 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
             fixed_img = tag
 
     def _sec_bc(title, body):
-        return (f"<div style='margin-bottom:26px;'>"
-                f"<h3 style='font-size:14px;font-weight:700;color:#7f1d1d;text-transform:uppercase;"
-                f"letter-spacing:2px;border-bottom:2px solid #991b1b;padding-bottom:5px;margin-bottom:14px;'>{title}</h3>"
+        return (f"<div style='margin-bottom:24px;'>"
+                f"<h2 style='font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;"
+                f"color:#7f1d1d;border-bottom:2px solid #991b1b;padding-bottom:4px;margin-bottom:14px;'>{title}</h2>"
                 f"{body}</div>")
 
     def _tags_bc(s, bg="#fef2f2", color="#7f1d1d", border="#fecaca"):
         return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};border:1px solid {border};"
-            f"border-radius:4px;padding:4px 11px;margin:3px 4px 3px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            f"border-radius:4px;padding:4px 12px;margin:4px 4px 4px 0;font-size:13px;font-weight:600;'>{x.strip()}</span>"
             for x in s.split(',') if x.strip())
 
     contact_parts_bc = []
@@ -9519,16 +9522,16 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
     exp_html_bc = ""
     for exp in session_state.experience_entries:
         if exp.get('company') or exp.get('title'):
-            desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#1c1c1c', line_height='1.75')
+            desc = _fmt_desc(exp.get('description',''), font_size='14px', color='#1c1c1c', line_height='1.7')
             exp_html_bc += (
-                f"<div style='margin-bottom:18px;padding-left:12px;border-left:3px solid #991b1b;'>"
-                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
-                f"<strong style='font-size:14px;color:#7f1d1d;'>{exp.get('title','')}</strong>"
-                f"<span style='font-size:12px;color:#6b7280;background:#fef2f2;padding:2px 8px;border-radius:5px;border:1px solid #fecaca;'>{exp.get('duration','')}</span>"
+                f"<div style='margin-bottom:18px;'>"
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline;'>"
+                f"<strong style='font-size:16px;color:#1a1a1a;'>{exp.get('company','')}</strong>"
+                f"<span style='font-size:13px;color:#6b7280;'>{exp.get('duration','')}</span>"
                 f"</div>"
-                f"<div style='font-size:13px;color:#374151;font-weight:600;margin-bottom:5px;'>{exp.get('company','')}</div>"
-                f"<div>{desc}</div></div>"
-                f"<div style='border-bottom:1px solid #fde8e8;margin-bottom:10px;'></div>"
+                f"<div style='font-size:14px;color:#7f1d1d;font-weight:600;font-style:italic;margin-bottom:6px;'>{exp.get('title','')}</div>"
+                f"<div style='font-size:14px;color:#1c1c1c;line-height:1.7;'>{desc}</div></div>"
+                f"<hr style='border:none;border-top:1px solid #fde8e8;margin:12px 0;'>"
             )
 
     edu_html_bc = ""
@@ -9538,72 +9541,81 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
             if isinstance(dv, list):
                 dv = ", ".join(dv)
             edu_html_bc += (
-                f"<div style='margin-bottom:12px;padding-left:12px;border-left:3px solid #991b1b;'>"
-                f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
-                f"<strong style='font-size:13px;color:#7f1d1d;'>{edu.get('institution','')}</strong>"
-                f"<span style='font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>"
+                f"<div style='margin-bottom:14px;'>"
+                f"<div style='display:flex;justify-content:space-between;'>"
+                f"<strong style='font-size:15px;'>{edu.get('institution','')}</strong>"
+                f"<span style='font-size:13px;color:#6b7280;'>{edu.get('year','')}</span>"
                 f"</div>"
-                f"<div style='font-size:13px;color:#374151;font-style:italic;font-weight:600;'>{dv}</div>"
-                f"<div style='font-size:12px;color:#6b7280;'>{edu.get('details','')}</div></div>"
+                f"<div style='font-size:14px;color:#6b7280;font-style:italic;'>{dv}</div>"
+                f"<div style='font-size:13px;color:#6b7280;'>{edu.get('details','')}</div></div>"
             )
 
     proj_html_bc = ""
     proj_links_all_bc = getattr(session_state, 'project_links', []) or []
     for idx, proj in enumerate(session_state.project_entries):
         if proj.get('title'):
-            desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#1c1c1c', line_height='1.75')
+            desc = _fmt_desc(proj.get('description',''), font_size='14px', color='#1c1c1c', line_height='1.75')
             pl = ""
             if idx < len(proj_links_all_bc) and proj_links_all_bc[idx]:
-                pl = (f"<div style='margin-top:4px;'><a href='{proj_links_all_bc[idx]}' target='_blank' "
-                      f"style='color:#991b1b;font-size:12px;font-weight:600;'>&#128279; View Project</a></div>")
+                pl = (f"<div style='margin-top:5px;font-size:13px;'><a href='{proj_links_all_bc[idx]}' target='_blank' "
+                      f"style='color:#7f1d1d;font-weight:600;'>&#128279; View Project / GitHub</a></div>")
             proj_html_bc += (
-                f"<div style='margin-bottom:14px;padding:10px 12px;background:#fffafa;"
-                f"border-radius:6px;border:1px solid #fde8e8;'>"
-                f"<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>"
-                f"<strong style='font-size:13px;color:#7f1d1d;'>{proj.get('title','')}</strong>"
-                f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
+                f"<div style='margin-bottom:16px;'>"
+                f"<div style='display:flex;justify-content:space-between;'>"
+                f"<strong style='font-size:15px;color:#7f1d1d;'>{proj.get('title','')}</strong>"
+                f"<span style='font-size:13px;color:#6b7280;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"<div style='font-size:12px;color:#374151;font-weight:600;margin-bottom:3px;'>Tech: {proj.get('tech','')}</div>"
-                f"<div>{desc}</div>{pl}</div>"
+                f"<div style='font-size:13px;color:#6b7280;margin-bottom:4px;'><b>Tech:</b> {proj.get('tech','')}</div>"
+                f"<div style='font-size:14px;color:#1c1c1c;line-height:1.6;'>{desc}</div>"
+                f"{pl}</div>"
             )
 
     cert_html_bc = ""
     for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_html_bc += (
-                f"<div style='margin-bottom:10px;padding-left:10px;border-left:2px solid #fca5a5;'>"
-                f"<a href='{cert.get('link','#')}' target='_blank' style='font-size:13px;font-weight:700;color:#7f1d1d;text-decoration:none;'>{cert.get('name','')}</a>"
-                f"<span style='font-size:12px;color:#6b7280;'> — {cert.get('duration','')}</span></div>"
+                f"<div style='margin-bottom:12px;'>"
+                f"<div style='display:flex;justify-content:space-between;'>"
+                f"<a href='{cert.get('link','#')}' target='_blank' style='font-weight:600;color:#7f1d1d;font-size:15px;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<span style='font-size:13px;color:#6b7280;'>{cert.get('duration','')}</span>"
+                f"</div></div>"
             )
 
     proj_links_sec_bc = ""
     if session_state.project_links:
         proj_links_sec_bc = "".join(
-            f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#991b1b;font-size:13px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#7f1d1d;font-weight:600;font-size:14px;'>&#128279; Project {i+1}: {lnk}</a></div>"
             for i, lnk in enumerate(session_state.project_links) if lnk)
 
-    summary_html_bc = _fmt_desc(session_state.get('summary',''), font_size='13px', color='#1c1c1c', line_height='1.8')
+    summary_html_bc = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#1c1c1c', line_height='1.8')
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title></head>
-<body style="font-family:'Georgia',serif;line-height:1.6;color:#1c1c1c;background:#fffafa;max-width:860px;margin:0 auto;padding:36px 40px;">
-  {fixed_img if fixed_img else ''}
-  <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:3px double #991b1b;">
-    <h1 style="font-size:28px;font-weight:800;color:#7f1d1d;margin-bottom:4px;font-family:'Georgia',serif;">{session_state.get('name','')}</h1>
-    <div style="font-size:15px;color:#374151;font-weight:600;margin-bottom:10px;letter-spacing:1px;">{session_state.get('job_title','')}</div>
-    <div style="font-size:12px;color:#3f1212;line-height:2;">{contact_html_bc}</div>
+<head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; }}
+  a {{ color:#7f1d1d; }}
+</style>
+</head>
+<body>
+  <div style='text-align:center;margin-bottom:6px;'>
+    {fixed_img if fixed_img else ''}
+    <h1 style='font-size:32px;font-weight:700;letter-spacing:1px;color:#7f1d1d;font-family:Georgia,serif;'>{session_state.get('name','')}</h1>
+    <div style='font-size:16px;color:#374151;font-weight:600;margin-top:4px;letter-spacing:1px;'>{session_state.get('job_title','')}</div>
+    <div style='font-size:13px;color:#3f1212;margin-top:6px;'>{contact_html_bc}</div>
   </div>
-  {_sec_bc("Professional Summary", f"<div style='font-size:13px;color:#1c1c1c;line-height:1.8;padding:12px 14px;background:#fff5f5;border-radius:6px;border:1px solid #fecaca;'>{summary_html_bc}</div>") if summary_html_bc else ''}
+  <hr style='border:none;border-top:3px double #991b1b;margin:16px 0 24px 0;'>
+  {_sec_bc("Professional Summary", f"<div style='font-size:14px;color:#1c1c1c;line-height:1.8;padding:12px 14px;background:#fff5f5;border-radius:6px;border:1px solid #fecaca;'>{summary_html_bc}</div>") if summary_html_bc else ''}
   {_sec_bc("Work Experience", exp_html_bc) if exp_html_bc else ''}
   {_sec_bc("Education", edu_html_bc) if edu_html_bc else ''}
-  {_sec_bc("Projects", proj_html_bc) if proj_html_bc else ''}
   {_sec_bc("Technical Skills", f"<div style='padding:6px 0;'>{_tags_bc(session_state.get('skills',''))}</div>") if session_state.get('skills','').strip() else ''}
   {_sec_bc("Core Competencies", f"<div style='padding:6px 0;'>{_tags_bc(session_state.get('Softskills',''),'#fff7ed','#78350f','#fed7aa')}</div>") if session_state.get('Softskills','').strip() else ''}
   {_sec_bc("Languages", f"<div style='padding:6px 0;'>{_tags_bc(session_state.get('languages',''),'#f0fdf4','#14532d','#bbf7d0')}</div>") if session_state.get('languages','').strip() else ''}
   {_sec_bc("Interests", f"<div style='padding:6px 0;'>{_tags_bc(session_state.get('interests',''),'#fdf4ff','#581c87','#e9d5ff')}</div>") if session_state.get('interests','').strip() else ''}
-  {_sec_bc("Certifications", cert_html_bc) if cert_html_bc else ''}
+  {_sec_bc("Projects", proj_html_bc) if proj_html_bc else ''}
   {_sec_bc("Project Links", proj_links_sec_bc) if proj_links_sec_bc else ''}
+  {_sec_bc("Certifications", cert_html_bc) if cert_html_bc else ''}
 </body></html>"""
 
     return html_content
