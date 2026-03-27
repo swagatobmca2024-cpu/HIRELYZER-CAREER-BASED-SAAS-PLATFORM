@@ -10377,7 +10377,6 @@ def render_cover_letter_ats(data):
         "I am particularly interested in [Company]'s work on [Product/Project/Technology Stack]. My experience with [Relevant Tool/Framework] and my understanding of [Technical Domain] position me to add immediate value to your engineering team.",
     ])
 
-    contact_parts = [name]
     if job_title: contact_parts_line = f"{name} | {job_title}"
     else:         contact_parts_line = name
 
@@ -10485,7 +10484,7 @@ def generate_cover_letter_from_resume_builder():
     location = st.session_state.get("location", "")
     today_date = datetime.today().strftime("%B %d, %Y")
 
-    # ✅ Cover Letter Template Selector
+    # ✅ FIX 1 — Template selector dropdown
     cover_letter_template = st.selectbox(
         "🎨 Choose Cover Letter Template",
         options=list(COVER_LETTER_TEMPLATES.keys()),
@@ -10493,6 +10492,12 @@ def generate_cover_letter_from_resume_builder():
         key="cover_letter_template_select",
         help="Select the style/format for your cover letter"
     )
+
+    # ✅ FIX 3 — Accent color picker (only relevant for Creative template)
+    if cover_letter_template == "Creative":
+        accent_color = st.color_picker("🎨 Choose Accent Color", value="#7c3aed", key="cl_accent_color")
+    else:
+        accent_color = "#003366"
 
     # ✅ Input boxes for contact info
     company = st.text_input("🏢 Target Company", placeholder="e.g., Google")
@@ -10510,43 +10515,78 @@ def generate_cover_letter_from_resume_builder():
         prompt = f"""
 You are a professional cover letter writer.
 
-Write a formal and compelling cover letter using the information below. 
-Format it as a real letter with:
-1. Date
-2. Recipient heading
-3. Proper salutation
-4. Three short paragraphs
-5. Professional closing
+Write ONLY the body paragraphs of a cover letter for the candidate below.
+Do NOT include: date, recipient address, salutation ("Dear ..."), closing ("Sincerely"), or the candidate's name at the end.
+The template will add all of those automatically — your job is only the 3 body paragraphs.
 
-Ensure you **only include the company name once** in the header or salutation, 
-and avoid repeating it redundantly in the body.
-
-### Heading Info:
-{today_date}
-Hiring Manager, {company}, {location}
+Output exactly 3 paragraphs separated by a blank line (double newline).
+Each paragraph should be 2-4 sentences.
 
 ### Candidate Info:
 - Name: {name}
 - Job Title: {job_title}
+- Target Company: {company}
+- Location: {location}
 - Summary: {summary}
 - Skills: {skills}
-- Location: {location}
 
 ### Instructions:
-- Do not use HTML tags. 
-- Return plain text only.
+- Do NOT include the date, header, salutation, or sign-off.
+- Do NOT start with "Dear Hiring Manager" or any greeting.
+- Do NOT end with "Sincerely" or the candidate's name.
+- Do not use HTML tags.
+- Separate each paragraph with a blank line (double newline).
+- Return plain text body paragraphs ONLY.
 """
 
         # ✅ Call LLM
-        cover_letter = call_llm(prompt, session=st.session_state).strip()
+        cover_letter_raw = call_llm(prompt, session=st.session_state).strip()
 
-        # ✅ Store plain text
-        st.session_state["cover_letter"] = cover_letter
+        # ✅ Strip any header/salutation/closing lines the LLM may have added despite instructions
+        import re as _cl_re
 
-        # ✅ Build paragraphs list for structured templates
-        body_paragraphs = [p.strip() for p in cover_letter.split("\n\n") if p.strip()]
+        def _strip_letter_boilerplate(text):
+            """Remove date lines, salutation, closing and name sign-off from LLM output."""
+            lines = text.split('\n')
+            cleaned = []
+            # Patterns to strip
+            skip_patterns = [
+                r'^\s*(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d',  # date lines
+                r'^\s*\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}',       # numeric date
+                r'^\s*dear\b',                                      # salutation
+                r'^\s*(sincerely|regards|best regards|yours truly|warm regards|respectfully)',  # closing
+                r'^\s*hiring manager[,.]?\s*$',                    # bare "Hiring Manager"
+                r'^\s*[a-z ]+,\s*(kolkata|mumbai|delhi|bangalore|hyderabad|chennai|pune)',  # "Company, City"
+            ]
+            skip_re = [_cl_re.compile(p, _cl_re.IGNORECASE) for p in skip_patterns]
+            # Also skip the last 1-2 lines if they look like a name sign-off (short line after closing)
+            # Find closing line index
+            closing_idx = None
+            for i, line in enumerate(lines):
+                if any(r.match(line) for r in skip_re[4:5]):  # closing words
+                    closing_idx = i
+            for i, line in enumerate(lines):
+                if any(r.match(line) for r in skip_re):
+                    continue
+                # Skip lines that are just the candidate name (after a closing)
+                if closing_idx is not None and i > closing_idx and line.strip().lower() in (name.lower(), job_title.lower(), ''):
+                    continue
+                cleaned.append(line)
+            return '\n'.join(cleaned).strip()
 
-        # ✅ Build data dict for template renderers
+        cover_letter_body = _strip_letter_boilerplate(cover_letter_raw)
+
+        # ✅ Store plain text (full body only, no boilerplate)
+        st.session_state["cover_letter"] = cover_letter_body
+
+        # ✅ Robust paragraph splitting (handles \n\n and single \n)
+        normalised  = _cl_re.sub(r'\n{3,}', '\n\n', cover_letter_body)
+        raw_paras   = normalised.split('\n\n')
+        if len(raw_paras) <= 1:          # fallback: LLM used single newlines only
+            raw_paras = normalised.split('\n')
+        body_paragraphs = [p.strip() for p in raw_paras if p.strip()]
+
+        # ✅ Build structured data dict for all template renderers
         cl_data = {
             "name":            name,
             "job_title":       job_title,
@@ -10560,18 +10600,29 @@ Hiring Manager, {company}, {location}
             "role":            job_title,
             "date":            today_date,
             "body_paragraphs": body_paragraphs,
-            "key_skills":      skills,        # used by ATS template
-            "accent_color":    "#003366",     # used by Creative template
+            "key_skills":      skills,       # used by ATS template
+            "accent_color":    accent_color, # FIX 3 — user-picked color for Creative
         }
 
-        # ✅ Render using the chosen template
-        selected_cl_template = st.session_state.get("cover_letter_template_select", "Professional / Corporate")
-        cover_letter_html = render_cover_letter(selected_cl_template, cl_data)
+        # ✅ FIX 1 — Render using the chosen template
+        cover_letter_html = render_cover_letter(cover_letter_template, cl_data)
 
         st.session_state["cover_letter_html"] = cover_letter_html
 
-        # ✅ Show nicely in Streamlit
-        st.markdown(cover_letter_html, unsafe_allow_html=True)
+        # ✅ Show cover letter in an iframe so the full HTML template renders correctly
+        # (st.markdown cannot render full <!DOCTYPE html> documents — it leaks raw tags)
+        import streamlit.components.v1 as _cl_components
+        st.success("✅ Cover letter generated successfully!")
+        st.markdown(
+            "<p style='color:#555; font-size:13px; margin-top:8px;'>"
+            "📄 Cover Letter Preview (scroll to explore):</p>",
+            unsafe_allow_html=True,
+        )
+        _cl_components.html(
+            cover_letter_html,
+            height=700,
+            scrolling=True,
+        )
 
 # Import necessary modules first
 import streamlit as st
