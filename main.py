@@ -17194,7 +17194,7 @@ def show_resume_scanning_animation():
             unsafe_allow_html=True
         )
         progress.progress(value)
-        time.sleep(0.6)
+        time.sleep(0.15)  # FIX: reduced from 0.6s to 0.15s — animation delay, not rerun gate
 
     status.empty()
     progress.empty()
@@ -18865,9 +18865,7 @@ Generate {num_questions} questions now:
                         st.session_state.resume_context = resume_context
 
                         st.success("✅ Resume uploaded and analyzed successfully!")
-                        
-                        time.sleep(1)
-                        st.rerun()
+                        st.rerun()  # FIX 5: removed time.sleep(1) — blocks server thread
                     else:
                         st.error("Could not extract text from resume. Please ensure it's a valid PDF.")
         else:
@@ -19243,8 +19241,7 @@ Generate {num_questions} questions now:
                                 show_resume_scanning_animation()
 
                             st.success("Questions generated! Starting your mock interview...")
-                            time.sleep(1)
-                            st.rerun()
+                            st.rerun()  # FIX 5: removed time.sleep(1)
                         else:
                             st.error("Failed to generate questions. Please try again.")
             
@@ -19275,6 +19272,16 @@ Generate {num_questions} questions now:
                 </div>
                 """, unsafe_allow_html=True)
 
+                # FIX 6: Early completion guard — resolve before fragment renders
+                if questions_answered >= st.session_state.original_num_questions and not st.session_state.dynamic_interview_completed:
+                    if st.session_state.get('interview_actual_start_time'):
+                        st.session_state.interview_final_duration_seconds = int(time.time() - st.session_state.interview_actual_start_time)
+                    else:
+                        st.session_state.interview_final_duration_seconds = None
+                    st.session_state.interview_result_saved = False
+                    st.session_state.dynamic_interview_completed = True
+                    st.rerun()
+
                 if questions_answered < st.session_state.original_num_questions:
                     question = st.session_state.current_interview_question_text or st.session_state.dynamic_interview_questions[st.session_state.current_dynamic_interview_question]
 
@@ -19295,15 +19302,17 @@ Generate {num_questions} questions now:
 
                     @st.fragment(run_every=1)
                     def _timer_fragment():
-                        # Timer + question card live together inside the fragment.
-                        # This guarantees the question never disappears — both elements
-                        # are owned by the same fragment slot and rerender atomically.
+                        # FIX: Guard against None timer start (race between full rerun and fragment tick)
+                        _start = st.session_state.get("question_timer_start")
+                        _total = st.session_state.get("timer_seconds", 120)
+                        if _start is None or _total is None or _total <= 0:
+                            return  # Timer not active yet; fragment will retry on next tick
 
-                        _elapsed   = time.time() - st.session_state.question_timer_start
-                        _remaining = max(0, st.session_state.timer_seconds - _elapsed)
+                        _elapsed   = time.time() - _start
+                        _remaining = max(0, _total - _elapsed)
                         _mins      = int(_remaining // 60)
                         _secs      = int(_remaining % 60)
-                        _pct       = 1.0 - (_remaining / st.session_state.timer_seconds)
+                        _pct       = 1.0 - (_remaining / _total)
                         _urgent    = _remaining <= 30
                         _submitted = st.session_state.get("dynamic_answer_submitted", False)
 
@@ -19376,6 +19385,10 @@ Generate {num_questions} questions now:
                         # ── Auto-submit trigger ────────────────────────────────────
                         if _remaining <= 0 and not _submitted:
                             if not st.session_state.get("_timer_expired", False):
+                                # FIX 4: Snapshot the answer widget value at the exact expiry
+                                # moment so a late-typing user cannot change it after time's up.
+                                _ans_key = f"dynamic_interview_answer_{st.session_state.get('current_dynamic_interview_question', 0)}"
+                                st.session_state["_timer_expired_answer"] = st.session_state.get(_ans_key, "")
                                 st.session_state["_timer_expired"] = True
                                 st.rerun(scope="app")
 
@@ -19420,6 +19433,7 @@ Generate {num_questions} questions now:
                         st.session_state.current_interview_id = None
                         st.session_state.question_db_ids = []
                         st.session_state.pop("_timer_expired", None)
+                        st.session_state.pop("_timer_expired_answer", None)  # FIX 9b
                         st.rerun()
 
                     # Answer input with character limit
@@ -19443,7 +19457,12 @@ Generate {num_questions} questions now:
 
                         ARCHITECTURE FIX: Every answered question is immediately saved to the
                         interview_questions DB table so the PDF can use it as single source of truth.
+                        FIX 8: Idempotency guard — bail out immediately if this question index
+                        has already been processed (prevents double-submission on rapid reruns).
                         """
+                        # FIX 8: Idempotency check using answered count vs question index
+                        if len(st.session_state.dynamic_interview_answers) > q_idx:
+                            return  # Already processed this question index — do not re-evaluate
                         diff = st.session_state.interview_difficulty
                         eval_res = evaluate_interview_answer_for_scores(
                             ans_text, q_text, diff,
@@ -19524,15 +19543,21 @@ Generate {num_questions} questions now:
                     if 'pending_followup_strategy' not in st.session_state:
                         st.session_state.pending_followup_strategy = ""
 
-                    # Auto-submit: triggered either by the fragment setting _timer_expired flag,
-                    # or by a natural rerun where remaining_time is already 0
+                    # Auto-submit: triggered by the fragment setting _timer_expired flag.
+                    # FIX 2+3: Pop flag atomically, recompute remaining time fresh (not stale),
+                    # and guard with dynamic_answer_submitted to prevent double-submission.
                     _timer_expired_flag = st.session_state.pop("_timer_expired", False)
-                    if (_timer_expired_flag or remaining_time <= 0) and not st.session_state.dynamic_answer_submitted:
-                        if not answer.strip():
-                            answer = "⚠️ No Answer"
+                    _fresh_elapsed = time.time() - st.session_state.question_timer_start if st.session_state.question_timer_start else 0
+                    _fresh_remaining = max(0, st.session_state.timer_seconds - _fresh_elapsed)
+                    if (_timer_expired_flag or _fresh_remaining <= 0) and not st.session_state.dynamic_answer_submitted:
+                        # FIX 3: Set submitted flag BEFORE processing to block any concurrent rerun
+                        st.session_state.dynamic_answer_submitted = True
+                        # FIX 4b: Prefer the answer snapshotted at expiry time (prevents post-expiry edits)
+                        _snapshotted = st.session_state.pop("_timer_expired_answer", "").strip()
+                        _auto_answer = _snapshotted if _snapshotted else (answer.strip() if answer.strip() else "⚠️ No Answer")
                         with st.spinner("Evaluating your answer..."):
                             _process_submission(
-                                answer, question,
+                                _auto_answer, question,
                                 st.session_state.current_dynamic_interview_question,
                                 questions_answered
                             )
@@ -19624,7 +19649,8 @@ Generate {num_questions} questions now:
                                 st.session_state.dynamic_answer_submitted = False
                                 st.session_state.pending_followup_display = ""
                                 st.session_state.pending_followup_strategy = ""
-                                st.session_state.pop("_timer_expired", None)  # clear so next Q starts clean
+                                st.session_state.pop("_timer_expired", None)       # clear so next Q starts clean
+                                st.session_state.pop("_timer_expired_answer", None)  # FIX 9: clear snapshotted answer
                                 if st.session_state.current_dynamic_interview_question < len(st.session_state.dynamic_interview_questions):
                                     st.session_state.current_interview_question_text = st.session_state.dynamic_interview_questions[st.session_state.current_dynamic_interview_question]
                                 else:
@@ -19667,17 +19693,15 @@ Generate {num_questions} questions now:
                     # the visual countdown entirely in the browser. Auto-submit
                     # is triggered by the hidden __TIMER_EXPIRED__ button click.
                 else:
-                    # CRITICAL FIX: All questions answered, move to completion automatically
-                    # Capture exact duration at auto-completion moment
-                    if st.session_state.get('interview_actual_start_time'):
-                        st.session_state.interview_final_duration_seconds = int(time.time() - st.session_state.interview_actual_start_time)
-                    else:
-                        st.session_state.interview_final_duration_seconds = None
-                    st.session_state.interview_result_saved = False
-                    st.session_state.dynamic_interview_completed = True
-                    st.success(f"✅ Completed all {st.session_state.original_num_questions} questions!")
-                    time.sleep(1)
-                    st.rerun()
+                    # FIX 6 (fallback): early guard above handles this; this is a safety net
+                    if not st.session_state.dynamic_interview_completed:
+                        if st.session_state.get('interview_actual_start_time'):
+                            st.session_state.interview_final_duration_seconds = int(time.time() - st.session_state.interview_actual_start_time)
+                        else:
+                            st.session_state.interview_final_duration_seconds = None
+                        st.session_state.interview_result_saved = False
+                        st.session_state.dynamic_interview_completed = True
+                        st.rerun()
             
             # UNIFIED: Interview completed + Course Recommendations + DB + PDF
             elif st.session_state.dynamic_interview_completed:
