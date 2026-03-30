@@ -1378,19 +1378,6 @@ h3, .stMarkdown h3 {
     color: var(--text-secondary) !important;
     font-family: var(--font-sans) !important;
 }
-/* ── Hide Streamlit's hardcoded "Limit 200MB per file" text ── */
-.stFileUploader [data-testid="stFileUploaderDropzone"] small {
-    display: none !important;
-}
-/* ── Inject custom "5 MB per file • PDF" in its place ── */
-.stFileUploader [data-testid="stFileUploaderDropzone"]::after {
-    content: "Limit 5MB per file \2022  PDF";
-    display: block;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    font-family: var(--font-sans);
-    margin-top: 2px;
-}
 </style>
 """, unsafe_allow_html=True)
 # 🔹 VIDEO BACKGROUND & GLOW TEXT
