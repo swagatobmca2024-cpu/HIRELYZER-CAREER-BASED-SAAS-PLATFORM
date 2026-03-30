@@ -346,27 +346,12 @@ def display_timer(remaining_seconds, expired=False, key_suffix=""):
     seconds = remaining_seconds % 60
 
     if expired or remaining_seconds <= 0:
-        st.markdown("""
-        <div class='timer-display timer-expired' style="
-            background: linear-gradient(135deg, rgba(255, 99, 71, 0.18) 0%, rgba(255, 99, 71, 0.08) 100%);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 2px solid rgba(255, 99, 71, 0.4);
-            border-radius: 14px;
-            padding: 16px 24px;
-            margin: 20px 0;
-            text-align: center;
-            box-shadow: 0 4px 20px rgba(255, 99, 71, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-        ">
-            <span class='timer-text' style="
-                color: #FF6347;
-                font-size: 1.15em;
-                font-weight: bold;
-                font-family: 'Orbitron', sans-serif;
-                text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);
-            ">⏱️ OTP Expired</span>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            "<div class='timer-display timer-expired' style=\"background:linear-gradient(135deg,rgba(255,99,71,0.18) 0%,rgba(255,99,71,0.08) 100%);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px);border:2px solid rgba(255,99,71,0.4);border-radius:14px;padding:16px 24px;margin:20px 0;text-align:center;box-shadow:0 4px 20px rgba(255,99,71,0.15),inset 0 1px 0 rgba(255,255,255,0.1);\">"
+            "<span class='timer-text' style=\"color:#FF6347;font-size:1.15em;font-weight:bold;font-family:-apple-system,sans-serif;text-shadow:0 0 18px rgba(255,99,71,0.5);\">OTP Expired</span>"
+            "</div>",
+            unsafe_allow_html=True
+        )
     else:
         # Client-side countdown for UX, but server validates on action
         st.components.v1.html(f"""
@@ -1403,37 +1388,14 @@ if not st.session_state.authenticated:
 
     # -------- Sidebar --------
     with st.sidebar:
-        st.markdown("""
-        <div style="
-            padding: 16px 4px 20px;
-            border-bottom: 1px solid rgba(255,255,255,0.07);
-            margin-bottom: 16px;
-        ">
-            <div style="
-                font-family: var(--font-sans, -apple-system, sans-serif);
-                font-size: 1.1rem;
-                font-weight: 700;
-                letter-spacing: -0.02em;
-                color: #f0f4f8;
-                line-height: 1.2;
-            ">HIRELYZER</div>
-            <div style="
-                font-size: 0.72rem;
-                font-weight: 600;
-                letter-spacing: 0.1em;
-                text-transform: uppercase;
-                color: #38bdf8;
-                margin-top: 3px;
-            ">AI Resume Intelligence</div>
-        </div>
-        <p style="
-            color: #64748b;
-            font-size: 0.8rem;
-            line-height: 1.55;
-            font-family: var(--font-sans, -apple-system, sans-serif);
-            margin-bottom: 16px;
-        ">Transform your career with AI-powered resume analysis, job matching, and smart insights.</p>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            "<div style=\"padding:16px 4px 20px;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:16px;\">"
+            "<div style=\"font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:1.1rem;font-weight:700;letter-spacing:-0.02em;color:#f0f4f8;line-height:1.2;\">HIRELYZER</div>"
+            "<div style=\"font-size:0.72rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#38bdf8;margin-top:3px;\">AI Resume Intelligence</div>"
+            "</div>"
+            "<p style=\"color:#64748b;font-size:0.8rem;line-height:1.55;font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin-bottom:16px;\">Transform your career with AI-powered resume analysis, job matching, and smart insights.</p>",
+            unsafe_allow_html=True
+        )
 
         features = [
             ("https://img.icons8.com/fluency/48/resume.png", "Resume Analyzer", "Get feedback, scores, and tips powered by AI along with the biased words detection and rewriting the resume in an inclusive way."),
@@ -2257,28 +2219,18 @@ if not st.session_state.get("authenticated", False):
 
 # ------------------- AFTER LOGIN -------------------
 if st.session_state.get("authenticated"):
-    st.markdown(f"""
-    <div class="welcome-banner">
-        <div>
-            <div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span> 👋</div>
-            <div class="welcome-subtitle">HIRELYZER — AI-Powered Resume Intelligence Platform</div>
-        </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-            <div style="
-                background: linear-gradient(135deg, rgba(52,211,153,0.15) 0%, rgba(52,211,153,0.06) 100%);
-                border: 1px solid rgba(52,211,153,0.25);
-                border-radius: 99px;
-                padding: 5px 14px;
-                font-size: 0.75rem;
-                font-weight: 600;
-                color: #6ee7b7;
-                letter-spacing: 0.04em;
-                text-transform: uppercase;
-                font-family: var(--font-sans);
-            ">● Live</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="welcome-banner">'
+        f'<div>'
+        f'<div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span> 👋</div>'
+        f'<div class="welcome-subtitle">HIRELYZER — AI-Powered Resume Intelligence Platform</div>'
+        f'</div>'
+        f'<div style="display:flex;align-items:center;gap:8px;">'
+        f'<div style="background:linear-gradient(135deg,rgba(52,211,153,0.15) 0%,rgba(52,211,153,0.06) 100%);border:1px solid rgba(52,211,153,0.25);border-radius:99px;padding:5px 14px;font-size:0.75rem;font-weight:600;color:#6ee7b7;letter-spacing:0.04em;text-transform:uppercase;font-family:-apple-system,sans-serif;">&#9679; Live</div>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
 
     # 🔓 LOGOUT BUTTON
     if st.button("🚪 Logout"):
@@ -2292,19 +2244,10 @@ if st.session_state.get("authenticated"):
         st.rerun()  # Force rerun to prevent stale UI
 
     # 🔑 GROQ API KEY SECTION (SIDEBAR)
-    st.sidebar.markdown("""
-    <p style='
-        font-size: 0.72rem;
-        font-weight: 700;
-        letter-spacing: 0.10em;
-        text-transform: uppercase;
-        color: #4a5568;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
-        padding-bottom: 8px;
-        margin-bottom: 12px;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-    '>🔑 Groq API Key</p>
-    """, unsafe_allow_html=True)
+    st.sidebar.markdown(
+        "<p style='font-size:0.72rem;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;color:#4a5568;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:8px;margin-bottom:12px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;'>Groq API Key</p>",
+        unsafe_allow_html=True
+    )
 
     # ✅ Load saved key from DB (cached — won't re-query on every rerun)
     saved_key = _cached_user_api_key(st.session_state.username)
@@ -3028,132 +2971,31 @@ def _render_scanned_rejection_card(filename: str, classification: dict):
     _svg_label_evidence = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
     _svg_label_fix      = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
 
-    st.markdown(f"""
-    <div style="
-        background: linear-gradient(135deg, {bg_color} 0%, rgba(0,0,0,0.0) 100%);
-        border: 1px solid {border_color};
-        border-radius: 16px;
-        padding: 22px 24px;
-        margin: 14px 0;
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06);
-        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'DM Sans', sans-serif;
-        animation: fadein 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
-        position: relative;
-        overflow: hidden;
-    ">
-        <!-- Shimmer bar top -->
-        <div style="
-            position:absolute; top:0; left:0; right:0; height:3px;
-            background: linear-gradient(90deg, transparent, {text_color}, transparent);
-            opacity: 0.6;
-        "></div>
-
-        <!-- Header row -->
-        <div style="display:flex; align-items:flex-start; gap:14px; margin-bottom:16px;">
-            <div style="
-                width:44px; height:44px;
-                background: rgba(255,255,255,0.05);
-                border: 1px solid rgba(255,255,255,0.09);
-                border-radius: 10px;
-                display:flex; align-items:center; justify-content:center;
-                flex-shrink:0;
-            ">{_svg_header}</div>
-            <div style="flex:1;">
-                <div style="
-                    display:flex; align-items:center; gap:6px;
-                    font-size: 0.72rem;
-                    font-weight: 700;
-                    letter-spacing: 0.1em;
-                    text-transform: uppercase;
-                    color: {text_color};
-                    margin-bottom: 4px;
-                ">{dot_svg}{badge_text}</div>
-                <div style="
-                    font-size: 1rem;
-                    font-weight: 600;
-                    color: #f0f4f8;
-                    word-break: break-all;
-                ">{filename}</div>
-            </div>
-        </div>
-
-        <!-- Stats row -->
-        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
-            <div style="
-                display:flex; align-items:center; gap:6px;
-                background: rgba(255,255,255,0.05);
-                border: 1px solid rgba(255,255,255,0.09);
-                border-radius: 8px;
-                padding: 6px 12px;
-                font-size: 0.78rem;
-                color: #94a3b8;
-            ">{_svg_pages} {page_count} page{"s" if page_count != 1 else ""}</div>
-            <div style="
-                display:flex; align-items:center; gap:6px;
-                background: rgba(255,255,255,0.05);
-                border: 1px solid rgba(255,255,255,0.09);
-                border-radius: 8px;
-                padding: 6px 12px;
-                font-size: 0.78rem;
-                color: #94a3b8;
-            ">{_svg_text} {total_words} words detected</div>
-            <div style="
-                display:flex; align-items:center; gap:6px;
-                background: rgba(255,255,255,0.05);
-                border: 1px solid rgba(255,255,255,0.09);
-                border-radius: 8px;
-                padding: 6px 12px;
-                font-size: 0.78rem;
-                color: #94a3b8;
-            ">{_svg_disk} {file_size} MB</div>
-        </div>
-
-        <!-- Detection Evidence -->
-        <div style="
-            background: rgba(0,0,0,0.2);
-            border: 1px solid rgba(255,255,255,0.06);
-            border-radius: 10px;
-            padding: 12px 16px;
-            margin-bottom: 16px;
-        ">
-            <div style="
-                display:flex; align-items:center; gap:6px;
-                font-size: 0.72rem;
-                font-weight: 700;
-                letter-spacing: 0.07em;
-                text-transform: uppercase;
-                color: #64748b;
-                margin-bottom: 10px;
-            ">{_svg_label_evidence} Detection Evidence</div>
-            <ul style="margin:0; padding:0; color:#94a3b8; font-size:0.82rem; line-height:1.6;">
-                {evidence_html}
-            </ul>
-        </div>
-
-        <!-- How to Fix -->
-        <div style="
-            background: rgba(56,189,248,0.07);
-            border: 1px solid rgba(56,189,248,0.18);
-            border-radius: 10px;
-            padding: 12px 16px;
-        ">
-            <div style="
-                display:flex; align-items:center; gap:6px;
-                font-size: 0.72rem;
-                font-weight: 700;
-                letter-spacing: 0.07em;
-                text-transform: uppercase;
-                color: #38bdf8;
-                margin-bottom: 10px;
-            ">{_svg_label_fix} How to Fix This</div>
-            <ul style="margin:0; padding:0; color:#7dd3fc; font-size:0.82rem; line-height:1.8;">
-                {fix_html}
-            </ul>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    card_html = (
+        f'<div style="background:linear-gradient(135deg,{bg_color} 0%,rgba(0,0,0,0) 100%);border:1px solid {border_color};border-radius:16px;padding:22px 24px;margin:14px 0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 8px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.06);font-family:-apple-system,BlinkMacSystemFont,sans-serif;position:relative;overflow:hidden;">'
+        f'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,{text_color},transparent);opacity:0.6;"></div>'
+        f'<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">'
+        f'<div style="width:44px;height:44px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">{_svg_header}</div>'
+        f'<div style="flex:1;">'
+        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:{text_color};margin-bottom:4px;">{dot_svg}{badge_text}</div>'
+        f'<div style="font-size:1rem;font-weight:600;color:#f0f4f8;word-break:break-all;">{filename}</div>'
+        f'</div></div>'
+        f'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">'
+        f'<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#94a3b8;">{_svg_pages} {page_count} page{"s" if page_count != 1 else ""}</div>'
+        f'<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#94a3b8;">{_svg_text} {total_words} words detected</div>'
+        f'<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#94a3b8;">{_svg_disk} {file_size} MB</div>'
+        f'</div>'
+        f'<div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px 16px;margin-bottom:16px;">'
+        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#64748b;margin-bottom:10px;">{_svg_label_evidence} Detection Evidence</div>'
+        f'<ul style="margin:0;padding:0;color:#94a3b8;font-size:0.82rem;line-height:1.6;">{evidence_html}</ul>'
+        f'</div>'
+        f'<div style="background:rgba(56,189,248,0.07);border:1px solid rgba(56,189,248,0.18);border-radius:10px;padding:12px 16px;">'
+        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#38bdf8;margin-bottom:10px;">{_svg_label_fix} How to Fix This</div>'
+        f'<ul style="margin:0;padding:0;color:#7dd3fc;font-size:0.82rem;line-height:1.8;">{fix_html}</ul>'
+        f'</div>'
+        f'</div>'
+    )
+    st.markdown(card_html, unsafe_allow_html=True)
 
 
 def extract_text_from_pdf(file_path: str):
@@ -6390,19 +6232,10 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 # ---------------- Sidebar Layout with Inline Images ----------------
-st.sidebar.markdown("""
-<p style='
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.10em;
-    text-transform: uppercase;
-    color: #4a5568;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    padding-bottom: 8px;
-    margin-bottom: 12px;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-'>🏷️ Job Configuration</p>
-""", unsafe_allow_html=True)
+st.sidebar.markdown(
+    "<p style='font-size:0.72rem;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;color:#4a5568;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:8px;margin-bottom:12px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;'>Job Configuration</p>",
+    unsafe_allow_html=True
+)
 
 # ---------------- Job Information Dropdown ----------------
 with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Enter Job Details", expanded=False):
@@ -6441,36 +6274,18 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
     # ---------------- Inline SVG Validation ----------------
     if total_weight != 90:
         st.markdown(
-            f"""
-            <div style="display:flex;align-items:center;gap:8px;
-                        border:1px solid rgba(251,113,133,0.3);
-                        background:linear-gradient(135deg,rgba(251,113,133,0.12) 0%,rgba(251,113,133,0.05) 100%);
-                        padding:10px 14px;
-                        border-radius:10px;
-                        backdrop-filter:blur(12px);">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#fb7185" style="flex-shrink:0;vertical-align:middle;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.83 0-1.5.67-1.5 1.5S11.17 20 12 20s1.5-.67 1.5-1.5S12.83 17 12 17zm1-4V7h-2v6h2z"/></svg>
-                <span style="color:#fca5a5;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;">
-                    Total = {total_weight}. Adjust to exactly 90 (Format = 10 pts fixed).
-                </span>
-            </div>
-            """,
+            f"<div style=\"display:flex;align-items:center;gap:8px;border:1px solid rgba(251,113,133,0.3);background:linear-gradient(135deg,rgba(251,113,133,0.12) 0%,rgba(251,113,133,0.05) 100%);padding:10px 14px;border-radius:10px;backdrop-filter:blur(12px);\">"
+            f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#fb7185\" style=\"flex-shrink:0;vertical-align:middle;\"><path d=\"M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.83 0-1.5.67-1.5 1.5S11.17 20 12 20s1.5-.67 1.5-1.5S12.83 17 12 17zm1-4V7h-2v6h2z\"/></svg>"
+            f"<span style=\"color:#fca5a5;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;\">Total = {total_weight}. Adjust to exactly 90 (Format = 10 pts fixed).</span>"
+            f"</div>",
             unsafe_allow_html=True
         )
     else:
         st.markdown(
-            f"""
-            <div style="display:flex;align-items:center;gap:8px;
-                        border:1px solid rgba(52,211,153,0.28);
-                        background:linear-gradient(135deg,rgba(52,211,153,0.12) 0%,rgba(52,211,153,0.05) 100%);
-                        padding:10px 14px;
-                        border-radius:10px;
-                        backdrop-filter:blur(12px);">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#34d399" style="flex-shrink:0;vertical-align:middle;"><path d="M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.3 7.7l-1.4-1.4z"/></svg>
-                <span style="color:#6ee7b7;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;">
-                    Weights balanced · Content = 90 pts · Format = 10 pts · Total = 100
-                </span>
-            </div>
-            """,
+            f"<div style=\"display:flex;align-items:center;gap:8px;border:1px solid rgba(52,211,153,0.28);background:linear-gradient(135deg,rgba(52,211,153,0.12) 0%,rgba(52,211,153,0.05) 100%);padding:10px 14px;border-radius:10px;backdrop-filter:blur(12px);\">"
+            f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#34d399\" style=\"flex-shrink:0;vertical-align:middle;\"><path d=\"M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.3 7.7l-1.4-1.4z\"/></svg>"
+            f"<span style=\"color:#6ee7b7;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;\">Weights balanced · Content = 90 pts · Format = 10 pts · Total = 100</span>"
+            f"</div>",
             unsafe_allow_html=True
         )
 
@@ -7308,24 +7123,13 @@ with tab1:
             missing_skills = resume.get("Missing Skills", [])
 
             with st.expander(f"{resume_name} | {candidate_name}"):
-                st.markdown(f"""
-                <div style="
-                    background: linear-gradient(135deg, rgba(56,189,248,0.10) 0%, rgba(79,163,227,0.05) 100%);
-                    border: 1px solid rgba(56,189,248,0.18);
-                    border-radius: 14px;
-                    padding: 18px 22px;
-                    margin-bottom: 20px;
-                ">
-                    <div style="
-                        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
-                        font-size: 1rem;
-                        font-weight: 700;
-                        color: #f0f4f8;
-                        letter-spacing: -0.01em;
-                    ">ATS Evaluation — <span style='color:#38bdf8;'>{candidate_name}</span></div>
-                    <div style="font-size:0.75rem; color:#64748b; margin-top:4px; font-family: -apple-system, sans-serif; text-transform:uppercase; letter-spacing:0.05em;">Resume Intelligence Report</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(
+                    f'<div style="background:linear-gradient(135deg,rgba(56,189,248,0.10) 0%,rgba(79,163,227,0.05) 100%);border:1px solid rgba(56,189,248,0.18);border-radius:14px;padding:18px 22px;margin-bottom:20px;">'
+                    f'<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:1rem;font-weight:700;color:#f0f4f8;letter-spacing:-0.01em;">ATS Evaluation — <span style="color:#38bdf8;">{candidate_name}</span></div>'
+                    f'<div style="font-size:0.75rem;color:#64748b;margin-top:4px;font-family:-apple-system,sans-serif;text-transform:uppercase;letter-spacing:0.05em;">Resume Intelligence Report</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
 
                 # ── SVG icon helper ──────────────────────────────────────────────
                 SVG_ICONS = {
@@ -7343,26 +7147,15 @@ with tab1:
 
                 def svg_ats_card(svg_key, label, value, tooltip=None):
                     tooltip_attr = f'title="{tooltip}"' if tooltip else ""
-                    return f"""
-                    <div style="
-                        background: rgba(15,23,42,0.85);
-                        border: 1px solid rgba(56,189,248,0.25);
-                        border-radius: 12px;
-                        padding: 14px 16px;
-                        margin-bottom: 8px;
-                        height: 86px;
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        overflow: hidden;
-                        box-sizing: border-box;
-                    ">
-                        <div style="display:flex;align-items:center;gap:6px;font-size:0.72rem; color:#94a3b8;">
-                            <span style="color:#38bdf8;flex-shrink:0;">{SVG_ICONS.get(svg_key,"")}</span>
-                            <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{label}</span>
-                        </div>
-                        <div {tooltip_attr} style="font-size:1.35rem; font-weight:700; color:#f0f4f8; margin-top:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{value}</div>
-                    </div>"""
+                    return (
+                        f'<div style="background:rgba(15,23,42,0.85);border:1px solid rgba(56,189,248,0.25);border-radius:12px;padding:14px 16px;margin-bottom:8px;height:86px;display:flex;flex-direction:column;justify-content:center;overflow:hidden;box-sizing:border-box;">'
+                        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:#94a3b8;">'
+                        f'<span style="color:#38bdf8;flex-shrink:0;">{SVG_ICONS.get(svg_key,"")}</span>'
+                        f'<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{label}</span>'
+                        f'</div>'
+                        f'<div {tooltip_attr} style="font-size:1.35rem;font-weight:700;color:#f0f4f8;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{value}</div>'
+                        f'</div>'
+                    )
 
                 # ── Overall Score Gauge (SVG) ────────────────────────────────────
                 overall_pct = resume.get("ATS Match %", 0)
@@ -7384,42 +7177,30 @@ with tab1:
                 circumference = 3.14159 * radius  # half-circle arc = π*r
                 arc_offset = circumference * (1 - overall_pct / 100)
 
-                st.markdown(f"""
-                <div style="display:flex;align-items:center;gap:32px;padding:20px 24px;
-                            background:rgba(15,23,42,0.9);border:1px solid rgba(56,189,248,0.2);
-                            border-radius:16px;margin-bottom:20px;flex-wrap:wrap;">
-                    <!-- Gauge -->
-                    <div style="flex-shrink:0;text-align:center;">
-                        <svg width="180" height="100" viewBox="0 0 180 100">
-                            <!-- Track -->
-                            <path d="M 20 90 A 70 70 0 0 1 160 90" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="12" stroke-linecap="round"/>
-                            <!-- Value arc -->
-                            <path d="M 20 90 A 70 70 0 0 1 160 90" fill="none"
-                                stroke="{gauge_color}" stroke-width="12" stroke-linecap="round"
-                                stroke-dasharray="{circumference}" stroke-dashoffset="{arc_offset}"
-                                style="transition:stroke-dashoffset 0.8s ease;"/>
-                            <!-- Score text -->
-                            <text x="90" y="80" text-anchor="middle" font-size="28" font-weight="700"
-                                fill="{gauge_color}" font-family="-apple-system,sans-serif">{overall_pct}</text>
-                            <text x="90" y="98" text-anchor="middle" font-size="11" fill="#64748b"
-                                font-family="-apple-system,sans-serif">/ 100</text>
-                        </svg>
-                        <div style="font-size:0.75rem;color:#64748b;margin-top:2px;font-family:-apple-system,sans-serif;letter-spacing:0.04em;text-transform:uppercase;">Overall ATS Score</div>
-                    </div>
-                    <!-- Label & Format quick-look -->
-                    <div style="flex:1;min-width:200px;">
-                        <div style="font-size:1.1rem;font-weight:700;color:#f0f4f8;font-family:-apple-system,sans-serif;">{resume.get("Formatted Score","N/A")}</div>
-                        <div style="margin-top:12px;display:flex;align-items:center;gap:10px;">
-                            <span style="color:#38bdf8;">{SVG_ICONS["format"]}</span>
-                            <span style="font-size:0.82rem;color:#94a3b8;">Format Score:</span>
-                            <span style="font-size:0.95rem;font-weight:700;color:#f0f4f8;">{fmt_score}/100</span>
-                            <span style="background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.25);
-                                        border-radius:6px;padding:2px 8px;font-size:0.75rem;font-weight:700;color:#38bdf8;">{fmt_grade}</span>
-                        </div>
-                        <div style="margin-top:6px;font-size:0.78rem;color:#64748b;">{fmt_label}</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                gauge_html = (
+                    f'<div style="display:flex;align-items:center;gap:32px;padding:20px 24px;background:rgba(15,23,42,0.9);border:1px solid rgba(56,189,248,0.2);border-radius:16px;margin-bottom:20px;flex-wrap:wrap;">'
+                    f'<div style="flex-shrink:0;text-align:center;">'
+                    f'<svg width="180" height="100" viewBox="0 0 180 100">'
+                    f'<path d="M 20 90 A 70 70 0 0 1 160 90" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="12" stroke-linecap="round"/>'
+                    f'<path d="M 20 90 A 70 70 0 0 1 160 90" fill="none" stroke="{gauge_color}" stroke-width="12" stroke-linecap="round" stroke-dasharray="{circumference}" stroke-dashoffset="{arc_offset}" style="transition:stroke-dashoffset 0.8s ease;"/>'
+                    f'<text x="90" y="80" text-anchor="middle" font-size="28" font-weight="700" fill="{gauge_color}" font-family="-apple-system,sans-serif">{overall_pct}</text>'
+                    f'<text x="90" y="98" text-anchor="middle" font-size="11" fill="#64748b" font-family="-apple-system,sans-serif">/ 100</text>'
+                    f'</svg>'
+                    f'<div style="font-size:0.75rem;color:#64748b;margin-top:2px;font-family:-apple-system,sans-serif;letter-spacing:0.04em;text-transform:uppercase;">Overall ATS Score</div>'
+                    f'</div>'
+                    f'<div style="flex:1;min-width:200px;">'
+                    f'<div style="font-size:1.1rem;font-weight:700;color:#f0f4f8;font-family:-apple-system,sans-serif;">{resume.get("Formatted Score","N/A")}</div>'
+                    f'<div style="margin-top:12px;display:flex;align-items:center;gap:10px;">'
+                    f'<span style="color:#38bdf8;">{SVG_ICONS["format"]}</span>'
+                    f'<span style="font-size:0.82rem;color:#94a3b8;">Format Score:</span>'
+                    f'<span style="font-size:0.95rem;font-weight:700;color:#f0f4f8;">{fmt_score}/100</span>'
+                    f'<span style="background:rgba(56,189,248,0.12);border:1px solid rgba(56,189,248,0.25);border-radius:6px;padding:2px 8px;font-size:0.75rem;font-weight:700;color:#38bdf8;">{fmt_grade}</span>'
+                    f'</div>'
+                    f'<div style="margin-top:6px;font-size:0.78rem;color:#64748b;">{fmt_label}</div>'
+                    f'</div>'
+                    f'</div>'
+                )
+                st.markdown(gauge_html, unsafe_allow_html=True)
 
                 # ── Score cards row 1 ──────────────────────────────────────────
                 formatted_val = resume.get("Formatted Score", "N/A")
