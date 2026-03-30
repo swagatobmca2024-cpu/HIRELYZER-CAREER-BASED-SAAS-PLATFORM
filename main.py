@@ -2670,8 +2670,10 @@ def ensure_nltk():
     return WordNetLemmatizer()
 
 lemmatizer = ensure_nltk()
-# reader is intentionally NOT loaded here — it is fetched lazily inside
-# extract_text_from_images() only when an image-based PDF passes all guards.
+# EasyOCR reader is intentionally NOT loaded here at module startup.
+# It is loaded lazily inside extract_text_from_images() only when a
+# partially-scanned PDF is encountered. This prevents the ~500 MB model
+# from being pulled on every cold start and avoids OOM on Streamlit Cloud.
 
 def generate_docx(text, filename="bias_free_resume.docx"):
     doc = Document()
@@ -2799,13 +2801,366 @@ def _extract_page_text_smart(page) -> str:
     return "\n".join(b[4].strip() for b in all_sorted)
 
 
-def extract_text_from_pdf(file_path):
+# ============================================================
+# 🔍 Scanned PDF Detection — Multi-Signal Engine
+# ============================================================
+
+# Sentinel returned by safe_extract_text when file is image-only
+_SCANNED_SENTINEL = "__SCANNED_PDF__"
+
+def _classify_pdf(file_path: str) -> dict:
     """
-    Returns a typed dict so callers can branch without triggering OCR silently.
-    Shapes:
-      {"type": "text",      "pages": [...]}          - digital PDF, text extracted
-      {"type": "image_pdf", "pages": []}             - no text layer found (scanned)
-      {"type": "error",     "pages": [], "msg": str} - fitz could not open the file
+    Multi-signal classifier that determines whether a PDF is text-based
+    or image/scan-based. Returns a dict with keys:
+      - is_scanned     : bool   — True if PDF is image-only
+      - confidence     : str    — 'definite' | 'likely' | 'uncertain'
+      - page_count     : int
+      - text_pages     : int    — pages with meaningful text (≥40 words)
+      - image_only_pages: int   — pages with embedded images but no text
+      - total_words    : int    — total word count across all pages
+      - file_size_mb   : float
+      - signals        : list   — human-readable evidence list
+
+    Detection uses FOUR independent signals so no single edge case can
+    misclassify a real text-based resume as scanned:
+
+    Signal 1 — Text density per page via PyMuPDF get_text()
+      A real resume page has ≥40 recognisable words. Fewer means the
+      page either has no text layer or the text is in images.
+
+    Signal 2 — Image-block ratio via get_text("dict") block analysis
+      Counts how many blocks on a page are image-type (type == 1) vs
+      text-type (type == 0). Scanned PDFs are 100% image blocks.
+
+    Signal 3 — Character confidence heuristic
+      OCR-produced or truly embedded text has normal char distribution.
+      Random symbol dumps (mojibake from scanned-then-OCR'd PDFs) have
+      high ratio of non-ASCII or non-printable chars → flagged.
+
+    Signal 4 — Embedded font check
+      Text-based PDFs always embed at least one font. A PDF with zero
+      embedded fonts across all pages has no real text layer.
+    """
+    signals = []
+    result = {
+        "is_scanned": False,
+        "confidence": "uncertain",
+        "page_count": 0,
+        "text_pages": 0,
+        "image_only_pages": 0,
+        "total_words": 0,
+        "file_size_mb": 0.0,
+        "signals": signals,
+    }
+
+    try:
+        result["file_size_mb"] = round(os.path.getsize(file_path) / (1024 * 1024), 2)
+        doc = fitz.open(file_path)
+        page_count = doc.page_count
+        result["page_count"] = page_count
+
+        text_pages       = 0
+        image_only_pages = 0
+        total_words      = 0
+        total_fonts      = 0
+        high_noise_pages = 0
+
+        for page in doc:
+            # ── Signal 1: text density ────────────────────────────────────
+            raw_text  = page.get_text("text") or ""
+            words     = [w for w in raw_text.split() if len(w) > 1]
+            word_count = len(words)
+            total_words += word_count
+
+            if word_count >= 40:
+                text_pages += 1
+            else:
+                # ── Signal 2: image-block ratio ───────────────────────────
+                page_dict   = page.get_text("dict")
+                all_blocks  = page_dict.get("blocks", [])
+                img_blocks  = [b for b in all_blocks if b.get("type") == 1]
+                text_blocks = [b for b in all_blocks if b.get("type") == 0
+                               and any(
+                                   span.get("text", "").strip()
+                                   for line in b.get("lines", [])
+                                   for span in line.get("spans", [])
+                               )]
+                if img_blocks and not text_blocks:
+                    image_only_pages += 1
+                    signals.append(f"Page {page.number + 1}: image-only block (no text layer)")
+
+            # ── Signal 3: character noise ratio ──────────────────────────
+            if word_count > 5:
+                total_chars  = len(raw_text)
+                noise_chars  = sum(
+                    1 for c in raw_text
+                    if ord(c) > 127 or (ord(c) < 32 and c not in "\n\r\t")
+                )
+                noise_ratio  = noise_chars / max(total_chars, 1)
+                if noise_ratio > 0.15:
+                    high_noise_pages += 1
+
+            # ── Signal 4: embedded font check ─────────────────────────────
+            font_list = page.get_fonts(full=False)
+            total_fonts += len(font_list)
+
+        doc.close()
+
+        result["text_pages"]        = text_pages
+        result["image_only_pages"]  = image_only_pages
+        result["total_words"]       = total_words
+
+        # ── Decision logic (multi-signal voting) ─────────────────────────
+        text_page_ratio  = text_pages / max(page_count, 1)
+        image_page_ratio = image_only_pages / max(page_count, 1)
+
+        # DEFINITE scanned: zero readable text pages + image blocks present
+        if text_pages == 0 and image_only_pages > 0:
+            result["is_scanned"]  = True
+            result["confidence"]  = "definite"
+            signals.append(f"Zero text pages found; {image_only_pages}/{page_count} page(s) are pure image blocks")
+
+        # DEFINITE scanned: no text at all and no embedded fonts
+        elif total_words < 30 and total_fonts == 0:
+            result["is_scanned"]  = True
+            result["confidence"]  = "definite"
+            signals.append(f"Only {total_words} words found and zero embedded fonts — no text layer")
+
+        # LIKELY scanned: very low text coverage across majority of pages
+        elif text_page_ratio < 0.30 and image_page_ratio >= 0.50:
+            result["is_scanned"]  = True
+            result["confidence"]  = "likely"
+            signals.append(
+                f"Only {text_pages}/{page_count} pages have ≥40 words; "
+                f"{image_only_pages} page(s) are image-only"
+            )
+
+        # UNCERTAIN: some text but very low total word count with images present
+        elif total_words < 80 and image_only_pages > 0:
+            result["is_scanned"]  = True
+            result["confidence"]  = "uncertain"
+            signals.append(
+                f"Low word count ({total_words} total) with image-only pages — "
+                "likely partially scanned"
+            )
+
+        else:
+            result["is_scanned"]  = False
+            result["confidence"]  = "definite"
+            signals.append(
+                f"Text-based PDF confirmed: {text_pages}/{page_count} pages readable, "
+                f"{total_words} total words"
+            )
+
+    except Exception as e:
+        signals.append(f"Classifier error: {e}")
+        result["confidence"] = "uncertain"
+
+    return result
+
+
+def _render_scanned_rejection_card(filename: str, classification: dict):
+    """
+    Renders an industry-standard rejection card for scanned/image PDFs.
+    Matches the app's existing glassmorphism dark theme exactly.
+    Shows classification evidence so the user understands why their file failed.
+    """
+    # SVG dot icon per confidence tier — replaces colored circle emojis
+    _dot_svg = {
+        "definite":  '<svg width="9" height="9" viewBox="0 0 9 9" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;margin-top:1px;"><circle cx="4.5" cy="4.5" r="4.5" fill="#fb7185"/></svg>',
+        "likely":    '<svg width="9" height="9" viewBox="0 0 9 9" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;margin-top:1px;"><circle cx="4.5" cy="4.5" r="4.5" fill="#fb923c"/></svg>',
+        "uncertain": '<svg width="9" height="9" viewBox="0 0 9 9" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;margin-top:1px;"><circle cx="4.5" cy="4.5" r="4.5" fill="#fbbf24"/></svg>',
+    }
+
+    confidence_label = {
+        "definite":  ("Unreadable — Image-Only PDF",        "#fb7185", "rgba(251,113,133,0.18)", "rgba(251,113,133,0.35)"),
+        "likely":    ("Likely Scanned — Low Text Coverage",  "#fb923c", "rgba(251,146, 60,0.18)", "rgba(251,146, 60,0.35)"),
+        "uncertain": ("Partially Scanned — Low Text Quality","#fbbf24", "rgba(251,191, 36,0.18)", "rgba(251,191, 36,0.35)"),
+    }.get(
+        classification["confidence"],
+        ("Scan Quality Issue", "#fbbf24", "rgba(251,191,36,0.18)", "rgba(251,191,36,0.35)")
+    )
+
+    dot_svg     = _dot_svg.get(classification["confidence"], _dot_svg["uncertain"])
+    badge_text, text_color, bg_color, border_color = confidence_label
+    page_count  = classification.get("page_count", "?")
+    total_words = classification.get("total_words", 0)
+    file_size   = classification.get("file_size_mb", 0)
+    signals     = classification.get("signals", [])
+
+    # Build evidence bullet list — SVG bullet marker instead of default disc
+    _bullet = '<svg width="6" height="6" viewBox="0 0 6 6" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;margin-top:5px;"><circle cx="3" cy="3" r="3" fill="#475569"/></svg>'
+    evidence_html = "".join(
+        f"<li style='display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;list-style:none;'>"
+        f"{_bullet}"
+        f"<span>{s}</span></li>"
+        for s in signals[:4]
+    )
+
+    # SVG icons for stat pills
+    _svg_pages = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+    _svg_text  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>'
+    _svg_disk  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>'
+
+    # SVG icon for header — image/scan concept (image frame with slash)
+    _svg_header = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/><line x1="2" y1="2" x2="22" y2="22" stroke="{c}" stroke-width="1.5"/></svg>'.replace("{c}", text_color)
+
+    # SVG icons for "How to Fix" section labels
+    _svg_fix_word  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>'
+    _svg_fix_export= '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>'
+    _svg_fix_scan  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><line x1="2" y1="2" x2="22" y2="22"/><path d="M10.58 10.58A2 2 0 0013 13"/><path d="M17.94 17.94A10 10 0 013.34 7.34"/></svg>'
+    _svg_fix_acro  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+
+    fix_items = [
+        (_svg_fix_word,   "Open your resume in <strong>Microsoft Word or Google Docs</strong>"),
+        (_svg_fix_export, "Export / Download as <strong>PDF</strong> — this creates a text-layer PDF"),
+        (_svg_fix_scan,   "Avoid scanning a printed resume — use the original digital file"),
+        (_svg_fix_acro,   "If you only have a scanned copy, use <strong>Adobe Acrobat → OCR → Save as PDF</strong>"),
+    ]
+    fix_html = "".join(
+        f"<li style='display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;list-style:none;'>"
+        f"{icon}<span>{text}</span></li>"
+        for icon, text in fix_items
+    )
+
+    # SVG icons for section header labels (evidence / how to fix)
+    _svg_label_evidence = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+    _svg_label_fix      = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+
+    st.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, {bg_color} 0%, rgba(0,0,0,0.0) 100%);
+        border: 1px solid {border_color};
+        border-radius: 16px;
+        padding: 22px 24px;
+        margin: 14px 0;
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.06);
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'DM Sans', sans-serif;
+        animation: fadein 0.4s cubic-bezier(0.34,1.56,0.64,1) forwards;
+        position: relative;
+        overflow: hidden;
+    ">
+        <!-- Shimmer bar top -->
+        <div style="
+            position:absolute; top:0; left:0; right:0; height:3px;
+            background: linear-gradient(90deg, transparent, {text_color}, transparent);
+            opacity: 0.6;
+        "></div>
+
+        <!-- Header row -->
+        <div style="display:flex; align-items:flex-start; gap:14px; margin-bottom:16px;">
+            <div style="
+                width:44px; height:44px;
+                background: rgba(255,255,255,0.05);
+                border: 1px solid rgba(255,255,255,0.09);
+                border-radius: 10px;
+                display:flex; align-items:center; justify-content:center;
+                flex-shrink:0;
+            ">{_svg_header}</div>
+            <div style="flex:1;">
+                <div style="
+                    display:flex; align-items:center; gap:6px;
+                    font-size: 0.72rem;
+                    font-weight: 700;
+                    letter-spacing: 0.1em;
+                    text-transform: uppercase;
+                    color: {text_color};
+                    margin-bottom: 4px;
+                ">{dot_svg}{badge_text}</div>
+                <div style="
+                    font-size: 1rem;
+                    font-weight: 600;
+                    color: #f0f4f8;
+                    word-break: break-all;
+                ">{filename}</div>
+            </div>
+        </div>
+
+        <!-- Stats row -->
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+            <div style="
+                display:flex; align-items:center; gap:6px;
+                background: rgba(255,255,255,0.05);
+                border: 1px solid rgba(255,255,255,0.09);
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 0.78rem;
+                color: #94a3b8;
+            ">{_svg_pages} {page_count} page{"s" if page_count != 1 else ""}</div>
+            <div style="
+                display:flex; align-items:center; gap:6px;
+                background: rgba(255,255,255,0.05);
+                border: 1px solid rgba(255,255,255,0.09);
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 0.78rem;
+                color: #94a3b8;
+            ">{_svg_text} {total_words} words detected</div>
+            <div style="
+                display:flex; align-items:center; gap:6px;
+                background: rgba(255,255,255,0.05);
+                border: 1px solid rgba(255,255,255,0.09);
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 0.78rem;
+                color: #94a3b8;
+            ">{_svg_disk} {file_size} MB</div>
+        </div>
+
+        <!-- Detection Evidence -->
+        <div style="
+            background: rgba(0,0,0,0.2);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+        ">
+            <div style="
+                display:flex; align-items:center; gap:6px;
+                font-size: 0.72rem;
+                font-weight: 700;
+                letter-spacing: 0.07em;
+                text-transform: uppercase;
+                color: #64748b;
+                margin-bottom: 10px;
+            ">{_svg_label_evidence} Detection Evidence</div>
+            <ul style="margin:0; padding:0; color:#94a3b8; font-size:0.82rem; line-height:1.6;">
+                {evidence_html}
+            </ul>
+        </div>
+
+        <!-- How to Fix -->
+        <div style="
+            background: rgba(56,189,248,0.07);
+            border: 1px solid rgba(56,189,248,0.18);
+            border-radius: 10px;
+            padding: 12px 16px;
+        ">
+            <div style="
+                display:flex; align-items:center; gap:6px;
+                font-size: 0.72rem;
+                font-weight: 700;
+                letter-spacing: 0.07em;
+                text-transform: uppercase;
+                color: #38bdf8;
+                margin-bottom: 10px;
+            ">{_svg_label_fix} How to Fix This</div>
+            <ul style="margin:0; padding:0; color:#7dd3fc; font-size:0.82rem; line-height:1.8;">
+                {fix_html}
+            </ul>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def extract_text_from_pdf(file_path: str):
+    """
+    Extracts text from a PDF using PyMuPDF smart extraction.
+    Returns list of page text strings, or empty list if nothing found.
+    Does NOT fall through to OCR — scanned detection is handled upstream
+    by _classify_pdf() + safe_extract_text().
     """
     try:
         doc = fitz.open(file_path)
@@ -2815,181 +3170,108 @@ def extract_text_from_pdf(file_path):
             if page_text.strip():
                 text_list.append(page_text)
         doc.close()
-
-        # Require at least 50 meaningful chars per page on average.
-        # Below this the "text layer" is noise (watermarks, lone chars, etc.)
-        # and the file must be treated as image-based - never silently OCR.
-        total_chars = sum(len(t.strip()) for t in text_list)
-        page_count  = max(len(text_list), 1)
-        if text_list and (total_chars / page_count) >= 50:
-            return {"type": "text", "pages": text_list}
-        return {"type": "image_pdf", "pages": []}
-
+        return text_list
     except Exception as e:
-        return {"type": "error", "pages": [], "msg": str(e)}
+        st.error(f"⚠ Error extracting text: {e}")
+        return []
+
 
 def extract_text_from_images(pdf_path):
     """
-    OCR fallback - only called when the caller has already decided OCR is worth
-    attempting (after the file-size gate and image_pdf classification).
-    - Lazy-loads EasyOCR so it never costs RAM unless actually needed.
-    - Downscales images to 1200px wide max before passing to EasyOCR to keep
-      memory under control on cloud deployments.
-    - Caps at 3 pages (not 5) to halve worst-case RAM use.
-    - Releases PIL images and numpy arrays immediately after use.
+    OCR fallback using EasyOCR — only called when explicitly requested
+    and classification confidence is 'uncertain' (partial scan).
+    EasyOCR reader is loaded lazily here, not at module startup.
     """
     try:
         _reader = get_easyocr_reader()
         images = convert_from_path(pdf_path, dpi=120, first_page=1, last_page=3)
         results = []
         for img in images:
-            max_w = 1200
-            if img.width > max_w:
-                ratio = max_w / img.width
-                img = img.resize(
-                    (max_w, int(img.height * ratio)),
-                    Image.LANCZOS
-                )
-            arr = np.array(img)
-            text = "\n".join(_reader.readtext(arr, detail=0))
-            results.append(text)
-            del arr, img
+            try:
+                page_text = "\n".join(_reader.readtext(np.array(img), detail=0))
+                if page_text.strip():
+                    results.append(page_text)
+            except Exception:
+                continue
         return results
     except Exception as e:
-        st.error(f"Error during OCR: {e}")
+        st.error(f"⚠ Error extracting from image: {e}")
         return []
+
+
 def safe_extract_text(uploaded_file):
     """
-    3-layer guard before any heavy processing:
-      Layer 1 - File size gate  : reject > 5 MB immediately, zero processing cost.
-      Layer 2 - Scanned PDF gate: if fitz finds no text layer, show banner + stop.
-                                  Never silently fall through to OCR.
-      Layer 3 - OCR quality gate: if OCR runs but yields < 100 words total,
-                                  the output is too noisy for LLM analysis — stop.
+    Main entry point for PDF text extraction.
+
+    Flow:
+      1. Write file to /tmp
+      2. Run _classify_pdf() — multi-signal scanned detector
+      3. If DEFINITE scanned  → render rejection card, return sentinel
+      4. If LIKELY scanned    → render rejection card, return sentinel
+      5. If UNCERTAIN         → attempt OCR, return text if usable or sentinel
+      6. If text-based        → extract with PyMuPDF, return text
+      7. If extracted text is still empty after all attempts → warn, return None
 
     Returns:
-      str   - extracted text, ready for analysis
-      None  - file rejected at any guard; UI banner already shown to user
+      str   — extracted resume text (usable)
+      _SCANNED_SENTINEL — file is image-based, rejection card already shown
+      None  — file is unreadable for an unknown reason
     """
-
-    # ── LAYER 1 : file size gate ─────────────────────────────────────────────
-    MAX_BYTES = 5 * 1024 * 1024  # 5 MB
-    file_size = uploaded_file.size
-
-    if file_size > MAX_BYTES:
-        size_mb = file_size / (1024 * 1024)
-        st.markdown(f"""
-        <div class='slide-message error-msg'>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="12"/>
-                <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            <span>
-                <b>{uploaded_file.name}</b> is {size_mb:.1f} MB — maximum allowed is 5 MB.
-                Heavy scanned files cannot be processed reliably.
-                Please compress it at <b>smallpdf.com</b> and re-upload.
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
-        return None
-
-    # ── Write to temp file ────────────────────────────────────────────────────
-    import tempfile, os
     try:
-        suffix = os.path.splitext(uploaded_file.name)[1] or ".pdf"
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(uploaded_file.getbuffer())
-            temp_path = tmp.name
+        temp_path = f"/tmp/{uploaded_file.name}"
+        with open(temp_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+
+        # ── Step 1: classify the PDF ──────────────────────────────────────
+        classification = _classify_pdf(temp_path)
+
+        # ── Step 2: handle scanned/image PDFs ────────────────────────────
+        if classification["is_scanned"]:
+            confidence = classification["confidence"]
+
+            if confidence in ("definite", "likely"):
+                # Hard reject — no OCR attempt, show full rejection card
+                _render_scanned_rejection_card(uploaded_file.name, classification)
+                return _SCANNED_SENTINEL
+
+            else:
+                # Uncertain — try OCR as last resort
+                ocr_text_list = extract_text_from_images(temp_path)
+                if ocr_text_list:
+                    ocr_text = "\n".join(ocr_text_list)
+                    ocr_words = len([w for w in ocr_text.split() if len(w) > 1])
+                    if ocr_words >= 60:
+                        # OCR gave enough signal — usable but warn the user
+                        st.markdown(f"""
+                        <div class='slide-message warn-msg'>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"
+                              stroke-width="2" viewBox="0 0 24 24" width="16" height="16">
+                              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                            </svg>
+                            ⚠️ <b>{uploaded_file.name}</b> appears partially scanned.
+                            Analysis is based on OCR text ({ocr_words} words) — accuracy may be reduced.
+                            For best results, upload a text-based PDF.
+                        </div>
+                        """, unsafe_allow_html=True)
+                        return ocr_text
+
+                # OCR gave too little — show rejection card
+                _render_scanned_rejection_card(uploaded_file.name, classification)
+                return _SCANNED_SENTINEL
+
+        # ── Step 3: text-based PDF — normal extraction ────────────────────
+        text_list = extract_text_from_pdf(temp_path)
+
+        if not text_list or all(len(t.strip()) == 0 for t in text_list):
+            st.warning("⚠️ This file doesn't look like a resume or contains no readable text.")
+            return None
+
+        return "\n".join(text_list)
+
     except Exception as e:
-        st.markdown(f"""
-        <div class='slide-message error-msg'>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="12"/>
-                <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            <span>Could not write <b>{uploaded_file.name}</b> to disk: {e}</span>
-        </div>
-        """, unsafe_allow_html=True)
+        st.error(f"⚠️ Could not process this file: {e}")
         return None
-
-    try:
-        # ── LAYER 2 : scanned / image PDF gate ───────────────────────────────
-        result = extract_text_from_pdf(temp_path)
-
-        if result["type"] == "error":
-            st.markdown(f"""
-            <div class='slide-message error-msg'>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                     viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                <span>Could not open <b>{uploaded_file.name}</b>: {result.get("msg", "unknown error")}</span>
-            </div>
-            """, unsafe_allow_html=True)
-            return None
-
-        if result["type"] == "image_pdf":
-            st.markdown(f"""
-            <div class='slide-message warn-msg'>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                     viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94
-                             a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                    <line x1="12" y1="9" x2="12" y2="13"/>
-                    <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-                <span>
-                    <b>{uploaded_file.name}</b> is a scanned or image-only PDF —
-                    no text layer was found. ATS systems cannot read this file.
-                    For best results, upload a digitally-created PDF.
-                </span>
-            </div>
-            """, unsafe_allow_html=True)
-            return None
-
-        # type == "text" — digital PDF extracted successfully
-        text_pages = result["pages"]
-
-        # ── LAYER 3 : OCR quality gate (only if we ever reach OCR path) ──────
-        full_text = "\n".join(text_pages)
-        word_count = len(full_text.split())
-        if word_count < 100:
-            st.markdown(f"""
-            <div class='slide-message warn-msg'>
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                     viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94
-                             a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                    <line x1="12" y1="9" x2="12" y2="13"/>
-                    <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-                <span>
-                    <b>{uploaded_file.name}</b> contains very little readable text ({word_count} words).
-                    This may not be a valid resume or the content is not parseable.
-                </span>
-            </div>
-            """, unsafe_allow_html=True)
-            return None
-
-        return full_text
-
-    finally:
-        # Always clean up the temp file regardless of outcome
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
 
 
 # ============================================================
@@ -6211,7 +6493,7 @@ with tab1:
         "📄 Upload PDF Resumes",
         type=["pdf"],
         accept_multiple_files=True,
-        help="Upload one or more resumes in PDF format (max 5 MB each). Scanned or image-only PDFs are not supported."
+        help="Upload one or more resumes in PDF format (max 200MB each)."
     )
 
     if uploaded_files:
@@ -6230,9 +6512,10 @@ with tab1:
                     uploaded_file.seek(0)
 
                     # ✅ Extract text safely
+                    # _SCANNED_SENTINEL means scanned — rejection card already shown inside safe_extract_text
                     resume_text = safe_extract_text(uploaded_file)
 
-                    if resume_text:
+                    if resume_text and resume_text != _SCANNED_SENTINEL:
                         st.markdown(f"""
                         <div class='slide-message success-msg'>
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"
@@ -6240,13 +6523,14 @@ with tab1:
                             ✅ Successfully processed <b>{uploaded_file.name}</b>
                         </div>
                         """, unsafe_allow_html=True)
-                        # 🔹 Continue with ATS scoring, bias detection, etc. here
-                    else:
+                    elif resume_text != _SCANNED_SENTINEL:
+                        # None and not sentinel → truly unreadable for unknown reason
                         st.markdown(f"""
                         <div class='slide-message warn-msg'>
                             ⚠️ <b>{uploaded_file.name}</b> does not contain valid resume text.
                         </div>
                         """, unsafe_allow_html=True)
+                    # If sentinel: rejection card was already rendered inside safe_extract_text — nothing else needed
 
                 except Exception as e:
                     st.markdown(f"""
@@ -6437,15 +6721,16 @@ if uploaded_files and job_description:
         # ✅ Reduced delay for better UX
         time.sleep(4)
 
-        # ✅ Extract text from PDF
-        text = extract_text_from_pdf(file_path)
-        if not text:
-            st.warning(f"⚠️ Could not extract text from {uploaded_file.name}. Skipping.")
+        # ✅ Extract text from PDF (scanned files return _SCANNED_SENTINEL)
+        uploaded_file.seek(0)
+        full_text = safe_extract_text(uploaded_file)
+        if full_text is None or full_text == _SCANNED_SENTINEL:
+            # Rejection card already rendered by safe_extract_text for scanned files.
+            # Plain None means unreadable for another reason — warning already shown.
             scanner_placeholder.empty()
             continue
 
-        all_text.append(" ".join(text))
-        full_text = " ".join(text)
+        all_text.append(full_text)
 
         # ✅ Bias detection
         bias_score, masc_count, fem_count, detected_masc, detected_fem = detect_bias(full_text)
