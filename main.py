@@ -982,6 +982,7 @@ h3, .stMarkdown h3 {
     min-height: 46px;
 }
 .slide-message:hover { transform: translateY(-2px); }
+.slide-message svg { display: inline-block !important; flex-shrink: 0; vertical-align: middle; min-width: 16px; min-height: 16px; }
 .slide-message-text { flex: 1; position: relative; z-index: 2; word-wrap: break-word; }
 .success-msg {
     background: linear-gradient(135deg, rgba(52,211,153,0.15) 0%, rgba(52,211,153,0.05) 100%);
@@ -3244,12 +3245,8 @@ def safe_extract_text(uploaded_file):
                         # OCR gave enough signal — usable but warn the user
                         st.markdown(f"""
                         <div class='slide-message warn-msg'>
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"
-                              stroke-width="2" viewBox="0 0 24 24" width="16" height="16">
-                              <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                            </svg>
-                            ⚠️ <b>{uploaded_file.name}</b> appears partially scanned.
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            <b>{uploaded_file.name}</b> appears partially scanned.
                             Analysis is based on OCR text ({ocr_words} words) — accuracy may be reduced.
                             For best results, upload a text-based PDF.
                         </div>
@@ -6451,13 +6448,7 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
                         padding:10px 14px;
                         border-radius:10px;
                         backdrop-filter:blur(12px);">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#fb7185" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10
-                             10-4.48 10-10S17.52 2 12 2zm0 15
-                             c-.83 0-1.5.67-1.5 1.5S11.17 20
-                             12 20s1.5-.67 1.5-1.5S12.83 17
-                             12 17zm1-4V7h-2v6h2z"/>
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#fb7185" style="flex-shrink:0;vertical-align:middle;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.83 0-1.5.67-1.5 1.5S11.17 20 12 20s1.5-.67 1.5-1.5S12.83 17 12 17zm1-4V7h-2v6h2z"/></svg>
                 <span style="color:#fca5a5;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;">
                     Total = {total_weight}. Adjust to exactly 90 (Format = 10 pts fixed).
                 </span>
@@ -6474,10 +6465,7 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
                         padding:10px 14px;
                         border-radius:10px;
                         backdrop-filter:blur(12px);">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#34d399" viewBox="0 0 24 24">
-                    <path d="M9 16.2l-3.5-3.5-1.4 1.4L9
-                             19 20.3 7.7l-1.4-1.4z"/>
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="#34d399" style="flex-shrink:0;vertical-align:middle;"><path d="M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.3 7.7l-1.4-1.4z"/></svg>
                 <span style="color:#6ee7b7;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;">
                     Weights balanced · Content = 90 pts · Format = 10 pts · Total = 100
                 </span>
@@ -6518,9 +6506,8 @@ with tab1:
                     if resume_text and resume_text != _SCANNED_SENTINEL:
                         st.markdown(f"""
                         <div class='slide-message success-msg'>
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"
-                              stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
-                            ✅ Successfully processed <b>{uploaded_file.name}</b>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg>
+                            Successfully processed <b>{uploaded_file.name}</b>
                         </div>
                         """, unsafe_allow_html=True)
                     elif resume_text != _SCANNED_SENTINEL:
@@ -7071,9 +7058,8 @@ with tab1:
         msg_placeholder = st.empty()
         msg_placeholder.markdown("""
         <div class='slide-message success-msg'>
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor"
-              stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
-            ✅ Cleared uploaded resume history. You can re-upload now.
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg>
+            Cleared uploaded resume history. You can re-upload now.
         </div>
         """, unsafe_allow_html=True)
 
