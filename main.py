@@ -2903,7 +2903,7 @@ def _classify_pdf(file_path: str) -> dict:
     return result
 
 
-def _render_scanned_rejection_card(filename: str, classification: dict):
+def _render_scanned_rejection_card(filename: str, classification: dict, container=None):
     """
     Renders an industry-standard rejection card for scanned/image PDFs.
     Matches the app's existing glassmorphism dark theme exactly.
@@ -2995,7 +2995,8 @@ def _render_scanned_rejection_card(filename: str, classification: dict):
         f'</div>'
         f'</div>'
     )
-    st.markdown(card_html, unsafe_allow_html=True)
+    _render_target = container if container is not None else st
+    _render_target.markdown(card_html, unsafe_allow_html=True)
 
 
 def extract_text_from_pdf(file_path: str):
@@ -3042,7 +3043,7 @@ def extract_text_from_images(pdf_path):
         return []
 
 
-def safe_extract_text(uploaded_file):
+def safe_extract_text(uploaded_file, container=None):
     """
     Main entry point for PDF text extraction.
 
@@ -3074,7 +3075,7 @@ def safe_extract_text(uploaded_file):
 
             if confidence in ("definite", "likely"):
                 # Hard reject — no OCR attempt, show full rejection card
-                _render_scanned_rejection_card(uploaded_file.name, classification)
+                _render_scanned_rejection_card(uploaded_file.name, classification, container=container)
                 return _SCANNED_SENTINEL
 
             else:
@@ -3085,7 +3086,8 @@ def safe_extract_text(uploaded_file):
                     ocr_words = len([w for w in ocr_text.split() if len(w) > 1])
                     if ocr_words >= 60:
                         # OCR gave enough signal — usable but warn the user
-                        st.markdown(f"""
+                        _render_target = container if container is not None else st
+                        _render_target.markdown(f"""
                         <div class='slide-message warn-msg'>
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                             <b>{uploaded_file.name}</b> appears partially scanned.
@@ -3096,14 +3098,15 @@ def safe_extract_text(uploaded_file):
                         return ocr_text
 
                 # OCR gave too little — show rejection card
-                _render_scanned_rejection_card(uploaded_file.name, classification)
+                _render_scanned_rejection_card(uploaded_file.name, classification, container=container)
                 return _SCANNED_SENTINEL
 
         # ── Step 3: text-based PDF — normal extraction ────────────────────
         text_list = extract_text_from_pdf(temp_path)
 
         if not text_list or all(len(t.strip()) == 0 for t in text_list):
-            st.warning("⚠️ This file doesn't look like a resume or contains no readable text.")
+            _render_target = container if container is not None else st
+            _render_target.warning("⚠️ This file doesn't look like a resume or contains no readable text.")
             return None
 
         return "\n".join(text_list)
@@ -6562,7 +6565,7 @@ if uploaded_files and job_description:
 
         # ✅ Extract text from PDF (scanned files return _SCANNED_SENTINEL)
         uploaded_file.seek(0)
-        full_text = safe_extract_text(uploaded_file)
+        full_text = safe_extract_text(uploaded_file, container=tab1)
         if full_text is None or full_text == _SCANNED_SENTINEL:
             # Rejection card already rendered by safe_extract_text for scanned files.
             # Plain None means unreadable for another reason — warning already shown.
