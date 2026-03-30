@@ -2670,7 +2670,8 @@ def ensure_nltk():
     return WordNetLemmatizer()
 
 lemmatizer = ensure_nltk()
-reader = get_easyocr_reader()
+# reader is intentionally NOT loaded here — it is fetched lazily inside
+# extract_text_from_images() only when an image-based PDF passes all guards.
 
 def generate_docx(text, filename="bias_free_resume.docx"):
     doc = Document()
@@ -2799,6 +2800,13 @@ def _extract_page_text_smart(page) -> str:
 
 
 def extract_text_from_pdf(file_path):
+    """
+    Returns a typed dict so callers can branch without triggering OCR silently.
+    Shapes:
+      {"type": "text",      "pages": [...]}          - digital PDF, text extracted
+      {"type": "image_pdf", "pages": []}             - no text layer found (scanned)
+      {"type": "error",     "pages": [], "msg": str} - fitz could not open the file
+    """
     try:
         doc = fitz.open(file_path)
         text_list = []
@@ -2807,43 +2815,181 @@ def extract_text_from_pdf(file_path):
             if page_text.strip():
                 text_list.append(page_text)
         doc.close()
-        return text_list if text_list else extract_text_from_images(file_path)
+
+        # Require at least 50 meaningful chars per page on average.
+        # Below this the "text layer" is noise (watermarks, lone chars, etc.)
+        # and the file must be treated as image-based - never silently OCR.
+        total_chars = sum(len(t.strip()) for t in text_list)
+        page_count  = max(len(text_list), 1)
+        if text_list and (total_chars / page_count) >= 50:
+            return {"type": "text", "pages": text_list}
+        return {"type": "image_pdf", "pages": []}
+
     except Exception as e:
-        st.error(f"⚠ Error extracting text: {e}")
-        return []
+        return {"type": "error", "pages": [], "msg": str(e)}
 
 def extract_text_from_images(pdf_path):
+    """
+    OCR fallback - only called when the caller has already decided OCR is worth
+    attempting (after the file-size gate and image_pdf classification).
+    - Lazy-loads EasyOCR so it never costs RAM unless actually needed.
+    - Downscales images to 1200px wide max before passing to EasyOCR to keep
+      memory under control on cloud deployments.
+    - Caps at 3 pages (not 5) to halve worst-case RAM use.
+    - Releases PIL images and numpy arrays immediately after use.
+    """
     try:
-        images = convert_from_path(pdf_path, dpi=150, first_page=1, last_page=5)
-        return ["\n".join(reader.readtext(np.array(img), detail=0)) for img in images]
+        _reader = get_easyocr_reader()
+        images = convert_from_path(pdf_path, dpi=120, first_page=1, last_page=3)
+        results = []
+        for img in images:
+            max_w = 1200
+            if img.width > max_w:
+                ratio = max_w / img.width
+                img = img.resize(
+                    (max_w, int(img.height * ratio)),
+                    Image.LANCZOS
+                )
+            arr = np.array(img)
+            text = "\n".join(_reader.readtext(arr, detail=0))
+            results.append(text)
+            del arr, img
+        return results
     except Exception as e:
-        st.error(f"⚠ Error extracting from image: {e}")
+        st.error(f"Error during OCR: {e}")
         return []
-
 def safe_extract_text(uploaded_file):
     """
-    Safely extracts text from uploaded file.
-    Prevents app crash if file is not a resume or unreadable.
+    3-layer guard before any heavy processing:
+      Layer 1 - File size gate  : reject > 5 MB immediately, zero processing cost.
+      Layer 2 - Scanned PDF gate: if fitz finds no text layer, show banner + stop.
+                                  Never silently fall through to OCR.
+      Layer 3 - OCR quality gate: if OCR runs but yields < 100 words total,
+                                  the output is too noisy for LLM analysis — stop.
+
+    Returns:
+      str   - extracted text, ready for analysis
+      None  - file rejected at any guard; UI banner already shown to user
     """
+
+    # ── LAYER 1 : file size gate ─────────────────────────────────────────────
+    MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+    file_size = uploaded_file.size
+
+    if file_size > MAX_BYTES:
+        size_mb = file_size / (1024 * 1024)
+        st.markdown(f"""
+        <div class='slide-message error-msg'>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span>
+                <b>{uploaded_file.name}</b> is {size_mb:.1f} MB — maximum allowed is 5 MB.
+                Heavy scanned files cannot be processed reliably.
+                Please compress it at <b>smallpdf.com</b> and re-upload.
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+        return None
+
+    # ── Write to temp file ────────────────────────────────────────────────────
+    import tempfile, os
     try:
-        # Save uploaded file to a temp location
-        temp_path = f"/tmp/{uploaded_file.name}"
-        with open(temp_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+        suffix = os.path.splitext(uploaded_file.name)[1] or ".pdf"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(uploaded_file.getbuffer())
+            temp_path = tmp.name
+    except Exception as e:
+        st.markdown(f"""
+        <div class='slide-message error-msg'>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                 viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span>Could not write <b>{uploaded_file.name}</b> to disk: {e}</span>
+        </div>
+        """, unsafe_allow_html=True)
+        return None
 
-        # Try PDF text extraction
-        text_list = extract_text_from_pdf(temp_path)
+    try:
+        # ── LAYER 2 : scanned / image PDF gate ───────────────────────────────
+        result = extract_text_from_pdf(temp_path)
 
-        # If nothing readable found
-        if not text_list or all(len(t.strip()) == 0 for t in text_list):
-            st.warning("⚠️ This file doesn't look like a resume or contains no readable text.")
+        if result["type"] == "error":
+            st.markdown(f"""
+            <div class='slide-message error-msg'>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                     viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Could not open <b>{uploaded_file.name}</b>: {result.get("msg", "unknown error")}</span>
+            </div>
+            """, unsafe_allow_html=True)
             return None
 
-        return "\n".join(text_list)
+        if result["type"] == "image_pdf":
+            st.markdown(f"""
+            <div class='slide-message warn-msg'>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                     viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94
+                             a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span>
+                    <b>{uploaded_file.name}</b> is a scanned or image-only PDF —
+                    no text layer was found. ATS systems cannot read this file.
+                    For best results, upload a digitally-created PDF.
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+            return None
 
-    except Exception as e:
-        st.error(f"⚠️ Could not process this file: {e}")
-        return None
+        # type == "text" — digital PDF extracted successfully
+        text_pages = result["pages"]
+
+        # ── LAYER 3 : OCR quality gate (only if we ever reach OCR path) ──────
+        full_text = "\n".join(text_pages)
+        word_count = len(full_text.split())
+        if word_count < 100:
+            st.markdown(f"""
+            <div class='slide-message warn-msg'>
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                     viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94
+                             a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <span>
+                    <b>{uploaded_file.name}</b> contains very little readable text ({word_count} words).
+                    This may not be a valid resume or the content is not parseable.
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+            return None
+
+        return full_text
+
+    finally:
+        # Always clean up the temp file regardless of outcome
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
 
 
 # ============================================================
@@ -6065,7 +6211,7 @@ with tab1:
         "📄 Upload PDF Resumes",
         type=["pdf"],
         accept_multiple_files=True,
-        help="Upload one or more resumes in PDF format (max 200MB each)."
+        help="Upload one or more resumes in PDF format (max 5 MB each). Scanned or image-only PDFs are not supported."
     )
 
     if uploaded_files:
