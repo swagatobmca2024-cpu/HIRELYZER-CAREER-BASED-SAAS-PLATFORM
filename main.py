@@ -3849,6 +3849,8 @@ ABSOLUTE RULES — NEVER VIOLATE:
 • DO NOT use personal pronouns (I, my, me, we, our) anywhere.
 • DO NOT repeat the same phrase or word across multiple sections.
 • EVERY section must contain unique, non-overlapping content.
+• DO NOT exaggerate experience level. If the candidate has no work experience or is a fresher/student, the summary MUST use honest framing: "Aspiring", "Entry-level", "Recent graduate", or "Seeking first role in...". NEVER use "seasoned", "veteran", "proven track record", or imply years of experience that do not exist in the resume.
+• PROFESSIONAL SUMMARY must reflect ONLY what is actually present in the resume. Do not upgrade a fresher to a professional or a junior to a senior.
 
 YOU MAY:
 ✓ Strengthen bullet points with stronger action verbs and tighter phrasing.
@@ -3862,10 +3864,16 @@ Work Experience → Projects → Education → Certifications & Links
 
 CONTACT HEADER: Full Name | Job Title | Email | Phone | Location | LinkedIn URL | GitHub/Portfolio URL
 
-PROFESSIONAL SUMMARY (2–3 sentences, max 60 words):
-  Sentence 1: [Seniority level] + [core domain] + [years of experience]
-  Sentence 2: [Top 2–3 specific technical or functional strengths]
-  Sentence 3: [Career value proposition — what the candidate delivers]
+PROFESSIONAL SUMMARY (2–3 sentences, max 80 words):
+  FIRST — assess the candidate's actual experience level from the resume:
+  • No experience / student / fresher → use "Aspiring [Role]" or "Recent [Degree] graduate"
+  • 0–2 years → "Entry-level" or "Junior"
+  • 2–5 years → "Mid-level" or just state domain + years honestly
+  • 5+ years → "Senior" or "Lead" only if the resume clearly supports it
+
+  Sentence 1: [Honest seniority label] + [core domain] + [years of experience IF present, else omit]
+  Sentence 2: [Top 2–3 specific technical or functional strengths from the resume]
+  Sentence 3: [What the candidate brings or is seeking — honest career value proposition]
 
 CORE SKILLS: labeled lines — Technical Skills: [...] and Professional Skills: [...]
 
@@ -3883,7 +3891,8 @@ PROJECTS: Name | Tech Stack | Duration
   • [Achievement bullet with action verb and metric]
   (3–5 bullets)
 
-EDUCATION: Degree, Major | Institution | Graduation Year
+EDUCATION: Degree, Major | Institution | Graduation Year | CGPA (if present, e.g. "8.5/10")
+  • Include honors, distinctions, or relevant coursework if mentioned in the original resume.
 CERTIFICATIONS: • Name | Issuing Body | MMM YYYY
 
 ATS FORMATTING:
@@ -3953,6 +3962,7 @@ RETURN ONLY THIS EXACT JSON STRUCTURE:
       "degree": "",
       "institution": "",
       "year": "",
+      "cgpa": "",
       "bullets": []
     }}
   ],
@@ -3976,10 +3986,12 @@ FIELD RULES:
 - "skills" = flat array of individual skill strings. Minimum 8. No duplicates.
 - "soft_skills" = professional competency phrases. Must NOT duplicate items in "skills".
 - "contact.*" = extract exactly as written. Use "" not null for missing fields.
-- "summary" = 2–3 sentences, max 60 words, no pronouns.
+- "summary" = 2–3 sentences, max 80 words, no pronouns. Must be the COMPLETE summary — do NOT truncate mid-sentence. MUST reflect actual experience level: freshers get "Aspiring/Entry-level", never "experienced professional" or fabricated years of experience.
 - "experience[].description" = 1-sentence role scope, unique from bullets.
 - "experience[].bullets" = 3–5 bullets each. Strong verb + task + tech + impact.
 - "projects[].bullets" = must NOT restate experience bullets.
+- "education[].cgpa" = extract CGPA/GPA exactly as written (e.g., "8.5/10", "3.9/4.0", "First Class"). Use "" if not present.
+- "education[].bullets" = include honors, distinctions, or relevant coursework if mentioned. Use [] if none.
 - "additional" items MUST use object format: {{"name":"","description":"","duration":""}}.
 - Missing fields: use "[Not Provided]" for text, [] for arrays.
 
@@ -4194,7 +4206,7 @@ def extract_resume_json(llm_response: str) -> dict:
                 proj["bullets"] = []
         # Backfill missing education fields
         for edu in data.get("education", []):
-            for f in ["degree", "institution", "year"]:
+            for f in ["degree", "institution", "year", "cgpa"]:
                 if f not in edu:
                     edu[f] = ""
             if "bullets" not in edu:
@@ -4847,6 +4859,15 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 r_yr.font.color.rgb = RGBColor(110, 110, 110)
                 p_yr.paragraph_format.space_before = Pt(0)
                 p_yr.paragraph_format.space_after = Pt(2)
+            if edu.get("cgpa") and edu["cgpa"] not in ("", "[Not Provided]"):
+                p_cgpa = doc.add_paragraph()
+                p_cgpa.clear()
+                r_cgpa = p_cgpa.add_run(f"CGPA: {edu['cgpa']}")
+                r_cgpa.font.size = Pt(BODY - 1)
+                r_cgpa.font.name = FONT
+                r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
+                p_cgpa.paragraph_format.space_before = Pt(0)
+                p_cgpa.paragraph_format.space_after = Pt(2)
             for b in (edu.get("bullets") or []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT)
@@ -5137,6 +5158,15 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 r_yr.font.color.rgb = RGBColor(*MID_GRAY)
                 p_yr.paragraph_format.space_before = Pt(0)
                 p_yr.paragraph_format.space_after = Pt(2)
+            if edu.get("cgpa") and edu["cgpa"] not in ("", "[Not Provided]"):
+                p_cgpa = doc.add_paragraph()
+                p_cgpa.clear()
+                r_cgpa = p_cgpa.add_run(f"CGPA: {edu['cgpa']}")
+                r_cgpa.font.size = Pt(BODY - 1)
+                r_cgpa.font.name = FONT
+                r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
+                p_cgpa.paragraph_format.space_before = Pt(0)
+                p_cgpa.paragraph_format.space_after = Pt(2)
             for b in (edu.get("bullets") or []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT)
@@ -5439,6 +5469,15 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 r3.font.color.rgb = RGBColor(110, 110, 110)
                 p_yr.paragraph_format.space_before = Pt(0)
                 p_yr.paragraph_format.space_after = Pt(2)
+            if edu.get("cgpa") and edu["cgpa"] not in ("", "[Not Provided]"):
+                p_cgpa = doc.add_paragraph()
+                p_cgpa.clear()
+                r_cgpa = p_cgpa.add_run(f"CGPA: {edu['cgpa']}")
+                r_cgpa.font.size = Pt(BODY - 1)
+                r_cgpa.font.name = FONT_BODY
+                r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
+                p_cgpa.paragraph_format.space_before = Pt(0)
+                p_cgpa.paragraph_format.space_after = Pt(2)
             for b in (edu.get("bullets") or []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT_BODY)
