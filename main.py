@@ -6363,26 +6363,8 @@ with tab1:
 
                     # Reset pointer so file can be read again later
                     uploaded_file.seek(0)
-
-                    # ✅ Extract text safely
-                    # _SCANNED_SENTINEL means scanned — rejection card already shown inside safe_extract_text
-                    resume_text = safe_extract_text(uploaded_file)
-
-                    if resume_text and resume_text != _SCANNED_SENTINEL:
-                        st.markdown(
-                            f'<div class="slide-message success-msg">'
-                            f'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg>'
-                            f' Successfully processed <b>{uploaded_file.name}</b></div>',
-                            unsafe_allow_html=True
-                        )
-                    elif resume_text != _SCANNED_SENTINEL:
-                        st.markdown(
-                            f'<div class="slide-message warn-msg">'
-                            f'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
-                            f' <b>{uploaded_file.name}</b> does not contain valid resume text.</div>',
-                            unsafe_allow_html=True
-                        )
-                    # If sentinel: rejection card was already rendered inside safe_extract_text — nothing else needed
+                    # NOTE: Text extraction + scanned rejection card is handled
+                    # exclusively in the processing loop below to avoid double rendering.
 
                 except Exception as e:
                     st.markdown(
@@ -7589,7 +7571,7 @@ with tab1:
                         key=f"download_pdf_{resume['Resume Name']}"
                     )
 
-    else:           
+    elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
 from xhtml2pdf import pisa
 from io import BytesIO
