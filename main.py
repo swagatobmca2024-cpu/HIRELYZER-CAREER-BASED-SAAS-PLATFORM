@@ -6296,12 +6296,62 @@ with tab1:
         "📄 Upload PDF Resumes",
         type=["pdf"],
         accept_multiple_files=True,
-        help="Upload one or more resumes in PDF format (max 200MB each)."
+        help="Upload one or more resumes in PDF format (max 5MB each)."
     )
+
+    # ── 5 MB hard cap ────────────────────────────────────────────────────────
+    _MAX_FILE_MB  = 5
+    _MAX_FILE_BYTES = _MAX_FILE_MB * 1024 * 1024
 
     if uploaded_files:
         for uploaded_file in uploaded_files:
             with st.container():
+
+                # ── Size gate — reject before any processing ─────────────────
+                file_bytes = uploaded_file.size  # Streamlit exposes .size directly
+                file_mb    = round(file_bytes / (1024 * 1024), 2)
+
+                if file_bytes > _MAX_FILE_BYTES:
+                    _svg_oversized = f'<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fb7185" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>'
+                    _svg_dot       = '<svg width="9" height="9" viewBox="0 0 9 9" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;margin-top:1px;"><circle cx="4.5" cy="4.5" r="4.5" fill="#fb7185"/></svg>'
+                    _svg_info      = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+                    _svg_compress  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>'
+                    _svg_export    = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><rect x="4" y="2" width="16" height="20" rx="2"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>'
+                    _svg_img       = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'
+
+                    fix_items_size = [
+                        (_svg_compress, "Open your resume in <strong>Microsoft Word or Google Docs</strong> and re-export as PDF"),
+                        (_svg_export,   "Use <strong>File &rarr; Export &rarr; Reduce File Size</strong> or <strong>Save as PDF (Optimised)</strong>"),
+                        (_svg_img,      "Remove embedded high-resolution photos or images from the resume before saving"),
+                    ]
+                    fix_html_size = "".join(
+                        f"<li style='display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;list-style:none;'>{icon}<span>{text}</span></li>"
+                        for icon, text in fix_items_size
+                    )
+
+                    size_card = (
+                        '<div style="background:linear-gradient(135deg,rgba(251,113,133,0.15) 0%,rgba(0,0,0,0) 100%);border:1px solid rgba(251,113,133,0.35);border-radius:16px;padding:22px 24px;margin:14px 0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 8px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.06);font-family:-apple-system,BlinkMacSystemFont,sans-serif;position:relative;overflow:hidden;">'
+                        '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#fb7185,transparent);opacity:0.6;"></div>'
+                        f'<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">'
+                        f'<div style="width:44px;height:44px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">{_svg_oversized}</div>'
+                        f'<div style="flex:1;">'
+                        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#fb7185;margin-bottom:4px;">{_svg_dot} File Too Large — Exceeds 5 MB Limit</div>'
+                        f'<div style="font-size:1rem;font-weight:600;color:#f0f4f8;word-break:break-all;">{uploaded_file.name}</div>'
+                        f'</div></div>'
+                        f'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">'
+                        f'<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#94a3b8;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg> {file_mb} MB uploaded</div>'
+                        f'<div style="display:flex;align-items:center;gap:6px;background:rgba(251,113,133,0.10);border:1px solid rgba(251,113,133,0.25);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#fca5a5;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Limit: {_MAX_FILE_MB} MB</div>'
+                        f'</div>'
+                        f'<div style="background:rgba(56,189,248,0.07);border:1px solid rgba(56,189,248,0.18);border-radius:10px;padding:12px 16px;">'
+                        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#38bdf8;margin-bottom:10px;">{_svg_info} How to Reduce File Size</div>'
+                        f'<ul style="margin:0;padding:0;color:#7dd3fc;font-size:0.82rem;line-height:1.8;">{fix_html_size}</ul>'
+                        f'</div>'
+                        f'</div>'
+                    )
+                    st.markdown(size_card, unsafe_allow_html=True)
+                    continue  # skip all further processing for this file
+
+                # ── Normal flow — file is within size limit ───────────────────
                 st.subheader(f"📄 Original Resume Preview: {uploaded_file.name}")
 
                 try:
@@ -6319,27 +6369,28 @@ with tab1:
                     resume_text = safe_extract_text(uploaded_file)
 
                     if resume_text and resume_text != _SCANNED_SENTINEL:
-                        st.markdown(f"""
-                        <div class='slide-message success-msg'>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg>
-                            Successfully processed <b>{uploaded_file.name}</b>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div class="slide-message success-msg">'
+                            f'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg>'
+                            f' Successfully processed <b>{uploaded_file.name}</b></div>',
+                            unsafe_allow_html=True
+                        )
                     elif resume_text != _SCANNED_SENTINEL:
-                        # None and not sentinel → truly unreadable for unknown reason
-                        st.markdown(f"""
-                        <div class='slide-message warn-msg'>
-                            ⚠️ <b>{uploaded_file.name}</b> does not contain valid resume text.
-                        </div>
-                        """, unsafe_allow_html=True)
+                        st.markdown(
+                            f'<div class="slide-message warn-msg">'
+                            f'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+                            f' <b>{uploaded_file.name}</b> does not contain valid resume text.</div>',
+                            unsafe_allow_html=True
+                        )
                     # If sentinel: rejection card was already rendered inside safe_extract_text — nothing else needed
 
                 except Exception as e:
-                    st.markdown(f"""
-                    <div class='slide-message error-msg'>
-                        ❌ Could not display or process <b>{uploaded_file.name}</b>: {e}
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="slide-message error-msg">'
+                        f'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle;"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>'
+                        f' Could not display or process <b>{uploaded_file.name}</b>: {e}</div>',
+                        unsafe_allow_html=True
+                    )
 
 # ✅ Initialize state
 # Initialize session state
@@ -6357,6 +6408,10 @@ if uploaded_files and job_description:
 
     for uploaded_file in uploaded_files:
         if uploaded_file.name in st.session_state.processed_files:
+            continue
+
+        # ── Skip files that exceeded the 5 MB size cap ───────────────────────
+        if uploaded_file.size > _MAX_FILE_BYTES:
             continue
 
         # ✅ Improved optimized scanner animation with better performance
