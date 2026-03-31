@@ -6,6 +6,7 @@ import string
 import re
 import asyncio
 import io
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.parse
 import base64
 from io import BytesIO
@@ -4406,6 +4407,74 @@ def _section_heading_bordered(doc, text: str, font_name: str,
     return p
 
 
+def _add_hyperlink(paragraph, url: str, display_text: str, font_name: str = "Calibri",
+                   font_size: int = 10, color_rgb: tuple = (0, 112, 192), underline: bool = True):
+    """
+    Add a real clickable hyperlink run to an existing paragraph in a python-docx document.
+    Uses OOXML relationship injection — works in Word, LibreOffice, and Google Docs.
+    """
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    import re
+
+    # Sanitise URL — ensure it has a scheme
+    url = url.strip()
+    if url and not re.match(r"https?://", url, re.IGNORECASE):
+        url = "https://" + url
+
+    part = paragraph.part
+    r_id = part.relate_to(url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink", is_external=True)
+
+    hyperlink = OxmlElement("w:hyperlink")
+    hyperlink.set(qn("r:id"), r_id)
+
+    new_run = OxmlElement("w:r")
+    rPr = OxmlElement("w:rPr")
+
+    # Font name
+    rFonts = OxmlElement("w:rFonts")
+    rFonts.set(qn("w:ascii"), font_name)
+    rFonts.set(qn("w:hAnsi"), font_name)
+    rPr.append(rFonts)
+
+    # Font size (half-points)
+    sz = OxmlElement("w:sz")
+    sz.set(qn("w:val"), str(font_size * 2))
+    rPr.append(sz)
+    szCs = OxmlElement("w:szCs")
+    szCs.set(qn("w:val"), str(font_size * 2))
+    rPr.append(szCs)
+
+    # Color
+    color_el = OxmlElement("w:color")
+    hex_color = "{:02X}{:02X}{:02X}".format(*color_rgb)
+    color_el.set(qn("w:val"), hex_color)
+    rPr.append(color_el)
+
+    # Underline
+    if underline:
+        u = OxmlElement("w:u")
+        u.set(qn("w:val"), "single")
+        rPr.append(u)
+
+    # Style override to prevent default hyperlink style from overriding color
+    rStyle = OxmlElement("w:rStyle")
+    rStyle.set(qn("w:val"), "Hyperlink")
+    rPr.insert(0, rStyle)
+
+    new_run.append(rPr)
+
+    # Text
+    t = OxmlElement("w:t")
+    t.text = display_text
+    t.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+    new_run.append(t)
+
+    hyperlink.append(new_run)
+    paragraph._p.append(hyperlink)
+    return hyperlink
+
+
 def _add_bullet(doc, text: str, font_size: int = 10, font_name: str = "Arial",
                 indent_left: int = 360, indent_hanging: int = 180,
                 color_rgb: tuple = None):
@@ -4803,19 +4872,24 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 r_dur.font.color.rgb = RGBColor(110, 110, 110)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(1)
-            # Line 2: Tech Stack + URL (plain text, ATS-safe)
-            meta_parts = []
-            if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
-                meta_parts.append(f"Tech: {proj['tech_stack']}")
-            if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
-                meta_parts.append(proj["url"])
-            if meta_parts:
+            # Line 2: Tech Stack (plain text) + URL (clickable hyperlink)
+            has_tech = proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]")
+            has_url  = proj.get("url") and proj["url"] not in ("", "[Not Provided]")
+            if has_tech or has_url:
                 p_meta = doc.add_paragraph()
                 p_meta.clear()
-                r_meta = p_meta.add_run("  |  ".join(meta_parts))
-                r_meta.font.size = Pt(BODY - 1)
-                r_meta.font.name = FONT
-                r_meta.font.color.rgb = RGBColor(74, 74, 74)
+                if has_tech:
+                    r_tech = p_meta.add_run(f"Tech: {proj['tech_stack']}")
+                    r_tech.font.size = Pt(BODY - 1)
+                    r_tech.font.name = FONT
+                    r_tech.font.color.rgb = RGBColor(74, 74, 74)
+                if has_tech and has_url:
+                    sep = p_meta.add_run("  |  ")
+                    sep.font.size = Pt(BODY - 1)
+                    sep.font.name = FONT
+                    sep.font.color.rgb = RGBColor(74, 74, 74)
+                if has_url:
+                    _add_hyperlink(p_meta, proj["url"], proj["url"], font_name=FONT, font_size=BODY - 1, color_rgb=(0, 102, 204))
                 p_meta.paragraph_format.space_before = Pt(0)
                 p_meta.paragraph_format.space_after = Pt(2)
             if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
@@ -4892,11 +4966,20 @@ def generate_modern_docx(data: dict) -> BytesIO:
             if cert.get("duration") and cert["duration"] not in ("", "[Not Provided]"):
                 parts.append(cert["duration"])
             _add_bullet(doc, "  |  ".join(parts), font_size=BODY, font_name=FONT)
-        # Profile links as plain-text bullets (ATS-safe)
+        # Profile links as real clickable hyperlinks
         for label, key in [("LinkedIn", "linkedin"), ("GitHub", "github"), ("Portfolio", "portfolio")]:
             val = contact.get(key, "")
             if val and val not in ("", "[Not Provided]", "Not Provided"):
-                _add_bullet(doc, f"{label}: {val}", font_size=BODY, font_name=FONT)
+                p_link = doc.add_paragraph()
+                p_link.paragraph_format.left_indent = Pt(0)
+                p_link.paragraph_format.space_before = Pt(2)
+                p_link.paragraph_format.space_after = Pt(2)
+                label_run = p_link.add_run(f"{label}: ")
+                label_run.bold = True
+                label_run.font.size = Pt(BODY)
+                label_run.font.name = FONT
+                label_run.font.color.rgb = RGBColor(*NAVY)
+                _add_hyperlink(p_link, val, val, font_name=FONT, font_size=BODY, color_rgb=(0, 102, 204))
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 7: LANGUAGES
@@ -5103,19 +5186,24 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 rd.font.color.rgb = RGBColor(*MID_GRAY)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(1)
-            # Line 2: Tech Stack + URL
-            meta_parts = []
-            if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
-                meta_parts.append(f"Tech: {proj['tech_stack']}")
-            if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
-                meta_parts.append(proj["url"])
-            if meta_parts:
+            # Line 2: Tech Stack (plain) + URL (clickable hyperlink)
+            has_tech = proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]")
+            has_url  = proj.get("url") and proj["url"] not in ("", "[Not Provided]")
+            if has_tech or has_url:
                 p_meta = doc.add_paragraph()
                 p_meta.clear()
-                r_meta = p_meta.add_run("  |  ".join(meta_parts))
-                r_meta.font.size = Pt(BODY - 1)
-                r_meta.font.name = FONT
-                r_meta.font.color.rgb = RGBColor(*DARK_GRAY)
+                if has_tech:
+                    r_tech = p_meta.add_run(f"Tech: {proj['tech_stack']}")
+                    r_tech.font.size = Pt(BODY - 1)
+                    r_tech.font.name = FONT
+                    r_tech.font.color.rgb = RGBColor(*DARK_GRAY)
+                if has_tech and has_url:
+                    sep = p_meta.add_run("  |  ")
+                    sep.font.size = Pt(BODY - 1)
+                    sep.font.name = FONT
+                    sep.font.color.rgb = RGBColor(*DARK_GRAY)
+                if has_url:
+                    _add_hyperlink(p_meta, proj["url"], proj["url"], font_name=FONT, font_size=BODY - 1, color_rgb=(0, 0, 0))
                 p_meta.paragraph_format.space_before = Pt(0)
                 p_meta.paragraph_format.space_after = Pt(2)
             if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
@@ -5193,7 +5281,14 @@ def generate_minimal_docx(data: dict) -> BytesIO:
         for label, key in [("LinkedIn", "linkedin"), ("GitHub", "github"), ("Portfolio", "portfolio")]:
             val = contact_min.get(key, "")
             if val and val not in ("", "[Not Provided]", "Not Provided"):
-                _add_bullet(doc, f"{label}: {val}", font_size=BODY, font_name=FONT)
+                p_link = doc.add_paragraph()
+                p_link.paragraph_format.space_before = Pt(2)
+                p_link.paragraph_format.space_after = Pt(2)
+                label_run = p_link.add_run(f"{label}: ")
+                label_run.bold = True
+                label_run.font.size = Pt(BODY)
+                label_run.font.name = FONT
+                _add_hyperlink(p_link, val, val, font_name=FONT, font_size=BODY, color_rgb=(0, 0, 0))
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 7: LANGUAGES
@@ -5414,19 +5509,24 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 rd.font.color.rgb = RGBColor(110, 110, 110)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(1)
-            # Line 2: Tech + URL (plain text, teal color — no underline/hyperlink)
-            meta_parts = []
-            if proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]"):
-                meta_parts.append(f"Tech: {proj['tech_stack']}")
-            if proj.get("url") and proj["url"] not in ("", "[Not Provided]"):
-                meta_parts.append(proj["url"])
-            if meta_parts:
+            # Line 2: Tech (teal plain text) + URL (clickable hyperlink)
+            has_tech = proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]")
+            has_url  = proj.get("url") and proj["url"] not in ("", "[Not Provided]")
+            if has_tech or has_url:
                 p_meta = doc.add_paragraph()
                 p_meta.clear()
-                r_meta = p_meta.add_run("  |  ".join(meta_parts))
-                r_meta.font.size = Pt(BODY - 1)
-                r_meta.font.name = FONT_BODY
-                r_meta.font.color.rgb = RGBColor(*TEAL)
+                if has_tech:
+                    r_tech = p_meta.add_run(f"Tech: {proj['tech_stack']}")
+                    r_tech.font.size = Pt(BODY - 1)
+                    r_tech.font.name = FONT_BODY
+                    r_tech.font.color.rgb = RGBColor(*TEAL)
+                if has_tech and has_url:
+                    sep = p_meta.add_run("  |  ")
+                    sep.font.size = Pt(BODY - 1)
+                    sep.font.name = FONT_BODY
+                    sep.font.color.rgb = RGBColor(*TEAL)
+                if has_url:
+                    _add_hyperlink(p_meta, proj["url"], proj["url"], font_name=FONT_BODY, font_size=BODY - 1, color_rgb=(0, 128, 128))
                 p_meta.paragraph_format.space_before = Pt(0)
                 p_meta.paragraph_format.space_after = Pt(2)
             if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
@@ -5504,7 +5604,15 @@ def generate_creative_docx(data: dict) -> BytesIO:
         for label, key in [("LinkedIn", "linkedin"), ("GitHub", "github"), ("Portfolio", "portfolio")]:
             val = contact_exec.get(key, "")
             if val and val not in ("", "[Not Provided]", "Not Provided"):
-                _add_bullet(doc, f"{label}: {val}", font_size=BODY, font_name=FONT_BODY)
+                p_link = doc.add_paragraph()
+                p_link.paragraph_format.space_before = Pt(2)
+                p_link.paragraph_format.space_after = Pt(2)
+                label_run = p_link.add_run(f"{label}: ")
+                label_run.bold = True
+                label_run.font.size = Pt(BODY)
+                label_run.font.name = FONT_BODY
+                label_run.font.color.rgb = RGBColor(*TEAL)
+                _add_hyperlink(p_link, val, val, font_name=FONT_BODY, font_size=BODY, color_rgb=(0, 128, 128))
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 7: LANGUAGES
@@ -6616,25 +6724,7 @@ if uploaded_files and job_description:
         # ✅ Bias detection
         bias_score, masc_count, fem_count, detected_masc, detected_fem = detect_bias(full_text)
 
-        # ⚡ MERGED: single LLM call returns BOTH plain-text rewrite AND JSON.
-        # json_str is the structured JSON for DOCX generation — no second call needed.
-        with st.spinner("✍️ Rewriting resume & generating optimised structure..."):
-            try:
-                highlighted_text, rewritten_text, _, _, _, _, json_str = rewrite_and_highlight(
-                    full_text, replacement_mapping, user_location
-                )
-            except Exception:
-                highlighted_text = full_text
-                rewritten_text   = full_text
-                json_str         = ""
-
-        # ✅ Resume Optimization Module — reuse JSON already produced above (0 extra LLM calls)
-        try:
-            optimized_resume_data = extract_resume_json(json_str)
-        except Exception:
-            optimized_resume_data = extract_resume_json("")  # falls back to empty skeleton
-
-        # ✅ Format check (industry standard — no LLM call)
+        # ✅ Format check (industry standard — no LLM call, run before parallel block)
         try:
             doc_check = fitz.open(file_path)
             num_pages = doc_check.page_count
@@ -6643,9 +6733,14 @@ if uploaded_files and job_description:
             num_pages = 1
         format_data = check_resume_format(full_text, num_pages, pdf_path=file_path)
 
-        # ✅ LLM-based ATS Evaluation (includes domain detection + grammar scoring internally)
-        with st.spinner("🔍 Running ATS evaluation..."):
-            ats_result, ats_scores = ats_percentage_score(
+        # ⚡ PARALLEL: rewrite + ATS run simultaneously using threads.
+        # Both are network-bound (Groq API) so they benefit from parallelism
+        # without needing async — ThreadPoolExecutor handles it safely.
+        def _task_rewrite():
+            return rewrite_and_highlight(full_text, replacement_mapping, user_location)
+
+        def _task_ats():
+            return ats_percentage_score(
                 resume_text=full_text,
                 job_description=job_description,
                 logic_profile_score=None,
@@ -6656,6 +6751,28 @@ if uploaded_files and job_description:
                 keyword_weight=keyword_weight,
                 format_data=format_data,
             )
+
+        with st.spinner("✍️ Rewriting resume & running ATS evaluation in parallel..."):
+            with ThreadPoolExecutor(max_workers=2) as _executor:
+                _future_rewrite = _executor.submit(_task_rewrite)
+                _future_ats     = _executor.submit(_task_ats)
+
+                # Collect rewrite result
+                try:
+                    highlighted_text, rewritten_text, _, _, _, _, json_str = _future_rewrite.result()
+                except Exception:
+                    highlighted_text = full_text
+                    rewritten_text   = full_text
+                    json_str         = ""
+
+                # Collect ATS result
+                ats_result, ats_scores = _future_ats.result()
+
+        # ✅ Resume Optimization Module — reuse JSON already produced above (0 extra LLM calls)
+        try:
+            optimized_resume_data = extract_resume_json(json_str)
+        except Exception:
+            optimized_resume_data = extract_resume_json("")  # falls back to empty skeleton
 
         # ✅ Extract structured ATS values
         candidate_name = ats_scores.get("Candidate Name", "Not Found")
