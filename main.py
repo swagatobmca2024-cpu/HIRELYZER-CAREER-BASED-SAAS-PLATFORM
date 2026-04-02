@@ -873,24 +873,11 @@ section[data-testid="stSidebar"] .stTextArea > div > div > textarea {
     border: 1.5px dashed rgba(79,163,227,0.3) !important;
     border-radius: var(--radius-lg) !important;
     transition: all var(--transition-base) !important;
-    overflow: visible !important;
-    position: static !important;
 }
 .stFileUploader > div:hover {
     border-color: rgba(79,163,227,0.6) !important;
     background: rgba(79,163,227,0.04) !important;
     box-shadow: 0 0 40px rgba(79,163,227,0.07) !important;
-}
-/* Ensure uploaded file name row is always fully visible */
-.stFileUploader [data-testid="stFileUploaderFile"],
-.stFileUploader [data-testid="stFileUploaderFileName"],
-.stFileUploader small,
-.stFileUploader span {
-    position: relative !important;
-    z-index: 10 !important;
-    color: var(--text-primary) !important;
-    opacity: 1 !important;
-    visibility: visible !important;
 }
 
 /* ══════════════════════════════════════
@@ -1391,13 +1378,10 @@ h3, .stMarkdown h3 {
    ══════════════════════════════════════ */
 .stFileUploader [data-testid="stFileUploaderDropzone"] {
     background: rgba(56,189,248,0.02) !important;
-    overflow: visible !important;
 }
 .stFileUploader [data-testid="stFileUploaderDropzone"] span {
     color: var(--text-secondary) !important;
     font-family: var(--font-sans) !important;
-    position: relative !important;
-    z-index: 10 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -2474,17 +2458,27 @@ with tab1:
     .shimmer:hover::before { left: 100%; top: 100%; }
 
     /* ---------- FILE UPLOADER ---------- */
-    .stFileUploader > div > div {
-        border: 1px solid rgba(0,200,255,0.5);
-        border-radius: 14px;
-        background: rgba(10,20,40,0.35);
-        backdrop-filter: blur(14px);
-        color: #cce6ff;
-        box-shadow: 0 0 12px rgba(0,200,255,0.3);
-        position: relative;
-        overflow: visible;
+    /* Scoped to the dropzone testid — avoids touching Streamlit's internal
+       layout divs. No position/overflow/pseudo-elements so text and the
+       "Browse files" button render correctly. */
+    [data-testid="stFileUploaderDropzone"] {
+        border: 1px solid rgba(0,200,255,0.5) !important;
+        border-radius: 14px !important;
+        background: rgba(10,20,40,0.35) !important;
+        backdrop-filter: blur(14px) !important;
+        color: #cce6ff !important;
+        box-shadow: 0 0 12px rgba(0,200,255,0.3) !important;
     }
-    /* ::before shimmer removed — was covering uploaded filename content */
+    [data-testid="stFileUploaderDropzone"]:hover {
+        border-color: rgba(0,200,255,0.8) !important;
+        box-shadow: 0 0 20px rgba(0,200,255,0.45) !important;
+    }
+    /* Block any inherited shimmer pseudo-elements from leaking into the dropzone */
+    [data-testid="stFileUploaderDropzone"]::before,
+    [data-testid="stFileUploaderDropzone"]::after {
+        content: none !important;
+        display: none !important;
+    }
 
     /* ---------- BUTTONS ---------- */
     .stButton > button {
