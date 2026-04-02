@@ -6527,7 +6527,7 @@ with tab1:
     uploaded_files = st.file_uploader(
         "📄 Upload PDF Resumes",
         type=["pdf"],
-        accept_multiple_files=True,
+        accept_multiple_files=False,
         help="Upload one or more resumes in PDF format (max 5MB each)."
     )
 
