@@ -1,4 +1,11 @@
-import os
+
+def html_to_pdf_bytes(html_string):
+    styled_html = f"""
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{import os
 os.environ["STREAMLIT_WATCHDOG"] = "false"
 import json
 import random
@@ -6467,20 +6474,61 @@ with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.
     if _ra_username:
         _ra_used = get_usage_count_last_hour(_ra_username, "resume_analyzer")
         _ra_remaining = max(0, 2 - _ra_used)
-        _ra_color = "#34d399" if _ra_remaining > 0 else "#fb7185"
-        _ra_svg = (
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
-            'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
-            'style="display:inline-block;vertical-align:middle;margin-right:5px;">'
-            '<rect x="3" y="3" width="7" height="7"/>'
-            '<rect x="14" y="3" width="7" height="7"/>'
-            '<rect x="14" y="14" width="7" height="7"/>'
-            '<rect x="3" y="14" width="7" height="7"/>'
+
+        # colours
+        _ra_accent   = "#34d399" if _ra_remaining > 0 else "#fb7185"
+        _ra_bg       = "rgba(52,211,153,0.08)" if _ra_remaining > 0 else "rgba(251,113,133,0.08)"
+        _ra_border   = "rgba(52,211,153,0.25)" if _ra_remaining > 0 else "rgba(251,113,133,0.25)"
+        _ra_dot_col  = _ra_accent
+
+        # animated pulse dot (green = ok, red = exhausted)
+        _ra_dot = (
+            f'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;'
+            f'background:{_ra_dot_col};box-shadow:0 0 0 0 {_ra_dot_col};'
+            f'animation:raPulse 2s infinite;flex-shrink:0;"></span>'
+        )
+
+        # clock icon
+        _ra_clock = (
+            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" '
+            f'stroke="{_ra_accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+            'style="flex-shrink:0;">'
+            '<circle cx="12" cy="12" r="10"/>'
+            '<polyline points="12 6 12 12 16 14"/>'
             '</svg>'
         )
+
+        # pill counter badge
+        _ra_pill = (
+            f'<span style="display:inline-flex;align-items:center;justify-content:center;'
+            f'background:{_ra_accent};color:#0f172a;font-weight:700;font-size:0.72rem;'
+            f'border-radius:999px;padding:1px 8px;min-width:32px;letter-spacing:0.01em;">'
+            f'{_ra_remaining}/2</span>'
+        )
+
         st.markdown(
-            f'<div style="display:flex;align-items:center;font-size:0.78rem;color:{_ra_color};margin-top:4px;font-family:-apple-system,sans-serif;">'
-            f'{_ra_svg} Resume Analyzer: <b style="margin-left:3px;">{_ra_remaining}/2</b>&nbsp;analyses remaining this hour</div>',
+            f"""
+            <style>
+            @keyframes raPulse {{
+                0%   {{ box-shadow: 0 0 0 0 {_ra_dot_col}66; }}
+                70%  {{ box-shadow: 0 0 0 5px {_ra_dot_col}00; }}
+                100% {{ box-shadow: 0 0 0 0 {_ra_dot_col}00; }}
+            }}
+            </style>
+            <div style="display:flex;align-items:center;gap:8px;
+                        margin-top:10px;padding:8px 12px;
+                        background:{_ra_bg};
+                        border:1px solid {_ra_border};
+                        border-radius:10px;
+                        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+                {_ra_dot}
+                {_ra_clock}
+                <span style="font-size:0.78rem;color:#94a3b8;flex:1;">
+                    Analyses remaining this hour
+                </span>
+                {_ra_pill}
+            </div>
+            """,
             unsafe_allow_html=True
         )
 
@@ -7850,13 +7898,6 @@ with tab1:
 
     elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
-def html_to_pdf_bytes(html_string):
-    styled_html = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{
                 size: 400mm 297mm;  /* Original custom large page size */
                 margin-top: 10mm;
                 margin-bottom: 10mm;
