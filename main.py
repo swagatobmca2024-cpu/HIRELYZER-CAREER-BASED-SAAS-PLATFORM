@@ -681,8 +681,6 @@ div.stAlert {
     backdrop-filter: blur(12px) !important;
     box-shadow: 0 2px 12px rgba(56,189,248,0.08), inset 0 1px 0 rgba(255,255,255,0.08) !important;
     transition: all var(--transition-fast) !important;
-    position: relative;
-    overflow: hidden;
 }
 .stButton > button:hover {
     background: linear-gradient(135deg,
@@ -1379,9 +1377,67 @@ h3, .stMarkdown h3 {
 .stFileUploader [data-testid="stFileUploaderDropzone"] {
     background: rgba(56,189,248,0.02) !important;
 }
-.stFileUploader [data-testid="stFileUploaderDropzone"] span {
+/* Only style the direct instruction text — not internal layout spans */
+.stFileUploader [data-testid="stFileUploaderDropzone"] > span {
     color: var(--text-secondary) !important;
     font-family: var(--font-sans) !important;
+}
+/* ══════════════════════════════════════
+   FILE UPLOADER — CSS ISOLATION RESET
+   Prevents shimmer pseudo-elements,
+   position/overflow/animation overrides
+   from leaking into the uploader widget.
+   ══════════════════════════════════════ */
+
+/* 1. Hard-reset every descendant's layout model */
+[data-testid="stFileUploader"] *,
+[data-testid="stFileUploaderDropzone"] * {
+    position: static !important;
+    overflow: visible !important;
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* 2. Kill ALL pseudo-elements inside the uploader */
+[data-testid="stFileUploader"] *::before,
+[data-testid="stFileUploader"] *::after,
+[data-testid="stFileUploaderDropzone"] *::before,
+[data-testid="stFileUploaderDropzone"] *::after {
+    content: none !important;
+    display: none !important;
+    position: static !important;
+    animation: none !important;
+}
+
+/* 3. Restore the dropzone container itself
+      (needs overflow:hidden for border clipping, relative for internal layout) */
+[data-testid="stFileUploaderDropzone"] {
+    overflow: hidden !important;
+    position: relative !important;
+    background: rgba(56,189,248,0.02) !important;
+}
+
+/* 4. Restore flex row on the dropzone's direct children
+      (Streamlit renders: icon | instruction text | Browse button) */
+[data-testid="stFileUploaderDropzone"] > div {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    position: relative !important;
+    overflow: visible !important;
+}
+
+/* 5. Let the uploaded file chip and its delete button render normally */
+[data-testid="stFileUploaderDeleteBtn"] button,
+[data-testid="stFileUploaderFile"],
+[data-testid="stFileUploaderFile"] * {
+    position: relative !important;
+    overflow: visible !important;
+    animation: none !important;
+    transform: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -2458,21 +2514,28 @@ with tab1:
     .shimmer:hover::before { left: 100%; top: 100%; }
 
     /* ---------- FILE UPLOADER ---------- */
-    /* Shimmer/pseudo-element animations intentionally NOT applied to stFileUploader.
-       Deep selectors like .stFileUploader > div > div caused position:relative +
-       overflow:hidden + ::before pseudo-elements to interfere with Streamlit's
-       internal dropzone layout, producing overlapping text and broken button alignment.
-       The uploader uses the global theme from the main CSS block (lines ~871-1385)
-       which safely targets .stFileUploader > div and [data-testid] attributes only. */
-    [data-testid="stFileUploader"] {
-        position: static !important;
-        overflow: visible !important;
+    .stFileUploader > div > div {
+        border: 1px solid rgba(0,200,255,0.5);
+        border-radius: 14px;
+        background: rgba(10,20,40,0.35);
+        backdrop-filter: blur(14px);
+        color: #cce6ff;
+        box-shadow: 0 0 12px rgba(0,200,255,0.3);
+        position: relative;
+        overflow: hidden;
     }
-    [data-testid="stFileUploader"]::before,
-    [data-testid="stFileUploader"]::after {
-        display: none !important;
-        content: none !important;
+    .stFileUploader > div > div::before {
+        content: "";
+        position: absolute; top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: linear-gradient(120deg,
+            rgba(255,255,255,0.15) 0%,
+            rgba(255,255,255,0.05) 40%,
+            transparent 60%);
+        transform: rotate(25deg);
+        transition: all 0.6s;
     }
+    .stFileUploader > div > div:hover::before { left: 100%; top: 100%; }
 
     /* ---------- BUTTONS ---------- */
     .stButton > button {
