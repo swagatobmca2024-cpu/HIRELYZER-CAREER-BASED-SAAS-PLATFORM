@@ -390,3 +390,63 @@ def update_password_by_email(email, new_password):
         _conn().rollback()
         st.error(f"Database error: {e}")
         return False
+
+
+# ── Feature usage rate limiting ───────────────────────────────────────────────
+
+USAGE_LIMITS = {
+    "resume_analyzer": 2,
+    "ai_coach": 2,
+}
+
+
+def get_usage_count_last_hour(username: str, feature: str) -> int:
+    """Return how many times username used feature in the last 60 minutes."""
+    row = _execute(
+        """
+        SELECT COUNT(*) AS cnt FROM feature_usage
+        WHERE username = %s
+          AND feature  = %s
+          AND used_at  > NOW() - INTERVAL '1 hour'
+        """,
+        (username, feature),
+        fetch="one",
+    )
+    return row["cnt"] if row else 0
+
+
+def record_feature_usage(username: str, feature: str):
+    """Log one usage event. Call AFTER the feature successfully runs."""
+    _execute(
+        "INSERT INTO feature_usage (username, feature) VALUES (%s, %s)",
+        (username, feature),
+    )
+
+
+def check_and_gate_feature(username: str, feature: str):
+    """
+    Check if user is within their hourly limit.
+    Returns (allowed: bool, message: str).
+    Call BEFORE running the feature.
+    """
+    limit = USAGE_LIMITS.get(feature, 999)
+    count = get_usage_count_last_hour(username, feature)
+    feature_label = "AI Coach" if feature == "ai_coach" else feature.replace('_', ' ').title()
+    if count >= limit:
+        svg_block = (
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
+            'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+            'style="display:inline-block;vertical-align:middle;margin-right:6px;">'
+            '<circle cx="12" cy="12" r="10"/>'
+            '<line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>'
+            '</svg>'
+        )
+        msg = (
+            f'<div style="display:flex;align-items:center;font-size:0.88rem;color:#fca5a5;'
+            f'background:rgba(251,113,133,0.08);border:1px solid rgba(251,113,133,0.25);'
+            f'border-radius:8px;padding:10px 14px;font-family:-apple-system,sans-serif;">'
+            f'{svg_block} You have reached the <b style="margin:0 4px;">{feature_label}</b> '
+            f'limit of <b style="margin:0 4px;">{limit}</b> uses per hour. Please try again later.</div>'
+        )
+        return False, msg
+    return True, f"{count}/{limit} uses this hour."
