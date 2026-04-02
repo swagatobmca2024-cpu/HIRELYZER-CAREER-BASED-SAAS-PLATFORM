@@ -873,11 +873,24 @@ section[data-testid="stSidebar"] .stTextArea > div > div > textarea {
     border: 1.5px dashed rgba(79,163,227,0.3) !important;
     border-radius: var(--radius-lg) !important;
     transition: all var(--transition-base) !important;
+    overflow: visible !important;
+    position: static !important;
 }
 .stFileUploader > div:hover {
     border-color: rgba(79,163,227,0.6) !important;
     background: rgba(79,163,227,0.04) !important;
     box-shadow: 0 0 40px rgba(79,163,227,0.07) !important;
+}
+/* Ensure uploaded file name row is always fully visible */
+.stFileUploader [data-testid="stFileUploaderFile"],
+.stFileUploader [data-testid="stFileUploaderFileName"],
+.stFileUploader small,
+.stFileUploader span {
+    position: relative !important;
+    z-index: 10 !important;
+    color: var(--text-primary) !important;
+    opacity: 1 !important;
+    visibility: visible !important;
 }
 
 /* ══════════════════════════════════════
@@ -1378,10 +1391,13 @@ h3, .stMarkdown h3 {
    ══════════════════════════════════════ */
 .stFileUploader [data-testid="stFileUploaderDropzone"] {
     background: rgba(56,189,248,0.02) !important;
+    overflow: visible !important;
 }
 .stFileUploader [data-testid="stFileUploaderDropzone"] span {
     color: var(--text-secondary) !important;
     font-family: var(--font-sans) !important;
+    position: relative !important;
+    z-index: 10 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -2468,23 +2484,7 @@ with tab1:
         position: relative;
         overflow: visible;
     }
-    .stFileUploader > div > div::before {
-        content: none;
-    }
-    /* Subtle glow on hover instead of the shimmer overlay */
-    .stFileUploader > div > div:hover {
-        box-shadow: 0 0 20px rgba(0,200,255,0.45);
-        border-color: rgba(0,200,255,0.75);
-    }
-    /* Ensure the Browse Files button and inner text are always visible */
-    .stFileUploader [data-testid="stFileUploaderDropzone"] {
-        position: relative;
-        z-index: 1;
-    }
-    .stFileUploader [data-testid="stFileUploaderDropzoneInstructions"] {
-        position: relative;
-        z-index: 1;
-    }
+    /* ::before shimmer removed — was covering uploaded filename content */
 
     /* ---------- BUTTONS ---------- */
     .stButton > button {
@@ -2515,7 +2515,6 @@ with tab1:
         transition: all 0.6s;
     }
     .stButton > button:hover::before { left: 100%; top: 100%; }
-
 
     /* ---------- INPUTS ---------- */
     .stTextInput > div > input,
@@ -6480,7 +6479,6 @@ with tab1:
         accept_multiple_files=True,
         help="Upload one or more resumes in PDF format (max 5MB each)."
     )
-    st.caption("📎 PDF only · Max 5 MB per file")
 
     # ── 5 MB hard cap ────────────────────────────────────────────────────────
     _MAX_FILE_MB  = 5
