@@ -866,38 +866,18 @@ section[data-testid="stSidebar"] .stTextArea > div > div > textarea {
 }
 
 /* ══════════════════════════════════════
-   FILE UPLOADER — full default reset
+   FILE UPLOADER
    ══════════════════════════════════════ */
-/* Hard-reset every layer of the uploader to Streamlit defaults.
-   No backgrounds, no overflow:hidden, no pseudo-elements — prevents
-   shimmer overlays from clipping the dropzone text and Browse button. */
-.stFileUploader,
-.stFileUploader > div,
-.stFileUploader > div > div,
-.stFileUploader > div > div > div,
-[data-testid="stFileUploaderDropzone"] {
-    background: transparent !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    overflow: visible !important;
-    position: static !important;
-    box-shadow: none !important;
-    animation: none !important;
-}
-.stFileUploader > div,
-[data-testid="stFileUploaderDropzone"] {
-    border: 1.5px dashed rgba(79,163,227,0.35) !important;
+.stFileUploader > div {
+    background: var(--surface-01) !important;
+    border: 1.5px dashed rgba(79,163,227,0.3) !important;
     border-radius: var(--radius-lg) !important;
+    transition: all var(--transition-base) !important;
 }
-.stFileUploader > div:hover,
-[data-testid="stFileUploaderDropzone"]:hover {
+.stFileUploader > div:hover {
     border-color: rgba(79,163,227,0.6) !important;
-}
-/* Kill any pseudo-elements on every uploader child */
-.stFileUploader *::before,
-.stFileUploader *::after {
-    content: none !important;
-    display: none !important;
+    background: rgba(79,163,227,0.04) !important;
+    box-shadow: 0 0 40px rgba(79,163,227,0.07) !important;
 }
 
 /* ══════════════════════════════════════
@@ -1393,7 +1373,12 @@ h3, .stMarkdown h3 {
     font-family: var(--font-sans) !important;
 }
 
-/* FILE UPLOADER INNER LABEL — text colour only, no backgrounds */
+/* ══════════════════════════════════════
+   FILE UPLOADER INNER LABEL
+   ══════════════════════════════════════ */
+.stFileUploader [data-testid="stFileUploaderDropzone"] {
+    background: rgba(56,189,248,0.02) !important;
+}
 .stFileUploader [data-testid="stFileUploaderDropzone"] span {
     color: var(--text-secondary) !important;
     font-family: var(--font-sans) !important;
@@ -2472,29 +2457,21 @@ with tab1:
     }
     .shimmer:hover::before { left: 100%; top: 100%; }
 
-    /* ---------- FILE UPLOADER — full reset, no shimmer ---------- */
-    .stFileUploader,
-    .stFileUploader > div,
-    .stFileUploader > div > div,
-    .stFileUploader > div > div > div,
-    [data-testid="stFileUploaderDropzone"] {
-        background: transparent !important;
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
-        overflow: visible !important;
+    /* ---------- FILE UPLOADER ---------- */
+    /* Shimmer/pseudo-element animations intentionally NOT applied to stFileUploader.
+       Deep selectors like .stFileUploader > div > div caused position:relative +
+       overflow:hidden + ::before pseudo-elements to interfere with Streamlit's
+       internal dropzone layout, producing overlapping text and broken button alignment.
+       The uploader uses the global theme from the main CSS block (lines ~871-1385)
+       which safely targets .stFileUploader > div and [data-testid] attributes only. */
+    [data-testid="stFileUploader"] {
         position: static !important;
-        box-shadow: none !important;
-        animation: none !important;
+        overflow: visible !important;
     }
-    .stFileUploader > div,
-    [data-testid="stFileUploaderDropzone"] {
-        border: 1px solid rgba(0,200,255,0.4) !important;
-        border-radius: 14px !important;
-    }
-    .stFileUploader *::before,
-    .stFileUploader *::after {
-        content: none !important;
+    [data-testid="stFileUploader"]::before,
+    [data-testid="stFileUploader"]::after {
         display: none !important;
+        content: none !important;
     }
 
     /* ---------- BUTTONS ---------- */
