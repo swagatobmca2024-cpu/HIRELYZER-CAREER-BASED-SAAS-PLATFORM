@@ -6535,37 +6535,62 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
 with tab1:
     # Slide message styles already defined in global CSS — no extra block needed
 
-    # ── Option 1: SaaS-style drag zone header ────────────────────────────────
+    # ── SaaS-style uploader: decorative header fused with native widget ───────
     st.markdown("""
 <style>
-/* Suppress the native uploader's own border/bg so it blends into our zone */
+/* Remove all styling from the native uploader so it sits flush inside our box */
+[data-testid="stFileUploader"] {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
 [data-testid="stFileUploader"] > div {
     background: transparent !important;
     border: none !important;
     padding: 0 !important;
+    box-shadow: none !important;
 }
 [data-testid="stFileUploaderDropzone"] {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    padding: 0 !important;
+    padding: 4px 0 0 0 !important;
+    border-top: 1px solid rgba(56,189,248,0.12) !important;
+    border-radius: 0 !important;
 }
-</style>
-<div style="
+/* Hide the "5MB per file • PDF" helper text — our chips already show this */
+[data-testid="stFileUploaderDropzoneInstructions"] small,
+[data-testid="stFileUploaderDropzoneInstructions"] span {
+    display: none !important;
+}
+/* Style the Upload button to match our theme */
+[data-testid="stFileUploaderDropzone"] button {
+    background: rgba(56,189,248,0.10) !important;
+    border: 1px solid rgba(56,189,248,0.30) !important;
+    color: #38bdf8 !important;
+    border-radius: 8px !important;
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+}
+[data-testid="stFileUploaderDropzone"] button:hover {
+    background: rgba(56,189,248,0.18) !important;
+    border-color: rgba(56,189,248,0.55) !important;
+}
+/* Wrapper box that visually contains both the header AND the native widget */
+.upload-zone-wrapper {
     border: 1.5px dashed rgba(56,189,248,0.35);
     border-radius: 16px;
     background: rgba(56,189,248,0.03);
-    padding: 22px 20px 10px 20px;
-    margin-bottom: 0;
+    padding: 22px 20px 16px 20px;
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-">
-    <!-- Icon -->
+}
+</style>
+<div class="upload-zone-wrapper">
     <div style="display:flex;justify-content:center;margin-bottom:10px;">
-        <div style="
-            width:40px;height:40px;border-radius:10px;
-            background:rgba(56,189,248,0.10);
-            border:1px solid rgba(56,189,248,0.20);
-            display:flex;align-items:center;justify-content:center;">
+        <div style="width:40px;height:40px;border-radius:10px;
+                    background:rgba(56,189,248,0.10);
+                    border:1px solid rgba(56,189,248,0.20);
+                    display:flex;align-items:center;justify-content:center;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
                  stroke="#38bdf8" stroke-width="1.8"
                  stroke-linecap="round" stroke-linejoin="round">
@@ -6575,15 +6600,13 @@ with tab1:
             </svg>
         </div>
     </div>
-    <!-- Title + subtitle -->
     <p style="text-align:center;font-size:0.9rem;font-weight:600;
               color:#e2e8f0;margin:0 0 4px 0;letter-spacing:-0.01em;">
         Drop your resumes here
     </p>
     <p style="text-align:center;font-size:0.75rem;color:#64748b;margin:0 0 12px 0;">
-        or click below to browse files
+        or use the button below to browse
     </p>
-    <!-- Constraint chips -->
     <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
         <span style="font-size:0.7rem;padding:3px 10px;border-radius:99px;
                      background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
@@ -6595,16 +6618,18 @@ with tab1:
                      background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
                      color:#94a3b8;">Batch supported</span>
     </div>
-</div>
 """, unsafe_allow_html=True)
 
     uploaded_files = st.file_uploader(
         "",
         type=["pdf"],
         accept_multiple_files=True,
-        help="Upload one or more resumes in PDF format (max 5MB each),",
+        help="Upload one or more resumes in PDF format (max 5MB each).",
         label_visibility="collapsed"
     )
+
+    # Close the wrapper div AFTER the native widget renders
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # ── 5 MB hard cap ────────────────────────────────────────────────────────
     _MAX_FILE_MB  = 5
