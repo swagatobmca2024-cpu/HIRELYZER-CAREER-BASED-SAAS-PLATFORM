@@ -20253,6 +20253,35 @@ Generate {num_questions} questions now:
                     _wm_count = _wm.get("interview_count", 0)
                     _wm_label = f"last {_wm_count} interview{'s' if _wm_count != 1 else ''}"
                     st.info(f"🧠 **Weakness Memory:** Based on your {_wm_label}, your weakest recurring skill is **{_wm_skill}** (avg: {_wm_score:.2f}/10). Questions will be biased toward improving this.")
+                else:
+                    # Graceful fallback for first-time users with no interview history
+                    st.markdown(
+                        """
+                        <div style="
+                            background: linear-gradient(135deg, rgba(79,163,227,0.10) 0%, rgba(56,189,248,0.06) 100%);
+                            border: 1px solid rgba(79,163,227,0.25);
+                            border-radius: 12px;
+                            padding: 14px 18px;
+                            margin-bottom: 14px;
+                            display: flex;
+                            align-items: flex-start;
+                            gap: 12px;
+                            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'DM Sans', sans-serif;
+                        ">
+                            <span style="font-size:1.4rem; line-height:1;">🎉</span>
+                            <div>
+                                <p style="margin:0 0 4px 0; font-weight:600; color:#7dd3fc; font-size:0.92rem;">
+                                    Welcome to AI Interview Coach!
+                                </p>
+                                <p style="margin:0; color:#94a3b8; font-size:0.85rem; line-height:1.5;">
+                                    This is your first mock interview — great time to start! Complete a session and the coach will automatically
+                                    remember your weak areas and personalise future questions to help you improve faster.
+                                </p>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
                 col1, col2 = st.columns(2)
 
@@ -21326,8 +21355,15 @@ Generate {num_questions} questions now:
                     conn, params=(username,)
                 )
             except Exception as e:
-                st.error(f"Error loading data: {e}")
-                df = pd.DataFrame()
+                _err_str = str(e).lower()
+                # Table doesn't exist yet (fresh deployment / first-time user) —
+                # treat exactly the same as "no interviews yet"; no raw SQL shown.
+                if "does not exist" in _err_str or "no such table" in _err_str or "undefined table" in _err_str:
+                    df = pd.DataFrame()
+                else:
+                    # Genuine unexpected DB error — log a friendly message only
+                    st.warning("⚠️ We couldn't load your dashboard right now. Please try refreshing in a moment.")
+                    df = pd.DataFrame()
             st.session_state[_cache_key] = df
             st.session_state[_cache_dirty_key] = False
         else:
