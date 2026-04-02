@@ -2466,20 +2466,25 @@ with tab1:
         color: #cce6ff;
         box-shadow: 0 0 12px rgba(0,200,255,0.3);
         position: relative;
-        overflow: hidden;
+        overflow: visible;
     }
     .stFileUploader > div > div::before {
-        content: "";
-        position: absolute; top: -50%; left: -50%;
-        width: 200%; height: 200%;
-        background: linear-gradient(120deg,
-            rgba(255,255,255,0.15) 0%,
-            rgba(255,255,255,0.05) 40%,
-            transparent 60%);
-        transform: rotate(25deg);
-        transition: all 0.6s;
+        content: none;
     }
-    .stFileUploader > div > div:hover::before { left: 100%; top: 100%; }
+    /* Subtle glow on hover instead of the shimmer overlay */
+    .stFileUploader > div > div:hover {
+        box-shadow: 0 0 20px rgba(0,200,255,0.45);
+        border-color: rgba(0,200,255,0.75);
+    }
+    /* Ensure the Browse Files button and inner text are always visible */
+    .stFileUploader [data-testid="stFileUploaderDropzone"] {
+        position: relative;
+        z-index: 1;
+    }
+    .stFileUploader [data-testid="stFileUploaderDropzoneInstructions"] {
+        position: relative;
+        z-index: 1;
+    }
 
     /* ---------- BUTTONS ---------- */
     .stButton > button {
