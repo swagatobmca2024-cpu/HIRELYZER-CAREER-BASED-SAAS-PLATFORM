@@ -6562,9 +6562,14 @@ resume_data = st.session_state.resume_data
 
 # ✏️ Resume Evaluation Logic
 if uploaded_files and job_description:
-    # ── Usage gate: 2 resume analyses per hour ───────────────────────────────
+    # ── Usage gate: only check when there are NEW files not yet processed ─────
     _gate_username = st.session_state.get("username")
-    if _gate_username:
+    _new_files = [
+        f for f in uploaded_files
+        if f.name not in st.session_state.get("processed_files", set())
+        and f.size <= _MAX_FILE_BYTES
+    ]
+    if _gate_username and _new_files:
         _gate_allowed, _gate_msg = check_and_gate_feature(_gate_username, "resume_analyzer")
         if not _gate_allowed:
             st.markdown(_gate_msg, unsafe_allow_html=True)
@@ -20438,9 +20443,10 @@ Generate {num_questions} questions now:
                 # ─────────────────────────────────────────────────────────────────────
 
                 if st.button("🚀 Start Mock Interview"):
-                    # ── Usage gate ────────────────────────────────────────────────────
+                    # ── Usage gate — guarded by session flag to prevent double-count ──
                     _ac_gate_user = st.session_state.get("username")
-                    if _ac_gate_user:
+                    _ac_already_recorded = st.session_state.get("_ac_usage_recorded_this_session", False)
+                    if _ac_gate_user and not _ac_already_recorded:
                         _ac_allowed, _ac_msg = check_and_gate_feature(_ac_gate_user, "ai_coach")
                         if not _ac_allowed:
                             st.markdown(_ac_msg, unsafe_allow_html=True)
@@ -20460,6 +20466,7 @@ Generate {num_questions} questions now:
                             st.stop()
                         else:
                             record_feature_usage(_ac_gate_user, "ai_coach")
+                            st.session_state._ac_usage_recorded_this_session = True
                     # ─────────────────────────────────────────────────────────────────
                     with st.spinner("Generating personalised interview questions..."):
                         _username_for_bias = st.session_state.get("username", "Guest")
@@ -21219,6 +21226,8 @@ Generate {num_questions} questions now:
                     st.session_state.follow_up_count = 0
                     st.session_state.current_interview_id = None
                     st.session_state.question_db_ids = []
+                    # ── Reset usage flag so next interview is properly gated ──
+                    st.session_state._ac_usage_recorded_this_session = False
                     st.rerun()
         else:
             st.info("Please select both a career domain and target role to start the interview practice.")
