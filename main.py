@@ -6462,36 +6462,25 @@ with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.
         height=200
     )
 
-    # ── Resume Analyzer quota pill ────────────────────────────────────────────
+    # ── Resume Analyzer quota badge ───────────────────────────────────────────
     _ra_username = st.session_state.get("username")
     if _ra_username:
         _ra_used = get_usage_count_last_hour(_ra_username, "resume_analyzer")
         _ra_remaining = max(0, 2 - _ra_used)
-        if _ra_remaining > 0:
-            _pill_bg     = "rgba(52,211,153,0.10)"
-            _pill_border = "rgba(52,211,153,0.30)"
-            _pill_color  = "#34d399"
-            _dot_color   = "#34d399"
-            _label       = f"{_ra_remaining}/2 analyses left this hour"
-        else:
-            _pill_bg     = "rgba(251,113,133,0.10)"
-            _pill_border = "rgba(251,113,133,0.30)"
-            _pill_color  = "#fb7185"
-            _dot_color   = "#fb7185"
-            _label       = "Limit reached \u2014 resets in 1 hour"
+        _ra_color = "#34d399" if _ra_remaining > 0 else "#fb7185"
+        _ra_svg = (
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
+            'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+            'style="display:inline-block;vertical-align:middle;margin-right:5px;">'
+            '<rect x="3" y="3" width="7" height="7"/>'
+            '<rect x="14" y="3" width="7" height="7"/>'
+            '<rect x="14" y="14" width="7" height="7"/>'
+            '<rect x="3" y="14" width="7" height="7"/>'
+            '</svg>'
+        )
         st.markdown(
-            f'<div style="margin-top:14px;padding:10px 14px;'
-            f'border-radius:10px;border:1px solid {_pill_border};'
-            f'background:{_pill_bg};'
-            f'display:flex;align-items:center;justify-content:space-between;'
-            f'font-family:-apple-system,BlinkMacSystemFont,sans-serif;">'
-            f'<div style="display:flex;align-items:center;gap:8px;">'
-            f'<span style="width:7px;height:7px;border-radius:50%;'
-            f'background:{_dot_color};flex-shrink:0;"></span>'
-            f'<span style="font-size:0.78rem;font-weight:600;color:{_pill_color};">'
-            f'Resume Analyzer</span></div>'
-            f'<span style="font-size:0.75rem;color:{_pill_color};opacity:0.85;font-weight:400;">'
-            f'{_label}</span></div>',
+            f'<div style="display:flex;align-items:center;font-size:0.78rem;color:{_ra_color};margin-top:4px;font-family:-apple-system,sans-serif;">'
+            f'{_ra_svg} Resume Analyzer: <b style="margin-left:3px;">{_ra_remaining}/2</b>&nbsp;analyses remaining this hour</div>',
             unsafe_allow_html=True
         )
 
@@ -6535,101 +6524,12 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
 with tab1:
     # Slide message styles already defined in global CSS — no extra block needed
 
-    # ── SaaS-style uploader: decorative header fused with native widget ───────
-    st.markdown("""
-<style>
-/* Remove all styling from the native uploader so it sits flush inside our box */
-[data-testid="stFileUploader"] {
-    background: transparent !important;
-    border: none !important;
-    padding: 0 !important;
-}
-[data-testid="stFileUploader"] > div {
-    background: transparent !important;
-    border: none !important;
-    padding: 0 !important;
-    box-shadow: none !important;
-}
-[data-testid="stFileUploaderDropzone"] {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 4px 0 0 0 !important;
-    border-top: 1px solid rgba(56,189,248,0.12) !important;
-    border-radius: 0 !important;
-}
-/* Hide the "5MB per file • PDF" helper text — our chips already show this */
-[data-testid="stFileUploaderDropzoneInstructions"] small,
-[data-testid="stFileUploaderDropzoneInstructions"] span {
-    display: none !important;
-}
-/* Style the Upload button to match our theme */
-[data-testid="stFileUploaderDropzone"] button {
-    background: rgba(56,189,248,0.10) !important;
-    border: 1px solid rgba(56,189,248,0.30) !important;
-    color: #38bdf8 !important;
-    border-radius: 8px !important;
-    font-size: 0.8rem !important;
-    font-weight: 600 !important;
-}
-[data-testid="stFileUploaderDropzone"] button:hover {
-    background: rgba(56,189,248,0.18) !important;
-    border-color: rgba(56,189,248,0.55) !important;
-}
-/* Wrapper box that visually contains both the header AND the native widget */
-.upload-zone-wrapper {
-    border: 1.5px dashed rgba(56,189,248,0.35);
-    border-radius: 16px;
-    background: rgba(56,189,248,0.03);
-    padding: 22px 20px 16px 20px;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-}
-</style>
-<div class="upload-zone-wrapper">
-    <div style="display:flex;justify-content:center;margin-bottom:10px;">
-        <div style="width:40px;height:40px;border-radius:10px;
-                    background:rgba(56,189,248,0.10);
-                    border:1px solid rgba(56,189,248,0.20);
-                    display:flex;align-items:center;justify-content:center;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                 stroke="#38bdf8" stroke-width="1.8"
-                 stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="16 16 12 12 8 16"/>
-                <line x1="12" y1="12" x2="12" y2="21"/>
-                <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
-            </svg>
-        </div>
-    </div>
-    <p style="text-align:center;font-size:0.9rem;font-weight:600;
-              color:#e2e8f0;margin:0 0 4px 0;letter-spacing:-0.01em;">
-        Drop your resumes here
-    </p>
-    <p style="text-align:center;font-size:0.75rem;color:#64748b;margin:0 0 12px 0;">
-        or use the button below to browse
-    </p>
-    <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
-        <span style="font-size:0.7rem;padding:3px 10px;border-radius:99px;
-                     background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
-                     color:#94a3b8;">PDF only</span>
-        <span style="font-size:0.7rem;padding:3px 10px;border-radius:99px;
-                     background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
-                     color:#94a3b8;">Max 5 MB each</span>
-        <span style="font-size:0.7rem;padding:3px 10px;border-radius:99px;
-                     background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
-                     color:#94a3b8;">Batch supported</span>
-    </div>
-""", unsafe_allow_html=True)
-
     uploaded_files = st.file_uploader(
-        "",
+        "📄 Upload PDF Resumes",
         type=["pdf"],
         accept_multiple_files=True,
-        help="Upload one or more resumes in PDF format (max 5MB each).",
-        label_visibility="collapsed"
+        help="Upload one or more resumes in PDF format (max 5MB each)."
     )
-
-    # Close the wrapper div AFTER the native widget renders
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # ── 5 MB hard cap ────────────────────────────────────────────────────────
     _MAX_FILE_MB  = 5
