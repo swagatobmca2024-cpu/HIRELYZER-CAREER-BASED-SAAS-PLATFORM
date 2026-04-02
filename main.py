@@ -698,43 +698,6 @@ div.stAlert {
     box-shadow: 0 1px 6px rgba(56,189,248,0.10) !important;
 }
 
-
-/* ══════════════════════════════════════
-   FILE UPLOADER BUTTON — global reset
-   Prevent stButton styles bleeding into
-   the native "Browse files" button
-   ══════════════════════════════════════ */
-.stFileUploader button,
-.stFileUploader [data-testid="stFileUploaderDropzoneButton"] {
-    position: static !important;
-    overflow: visible !important;
-    background: transparent !important;
-    border: 1px solid rgba(56,189,248,0.4) !important;
-    color: #7dd3fc !important;
-    border-radius: 8px !important;
-    padding: 5px 14px !important;
-    font-size: 0.82rem !important;
-    font-weight: 500 !important;
-    text-transform: none !important;
-    letter-spacing: normal !important;
-    backdrop-filter: none !important;
-    box-shadow: none !important;
-    transform: none !important;
-    transition: border-color 0.2s !important;
-}
-.stFileUploader button:hover,
-.stFileUploader [data-testid="stFileUploaderDropzoneButton"]:hover {
-    border-color: rgba(56,189,248,0.75) !important;
-    background: rgba(56,189,248,0.06) !important;
-    transform: none !important;
-    box-shadow: none !important;
-}
-.stFileUploader button::before,
-.stFileUploader button::after,
-.stFileUploader [data-testid="stFileUploaderDropzoneButton"]::before,
-.stFileUploader [data-testid="stFileUploaderDropzoneButton"]::after {
-    content: none !important;
-}
 /* ══════════════════════════════════════
    DOWNLOAD BUTTONS
    ══════════════════════════════════════ */
@@ -2553,28 +2516,6 @@ with tab1:
     }
     .stButton > button:hover::before { left: 100%; top: 100%; }
 
-    /* ---------- FILE UPLOADER BUTTON RESET ---------- */
-    /* Dropzone "Browse files" button must NOT inherit stButton shimmer/uppercase */
-    .stFileUploader button,
-    .stFileUploader [data-testid="stFileUploaderDropzoneButton"] {
-        position: static !important;
-        overflow: visible !important;
-        background: transparent !important;
-        border: 1px solid rgba(0,200,255,0.45) !important;
-        color: #7dd3fc !important;
-        border-radius: 8px !important;
-        padding: 6px 16px !important;
-        font-size: 0.82rem !important;
-        font-weight: 500 !important;
-        text-transform: none !important;
-        backdrop-filter: none !important;
-        box-shadow: none !important;
-        letter-spacing: normal !important;
-    }
-    .stFileUploader button::before,
-    .stFileUploader [data-testid="stFileUploaderDropzoneButton"]::before {
-        content: none !important;
-    }
 
     /* ---------- INPUTS ---------- */
     .stTextInput > div > input,
@@ -6539,6 +6480,7 @@ with tab1:
         accept_multiple_files=True,
         help="Upload one or more resumes in PDF format (max 5MB each)."
     )
+    st.caption("📎 PDF only · Max 5 MB per file")
 
     # ── 5 MB hard cap ────────────────────────────────────────────────────────
     _MAX_FILE_MB  = 5
