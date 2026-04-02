@@ -866,18 +866,38 @@ section[data-testid="stSidebar"] .stTextArea > div > div > textarea {
 }
 
 /* ══════════════════════════════════════
-   FILE UPLOADER
+   FILE UPLOADER — full default reset
    ══════════════════════════════════════ */
-.stFileUploader > div {
-    background: var(--surface-01) !important;
-    border: 1.5px dashed rgba(79,163,227,0.3) !important;
-    border-radius: var(--radius-lg) !important;
-    transition: all var(--transition-base) !important;
+/* Hard-reset every layer of the uploader to Streamlit defaults.
+   No backgrounds, no overflow:hidden, no pseudo-elements — prevents
+   shimmer overlays from clipping the dropzone text and Browse button. */
+.stFileUploader,
+.stFileUploader > div,
+.stFileUploader > div > div,
+.stFileUploader > div > div > div,
+[data-testid="stFileUploaderDropzone"] {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    overflow: visible !important;
+    position: static !important;
+    box-shadow: none !important;
+    animation: none !important;
 }
-.stFileUploader > div:hover {
+.stFileUploader > div,
+[data-testid="stFileUploaderDropzone"] {
+    border: 1.5px dashed rgba(79,163,227,0.35) !important;
+    border-radius: var(--radius-lg) !important;
+}
+.stFileUploader > div:hover,
+[data-testid="stFileUploaderDropzone"]:hover {
     border-color: rgba(79,163,227,0.6) !important;
-    background: rgba(79,163,227,0.04) !important;
-    box-shadow: 0 0 40px rgba(79,163,227,0.07) !important;
+}
+/* Kill any pseudo-elements on every uploader child */
+.stFileUploader *::before,
+.stFileUploader *::after {
+    content: none !important;
+    display: none !important;
 }
 
 /* ══════════════════════════════════════
@@ -1373,12 +1393,7 @@ h3, .stMarkdown h3 {
     font-family: var(--font-sans) !important;
 }
 
-/* ══════════════════════════════════════
-   FILE UPLOADER INNER LABEL
-   ══════════════════════════════════════ */
-.stFileUploader [data-testid="stFileUploaderDropzone"] {
-    background: rgba(56,189,248,0.02) !important;
-}
+/* FILE UPLOADER INNER LABEL — text colour only, no backgrounds */
 .stFileUploader [data-testid="stFileUploaderDropzone"] span {
     color: var(--text-secondary) !important;
     font-family: var(--font-sans) !important;
@@ -2457,25 +2472,27 @@ with tab1:
     }
     .shimmer:hover::before { left: 100%; top: 100%; }
 
-    /* ---------- FILE UPLOADER ---------- */
-    /* Scoped to the dropzone testid — avoids touching Streamlit's internal
-       layout divs. No position/overflow/pseudo-elements so text and the
-       "Browse files" button render correctly. */
+    /* ---------- FILE UPLOADER — full reset, no shimmer ---------- */
+    .stFileUploader,
+    .stFileUploader > div,
+    .stFileUploader > div > div,
+    .stFileUploader > div > div > div,
     [data-testid="stFileUploaderDropzone"] {
-        border: 1px solid rgba(0,200,255,0.5) !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        overflow: visible !important;
+        position: static !important;
+        box-shadow: none !important;
+        animation: none !important;
+    }
+    .stFileUploader > div,
+    [data-testid="stFileUploaderDropzone"] {
+        border: 1px solid rgba(0,200,255,0.4) !important;
         border-radius: 14px !important;
-        background: rgba(10,20,40,0.35) !important;
-        backdrop-filter: blur(14px) !important;
-        color: #cce6ff !important;
-        box-shadow: 0 0 12px rgba(0,200,255,0.3) !important;
     }
-    [data-testid="stFileUploaderDropzone"]:hover {
-        border-color: rgba(0,200,255,0.8) !important;
-        box-shadow: 0 0 20px rgba(0,200,255,0.45) !important;
-    }
-    /* Block any inherited shimmer pseudo-elements from leaking into the dropzone */
-    [data-testid="stFileUploaderDropzone"]::before,
-    [data-testid="stFileUploaderDropzone"]::after {
+    .stFileUploader *::before,
+    .stFileUploader *::after {
         content: none !important;
         display: none !important;
     }
