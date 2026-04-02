@@ -1,11 +1,4 @@
-
-def html_to_pdf_bytes(html_string):
-    styled_html = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{import os
+import os
 os.environ["STREAMLIT_WATCHDOG"] = "false"
 import json
 import random
@@ -7898,6 +7891,13 @@ with tab1:
 
     elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
+def html_to_pdf_bytes(html_string):
+    styled_html = f"""
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
                 size: 400mm 297mm;  /* Original custom large page size */
                 margin-top: 10mm;
                 margin-bottom: 10mm;
@@ -12374,6 +12374,7 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
+
 JOB_TITLES = [
     "Software Engineering",
     "Full Stack Development",
