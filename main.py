@@ -427,11 +427,6 @@ if "reset_otp_time" not in st.session_state:
 # Validation message state for register form (populated by on_change callbacks)
 # _email_msg, _user_msg, _pass_msg are initialised inside the register form block
 
-# Raise Streamlit's built-in upload cap to 200 MB so it never fires its own
-# "File must be X or smaller" inline error — our custom size-gate card handles
-# all validation and renders a proper styled error below the chip.
-st.set_option("server.maxUploadSize", 200)
-
 # ------------------- CSS Styling -------------------
 st.markdown("""
 <style>
