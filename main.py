@@ -5871,7 +5871,6 @@ def ats_percentage_score(
 ):
     import datetime
 
-    # ⚡ MERGED: detect both domains in a single LLM call (saves 1 API call vs 2 separate detect_domain_llm calls)
     _valid_domains = [
         "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
         "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
@@ -5883,26 +5882,53 @@ def ats_percentage_score(
         "Agile Coaching", "Software Engineering"
     ]
     _domain_list = ", ".join(_valid_domains)
-    _domain_prompt = f"""Classify the two texts below into professional domains.
-Return ONLY this exact format on one line, nothing else:
-RESUME_DOMAIN | JOB_DOMAIN
 
-Choose each domain from ONLY this list: {_domain_list}
+    # ── RESUME DOMAIN: detected from resume text ONLY, locked in session state ──
+    # Never re-detected when JD changes — keyed by resume content hash
+    _resume_cache_key = f"resume_domain_{hash(resume_text[:500])}"
+    if _resume_cache_key not in st.session_state:
+        _resume_domain_prompt = f"""You are a technical recruiter analyzing a candidate's resume.
+Based ONLY on the resume content below, identify the candidate's PRIMARY professional domain.
 
-RESUME TEXT (first 600 chars):
-{resume_text[:600]}
+Instructions:
+- Focus on: job titles held, technologies used, projects built, skills listed
+- Look PAST the contact info and summary — read the full experience and skills sections
+- Classify what the CANDIDATE does, completely ignore any job requirements
+- A Full Stack developer uses both frontend (React/Vue) AND backend (Node/Django/Spring) — do not classify them as Mobile just because they mention "app"
 
-JOB TEXT (first 600 chars):
-{job_description[:600]}
+Resume Text:
+{resume_text[:2000]}
+
+Return ONLY one domain from this list, nothing else:
+{_domain_list}
 """
-    try:
-        _domain_raw = call_llm(_domain_prompt, session=st.session_state).strip()
-        _parts = [p.strip() for p in _domain_raw.split("|")]
-        resume_domain = _parts[0] if len(_parts) == 2 and _parts[0] in _valid_domains else "Software Engineering"
-        job_domain    = _parts[1] if len(_parts) == 2 and _parts[1] in _valid_domains else "Software Engineering"
-    except Exception:
-        resume_domain = "Software Engineering"
-        job_domain    = "Software Engineering"
+        try:
+            _r = call_llm(_resume_domain_prompt, session=st.session_state).strip()
+            st.session_state[_resume_cache_key] = _r if _r in _valid_domains else "Software Engineering"
+        except Exception:
+            st.session_state[_resume_cache_key] = "Software Engineering"
+
+    resume_domain = st.session_state[_resume_cache_key]  # locked — never changes with JD
+
+    # ── JOB DOMAIN: detected fresh from JD each time (expected to change) ──
+    _jd_cache_key = f"jd_domain_{hash(job_description[:500])}"
+    if _jd_cache_key not in st.session_state:
+        _jd_domain_prompt = f"""Classify this job description into one professional domain.
+
+Job Title: {job_title}
+Job Description:
+{job_description[:800]}
+
+Return ONLY one domain from this list, nothing else:
+{_domain_list}
+"""
+        try:
+            _j = call_llm(_jd_domain_prompt, session=st.session_state).strip()
+            st.session_state[_jd_cache_key] = _j if _j in _valid_domains else "Software Engineering"
+        except Exception:
+            st.session_state[_jd_cache_key] = "Software Engineering"
+
+    job_domain = st.session_state[_jd_cache_key]
 
     similarity_score = get_domain_similarity(resume_domain, job_domain)
 
@@ -7103,7 +7129,8 @@ if uploaded_files and job_description:
                 fmt_score,   # ← format_score now saved to DB
             ),
             job_title=job_title,
-            job_description=job_description
+            job_description=job_description,
+            resume_domain=domain,   # ← pass pre-detected resume domain, never re-detected
         )
 
         st.session_state.processed_files.add(uploaded_file.name)
