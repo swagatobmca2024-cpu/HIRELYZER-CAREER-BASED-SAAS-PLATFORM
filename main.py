@@ -5867,7 +5867,9 @@ def ats_percentage_score(
     skills_weight=30,
     lang_weight=5,
     keyword_weight=10,
-    format_data=None,   # ← NEW: pass pre-computed format check result
+    format_data=None,       # pass pre-computed format check result
+    resume_domain=None,     # FIX: accept pre-detected domain from main thread
+    job_domain=None,        # FIX: accept pre-detected domain from main thread
 ):
     import datetime
 
@@ -5883,10 +5885,11 @@ def ats_percentage_score(
     ]
     _domain_list = ", ".join(_valid_domains)
 
-    # ── RESUME DOMAIN: detected from resume text ONLY, locked in session state ──
-    # Never re-detected when JD changes — keyed by resume content hash
+    # FIX: use pre-detected value if passed in, only call LLM if not already set
+    # When called from the parallel thread, resume_domain is set by the main thread
+    # so no LLM call fires inside the thread (thread-safe).
     _resume_cache_key = f"resume_domain_{hash(resume_text[:500])}"
-    if _resume_cache_key not in st.session_state:
+    if resume_domain is None and _resume_cache_key not in st.session_state:
         _resume_domain_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across all levels — freshers, students, mid-level, and senior professionals.
 
 Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.
@@ -6052,11 +6055,13 @@ Return ONLY one domain from this list, nothing else:
         except Exception:
             st.session_state[_resume_cache_key] = "Software Engineering"
 
-    resume_domain = st.session_state[_resume_cache_key]  # locked — never changes with JD
+    # Use passed-in value if provided, otherwise use session state value
+    if resume_domain is None:
+        resume_domain = st.session_state.get(_resume_cache_key, "Software Engineering")
 
-    # ── JOB DOMAIN: detected fresh from JD each time (expected to change) ──
+    # ── JOB DOMAIN: use pre-detected value if passed in, else detect here ──
     _jd_cache_key = f"jd_domain_{hash(job_description[:500])}"
-    if _jd_cache_key not in st.session_state:
+    if job_domain is None and _jd_cache_key not in st.session_state:
         _jd_domain_prompt = f"""Classify this job description into one professional domain.
 
 Job Title: {job_title}
@@ -6072,7 +6077,9 @@ Return ONLY one domain from this list, nothing else:
         except Exception:
             st.session_state[_jd_cache_key] = "Software Engineering"
 
-    job_domain = st.session_state[_jd_cache_key]
+    # Use passed-in value if provided, otherwise use session state value
+    if job_domain is None:
+        job_domain = st.session_state.get(_jd_cache_key, "Software Engineering")
 
     similarity_score = get_domain_similarity(resume_domain, job_domain)
 
@@ -6589,7 +6596,7 @@ def create_chain(vectorstore):
         raise ValueError("❌ No healthy Groq API keys available for chat chain.")
     # healthy list is already shuffled by get_healthy_keys — just take the first
     groq_api_key = healthy[0]
-    increment_key_usage(groq_api_key)   # keep usage count in sync with call_llm
+    # ✅ FIX: do NOT increment usage before the call — only after success
 
     # ✅ Create the ChatGroq object
     llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=groq_api_key)
@@ -6601,10 +6608,15 @@ def create_chain(vectorstore):
             retriever=vectorstore.as_retriever(),
             return_source_documents=True
         )
+        increment_key_usage(groq_api_key)   # ✅ FIX: only count on success
         return chain
     except Exception as e:
-        reason = "quota" if any(w in str(e).lower() for w in ["quota", "rate limit", "429"]) else "error"
-        mark_key_failure(groq_api_key, reason)
+        err_str = str(e).lower()
+        if any(w in err_str for w in ["quota", "rate limit", "429", "too many requests"]):
+            mark_key_failure(groq_api_key, "quota")
+        elif any(w in err_str for w in ["invalid api key", "unauthorized", "401", "403", "authentication"]):
+            mark_key_failure(groq_api_key, "error")
+        # transient errors (network blip, 500) — don't mark the key failed at all
         raise
 
 # Chat history
@@ -7056,9 +7068,211 @@ if uploaded_files and job_description:
             num_pages = 1
         format_data = check_resume_format(full_text, num_pages, pdf_path=file_path)
 
+        # FIX: detect domains on the main thread BEFORE spawning parallel threads.
+        # This prevents both threads from simultaneously reading/writing st.session_state
+        # and firing duplicate LLM calls for domain detection.
+        _pre_valid_domains = [
+            "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
+            "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
+            "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
+            "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
+            "Networking", "Site Reliability Engineering", "Product Management", "Project Management",
+            "Business Analysis", "Technical Writing", "Digital Marketing", "E-commerce", "Fintech",
+            "Healthcare Tech", "EdTech", "IoT Development", "AR/VR Development", "Technical Sales",
+            "Agile Coaching", "Software Engineering"
+        ]
+        _pre_domain_list = ", ".join(_pre_valid_domains)
+
+        _pre_resume_cache_key = f"resume_domain_{hash(full_text[:500])}"
+        if _pre_resume_cache_key not in st.session_state:
+            _pre_resume_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across all levels — freshers, students, mid-level, and senior professionals.
+
+Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.
+
+════════════════════════════════════════════════════════
+STEP 1 — DETERMINE CANDIDATE LEVEL FIRST
+════════════════════════════════════════════════════════
+
+Classify the candidate into one of these levels before picking a domain:
+
+LEVEL A — Pure Fresher / Student with NO specialization evidence:
+  • Still studying OR just graduated
+  • No internship OR only 1 internship with no described work
+  • Projects listed as names only (no descriptions, no tech stack mentioned)
+  • Skills are only basic CS fundamentals (Java, C, C++, Python, HTML, SQL alone)
+  → DEFAULT to "Software Engineering" immediately. Do not over-classify.
+  → EXAMPLES: Only Java+MySQL+DBMS listed, no projects described → "Software Engineering"
+
+LEVEL B — Fresher / Student WITH specialization evidence:
+  • Still studying OR recently graduated BUT has AT LEAST ONE of:
+    - 1 internship where the domain is clearly described (e.g. "frontend web development internship")
+    - 1 project with a description mentioning domain-specific technologies
+    - Skills showing a clear technology stack (not just basics)
+  → DO classify into a specific domain based on the strongest evidence
+  → EXAMPLES:
+    - HTML+CSS+JS+React + frontend internship described → "Frontend Development"
+    - Django/Laravel + MySQL + web project described → "Full Stack Development" or "Backend Development"
+    - Android/Flutter + built a mobile app described → "Mobile Development"
+    - TensorFlow/PyTorch + ML project described → "AI/Machine Learning"
+
+LEVEL C — Experienced Professional (1+ years full-time work):
+  → ALWAYS classify into a specific domain — never default to "Software Engineering" unless truly mixed
+  → Use job titles + tech stack + years of experience as primary signals
+
+════════════════════════════════════════════════════════
+STEP 2 — DOMAIN CLASSIFICATION RULES (for Level B and C)
+════════════════════════════════════════════════════════
+
+RULE A — DO NOT over-classify from basic skills alone (applies to ALL levels):
+  ✗ Java + MySQL + DBMS alone → NOT "Backend Development"
+  ✗ HTML + CSS alone → NOT "Frontend Development"
+  ✗ Python alone → NOT "AI/Machine Learning" or "Data Science"
+  ✗ SQL alone → NOT "Database Management" or "Data Science"
+  ✗ C / C++ alone → NOT "Embedded Systems" or "Software Engineering" specialist
+  ✓ Basic CS languages without frameworks + no described projects → "Software Engineering"
+
+RULE B — WHAT COUNTS AS TRUE DOMAIN EVIDENCE:
+  → Frontend Development:
+     MUST have: HTML+CSS+JS PLUS at least one of (React/Vue/Angular/Bootstrap/jQuery)
+     AND: at least 1 described project OR internship explicitly about frontend/web UI
+     
+  → Backend Development:
+     MUST have: A backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI)
+     AND: database integration (MySQL/PostgreSQL/MongoDB) in a described project
+     NOT just: Java + SQL listed in skills with no project context
+     
+  → Full Stack Development:
+     MUST have: frontend technologies + backend framework + database ALL present
+     AND: at least 1 project or internship that uses both frontend and backend
+     SELF-IDENTIFICATION counts: if summary says "full stack" or "front-end and back-end" → Full Stack
+     
+  → Mobile Development:
+     MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift
+     AND: at least 1 described mobile app project
+     
+  → Data Science:
+     MUST have: pandas/numpy/matplotlib/seaborn/tableau/power bi
+     AND: actual data analysis or visualization project described
+     NOT just: SQL or Excel listed in skills
+     
+  → AI/Machine Learning:
+     MUST have: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/LLM/NLP/Computer Vision
+     AND: model training or ML pipeline described in a project
+     
+  → Cybersecurity:
+     MUST have: security tools (Kali/Burp Suite/Wireshark/Metasploit) OR security concepts (pentesting/OWASP/CTF)
+     AND: security internship or project described
+     NOTE: A cybersecurity VIRTUAL internship with no tools described = weak signal, check other evidence too
+     
+  → DevOps/Infrastructure:
+     MUST have: Docker/Kubernetes/CI-CD/Jenkins/Terraform/Ansible
+     AND: deployment or infrastructure project described
+     
+  → Cloud Engineering:
+     MUST have: AWS/Azure/GCP services (not just "cloud" mentioned)
+     AND: cloud deployment or architecture in a project
+     
+  → UI/UX Design:
+     MUST have: Figma/Adobe XD/Sketch/InVision
+     AND: wireframes/prototypes/user research described
+     
+  → Database Management:
+     MUST have: DBA role OR database optimization/administration as PRIMARY focus
+     NOT just: SQL listed as one of many skills
+     
+  → Product Management:
+     MUST have: product ownership, roadmaps, PRDs, stakeholder management
+     NOT just: Agile/Scrum keywords
+     
+  → Project Management:
+     MUST have: managing teams, project delivery, PMP/Prince2 or equivalent experience
+     
+  → Business Analysis:
+     MUST have: requirements gathering, process mapping, business case writing
+     
+  → Digital Marketing:
+     MUST have: SEO/SEM/campaigns/social media marketing with actual results
+     
+  → Blockchain Development:
+     MUST have: Solidity/Web3/Smart Contracts/Ethereum/DeFi in described projects
+     
+  → Game Development:
+     MUST have: Unity/Unreal Engine/game mechanics in described projects
+     
+  → Embedded Systems:
+     MUST have: microcontroller/RTOS/firmware/hardware programming described
+     
+  → IoT Development:
+     MUST have: IoT devices/sensors/protocols (MQTT/CoAP) + hardware integration
+     
+  → AR/VR Development:
+     MUST have: ARKit/ARCore/Unity3D/Unreal/Oculus in described projects
+
+RULE C — MIXED SIGNALS → pick the DOMINANT domain:
+  • Count: technologies + described projects + internship titles per domain
+  • The domain with the most evidence wins
+  • If frontend has 3 signals and cybersecurity has 1 virtual internship → Frontend wins
+  • If truly equal across 2 domains → "Full Stack Development" if they're frontend+backend, else "Software Engineering"
+
+RULE D — RESEARCH / ACADEMIC profiles:
+  • Research intern at university/NIT/IIT/ISRO/DRDO etc. → classify by research TOPIC
+  • AI/accessibility/NLP research → "AI/Machine Learning"
+  • Security research → "Cybersecurity"  
+  • Hardware/systems research → "Embedded Systems" or "Software Engineering"
+  • Generic CS research → "Software Engineering"
+
+RULE E — CAREER SWITCHERS:
+  • If candidate has old domain (e.g. mechanical engineer) but new projects/courses in tech → classify by new tech domain
+  • Recent certifications + projects in new domain outweigh old job titles
+
+════════════════════════════════════════════════════════
+STEP 3 — FINAL CHECK BEFORE ANSWERING
+════════════════════════════════════════════════════════
+
+Ask yourself:
+1. What is the candidate's LEVEL? (A / B / C)
+2. If Level A → return "Software Engineering"
+3. If Level B or C → what domain has the MOST evidence (technologies + described projects + internship/job titles)?
+4. Does that domain meet the TRUE EVIDENCE bar from Rule B?
+5. If yes → return that domain. If no → return "Software Engineering"
+
+════════════════════════════════════════════════════════
+Resume Text:
+{full_text[:3000]}
+════════════════════════════════════════════════════════
+
+Return ONLY one domain from this list, nothing else:
+{_pre_domain_list}
+"""
+            try:
+                _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
+                st.session_state[_pre_resume_cache_key] = _r if _r in _pre_valid_domains else "Software Engineering"
+            except Exception:
+                st.session_state[_pre_resume_cache_key] = "Software Engineering"
+        _pre_resume_domain = st.session_state[_pre_resume_cache_key]
+
+        _pre_jd_cache_key = f"jd_domain_{hash(job_description[:500])}"
+        if _pre_jd_cache_key not in st.session_state:
+            _pre_jd_prompt = f"""Classify this job description into one professional domain.
+
+Job Title: {job_title}
+Job Description:
+{job_description[:800]}
+
+Return ONLY one domain from this list, nothing else:
+{_pre_domain_list}
+"""
+            try:
+                _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
+                st.session_state[_pre_jd_cache_key] = _j if _j in _pre_valid_domains else "Software Engineering"
+            except Exception:
+                st.session_state[_pre_jd_cache_key] = "Software Engineering"
+        _pre_job_domain = st.session_state[_pre_jd_cache_key]
+
         # ⚡ PARALLEL: rewrite + ATS run simultaneously using threads.
         # Both are network-bound (Groq API) so they benefit from parallelism
         # without needing async — ThreadPoolExecutor handles it safely.
+        # Domains pre-detected above on main thread — no LLM calls fire inside threads.
         def _task_rewrite():
             return rewrite_and_highlight(full_text, replacement_mapping, user_location)
 
@@ -7073,6 +7287,8 @@ if uploaded_files and job_description:
                 lang_weight=lang_weight,
                 keyword_weight=keyword_weight,
                 format_data=format_data,
+                resume_domain=_pre_resume_domain,   # FIX: pre-detected, no thread LLM call
+                job_domain=_pre_job_domain,         # FIX: pre-detected, no thread LLM call
             )
 
         with st.spinner("✍️ Rewriting resume & running ATS evaluation in parallel..."):
