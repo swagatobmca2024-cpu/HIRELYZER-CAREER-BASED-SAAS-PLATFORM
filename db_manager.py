@@ -150,6 +150,18 @@ class DatabaseManager:
 
     # ── Domain detection (unchanged logic) ───────────────────────────────────
 
+    # ── Valid domain list (single source of truth) ───────────────────────────
+    VALID_DOMAINS = [
+        "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
+        "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
+        "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
+        "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
+        "Networking", "Site Reliability Engineering", "Product Management", "Project Management",
+        "Business Analysis", "Technical Writing", "Digital Marketing", "E-commerce", "Fintech",
+        "Healthcare Tech", "EdTech", "IoT Development", "AR/VR Development", "Technical Sales",
+        "Agile Coaching", "Software Engineering", "Unclassified",
+    ]
+
     def detect_domain_llm(self, job_title: str, job_description: str, session=None) -> str:
         prompt = f"""
 You are an expert career advisor.
@@ -171,39 +183,174 @@ Agile Coaching, Software Engineering]
 """
         try:
             result = call_llm(prompt, session=session).strip()
-            valid_domains = [
-                "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
-                "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
-                "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
-                "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
-                "Networking", "Site Reliability Engineering", "Product Management", "Project Management",
-                "Business Analysis", "Technical Writing", "Digital Marketing", "E-commerce", "Fintech",
-                "Healthcare Tech", "EdTech", "IoT Development", "AR/VR Development", "Technical Sales",
-                "Agile Coaching", "Software Engineering"
-            ]
-            return result if result in valid_domains else "Software Engineering"
+            if result in self.VALID_DOMAINS:
+                return result
+            # LLM returned something outside the valid list — fall through to keyword
+            logger.warning(f"LLM returned invalid domain '{result}' — falling back to keyword detection")
+            return self.detect_domain_from_title_and_description(job_title, job_description)
         except Exception as e:
             logger.error(f"LLM domain detection failed: {e}")
             return self.detect_domain_from_title_and_description(job_title, job_description)
+
+    def detect_domain_with_confidence(self, job_title: str, job_description: str, session=None) -> Dict[str, Any]:
+        """
+        Two-stage domain detection with confidence scoring.
+
+        Runs both LLM and keyword detection independently, then compares:
+          - Agreement  → high confidence, use the agreed domain
+          - Disagreement → low confidence, prefer LLM but flag for review
+          - LLM failure  → keyword result with low confidence
+
+        Returns a dict:
+          {
+            "domain":      str,   — final domain label
+            "confidence":  str,   — "high" | "medium" | "low"
+            "llm_domain":  str,   — raw LLM result (or None if failed)
+            "kw_domain":   str,   — keyword result
+            "agreed":      bool,  — whether both methods agreed
+          }
+        """
+        # Run keyword detection (always fast, no API call)
+        kw_domain = self.detect_domain_from_title_and_description(job_title, job_description)
+
+        # Run LLM detection
+        llm_domain = None
+        llm_failed = False
+        try:
+            prompt = f"""
+You are an expert career advisor.
+Given either a job posting (title + description) OR a candidate resume (summary, skills, experience, projects),
+classify the most relevant professional domain.
+
+Job Title: {job_title}
+Job / Resume Text: {job_description}
+
+Return ONLY one domain from this list (no explanation, no extra text):
+[Data Science, AI/Machine Learning, UI/UX Design, Mobile Development,
+Frontend Development, Backend Development, Full Stack Development, Cybersecurity,
+Cloud Engineering, DevOps/Infrastructure, Quality Assurance, Game Development,
+Blockchain Development, Embedded Systems, System Architecture, Database Management,
+Networking, Site Reliability Engineering, Product Management, Project Management,
+Business Analysis, Technical Writing, Digital Marketing, E-commerce, Fintech,
+Healthcare Tech, EdTech, IoT Development, AR/VR Development, Technical Sales,
+Agile Coaching, Software Engineering]
+"""
+            raw = call_llm(prompt, session=session).strip()
+            llm_domain = raw if raw in self.VALID_DOMAINS else None
+            if llm_domain is None:
+                logger.warning(f"LLM returned invalid domain '{raw}' in two-stage detection")
+                llm_failed = True
+        except Exception as e:
+            logger.error(f"LLM failed in two-stage detection: {e}")
+            llm_failed = True
+
+        # Determine agreement and confidence
+        if llm_failed or llm_domain is None:
+            # Only keyword available
+            return {
+                "domain":     kw_domain,
+                "confidence": "low",
+                "llm_domain": None,
+                "kw_domain":  kw_domain,
+                "agreed":     False,
+            }
+
+        agreed = (llm_domain.lower() == kw_domain.lower())
+
+        # Both agree → high confidence
+        if agreed:
+            return {
+                "domain":     llm_domain,
+                "confidence": "high",
+                "llm_domain": llm_domain,
+                "kw_domain":  kw_domain,
+                "agreed":     True,
+            }
+
+        # Disagreement: prefer LLM but mark medium confidence
+        # Exception: if kw result is "Unclassified" (no strong keyword signal),
+        # trust the LLM fully and still call it high confidence
+        if kw_domain == "Unclassified":
+            return {
+                "domain":     llm_domain,
+                "confidence": "high",
+                "llm_domain": llm_domain,
+                "kw_domain":  kw_domain,
+                "agreed":     False,
+            }
+
+        return {
+            "domain":     llm_domain,
+            "confidence": "medium",
+            "llm_domain": llm_domain,
+            "kw_domain":  kw_domain,
+            "agreed":     False,
+        }
 
     def detect_domain_from_title_and_description(self, job_title: str, job_description: str) -> str:
         title = job_title.lower().strip()
         desc = job_description.lower().strip()
 
         replacements = {
-            "cyber security": "cybersecurity", "ai engineer": "machine learning",
-            "ml engineer": "machine learning", "software developer": "software engineer",
-            "frontend developer": "frontend", "backend developer": "backend",
-            "fullstack developer": "full stack", "devops engineer": "devops",
-            "cloud engineer": "cloud", "qa engineer": "quality assurance",
-            "test engineer": "quality assurance", "sre": "site reliability engineering",
-            "blockchain developer": "blockchain", "game developer": "game development",
-            "embedded engineer": "embedded systems", "network engineer": "networking",
+            # Security
+            "cyber security": "cybersecurity", "security engineer": "cybersecurity",
+            "information security": "cybersecurity", "infosec engineer": "cybersecurity",
+            "application security": "cybersecurity", "appsec": "cybersecurity",
+            # AI / ML
+            "ai engineer": "machine learning", "ml engineer": "machine learning",
+            "nlp engineer": "machine learning", "computer vision engineer": "machine learning",
+            "research scientist": "machine learning", "ml ops engineer": "machine learning",
+            "mlops engineer": "machine learning", "ai researcher": "machine learning",
+            "deep learning engineer": "machine learning",
+            # Data
+            "data engineer": "data science", "analytics engineer": "data science",
+            "data architect": "data science", "bi developer": "data science",
+            "business intelligence developer": "data science",
+            # Software
+            "software developer": "software engineer",
+            # Frontend / Backend / Full Stack
+            "frontend developer": "frontend", "front end developer": "frontend",
+            "backend developer": "backend", "back end developer": "backend",
+            "fullstack developer": "full stack", "full stack developer": "full stack",
+            "full-stack developer": "full stack",
+            # DevOps / Infra
+            "devops engineer": "devops", "platform engineer": "devops",
+            "infrastructure engineer": "devops", "site reliability engineer": "devops",
+            "release engineer": "devops", "build engineer": "devops",
+            # Cloud
+            "cloud engineer": "cloud", "cloud architect": "cloud",
+            "cloud infrastructure engineer": "cloud",
+            # QA
+            "qa engineer": "quality assurance", "test engineer": "quality assurance",
+            "sdet": "quality assurance", "automation engineer": "quality assurance",
+            "qa automation engineer": "quality assurance",
+            # SRE
+            "sre": "site reliability engineering",
+            # Blockchain
+            "blockchain developer": "blockchain", "web3 developer": "blockchain",
+            "smart contract developer": "blockchain",
+            # Game
+            "game developer": "game development", "game engineer": "game development",
+            # Embedded / IoT
+            "embedded engineer": "embedded systems", "firmware engineer": "embedded systems",
+            "iot engineer": "iot development",
+            # Networking
+            "network engineer": "networking", "network administrator": "networking",
+            "network architect": "networking",
+            # Database
             "database administrator": "database management", "dba": "database management",
+            "database engineer": "database management",
+            # Management / Business
             "business analyst": "business analysis", "product manager": "product management",
             "project manager": "project management", "scrum master": "agile coaching",
+            "agile coach": "agile coaching", "program manager": "project management",
+            # Other
             "technical writer": "technical writing", "sales engineer": "technical sales",
-            "solution architect": "system architecture"
+            "solution architect": "system architecture",
+            "enterprise architect": "system architecture",
+            "mobile developer": "mobile development", "android developer": "mobile development",
+            "ios developer": "mobile development", "react native developer": "mobile development",
+            "flutter developer": "mobile development",
         }
         for old, new in replacements.items():
             title = title.replace(old, new)
@@ -233,18 +380,27 @@ Agile Coaching, Software Engineering]
                 "statistical modeling","time series","forecasting","predictive analytics",
                 "analytics engineer","r programming","jupyter","databricks","spark","hadoop",
                 "etl","data pipeline","data warehouse","olap","oltp","dimensional modeling",
-                "data governance"
+                "data governance","data engineer","data architecture","dbt","airflow",
+                "data quality","data catalog","data lake","data mesh","data observability",
+                "cohort analysis","funnel analysis","retention analysis","churn prediction",
+                "looker studio","metabase","superset","google analytics","mixpanel","amplitude"
             ],
             "AI/Machine Learning": [
-                "machine learning","ml engineer","deep learning","neural network","nlp",
-                "computer vision","ai engineer","scikit-learn","tensorflow","pytorch","llm",
+                "machine learning","deep learning","neural network","nlp",
+                "computer vision","scikit-learn","tensorflow","pytorch","llm",
                 "huggingface","xgboost","lightgbm","classification","regression",
                 "reinforcement learning","transfer learning","model training","bert","gpt",
-                "yolo","transformer","autoencoder","ai models","fine-tuning","zero-shot",
+                "yolo","transformer","autoencoder","fine-tuning","zero-shot",
                 "one-shot","mistral","llama","openai","langchain","vector embeddings",
                 "prompt engineering","mlops","model deployment","feature store",
                 "model monitoring","hyperparameter tuning","ensemble methods",
-                "gradient boosting","random forest","svm","clustering","pca"
+                "gradient boosting","random forest","svm","clustering","pca",
+                "natural language processing","text classification","named entity recognition",
+                "sentiment analysis","object detection","image segmentation","generative ai",
+                "diffusion models","stable diffusion","rag","retrieval augmented generation",
+                "vector database","pinecone","weaviate","chroma","faiss","onnx","triton",
+                "kubeflow","mlflow","weights and biases","model quantization","distillation",
+                "research scientist","nlp engineer","computer vision engineer","ai researcher"
             ],
             "UI/UX Design": [
                 "figma","adobe xd","sketch","wireframe","prototyping","user interface",
@@ -254,7 +410,10 @@ Agile Coaching, Software Engineering]
                 "journey mapping","heuristic evaluation","persona","mobile-first","ux audit",
                 "design tokens","design thinking","information architecture","card sorting",
                 "tree testing","user testing","a/b testing design","design sprint",
-                "atomic design","design ops","brand design"
+                "atomic design","design ops","brand design","motion design","micro-interactions",
+                "zeplin","invision","principle","framer","hotjar","maze","optimal workshop",
+                "wcag","aria","color theory","typography","grid system","ui design",
+                "ux research","ux writing","content design","service design"
             ],
             "Mobile Development": [
                 "android","ios","flutter","kotlin","swift","mobile app","react native",
@@ -263,36 +422,47 @@ Agile Coaching, Software Engineering]
                 "in-app purchases","mobile ui","mobile ux","apk","ipa","expo","capacitor",
                 "cordova","xamarin","ionic","phonegap","mobile testing","app optimization",
                 "mobile security","offline functionality","mobile analytics","app monetization",
-                "mobile performance"
+                "mobile performance","jetpack compose","swiftui","kotlin multiplatform",
+                "mobile ci/cd","fastlane","detox","espresso","xctest","app store optimization",
+                "deep linking","mobile architecture","mvvm android","clean architecture mobile",
+                "android developer","ios developer","flutter developer","react native developer"
             ],
             "Frontend Development": [
                 "frontend","html","css","javascript","react","angular","vue","typescript",
                 "next.js","webpack","bootstrap","tailwind","sass","es6","responsive design",
                 "web accessibility","dom","jquery","redux","vite","zustand","framer motion",
-                "storybook","eslint","vitepress","pwa","single page application","csr","ssr",
+                "storybook","eslint","pwa","single page application","csr","ssr",
                 "hydration","component-based ui","web components","micro frontends","bundler",
                 "transpiler","polyfill","css grid","flexbox","css animations","web performance",
-                "lighthouse","core web vitals"
+                "lighthouse","core web vitals","nuxt.js","svelte","solid.js","astro",
+                "graphql client","apollo client","react query","swr","emotion","styled components",
+                "testing library","playwright","vitest","web vitals","accessibility testing",
+                "design tokens implementation","component library","front end"
             ],
             "Backend Development": [
-                "backend","node.js","django","flask","express","api development","sql","nosql",
+                "backend","node.js","django","flask","express","api development","nosql",
                 "server-side","mysql","postgresql","mongodb","rest api","graphql","java",
                 "spring boot","authentication","authorization","mvc","business logic","orm",
                 "database schema","asp.net","laravel","go","fastapi","nest.js","microservices",
                 "websockets","rabbitmq","message broker","cron jobs","redis","elasticsearch",
                 "kafka","grpc","soap","middleware","caching","load balancing","rate limiting",
-                "api gateway","serverless","lambda functions"
+                "api gateway","serverless","lambda functions","backend developer",
+                "back end","python backend","ruby on rails","php","scala","rust backend",
+                "celery","dramatiq","background jobs","database optimization","query optimization",
+                "connection pooling","database indexing","api versioning","oauth","jwt",
+                "session management","backend architecture","hexagonal architecture"
             ],
             "Full Stack Development": [
                 "full stack","fullstack","mern","mean","mevn","lamp","jamstack",
                 "frontend and backend","end-to-end development","full stack developer",
-                "api integration","rest api","graphql","react + node","react.js + express",
-                "monolith","microservices","serverless architecture","integrated app",
-                "web application","cross-functional development","component-based architecture",
+                "api integration","rest api","graphql","monolith","microservices",
+                "serverless architecture","integrated app","web application",
+                "cross-functional development","component-based architecture",
                 "database design","middleware","mvc","mvvm","authentication","authorization",
                 "session management","cloud deployment","responsive ui","performance tuning",
                 "state management","redux","context api","axios","fetch api","isomorphic",
-                "universal rendering","headless cms","api-first development"
+                "universal rendering","headless cms","api-first development",
+                "full-stack","t3 stack","blitz.js","remix","trpc"
             ],
             "Cybersecurity": [
                 "cybersecurity","security analyst","penetration testing","ethical hacking",
@@ -302,7 +472,11 @@ Agile Coaching, Software Engineering]
                 "kali linux","burp suite","nmap","wireshark","cve","forensics","security audit",
                 "information security","compliance","ransomware","threat hunting",
                 "security architecture","identity management","pki","security governance",
-                "risk assessment","vulnerability management","soc"
+                "risk assessment","vulnerability management","soc","security engineer",
+                "application security","appsec","devsecops","pentesting","ctf","metasploit",
+                "reverse engineering","malware analysis","threat intelligence","osint",
+                "zero trust","iam security","privileged access","dlp","endpoint security",
+                "security monitoring","log analysis","security automation","soar"
             ],
             "Cloud Engineering": [
                 "cloud","aws","azure","gcp","cloud engineer","cloud computing",
@@ -310,46 +484,68 @@ Agile Coaching, Software Engineering]
                 "load balancer","auto scaling","cloud storage","cloud native","cloud migration",
                 "eks","aks","terraform","cloudwatch","cloudtrail","iam","rds","elb","lambda",
                 "azure functions","cloud functions","serverless","containers",
-                "cloud architecture","multi-cloud","hybrid cloud","cloud cost optimization"
+                "cloud architecture","multi-cloud","hybrid cloud","cloud cost optimization",
+                "cloud architect","google cloud","digitalocean","cloud deployment",
+                "vpc","subnet","cdn","route53","cloudfront","azure ad","gke","fargate",
+                "cloud security posture","finops","well-architected framework",
+                "cloud networking","transit gateway","direct connect","expressroute"
             ],
             "DevOps/Infrastructure": [
                 "devops","docker","kubernetes","ci/cd","jenkins","ansible",
                 "infrastructure as code","terraform","monitoring","prometheus","grafana",
                 "deployment","automation","pipeline","build and release","scripting","bash",
-                "shell script","site reliability","sre","argocd","helm","fluxcd","aws cli",
+                "shell script","site reliability","argocd","helm","fluxcd","aws cli",
                 "linux administration","log aggregation","observability","splunk","gitlab ci",
                 "github actions","azure devops","puppet","chef","vagrant",
-                "infrastructure monitoring","alerting","incident management","chaos engineering"
+                "infrastructure monitoring","alerting","incident management","chaos engineering",
+                "platform engineer","infrastructure engineer","platform engineering",
+                "pagerduty","datadog","new relic","elk stack","fluentd","logstash",
+                "continuous delivery","continuous deployment","gitops","k8s","openshift",
+                "vault","consul","service mesh","istio","linkerd","release management"
             ],
             "Quality Assurance": [
-                "qa","quality assurance","testing","test automation","selenium","cypress",
+                "quality assurance","testing","test automation","selenium","cypress",
                 "test cases","test planning","bug tracking","regression testing",
                 "performance testing","load testing","stress testing","api testing",
                 "ui testing","unit testing","integration testing","system testing",
                 "acceptance testing","test driven development","behavior driven development",
                 "cucumber","jest","mocha","junit","testng","postman","jmeter","appium",
-                "test management","defect management"
+                "test management","defect management","sdet","manual testing",
+                "exploratory testing","smoke testing","sanity testing","end-to-end testing",
+                "playwright","k6","gatling","locust","test strategy","test coverage",
+                "quality engineer","software tester","qa automation","test framework",
+                "accessibility testing","cross-browser testing","mobile testing"
             ],
             "Game Development": [
-                "game development","unity","unreal engine","c#","c++","game design",
-                "game programming","3d modeling","animation","shader programming",
+                "game development","unity","unreal engine","game design",
+                "game programming","animation","shader programming",
                 "physics engine","game mechanics","level design","game testing","multiplayer",
-                "networking","mobile games","console games","pc games","vr games","ar games",
-                "game optimization","performance profiling","game analytics","monetization"
+                "mobile games","console games","pc games","vr games","ar games",
+                "game optimization","performance profiling","game analytics","monetization",
+                "godot","cocos2d","opengl","directx","vulkan","game engine",
+                "procedural generation","pathfinding","ai for games","game ui",
+                "loot systems","inventory system","save system","game backend",
+                "steam","unity3d","unreal blueprint","c++ games","c# unity"
             ],
             "Blockchain Development": [
                 "blockchain","cryptocurrency","smart contracts","solidity","ethereum","bitcoin",
                 "defi","nft","web3","dapp","consensus algorithms","cryptography",
                 "distributed ledger","mining","staking","tokenomics","metamask","truffle",
                 "hardhat","ipfs","polygon","binance smart chain","hyperledger","chainlink",
-                "oracles","dao","yield farming"
+                "oracles","dao","yield farming","blockchain developer","web3 developer",
+                "evm","layer 2","zk-rollups","optimism","arbitrum","solana","rust blockchain",
+                "anchor framework","token standards","erc20","erc721","defi protocol",
+                "liquidity pool","amm","cross-chain","bridge","wallet integration"
             ],
             "Embedded Systems": [
-                "embedded systems","microcontroller","firmware","c programming","assembly",
+                "embedded systems","microcontroller","firmware","assembly",
                 "real-time systems","rtos","arduino","raspberry pi","arm","pic","embedded c",
                 "hardware programming","sensor integration","iot devices","low-level programming",
                 "device drivers","bootloader","embedded linux","fpga","verilog","vhdl",
-                "pcb design","circuit design"
+                "pcb design","circuit design","firmware engineer","embedded engineer",
+                "freertos","zephyr","bare metal","stm32","esp32","avr","msp430",
+                "can bus","spi","i2c","uart","modbus","embedded testing","hardware abstraction",
+                "cross compilation","jtag","debugging embedded","power management ic"
             ],
             "System Architecture": [
                 "system architecture","solution architect","enterprise architecture",
@@ -357,40 +553,66 @@ Agile Coaching, Software Engineering]
                 "fault tolerance","system design","architecture patterns","design patterns",
                 "load balancing","caching strategies","database sharding",
                 "event-driven architecture","message queues","api design","service mesh",
-                "containerization","orchestration","cloud architecture"
+                "containerization","orchestration","cloud architecture","enterprise architect",
+                "technical architecture","domain driven design","ddd","cqrs","event sourcing",
+                "saga pattern","strangler fig","hexagonal architecture","clean architecture",
+                "architect","system design interview","cap theorem","consistency","availability",
+                "partition tolerance","technical roadmap","architecture review","adr"
             ],
             "Database Management": [
-                "database administrator","dba","database design","sql optimization",
+                "database administrator","database design","sql optimization",
                 "database performance","backup and recovery","replication","clustering",
                 "data modeling","normalization","indexing","stored procedures","triggers",
                 "database security","mysql","postgresql","oracle","sql server","mongodb",
-                "cassandra","redis","elasticsearch","data warehouse","etl","olap"
+                "cassandra","redis","elasticsearch","data warehouse","etl","olap",
+                "database engineer","database management","dba","database tuning",
+                "query optimization","execution plan","partitioning","sharding",
+                "cockroachdb","tidb","yugabyte","vitess","pgbouncer","connection pooling",
+                "database migration","flyway","liquibase","schema design","er diagram",
+                "database monitoring","slow query","index strategy","database backup"
             ],
             "Networking": [
                 "network engineer","network administration","cisco","routing","switching",
                 "tcp/ip","dns","dhcp","vpn","firewall","network security","network monitoring",
                 "network troubleshooting","wan","lan","vlan","bgp","ospf","mpls","sd-wan",
-                "network automation","network protocols"
+                "network automation","network protocols","network administrator","network architect",
+                "juniper","arista","palo alto","fortinet","f5","load balancer networking",
+                "network design","ip addressing","subnetting","nat","acl","qos",
+                "wireless networking","wifi","802.11","lte","5g","network virtualization",
+                "nfv","sdn","openflow","network observability","netflow","packet analysis"
             ],
             "Site Reliability Engineering": [
-                "sre","site reliability","system reliability","incident management",
+                "site reliability","system reliability","incident management",
                 "post-mortem","error budgets","sli","slo","monitoring","alerting",
                 "capacity planning","performance optimization","chaos engineering",
-                "disaster recovery","high availability","fault tolerance","observability"
+                "disaster recovery","high availability","fault tolerance","observability",
+                "site reliability engineer","reliability engineering","sre practices",
+                "toil reduction","on-call","runbook","playbook","mean time to recovery",
+                "mttr","mtbf","golden signals","latency","traffic","errors","saturation",
+                "distributed tracing","jaeger","zipkin","opentelemetry","service level"
             ],
             "Product Management": [
                 "product manager","product management","product strategy","roadmap",
                 "user stories","requirements gathering","stakeholder management","agile",
                 "scrum","kanban","product analytics","a/b testing","user research",
                 "market research","competitive analysis","go-to-market","product launch",
-                "feature prioritization","backlog management","kpi","metrics"
+                "feature prioritization","backlog management","kpi","metrics",
+                "product owner","product lead","product director","product vision",
+                "okr","north star metric","product discovery","customer interviews",
+                "jobs to be done","jtbd","product market fit","mvp","product roadmap",
+                "prioritization framework","rice scoring","moscow method","product operations",
+                "growth product","platform product","b2b product","b2c product"
             ],
             "Project Management": [
                 "project manager","project management","pmp","agile","scrum master","kanban",
                 "waterfall","risk management","resource planning","timeline","milestone",
                 "deliverables","stakeholder communication","budget management",
                 "team coordination","project planning","project execution","project closure",
-                "change management","quality assurance","jira","confluence","ms project"
+                "change management","jira","confluence","ms project","program manager",
+                "portfolio management","prince2","pmbok","earned value management",
+                "critical path","gantt chart","project charter","work breakdown structure",
+                "wbs","resource allocation","project governance","project tracking",
+                "asana","monday.com","smartsheet","basecamp","trello"
             ],
             "Business Analysis": [
                 "business analyst","requirements analysis","process improvement","workflow",
@@ -398,85 +620,143 @@ Agile Coaching, Software Engineering]
                 "functional requirements","non-functional requirements","documentation",
                 "process mapping","business rules","acceptance criteria",
                 "user acceptance testing","change management","business intelligence",
-                "data analysis","reporting"
+                "data analysis","reporting","business analysis","bpmn","uml use cases",
+                "requirements elicitation","as-is process","to-be process","business case",
+                "cost benefit analysis","feasibility study","business requirements document",
+                "brd","functional specification","user stories","epics","wireframes ba",
+                "visio","lucidchart","process automation","rpa analysis"
             ],
             "Technical Writing": [
                 "technical writer","documentation","api documentation","user manuals",
                 "technical communication","content strategy","information architecture",
                 "style guide","editing","proofreading","markdown","confluence","gitbook",
-                "sphinx","doxygen","technical blogging","knowledge base"
+                "sphinx","doxygen","technical blogging","knowledge base","technical writing",
+                "developer documentation","sdk documentation","release notes","changelog",
+                "readme","swagger","openapi documentation","docs as code","docusaurus",
+                "readthedocs","vale","technical content","developer relations","devrel",
+                "tutorials","how-to guides","reference documentation","conceptual documentation"
             ],
             "Digital Marketing": [
                 "digital marketing","seo","sem","social media marketing","content marketing",
                 "email marketing","ppc","google ads","facebook ads","analytics",
                 "conversion optimization","marketing automation","lead generation",
-                "brand management","influencer marketing","affiliate marketing","growth hacking"
+                "brand management","influencer marketing","affiliate marketing","growth hacking",
+                "marketing analytics","google analytics","hubspot","marketo","mailchimp",
+                "content creation","copywriting","ad campaigns","performance marketing",
+                "cpa","cpc","ctr","roas","marketing funnel","customer acquisition",
+                "retention marketing","crm marketing","social ads","tiktok ads"
             ],
             "E-commerce": [
                 "e-commerce","online retail","shopify","magento","woocommerce","payment gateway",
                 "inventory management","order management","shipping","customer service",
                 "marketplace","dropshipping","conversion rate optimization","product catalog",
-                "shopping cart","checkout optimization","amazon fba"
+                "shopping cart","checkout optimization","amazon fba","ecommerce",
+                "bigcommerce","prestashop","opencart","wix ecommerce","squarespace",
+                "product feed","google merchant","amazon seller","ebay seller",
+                "fulfillment","logistics","returns management","customer lifetime value",
+                "clv","average order value","aov","cart abandonment","upsell ecommerce"
             ],
             "Fintech": [
                 "fintech","financial technology","payment processing","banking software",
                 "trading systems","risk management","compliance","regulatory","kyc","aml",
                 "blockchain finance","cryptocurrency","robo-advisor","insurtech",
-                "lending platform","credit scoring","fraud detection","financial analytics"
+                "lending platform","credit scoring","fraud detection","financial analytics",
+                "payment gateway","swift","iso 20022","open banking","plaid","stripe",
+                "braintree","adyen","neobank","digital banking","core banking",
+                "algorithmic trading","quantitative finance","fixed income","derivatives",
+                "options trading","portfolio management","asset management","wealth tech",
+                "regtech","psd2","gdpr finance","financial modeling","risk modeling",
+                "anti-money laundering","know your customer","transaction monitoring"
             ],
             "Healthcare Tech": [
                 "healthcare technology","healthtech","medical software","ehr","emr",
                 "telemedicine","medical devices","hipaa","healthcare analytics","clinical trials",
                 "medical imaging","bioinformatics","health informatics","patient management",
-                "healthcare compliance","medical ai","digital health"
+                "healthcare compliance","medical ai","digital health","hl7","fhir",
+                "healthcare interoperability","clinical data","medical records",
+                "hospital information system","his","laboratory information system","lis",
+                "radiology information system","ris","pacs","dicom","icd codes","cpt codes",
+                "telehealth","remote patient monitoring","wearable health","health api",
+                "clinical decision support","population health","care coordination",
+                "pharmacy management","drug interaction","medical billing","rcm"
             ],
             "EdTech": [
                 "edtech","educational technology","e-learning","lms","learning management",
                 "online education","educational software","student information system",
                 "assessment tools","educational analytics","adaptive learning","gamification",
-                "virtual classroom","educational content","curriculum development"
+                "virtual classroom","educational content","curriculum development",
+                "moodle","canvas","blackboard","scorm","xapi","tin can api",
+                "courseware","instructional design","learning experience design","lxd",
+                "tutoring platform","online course","mooc","microlearning","blended learning",
+                "student engagement","learning outcomes","educational games","school management",
+                "university management","grade tracking","attendance system"
             ],
             "IoT Development": [
                 "iot","internet of things","connected devices","sensor networks","edge computing",
-                "mqtt","coap","zigbee","bluetooth","wifi","embedded systems","device management",
+                "mqtt","coap","zigbee","bluetooth","wifi","device management",
                 "iot platform","industrial iot","smart home","smart city","wearables",
-                "asset tracking","predictive maintenance"
+                "asset tracking","predictive maintenance","iot engineer",
+                "aws iot","azure iot","google cloud iot","thingsboard","node-red",
+                "lorawan","nb-iot","lte-m","5g iot","iot security","ota updates",
+                "digital twin","industry 4.0","iiot","scada","plc","hmi","opc-ua",
+                "time series database","influxdb","iot analytics","fleet management"
             ],
             "AR/VR Development": [
-                "ar","vr","augmented reality","virtual reality","mixed reality","xr","unity 3d",
+                "augmented reality","virtual reality","mixed reality","xr","unity 3d",
                 "unreal engine","oculus","hololens","arkit","arcore","3d modeling",
                 "spatial computing","immersive experience","360 video","haptic feedback",
-                "motion tracking","computer vision","3d graphics"
+                "motion tracking","computer vision","3d graphics","metaverse",
+                "openxr","webxr","a-frame","babylon.js","three.js vr","vr developer",
+                "ar developer","spatial audio","6dof","room-scale","hand tracking",
+                "eye tracking","mixed reality toolkit","mrtk","vuforia","spark ar",
+                "lens studio","snap ar","instagram ar","webgl","3d web"
             ],
             "Technical Sales": [
                 "technical sales","sales engineer","solution selling","pre-sales",
                 "technical consulting","customer success","account management",
                 "product demonstration","technical presentation","proposal writing",
-                "client relationship","revenue generation","sales process","crm"
+                "client relationship","revenue generation","sales process","crm",
+                "b2b sales","saas sales","enterprise sales","technical account manager",
+                "tam","demo","proof of concept","poc sales","rfp","rfi","deal closure",
+                "pipeline management","quota","upsell","cross-sell","renewal",
+                "salesforce","hubspot crm","solution architect sales","value selling",
+                "roi analysis","business case selling","partner sales","channel sales"
             ],
             "Agile Coaching": [
                 "agile coach","scrum master","agile transformation","team facilitation",
                 "retrospectives","sprint planning","daily standups","agile ceremonies",
                 "continuous improvement","change management","team dynamics","agile metrics",
-                "coaching","mentoring","organizational change"
+                "coaching","mentoring","organizational change","kanban","velocity",
+                "burndown chart","backlog refinement","product owner coaching","sprint review",
+                "story points","definition of done","definition of ready","scaled agile",
+                "safe","less","nexus","scrum of scrums","agile at scale","lean agile",
+                "obeya","value stream mapping","flow metrics","cycle time","lead time",
+                "agile mindset","psychological safety","team health","mob programming"
             ],
             "Software Engineering": [
-                "software engineer","web developer","developer","programmer","object oriented",
+                "software engineer","web developer","programmer","object oriented",
                 "design patterns","agile","scrum","git","version control","unit testing",
                 "integration testing","debugging","code review","system design","tdd","bdd",
                 "pair programming","refactoring","uml","dev environment","ide","algorithms",
-                "data structures","software architecture","clean code"
+                "data structures","software architecture","clean code","software development",
+                "developer","coding","programming","github","gitlab","bitbucket",
+                "pull request","merge request","continuous integration","solid principles",
+                "dry principle","kiss principle","software lifecycle","sdlc","api","sdk"
             ],
         }
 
+        import re as _re
+        def _kw_hit(kw, text):
+            return bool(_re.search(r'(?<![a-z])' + _re.escape(kw) + r'(?![a-z])', text))
+
         for domain, kws in keywords.items():
-            title_hits = sum(1 for kw in kws if kw in title)
-            desc_hits = sum(1 for kw in kws if kw in desc)
+            title_hits = sum(1 for kw in kws if _kw_hit(kw, title))
+            desc_hits  = sum(1 for kw in kws if _kw_hit(kw, desc))
             domain_scores[domain] = (4 * title_hits + 1 * desc_hits) * WEIGHTS[domain]
 
-        frontend_hits = sum(1 for kw in keywords["Frontend Development"] if kw in title or kw in desc)
-        backend_hits = sum(1 for kw in keywords["Backend Development"] if kw in title or kw in desc)
-        fullstack_mentioned = any(t in title or t in desc for t in ["full stack", "fullstack", "full-stack"])
+        frontend_hits = sum(1 for kw in keywords["Frontend Development"] if _kw_hit(kw, title) or _kw_hit(kw, desc))
+        backend_hits = sum(1 for kw in keywords["Backend Development"] if _kw_hit(kw, title) or _kw_hit(kw, desc))
+        fullstack_mentioned = any(_kw_hit(t, title) or _kw_hit(t, desc) for t in ["full stack", "fullstack", "full-stack"])
         if fullstack_mentioned:
             domain_scores["Full Stack Development"] += 15
         if frontend_hits >= 4 and backend_hits >= 4:
@@ -493,28 +773,28 @@ Agile Coaching, Software Engineering]
             "AR/VR Development": ["ar", "vr", "augmented", "virtual reality"],
         }
         for domain, boost_terms in domain_boosts.items():
-            if any(t in title for t in boost_terms):
+            if any(_kw_hit(t, title) for t in boost_terms):
                 domain_scores[domain] += 8
-            if any(t in desc for t in boost_terms):
+            if any(_kw_hit(t, desc) for t in boost_terms):
                 domain_scores[domain] += 3
 
         if len(desc.split()) < 8:
             strong_keywords = ["full stack developer", "mobile developer", "android developer", "ios developer"]
-            if not any(k in title or k in desc for k in strong_keywords):
+            if not any(_kw_hit(k, title) or _kw_hit(k, desc) for k in strong_keywords):
                 for domain in domain_scores:
-                    desc_hits = sum(1 for kw in keywords[domain] if kw in desc)
+                    desc_hits = sum(1 for kw in keywords[domain] if _kw_hit(kw, desc))
                     domain_scores[domain] = max(0, domain_scores[domain] - (desc_hits * WEIGHTS[domain] * 0.5))
 
         if domain_scores:
             top_domain = max(domain_scores, key=domain_scores.get)
             top_score = domain_scores[top_domain]
             if top_score >= 8:
-                if "full stack developer" in title:
+                if _kw_hit("full stack developer", title):
                     return "Full Stack Development"
-                if "mobile developer" in title or "android developer" in title or "ios developer" in title:
+                if _kw_hit("mobile developer", title) or _kw_hit("android developer", title) or _kw_hit("ios developer", title):
                     return "Mobile Development"
                 return top_domain
-        return "Software Engineering"
+        return "Unclassified"
 
     def get_domain_similarity(self, resume_domain: str, job_domain: str) -> float:
         resume_domain = resume_domain.strip().lower()
@@ -644,11 +924,25 @@ Agile Coaching, Software Engineering]
 
     # ── CRUD operations ───────────────────────────────────────────────────────
 
-    def insert_candidate(self, data: Tuple, job_title: str = "", job_description: str = "") -> int:
+    def insert_candidate(self, data: Tuple, job_title: str = "", job_description: str = "", resume_text: str = "") -> int:
         try:
             local_tz = pytz.timezone("Asia/Kolkata")
             local_time = datetime.now(local_tz).strftime("%Y-%m-%d %H:%M:%S")
-            detected_domain = self.detect_domain_from_title_and_description(job_title, job_description)
+
+            # ── Two-stage domain detection ────────────────────────────────────
+            # Combine job description + resume text so domain reflects the
+            # candidate's actual background, not just the job posting title.
+            combined_text = f"{job_description}\n\n{resume_text}".strip() if resume_text else job_description
+            confidence_result = self.detect_domain_with_confidence(job_title, combined_text)
+            detected_domain   = confidence_result["domain"]
+            domain_confidence = confidence_result["confidence"]   # "high" | "medium" | "low"
+            logger.info(
+                f"Domain detected: '{detected_domain}' "
+                f"(confidence={domain_confidence}, "
+                f"llm='{confidence_result['llm_domain']}', "
+                f"kw='{confidence_result['kw_domain']}', "
+                f"agreed={confidence_result['agreed']})"
+            )
 
             if len(data) < 9:
                 raise ValueError(f"Expected at least 9 data fields, got {len(data)}")
@@ -1012,8 +1306,8 @@ def detect_domain_from_title_and_description(job_title: str, job_description: st
 def get_domain_similarity(resume_domain: str, job_domain: str) -> float:
     return db_manager.get_domain_similarity(resume_domain, job_domain)
 
-def insert_candidate(data: tuple, job_title: str = "", job_description: str = ""):
-    return db_manager.insert_candidate(data, job_title, job_description)
+def insert_candidate(data: tuple, job_title: str = "", job_description: str = "", resume_text: str = ""):
+    return db_manager.insert_candidate(data, job_title, job_description, resume_text)
 
 def get_top_domains_by_score(limit: int = 5) -> list:
     return db_manager.get_top_domains_by_score(limit)
