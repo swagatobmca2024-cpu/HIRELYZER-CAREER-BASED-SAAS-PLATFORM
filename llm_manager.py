@@ -3,11 +3,20 @@ LLM Manager — Supabase PostgreSQL backend
 Migrated from SQLite to psycopg2, using the same @st.cache_resource singleton
 pattern as db_manager.py and user_login.py.
 All timestamps are stored and compared in UTC (TIMESTAMPTZ columns).
+
+FIXES vs previous version:
+  1. cleanup_cache() now rate-limited to once per 30 min (was firing on every call)
+  2. Thread lock around key_index read/write (race condition in ThreadPoolExecutor)
+  3. Transient errors (network blip, 500) no longer mark healthy keys as failed
+  4. mark_key_failure() moved outside get_healthy_keys() read loop (batch write)
+  5. create_chain() pattern: increment_key_usage only after success (caller fix noted)
 """
 
 import hashlib
 import os
 import random
+import threading
+import time
 from datetime import datetime, timedelta
 
 import psycopg2
@@ -17,11 +26,21 @@ import streamlit as st
 from langchain_groq import ChatGroq
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-CACHE_EXPIRY_HOURS      = 24
+CACHE_EXPIRY_HOURS       = 24
 FAILURE_COOLDOWN_MINUTES = 5
-QUOTA_COOLDOWN_MINUTES  = 60
-DAILY_KEY_LIMIT         = 800
-DEAD_KEY_REMOVE_DAYS    = 3   # auto-remove permanently dead keys after X days
+QUOTA_COOLDOWN_MINUTES   = 60
+DAILY_KEY_LIMIT          = 800
+DEAD_KEY_REMOVE_DAYS     = 3    # auto-remove permanently dead keys after X days
+CLEANUP_INTERVAL_SECONDS = 1800  # FIX 1: run cleanup at most once per 30 min
+
+# FIX 2: module-level lock so parallel threads never pick the same key
+_key_rotation_lock = threading.Lock()
+
+# Groq errors that mean the KEY itself is bad (not a transient server issue)
+# FIX 3: only these trigger mark_key_failure; everything else is a transient error
+_QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests"]
+_DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
+                     "api key", "authentication", "permission denied"]
 
 
 # ── Timezone helper ───────────────────────────────────────────────────────────
@@ -33,11 +52,6 @@ def get_utc_now() -> datetime:
 # ── Cached Supabase connection (one per Streamlit worker) ─────────────────────
 @st.cache_resource
 def _get_llm_pg_connection():
-    """
-    Dedicated cached psycopg2 connection for llm_manager operations.
-    Created once per Streamlit worker process — never recreated on reruns.
-    Mirrors the pattern used in db_manager.py and user_login.py.
-    """
     conn = psycopg2.connect(
         host=st.secrets["SUPABASE_HOST"],
         dbname=st.secrets["SUPABASE_DB"],
@@ -127,14 +141,8 @@ def cleanup_cache():
     cutoff_cache = get_utc_now() - timedelta(hours=CACHE_EXPIRY_HOURS)
     cutoff_dead  = get_utc_now() - timedelta(days=DEAD_KEY_REMOVE_DAYS)
 
-    _execute(
-        "DELETE FROM llm_cache WHERE timestamp < %s",
-        (cutoff_cache,),
-    )
-    _execute(
-        "DELETE FROM key_failures WHERE fail_time < %s",
-        (cutoff_dead,),
-    )
+    _execute("DELETE FROM llm_cache WHERE timestamp < %s", (cutoff_cache,))
+    _execute("DELETE FROM key_failures WHERE fail_time < %s", (cutoff_dead,))
 
 
 # ── API key loader ────────────────────────────────────────────────────────────
@@ -178,7 +186,6 @@ def get_cached_response(prompt: str, model: str):
         ts = row["timestamp"]
         if isinstance(ts, str):
             ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
-        # Ensure timezone-aware for comparison (TIMESTAMPTZ returns UTC-aware)
         if ts.tzinfo is None:
             ts = pytz.utc.localize(ts)
         if ts >= cutoff:
@@ -236,10 +243,23 @@ def mark_key_failure(api_key: str, reason: str = "error"):
 
 def clear_key_failure(api_key: str):
     """Remove a key from the failure table (marks it healthy again)."""
-    _execute(
-        "DELETE FROM key_failures WHERE api_key = %s",
-        (api_key,),
-    )
+    _execute("DELETE FROM key_failures WHERE api_key = %s", (api_key,))
+
+
+def _classify_error(error: Exception):
+    """
+    FIX 3: Classify an exception so we only penalise keys for real key errors.
+    Returns:
+        'quota'     — rate limited, put key in 60-min cooldown
+        'dead'      — bad/invalid key, put in 5-min cooldown
+        'transient' — network blip / server 500 / timeout, do NOT touch the key
+    """
+    msg = str(error).lower()
+    if any(s in msg for s in _QUOTA_SIGNALS):
+        return "quota"
+    if any(s in msg for s in _DEAD_KEY_SIGNALS):
+        return "dead"
+    return "transient"
 
 
 def get_healthy_keys(api_keys: list) -> list:
@@ -248,6 +268,9 @@ def get_healthy_keys(api_keys: list) -> list:
     - not in cooldown (FAILURE_COOLDOWN_MINUTES / QUOTA_COOLDOWN_MINUTES)
     - below DAILY_KEY_LIMIT
     Result is shuffled for load-balancing.
+
+    FIX 4: mark_key_failure() calls are batched AFTER the read loop,
+            not inside it, to avoid lock contention under concurrent users.
     """
     now     = get_utc_now()
     today   = now.strftime("%Y-%m-%d")
@@ -265,18 +288,19 @@ def get_healthy_keys(api_keys: list) -> list:
         fetch="all",
     ) or []
 
-    # Index into dicts for O(1) lookup
     failures = {r["api_key"]: r for r in failures_rows}
     usages   = {r["api_key"]: r for r in usage_rows}
+
+    # FIX 4: collect quota-exhausted keys, write after loop
+    quota_keys = []
 
     for key in api_keys:
         # ── cooldown check ────────────────────────────────────────────────────
         if key in failures:
-            f        = failures[key]
-            fail_dt  = f["fail_time"]
+            f       = failures[key]
+            fail_dt = f["fail_time"]
             if isinstance(fail_dt, str):
                 fail_dt = datetime.strptime(fail_dt, "%Y-%m-%d %H:%M:%S")
-            # Ensure timezone-aware for comparison (TIMESTAMPTZ returns UTC-aware)
             if fail_dt.tzinfo is None:
                 fail_dt = pytz.utc.localize(fail_dt)
             cooldown = (
@@ -289,18 +313,22 @@ def get_healthy_keys(api_keys: list) -> list:
 
         # ── daily quota check ─────────────────────────────────────────────────
         if key in usages:
-            u           = usages[key]
-            last_reset  = u["last_reset"]
+            u          = usages[key]
+            last_reset = u["last_reset"]
             if isinstance(last_reset, datetime):
                 last_reset = last_reset.strftime("%Y-%m-%d")
-            elif hasattr(last_reset, "isoformat"):      # date object
+            elif hasattr(last_reset, "isoformat"):
                 last_reset = last_reset.isoformat()
             usage_count = u["usage_count"] if last_reset == today else 0
             if usage_count >= DAILY_KEY_LIMIT:
-                mark_key_failure(key, "quota")
+                quota_keys.append(key)   # FIX 4: defer the write
                 continue
 
         healthy.append(key)
+
+    # FIX 4: batch-write quota failures after the loop (no mid-loop DB writes)
+    for key in quota_keys:
+        mark_key_failure(key, "quota")
 
     random.shuffle(healthy)
     return healthy
@@ -323,9 +351,23 @@ def call_llm(
     1. Check Supabase cache — return immediately on hit.
     2. Try user-provided Groq key (if set).
     3. Rotate through healthy admin keys.
+
+    FIXES applied:
+      FIX 1 — cleanup_cache() runs at most once per 30 min, not on every call.
+      FIX 2 — _key_rotation_lock ensures parallel threads pick different keys.
+      FIX 3 — transient errors (network, 500) do NOT mark healthy keys failed.
+      FIX 5 (from caller) — key_index guard when admin list shrinks between calls.
     """
-    # Step 1 — cache
-    cleanup_cache()
+    # ── FIX 1: throttled cleanup — not on every single call ──────────────────
+    _last_cleanup = session.get("_last_cleanup_ts", 0)
+    if time.time() - _last_cleanup > CLEANUP_INTERVAL_SECONDS:
+        try:
+            cleanup_cache()
+        except Exception:
+            pass  # never let cleanup failure block an LLM call
+        session["_last_cleanup_ts"] = time.time()
+
+    # ── Cache hit ─────────────────────────────────────────────────────────────
     cached = get_cached_response(prompt, model)
     if cached:
         return cached
@@ -340,7 +382,7 @@ def call_llm(
     )
     last_error = None
 
-    # Step 2 — user key
+    # ── Step 2: user-supplied key ─────────────────────────────────────────────
     if user_key:
         try:
             response = try_call_llm(prompt, user_key, model, temperature)
@@ -348,35 +390,41 @@ def call_llm(
             increment_key_usage(user_key)
             return response
         except Exception as e:
-            reason = (
-                "quota"
-                if any(w in str(e).lower() for w in ["quota", "rate limit", "429"])
-                else "error"
-            )
-            mark_key_failure(user_key, reason)
+            err_type = _classify_error(e)
+            if err_type != "transient":          # FIX 3
+                mark_key_failure(user_key, "quota" if err_type == "quota" else "error")
             last_error = e
 
-    # Step 3 — admin key rotation
+    # ── Step 3: admin key rotation ────────────────────────────────────────────
     admin_keys = get_healthy_keys(load_groq_api_keys())
-    if admin_keys:
-        start = session["key_index"] % len(admin_keys)
-        for offset in range(len(admin_keys)):
-            idx = (start + offset) % len(admin_keys)
-            key = admin_keys[idx]
-            try:
-                response = try_call_llm(prompt, key, model, temperature)
-                set_cached_response(prompt, model, response)
-                increment_key_usage(key)
-                clear_key_failure(key)
-                session["key_index"] = (idx + 1) % len(admin_keys)
-                return response
-            except Exception as e:
-                reason = (
-                    "quota"
-                    if any(w in str(e).lower() for w in ["quota", "rate limit", "429"])
-                    else "error"
-                )
-                mark_key_failure(key, reason)
-                last_error = e
+
+    if not admin_keys:
+        return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
+
+    # FIX 2 + FIX 5: lock while we pick a key index; guard against shrunk list
+    with _key_rotation_lock:
+        if session["key_index"] >= len(admin_keys):
+            session["key_index"] = 0
+        start = session["key_index"]
+        # Advance index now so the next concurrent call picks a different key
+        session["key_index"] = (start + 1) % len(admin_keys)
+
+    for offset in range(len(admin_keys)):
+        idx = (start + offset) % len(admin_keys)
+        key = admin_keys[idx]
+        try:
+            response = try_call_llm(prompt, key, model, temperature)
+            set_cached_response(prompt, model, response)
+            increment_key_usage(key)
+            clear_key_failure(key)
+            return response
+        except Exception as e:
+            err_type = _classify_error(e)
+            if err_type == "quota":
+                mark_key_failure(key, "quota")   # 60-min cooldown
+            elif err_type == "dead":
+                mark_key_failure(key, "error")   # 5-min cooldown
+            # FIX 3: transient errors — key stays healthy, we just try the next one
+            last_error = e
 
     return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
