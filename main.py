@@ -427,6 +427,11 @@ if "reset_otp_time" not in st.session_state:
 # Validation message state for register form (populated by on_change callbacks)
 # _email_msg, _user_msg, _pass_msg are initialised inside the register form block
 
+# Raise Streamlit's built-in upload cap to 200 MB so it never fires its own
+# "File must be X or smaller" inline error — our custom size-gate card handles
+# all validation and renders a proper styled error below the chip.
+st.set_option("server.maxUploadSize", 200)
+
 # ------------------- CSS Styling -------------------
 st.markdown("""
 <style>
@@ -1438,6 +1443,36 @@ h3, .stMarkdown h3 {
     overflow: visible !important;
     animation: none !important;
     transform: none !important;
+}
+
+/* 6. Hide Streamlit's native inline "Error: File must be X or smaller" text
+      that appears next to the file chip — we replace it with our own card. */
+[data-testid="stFileUploader"] small,
+[data-testid="stFileUploader"] [data-testid="stFileUploaderFileData"] ~ span,
+[data-testid="stFileUploader"] .uploadedFileName ~ span,
+[data-testid="stFileUploader"] span[style*="color: red"],
+[data-testid="stFileUploader"] span[style*="color:red"],
+[data-testid="stFileUploaderFile"] + span,
+[data-testid="stFileUploaderFile"] ~ div > span:last-child {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* 7. Ensure the uploader file-list row stacks vertically so chip + custom
+      error card never sit side-by-side / overlap each other */
+[data-testid="stFileUploader"] > div:last-child {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0 !important;
+}
+
+/* 8. Style the uploaded file chip row cleanly */
+[data-testid="stFileUploaderFile"] {
+    background: rgba(15, 23, 42, 0.6) !important;
+    border: 1px solid rgba(56, 189, 248, 0.18) !important;
+    border-radius: 10px !important;
+    padding: 6px 12px !important;
+    margin-bottom: 2px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -6603,7 +6638,7 @@ with tab1:
                     )
 
                     size_card = (
-                        '<div style="background:linear-gradient(135deg,rgba(251,113,133,0.15) 0%,rgba(0,0,0,0) 100%);border:1px solid rgba(251,113,133,0.35);border-radius:16px;padding:22px 24px;margin:14px 0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 8px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.06);font-family:-apple-system,BlinkMacSystemFont,sans-serif;position:relative;overflow:hidden;">'
+                        '<div style="background:linear-gradient(135deg,rgba(251,113,133,0.15) 0%,rgba(0,0,0,0) 100%);border:1px solid rgba(251,113,133,0.35);border-radius:16px;padding:22px 24px;margin:8px 0 14px 0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 8px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.06);font-family:-apple-system,BlinkMacSystemFont,sans-serif;position:relative;overflow:hidden;">'
                         '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#fb7185,transparent);opacity:0.6;"></div>'
                         f'<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">'
                         f'<div style="width:44px;height:44px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">{_svg_oversized}</div>'
