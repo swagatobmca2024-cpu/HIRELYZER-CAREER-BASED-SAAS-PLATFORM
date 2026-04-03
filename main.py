@@ -5887,60 +5887,161 @@ def ats_percentage_score(
     # Never re-detected when JD changes — keyed by resume content hash
     _resume_cache_key = f"resume_domain_{hash(resume_text[:500])}"
     if _resume_cache_key not in st.session_state:
-        _resume_domain_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles.
-Your job is to identify the candidate's PRIMARY professional domain from their resume.
+        _resume_domain_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across all levels — freshers, students, mid-level, and senior professionals.
 
-═══════════════════════════════════════════
-CLASSIFICATION RULES (apply in this order)
-═══════════════════════════════════════════
+Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.
 
-RULE 1 — FRESHERS & STUDENTS (most important rule):
-If the candidate is a student OR fresher (final year, recent graduate, no full-time job experience,
-only internships/academic projects), classify as "Software Engineering" UNLESS they have
-deep specialization evidence (e.g. published ML research, multiple production mobile apps,
-a portfolio of UI/UX work with Figma). When in doubt for freshers → "Software Engineering".
+════════════════════════════════════════════════════════
+STEP 1 — DETERMINE CANDIDATE LEVEL FIRST
+════════════════════════════════════════════════════════
 
-RULE 2 — DO NOT over-classify from basic skills alone:
-- Java + MySQL + DBMS alone → NOT "Backend Development" (these are taught in every CS degree)
-- HTML + CSS alone → NOT "Frontend Development"
-- Python alone → NOT "AI/Machine Learning" or "Data Science"
-- Basic programming languages without frameworks/architecture → "Software Engineering"
+Classify the candidate into one of these levels before picking a domain:
 
-RULE 3 — SPECIALIZATION requires EVIDENCE, not just keywords:
-Classify as a specialist domain ONLY when you see ALL of:
-  • Multiple technologies specific to that domain (not just 1-2)
-  • Real project or work experience applying those technologies
-  • Professional or internship job title matching that domain
-Examples of TRUE specialization signals:
-  → Backend: Spring Boot + REST API + microservices + database design in a real project
-  → Frontend: React/Vue/Angular + state management + responsive UI in a real project
-  → Full Stack: frontend framework + backend framework + DB in the SAME project
-  → Mobile: Android/iOS/Flutter + published or built app + platform-specific knowledge
-  → Data Science: pandas + ML models + data analysis + visualization in real projects
-  → AI/ML: model training + frameworks (TensorFlow/PyTorch) + real ML pipeline
-  → DevOps: CI/CD pipelines + Docker/K8s + cloud deployment in real work
-  → UI/UX: Figma/XD + wireframes + user research + design system
+LEVEL A — Pure Fresher / Student with NO specialization evidence:
+  • Still studying OR just graduated
+  • No internship OR only 1 internship with no described work
+  • Projects listed as names only (no descriptions, no tech stack mentioned)
+  • Skills are only basic CS fundamentals (Java, C, C++, Python, HTML, SQL alone)
+  → DEFAULT to "Software Engineering" immediately. Do not over-classify.
+  → EXAMPLES: Only Java+MySQL+DBMS listed, no projects described → "Software Engineering"
 
-RULE 4 — MIXED SIGNALS → pick the STRONGEST one:
-If the resume shows multiple domains, pick the one with the most evidence
-(most technologies + most projects + most experience time). If truly equal → "Software Engineering".
+LEVEL B — Fresher / Student WITH specialization evidence:
+  • Still studying OR recently graduated BUT has AT LEAST ONE of:
+    - 1 internship where the domain is clearly described (e.g. "frontend web development internship")
+    - 1 project with a description mentioning domain-specific technologies
+    - Skills showing a clear technology stack (not just basics)
+  → DO classify into a specific domain based on the strongest evidence
+  → EXAMPLES:
+    - HTML+CSS+JS+React + frontend internship described → "Frontend Development"
+    - Django/Laravel + MySQL + web project described → "Full Stack Development" or "Backend Development"
+    - Android/Flutter + built a mobile app described → "Mobile Development"
+    - TensorFlow/PyTorch + ML project described → "AI/Machine Learning"
 
-RULE 5 — RESEARCH / ACADEMIC resumes:
-If the candidate's primary work is research (intern at university/institute, publications,
-academic projects), classify by what the research is IN:
-  → AI/accessibility research → "AI/Machine Learning" or "Software Engineering"
-  → Security research → "Cybersecurity"
-  → Systems research → "Software Engineering"
+LEVEL C — Experienced Professional (1+ years full-time work):
+  → ALWAYS classify into a specific domain — never default to "Software Engineering" unless truly mixed
+  → Use job titles + tech stack + years of experience as primary signals
 
-RULE 6 — NON-TECH domains need strong evidence too:
-  → "Product Management": must have product ownership, roadmaps, PRDs — not just Agile keywords
-  → "Data Science": must have actual data analysis projects, not just SQL listed as a skill
-  → "Digital Marketing": must have campaigns, SEO, analytics — not just "communication skills"
+════════════════════════════════════════════════════════
+STEP 2 — DOMAIN CLASSIFICATION RULES (for Level B and C)
+════════════════════════════════════════════════════════
 
-═══════════════════════════════════════════
+RULE A — DO NOT over-classify from basic skills alone (applies to ALL levels):
+  ✗ Java + MySQL + DBMS alone → NOT "Backend Development"
+  ✗ HTML + CSS alone → NOT "Frontend Development"
+  ✗ Python alone → NOT "AI/Machine Learning" or "Data Science"
+  ✗ SQL alone → NOT "Database Management" or "Data Science"
+  ✗ C / C++ alone → NOT "Embedded Systems" or "Software Engineering" specialist
+  ✓ Basic CS languages without frameworks + no described projects → "Software Engineering"
+
+RULE B — WHAT COUNTS AS TRUE DOMAIN EVIDENCE:
+  → Frontend Development:
+     MUST have: HTML+CSS+JS PLUS at least one of (React/Vue/Angular/Bootstrap/jQuery)
+     AND: at least 1 described project OR internship explicitly about frontend/web UI
+     
+  → Backend Development:
+     MUST have: A backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI)
+     AND: database integration (MySQL/PostgreSQL/MongoDB) in a described project
+     NOT just: Java + SQL listed in skills with no project context
+     
+  → Full Stack Development:
+     MUST have: frontend technologies + backend framework + database ALL present
+     AND: at least 1 project or internship that uses both frontend and backend
+     SELF-IDENTIFICATION counts: if summary says "full stack" or "front-end and back-end" → Full Stack
+     
+  → Mobile Development:
+     MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift
+     AND: at least 1 described mobile app project
+     
+  → Data Science:
+     MUST have: pandas/numpy/matplotlib/seaborn/tableau/power bi
+     AND: actual data analysis or visualization project described
+     NOT just: SQL or Excel listed in skills
+     
+  → AI/Machine Learning:
+     MUST have: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/LLM/NLP/Computer Vision
+     AND: model training or ML pipeline described in a project
+     
+  → Cybersecurity:
+     MUST have: security tools (Kali/Burp Suite/Wireshark/Metasploit) OR security concepts (pentesting/OWASP/CTF)
+     AND: security internship or project described
+     NOTE: A cybersecurity VIRTUAL internship with no tools described = weak signal, check other evidence too
+     
+  → DevOps/Infrastructure:
+     MUST have: Docker/Kubernetes/CI-CD/Jenkins/Terraform/Ansible
+     AND: deployment or infrastructure project described
+     
+  → Cloud Engineering:
+     MUST have: AWS/Azure/GCP services (not just "cloud" mentioned)
+     AND: cloud deployment or architecture in a project
+     
+  → UI/UX Design:
+     MUST have: Figma/Adobe XD/Sketch/InVision
+     AND: wireframes/prototypes/user research described
+     
+  → Database Management:
+     MUST have: DBA role OR database optimization/administration as PRIMARY focus
+     NOT just: SQL listed as one of many skills
+     
+  → Product Management:
+     MUST have: product ownership, roadmaps, PRDs, stakeholder management
+     NOT just: Agile/Scrum keywords
+     
+  → Project Management:
+     MUST have: managing teams, project delivery, PMP/Prince2 or equivalent experience
+     
+  → Business Analysis:
+     MUST have: requirements gathering, process mapping, business case writing
+     
+  → Digital Marketing:
+     MUST have: SEO/SEM/campaigns/social media marketing with actual results
+     
+  → Blockchain Development:
+     MUST have: Solidity/Web3/Smart Contracts/Ethereum/DeFi in described projects
+     
+  → Game Development:
+     MUST have: Unity/Unreal Engine/game mechanics in described projects
+     
+  → Embedded Systems:
+     MUST have: microcontroller/RTOS/firmware/hardware programming described
+     
+  → IoT Development:
+     MUST have: IoT devices/sensors/protocols (MQTT/CoAP) + hardware integration
+     
+  → AR/VR Development:
+     MUST have: ARKit/ARCore/Unity3D/Unreal/Oculus in described projects
+
+RULE C — MIXED SIGNALS → pick the DOMINANT domain:
+  • Count: technologies + described projects + internship titles per domain
+  • The domain with the most evidence wins
+  • If frontend has 3 signals and cybersecurity has 1 virtual internship → Frontend wins
+  • If truly equal across 2 domains → "Full Stack Development" if they're frontend+backend, else "Software Engineering"
+
+RULE D — RESEARCH / ACADEMIC profiles:
+  • Research intern at university/NIT/IIT/ISRO/DRDO etc. → classify by research TOPIC
+  • AI/accessibility/NLP research → "AI/Machine Learning"
+  • Security research → "Cybersecurity"  
+  • Hardware/systems research → "Embedded Systems" or "Software Engineering"
+  • Generic CS research → "Software Engineering"
+
+RULE E — CAREER SWITCHERS:
+  • If candidate has old domain (e.g. mechanical engineer) but new projects/courses in tech → classify by new tech domain
+  • Recent certifications + projects in new domain outweigh old job titles
+
+════════════════════════════════════════════════════════
+STEP 3 — FINAL CHECK BEFORE ANSWERING
+════════════════════════════════════════════════════════
+
+Ask yourself:
+1. What is the candidate's LEVEL? (A / B / C)
+2. If Level A → return "Software Engineering"
+3. If Level B or C → what domain has the MOST evidence (technologies + described projects + internship/job titles)?
+4. Does that domain meet the TRUE EVIDENCE bar from Rule B?
+5. If yes → return that domain. If no → return "Software Engineering"
+
+════════════════════════════════════════════════════════
 Resume Text:
-{resume_text[:2500]}
-═══════════════════════════════════════════
+{resume_text[:3000]}
+════════════════════════════════════════════════════════
 
 Return ONLY one domain from this list, nothing else:
 {_domain_list}
