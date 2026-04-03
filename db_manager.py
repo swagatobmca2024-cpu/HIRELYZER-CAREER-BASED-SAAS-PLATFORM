@@ -924,25 +924,22 @@ Agile Coaching, Software Engineering]
 
     # ── CRUD operations ───────────────────────────────────────────────────────
 
-    def insert_candidate(self, data: Tuple, job_title: str = "", job_description: str = "", resume_text: str = "") -> int:
+    def insert_candidate(self, data: Tuple, job_title: str = "", job_description: str = "", resume_text: str = "", resume_domain: str = "") -> int:
         try:
             local_tz = pytz.timezone("Asia/Kolkata")
             local_time = datetime.now(local_tz).strftime("%Y-%m-%d %H:%M:%S")
 
-            # ── Two-stage domain detection ────────────────────────────────────
-            # Combine job description + resume text so domain reflects the
-            # candidate's actual background, not just the job posting title.
-            combined_text = f"{job_description}\n\n{resume_text}".strip() if resume_text else job_description
-            confidence_result = self.detect_domain_with_confidence(job_title, combined_text)
-            detected_domain   = confidence_result["domain"]
-            domain_confidence = confidence_result["confidence"]   # "high" | "medium" | "low"
-            logger.info(
-                f"Domain detected: '{detected_domain}' "
-                f"(confidence={domain_confidence}, "
-                f"llm='{confidence_result['llm_domain']}', "
-                f"kw='{confidence_result['kw_domain']}', "
-                f"agreed={confidence_result['agreed']})"
-            )
+            # ── Domain: use pre-detected resume domain if provided ────────────
+            # resume_domain is already correctly detected in resummme_analyzer_tab1.py
+            # from resume text ONLY (locked, never contaminated by JD).
+            # Only fall back to keyword detection if nothing was passed in.
+            if resume_domain and resume_domain in self.VALID_DOMAINS:
+                detected_domain = resume_domain
+                logger.info(f"Domain used from pre-detected resume domain: '{detected_domain}'")
+            else:
+                # Fallback: keyword-only detection from resume text alone (no JD)
+                detected_domain = self.detect_domain_from_title_and_description(job_title, resume_text or job_description)
+                logger.info(f"Domain fallback detected: '{detected_domain}'")
 
             if len(data) < 9:
                 raise ValueError(f"Expected at least 9 data fields, got {len(data)}")
@@ -1306,8 +1303,8 @@ def detect_domain_from_title_and_description(job_title: str, job_description: st
 def get_domain_similarity(resume_domain: str, job_domain: str) -> float:
     return db_manager.get_domain_similarity(resume_domain, job_domain)
 
-def insert_candidate(data: tuple, job_title: str = "", job_description: str = "", resume_text: str = ""):
-    return db_manager.insert_candidate(data, job_title, job_description, resume_text)
+def insert_candidate(data: tuple, job_title: str = "", job_description: str = "", resume_text: str = "", resume_domain: str = ""):
+    return db_manager.insert_candidate(data, job_title, job_description, resume_text, resume_domain)
 
 def get_top_domains_by_score(limit: int = 5) -> list:
     return db_manager.get_top_domains_by_score(limit)
