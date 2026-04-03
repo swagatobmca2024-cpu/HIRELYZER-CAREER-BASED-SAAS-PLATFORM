@@ -5887,17 +5887,60 @@ def ats_percentage_score(
     # Never re-detected when JD changes — keyed by resume content hash
     _resume_cache_key = f"resume_domain_{hash(resume_text[:500])}"
     if _resume_cache_key not in st.session_state:
-        _resume_domain_prompt = f"""You are a technical recruiter analyzing a candidate's resume.
-Based ONLY on the resume content below, identify the candidate's PRIMARY professional domain.
+        _resume_domain_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles.
+Your job is to identify the candidate's PRIMARY professional domain from their resume.
 
-Instructions:
-- Focus on: job titles held, technologies used, projects built, skills listed
-- Look PAST the contact info and summary — read the full experience and skills sections
-- Classify what the CANDIDATE does, completely ignore any job requirements
-- A Full Stack developer uses both frontend (React/Vue) AND backend (Node/Django/Spring) — do not classify them as Mobile just because they mention "app"
+═══════════════════════════════════════════
+CLASSIFICATION RULES (apply in this order)
+═══════════════════════════════════════════
 
+RULE 1 — FRESHERS & STUDENTS (most important rule):
+If the candidate is a student OR fresher (final year, recent graduate, no full-time job experience,
+only internships/academic projects), classify as "Software Engineering" UNLESS they have
+deep specialization evidence (e.g. published ML research, multiple production mobile apps,
+a portfolio of UI/UX work with Figma). When in doubt for freshers → "Software Engineering".
+
+RULE 2 — DO NOT over-classify from basic skills alone:
+- Java + MySQL + DBMS alone → NOT "Backend Development" (these are taught in every CS degree)
+- HTML + CSS alone → NOT "Frontend Development"
+- Python alone → NOT "AI/Machine Learning" or "Data Science"
+- Basic programming languages without frameworks/architecture → "Software Engineering"
+
+RULE 3 — SPECIALIZATION requires EVIDENCE, not just keywords:
+Classify as a specialist domain ONLY when you see ALL of:
+  • Multiple technologies specific to that domain (not just 1-2)
+  • Real project or work experience applying those technologies
+  • Professional or internship job title matching that domain
+Examples of TRUE specialization signals:
+  → Backend: Spring Boot + REST API + microservices + database design in a real project
+  → Frontend: React/Vue/Angular + state management + responsive UI in a real project
+  → Full Stack: frontend framework + backend framework + DB in the SAME project
+  → Mobile: Android/iOS/Flutter + published or built app + platform-specific knowledge
+  → Data Science: pandas + ML models + data analysis + visualization in real projects
+  → AI/ML: model training + frameworks (TensorFlow/PyTorch) + real ML pipeline
+  → DevOps: CI/CD pipelines + Docker/K8s + cloud deployment in real work
+  → UI/UX: Figma/XD + wireframes + user research + design system
+
+RULE 4 — MIXED SIGNALS → pick the STRONGEST one:
+If the resume shows multiple domains, pick the one with the most evidence
+(most technologies + most projects + most experience time). If truly equal → "Software Engineering".
+
+RULE 5 — RESEARCH / ACADEMIC resumes:
+If the candidate's primary work is research (intern at university/institute, publications,
+academic projects), classify by what the research is IN:
+  → AI/accessibility research → "AI/Machine Learning" or "Software Engineering"
+  → Security research → "Cybersecurity"
+  → Systems research → "Software Engineering"
+
+RULE 6 — NON-TECH domains need strong evidence too:
+  → "Product Management": must have product ownership, roadmaps, PRDs — not just Agile keywords
+  → "Data Science": must have actual data analysis projects, not just SQL listed as a skill
+  → "Digital Marketing": must have campaigns, SEO, analytics — not just "communication skills"
+
+═══════════════════════════════════════════
 Resume Text:
-{resume_text[:2000]}
+{resume_text[:2500]}
+═══════════════════════════════════════════
 
 Return ONLY one domain from this list, nothing else:
 {_domain_list}
