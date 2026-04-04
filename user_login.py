@@ -179,6 +179,9 @@ def create_user_table():
     try:
         with conn.cursor() as cur:
             cur.execute(ddl)
+            # Prune feature_usage rows older than 2 hours — they are only needed
+            # for the 1-hour rate-limit window. Without this the table grows forever.
+            cur.execute("DELETE FROM feature_usage WHERE used_at < NOW() - INTERVAL '2 hours'")
         conn.commit()
     except Exception as e:
         # FIX: rollback on the SAME connection object, not a fresh _conn() call
@@ -208,10 +211,12 @@ def _send_email(to_email: str, subject: str, body: str) -> bool:
         msg.attach(MIMEText(body, 'plain'))
 
         server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(sender_email, sender_password)
-        server.sendmail(sender_email, to_email, msg.as_string())
-        server.quit()
+        try:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, to_email, msg.as_string())
+        finally:
+            server.quit()  # always close — prevents SMTP connection leak on exception
         return True
     except smtplib.SMTPException as e:
         st.error(f"SMTP Error: {e}")
