@@ -214,23 +214,72 @@ class DatabaseManager:
     ]
 
     def detect_domain_llm(self, job_title: str, job_description: str, session=None) -> str:
-        prompt = f"""
-You are an expert career advisor.
-Given either a job posting (title + description) OR a candidate resume (summary, skills, experience, projects),
-classify the most relevant professional domain.
+        _domain_list = ", ".join(self.VALID_DOMAINS)
+        prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions and resumes across all industries and levels.
+
+Your ONLY job: identify the PRIMARY professional domain from the input below.
+
+════════════════════════════════════════════════════════
+STEP 1 — READ THE JOB TITLE FIRST (strongest signal)
+════════════════════════════════════════════════════════
 
 Job Title: {job_title}
-Job / Resume Text: {job_description}
 
-Return ONLY one domain from this list (no explanation, no extra text):
-[Data Science, AI/Machine Learning, UI/UX Design, Mobile Development,
-Frontend Development, Backend Development, Full Stack Development, Cybersecurity,
-Cloud Engineering, DevOps/Infrastructure, Quality Assurance, Game Development,
-Blockchain Development, Embedded Systems, System Architecture, Database Management,
-Networking, Site Reliability Engineering, Product Management, Project Management,
-Business Analysis, Technical Writing, Digital Marketing, E-commerce, Fintech,
-Healthcare Tech, EdTech, IoT Development, AR/VR Development, Technical Sales,
-Agile Coaching, Software Engineering]
+If the title explicitly names a domain, use it directly:
+  "Backend Developer" → "Backend Development"
+  "Data Analyst" / "Data Scientist" → "Data Science"
+  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
+  "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
+  "Cloud Engineer" / "Cloud Architect" → "Cloud Engineering"
+  "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
+  "Mobile Developer" / "Android" / "iOS" / "Flutter" → "Mobile Development"
+  "Full Stack Developer" → "Full Stack Development"
+  "Frontend Developer" → "Frontend Development"
+  "UX Designer" / "UI Designer" → "UI/UX Design"
+  "Security Engineer" / "Security Analyst" → "Cybersecurity"
+  "SRE" / "Site Reliability Engineer" → "Site Reliability Engineering"
+  "Blockchain Developer" / "Web3 Developer" → "Blockchain Development"
+  "Game Developer" → "Game Development"
+  "Embedded Engineer" / "Firmware Engineer" → "Embedded Systems"
+  "IoT Engineer" → "IoT Development"
+  "Network Engineer" → "Networking"
+  "Database Administrator" / "DBA" → "Database Management"
+  "Product Manager" → "Product Management"
+  "Project Manager" / "Program Manager" → "Project Management"
+  "Business Analyst" → "Business Analysis"
+  "Scrum Master" / "Agile Coach" → "Agile Coaching"
+  "Technical Writer" → "Technical Writing"
+  "Sales Engineer" / "Pre-Sales" → "Technical Sales"
+  "Solution Architect" / "Enterprise Architect" → "System Architecture"
+
+════════════════════════════════════════════════════════
+STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE TEXT
+════════════════════════════════════════════════════════
+
+Job / Resume Text:
+{job_description[:3000]}
+
+Key classification rules:
+  • Backend: backend framework (Django/Flask/Spring/Express/FastAPI) + database + API work required
+  • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work required
+  • Full Stack: BOTH frontend AND backend tech explicitly required
+  • Data Science: pandas/numpy/Tableau/Power BI + analysis or visualization work
+  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
+  • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
+  • Cloud: specific AWS/Azure/GCP services required (not just the word "cloud")
+  • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
+  • Mobile: Android/iOS/Flutter/React Native explicitly required
+  • UI/UX: Figma/wireframes/prototyping/user research as primary duty
+  • DO NOT classify as Full Stack if only backend framework + "website" — frontend tech must be explicit
+  • DO NOT classify as Data Science from SQL alone — analytics work must be described
+  • If truly mixed with no dominant domain → "Software Engineering"
+
+════════════════════════════════════════════════════════
+STEP 3 — RETURN ANSWER
+════════════════════════════════════════════════════════
+
+Return ONLY one domain from this list, nothing else:
+{_domain_list}
 """
         try:
             result = call_llm(prompt, session=session).strip()
@@ -265,23 +314,72 @@ Agile Coaching, Software Engineering]
         llm_domain = None
         llm_failed = False
         try:
-            prompt = f"""
-You are an expert career advisor.
-Given either a job posting (title + description) OR a candidate resume (summary, skills, experience, projects),
-classify the most relevant professional domain.
+            _domain_list = ", ".join(self.VALID_DOMAINS)
+            prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions and resumes across all industries and levels.
+
+Your ONLY job: identify the PRIMARY professional domain from the input below.
+
+════════════════════════════════════════════════════════
+STEP 1 — READ THE JOB TITLE FIRST (strongest signal)
+════════════════════════════════════════════════════════
 
 Job Title: {job_title}
-Job / Resume Text: {job_description}
 
-Return ONLY one domain from this list (no explanation, no extra text):
-[Data Science, AI/Machine Learning, UI/UX Design, Mobile Development,
-Frontend Development, Backend Development, Full Stack Development, Cybersecurity,
-Cloud Engineering, DevOps/Infrastructure, Quality Assurance, Game Development,
-Blockchain Development, Embedded Systems, System Architecture, Database Management,
-Networking, Site Reliability Engineering, Product Management, Project Management,
-Business Analysis, Technical Writing, Digital Marketing, E-commerce, Fintech,
-Healthcare Tech, EdTech, IoT Development, AR/VR Development, Technical Sales,
-Agile Coaching, Software Engineering]
+If the title explicitly names a domain, use it directly:
+  "Backend Developer" → "Backend Development"
+  "Data Analyst" / "Data Scientist" → "Data Science"
+  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
+  "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
+  "Cloud Engineer" / "Cloud Architect" → "Cloud Engineering"
+  "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
+  "Mobile Developer" / "Android" / "iOS" / "Flutter" → "Mobile Development"
+  "Full Stack Developer" → "Full Stack Development"
+  "Frontend Developer" → "Frontend Development"
+  "UX Designer" / "UI Designer" → "UI/UX Design"
+  "Security Engineer" / "Security Analyst" → "Cybersecurity"
+  "SRE" / "Site Reliability Engineer" → "Site Reliability Engineering"
+  "Blockchain Developer" / "Web3 Developer" → "Blockchain Development"
+  "Game Developer" → "Game Development"
+  "Embedded Engineer" / "Firmware Engineer" → "Embedded Systems"
+  "IoT Engineer" → "IoT Development"
+  "Network Engineer" → "Networking"
+  "Database Administrator" / "DBA" → "Database Management"
+  "Product Manager" → "Product Management"
+  "Project Manager" / "Program Manager" → "Project Management"
+  "Business Analyst" → "Business Analysis"
+  "Scrum Master" / "Agile Coach" → "Agile Coaching"
+  "Technical Writer" → "Technical Writing"
+  "Sales Engineer" / "Pre-Sales" → "Technical Sales"
+  "Solution Architect" / "Enterprise Architect" → "System Architecture"
+
+════════════════════════════════════════════════════════
+STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE TEXT
+════════════════════════════════════════════════════════
+
+Job / Resume Text:
+{job_description[:3000]}
+
+Key classification rules:
+  • Backend: backend framework (Django/Flask/Spring/Express/FastAPI) + database + API work required
+  • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work required
+  • Full Stack: BOTH frontend AND backend tech explicitly required
+  • Data Science: pandas/numpy/Tableau/Power BI + analysis or visualization work
+  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
+  • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
+  • Cloud: specific AWS/Azure/GCP services required (not just the word "cloud")
+  • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
+  • Mobile: Android/iOS/Flutter/React Native explicitly required
+  • UI/UX: Figma/wireframes/prototyping/user research as primary duty
+  • DO NOT classify as Full Stack if only backend framework + "website" — frontend tech must be explicit
+  • DO NOT classify as Data Science from SQL alone — analytics work must be described
+  • If truly mixed with no dominant domain → "Software Engineering"
+
+════════════════════════════════════════════════════════
+STEP 3 — RETURN ANSWER
+════════════════════════════════════════════════════════
+
+Return ONLY one domain from this list, nothing else:
+{_domain_list}
 """
             raw = call_llm(prompt, session=session).strip()
             llm_domain = raw if raw in self.VALID_DOMAINS else None
@@ -805,17 +903,31 @@ Agile Coaching, Software Engineering]
         if frontend_hits >= 4 and backend_hits >= 4:
             domain_scores["Full Stack Development"] += 12
 
-        # ── Boost 2: CRITICAL WEB APP RULE ────────────────────────────────────
-        # A "website" or "web app/application" built with a backend framework
-        # implies a UI was also built → Full Stack, not pure Backend.
-        web_app_terms   = ["website", "web app", "web application", "web portal", "web platform"]
+        # ── Boost 2: EVIDENCE-GATED WEB APP RULE ─────────────────────────────
+        # Only boost Full Stack when EXPLICIT frontend tech is present alongside
+        # a backend framework. "website" + "Django" alone is Backend, not Full Stack
+        # — the word "website" does not prove a frontend was built by this candidate.
+        web_app_terms    = ["website", "web app", "web application", "web portal", "web platform"]
         backend_fw_terms = ["django", "flask", "laravel", "express", "node.js", "spring boot",
                             "fastapi", "nestjs", "rails", "asp.net", "sinatra", "gin", "fiber"]
-        is_web_app      = any(_kw_hit(t, title) or _kw_hit(t, desc) for t in web_app_terms)
-        has_backend_fw  = any(_kw_hit(t, title) or _kw_hit(t, desc) for t in backend_fw_terms)
-        if is_web_app and has_backend_fw:
+        # Frontend must be EXPLICITLY named — not just implied by "website"
+        frontend_explicit_terms = [
+            "html", "css", "javascript", "react", "vue", "angular", "bootstrap",
+            "jquery", "next.js", "tailwind", "sass", "typescript", "svelte",
+            "nuxt", "vite", "webpack", "jsx", "tsx"
+        ]
+        is_web_app              = any(_kw_hit(t, title) or _kw_hit(t, desc) for t in web_app_terms)
+        has_backend_fw          = any(_kw_hit(t, title) or _kw_hit(t, desc) for t in backend_fw_terms)
+        frontend_explicit_hits  = sum(1 for kw in frontend_explicit_terms if _kw_hit(kw, title) or _kw_hit(kw, desc))
+
+        if is_web_app and has_backend_fw and frontend_explicit_hits >= 2:
+            # Both frontend AND backend explicitly present → Full Stack boost
             domain_scores["Full Stack Development"] += 10
             domain_scores["Backend Development"]    = max(0, domain_scores["Backend Development"] - 5)
+        elif is_web_app and has_backend_fw and frontend_explicit_hits < 2:
+            # Backend framework + "website" but NO explicit frontend → Backend boost
+            domain_scores["Backend Development"]    += 6
+            domain_scores["Full Stack Development"] = max(0, domain_scores["Full Stack Development"] - 3)
 
         # ── Boost 3: domain keyword boosts ────────────────────────────────────
         domain_boosts = {
