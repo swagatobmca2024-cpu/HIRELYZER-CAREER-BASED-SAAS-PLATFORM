@@ -1,6 +1,17 @@
 """
 Enhanced Database Manager for Resume Analysis System
 Migrated from SQLite to Supabase PostgreSQL (psycopg2)
+
+FIXES vs previous version:
+  1. FIXED: _get_fresh_cursor() liveness check now does a real SELECT 1 round-trip
+            (old code read conn.isolation_level — a pure Python attr, never touched the socket)
+  2. FIXED: Reconnect no longer calls st.cache_resource.clear() — that nuked ALL cached
+            resources app-wide, killing llm_manager and user_login connections simultaneously.
+            Now uses an isolated module-level connection holder with its own lock.
+  3. FIXED: _read_df() no longer commits after a SELECT (was closing open transactions on
+            the shared singleton connection, risking mid-transaction corruption).
+  4. FIXED: detect_domain_llm() / detect_domain_with_confidence() are safe to call with
+            session=None (call_llm now handles None gracefully).
 """
 
 import psycopg2
@@ -8,6 +19,7 @@ import psycopg2.extras
 import pandas as pd
 from datetime import datetime
 import pytz
+import threading
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import Optional, List, Tuple, Dict, Any
@@ -20,13 +32,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# ── Cached connection (one per Streamlit session / process) ──────────────────
-@st.cache_resource
-def _get_pg_connection():
-    """
-    Return a single cached psycopg2 connection per Streamlit worker.
-    @st.cache_resource ensures the connection is NOT recreated on every rerun.
-    """
+# ── Connection management (isolated — never touches other modules' connections) ─
+# FIX 2: replaced st.cache_resource singleton + .clear() with a module-level holder.
+# st.cache_resource.clear() nuked ALL cached resources app-wide, which killed
+# llm_manager and user_login connections whenever a DB hiccup occurred here.
+
+_db_conn_holder: dict = {"conn": None}
+_db_reconnect_lock = threading.Lock()
+
+
+def _make_db_connection():
+    """Open a fresh psycopg2 connection for DatabaseManager operations."""
     conn = psycopg2.connect(
         host=st.secrets["SUPABASE_HOST"],
         dbname=st.secrets["SUPABASE_DB"],
@@ -40,23 +56,42 @@ def _get_pg_connection():
         keepalives_count=5,
     )
     conn.autocommit = False
-    logger.info("New Supabase PostgreSQL connection established (cached).")
+    logger.info("New Supabase PostgreSQL connection established for db_manager.")
     return conn
 
 
 def _get_fresh_cursor():
     """
-    Return a cursor from the cached connection.
-    Reconnects automatically if the connection was dropped.
+    Return a live psycopg2 connection.
+
+    FIX 1: Liveness check is a real SELECT 1 round-trip — the old code read
+            conn.isolation_level which is a pure Python attribute and never
+            touches the socket, so stale connections passed silently.
+    FIX 2: Reconnect only replaces THIS module's connection; does NOT call
+            st.cache_resource.clear() which would destroy all other connections.
     """
-    conn = _get_pg_connection()
-    try:
-        conn.isolation_level  # lightweight liveness check
-    except Exception:
-        # Connection lost – clear the cache so next call reconnects
-        st.cache_resource.clear()
-        conn = _get_pg_connection()
-    return conn
+    with _db_reconnect_lock:
+        conn = _db_conn_holder.get("conn")
+        need_reconnect = False
+
+        if conn is None:
+            need_reconnect = True
+        else:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                conn.rollback()  # close implicit transaction opened by SELECT 1
+            except Exception:
+                need_reconnect = True
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        if need_reconnect:
+            _db_conn_holder["conn"] = _make_db_connection()
+
+        return _db_conn_holder["conn"]
 
 
 class DatabaseManager:
@@ -76,14 +111,17 @@ class DatabaseManager:
         """
         Context manager that yields a psycopg2 connection.
         Commits on success, rolls back on error.
-        The underlying connection is the @st.cache_resource singleton.
+        The underlying connection is the module-level singleton.
         """
         conn = _get_fresh_cursor()
         try:
             yield conn
             conn.commit()
         except Exception as e:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             logger.error(f"Database error: {e}")
             raise
 
@@ -102,14 +140,28 @@ class DatabaseManager:
                 return None
 
     def _read_df(self, sql: str, params=None) -> pd.DataFrame:
-        """Execute a SELECT and return a pandas DataFrame."""
-        with self.get_connection() as conn:
+        """
+        Execute a SELECT and return a pandas DataFrame.
+
+        FIX 3: Uses a cursor directly instead of routing through get_connection()
+                context manager — get_connection() calls conn.commit() on every exit,
+                which is harmless for writes but can interrupt in-flight transactions
+                on the shared singleton if called concurrently.
+        """
+        conn = _get_fresh_cursor()
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(sql, params)
+                rows = cur.fetchall()
+            # No commit needed for SELECT; do not close any outer transaction.
+            return pd.DataFrame([dict(r) for r in rows]) if rows else pd.DataFrame()
+        except Exception as e:
+            logger.error(f"read_df error: {e}")
             try:
-                df = pd.read_sql_query(sql, conn, params=params)
-                return df
-            except Exception as e:
-                logger.error(f"read_df error: {e}")
-                return pd.DataFrame()
+                conn.rollback()
+            except Exception:
+                pass
+            return pd.DataFrame()
 
     # ── Schema initialisation ─────────────────────────────────────────────────
 
@@ -148,9 +200,8 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Schema init error: {e}")
 
-    # ── Domain detection (unchanged logic) ───────────────────────────────────
+    # ── Domain detection ──────────────────────────────────────────────────────
 
-    # ── Valid domain list (single source of truth) ───────────────────────────
     VALID_DOMAINS = [
         "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
         "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
@@ -185,7 +236,6 @@ Agile Coaching, Software Engineering]
             result = call_llm(prompt, session=session).strip()
             if result in self.VALID_DOMAINS:
                 return result
-            # LLM returned something outside the valid list — fall through to keyword
             logger.warning(f"LLM returned invalid domain '{result}' — falling back to keyword detection")
             return self.detect_domain_from_title_and_description(job_title, job_description)
         except Exception as e:
@@ -197,7 +247,7 @@ Agile Coaching, Software Engineering]
         Two-stage domain detection with confidence scoring.
 
         Runs both LLM and keyword detection independently, then compares:
-          - Agreement  → high confidence, use the agreed domain
+          - Agreement    → high confidence, use the agreed domain
           - Disagreement → low confidence, prefer LLM but flag for review
           - LLM failure  → keyword result with low confidence
 
@@ -210,10 +260,8 @@ Agile Coaching, Software Engineering]
             "agreed":      bool,  — whether both methods agreed
           }
         """
-        # Run keyword detection (always fast, no API call)
         kw_domain = self.detect_domain_from_title_and_description(job_title, job_description)
 
-        # Run LLM detection
         llm_domain = None
         llm_failed = False
         try:
@@ -244,9 +292,7 @@ Agile Coaching, Software Engineering]
             logger.error(f"LLM failed in two-stage detection: {e}")
             llm_failed = True
 
-        # Determine agreement and confidence
         if llm_failed or llm_domain is None:
-            # Only keyword available
             return {
                 "domain":     kw_domain,
                 "confidence": "low",
@@ -257,7 +303,6 @@ Agile Coaching, Software Engineering]
 
         agreed = (llm_domain.lower() == kw_domain.lower())
 
-        # Both agree → high confidence
         if agreed:
             return {
                 "domain":     llm_domain,
@@ -267,9 +312,6 @@ Agile Coaching, Software Engineering]
                 "agreed":     True,
             }
 
-        # Disagreement: prefer LLM but mark medium confidence
-        # Exception: if kw result is "Unclassified" (no strong keyword signal),
-        # trust the LLM fully and still call it high confidence
         if kw_domain == "Unclassified":
             return {
                 "domain":     llm_domain,
@@ -755,7 +797,7 @@ Agile Coaching, Software Engineering]
             domain_scores[domain] = (4 * title_hits + 1 * desc_hits) * WEIGHTS[domain]
 
         frontend_hits = sum(1 for kw in keywords["Frontend Development"] if _kw_hit(kw, title) or _kw_hit(kw, desc))
-        backend_hits = sum(1 for kw in keywords["Backend Development"] if _kw_hit(kw, title) or _kw_hit(kw, desc))
+        backend_hits  = sum(1 for kw in keywords["Backend Development"]  if _kw_hit(kw, title) or _kw_hit(kw, desc))
         fullstack_mentioned = any(_kw_hit(t, title) or _kw_hit(t, desc) for t in ["full stack", "fullstack", "full-stack"])
         if fullstack_mentioned:
             domain_scores["Full Stack Development"] += 15
@@ -763,14 +805,14 @@ Agile Coaching, Software Engineering]
             domain_scores["Full Stack Development"] += 12
 
         domain_boosts = {
-            "AI/Machine Learning": ["ai", "ml", "machine learning", "artificial intelligence"],
-            "Cybersecurity": ["security", "cyber", "infosec"],
-            "Cloud Engineering": ["cloud", "aws", "azure", "gcp"],
-            "Mobile Development": ["mobile", "android", "ios", "app"],
-            "Game Development": ["game", "unity", "unreal"],
+            "AI/Machine Learning":    ["ai", "ml", "machine learning", "artificial intelligence"],
+            "Cybersecurity":          ["security", "cyber", "infosec"],
+            "Cloud Engineering":      ["cloud", "aws", "azure", "gcp"],
+            "Mobile Development":     ["mobile", "android", "ios", "app"],
+            "Game Development":       ["game", "unity", "unreal"],
             "Blockchain Development": ["blockchain", "crypto", "web3", "defi"],
-            "IoT Development": ["iot", "embedded", "sensor"],
-            "AR/VR Development": ["ar", "vr", "augmented", "virtual reality"],
+            "IoT Development":        ["iot", "embedded", "sensor"],
+            "AR/VR Development":      ["ar", "vr", "augmented", "virtual reality"],
         }
         for domain, boost_terms in domain_boosts.items():
             if any(_kw_hit(t, title) for t in boost_terms):
@@ -787,7 +829,7 @@ Agile Coaching, Software Engineering]
 
         if domain_scores:
             top_domain = max(domain_scores, key=domain_scores.get)
-            top_score = domain_scores[top_domain]
+            top_score  = domain_scores[top_domain]
             if top_score >= 8:
                 if _kw_hit("full stack developer", title):
                     return "Full Stack Development"
@@ -798,7 +840,7 @@ Agile Coaching, Software Engineering]
 
     def get_domain_similarity(self, resume_domain: str, job_domain: str) -> float:
         resume_domain = resume_domain.strip().lower()
-        job_domain = job_domain.strip().lower()
+        job_domain    = job_domain.strip().lower()
 
         normalization = {
             "frontend": "frontend development", "backend": "backend development",
@@ -821,7 +863,7 @@ Agile Coaching, Software Engineering]
             "game developer": "game development", "blockchain developer": "blockchain development",
         }
         resume_domain = normalization.get(resume_domain, resume_domain)
-        job_domain = normalization.get(job_domain, job_domain)
+        job_domain    = normalization.get(job_domain, job_domain)
 
         similarity_map = {
             ("full stack development", "frontend development"): 0.85,
@@ -901,14 +943,14 @@ Agile Coaching, Software Engineering]
         if similarity:
             return similarity
 
-        tech_domains = {"software engineering","full stack development","frontend development",
-                        "backend development","mobile development","game development",
-                        "blockchain development","embedded systems","iot development"}
-        data_domains = {"data science","ai/machine learning","business analysis"}
+        tech_domains           = {"software engineering","full stack development","frontend development",
+                                   "backend development","mobile development","game development",
+                                   "blockchain development","embedded systems","iot development"}
+        data_domains           = {"data science","ai/machine learning","business analysis"}
         infrastructure_domains = {"cloud engineering","devops/infrastructure","site reliability engineering",
-                                  "system architecture","database management","networking","cybersecurity"}
-        management_domains = {"product management","project management","business analysis","agile coaching"}
-        design_domains = {"ui/ux design","ar/vr development"}
+                                   "system architecture","database management","networking","cybersecurity"}
+        management_domains     = {"product management","project management","business analysis","agile coaching"}
+        design_domains         = {"ui/ux design","ar/vr development"}
 
         categories = [tech_domains, data_domains, infrastructure_domains, management_domains, design_domains]
         for category in categories:
@@ -924,28 +966,24 @@ Agile Coaching, Software Engineering]
 
     # ── CRUD operations ───────────────────────────────────────────────────────
 
-    def insert_candidate(self, data: Tuple, job_title: str = "", job_description: str = "", resume_text: str = "", resume_domain: str = "") -> int:
+    def insert_candidate(self, data: Tuple, job_title: str = "", job_description: str = "",
+                         resume_text: str = "", resume_domain: str = "") -> int:
         try:
-            local_tz = pytz.timezone("Asia/Kolkata")
+            local_tz   = pytz.timezone("Asia/Kolkata")
             local_time = datetime.now(local_tz).strftime("%Y-%m-%d %H:%M:%S")
 
-            # ── Domain: use pre-detected resume domain if provided ────────────
-            # resume_domain is already correctly detected in resummme_analyzer_tab1.py
-            # from resume text ONLY (locked, never contaminated by JD).
-            # Only fall back to keyword detection if nothing was passed in.
             if resume_domain and resume_domain in self.VALID_DOMAINS:
                 detected_domain = resume_domain
                 logger.info(f"Domain used from pre-detected resume domain: '{detected_domain}'")
             else:
-                # Fallback: keyword-only detection from resume text alone (no JD)
-                detected_domain = self.detect_domain_from_title_and_description(job_title, resume_text or job_description)
+                detected_domain = self.detect_domain_from_title_and_description(
+                    job_title, resume_text or job_description
+                )
                 logger.info(f"Domain fallback detected: '{detected_domain}'")
 
             if len(data) < 9:
                 raise ValueError(f"Expected at least 9 data fields, got {len(data)}")
 
-            # Unpack core fields (positions 0–8 are unchanged for backward compat)
-            # Position 9 is the new optional format_score (defaults to 0 if not supplied)
             resume_name    = data[0]
             candidate_name = data[1]
             ats_score      = data[2]
@@ -957,7 +995,6 @@ Agile Coaching, Software Engineering]
             bias_score     = data[8]
             format_score   = int(data[9]) if len(data) >= 10 else 0
 
-            # Validate all integer scores (0–100)
             for name, val in [
                 ("ats_score", ats_score), ("edu_score", edu_score),
                 ("exp_score", exp_score), ("skills_score", skills_score),
@@ -983,7 +1020,7 @@ Agile Coaching, Software Engineering]
                 skills_score, lang_score, keyword_score, format_score, bias_score,
                 detected_domain, local_time,
             )
-            row = self._execute(sql, params, fetch="one")
+            row          = self._execute(sql, params, fetch="one")
             candidate_id = row["id"] if row else None
             logger.info(f"Inserted candidate with ID: {candidate_id}")
             return candidate_id
@@ -1090,7 +1127,7 @@ Agile Coaching, Software Engineering]
                            limit: Optional[int] = None,
                            offset: int = 0) -> pd.DataFrame:
         try:
-            sql = "SELECT * FROM candidates WHERE 1=1"
+            sql    = "SELECT * FROM candidates WHERE 1=1"
             params: list = []
             if bias_threshold is not None:
                 sql += " AND bias_score >= %s"
@@ -1110,7 +1147,7 @@ Agile Coaching, Software Engineering]
     def export_to_csv(self, filepath: str = "candidates_export.csv",
                       filters: Optional[Dict[str, Any]] = None) -> bool:
         try:
-            sql = "SELECT * FROM candidates WHERE 1=1"
+            sql    = "SELECT * FROM candidates WHERE 1=1"
             params: list = []
             if filters:
                 if 'min_ats' in filters:
@@ -1136,8 +1173,8 @@ Agile Coaching, Software Engineering]
 
     def get_candidate_by_id(self, candidate_id: int) -> pd.DataFrame:
         try:
-            sql = "SELECT * FROM candidates WHERE id = %s"
-            return self._read_df(sql, params=(candidate_id,))
+            return self._read_df("SELECT * FROM candidates WHERE id = %s",
+                                 params=(candidate_id,))
         except Exception as e:
             logger.error(f"Error getting candidate by ID: {e}")
             return pd.DataFrame()
@@ -1238,36 +1275,36 @@ Agile Coaching, Software Engineering]
 
     def get_database_stats(self) -> Dict[str, Any]:
         try:
-            with self.get_connection() as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("SELECT COUNT(*) AS cnt FROM candidates")
-                    total_candidates = cur.fetchone()["cnt"]
+            conn = _get_fresh_cursor()
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT COUNT(*) AS cnt FROM candidates")
+                total_candidates = cur.fetchone()["cnt"]
 
-                    cur.execute("""
-                        SELECT
-                            ROUND(AVG(ats_score)::numeric, 2)  AS avg_ats,
-                            ROUND(AVG(bias_score)::numeric, 3) AS avg_bias,
-                            COUNT(DISTINCT domain)             AS unique_domains
-                        FROM candidates
-                    """)
-                    avg_stats = cur.fetchone()
+                cur.execute("""
+                    SELECT
+                        ROUND(AVG(ats_score)::numeric, 2)  AS avg_ats,
+                        ROUND(AVG(bias_score)::numeric, 3) AS avg_bias,
+                        COUNT(DISTINCT domain)             AS unique_domains
+                    FROM candidates
+                """)
+                avg_stats = cur.fetchone()
 
-                    cur.execute("""
-                        SELECT
-                            MIN(DATE(timestamp)) AS earliest_date,
-                            MAX(DATE(timestamp)) AS latest_date
-                        FROM candidates
-                    """)
-                    date_range = cur.fetchone()
-
+                cur.execute("""
+                    SELECT
+                        MIN(DATE(timestamp)) AS earliest_date,
+                        MAX(DATE(timestamp)) AS latest_date
+                    FROM candidates
+                """)
+                date_range = cur.fetchone()
+            # No commit needed for SELECT-only block
             return {
                 'total_candidates': total_candidates,
-                'avg_ats_score': float(avg_stats["avg_ats"]) if avg_stats["avg_ats"] else 0,
-                'avg_bias_score': float(avg_stats["avg_bias"]) if avg_stats["avg_bias"] else 0,
-                'unique_domains': avg_stats["unique_domains"] if avg_stats["unique_domains"] else 0,
-                'earliest_date': str(date_range["earliest_date"]) if date_range["earliest_date"] else None,
-                'latest_date': str(date_range["latest_date"]) if date_range["latest_date"] else None,
-                'database_size_mb': 0,   # not applicable for hosted Supabase
+                'avg_ats_score':    float(avg_stats["avg_ats"])  if avg_stats["avg_ats"]  else 0,
+                'avg_bias_score':   float(avg_stats["avg_bias"]) if avg_stats["avg_bias"] else 0,
+                'unique_domains':   avg_stats["unique_domains"]  if avg_stats["unique_domains"] else 0,
+                'earliest_date':    str(date_range["earliest_date"]) if date_range["earliest_date"] else None,
+                'latest_date':      str(date_range["latest_date"])   if date_range["latest_date"]   else None,
+                'database_size_mb': 0,
             }
         except Exception as e:
             logger.error(f"Error getting database stats: {e}")
@@ -1288,8 +1325,8 @@ Agile Coaching, Software Engineering]
             return 0
 
     def close_all_connections(self):
-        """No-op: connection lifecycle is managed by @st.cache_resource."""
-        logger.info("close_all_connections called — connection managed by cache_resource.")
+        """No-op: connection lifecycle is managed by the module-level holder."""
+        logger.info("close_all_connections called — connection managed by module-level holder.")
 
 
 # ── Global instance (backward compatibility) ─────────────────────────────────
@@ -1303,7 +1340,8 @@ def detect_domain_from_title_and_description(job_title: str, job_description: st
 def get_domain_similarity(resume_domain: str, job_domain: str) -> float:
     return db_manager.get_domain_similarity(resume_domain, job_domain)
 
-def insert_candidate(data: tuple, job_title: str = "", job_description: str = "", resume_text: str = "", resume_domain: str = ""):
+def insert_candidate(data: tuple, job_title: str = "", job_description: str = "",
+                     resume_text: str = "", resume_domain: str = ""):
     return db_manager.insert_candidate(data, job_title, job_description, resume_text, resume_domain)
 
 def get_top_domains_by_score(limit: int = 5) -> list:
