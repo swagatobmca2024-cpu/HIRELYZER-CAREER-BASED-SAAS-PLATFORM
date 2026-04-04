@@ -5974,14 +5974,16 @@ RULE B — TRUE EVIDENCE BAR per domain (must satisfy BOTH sub-conditions):
   → Backend Development:
      MUST have: A backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI/NestJS/Rails)
      AND: database integration described in a project or internship
-     CRITICAL WEB APP RULE: If the project is described as a "website" or "web application" with
-     NO explicit mention of "API-only", "server-side only", or "no frontend" → classify as
-     "Full Stack Development" NOT "Backend Development", because a functional website implies UI was built too.
+     ⚠ "website" or "web application" in project name does NOT imply Full Stack.
+     Django + database + "Travel Management website" with NO frontend tech mentioned = Backend Development.
+     Only classify as Full Stack if HTML/CSS/JS or a frontend framework is EXPLICITLY mentioned.
 
   → Full Stack Development:
-     MUST have: EITHER (frontend tech + backend framework + database together in 1 project/internship)
-     OR (self-identifies as "full stack" / "front-end and back-end" in summary or title)
-     OR (backend framework + described website/web app project — see Backend critical rule above)
+     MUST have: frontend technologies (HTML+CSS+JS or React/Vue/Angular/Bootstrap/jQuery/Svelte/Next.js)
+     AND: backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI)
+     AND: database — ALL THREE explicitly present in the same project or internship description
+     OR: candidate explicitly self-identifies as "full stack" / "front-end and back-end" in summary/title
+     ⚠ "website" + backend framework alone is NOT Full Stack — frontend tech must be named explicitly.
 
   → Mobile Development:
      MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift/Xamarin
@@ -6126,11 +6128,10 @@ RULE F — JOB TITLE as strong signal (for Level C):
 STEP 3 — TIEBREAKERS (apply in order)
 ════════════════════════════════════════════════════════
 
-T1. If described project is a "website" or "web app" built with a backend framework → "Full Stack Development"
-T2. If self-identified domain in summary/objective → use that domain (if it exists in the valid list)
-T3. If internship title explicitly names a domain → use that domain
-T4. If tech stack strongly maps to exactly 1 domain → use that domain
-T5. If still tied → "Software Engineering" as safe fallback
+T1. If self-identified domain in summary/objective → use that domain (if it exists in the valid list)
+T2. If internship title explicitly names a domain → use that domain
+T3. If tech stack strongly maps to exactly 1 domain → use that domain
+T4. If still tied → "Software Engineering" as safe fallback
 
 ════════════════════════════════════════════════════════
 STEP 4 — FINAL SANITY CHECK
@@ -6140,13 +6141,13 @@ Before answering, verify:
 1. Did I correctly determine the level (A/B/C)?
 2. If Level A → am I returning "Software Engineering"? (If not, reconsider)
 3. Does my chosen domain meet the TRUE EVIDENCE BAR from Rule B?
-4. Did I apply the CRITICAL WEB APP RULE (website/web app → Full Stack, not pure Backend)?
+4. For Full Stack: are frontend tech + backend framework + database ALL explicitly mentioned? If any is missing → not Full Stack.
 5. Is there a job title that overrides my inference (Rule F)?
 6. Is this the domain with the MOST evidence overall?
 
 ════════════════════════════════════════════════════════
 Resume Text:
-{resume_text[:3000]}
+{resume_text[:6000]}
 ════════════════════════════════════════════════════════
 
 Return ONLY one domain from this list, nothing else:
@@ -6154,9 +6155,19 @@ Return ONLY one domain from this list, nothing else:
 """
         try:
             _r = call_llm(_resume_domain_prompt, session=st.session_state).strip()
-            st.session_state[_resume_cache_key] = _r if _r in _valid_domains else "Software Engineering"
+            if _r in _valid_domains:
+                st.session_state[_resume_cache_key] = _r
+            else:
+                # LLM returned invalid domain — fall back to keyword detection
+                _kw_fallback = db_manager.detect_domain_from_title_and_description("", resume_text[:3000])
+                st.session_state[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
         except Exception:
-            st.session_state[_resume_cache_key] = "Software Engineering"
+            # LLM failed entirely — fall back to keyword detection
+            try:
+                _kw_fallback = db_manager.detect_domain_from_title_and_description("", resume_text[:3000])
+                st.session_state[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
+            except Exception:
+                st.session_state[_resume_cache_key] = "Software Engineering"
 
     # Use passed-in value if provided, otherwise use session state value
     if resume_domain is None:
@@ -6165,20 +6176,100 @@ Return ONLY one domain from this list, nothing else:
     # ── JOB DOMAIN: use pre-detected value if passed in, else detect here ──
     _jd_cache_key = f"jd_domain_{hash(job_description[:500])}"
     if job_domain is None and _jd_cache_key not in st.session_state:
-        _jd_domain_prompt = f"""Classify this job description into one professional domain.
+        _jd_domain_prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions across all industries and levels.
+
+Your ONLY job: identify the PRIMARY professional domain this job description is hiring for.
+
+════════════════════════════════════════════════════════
+STEP 1 — READ THE JOB TITLE FIRST (strongest signal)
+════════════════════════════════════════════════════════
 
 Job Title: {job_title}
+
+If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scientist", "DevOps Engineer", "UX Designer"), use that domain directly — do not over-analyse the description.
+
+Title override examples:
+  "Backend Developer" → "Backend Development"
+  "Data Analyst" → "Data Science"
+  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
+  "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
+  "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
+  "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
+  "Mobile Developer" / "Android" / "iOS" / "Flutter" → "Mobile Development"
+  "Full Stack Developer" → "Full Stack Development"
+  "Frontend Developer" / "Front End" → "Frontend Development"
+  "UX Designer" / "UI Designer" / "Product Designer" → "UI/UX Design"
+  "Security Engineer" / "Security Analyst" / "Penetration Tester" → "Cybersecurity"
+  "SRE" / "Site Reliability Engineer" → "Site Reliability Engineering"
+  "Blockchain Developer" / "Web3 Developer" → "Blockchain Development"
+  "Game Developer" / "Game Engineer" → "Game Development"
+  "Embedded Engineer" / "Firmware Engineer" → "Embedded Systems"
+  "IoT Engineer" → "IoT Development"
+  "Network Engineer" / "Network Admin" → "Networking"
+  "Database Administrator" / "DBA" → "Database Management"
+  "Product Manager" → "Product Management"
+  "Project Manager" / "Program Manager" → "Project Management"
+  "Business Analyst" → "Business Analysis"
+  "Scrum Master" / "Agile Coach" → "Agile Coaching"
+  "Technical Writer" → "Technical Writing"
+  "Sales Engineer" / "Pre-Sales" → "Technical Sales"
+  "Solution Architect" / "Enterprise Architect" → "System Architecture"
+
+════════════════════════════════════════════════════════
+STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE JD BELOW
+════════════════════════════════════════════════════════
+
 Job Description:
-{job_description[:800]}
+{job_description[:3000]}
+
+Classification rules:
+  • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
+  • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work
+  • Full Stack: Both frontend AND backend tech explicitly required
+  • Data Science: SQL/Python analytics + pandas/numpy/Tableau/Power BI + analysis work
+  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
+  • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
+  • Cloud: AWS/Azure/GCP services explicitly required (not just "cloud" mentioned)
+  • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
+  • Mobile: Android/iOS/Flutter/React Native explicitly required
+  • UI/UX: Figma/wireframes/prototyping/user research required
+  • Product Management: roadmap/PRD/stakeholder management (not just Agile)
+  • Project Management: team delivery/PMP/programme management
+  • Business Analysis: requirements/BRD/process mapping as primary duty
+  • Quality Assurance: test automation/test planning as primary duty
+  • Fintech: payment/banking/trading/KYC/AML systems
+  • Healthcare Tech: EHR/EMR/HIPAA/clinical systems
+  • EdTech: LMS/e-learning/educational platform
+  • Game Development: Unity/Unreal/game mechanics explicitly required
+  • Blockchain: Solidity/Web3/smart contracts explicitly required
+  • Embedded: firmware/RTOS/microcontroller/hardware explicitly required
+
+════════════════════════════════════════════════════════
+STEP 3 — FINAL CHECK
+════════════════════════════════════════════════════════
+
+1. Did the job title directly name a domain? → Use that.
+2. If not, which domain has the MOST required skills/responsibilities in the JD?
+3. If truly unclear → "Software Engineering"
 
 Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
             _j = call_llm(_jd_domain_prompt, session=st.session_state).strip()
-            st.session_state[_jd_cache_key] = _j if _j in _valid_domains else "Software Engineering"
+            if _j in _valid_domains:
+                st.session_state[_jd_cache_key] = _j
+            else:
+                # LLM returned invalid — fall back to keyword detection
+                _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+                st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
         except Exception:
-            st.session_state[_jd_cache_key] = "Software Engineering"
+            # LLM failed — fall back to keyword detection
+            try:
+                _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+                st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
+            except Exception:
+                st.session_state[_jd_cache_key] = "Software Engineering"
 
     # Use passed-in value if provided, otherwise use session state value
     if job_domain is None:
@@ -7221,7 +7312,8 @@ LEVEL B — Fresher / Student WITH specialization evidence:
   → DO classify into a specific domain based on the strongest evidence
   → EXAMPLES:
     - HTML+CSS+JS+React + frontend internship described → "Frontend Development"
-    - Django/Laravel + MySQL + web project described → "Full Stack Development" or "Backend Development"
+    - Django/Laravel + MySQL + web project described, NO frontend tech mentioned → "Backend Development"
+    - Django/Laravel + MySQL + HTML+CSS+JS + web project described → "Full Stack Development"
     - Android/Flutter + built a mobile app described → "Mobile Development"
     - TensorFlow/PyTorch + ML project described → "AI/Machine Learning"
 
@@ -7250,11 +7342,14 @@ RULE B — WHAT COUNTS AS TRUE DOMAIN EVIDENCE:
      MUST have: A backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI)
      AND: database integration (MySQL/PostgreSQL/MongoDB) in a described project
      NOT just: Java + SQL listed in skills with no project context
+     ⚠ "website" in project name does NOT mean Full Stack. Django + database + no frontend = Backend.
      
   → Full Stack Development:
-     MUST have: frontend technologies + backend framework + database ALL present
+     MUST have: frontend technologies (HTML+CSS+JS or React/Vue/Angular/Bootstrap/jQuery)
+     AND: backend framework + database — ALL THREE explicitly present
      AND: at least 1 project or internship that uses both frontend and backend
      SELF-IDENTIFICATION counts: if summary says "full stack" or "front-end and back-end" → Full Stack
+     ⚠ "website" + backend framework alone is NOT Full Stack — frontend tech must be explicitly named.
      
   → Mobile Development:
      MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift
@@ -7344,11 +7439,12 @@ Ask yourself:
 2. If Level A → return "Software Engineering"
 3. If Level B or C → what domain has the MOST evidence (technologies + described projects + internship/job titles)?
 4. Does that domain meet the TRUE EVIDENCE bar from Rule B?
-5. If yes → return that domain. If no → return "Software Engineering"
+5. If Full Stack → are frontend tech + backend framework + database ALL explicitly mentioned? If frontend is missing → Backend, not Full Stack.
+6. If yes → return that domain. If no → return "Software Engineering"
 
 ════════════════════════════════════════════════════════
 Resume Text:
-{full_text[:3000]}
+{full_text[:6000]}
 ════════════════════════════════════════════════════════
 
 Return ONLY one domain from this list, nothing else:
@@ -7356,27 +7452,117 @@ Return ONLY one domain from this list, nothing else:
 """
             try:
                 _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
-                st.session_state[_pre_resume_cache_key] = _r if _r in _pre_valid_domains else "Software Engineering"
+                if _r in _pre_valid_domains:
+                    st.session_state[_pre_resume_cache_key] = _r
+                else:
+                    # LLM returned invalid domain — fall back to keyword detection
+                    _kw = db_manager.detect_domain_from_title_and_description("", full_text[:3000])
+                    st.session_state[_pre_resume_cache_key] = _kw if _kw != "Unclassified" else "Software Engineering"
             except Exception:
-                st.session_state[_pre_resume_cache_key] = "Software Engineering"
+                # LLM failed entirely — fall back to keyword detection
+                try:
+                    _kw = db_manager.detect_domain_from_title_and_description("", full_text[:3000])
+                    st.session_state[_pre_resume_cache_key] = _kw if _kw != "Unclassified" else "Software Engineering"
+                except Exception:
+                    st.session_state[_pre_resume_cache_key] = "Software Engineering"
         _pre_resume_domain = st.session_state[_pre_resume_cache_key]
 
         _pre_jd_cache_key = f"jd_domain_{hash(job_description[:500])}"
         if _pre_jd_cache_key not in st.session_state:
-            _pre_jd_prompt = f"""Classify this job description into one professional domain.
+            _pre_jd_prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions across all industries and levels.
+
+Your ONLY job: identify the PRIMARY professional domain this job description is hiring for.
+
+════════════════════════════════════════════════════════
+STEP 1 — READ THE JOB TITLE FIRST (strongest signal)
+════════════════════════════════════════════════════════
 
 Job Title: {job_title}
+
+If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scientist", "DevOps Engineer", "UX Designer"), use that domain directly — do not over-analyse the description.
+
+Title override examples:
+  "Backend Developer" → "Backend Development"
+  "Data Analyst" → "Data Science"
+  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
+  "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
+  "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
+  "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
+  "Mobile Developer" / "Android" / "iOS" / "Flutter" → "Mobile Development"
+  "Full Stack Developer" → "Full Stack Development"
+  "Frontend Developer" / "Front End" → "Frontend Development"
+  "UX Designer" / "UI Designer" / "Product Designer" → "UI/UX Design"
+  "Security Engineer" / "Security Analyst" / "Penetration Tester" → "Cybersecurity"
+  "SRE" / "Site Reliability Engineer" → "Site Reliability Engineering"
+  "Blockchain Developer" / "Web3 Developer" → "Blockchain Development"
+  "Game Developer" / "Game Engineer" → "Game Development"
+  "Embedded Engineer" / "Firmware Engineer" → "Embedded Systems"
+  "IoT Engineer" → "IoT Development"
+  "Network Engineer" / "Network Admin" → "Networking"
+  "Database Administrator" / "DBA" → "Database Management"
+  "Product Manager" → "Product Management"
+  "Project Manager" / "Program Manager" → "Project Management"
+  "Business Analyst" → "Business Analysis"
+  "Scrum Master" / "Agile Coach" → "Agile Coaching"
+  "Technical Writer" → "Technical Writing"
+  "Sales Engineer" / "Pre-Sales" → "Technical Sales"
+  "Solution Architect" / "Enterprise Architect" → "System Architecture"
+
+════════════════════════════════════════════════════════
+STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE JD BELOW
+════════════════════════════════════════════════════════
+
 Job Description:
-{job_description[:800]}
+{job_description[:3000]}
+
+Classification rules:
+  • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
+  • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work
+  • Full Stack: Both frontend AND backend tech explicitly required
+  • Data Science: SQL/Python analytics + pandas/numpy/Tableau/Power BI + analysis work
+  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
+  • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
+  • Cloud: AWS/Azure/GCP services explicitly required (not just "cloud" mentioned)
+  • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
+  • Mobile: Android/iOS/Flutter/React Native explicitly required
+  • UI/UX: Figma/wireframes/prototyping/user research required
+  • Product Management: roadmap/PRD/stakeholder management (not just Agile)
+  • Project Management: team delivery/PMP/programme management
+  • Business Analysis: requirements/BRD/process mapping as primary duty
+  • Quality Assurance: test automation/test planning as primary duty
+  • Fintech: payment/banking/trading/KYC/AML systems
+  • Healthcare Tech: EHR/EMR/HIPAA/clinical systems
+  • EdTech: LMS/e-learning/educational platform
+  • Game Development: Unity/Unreal/game mechanics explicitly required
+  • Blockchain: Solidity/Web3/smart contracts explicitly required
+  • Embedded: firmware/RTOS/microcontroller/hardware explicitly required
+
+════════════════════════════════════════════════════════
+STEP 3 — FINAL CHECK
+════════════════════════════════════════════════════════
+
+1. Did the job title directly name a domain? → Use that.
+2. If not, which domain has the MOST required skills/responsibilities in the JD?
+3. If truly unclear → "Software Engineering"
 
 Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
                 _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
-                st.session_state[_pre_jd_cache_key] = _j if _j in _pre_valid_domains else "Software Engineering"
+                if _j in _pre_valid_domains:
+                    st.session_state[_pre_jd_cache_key] = _j
+                else:
+                    # LLM returned invalid — fall back to keyword detection
+                    _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
             except Exception:
-                st.session_state[_pre_jd_cache_key] = "Software Engineering"
+                # LLM failed — fall back to keyword detection
+                try:
+                    _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
+                except Exception:
+                    st.session_state[_pre_jd_cache_key] = "Software Engineering"
         _pre_job_domain = st.session_state[_pre_jd_cache_key]
 
         # ⚡ PARALLEL: rewrite + ATS run simultaneously using threads.
