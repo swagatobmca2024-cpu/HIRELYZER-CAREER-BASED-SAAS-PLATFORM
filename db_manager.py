@@ -796,6 +796,7 @@ Agile Coaching, Software Engineering]
             desc_hits  = sum(1 for kw in kws if _kw_hit(kw, desc))
             domain_scores[domain] = (4 * title_hits + 1 * desc_hits) * WEIGHTS[domain]
 
+        # ── Boost 1: explicit full-stack signals ──────────────────────────────
         frontend_hits = sum(1 for kw in keywords["Frontend Development"] if _kw_hit(kw, title) or _kw_hit(kw, desc))
         backend_hits  = sum(1 for kw in keywords["Backend Development"]  if _kw_hit(kw, title) or _kw_hit(kw, desc))
         fullstack_mentioned = any(_kw_hit(t, title) or _kw_hit(t, desc) for t in ["full stack", "fullstack", "full-stack"])
@@ -804,15 +805,36 @@ Agile Coaching, Software Engineering]
         if frontend_hits >= 4 and backend_hits >= 4:
             domain_scores["Full Stack Development"] += 12
 
+        # ── Boost 2: CRITICAL WEB APP RULE ────────────────────────────────────
+        # A "website" or "web app/application" built with a backend framework
+        # implies a UI was also built → Full Stack, not pure Backend.
+        web_app_terms   = ["website", "web app", "web application", "web portal", "web platform"]
+        backend_fw_terms = ["django", "flask", "laravel", "express", "node.js", "spring boot",
+                            "fastapi", "nestjs", "rails", "asp.net", "sinatra", "gin", "fiber"]
+        is_web_app      = any(_kw_hit(t, title) or _kw_hit(t, desc) for t in web_app_terms)
+        has_backend_fw  = any(_kw_hit(t, title) or _kw_hit(t, desc) for t in backend_fw_terms)
+        if is_web_app and has_backend_fw:
+            domain_scores["Full Stack Development"] += 10
+            domain_scores["Backend Development"]    = max(0, domain_scores["Backend Development"] - 5)
+
+        # ── Boost 3: domain keyword boosts ────────────────────────────────────
         domain_boosts = {
-            "AI/Machine Learning":    ["ai", "ml", "machine learning", "artificial intelligence"],
-            "Cybersecurity":          ["security", "cyber", "infosec"],
-            "Cloud Engineering":      ["cloud", "aws", "azure", "gcp"],
-            "Mobile Development":     ["mobile", "android", "ios", "app"],
-            "Game Development":       ["game", "unity", "unreal"],
-            "Blockchain Development": ["blockchain", "crypto", "web3", "defi"],
-            "IoT Development":        ["iot", "embedded", "sensor"],
-            "AR/VR Development":      ["ar", "vr", "augmented", "virtual reality"],
+            "AI/Machine Learning":    ["ai", "ml", "machine learning", "artificial intelligence", "deep learning", "llm", "nlp"],
+            "Cybersecurity":          ["security", "cyber", "infosec", "pentesting", "ethical hacking", "soc"],
+            "Cloud Engineering":      ["cloud", "aws", "azure", "gcp", "cloud engineer"],
+            "Mobile Development":     ["mobile", "android", "ios", "flutter", "react native", "kotlin", "swift"],
+            "Game Development":       ["game", "unity", "unreal", "godot"],
+            "Blockchain Development": ["blockchain", "crypto", "web3", "defi", "solidity", "smart contract"],
+            "IoT Development":        ["iot", "sensor", "mqtt", "raspberry pi", "arduino iot"],
+            "AR/VR Development":      ["ar", "vr", "augmented reality", "virtual reality", "arkit", "arcore", "oculus"],
+            "Quality Assurance":      ["qa", "quality assurance", "test automation", "sdet", "selenium", "cypress"],
+            "Site Reliability Engineering": ["sre", "site reliability", "error budget", "slo", "sli", "on-call"],
+            "Data Science":           ["data analyst", "data scientist", "business intelligence", "tableau", "power bi"],
+            "UI/UX Design":           ["ux", "ui design", "figma", "user experience", "user interface design", "wireframe"],
+            "Digital Marketing":      ["seo", "sem", "ppc", "social media marketing", "content marketing", "google ads"],
+            "Fintech":                ["fintech", "payment", "banking", "trading", "kyc", "aml"],
+            "Healthcare Tech":        ["healthtech", "ehr", "emr", "hipaa", "medical software", "clinical"],
+            "EdTech":                 ["edtech", "e-learning", "lms", "learning platform", "educational technology"],
         }
         for domain, boost_terms in domain_boosts.items():
             if any(_kw_hit(t, title) for t in boost_terms):
@@ -820,21 +842,67 @@ Agile Coaching, Software Engineering]
             if any(_kw_hit(t, desc) for t in boost_terms):
                 domain_scores[domain] += 3
 
+        # ── Boost 4: Sparse description guard ─────────────────────────────────
+        # If description is very short, reduce noise from weak desc keyword hits
         if len(desc.split()) < 8:
-            strong_keywords = ["full stack developer", "mobile developer", "android developer", "ios developer"]
+            strong_keywords = ["full stack developer", "mobile developer", "android developer",
+                               "ios developer", "flutter developer", "react native developer"]
             if not any(_kw_hit(k, title) or _kw_hit(k, desc) for k in strong_keywords):
                 for domain in domain_scores:
                     desc_hits = sum(1 for kw in keywords[domain] if _kw_hit(kw, desc))
                     domain_scores[domain] = max(0, domain_scores[domain] - (desc_hits * WEIGHTS[domain] * 0.5))
 
+        # ── Final selection ────────────────────────────────────────────────────
         if domain_scores:
             top_domain = max(domain_scores, key=domain_scores.get)
             top_score  = domain_scores[top_domain]
             if top_score >= 8:
-                if _kw_hit("full stack developer", title):
-                    return "Full Stack Development"
-                if _kw_hit("mobile developer", title) or _kw_hit("android developer", title) or _kw_hit("ios developer", title):
-                    return "Mobile Development"
+                # Hard title overrides — explicit title is strongest signal
+                title_overrides = [
+                    ("full stack developer",         "Full Stack Development"),
+                    ("full-stack developer",         "Full Stack Development"),
+                    ("fullstack developer",          "Full Stack Development"),
+                    ("frontend developer",           "Frontend Development"),
+                    ("front end developer",          "Frontend Development"),
+                    ("backend developer",            "Backend Development"),
+                    ("back end developer",           "Backend Development"),
+                    ("mobile developer",             "Mobile Development"),
+                    ("android developer",            "Mobile Development"),
+                    ("ios developer",                "Mobile Development"),
+                    ("flutter developer",            "Mobile Development"),
+                    ("react native developer",       "Mobile Development"),
+                    ("data analyst",                 "Data Science"),
+                    ("data scientist",               "Data Science"),
+                    ("ml engineer",                  "AI/Machine Learning"),
+                    ("ai engineer",                  "AI/Machine Learning"),
+                    ("qa engineer",                  "Quality Assurance"),
+                    ("test engineer",                "Quality Assurance"),
+                    ("sdet",                         "Quality Assurance"),
+                    ("devops engineer",              "DevOps/Infrastructure"),
+                    ("cloud engineer",               "Cloud Engineering"),
+                    ("sre",                          "Site Reliability Engineering"),
+                    ("site reliability engineer",    "Site Reliability Engineering"),
+                    ("security engineer",            "Cybersecurity"),
+                    ("security analyst",             "Cybersecurity"),
+                    ("penetration tester",           "Cybersecurity"),
+                    ("ux designer",                  "UI/UX Design"),
+                    ("ui designer",                  "UI/UX Design"),
+                    ("product manager",              "Product Management"),
+                    ("project manager",              "Project Management"),
+                    ("business analyst",             "Business Analysis"),
+                    ("scrum master",                 "Agile Coaching"),
+                    ("technical writer",             "Technical Writing"),
+                    ("blockchain developer",         "Blockchain Development"),
+                    ("game developer",               "Game Development"),
+                    ("embedded engineer",            "Embedded Systems"),
+                    ("firmware engineer",            "Embedded Systems"),
+                    ("iot engineer",                 "IoT Development"),
+                    ("network engineer",             "Networking"),
+                    ("database administrator",       "Database Management"),
+                ]
+                for kw, domain in title_overrides:
+                    if _kw_hit(kw, title):
+                        return domain
                 return top_domain
         return "Unclassified"
 
