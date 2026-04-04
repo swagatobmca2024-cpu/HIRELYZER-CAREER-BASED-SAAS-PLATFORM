@@ -6105,6 +6105,14 @@ RULE C — MIXED SIGNALS → dominant domain wins:
   • Tie between frontend+backend → "Full Stack Development"
   • Tie between unrelated domains → "Software Engineering"
   • 1 weak signal (e.g. 1 virtual internship, no described work) vs 3 strong signals → strong side wins
+  ⚠ INTERNSHIP TITLE CONFLICT RULE (critical for Level B):
+    If internship title suggests Domain A BUT skills + projects have 3+ strong signals for Domain B
+    AND Domain B is more specific than Domain A → Domain B wins over the internship title.
+    EXAMPLE: "Full Stack Developer Intern" + LangChain/LLaMA/RAG/FAISS/LLMs in skills+projects
+             → "AI/Machine Learning" wins, NOT "Full Stack Development"
+    EXAMPLE: "Full Stack Developer Intern" + only HTML/CSS/React/Node projects, no AI tools
+             → "Full Stack Development" wins correctly
+    EXAMPLE: "Android Developer Intern" + Flutter/Kotlin projects → "Mobile Development" wins correctly
 
 RULE D — NON-TECH / HYBRID profiles:
   • Pure non-tech background (marketing, finance, HR, design) + no tech projects → classify by their actual domain
@@ -6117,19 +6125,24 @@ RULE E — RESEARCH / ACADEMIC profiles:
   • Hardware/systems research → "Embedded Systems"
   • Generic CS research → "Software Engineering"
 
-RULE F — JOB TITLE as strong signal (for Level C):
-  • If explicit job title is present, it is the STRONGEST single signal
-  • "Backend Developer" title → "Backend Development" (even if also does some frontend)
+RULE F — JOB TITLE as strong signal (Level C only):
+  • ONLY applies to Level C (1+ years full-time work experience)
+  • For Level C: explicit job title is the STRONGEST single signal
+  • "Backend Developer" title → "Backend Development"
   • "Data Analyst" title → "Data Science"
   • "QA Engineer" title → "Quality Assurance"
   • Title + matching tech stack → confirm that domain immediately
+  ⚠ For Level B (freshers/students): internship title is ONE signal among many.
+    It can be OVERRIDDEN if skills + projects show 3+ strong signals for a different domain.
+    Do NOT blindly use internship title for Level B — apply Rule C conflict check first.
 
 ════════════════════════════════════════════════════════
 STEP 3 — TIEBREAKERS (apply in order)
 ════════════════════════════════════════════════════════
 
 T1. If self-identified domain in summary/objective → use that domain (if it exists in the valid list)
-T2. If internship title explicitly names a domain → use that domain
+T2. If internship title names a domain AND no conflict with Rule C → use that domain
+    ⚠ If conflict exists (skills+projects strongly point elsewhere) → skip T2, go to T3
 T3. If tech stack strongly maps to exactly 1 domain → use that domain
 T4. If still tied → "Software Engineering" as safe fallback
 
@@ -6142,8 +6155,10 @@ Before answering, verify:
 2. If Level A → am I returning "Software Engineering"? (If not, reconsider)
 3. Does my chosen domain meet the TRUE EVIDENCE BAR from Rule B?
 4. For Full Stack: are frontend tech + backend framework + database ALL explicitly mentioned? If any is missing → not Full Stack.
-5. Is there a job title that overrides my inference (Rule F)?
-6. Is this the domain with the MOST evidence overall?
+5. If Level B: did I check Rule C conflict? Is the internship title conflicting with skills+projects?
+   If yes → did I correctly let skills+projects override the internship title?
+6. If Level C: is there a job title that confirms my domain (Rule F)?
+7. Is this the domain with the MOST evidence overall?
 
 ════════════════════════════════════════════════════════
 Resume Text:
@@ -7418,6 +7433,14 @@ RULE C — MIXED SIGNALS → pick the DOMINANT domain:
   • The domain with the most evidence wins
   • If frontend has 3 signals and cybersecurity has 1 virtual internship → Frontend wins
   • If truly equal across 2 domains → "Full Stack Development" if they're frontend+backend, else "Software Engineering"
+  ⚠ INTERNSHIP TITLE CONFLICT RULE (critical for Level B):
+    If internship title suggests Domain A BUT skills + projects have 3+ strong signals for Domain B
+    AND Domain B is more specific than Domain A → Domain B wins over the internship title.
+    EXAMPLE: "Full Stack Developer Intern" + LangChain/LLaMA/RAG/FAISS/LLMs in skills+projects
+             → "AI/Machine Learning" wins, NOT "Full Stack Development"
+    EXAMPLE: "Full Stack Developer Intern" + only HTML/CSS/React/Node projects, no AI tools
+             → "Full Stack Development" wins correctly
+    EXAMPLE: "Android Developer Intern" + Flutter/Kotlin projects → "Mobile Development" wins correctly
 
 RULE D — RESEARCH / ACADEMIC profiles:
   • Research intern at university/NIT/IIT/ISRO/DRDO etc. → classify by research TOPIC
@@ -7430,6 +7453,14 @@ RULE E — CAREER SWITCHERS:
   • If candidate has old domain (e.g. mechanical engineer) but new projects/courses in tech → classify by new tech domain
   • Recent certifications + projects in new domain outweigh old job titles
 
+RULE F — JOB TITLE as strong signal (Level C only):
+  • ONLY applies to Level C (1+ years full-time work experience)
+  • For Level C: explicit job title is the STRONGEST single signal
+  • "Backend Developer" → "Backend Development", "Data Analyst" → "Data Science"
+  ⚠ For Level B (freshers/students): internship title is ONE signal among many.
+    It can be OVERRIDDEN if skills + projects show 3+ strong signals for a different domain.
+    Do NOT blindly use internship title for Level B — apply Rule C conflict check first.
+
 ════════════════════════════════════════════════════════
 STEP 3 — FINAL CHECK BEFORE ANSWERING
 ════════════════════════════════════════════════════════
@@ -7440,7 +7471,10 @@ Ask yourself:
 3. If Level B or C → what domain has the MOST evidence (technologies + described projects + internship/job titles)?
 4. Does that domain meet the TRUE EVIDENCE bar from Rule B?
 5. If Full Stack → are frontend tech + backend framework + database ALL explicitly mentioned? If frontend is missing → Backend, not Full Stack.
-6. If yes → return that domain. If no → return "Software Engineering"
+6. If Level B → did I check Rule C conflict? Does the internship title conflict with skills+projects?
+   If yes → let skills+projects override the internship title.
+7. If Level C → is there a job title confirming the domain (Rule F)?
+8. If yes → return that domain. If no → return "Software Engineering"
 
 ════════════════════════════════════════════════════════
 Resume Text:
