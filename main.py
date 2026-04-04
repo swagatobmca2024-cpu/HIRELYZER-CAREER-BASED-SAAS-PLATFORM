@@ -3947,6 +3947,18 @@ WORK EXPERIENCE (reverse chronological):
   Spearheaded, Deployed, Designed, Reduced, Increased, Streamlined, Led, Built.
   NEVER: helped, assisted, worked on, involved in, responsible for.
 
+  ⚠️ ZERO EXPERIENCE / FRESHER RULE — CRITICAL:
+  If the candidate has NO work experience (no jobs, no internships):
+  • DO NOT write a "Work Experience" section at all — omit it entirely.
+  • DO NOT write "0 years of experience", "No experience", "N/A", or any placeholder.
+  • Instead, elevate the PROJECTS section — give it prominence immediately after Core Skills.
+  • In the Professional Summary, use honest framing: "Aspiring [Role]" or "Recent graduate
+    with hands-on project experience in [domain]" — never imply professional tenure.
+  If the candidate has only internship(s) but NO full-time roles:
+  • Label the section "Internship Experience" instead of "Work Experience".
+  • Present internships with the same bullet format (3–5 achievement bullets each).
+  • DO NOT write "0 years of full-time experience" anywhere.
+
 PROJECTS: Name | Tech Stack | Duration
   [1-sentence purpose]
   • [Achievement bullet with action verb and metric]
@@ -4048,6 +4060,8 @@ FIELD RULES:
 - "soft_skills" = professional competency phrases. Must NOT duplicate items in "skills".
 - "contact.*" = extract exactly as written. Use "" not null for missing fields.
 - "summary" = 2–3 sentences, max 80 words, no pronouns. Must be the COMPLETE summary — do NOT truncate mid-sentence. MUST reflect actual experience level: freshers get "Aspiring/Entry-level", never "experienced professional" or fabricated years of experience.
+- "experience" = if candidate has NO work experience AND no internships, set to [] (empty array). Never populate with placeholder roles.
+  If only internships exist, include them with role/company/duration/bullets — DO NOT write "0 years" in any field.
 - "experience[].description" = 1-sentence role scope, unique from bullets.
 - "experience[].bullets" = 3–5 bullets each. Strong verb + task + tech + impact.
 - "projects[].bullets" = must NOT restate experience bullets.
@@ -4252,12 +4266,35 @@ def extract_resume_json(llm_response: str) -> dict:
             if not isinstance(ct.get(field), str) or ct[field] is None:
                 ct[field] = ""
         # Backfill missing experience fields
+        _ZERO_EXP_PHRASES = re.compile(
+            r'\b0\s*years?\s*(of\s*)?(experience|exp)?\b'
+            r'|\bno\s+(work\s+)?experience\b'
+            r'|\bN/?A\b'
+            r'|\bnone\b',
+            re.IGNORECASE,
+        )
         for exp in data.get("experience", []):
             for f in ["role", "company", "duration", "description"]:
                 if f not in exp:
                     exp[f] = ""
+                # Scrub "0 years of experience" / "N/A" / "No experience" from any field
+                if isinstance(exp[f], str) and _ZERO_EXP_PHRASES.search(exp[f]):
+                    exp[f] = ""
             if "bullets" not in exp:
                 exp["bullets"] = []
+            # Scrub zero-exp phrases from bullets too
+            exp["bullets"] = [
+                b for b in exp["bullets"]
+                if isinstance(b, str) and b.strip()
+                and not _ZERO_EXP_PHRASES.search(b)
+            ]
+        # Drop experience entries that became entirely empty after scrubbing
+        data["experience"] = [
+            e for e in data.get("experience", [])
+            if (e.get("role") and e["role"] not in ("", "[Not Provided]"))
+            or (e.get("company") and e["company"] not in ("", "[Not Provided]"))
+            or e.get("bullets")
+        ]
         # Backfill missing project fields
         for proj in data.get("projects", []):
             for f in ["name", "duration", "tech_stack", "url", "description"]:
@@ -6084,7 +6121,7 @@ Return ONLY one domain from this list, nothing else:
     similarity_score = get_domain_similarity(resume_domain, job_domain)
 
     # Grammar defaults — overwritten by values parsed from the ATS prompt response below
-    grammar_score       = max(0, min(lang_weight, lang_weight - 2))
+    grammar_score       = 0          # stays 0 if LLM section fails to parse — no phantom score
     grammar_feedback    = "Language quality appears adequate for professional communication."
     grammar_suggestions = []
 
@@ -6511,11 +6548,18 @@ SCORING SCALE for language ({lang_weight} pts max):
     if grammar_suggestions:
         suggestions_html = "<ul>" + "".join([f"<li>{s}</li>" for s in grammar_suggestions]) + "</ul>"
 
-    updated_lang_analysis = f"""
-{lang_analysis}
-<br><b>LLM Feedback Summary:</b> {grammar_feedback}
-<br><b>Improvement Suggestions:</b> {suggestions_html}
-"""
+    # Convert LLM markdown to HTML so asterisks don't render literally
+    # (lang_analysis is raw markdown; the appended content is already HTML)
+    _lang_html = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', lang_analysis)   # **bold**
+    _lang_html = re.sub(r'\*(.+?)\*',     r'<i>\1</i>', _lang_html)       # *italic*
+    _lang_html = re.sub(r'^- ',           '• ',          _lang_html, flags=re.MULTILINE)  # bullet dash
+    _lang_html = _lang_html.replace('\n', '<br>')
+
+    updated_lang_analysis = (
+        f"{_lang_html}"
+        f"<br><b>LLM Feedback Summary:</b> {grammar_feedback}"
+        f"<br><b>Improvement Suggestions:</b> {suggestions_html}"
+    )
 
     # Enhanced final thoughts with domain analysis and industry benchmarks
     final_thoughts += f"""
