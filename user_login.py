@@ -7,20 +7,24 @@ import pytz
 import re
 import os
 import random
+import threading
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import dns.resolver
 
 
-# ── Cached PostgreSQL connection (shares the same singleton as db_manager) ───
-@st.cache_resource
-def _get_user_pg_connection():
-    """
-    Dedicated cached connection for user_login operations.
-    @st.cache_resource means it is created once per Streamlit worker process
-    and reused on every rerun — no reconnection on every click.
-    """
+# ── Connection management (isolated — never touches other modules' connections) ─
+# FIX: replaced st.cache_resource singleton + .clear() with a module-level holder.
+# st.cache_resource.clear() nukes ALL cached resources app-wide, which killed
+# llm_manager and db_manager connections whenever a login DB hiccup occurred.
+
+_user_conn_holder: dict = {"conn": None}
+_user_reconnect_lock = threading.Lock()
+
+
+def _make_user_connection():
+    """Open a fresh psycopg2 connection for user_login operations."""
     conn = psycopg2.connect(
         host=st.secrets["SUPABASE_HOST"],
         dbname=st.secrets["SUPABASE_DB"],
@@ -38,14 +42,37 @@ def _get_user_pg_connection():
 
 
 def _conn():
-    """Return the cached connection, reconnecting if the socket was dropped."""
-    conn = _get_user_pg_connection()
-    try:
-        conn.isolation_level  # lightweight liveness check
-    except Exception:
-        st.cache_resource.clear()
-        conn = _get_user_pg_connection()
-    return conn
+    """
+    Return a live psycopg2 connection.
+
+    FIX: Liveness check is a real SELECT 1 round-trip — the old code read
+         conn.isolation_level which is a pure Python attribute and never
+         touches the socket, so stale connections passed silently.
+    FIX: Reconnect only replaces THIS module's connection; does NOT call
+         st.cache_resource.clear() which would destroy all other connections.
+    """
+    with _user_reconnect_lock:
+        conn = _user_conn_holder.get("conn")
+        need_reconnect = False
+
+        if conn is None:
+            need_reconnect = True
+        else:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                conn.rollback()
+            except Exception:
+                need_reconnect = True
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        if need_reconnect:
+            _user_conn_holder["conn"] = _make_user_connection()
+
+        return _user_conn_holder["conn"]
 
 
 def _execute(sql: str, params=None, fetch: str = "none"):
@@ -63,10 +90,13 @@ def _execute(sql: str, params=None, fetch: str = "none"):
                 result = cur.fetchone()
             elif fetch == "all":
                 result = cur.fetchall()
-            conn.commit()
-            return result
+        conn.commit()
+        return result
     except Exception:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         raise
 
 
@@ -136,14 +166,26 @@ def create_user_table():
         action    TEXT NOT NULL,
         timestamp TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS feature_usage (
+        id       SERIAL PRIMARY KEY,
+        username TEXT NOT NULL,
+        feature  TEXT NOT NULL,
+        used_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_feature_usage_lookup
+        ON feature_usage (username, feature, used_at);
     """
+    conn = _conn()
     try:
-        conn = _conn()
         with conn.cursor() as cur:
             cur.execute(ddl)
         conn.commit()
     except Exception as e:
-        _conn().rollback()
+        # FIX: rollback on the SAME connection object, not a fresh _conn() call
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         st.error(f"Error creating tables: {e}")
 
 
@@ -253,7 +295,7 @@ def complete_registration(entered_otp):
 
     pending = st.session_state.pending_registration
     stored_otp = pending['otp']
-    timestamp = pending['timestamp']
+    timestamp  = pending['timestamp']
 
     time_elapsed = (get_ist_time() - timestamp).total_seconds()
     if time_elapsed > 180:
@@ -262,9 +304,9 @@ def complete_registration(entered_otp):
     if entered_otp != stored_otp:
         return False, "❌ Invalid OTP. Please try again."
 
-    username = pending['username']
-    password = pending['password']
-    email = pending['email']
+    username        = pending['username']
+    password        = pending['password']
+    email           = pending['email']
     hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
     try:
@@ -296,11 +338,11 @@ def verify_user(username_or_email, password):
     row = _execute(sql, (username_or_email,), fetch="one")
     if row:
         actual_username = row["username"]
-        stored_hashed = row["password"]
-        stored_key = row["groq_api_key"]
+        stored_hashed   = row["password"]
+        stored_key      = row["groq_api_key"]
 
         if bcrypt.checkpw(password.encode('utf-8'), stored_hashed.encode('utf-8')):
-            st.session_state.username = actual_username
+            st.session_state.username      = actual_username
             st.session_state.user_groq_key = stored_key or ""
             return True, stored_key
     return False, None
@@ -376,8 +418,12 @@ def update_password_by_email(email, new_password):
         return False
 
     hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    # FIX: acquire conn once and reuse it for both execute and rollback.
+    # Old code called _conn() again in the except block which could return a
+    # brand-new connection and rollback nothing, leaving the original transaction
+    # in a broken state (InFailedSqlTransaction on all subsequent calls).
+    conn = _conn()
     try:
-        conn = _conn()
         with conn.cursor() as cur:
             cur.execute(
                 "UPDATE users SET password = %s WHERE email = %s",
@@ -387,7 +433,10 @@ def update_password_by_email(email, new_password):
         conn.commit()
         return updated > 0
     except Exception as e:
-        _conn().rollback()
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         st.error(f"Database error: {e}")
         return False
 
@@ -402,25 +451,31 @@ USAGE_LIMITS = {
 
 def get_usage_count_last_hour(username: str, feature: str) -> int:
     """Return how many times username used feature in the last 60 minutes."""
-    row = _execute(
-        """
-        SELECT COUNT(*) AS cnt FROM feature_usage
-        WHERE username = %s
-          AND feature  = %s
-          AND used_at  > NOW() - INTERVAL '1 hour'
-        """,
-        (username, feature),
-        fetch="one",
-    )
-    return row["cnt"] if row else 0
+    try:
+        row = _execute(
+            """
+            SELECT COUNT(*) AS cnt FROM feature_usage
+            WHERE username = %s
+              AND feature  = %s
+              AND used_at  > NOW() - INTERVAL '1 hour'
+            """,
+            (username, feature),
+            fetch="one",
+        )
+        return row["cnt"] if row else 0
+    except Exception:
+        return 0  # fail open — don't block users due to a DB hiccup
 
 
 def record_feature_usage(username: str, feature: str):
     """Log one usage event. Call AFTER the feature successfully runs."""
-    _execute(
-        "INSERT INTO feature_usage (username, feature) VALUES (%s, %s)",
-        (username, feature),
-    )
+    try:
+        _execute(
+            "INSERT INTO feature_usage (username, feature) VALUES (%s, %s)",
+            (username, feature),
+        )
+    except Exception:
+        pass  # non-fatal
 
 
 def check_and_gate_feature(username: str, feature: str):
