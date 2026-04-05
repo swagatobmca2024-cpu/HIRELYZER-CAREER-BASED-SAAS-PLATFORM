@@ -13944,8 +13944,10 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
     if job_type in job_type_map:
         linkedin_url += f"&f_JT={job_type_map[job_type]}"
 
-    # Determine experience values
-    # Only use foundit_experience if it is a non-empty string (user actually typed a value)
+    # Naukri always uses the dropdown (experience_exact_map → year numbers)
+    naukri_experience = experience_exact_map.get(experience_level, "")
+
+    # FoundIt uses its own field if filled, else falls back to dropdown
     foundit_exp_clean = str(foundit_experience).strip() if foundit_experience is not None else ""
     if foundit_exp_clean:
         experience_range = f"{foundit_exp_clean}~{foundit_exp_clean}"
@@ -13954,13 +13956,13 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
         experience_range = experience_range_map.get(experience_level, "")
         experience_exact = experience_exact_map.get(experience_level, "")
 
-    # Naukri URL – no forced "and-india"
+    # Naukri URL – uses its own dedicated experience value from dropdown
     naukri_url = (
         f"https://www.naukri.com/{role_path_naukri}-jobs-in-{city_naukri}"
         f"?k={role_encoded}&l={city_query_naukri}"
     )
-    if experience_exact:
-        naukri_url += f"&experience={experience_exact}"
+    if naukri_experience:
+        naukri_url += f"&experience={naukri_experience}"
     naukri_url += "&nignbevent_src=jobsearchDeskGNB"
 
     # FoundIt URL
