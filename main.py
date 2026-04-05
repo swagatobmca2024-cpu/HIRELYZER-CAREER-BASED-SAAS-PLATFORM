@@ -14285,7 +14285,7 @@ def _job_search_interactive():
                         })
                     save_job_search(st.session_state.username, job_role, location, formatted_results)
 
-                st.markdown("## External Job Search Results")
+                st.markdown("""<div style="display:flex; align-items:center; gap:10px; margin:18px 0 14px;"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#gext)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gext" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#818cf8"/></linearGradient></defs><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span style="font-size:1.35rem; font-weight:800; letter-spacing:-0.025em; background:linear-gradient(135deg,#38bdf8,#818cf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; font-family:var(--t3-font);">External Job Search Results</span></div>""", unsafe_allow_html=True)
 
                 for job in results:
                     platform = job["title"].split(":")[0].lower()
@@ -14437,7 +14437,7 @@ def _job_search_interactive():
                     formatted_results
                 )
 
-            st.markdown("## RapidAPI Job Results")
+            st.markdown("""<div style="display:flex; align-items:center; gap:10px; margin:18px 0 14px;"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#grap)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="grap" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#38bdf8"/></linearGradient></defs><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg><span style="font-size:1.35rem; font-weight:800; letter-spacing:-0.025em; background:linear-gradient(135deg,#34d399,#38bdf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; font-family:var(--t3-font);">RapidAPI Job Results</span></div>""", unsafe_allow_html=True)
 
 
             if results:
@@ -14723,7 +14723,7 @@ def _job_search_interactive():
 
                     with delete_col:
                         # Delete button
-                        if st.button("✕", key=f"delete_{search['id']}", help="Delete this search"):
+                        if st.button("🗑", key=f"delete_{search['id']}", help="Delete this search"):
                             delete_saved_job_search(search['id'])
                             st.rerun(scope="fragment")
             else:
@@ -14792,14 +14792,19 @@ def _analytics_dashboard():
 
     _scope_col, _refresh_col = st.columns([5, 1])
     with _scope_col:
+        st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6l5 5 5-5"/><path d="M6 11V3"/><path d="M23 18l-5-5-5 5"/><path d="M18 13v8"/></svg>
+            Analytics Scope</label>""", unsafe_allow_html=True)
         analytics_scope = st.radio(
             "Analytics Scope",
             ["My Analytics", "Global Analytics"],
             horizontal=True,
-            key="analytics_scope_toggle"
+            key="analytics_scope_toggle",
+            label_visibility="collapsed"
         )
     with _refresh_col:
-        if st.button("Refresh", key="analytics_refresh_btn", help="Force-fetch latest data"):
+        st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:transparent;display:block;margin-bottom:4px;">.</label>""", unsafe_allow_html=True)
+        if st.button("↺ Refresh", key="analytics_refresh_btn", help="Force-fetch latest data"):
             fetch_analytics_data.clear()
 
     is_my_analytics = analytics_scope == "My Analytics"
@@ -15177,7 +15182,7 @@ def _analytics_dashboard():
                     fig_hour.add_annotation(
                         x=peak_label,
                         y=hour_dist['Searches'].max(),
-                        text=f"Peak: {peak_hour:02d}:00 IST",
+                        text=f"⚡ Peak: {peak_hour:02d}:00 IST",
                         showarrow=True, arrowhead=2, arrowcolor='#f87171',
                         font=dict(color='#f87171', size=12, family='Inter'),
                         bgcolor='rgba(248,113,113,0.15)',
@@ -15207,7 +15212,7 @@ def _analytics_dashboard():
                     fig_hour.add_annotation(
                         y=peak_label,
                         x=hour_dist['Searches'].max(),
-                        text=f"Peak: {peak_hour:02d}:00 IST",
+                        text=f"⚡ Peak: {peak_hour:02d}:00 IST",
                         showarrow=True, arrowhead=2, arrowcolor='#f87171',
                         font=dict(color='#f87171', size=12, family='Inter'),
                         bgcolor='rgba(248,113,113,0.15)',
@@ -15693,6 +15698,49 @@ def _inject_tab3_css():
         .t3-page-title { font-size: 1.5rem !important; }
         .company-header { font-size: 0.95rem; }
         .title-header { font-size: 1.1rem !important; }
+    }
+
+    /* ══════════════════════════════════
+       FORM SUBMIT BUTTON SVG ICONS
+       Target Streamlit form submit buttons
+       and inject icons via ::before
+       ══════════════════════════════════ */
+
+    /* Base style for all form submit buttons in tab3 */
+    [data-testid="stForm"] button[kind="primaryFormSubmit"],
+    [data-testid="stForm"] button[kind="secondaryFormSubmit"] {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 8px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.02em !important;
+    }
+
+    /* Search Jobs / Search Live Jobs button — magnifying glass icon */
+    [data-testid="stForm"] button[kind="primaryFormSubmit"]::before {
+        content: '';
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-size: contain;
+        background-position: center;
+    }
+
+    /* Clear Form button — broom/eraser icon */
+    [data-testid="stForm"] button[kind="secondaryFormSubmit"]::before {
+        content: '';
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.75)' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 20H7L3 16l10-10 7 7-2.5 2.5'/%3E%3Cpath d='M6.0 17.0 L13 10'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-size: contain;
+        background-position: center;
     }
     </style>
     """, unsafe_allow_html=True)
