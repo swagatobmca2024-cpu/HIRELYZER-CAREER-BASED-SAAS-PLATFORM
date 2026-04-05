@@ -15725,6 +15725,12 @@ def _inject_tab3_css():
         position: relative !important;
     }
 
+    /* Hide Streamlit's built-in button SVG icon (the ⊗ shown on both buttons) */
+    [data-testid="stForm"] button[kind="primaryFormSubmit"] svg,
+    [data-testid="stForm"] button[kind="secondaryFormSubmit"] svg {
+        display: none !important;
+    }
+
     /* Both buttons get a ::before icon placeholder */
     [data-testid="stForm"] button[kind="primaryFormSubmit"]::before,
     [data-testid="stForm"] button[kind="secondaryFormSubmit"]::before {
@@ -15743,9 +15749,9 @@ def _inject_tab3_css():
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
     }
 
-    /* SECONDARY (second col) = Clear — X circle icon */
+    /* SECONDARY (second col) = Clear — eraser/trash icon */
     [data-testid="stForm"] button[kind="secondaryFormSubmit"]::before {
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255%2C255%2C255%2C0.8)' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='15' y1='9' x2='9' y2='15'/%3E%3Cline x1='9' y1='9' x2='15' y2='15'/%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255%2C255%2C255%2C0.85)' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 6 5 6 21 6'/%3E%3Cpath d='M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'/%3E%3Cpath d='M10 11v6M14 11v6'/%3E%3Cpath d='M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2'/%3E%3C/svg%3E");
     }
     </style>
     """, unsafe_allow_html=True)
