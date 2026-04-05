@@ -13944,10 +13944,8 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
     if job_type in job_type_map:
         linkedin_url += f"&f_JT={job_type_map[job_type]}"
 
-    # Naukri always uses the dropdown (experience_exact_map → year numbers)
-    naukri_experience = experience_exact_map.get(experience_level, "")
-
-    # FoundIt uses its own field if filled, else falls back to dropdown
+    # Naukri & FoundIt share the same experience value:
+    # if the years field is filled → use that; else fall back to dropdown
     foundit_exp_clean = str(foundit_experience).strip() if foundit_experience is not None else ""
     if foundit_exp_clean:
         experience_range = f"{foundit_exp_clean}~{foundit_exp_clean}"
@@ -13956,13 +13954,13 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
         experience_range = experience_range_map.get(experience_level, "")
         experience_exact = experience_exact_map.get(experience_level, "")
 
-    # Naukri URL – uses its own dedicated experience value from dropdown
+    # Naukri URL – shares experience_exact with FoundIt
     naukri_url = (
         f"https://www.naukri.com/{role_path_naukri}-jobs-in-{city_naukri}"
         f"?k={role_encoded}&l={city_query_naukri}"
     )
-    if naukri_experience:
-        naukri_url += f"&experience={naukri_experience}"
+    if experience_exact:
+        naukri_url += f"&experience={experience_exact}"
     naukri_url += "&nignbevent_src=jobsearchDeskGNB"
 
     # FoundIt URL
@@ -14235,9 +14233,9 @@ def _job_search_interactive():
                         label_visibility="collapsed"
                     )
 
-                st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> FOUNDIT EXPERIENCE (YEARS)</label>""", unsafe_allow_html=True)
+                st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> NAUKRI & FOUNDIT EXPERIENCE (YEARS)</label>""", unsafe_allow_html=True)
                 foundit_experience = st.text_input(
-                    "FoundIt Experience (Years)",
+                    "Naukri & FoundIt Experience (Years)",
                     value=st.session_state.ext_foundit_val,
                     placeholder="e.g., 1",
                     key=f"external_foundit_{_ext_c}",
