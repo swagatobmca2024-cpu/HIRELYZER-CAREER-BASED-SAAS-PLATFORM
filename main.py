@@ -8609,21 +8609,7 @@ with tab1:
     elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
 
-
-JOB_TITLES = [
-    "Software Engineering",
-    "Full Stack Development",
-    "Frontend Development",
-    "Backend Development",
-    "Mobile Development",
-    "Game Development",
-    "Data Science",
-    "AI / Machine Learning",
-    "Data Engineering",
-    "Business Intelligence",
-    "Analytics Engineering",
-    "Cloud Engineering",
-    "DevOps / Infrastructure",def html_to_pdf_bytes(html_string):
+def html_to_pdf_bytes(html_string):
     styled_html = f"""
     <html>
     <head>
@@ -13311,6 +13297,20 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
+JOB_TITLES = [
+    "Software Engineering",
+    "Full Stack Development",
+    "Frontend Development",
+    "Backend Development",
+    "Mobile Development",
+    "Game Development",
+    "Data Science",
+    "AI / Machine Learning",
+    "Data Engineering",
+    "Business Intelligence",
+    "Analytics Engineering",
+    "Cloud Engineering",
+    "DevOps / Infrastructure",
     "Site Reliability Engineering",
     "System Architecture",
     "Platform Engineering",
