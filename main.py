@@ -14189,52 +14189,62 @@ def _job_search_interactive():
         _ext_type_idx  = _ext_type_list.index(st.session_state.ext_type_val) if st.session_state.ext_type_val  in _ext_type_list  else 0
         _ext_c = st.session_state["_ext_clear_count"]
 
-        with st.expander("🌐 External Job Search — LinkedIn, Naukri, FoundIt", expanded=True):
+        with st.expander("External Job Search — LinkedIn, Naukri, FoundIt", expanded=True):
             with st.form(f"external_search_form_{_ext_c}", clear_on_submit=False):
+                st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg> JOB DOMAIN</label>""", unsafe_allow_html=True)
                 job_role = st.selectbox(
-                    "💼 Job Domain",
+                    "Job Domain",
                     JOB_TITLES,
                     index=_ext_role_idx,
                     placeholder="Select Job Domain",
-                    key=f"external_role_{_ext_c}"
+                    key=f"external_role_{_ext_c}",
+                    label_visibility="collapsed"
                 )
 
+                st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 018 8c0 5.25-8 14-8 14S4 15.25 4 10a8 8 0 018-8z"/></svg> LOCATION</label>""", unsafe_allow_html=True)
                 location = st.selectbox(
-                    "📍 Location",
+                    "Location",
                     LOCATIONS,
                     index=_ext_loc_idx,
                     placeholder="Select Location",
-                    key=f"external_location_{_ext_c}"
+                    key=f"external_location_{_ext_c}",
+                    label_visibility="collapsed"
                 )
 
                 col1, col2 = st.columns(2)
                 with col1:
+                    st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> EXPERIENCE LEVEL</label>""", unsafe_allow_html=True)
                     experience_level = st.selectbox(
-                        "📈 Experience Level",
+                        "Experience Level",
                         _ext_exp_list,
                         index=_ext_exp_idx,
-                        key=f"external_exp_{_ext_c}"
+                        key=f"external_exp_{_ext_c}",
+                        label_visibility="collapsed"
                     )
                 with col2:
+                    st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> JOB TYPE</label>""", unsafe_allow_html=True)
                     job_type = st.selectbox(
-                        "📋 Job Type",
+                        "Job Type",
                         _ext_type_list,
                         index=_ext_type_idx,
-                        key=f"external_type_{_ext_c}"
+                        key=f"external_type_{_ext_c}",
+                        label_visibility="collapsed"
                     )
 
+                st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> FOUNDIT EXPERIENCE (YEARS)</label>""", unsafe_allow_html=True)
                 foundit_experience = st.text_input(
-                    "🔢 FoundIt Experience (Years)",
+                    "FoundIt Experience (Years)",
                     value=st.session_state.ext_foundit_val,
                     placeholder="e.g., 1",
-                    key=f"external_foundit_{_ext_c}"
+                    key=f"external_foundit_{_ext_c}",
+                    label_visibility="collapsed"
                 )
 
-                col_btn1, col_btn2 = st.columns(2)
+                col_btn1, col_spacer, col_btn2 = st.columns([3, 0.4, 3])
                 with col_btn1:
-                    search_clicked = st.form_submit_button("🔍 Search Jobs")
+                    search_clicked = st.form_submit_button("Search Jobs", use_container_width=True)
                 with col_btn2:
-                    clear_clicked = st.form_submit_button("🧹 Clear Form")
+                    clear_clicked = st.form_submit_button("Clear Form", use_container_width=True)
 
         # Handle clear — reset shadow keys + bump clear counter to re-render widgets fresh
         if clear_clicked:
@@ -14255,9 +14265,9 @@ def _job_search_interactive():
             st.session_state.ext_foundit_val = foundit_experience
 
         if search_clicked and not job_role:
-            st.warning("⚠️ Please select a Job Domain to search.")
+            st.warning("Please select a Job Domain to search.")
         elif search_clicked and not location:
-            st.warning("⚠️ Please select a Location to search.")
+            st.warning("Please select a Location to search.")
 
         if search_clicked and job_role and location:
                 # Call search_jobs function for external platforms
@@ -14275,7 +14285,7 @@ def _job_search_interactive():
                         })
                     save_job_search(st.session_state.username, job_role, location, formatted_results)
 
-                st.markdown("## 🎯 External Job Search Results")
+                st.markdown("## External Job Search Results")
 
                 for job in results:
                     platform = job["title"].split(":")[0].lower()
@@ -14310,7 +14320,7 @@ def _job_search_interactive():
                     )
                     st.components.v1.html(job_card_html, height=card_height, scrolling=False)
         elif search_clicked:
-            st.warning("⚠️ Please select both a Job Domain and Location to perform the search.")
+            st.warning("Please select both a Job Domain and Location to perform the search.")
 
     else:
         # Shadow keys for RapidAPI clear
@@ -14326,52 +14336,64 @@ def _job_search_interactive():
         _rapid_c = st.session_state["_rapid_clear_count"]
 
         # RapidAPI Jobs Section — collapsible expander
-        with st.expander("⚡ RapidAPI Live Job Search", expanded=True):
+        with st.expander("RapidAPI Live Job Search", expanded=True):
             with st.form(f"rapid_search_form_{_rapid_c}", clear_on_submit=False):
+                st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg> JOB DOMAIN</label>""", unsafe_allow_html=True)
                 rapid_job_role = st.selectbox(
-                    "💼 Job Domain",
+                    "Job Domain",
                     JOB_TITLES,
                     index=_rapid_role_idx,
                     placeholder="Select Job Domain",
-                    key=f"rapid_role_{_rapid_c}"
+                    key=f"rapid_role_{_rapid_c}",
+                    label_visibility="collapsed"
                 )
 
+                st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 018 8c0 5.25-8 14-8 14S4 15.25 4 10a8 8 0 018-8z"/></svg> LOCATION</label>""", unsafe_allow_html=True)
                 rapid_location = st.selectbox(
-                    "📍 Location",
+                    "Location",
                     LOCATIONS,
                     index=_rapid_loc_idx,
                     placeholder="Select Location",
-                    key=f"rapid_location_{_rapid_c}"
+                    key=f"rapid_location_{_rapid_c}",
+                    label_visibility="collapsed"
                 )
 
                 # Number of results
-                num_results = st.slider("📊 Number of Jobs to Fetch", min_value=5, max_value=50, value=10, step=5, key="rapid_num_results")
+                st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> NUMBER OF JOBS TO FETCH</label>""", unsafe_allow_html=True)
+                num_results = st.slider("Number of Jobs to Fetch", min_value=1, max_value=5, value=3, step=1, key="rapid_num_results", label_visibility="collapsed")
 
                 # Advanced Filters
-                with st.expander("🔧 Advanced Filters"):
+                with st.expander("Advanced Filters"):
+                    st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> DATE POSTED</label>""", unsafe_allow_html=True)
                     date_posted = st.selectbox(
-                        "📅 Date Posted",
+                        "Date Posted",
                         ["all", "today", "3days", "week", "month"],
-                        key="rapid_date"
+                        key="rapid_date",
+                        label_visibility="collapsed"
                     )
+                    st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> JOB TYPE</label>""", unsafe_allow_html=True)
                     rapid_job_type = st.selectbox(
-                        "📋 Job Type",
+                        "Job Type",
                         ["", "Full-time", "Part-time", "Contract", "Internship"],
-                        key="rapid_type"
+                        key="rapid_type",
+                        label_visibility="collapsed"
                     )
-                    remote_only = st.checkbox("🏠 Remote Only", key="rapid_remote")
-                    radius = st.number_input("📏 Radius (km)", min_value=0, max_value=200, value=50, key="rapid_radius")
+                    remote_only = st.checkbox("Remote Only", key="rapid_remote")
+                    st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg> Radius (km)</label>""", unsafe_allow_html=True)
+                    radius = st.number_input("Radius (km)", min_value=0, max_value=200, value=50, key="rapid_radius", label_visibility="collapsed")
+                    st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg> Job Requirements</label>""", unsafe_allow_html=True)
                     job_requirements = st.multiselect(
-                        "📝 Job Requirements",
+                        "Job Requirements",
                         ["under_3_years_experience", "more_than_3_years_experience", "no_experience", "no_degree"],
-                        key="rapid_req"
+                        key="rapid_req",
+                        label_visibility="collapsed"
                     )
 
-                col_btn1, col_btn2 = st.columns(2)
+                col_btn1, col_spacer, col_btn2 = st.columns([3, 0.4, 3])
                 with col_btn1:
-                    rapid_search_clicked = st.form_submit_button("⚡ Search Live Jobs")
+                    rapid_search_clicked = st.form_submit_button("Search Live Jobs", use_container_width=True)
                 with col_btn2:
-                    rapid_clear_clicked = st.form_submit_button("🧹 Clear Form")
+                    rapid_clear_clicked = st.form_submit_button("Clear Form", use_container_width=True)
 
         # Handle clear — reset shadow keys + bump clear counter to re-render widgets fresh
         if rapid_clear_clicked:
@@ -14386,12 +14408,12 @@ def _job_search_interactive():
             st.session_state.rapid_loc_val  = rapid_location
 
         if rapid_search_clicked and not rapid_job_role:
-            st.warning("⚠️ Please select a Job Domain to search.")
+            st.warning("Please select a Job Domain to search.")
         elif rapid_search_clicked and not rapid_location:
-            st.warning("⚠️ Please select a Location to search.")
+            st.warning("Please select a Location to search.")
 
         if rapid_search_clicked and rapid_job_role and rapid_location:
-            with st.spinner("⚡ Fetching live jobs from RapidAPI..."):
+            with st.spinner("Fetching live jobs from RapidAPI..."):
                 results = fetch_live_jobs(
                     rapid_job_role,
                     rapid_location,
@@ -14415,7 +14437,7 @@ def _job_search_interactive():
                     formatted_results
                 )
 
-            st.markdown("## 🎯 RapidAPI Job Results")
+            st.markdown("## RapidAPI Job Results")
 
 
             if results:
@@ -14548,7 +14570,7 @@ def _job_search_interactive():
             else:
                 st.info("No jobs found. Try adjusting your search criteria.")
         elif rapid_search_clicked:
-            st.warning("⚠️ Please select both a Job Domain and Location to perform the search.")
+            st.warning("Please select both a Job Domain and Location to perform the search.")
 
     # Display saved job searches if user is logged in
     if hasattr(st.session_state, 'username') and st.session_state.username:
@@ -14567,7 +14589,7 @@ def _job_search_interactive():
 
             with col1:
                 platform_filter = st.selectbox(
-                    "🔍 Filter by Platform",
+                    "Filter by Platform",
                     platform_options,
                     key="platform_filter"
                 )
@@ -14701,7 +14723,7 @@ def _job_search_interactive():
 
                     with delete_col:
                         # Delete button
-                        if st.button("🗑", key=f"delete_{search['id']}", help="Delete this search"):
+                        if st.button("✕", key=f"delete_{search['id']}", help="Delete this search"):
                             delete_saved_job_search(search['id'])
                             st.rerun(scope="fragment")
             else:
@@ -14766,21 +14788,21 @@ def _analytics_dashboard():
     # ── Analytics Scope Toggle ────────────────────────────────────
     # Track previous scope so we can bust the cache the moment scope changes
     if "_prev_analytics_scope" not in st.session_state:
-        st.session_state["_prev_analytics_scope"] = "🙋 My Analytics"
+        st.session_state["_prev_analytics_scope"] = "My Analytics"
 
     _scope_col, _refresh_col = st.columns([5, 1])
     with _scope_col:
         analytics_scope = st.radio(
-            "📡 Analytics Scope",
-            ["🙋 My Analytics", "🌐 Global Analytics"],
+            "Analytics Scope",
+            ["My Analytics", "Global Analytics"],
             horizontal=True,
             key="analytics_scope_toggle"
         )
     with _refresh_col:
-        if st.button("🔄 Refresh", key="analytics_refresh_btn", help="Force-fetch latest data"):
+        if st.button("Refresh", key="analytics_refresh_btn", help="Force-fetch latest data"):
             fetch_analytics_data.clear()
 
-    is_my_analytics = analytics_scope == "🙋 My Analytics"
+    is_my_analytics = analytics_scope == "My Analytics"
 
     # If the user just switched scope, clear the cache so the new scope
     # fetches fresh data immediately instead of returning the cached value
@@ -14793,7 +14815,7 @@ def _analytics_dashboard():
     scope_user = current_user if is_my_analytics else None
 
     if is_my_analytics and not current_user:
-        st.warning("⚠️ Please log in to view your personal analytics.")
+        st.warning("Please log in to view your personal analytics.")
     else:
         df_analytics = fetch_analytics_data(scope_username=scope_user)
 
@@ -14801,7 +14823,7 @@ def _analytics_dashboard():
         if df_analytics.empty:
             st.markdown("""
             <div class="empty-state">
-                <div class="icon">📭</div>
+                <div class="icon"><svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.8 19.79 19.79 0 01.1 1.18 2 2 0 012.11 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></div>
                 <div class="title">No Data Yet</div>
                 <div class="sub">Perform job searches to populate your analytics dashboard.</div>
             </div>
@@ -14819,10 +14841,10 @@ def _analytics_dashboard():
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-            def _kpi_card(col, icon, label, value, sub, accent):
+            def _kpi_card(col, icon_svg, label, value, sub, accent):
                 col.markdown(f"""
                 <div class="kpi-card" style="border-color:{accent}22;">
-                    <div style='font-size:22px; margin-bottom:5px;'>{icon}</div>
+                    <div style='margin-bottom:8px; display:flex; align-items:center; justify-content:center;'>{icon_svg}</div>
                     <div style='
                         color:{accent};
                         font-size:0.68rem;
@@ -14846,15 +14868,15 @@ def _analytics_dashboard():
                 </div>
                 """, unsafe_allow_html=True)
 
-            _kpi_card(kpi1, "🔎", "Total Searches",    f"{total_searches:,}",   "all recorded",              "#00c4cc")
-            _kpi_card(kpi2, "💼", "Unique Roles",       f"{unique_roles:,}",     "distinct job titles",       "#7c4dff")
-            _kpi_card(kpi3, "📍", "Unique Locations",   f"{unique_locations:,}", "distinct cities/regions",   "#34d399")
-            _kpi_card(kpi4, "🏆", "Top Platform",       most_used_platform,      f"{top_plat_count} searches","#fbbf24")
+            _kpi_card(kpi1, '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00c4cc" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>', "Total Searches", f"{total_searches:,}", "all recorded", "#00c4cc")
+            _kpi_card(kpi2, '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#7c4dff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>', "Unique Roles", f"{unique_roles:,}", "distinct job titles", "#7c4dff")
+            _kpi_card(kpi3, '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 018 8c0 5.25-8 14-8 14S4 15.25 4 10a8 8 0 018-8z"/></svg>', "Unique Locations", f"{unique_locations:,}", "distinct cities/regions", "#34d399")
+            _kpi_card(kpi4, '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>', "Top Platform", most_used_platform, f"{top_plat_count} searches", "#fbbf24")
 
             st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
 
             # ── SECTION HEADER helper ─────────────────────────────
-            def _section_header(icon, title, subtitle, accent):
+            def _section_header(icon_svg, title, subtitle, accent):
                 st.markdown(f"""
                 <div style='
                     display:flex; align-items:center; gap:10px;
@@ -14862,7 +14884,7 @@ def _analytics_dashboard():
                     border-bottom: 1px solid rgba(255,255,255,0.06);
                     font-family:var(--t3-font);
                 '>
-                    <span style='font-size:18px;'>{icon}</span>
+                    <span style='display:flex;align-items:center;flex-shrink:0;'>{icon_svg}</span>
                     <div>
                         <div style='
                             color:{accent};
@@ -14879,7 +14901,7 @@ def _analytics_dashboard():
             col_roles, col_locs = st.columns(2)
 
             with col_roles:
-                _section_header("🎯", "Top 5 Most Searched Roles", "by search frequency", "#00c4cc")
+                _section_header('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00c4cc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>', "Top 5 Most Searched Roles", "by search frequency", "#00c4cc")
                 roles_orient = st.radio("Orientation", ["↔ Horizontal", "↕ Vertical"], index=0, horizontal=True, key="roles_orient")
                 top_roles = (
                     df_analytics['role'].value_counts().head(5)
@@ -14942,7 +14964,7 @@ def _analytics_dashboard():
                 })
 
             with col_locs:
-                _section_header("📍", "Top 5 Most Searched Locations", "by search frequency", "#7c4dff")
+                _section_header('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c4dff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 018 8c0 5.25-8 14-8 14S4 15.25 4 10a8 8 0 018-8z"/></svg>', "Top 5 Most Searched Locations", "by search frequency", "#7c4dff")
                 locs_orient = st.radio("Orientation", ["↔ Horizontal", "↕ Vertical"], index=0, horizontal=True, key="locs_orient")
                 top_locs = (
                     df_analytics['location'].value_counts().head(5)
@@ -15008,7 +15030,7 @@ def _analytics_dashboard():
             col_plat, col_trend = st.columns(2)
 
             with col_plat:
-                _section_header("🏢", "Platform Usage Distribution", "share of all searches", "#fbbf24")
+                _section_header('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>', "Platform Usage Distribution", "share of all searches", "#fbbf24")
                 plat_orient = st.radio("Orientation", ["↕ Vertical", "↔ Horizontal"], index=0, horizontal=True, key="plat_orient")
                 plat_dist = (
                     df_analytics.groupby('platform').size()
@@ -15081,7 +15103,7 @@ def _analytics_dashboard():
                 })
 
             with col_trend:
-                _section_header("📈", "Search Trend Over Time (IST)", "daily activity", "#34d399")
+                _section_header('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>', "Search Trend Over Time (IST)", "daily activity", "#34d399")
                 trend_data = (
                     df_analytics.groupby('date').size()
                     .reset_index(name='Searches')
@@ -15117,7 +15139,7 @@ def _analytics_dashboard():
                                 })
 
             # ── ROW 3: Peak Hour (IST, full width) ───────────────
-            _section_header("🕐", "Peak Search Hour — IST (0–23 Distribution)", "when you search most — converted to Indian Standard Time", "#f87171")
+            _section_header('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>', "Peak Search Hour — IST (0–23 Distribution)", "when you search most — converted to Indian Standard Time", "#f87171")
             hour_orient = st.radio("Orientation", ["↕ Vertical", "↔ Horizontal"], index=0, horizontal=True, key="hour_orient")
 
             # Build full 0-23 with IST hours
@@ -15155,7 +15177,7 @@ def _analytics_dashboard():
                     fig_hour.add_annotation(
                         x=peak_label,
                         y=hour_dist['Searches'].max(),
-                        text=f"⚡ Peak: {peak_hour:02d}:00 IST",
+                        text=f"Peak: {peak_hour:02d}:00 IST",
                         showarrow=True, arrowhead=2, arrowcolor='#f87171',
                         font=dict(color='#f87171', size=12, family='Inter'),
                         bgcolor='rgba(248,113,113,0.15)',
@@ -15185,7 +15207,7 @@ def _analytics_dashboard():
                     fig_hour.add_annotation(
                         y=peak_label,
                         x=hour_dist['Searches'].max(),
-                        text=f"⚡ Peak: {peak_hour:02d}:00 IST",
+                        text=f"Peak: {peak_hour:02d}:00 IST",
                         showarrow=True, arrowhead=2, arrowcolor='#f87171',
                         font=dict(color='#f87171', size=12, family='Inter'),
                         bgcolor='rgba(248,113,113,0.15)',
