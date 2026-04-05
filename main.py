@@ -8608,7 +8608,6 @@ with tab1:
 
     elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
-
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
     <html>
@@ -12219,259 +12218,54 @@ with tab2:
 
     # ---------------- Sidebar (ONLY in Tab 2) ----------------
     with st.sidebar:
-
-        # ── GAMIFICATION: Resume Strength ──────────────────────────────────────
-        # Compute how many of the 8 key sections are filled
-        _sections_status = {
-            "👤 Personal Info": bool(
-                st.session_state.get("name") or st.session_state.get("email") or st.session_state.get("phone")
-            ),
-            "💼 Job Title": bool(st.session_state.get("job_title", "").strip()),
-            "📝 Summary": bool(st.session_state.get("summary", "").strip()),
-            "🛠 Skills": bool(st.session_state.get("skills", "").strip()),
-            "🧱 Experience": any(
-                e.get("company") or e.get("title")
-                for e in st.session_state.get("experience_entries", [])
-            ),
-            "🎓 Education": any(
-                e.get("institution") or e.get("degree")
-                for e in st.session_state.get("education_entries", [])
-            ),
-            "🔧 Projects": any(
-                p.get("title")
-                for p in st.session_state.get("project_entries", [])
-            ),
-            "🏅 Certificates": any(
-                c.get("name")
-                for c in st.session_state.get("certificate_links", [])
-            ),
-        }
-        _filled = sum(_sections_status.values())
-        _total = len(_sections_status)
-        _pct = int((_filled / _total) * 100)
-
-        # Pick color + label based on score
-        if _pct < 30:
-            _bar_color = "#ef4444"
-            _strength_label = "Getting Started 🚀"
-            _strength_emoji = "🔴"
-        elif _pct < 60:
-            _bar_color = "#f59e0b"
-            _strength_label = "Looking Good 💪"
-            _strength_emoji = "🟡"
-        elif _pct < 90:
-            _bar_color = "#10b981"
-            _strength_label = "Almost There ⚡"
-            _strength_emoji = "🟢"
-        else:
-            _bar_color = "#6366f1"
-            _strength_label = "Resume Pro! 🏆"
-            _strength_emoji = "🟣"
-
-        # Build pill badges for each section
-        _pill_html = ""
-        for _sec_name, _done in _sections_status.items():
-            _bg = "rgba(99,102,241,0.25)" if _done else "rgba(255,255,255,0.06)"
-            _border = "#6366f1" if _done else "rgba(255,255,255,0.15)"
-            _color = "#c7d2fe" if _done else "rgba(255,255,255,0.35)"
-            _check = "✓ " if _done else "• "
-            _pill_html += (
-                f"<span style='display:inline-block;background:{_bg};color:{_color};"
-                f"border:1px solid {_border};border-radius:20px;padding:3px 10px;"
-                f"font-size:11px;font-weight:600;margin:3px 3px 3px 0;'>"
-                f"{_check}{_sec_name}</span>"
-            )
-
-        st.markdown(f"""
-        <style>
-        /* Sidebar overall dark theme */
-        section[data-testid="stSidebar"] {{
-            background: linear-gradient(160deg, #0f172a 0%, #1e293b 100%) !important;
-        }}
-        /* Gamification card */
-        .strength-card {{
-            background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(16,185,129,0.08));
-            border: 1px solid rgba(99,102,241,0.3);
-            border-radius: 16px;
-            padding: 16px;
-            margin-bottom: 18px;
-        }}
-        .strength-title {{
-            font-size: 11px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: rgba(255,255,255,0.5);
-            font-weight: 700;
-            margin-bottom: 4px;
-        }}
-        .strength-pct {{
-            font-size: 32px;
-            font-weight: 900;
-            color: {_bar_color};
-            line-height: 1;
-        }}
-        .strength-label {{
-            font-size: 12px;
-            color: rgba(255,255,255,0.6);
-            margin-top: 2px;
-            margin-bottom: 10px;
-        }}
-        .strength-bar-bg {{
-            background: rgba(255,255,255,0.08);
-            border-radius: 99px;
-            height: 8px;
-            overflow: hidden;
-            margin-bottom: 12px;
-        }}
-        .strength-bar-fill {{
-            height: 8px;
-            border-radius: 99px;
-            background: linear-gradient(90deg, {_bar_color}, {_bar_color}cc);
-            width: {_pct}%;
-            transition: width 0.6s ease;
-        }}
-        /* Section management cards */
-        .section-card {{
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.09);
-            border-radius: 12px;
-            padding: 12px 14px;
-            margin-bottom: 10px;
-        }}
-        .section-card-header {{
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 8px;
-        }}
-        .section-card-title {{
-            font-size: 13px;
-            font-weight: 700;
-            color: rgba(255,255,255,0.85);
-        }}
-        .section-count-badge {{
-            background: rgba(99,102,241,0.3);
-            color: #a5b4fc;
-            border-radius: 99px;
-            padding: 1px 9px;
-            font-size: 11px;
-            font-weight: 700;
-            border: 1px solid rgba(99,102,241,0.4);
-        }}
-        /* Sidebar section header text */
-        .sidebar-section-title {{
-            font-size: 10px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            color: rgba(255,255,255,0.35);
-            font-weight: 800;
-            margin: 18px 0 10px 0;
-        }}
-        </style>
-
-        <div class="strength-card">
-            <div class="strength-title">📊 Resume Strength</div>
-            <div class="strength-pct">{_pct}%</div>
-            <div class="strength-label">{_strength_emoji} {_strength_label} &nbsp;·&nbsp; {_filled} of {_total} sections complete</div>
-            <div class="strength-bar-bg">
-                <div class="strength-bar-fill"></div>
-            </div>
-            <div>{_pill_html}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # ── MANAGE SECTIONS ────────────────────────────────────────────────────
-        st.markdown('<div class="sidebar-section-title">⚙️ Manage Sections</div>', unsafe_allow_html=True)
+        st.markdown("### ✨ Manage Resume Sections")
 
         if "edit_mode" not in st.session_state:
             st.session_state.edit_mode = "Add"
 
-        # Styled toggle for Add / Delete mode
-        _mode_col1, _mode_col2 = st.columns(2)
-        with _mode_col1:
-            if st.button("➕  Add", key="mode_add_btn",
-                         use_container_width=True,
-                         type="primary" if st.session_state.edit_mode == "Add" else "secondary"):
-                st.session_state.edit_mode = "Add"
-        with _mode_col2:
-            if st.button("🗑  Remove", key="mode_del_btn",
-                         use_container_width=True,
-                         type="primary" if st.session_state.edit_mode == "Delete" else "secondary"):
-                st.session_state.edit_mode = "Delete"
+        mode = st.selectbox("Mode", ["Add", "Delete"], index=0, key="mode_dropdown")
+        st.session_state.edit_mode = mode
+        st.markdown("---")
 
-        mode = st.session_state.edit_mode
-        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+        # 💼 Experience
+        with st.expander("💼 Experience"):
+            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Experience", key="exp_btn"):
+                if mode == "Add":
+                    st.session_state.experience_entries.append(
+                        {"title": "", "company": "", "duration": "", "description": ""}
+                    )
+                elif mode == "Delete" and len(st.session_state.experience_entries) > 1:
+                    st.session_state.experience_entries.pop()
 
-        # Helper: render a section management card
-        def _section_card(icon, label, count, add_key, del_key, add_fn, del_fn, min_count=1):
-            """Render one manage-section card with inline Add / Remove buttons."""
-            # Completeness indicator
-            _is_done = _sections_status.get(f"{icon} {label}", False)
-            _dot = "🟢" if _is_done else "⚪"
-            st.markdown(f"""
-            <div class="section-card">
-                <div class="section-card-header">
-                    <span class="section-card-title">{icon} {label} {_dot}</span>
-                    <span class="section-count-badge">{count}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            _c1, _c2 = st.columns(2)
-            with _c1:
-                if st.button("➕ Add", key=add_key, use_container_width=True):
-                    add_fn()
-            with _c2:
-                _disabled = count <= min_count
-                if st.button("🗑 Remove", key=del_key, use_container_width=True, disabled=_disabled):
-                    del_fn()
+        # 🎓 Education
+        with st.expander("🎓 Education"):
+            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Education", key="edu_btn"):
+                if mode == "Add":
+                    st.session_state.education_entries.append(
+                        {"degree": "", "institution": "", "year": "", "details": ""}
+                    )
+                elif mode == "Delete" and len(st.session_state.education_entries) > 1:
+                    st.session_state.education_entries.pop()
 
-        # 💼 Experience card
-        _section_card(
-            icon="💼", label="Experience",
-            count=len(st.session_state.experience_entries),
-            add_key="exp_add_btn", del_key="exp_del_btn",
-            add_fn=lambda: st.session_state.experience_entries.append(
-                {"title": "", "company": "", "duration": "", "description": ""}
-            ),
-            del_fn=lambda: st.session_state.experience_entries.pop()
-                if len(st.session_state.experience_entries) > 1 else None,
-        )
+        # 🛠 Projects
+        with st.expander("🛠 Projects"):
+            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Project", key="proj_btn"):
+                if mode == "Add":
+                    st.session_state.project_entries.append(
+                        {"title": "", "tech": "", "duration": "", "description": ""}
+                    )
+                elif mode == "Delete" and len(st.session_state.project_entries) > 1:
+                    st.session_state.project_entries.pop()
 
-        # 🎓 Education card
-        _section_card(
-            icon="🎓", label="Education",
-            count=len(st.session_state.education_entries),
-            add_key="edu_add_btn", del_key="edu_del_btn",
-            add_fn=lambda: st.session_state.education_entries.append(
-                {"degree": "", "institution": "", "year": "", "details": ""}
-            ),
-            del_fn=lambda: st.session_state.education_entries.pop()
-                if len(st.session_state.education_entries) > 1 else None,
-        )
-
-        # 🛠 Projects card
-        _section_card(
-            icon="🔧", label="Projects",
-            count=len(st.session_state.project_entries),
-            add_key="proj_add_btn", del_key="proj_del_btn",
-            add_fn=lambda: st.session_state.project_entries.append(
-                {"title": "", "tech": "", "duration": "", "description": ""}
-            ),
-            del_fn=lambda: st.session_state.project_entries.pop()
-                if len(st.session_state.project_entries) > 1 else None,
-        )
-
-        # 🏅 Certificates card
-        _section_card(
-            icon="🏅", label="Certificates",
-            count=len(st.session_state.certificate_links),
-            add_key="cert_add_btn", del_key="cert_del_btn",
-            add_fn=lambda: st.session_state.certificate_links.append(
-                {"name": "", "link": "", "duration": "", "description": ""}
-            ),
-            del_fn=lambda: st.session_state.certificate_links.pop()
-                if len(st.session_state.certificate_links) > 1 else None,
-        )
+        # 📜 Certificates
+        with st.expander("📜 Certificates"):
+            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Certificate", key="cert_btn"):
+                if mode == "Add":
+                    st.session_state.certificate_links.append(
+                        {"name": "", "link": "", "duration": "", "description": ""}
+                    )
+                elif mode == "Delete" and len(st.session_state.certificate_links) > 1:
+                    st.session_state.certificate_links.pop()
 
     # ---------------- Resume Form ----------------
     fk = st.session_state["form_key_counter"]
@@ -13297,6 +13091,7 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
+
 JOB_TITLES = [
     "Software Engineering",
     "Full Stack Development",
