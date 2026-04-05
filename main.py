@@ -12216,147 +12216,461 @@ with tab2:
     st.session_state.setdefault("certificate_links", [{"name": "", "link": "", "duration": "", "description": ""}])
     st.session_state.setdefault("form_key_counter", 0)
 
-    # ---------------- Sidebar (ONLY in Tab 2) ----------------
+    # ---------------- Sidebar (Tab 2 only) ----------------
     with st.sidebar:
-        st.markdown("### ✨ Manage Resume Sections")
 
-        if "edit_mode" not in st.session_state:
-            st.session_state.edit_mode = "Add"
+        # ── Section label ──────────────────────────────────────
+        st.markdown(
+            "<p style='font-size:0.72rem;font-weight:700;letter-spacing:0.10em;"
+            "text-transform:uppercase;color:#4a5568;"
+            "border-top:1px solid rgba(255,255,255,0.06);"
+            "padding-top:14px;margin-top:4px;margin-bottom:12px;"
+            "font-family:-apple-system,BlinkMacSystemFont,sans-serif;'>"
+            "Resume Builder</p>",
+            unsafe_allow_html=True,
+        )
 
-        mode = st.selectbox("Mode", ["Add", "Delete"], index=0, key="mode_dropdown")
-        st.session_state.edit_mode = mode
-        st.markdown("---")
+        # ── Completeness tracker ───────────────────────────────
+        _ss = st.session_state
+        _sections_done = {
+            "Personal info":  bool(_ss.get("name","").strip() and _ss.get("email","").strip()),
+            "Job title":      bool(_ss.get("job_title","").strip()),
+            "Summary":        len(_ss.get("summary","").strip()) >= 40,
+            "Skills":         len(_ss.get("skills","").strip()) >= 5,
+            "Experience":     any(
+                e.get("company","").strip() and e.get("description","").strip()
+                for e in _ss.get("experience_entries", [])
+            ),
+            "Education":      any(
+                e.get("institution","").strip()
+                for e in _ss.get("education_entries", [])
+            ),
+            "Projects":       any(
+                e.get("title","").strip()
+                for e in _ss.get("project_entries", [])
+            ),
+            "Certificates":   any(
+                e.get("name","").strip()
+                for e in _ss.get("certificate_links", [])
+            ),
+        }
+        _weights = {
+            "Personal info": 15, "Job title": 10, "Summary": 20,
+            "Skills": 15, "Experience": 20, "Education": 10,
+            "Projects": 7, "Certificates": 3,
+        }
+        _pct = sum(_weights[k] for k, v in _sections_done.items() if v)
+        _done_count = sum(1 for v in _sections_done.values() if v)
 
-        # 💼 Experience
-        with st.expander("💼 Experience"):
-            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Experience", key="exp_btn"):
-                if mode == "Add":
-                    st.session_state.experience_entries.append(
-                        {"title": "", "company": "", "duration": "", "description": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.experience_entries) > 1:
-                    st.session_state.experience_entries.pop()
+        _bar_color   = "#34d399" if _pct >= 80 else ("#38bdf8" if _pct >= 50 else "#fbbf24")
+        _label_color = "#6ee7b7" if _pct >= 80 else ("#7dd3fc" if _pct >= 50 else "#fde68a")
 
-        # 🎓 Education
-        with st.expander("🎓 Education"):
-            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Education", key="edu_btn"):
-                if mode == "Add":
-                    st.session_state.education_entries.append(
-                        {"degree": "", "institution": "", "year": "", "details": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.education_entries) > 1:
-                    st.session_state.education_entries.pop()
+        _check_svg = (
+            '<svg width="9" height="9" viewBox="0 0 10 10" fill="none" '
+            'xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">'
+            '<polyline points="1.5,5 4,7.5 8.5,2" stroke="currentColor" '
+            'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+            '</svg>'
+        )
 
-        # 🛠 Projects
-        with st.expander("🛠 Projects"):
-            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Project", key="proj_btn"):
-                if mode == "Add":
-                    st.session_state.project_entries.append(
-                        {"title": "", "tech": "", "duration": "", "description": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.project_entries) > 1:
-                    st.session_state.project_entries.pop()
+        _pills_html = ""
+        for _lbl, _done in _sections_done.items():
+            if _done:
+                _pills_html += (
+                    f"<span style='display:inline-flex;align-items:center;gap:4px;"
+                    f"font-size:0.67rem;font-weight:600;padding:2px 8px;"
+                    f"border-radius:999px;margin:2px 3px 2px 0;"
+                    f"background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.28);"
+                    f"color:#6ee7b7;font-family:-apple-system,sans-serif;'>"
+                    f"{_check_svg}{_lbl}</span>"
+                )
+            else:
+                _pills_html += (
+                    f"<span style='display:inline-flex;align-items:center;gap:4px;"
+                    f"font-size:0.67rem;font-weight:500;padding:2px 8px;"
+                    f"border-radius:999px;margin:2px 3px 2px 0;"
+                    f"background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.09);"
+                    f"color:#4a5568;font-family:-apple-system,sans-serif;'>"
+                    f"<span style='width:5px;height:5px;border-radius:50%;"
+                    f"background:#334155;display:inline-block;flex-shrink:0;'></span>"
+                    f"{_lbl}</span>"
+                )
 
-        # 📜 Certificates
-        with st.expander("📜 Certificates"):
-            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Certificate", key="cert_btn"):
-                if mode == "Add":
-                    st.session_state.certificate_links.append(
-                        {"name": "", "link": "", "duration": "", "description": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.certificate_links) > 1:
-                    st.session_state.certificate_links.pop()
+        st.sidebar.markdown(
+            f"""
+            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
+                        border-radius:14px;padding:14px 16px 12px;margin-bottom:16px;
+                        font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;
+                            margin-bottom:8px;">
+                    <div>
+                        <div style="font-size:0.70rem;font-weight:700;letter-spacing:0.08em;
+                                    text-transform:uppercase;color:#4a5568;margin-bottom:3px;">
+                            Resume strength
+                        </div>
+                        <div style="font-size:0.74rem;color:#64748b;">
+                            {_done_count} of {len(_sections_done)} sections complete
+                        </div>
+                    </div>
+                    <div style="font-size:1.35rem;font-weight:700;color:{_label_color};
+                                line-height:1;margin-top:2px;">{_pct}%</div>
+                </div>
+                <div style="height:5px;background:rgba(255,255,255,0.07);border-radius:999px;
+                            overflow:hidden;margin-bottom:12px;">
+                    <div style="height:100%;width:{_pct}%;background:{_bar_color};
+                                border-radius:999px;"></div>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;">{_pills_html}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    # ---------------- Resume Form ----------------
+        # ── Manage sections label ──────────────────────────────
+        st.markdown(
+            "<p style='font-size:0.72rem;font-weight:700;letter-spacing:0.08em;"
+            "text-transform:uppercase;color:#4a5568;margin-bottom:10px;"
+            "font-family:-apple-system,BlinkMacSystemFont,sans-serif;'>"
+            "Manage sections</p>",
+            unsafe_allow_html=True,
+        )
+
+        # ── Add / Remove rows — no mode selectbox, inline buttons ─
+        _sections_meta = [
+            (
+                "Experience", "experience_entries",
+                {"title": "", "company": "", "duration": "", "description": ""},
+                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+                'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+                '<rect x="2" y="7" width="20" height="14" rx="2"/>'
+                '<path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>',
+            ),
+            (
+                "Education", "education_entries",
+                {"degree": "", "institution": "", "year": "", "details": ""},
+                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+                'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+                '<path d="M22 10L12 5 2 10l10 5 10-5z"/>'
+                '<path d="M6 12v5c3 2 9 2 12 0v-5"/></svg>',
+            ),
+            (
+                "Projects", "project_entries",
+                {"title": "", "tech": "", "duration": "", "description": ""},
+                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+                'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+                '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+            ),
+            (
+                "Certificates", "certificate_links",
+                {"name": "", "link": "", "duration": "", "description": ""},
+                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+                'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+                '<circle cx="12" cy="8" r="6"/>'
+                '<path d="M9 14l-3 7 6-3 6 3-3-7"/></svg>',
+            ),
+        ]
+
+        for _lbl, _key, _blank, _icon in _sections_meta:
+            _count = len(st.session_state.get(_key, []))
+            st.sidebar.markdown(
+                f"""
+                <div style="display:flex;align-items:center;justify-content:space-between;
+                            padding:7px 10px;margin-bottom:4px;
+                            background:rgba(255,255,255,0.04);
+                            border:1px solid rgba(255,255,255,0.08);
+                            border-radius:10px;">
+                    <div style="display:flex;align-items:center;gap:7px;">
+                        <span style="color:#64748b;">{_icon}</span>
+                        <span style="font-size:0.79rem;font-weight:500;color:#94a3b8;
+                                    font-family:-apple-system,sans-serif;">{_lbl}</span>
+                        <span style="font-size:0.67rem;font-weight:600;
+                                    background:rgba(56,189,248,0.12);color:#38bdf8;
+                                    border:1px solid rgba(56,189,248,0.20);
+                                    border-radius:999px;padding:1px 7px;">{_count}</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            _ac, _dc = st.columns(2)
+            with _ac:
+                if st.button("Add", key=f"add_{_key}", use_container_width=True):
+                    st.session_state[_key].append(dict(_blank))
+                    st.rerun()
+            with _dc:
+                if st.button(
+                    "Remove", key=f"del_{_key}",
+                    use_container_width=True,
+                    disabled=(_count <= 1),
+                ):
+                    if _count > 1:
+                        st.session_state[_key].pop()
+                        st.rerun()
+
+    # ---------------- Resume Form (no st.form — uses live session_state updates) ----------------
+    # NOTE: We intentionally do NOT use st.form() here.
+    # Reason 1: st.form delays all widget values until submit, so the sidebar
+    #           Resume Strength tracker can't update until the user clicks submit.
+    # Reason 2: st.form forbids regular st.button inside it, which means AI
+    #           Rewrite buttons cannot be placed inline next to each field.
+    # Solution: Use plain widgets with on_change callbacks so session_state is
+    #           always live, sidebar updates immediately, and AI buttons can sit
+    #           right inside each expander alongside its field.
+
     fk = st.session_state["form_key_counter"]
-    with st.form(f"resume_form_{fk}", clear_on_submit=False):
-        st.markdown("### 👤 <u>Personal Information</u>", unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, key=f"name_input_{fk}")
-            st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, key=f"phone_input_{fk}")
-            st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, key=f"loc_input_{fk}")
-        with col2:
-            st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, key=f"email_input_{fk}")
-            st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, key=f"ln_input_{fk}")
-            st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, key=f"port_input_{fk}")
-            st.session_state.job_title = st.text_input("💼 Job Title", value=st.session_state.job_title, key=f"job_input_{fk}")
 
-        st.markdown("### 📝 <u>Professional Summary</u>", unsafe_allow_html=True)
-        st.session_state.summary = st.text_area("Summary", value=st.session_state.summary, key=f"summary_input_{fk}")
+    # ── AI helper functions — defined here so they're usable inside expanders ──
+    _job_role = st.session_state.get("job_title", "professional") or "professional"
 
-        st.markdown("### 💼 <u>Skills, Languages, Interests & Soft Skills</u>", unsafe_allow_html=True)
-        st.session_state.skills = st.text_area("Skills (comma-separated)", value=st.session_state.skills, key=f"skills_input_{fk}")
-        st.session_state.languages = st.text_area("Languages (comma-separated)", value=st.session_state.languages, key=f"lang_input_{fk}")
-        st.session_state.interests = st.text_area("Interests (comma-separated)", value=st.session_state.interests, key=f"int_input_{fk}")
-        st.session_state.Softskills = st.text_area("Softskills (comma-separated)", value=st.session_state.Softskills, key=f"soft_input_{fk}")
+    def _build_improve_prompt(section_name: str, current_text: str) -> str:
+        _jr = st.session_state.get("job_title", "professional") or "professional"
+        return (
+            f"You are an expert resume writer. Rewrite ONLY the {section_name} section below "
+            f"for a \"{_jr}\" role.\n\n"
+            "Rules:\n"
+            "- Third-person, no pronouns (I/me/my/we/our)\n"
+            "- ATS-optimised, outcome-focused, concise\n"
+            "- Preserve factual accuracy — do NOT invent companies, metrics, or skills\n"
+            "- Return ONLY the improved text, no headings, no preamble\n\n"
+            f"Current {section_name}:\n{current_text}"
+        )
 
-        st.markdown("### 🧱 <u>Work Experience</u>", unsafe_allow_html=True)
-        for idx, exp in enumerate(st.session_state.experience_entries):
-            with st.expander(f"Experience #{idx+1}", expanded=True):
-                exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["company"] = st.text_input("Company", value=exp.get("company", ""), key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["description"] = st.text_area("Description", value=exp.get("description", ""), key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+    def _ai_improve_inline(section_key: str, prompt: str, btn_label: str = "✨ Rewrite with AI"):
+        """
+        Renders an AI rewrite button + inline suggestion box directly inside any widget context.
+        Returns the accepted text string or None.
+        """
+        _r_key = f"_ai_{section_key}"
+        clicked = st.button(btn_label, key=f"_aibtn_{section_key}")
+        if clicked:
+            with st.spinner("Rewriting..."):
+                try:
+                    _result = call_llm(prompt, session=st.session_state)
+                    st.session_state[_r_key] = _result.strip()
+                except Exception as _e:
+                    st.session_state[_r_key] = f"__err__{_e}"
 
-        st.markdown("### 🎓 <u>Education</u>", unsafe_allow_html=True)
-        for idx, edu in enumerate(st.session_state.education_entries):
-            with st.expander(f"Education #{idx+1}", expanded=True):
-                edu["degree"] = st.text_input("Degree", value=edu.get("degree", ""), key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["year"] = st.text_input("Year", value=edu.get("year", ""), key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["details"] = st.text_area("Details", value=edu.get("details", ""), key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
+        if _r_key in st.session_state:
+            _suggestion = st.session_state[_r_key]
+            if _suggestion.startswith("__err__"):
+                st.markdown(
+                    f"<div style='font-size:0.78rem;color:#fb7185;padding:4px 0;'>"
+                    f"Failed: {_suggestion[7:]}</div>",
+                    unsafe_allow_html=True,
+                )
+                if st.button("Dismiss", key=f"_aidis_{section_key}_err"):
+                    del st.session_state[_r_key]
+                return None
 
-        st.markdown("### 🛠 <u>Projects</u>", unsafe_allow_html=True)
-        for idx, proj in enumerate(st.session_state.project_entries):
-            with st.expander(f"Project #{idx+1}", expanded=True):
-                proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["description"] = st.text_area("Description", value=proj.get("description", ""), key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
+            st.markdown(
+                f"""<div style="
+                    background:rgba(56,189,248,0.07);
+                    border:1px solid rgba(56,189,248,0.22);
+                    border-radius:10px;padding:12px 14px;margin:6px 0 4px;
+                    font-size:0.82rem;color:#bae6fd;line-height:1.6;
+                    white-space:pre-wrap;
+                    font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
+                    <div style="font-size:0.64rem;font-weight:700;letter-spacing:0.09em;
+                                text-transform:uppercase;color:#38bdf8;margin-bottom:6px;
+                                opacity:0.85;">AI suggestion</div>{_suggestion}</div>""",
+                unsafe_allow_html=True,
+            )
+            _ac, _dc, _ = st.columns([1, 1, 4])
+            with _ac:
+                if st.button("Apply", key=f"_aiapp_{section_key}", type="primary"):
+                    _accepted = st.session_state.pop(_r_key)
+                    return _accepted
+            with _dc:
+                if st.button("Dismiss", key=f"_aidis_{section_key}"):
+                    del st.session_state[_r_key]
+        return None
 
-        st.markdown("### 🔗 Project Links")
-        project_links_input = st.text_area("Enter one project link per line:", value="\n".join(st.session_state.project_links), key=f"proj_links_input_{fk}")
-        if project_links_input:
-            st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
+    # ── helper: sync a simple text field directly into session_state ──────────
+    def _sync(ss_key, widget_key):
+        st.session_state[ss_key] = st.session_state[widget_key]
 
-        st.markdown("### 🧾 <u>Certificates</u>", unsafe_allow_html=True)
-        for idx, cert in enumerate(st.session_state.certificate_links):
-            with st.expander(f"Certificate #{idx+1}", expanded=True):
-                cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""), key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+    st.markdown("### 👤 <u>Personal Information</u>", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.text_input("👤 Full Name", value=st.session_state.name,
+                      key=f"name_input_{fk}",
+                      on_change=_sync, args=("name", f"name_input_{fk}"))
+        st.text_input("📞 Phone Number", value=st.session_state.phone,
+                      key=f"phone_input_{fk}",
+                      on_change=_sync, args=("phone", f"phone_input_{fk}"))
+        st.text_input("📍 Location", value=st.session_state.location,
+                      key=f"loc_input_{fk}",
+                      on_change=_sync, args=("location", f"loc_input_{fk}"))
+    with col2:
+        st.text_input("📧 Email", value=st.session_state.email,
+                      key=f"email_input_{fk}",
+                      on_change=_sync, args=("email", f"email_input_{fk}"))
+        st.text_input("🔗 LinkedIn", value=st.session_state.linkedin,
+                      key=f"ln_input_{fk}",
+                      on_change=_sync, args=("linkedin", f"ln_input_{fk}"))
+        st.text_input("🌐 Portfolio", value=st.session_state.portfolio,
+                      key=f"port_input_{fk}",
+                      on_change=_sync, args=("portfolio", f"port_input_{fk}"))
+        st.text_input("💼 Job Title", value=st.session_state.job_title,
+                      key=f"job_input_{fk}",
+                      on_change=_sync, args=("job_title", f"job_input_{fk}"))
 
-        btn_col1, btn_col2 = st.columns([1, 1])
-        with btn_col1:
-            submitted = st.form_submit_button("📑 Generate Resume", use_container_width=True)
-        with btn_col2:
-            clear_clicked = st.form_submit_button("🗑️ Clear Form", use_container_width=True)
+    st.markdown("### 📝 <u>Professional Summary</u>", unsafe_allow_html=True)
+    st.text_area("Summary", value=st.session_state.summary,
+                 key=f"summary_input_{fk}",
+                 on_change=_sync, args=("summary", f"summary_input_{fk}"))
 
-        if submitted:
-            st.session_state["_resume_generated_msg"] = True
+    st.markdown("### 💼 <u>Skills, Languages, Interests & Soft Skills</u>", unsafe_allow_html=True)
+    st.text_area("Skills (comma-separated)", value=st.session_state.skills,
+                 key=f"skills_input_{fk}",
+                 on_change=_sync, args=("skills", f"skills_input_{fk}"))
+    st.text_area("Languages (comma-separated)", value=st.session_state.languages,
+                 key=f"lang_input_{fk}",
+                 on_change=_sync, args=("languages", f"lang_input_{fk}"))
+    st.text_area("Interests (comma-separated)", value=st.session_state.interests,
+                 key=f"int_input_{fk}",
+                 on_change=_sync, args=("interests", f"int_input_{fk}"))
+    st.text_area("Softskills (comma-separated)", value=st.session_state.Softskills,
+                 key=f"soft_input_{fk}",
+                 on_change=_sync, args=("Softskills", f"soft_input_{fk}"))
 
-        if clear_clicked:
-            # Reset only resume-related keys — do NOT clear() or rerun() as that
-            # wipes tab context and navigates back to the main/home page.
-            # Instead, reset values in-place and bump the form key counter so
-            # all widgets re-render empty on this same run, no page jump.
-            _new_counter = st.session_state.get("form_key_counter", 0) + 1
-            resume_fields = ["name", "email", "phone", "linkedin", "location",
-                             "portfolio", "summary", "skills", "languages",
-                             "interests", "Softskills", "job_title"]
-            for _f in resume_fields:
-                st.session_state[_f] = ""
-            st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
-            st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
-            st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
-            st.session_state["project_links"] = []
-            st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
-            for _key in ["generated_html", "ai_output", "cover_letter",
-                         "cover_letter_html", "encoded_profile_image"]:
-                st.session_state.pop(_key, None)
-            st.session_state["form_key_counter"] = _new_counter
+    st.markdown("### 🧱 <u>Work Experience</u>", unsafe_allow_html=True)
+    for idx, exp in enumerate(st.session_state.experience_entries):
+        n_exp = len(st.session_state.experience_entries)
+        with st.expander(f"Experience #{idx+1}", expanded=True):
+            def _sync_exp_field(field, wkey, _idx=idx):
+                st.session_state["experience_entries"][_idx][field] = st.session_state[wkey]
+            exp["title"] = st.text_input("Job Title", value=exp.get("title", ""),
+                                          key=f"title_{idx}_{n_exp}_{fk}",
+                                          on_change=lambda wk=f"title_{idx}_{n_exp}_{fk}", i=idx: st.session_state["experience_entries"].__setitem__(i, {**st.session_state["experience_entries"][i], "title": st.session_state[wk]}))
+            exp["company"] = st.text_input("Company", value=exp.get("company", ""),
+                                            key=f"company_{idx}_{n_exp}_{fk}",
+                                            on_change=lambda wk=f"company_{idx}_{n_exp}_{fk}", i=idx: st.session_state["experience_entries"].__setitem__(i, {**st.session_state["experience_entries"][i], "company": st.session_state[wk]}))
+            exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""),
+                                             key=f"duration_{idx}_{n_exp}_{fk}",
+                                             on_change=lambda wk=f"duration_{idx}_{n_exp}_{fk}", i=idx: st.session_state["experience_entries"].__setitem__(i, {**st.session_state["experience_entries"][i], "duration": st.session_state[wk]}))
+            exp["description"] = st.text_area("Description", value=exp.get("description", ""),
+                                               key=f"description_{idx}_{n_exp}_{fk}",
+                                               on_change=lambda wk=f"description_{idx}_{n_exp}_{fk}", i=idx: st.session_state["experience_entries"].__setitem__(i, {**st.session_state["experience_entries"][i], "description": st.session_state[wk]}))
+            # ── AI Rewrite button inline inside this expander ──────────────
+            _co  = exp.get("company","").strip() or f"Entry {idx+1}"
+            _desc = exp.get("description","").strip()
+            if _desc:
+                _res_exp = _ai_improve_inline(
+                    f"exp_{idx}",
+                    _build_improve_prompt(
+                        f"Work Experience description for {_co} (role: {exp.get('title','')})",
+                        _desc,
+                    ),
+                    "✨ Rewrite with AI",
+                )
+                if _res_exp:
+                    st.session_state["experience_entries"][idx]["description"] = _res_exp
+                    st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
+                    st.rerun()
+
+    st.markdown("### 🎓 <u>Education</u>", unsafe_allow_html=True)
+    for idx, edu in enumerate(st.session_state.education_entries):
+        n_edu = len(st.session_state.education_entries)
+        with st.expander(f"Education #{idx+1}", expanded=True):
+            edu["degree"] = st.text_input("Degree", value=edu.get("degree", ""),
+                                           key=f"degree_{idx}_{n_edu}_{fk}",
+                                           on_change=lambda wk=f"degree_{idx}_{n_edu}_{fk}", i=idx: st.session_state["education_entries"].__setitem__(i, {**st.session_state["education_entries"][i], "degree": st.session_state[wk]}))
+            edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""),
+                                                key=f"institution_{idx}_{n_edu}_{fk}",
+                                                on_change=lambda wk=f"institution_{idx}_{n_edu}_{fk}", i=idx: st.session_state["education_entries"].__setitem__(i, {**st.session_state["education_entries"][i], "institution": st.session_state[wk]}))
+            edu["year"] = st.text_input("Year", value=edu.get("year", ""),
+                                         key=f"edu_year_{idx}_{n_edu}_{fk}",
+                                         on_change=lambda wk=f"edu_year_{idx}_{n_edu}_{fk}", i=idx: st.session_state["education_entries"].__setitem__(i, {**st.session_state["education_entries"][i], "year": st.session_state[wk]}))
+            edu["details"] = st.text_area("Details", value=edu.get("details", ""),
+                                           key=f"edu_details_{idx}_{n_edu}_{fk}",
+                                           on_change=lambda wk=f"edu_details_{idx}_{n_edu}_{fk}", i=idx: st.session_state["education_entries"].__setitem__(i, {**st.session_state["education_entries"][i], "details": st.session_state[wk]}))
+
+    st.markdown("### 🛠 <u>Projects</u>", unsafe_allow_html=True)
+    for idx, proj in enumerate(st.session_state.project_entries):
+        n_proj = len(st.session_state.project_entries)
+        with st.expander(f"Project #{idx+1}", expanded=True):
+            proj["title"] = st.text_input("Project Title", value=proj.get("title", ""),
+                                           key=f"proj_title_{idx}_{n_proj}_{fk}",
+                                           on_change=lambda wk=f"proj_title_{idx}_{n_proj}_{fk}", i=idx: st.session_state["project_entries"].__setitem__(i, {**st.session_state["project_entries"][i], "title": st.session_state[wk]}))
+            proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""),
+                                          key=f"proj_tech_{idx}_{n_proj}_{fk}",
+                                          on_change=lambda wk=f"proj_tech_{idx}_{n_proj}_{fk}", i=idx: st.session_state["project_entries"].__setitem__(i, {**st.session_state["project_entries"][i], "tech": st.session_state[wk]}))
+            proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""),
+                                              key=f"proj_duration_{idx}_{n_proj}_{fk}",
+                                              on_change=lambda wk=f"proj_duration_{idx}_{n_proj}_{fk}", i=idx: st.session_state["project_entries"].__setitem__(i, {**st.session_state["project_entries"][i], "duration": st.session_state[wk]}))
+            proj["description"] = st.text_area("Description", value=proj.get("description", ""),
+                                                key=f"proj_desc_{idx}_{n_proj}_{fk}",
+                                                on_change=lambda wk=f"proj_desc_{idx}_{n_proj}_{fk}", i=idx: st.session_state["project_entries"].__setitem__(i, {**st.session_state["project_entries"][i], "description": st.session_state[wk]}))
+            # ── AI Rewrite button inline inside this expander ──────────────
+            _ptitle = proj.get("title","").strip()
+            _pdesc  = proj.get("description","").strip()
+            if _ptitle and _pdesc:
+                _res_proj = _ai_improve_inline(
+                    f"proj_{idx}",
+                    _build_improve_prompt(
+                        f"Project description for '{_ptitle}' (tech stack: {proj.get('tech','')})",
+                        _pdesc,
+                    ),
+                    "✨ Rewrite with AI",
+                )
+                if _res_proj:
+                    st.session_state["project_entries"][idx]["description"] = _res_proj
+                    st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
+                    st.rerun()
+
+    st.markdown("### 🔗 Project Links")
+    _proj_links_val = "\n".join(st.session_state.project_links)
+    def _sync_proj_links():
+        raw = st.session_state.get(f"proj_links_input_{fk}", "")
+        st.session_state.project_links = [l.strip() for l in raw.splitlines() if l.strip()]
+    st.text_area("Enter one project link per line:", value=_proj_links_val,
+                 key=f"proj_links_input_{fk}", on_change=_sync_proj_links)
+
+    st.markdown("### 🧾 <u>Certificates</u>", unsafe_allow_html=True)
+    for idx, cert in enumerate(st.session_state.certificate_links):
+        n_cert = len(st.session_state.certificate_links)
+        with st.expander(f"Certificate #{idx+1}", expanded=True):
+            cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""),
+                                          key=f"cert_name_{idx}_{n_cert}_{fk}",
+                                          on_change=lambda wk=f"cert_name_{idx}_{n_cert}_{fk}", i=idx: st.session_state["certificate_links"].__setitem__(i, {**st.session_state["certificate_links"][i], "name": st.session_state[wk]}))
+            cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""),
+                                          key=f"cert_link_{idx}_{n_cert}_{fk}",
+                                          on_change=lambda wk=f"cert_link_{idx}_{n_cert}_{fk}", i=idx: st.session_state["certificate_links"].__setitem__(i, {**st.session_state["certificate_links"][i], "link": st.session_state[wk]}))
+            cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""),
+                                              key=f"cert_duration_{idx}_{n_cert}_{fk}",
+                                              on_change=lambda wk=f"cert_duration_{idx}_{n_cert}_{fk}", i=idx: st.session_state["certificate_links"].__setitem__(i, {**st.session_state["certificate_links"][i], "duration": st.session_state[wk]}))
+            cert["description"] = st.text_area("Description", value=cert.get("description", ""),
+                                                key=f"cert_description_{idx}_{n_cert}_{fk}",
+                                                on_change=lambda wk=f"cert_description_{idx}_{n_cert}_{fk}", i=idx: st.session_state["certificate_links"].__setitem__(i, {**st.session_state["certificate_links"][i], "description": st.session_state[wk]}))
+
+    # ── Generate / Clear buttons (replace form_submit_button with regular buttons) ──
+    btn_col1, btn_col2 = st.columns([1, 1])
+    with btn_col1:
+        submitted = st.button("📑 Generate Resume", use_container_width=True, key="generate_resume_btn")
+    with btn_col2:
+        clear_clicked = st.button("🗑️ Clear Form", use_container_width=True, key="clear_form_btn")
+
+    if submitted:
+        st.session_state["_resume_generated_msg"] = True
+
+    if clear_clicked:
+        _new_counter = st.session_state.get("form_key_counter", 0) + 1
+        resume_fields = ["name", "email", "phone", "linkedin", "location",
+                         "portfolio", "summary", "skills", "languages",
+                         "interests", "Softskills", "job_title"]
+        for _f in resume_fields:
+            st.session_state[_f] = ""
+        st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
+        st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
+        st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
+        st.session_state["project_links"] = []
+        st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
+        for _key in ["generated_html", "ai_output", "cover_letter",
+                     "cover_letter_html", "encoded_profile_image"]:
+            st.session_state.pop(_key, None)
+        st.session_state["form_key_counter"] = _new_counter
+        st.rerun()
 
     st.markdown("""
     <style>
@@ -12375,6 +12689,37 @@ with tab2:
         }
     </style>
     """, unsafe_allow_html=True)
+
+    # ── AI Section Improvers — defined here, used inline inside expanders above ──
+    # (Summary AI improve is placed here, after the form fields, because summary
+    #  does not have its own expander — it's a plain text_area above.)
+    _job_role = st.session_state.get("job_title", "professional") or "professional"
+
+    # Summary AI improve (shown below the summary field since it's not in an expander)
+    _summary_text = st.session_state.get("summary", "")
+    if _summary_text.strip():
+        st.markdown(
+            "<div style='display:flex;align-items:center;gap:7px;margin:4px 0 6px;'>"
+            "<span style='font-size:0.70rem;font-weight:700;letter-spacing:0.08em;"
+            "text-transform:uppercase;color:#38bdf8;"
+            "font-family:-apple-system,BlinkMacSystemFont,sans-serif;'>✨ AI Summary Rewrite</span>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        _res = _ai_improve_inline(
+            "summary",
+            _build_improve_prompt("Professional Summary", _summary_text),
+            "✨ Rewrite Summary with AI",
+        )
+        if _res:
+            st.session_state["summary"] = _res
+            st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
+            st.rerun()
+
+    st.markdown(
+        "<div style='height:1px;background:rgba(255,255,255,0.06);margin:18px 0 10px;'></div>",
+        unsafe_allow_html=True,
+    )
 
     # --- Visual Resume Preview Section (only shown after form is submitted) ---
     if st.session_state.get("_resume_generated_msg"):
@@ -12480,423 +12825,6 @@ with tab2:
 import re
 
 with tab2:
-    st.markdown("## ✨ <span style='color:#336699;'>Enhanced AI Resume Preview</span>", unsafe_allow_html=True)
-    st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
-
-    col1, spacer, col2 = st.columns([1, 0.2, 1])
-
-    with col1:
-        if st.button("🔁 Clear Preview"):
-            st.session_state.pop("ai_output", None)
-
-    with col2:
-        if st.button("🚀 Generate AI Resume Preview"):
-            # Normalize and ensure at least 2 experience entries
-            experience_entries = st.session_state.get('experience_entries', [])
-            normalized_experience_entries = []
-            for entry in experience_entries:
-                if isinstance(entry, dict):
-                    title = entry.get("title", "")
-                    desc = entry.get("description", "")
-                    formatted = f"{title}\n{desc}".strip()
-                else:
-                    formatted = entry.strip()
-                normalized_experience_entries.append(formatted)
-            while len(normalized_experience_entries) < 2:
-                normalized_experience_entries.append("Placeholder Experience")
-
-            # Normalize and ensure at least 2 project entries
-            project_entries = st.session_state.get('project_entries', [])
-            normalized_project_entries = []
-            for entry in project_entries:
-                if isinstance(entry, dict):
-                    title = entry.get("title", "")
-                    desc = entry.get("description", "")
-                    formatted = f"{title}\n{desc}".strip()
-                else:
-                    formatted = entry.strip()
-                normalized_project_entries.append(formatted)
-            while len(normalized_project_entries) < 2:
-                normalized_project_entries.append("Placeholder Project")
-
-            enhance_prompt = f"""
-            You are a professional and unbiased Resume Optimization Specialist with deep knowledge of ATS systems,
-            industry hiring standards, and professional resume writing conventions. Your goal is to enhance the
-            provided resume data for the role:
-            "{st.session_state['job_title']}" — ensuring strong ATS alignment, linguistic precision, and
-            real-world industry relevance.
-
-            ROLE-SPECIFIC INSTRUCTION:
-            - Tailor every section strictly toward the competencies, technical skills, and outcomes expected
-              for "{st.session_state['job_title']}".
-            - Infer the most essential 6–10 role-defining skills, tools, and responsibilities using industry standards.
-            - Prioritize factual accuracy, clarity, and hiring relevance over creative or generic rewriting.
-
-            LANGUAGE & TONE GUIDELINES:
-            - Maintain neutral, inclusive, and strictly professional tone.
-            - Avoid biased, informal, exaggerated, or marketing-style terms (e.g., “rockstar,” “guru,” “ninja”).
-            - Use concise, quantifiable, outcome-focused language.
-            - Do NOT repeat the same verbs, verb roots, phrases, or semantic actions across different sections.
-            - Focus on measurable impact, scope, and responsibility.
-            - Avoid subjective adjectives like "excellent" or "great" — prefer evidence-based outcomes.
-
-            ABSOLUTE PRONOUN & VOICE RESTRICTIONS (NON-NEGOTIABLE):
-            - NEVER use first-person language under any circumstance (I, me, my, we, our).
-            - NEVER use gendered pronouns or possessives
-              (he, she, him, her, his, hers, himself, herself).
-            - NEVER refer to the AI, system, assistant, or writer in the output.
-            - ALL content must be written in third-person, candidate-focused, resume-standard language.
-            - Prefer implicit subject sentences or neutral nouns such as
-              “the candidate”, “the professional”, or role-based references.
-
-            CRITICAL PROFESSIONAL WRITING CONSTRAINT (VERY IMPORTANT):
-            - Treat each resume section as a completely isolated linguistic document.
-            - Once a verb, phrase, or action concept appears in one section, it is forbidden in all other sections,
-              even if reworded, paraphrased, or changed in tense.
-            - Each section (Summary, Experience, Projects, Skills, SoftSkills, Interests) MUST use a distinct
-              vocabulary set and unique action intent.
-            - Any repetition across sections is a strict quality failure.
-
-            GLOBAL ACTION & VERB ISOLATION PROTOCOL (MANDATORY EXECUTION STEP):
-
-            Before generating any resume content, you MUST internally perform the following steps:
-
-            STEP 1 — SECTION VOCABULARY PLANNING (INTERNAL, DO NOT OUTPUT):
-            - Create a private, internal list of verbs and action concepts for EACH section:
-              • Summary_Verb_Set
-              • Experience_Verb_Set
-              • Projects_Verb_Set
-              • Interests_Action_Set
-            - Each list MUST contain only verbs or action concepts unique to that section.
-            - NO verb, verb root, synonym, or semantic action may appear in more than one list.
-
-            STEP 2 — VOCABULARY LOCKING:
-            - Once a verb or action concept is assigned to a section, it becomes permanently locked.
-            - Locked verbs or actions are FORBIDDEN in all other sections, even if paraphrased.
-
-            STEP 3 — ENFORCED GENERATION:
-            - While writing each section, use ONLY the verbs and action concepts from its locked set.
-            - If a conflict is detected, you MUST rewrite the conflicting section completely
-              before producing final output.
-
-            FAILURE CONDITION:
-            - Any repeated verb, verb root, synonym, or semantic action across sections
-              is considered a critical failure and must be corrected before output.
-
-            FORMATTING REQUIREMENTS (FOLLOW EXACTLY):
-            Each section must start with its label followed by a colon and then the formatted content.
-
-            SECTION ENHANCEMENT RULES:
-
-            SECTION-SPECIFIC LANGUAGE ENFORCEMENT:
-
-            - SUMMARY:
-              Use third-person PRESENT tense ONLY.
-              Every bullet MUST begin with a third-person singular verb
-              (e.g., specializes, positions, focuses, leverages).
-              Do NOT use base verb forms (e.g., specialize, bring, focus).
-              Do NOT use past or future tense.
-              Use high-level professional positioning and strategic identity language only.
-              Do NOT include implementation, execution, or tooling verbs.
-
-            - EXPERIENCE:
-              Use PAST tense ONLY.
-              Use ownership, accountability, delivery, and responsibility-oriented language
-              (e.g., led, governed, executed, resolved, delivered).
-              Emphasize outcomes, scope, and measurable impact.
-              Do NOT reuse verbs, phrases, or semantic actions from the Summary.
-
-            - PROJECTS:
-              Use PAST tense ONLY.
-              Use deep technical, engineering, and system-design language
-              (e.g., architected, engineered, integrated, optimized, validated).
-              Projects MUST reflect industry-standard, real-world complexity.
-              Avoid basic CRUD apps, toy projects, or academic-only descriptions.
-              Emphasize architecture, constraints, scalability, performance, or security.
-              Do NOT reuse verbs, phrases, or action ideas from Summary or Experience.
-
-            - SKILLS & SOFTSKILLS:
-              Nouns only.
-              List-only format.
-              Do NOT include descriptive or explanatory sentences.
-
-            - INTERESTS:
-              Use professional learning, exploration, contribution, or domain-engagement language.
-              Avoid overlap with Skills or Projects.
-
-            1. SUMMARY:
-               Write 3–4 bullet points defining the candidate’s current professional identity,
-               specialization, and measurable strengths for "{st.session_state['job_title']}". 
-
-            2. EXPERIENCE:
-               Present entries as (A., B., C.) containing:
-               - Company Name (Duration)
-               - Role title
-               - 3–4 bullets focused on achievements, ownership, and measurable impact
-               - Include tools, metrics, scale, and outcomes where applicable
-
-            3. PROJECTS:
-               Present as (A., B., C.) with:
-               - Project Title
-               - Tech Stack: (only relevant, production-grade technologies)
-               - Duration: (timeframe)
-               - Description:
-                 - System or feature engineered
-                 - Technical decisions or architectural approach
-                 - Performance, scalability, or security improvement with metrics
-                 - Complexity handled or constraints solved
-                 - Final measurable outcome or professional learning
-
-            4. SKILLS:
-               List 6–8 current, job-relevant technical skills only.
-
-            5. SOFTSKILLS:
-               List 6–8 professional traits related to collaboration, ownership,
-               adaptability, communication, and analytical thinking.
-
-            6. LANGUAGES:
-               Include spoken or written languages only.
-
-            7. INTERESTS:
-               Include 3–6 professional or domain-aligned interests.
-
-            8. CERTIFICATES:
-               Include 3–6 verified, industry-recognized certifications with provider and duration.
-
-            DOMAIN-SPECIFIC FOCUS:
-            - Technical Roles → Frameworks, programming languages, CI/CD, cloud platforms, scalability, security.
-            - Security Roles → Threat modeling, SIEM tools, incident response, compliance frameworks.
-            - Data Roles → Python, SQL, analytics, machine learning, visualization, statistics.
-            - Management Roles → Leadership, KPIs, process optimization, strategic execution.
-
-            OUTPUT FORMAT (STRICTLY FOLLOW THIS STRUCTURE):
-
-            Summary:
-            • [Third-person present tense, strategic positioning, measurable impact]
-            • [Distinct professional strength with role alignment]
-            • [Unique competency with quantified outcome]
-
-            Experience:
-            A. [Company Name] ([Duration])
-               • [Role Title]
-               • [Achievement with metrics]
-               • [Ownership or delivery responsibility]
-               • [Process or performance improvement]
-
-            B. [Company Name] ([Duration])
-               • [Role Title]
-               • [Achievement with measurable outcome]
-               • [Contribution or responsibility]
-
-            Projects:
-            A. [Project Title]
-               • Tech Stack: [Relevant technologies only]
-               • Duration: [Start – End]
-               • Description:
-                 - [System or feature engineered]
-                 - [Technical decisions and implementation]
-                 - [Measured improvement or result]
-                 - [Complexity handled or innovation]
-
-            B. [Project Title]
-               • Tech Stack: [Relevant technologies only]
-               • Duration: [Start – End]
-               • Description:
-                 - [Technical scope]
-                 - [Challenges solved]
-                 - [Quantified results]
-                 - [Skills demonstrated]
-
-            Skills:
-            [Skill 1], [Skill 2], [Skill 3], [Skill 4], [Skill 5], [Skill 6], [Skill 7], [Skill 8]
-
-            SoftSkills:
-            [Soft Skill 1], [Soft Skill 2], [Soft Skill 3], [Soft Skill 4], [Soft Skill 5], [Soft Skill 6]
-
-            Languages:
-            [Language 1], [Language 2], [Language 3]
-
-            Interests:
-            [Interest 1], [Interest 2], [Interest 3], [Interest 4]
-
-            Certificates:
-            [Certificate Name] – [Provider] ([Duration/Level])
-            [Certificate Name] – [Provider] ([Duration/Level])
-            [Certificate Name] – [Provider] ([Duration/Level])
-
-            ENHANCEMENT SOURCE DATA:
-            Enhance the following inputs while maintaining factual accuracy
-            and logical alignment with "{st.session_state['job_title']}":
-
-            Summary:
-            {st.session_state['summary']}
-
-            Experience:
-            {normalized_experience_entries}
-
-            Projects:
-            {normalized_project_entries}
-
-            Skills:
-            {st.session_state['skills']}
-
-            SoftSkills:
-            {st.session_state['Softskills']}
-
-            Languages:
-            {st.session_state['languages']}
-
-            Interests:
-            {st.session_state['interests']}
-
-            Certificates:
-            {[cert['name'] for cert in st.session_state['certificate_links'] if cert['name']]}
-
-            FINAL QUALITY & DE-DUPLICATION CHECK (MANDATORY):
-            - Ensure verb tense consistency per section.
-            - Ensure zero verb, phrase, or semantic repetition across sections.
-            - If any conflict exists, rewrite the later section entirely before output.
-
-            IMPORTANT:
-            - Do NOT fabricate companies, experience, or certifications.
-            - Maintain professional, ATS-optimized language.
-            - Output ONLY the formatted resume content without explanations.
-            """
-
-
-
-
-
-            with st.spinner("🧠 Thinking..."):
-                ai_output = call_llm(enhance_prompt, session=st.session_state)
-                st.session_state["ai_output"] = ai_output
-
-    # ------------------------- PARSE + RENDER -------------------------
-    if "ai_output" in st.session_state:
-        ai_output = st.session_state["ai_output"]
-
-        def extract_section(label, output, default=""):
-            match = re.search(rf"{label}:\s*(.*?)(?=\n\w+:|\Z)", output, re.DOTALL)
-            return match.group(1).strip() if match else default
-
-        summary_enhanced = extract_section("Summary", ai_output, st.session_state['summary'])
-        experience_raw = extract_section("Experience", ai_output)
-        experience_blocks = re.split(r"\n(?=[A-Z]\. )", experience_raw.strip())
-        projects_raw = extract_section("Projects", ai_output)
-        projects_blocks = re.split(r"\n(?=[A-Z]\. )", projects_raw.strip())
-        skills_list = extract_section("Skills", ai_output, st.session_state['skills'])
-        softskills_list = extract_section("SoftSkills", ai_output, st.session_state['Softskills'])
-        languages_list = extract_section("Languages", ai_output, st.session_state['languages'])
-        interests_list = extract_section("Interests", ai_output, st.session_state['interests'])
-        certificates_list = extract_section("Certificates", ai_output)
-
-        # ------------------------- UI RENDER -------------------------
-        left, right = st.columns([1, 2])
-
-        with left:
-            st.markdown(f"""
-                <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
-                <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
-                <p style='font-size:14px;'>
-                📍 {st.session_state['location']}<br>
-                📞 {st.session_state['phone']}<br>
-                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
-                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
-                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
-                </p>
-            """, unsafe_allow_html=True)
-
-            def render_bullet_section(title, items):
-                st.markdown(f"<h4 style='color:#336699;'>{title}</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for item in [i.strip() for i in items.split(",") if i.strip()]:
-                    st.markdown(f"<div style='margin-left:10px;'>• {item}</div>", unsafe_allow_html=True)
-
-            render_bullet_section("Skills", skills_list)
-            render_bullet_section("Languages", languages_list)
-            render_bullet_section("Interests", interests_list)
-            render_bullet_section("Soft Skills", softskills_list)
-
-        with right:
-            formatted_summary = summary_enhanced.replace('\n• ', '<br>• ').replace('\n', '<br>')
-            st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            st.markdown(f"<p style='font-size:17px;'>{formatted_summary}</p>", unsafe_allow_html=True)
-
-            # Experience
-            if experience_blocks:
-                st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                experience_titles = [entry.get("title", "").strip().upper() for entry in st.session_state.experience_entries]
-                for idx, exp_block in enumerate(experience_blocks):
-                    lines = exp_block.strip().split("\n")
-                    if not lines:
-                        continue
-                    heading = lines[0]
-                    description_lines = lines[1:]
-                    match = re.match(r"[A-Z]\.\s*(.+?)\s*\((.*?)\)", heading)
-                    company, duration = (match.group(1).strip(), match.group(2).strip()) if match else (heading, "")
-                    role = experience_titles[idx] if idx < len(experience_titles) else ""
-                    formatted_exp = "<br>".join(description_lines)
-
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
-                        <div style='display:flex; justify-content:space-between;'>
-                            <b>🏢 {company.upper()}</b><span style='color:gray;'>📆 {duration}</span>
-                        </div>
-                        <div style='font-size:14px;'>💼 <i>{role}</i></div>
-                        <div style='font-size:17px;'>📝 {formatted_exp}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            # Education
-            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for edu in st.session_state.education_entries:
-                st.markdown(f"""
-                <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px;'>
-                    <div style='display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;'>
-                        <span>🏫 {edu['institution']}</span>
-                        <span style='color: gray;'>📅 {edu['year']}</span>
-                    </div>
-                    <div style='font-size: 14px;'>🎓 <i>{edu['degree']}</i></div>
-                    <div style='font-size: 14px;'>📄 {edu['details']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            # Projects
-            if projects_blocks:
-                st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for idx, proj_block in enumerate(projects_blocks):
-                    proj = st.session_state.project_entries[idx] if idx < len(st.session_state.project_entries) else {}
-                    title = proj.get("title", "")
-                    tech = proj.get("tech", "")
-                    duration = proj.get("duration", "")
-                    description = proj_block
-                    for keyword in [title, f"Tech Stack: {tech}", f"Duration: {duration}"]:
-                        if keyword and keyword in description:
-                            description = description.replace(keyword, "")
-                    formatted_proj = description.strip().replace('\n• ', '<br>• ').replace('\n', '<br>')
-                    label = chr(65 + idx)
-
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding: 10px;'>
-                        <strong style='font-size:16px;'>📌 <span style='color:#444;'>{label}. </span>{title}</strong><br>
-                        <span style='font-size:14px;'>🛠️ <strong>Tech Stack:</strong> {tech}</span><br>
-                        <span style='font-size:14px;'>⏳ <strong>Duration:</strong> {duration}</span><br>
-                        <span style='font-size:17px;'>📄 <strong>Description:</strong></span><br>
-                        <div style='margin-top:4px; font-size:15px;'>{formatted_proj}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            # Certificates
-            if certificates_list:
-                st.markdown("<h4 style='color:#336699;'>📜 Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                certs = re.split(r"\n|(?<=\))(?=\s*[A-Z])|(?<=[a-z]\))(?= [A-Z])", certificates_list)
-                for cert in [c.strip() for c in certs if c.strip()]:
-                    st.markdown(f"<div style='margin-left:10px;'>• {cert}</div>", unsafe_allow_html=True)
-
-            if st.session_state.project_links:
-                st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for i, link in enumerate(st.session_state.project_links):
-                    st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
-
     # Generate HTML content based on selected template — only on submit, stored in session_state
     if submitted:
         # Determine which template to use
