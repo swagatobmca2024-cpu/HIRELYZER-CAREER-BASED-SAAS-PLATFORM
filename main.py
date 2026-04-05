@@ -14776,12 +14776,124 @@ def _analytics_dashboard():
 
     st.markdown("---")
     st.markdown("""
-    <div class="analytics-header">
-        <div style='display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:4px;'>
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="url(#ganal)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="ganal" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#818cf8"/></linearGradient></defs><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-            <h2>Search Analytics Dashboard</h2>
+    <style>
+    @keyframes bar1rise { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.5)} }
+    @keyframes bar2rise { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(0.55)} }
+    @keyframes bar3rise { 0%,100%{transform:scaleY(1)} 50%{transform:scaleY(1.35)} }
+    @keyframes pulse-ring { 0%{transform:scale(0.92);opacity:0.7} 100%{transform:scale(1.08);opacity:0} }
+    @keyframes shimmer-text {
+        0%   { background-position: -200% center; }
+        100% { background-position:  200% center; }
+    }
+    .analytics-header-interactive {
+        text-align: center;
+        padding: 28px 20px 18px;
+        position: relative;
+        cursor: default;
+    }
+    .analytics-header-interactive:hover .anal-bar1 { animation: bar1rise 0.7s ease-in-out infinite; }
+    .analytics-header-interactive:hover .anal-bar2 { animation: bar2rise 0.7s ease-in-out infinite 0.1s; }
+    .analytics-header-interactive:hover .anal-bar3 { animation: bar3rise 0.7s ease-in-out infinite 0.2s; }
+    .analytics-header-interactive:hover .anal-pulse { animation: pulse-ring 1.2s ease-out infinite; }
+    .anal-bar1,.anal-bar2,.anal-bar3 { transform-origin: bottom center; transition: all 0.3s; }
+    .anal-pulse {
+        position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(0.9);
+        width:56px; height:56px; border-radius:50%;
+        border:2px solid rgba(56,189,248,0.35);
+        opacity:0; pointer-events:none;
+    }
+    .analytics-main-title {
+        font-size: 1.85rem;
+        font-weight: 800;
+        background: linear-gradient(90deg, #38bdf8 0%, #818cf8 40%, #38bdf8 80%, #a78bfa 100%);
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+        display: inline-block;
+        transition: all 0.3s ease;
+    }
+    .analytics-header-interactive:hover .analytics-main-title {
+        animation: shimmer-text 2s linear infinite;
+    }
+    .analytics-icon-wrap {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 52px; height: 52px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, rgba(56,189,248,0.15) 0%, rgba(129,140,248,0.12) 100%);
+        border: 1px solid rgba(56,189,248,0.25);
+        position: relative;
+        flex-shrink: 0;
+        transition: all 0.3s ease;
+        box-shadow: 0 0 0 0 rgba(56,189,248,0.3);
+    }
+    .analytics-header-interactive:hover .analytics-icon-wrap {
+        box-shadow: 0 0 20px rgba(56,189,248,0.35), inset 0 0 12px rgba(56,189,248,0.1);
+        border-color: rgba(56,189,248,0.5);
+    }
+    .analytics-badge {
+        display:inline-flex; align-items:center; gap:5px;
+        background: rgba(56,189,248,0.08);
+        border: 1px solid rgba(56,189,248,0.2);
+        border-radius: 99px;
+        padding: 4px 12px;
+        font-size:0.78rem; font-weight:600; color:#7dd3fc;
+        letter-spacing: 0.04em;
+        margin-top:10px;
+    }
+    .analytics-dot {
+        width:7px; height:7px; border-radius:50%;
+        background:#34d399;
+        box-shadow: 0 0 6px #34d399;
+        animation: pulse-ring 1.5s ease-out infinite;
+        display:inline-block;
+    }
+    </style>
+
+    <div class="analytics-header-interactive">
+        <div style='display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:8px;'>
+            <!-- Left icon: sparkle/star -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.7;flex-shrink:0;">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+
+            <!-- Animated bar-chart icon in a glowing box -->
+            <div class="analytics-icon-wrap">
+                <div class="anal-pulse"></div>
+                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <defs>
+                        <linearGradient id="ganalH" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stop-color="#38bdf8"/>
+                            <stop offset="100%" stop-color="#818cf8"/>
+                        </linearGradient>
+                    </defs>
+                    <line class="anal-bar3" x1="6"  y1="20" x2="6"  y2="14" stroke="url(#ganalH)"/>
+                    <line class="anal-bar2" x1="12" y1="20" x2="12" y2="4"  stroke="url(#ganalH)"/>
+                    <line class="anal-bar1" x1="18" y1="20" x2="18" y2="10" stroke="url(#ganalH)"/>
+                </svg>
+            </div>
+
+            <h2 class="analytics-main-title">Search Analytics Dashboard</h2>
+
+            <!-- Right icon: activity/pulse -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.7;flex-shrink:0;">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
         </div>
-        <p>Real-time insights from your job search history · All times in <b style="color:#38bdf8">IST (UTC+5:30)</b></p>
+
+        <p style="color:#64748b; font-size:0.88rem; margin:0 0 6px; font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;">
+            Real-time insights from your job search history · All times in <b style="color:#38bdf8">IST (UTC+5:30)</b>
+        </p>
+
+        <div class="analytics-badge">
+            <span class="analytics-dot"></span>
+            Live Data
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:2px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -15730,14 +15842,14 @@ def _inject_tab3_css():
         background-position: center;
     }
 
-    /* Clear Form button — broom/eraser icon */
+    /* Clear Form button — rotate-ccw / reset icon */
     [data-testid="stForm"] button[kind="secondaryFormSubmit"]::before {
         content: '';
         display: inline-block;
         width: 16px;
         height: 16px;
         flex-shrink: 0;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.75)' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 20H7L3 16l10-10 7 7-2.5 2.5'/%3E%3Cpath d='M6.0 17.0 L13 10'/%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.80)' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='1 4 1 10 7 10'/%3E%3Cpath d='M3.51 15a9 9 0 1 0 .49-4.95'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
         background-size: contain;
         background-position: center;
