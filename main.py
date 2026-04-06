@@ -12219,7 +12219,7 @@ with tab2:
     # ─────────────────────────────────────────────────────────────────────────
     # GAMIFIED SIDEBAR
     # ─────────────────────────────────────────────────────────────────────────
-    def render_gamified_sidebar(ss):
+    def render_gamified_sidebar(ss, fk):
         """
         Renders a fully gamified sidebar with:
         - XP counter + rank badge
@@ -12245,44 +12245,154 @@ with tab2:
             "remove":   '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="6" x2="10" y2="6"/></svg>',
         }
 
-        # ── completion state ───────────────────────────────────────────────────
+        # ══════════════════════════════════════════════════════════════════════
+        # PARTIAL-FILL SCORING
+        # Each section returns a float 0.0–1.0 based on how many of its
+        # required fields the user has actually filled.
+        # The mini-bar width, XP, and master bar all reflect partial progress.
+        # A section is "complete" (check circle on) only at 1.0.
+        # ══════════════════════════════════════════════════════════════════════
+
+        def _wv(widget_key, fallback_key=""):
+            """Live widget value → stored session value → empty string."""
+            v = ss.get(widget_key, "")
+            if not v and fallback_key:
+                v = ss.get(fallback_key, "")
+            return str(v).strip()
+
+        def _filled(*values):
+            """Count how many of the given values are non-empty."""
+            return sum(1 for v in values if str(v).strip())
+
+        # ── Personal Info: 5 fields, each worth 0.2 ───────────────────────────
+        pi_name     = _wv(f"name_input_{fk}",  "name")
+        pi_email    = _wv(f"email_input_{fk}",  "email")
+        pi_phone    = _wv(f"phone_input_{fk}",  "phone")
+        pi_location = _wv(f"loc_input_{fk}",    "location")
+        pi_jobtitle = _wv(f"job_input_{fk}",    "job_title")
+        _fill_personal = round(_filled(pi_name, pi_email, pi_phone, pi_location, pi_jobtitle) / 5, 2)
+
+        # ── Summary: single textarea, any text = full ─────────────────────────
+        _fill_summary = 1.0 if _wv(f"summary_input_{fk}", "summary") else 0.0
+
+        # ── Skills: any comma-separated content = full ────────────────────────
+        _fill_skills = 1.0 if _wv(f"skills_input_{fk}", "skills") else 0.0
+
+        # ── Contact: phone + linkedin, each worth 0.5 ─────────────────────────
+        pi_phone2   = _wv(f"phone_input_{fk}",  "phone")
+        pi_linkedin = _wv(f"ln_input_{fk}",      "linkedin")
+        _fill_contact = round(_filled(pi_phone2, pi_linkedin) / 2, 2)
+
+        # ── Entry-based sections: score = avg fill-ratio across all entries ────
+        # Each entry has N required sub-fields; we score each sub-field 0 or 1
+        # and average across all entries so partial entries count proportionally.
+
+        def _entry_fill_ratio(entries_key, widget_prefixes, stored_keys):
+            """
+            entries_key     : session_state key holding the list of entries
+            widget_prefixes : list of widget key prefix strings  e.g. ["title","company"]
+            stored_keys     : list of dict keys in the stored entry  e.g. ["title","company"]
+            Returns float 0.0–1.0.
+            """
+            entries = ss.get(entries_key, [])
+            n = len(entries)
+            if n == 0:
+                return 0.0
+            n_fields = len(widget_prefixes)
+            total_score = 0.0
+            for i, entry in enumerate(entries):
+                entry_score = 0
+                for prefix, skey in zip(widget_prefixes, stored_keys):
+                    # try live widget key first, then stored entry value
+                    wkey = f"{prefix}_{i}_{n}_{fk}"
+                    val  = ss.get(wkey, "") or entry.get(skey, "")
+                    if str(val).strip():
+                        entry_score += 1
+                total_score += entry_score / n_fields
+            return round(total_score / n, 2)
+
+        # Experience: title + company are required; duration + description optional but scored
+        _fill_exp = _entry_fill_ratio(
+            "experience_entries",
+            ["title", "company", "duration", "description"],
+            ["title", "company", "duration", "description"],
+        )
+
+        # Education: institution + degree required; year + details scored
+        _fill_edu = _entry_fill_ratio(
+            "education_entries",
+            ["degree", "institution", "edu_year", "edu_details"],
+            ["degree", "institution", "year",     "details"],
+        )
+
+        # Projects: title + tech required; duration + description scored
+        _fill_proj = _entry_fill_ratio(
+            "project_entries",
+            ["proj_title", "proj_tech", "proj_duration", "proj_desc"],
+            ["title",      "tech",      "duration",      "description"],
+        )
+
+        # Certificates: name + link required; duration + description scored
+        _fill_cert = _entry_fill_ratio(
+            "certificate_links",
+            ["cert_name", "cert_link", "cert_duration", "cert_description"],
+            ["name",      "link",      "duration",      "description"],
+        )
+
+        # ── SECTIONS dict: float 0.0–1.0 per section ─────────────────────────
         SECTIONS = {
-            "Personal Info": bool(ss.get("name") and ss.get("email")),
-            "Summary":       bool(ss.get("summary", "").strip()),
-            "Experience":    any(e.get("company") or e.get("title") for e in ss.get("experience_entries", [])),
-            "Education":     any(e.get("institution") for e in ss.get("education_entries", [])),
-            "Projects":      any(p.get("title") for p in ss.get("project_entries", [])),
-            "Skills":        bool(ss.get("skills", "").strip()),
-            "Certificates":  any(c.get("name") for c in ss.get("certificate_links", [])),
-            "Contact":       bool(ss.get("phone") or ss.get("linkedin")),
+            "Personal Info": _fill_personal,
+            "Summary":       _fill_summary,
+            "Experience":    _fill_exp,
+            "Education":     _fill_edu,
+            "Projects":      _fill_proj,
+            "Skills":        _fill_skills,
+            "Certificates":  _fill_cert,
+            "Contact":       _fill_contact,
         }
         ICON_KEYS = ["personal", "summary", "exp", "edu", "projects", "skills", "certs", "contact"]
 
-        completed  = sum(SECTIONS.values())
-        total      = len(SECTIONS)
-        xp         = completed * 10
-        max_xp     = total * 10
-        pct        = int((completed / total) * 100)
+        # ── Aggregate XP and progress from fractional scores ──────────────────
+        total       = len(SECTIONS)
+        xp_raw      = sum(SECTIONS.values())          # 0.0 – 8.0
+        xp          = int(round(xp_raw * 10))         # 0 – 80
+        max_xp      = total * 10
+        pct         = int(round((xp_raw / total) * 100))
+        # "completed" for streak dots = sections at 100%
+        fully_done  = sum(1 for v in SECTIONS.values() if v >= 1.0)
 
-        if   completed == 0:      rank, rank_color, rank_bg, rank_border = "Unranked",   "#6b7280", "#1e2535",  "#374151"
-        elif completed <= 2:      rank, rank_color, rank_bg, rank_border = "Beginner",   "#d97706", "#2a1f12",  "#92400e"
-        elif completed <= 4:      rank, rank_color, rank_bg, rank_border = "Builder",    "#94a3b8", "#1a2133",  "#475569"
-        elif completed <= 6:      rank, rank_color, rank_bg, rank_border = "Advanced",   "#f59e0b", "#2a2410",  "#92700e"
-        elif completed < total:   rank, rank_color, rank_bg, rank_border = "Expert",     "#a78bfa", "#1a1a2e",  "#6d28d9"
-        else:                     rank, rank_color, rank_bg, rank_border = "Pro Resume", "#a78bfa", "#1a1a2e",  "#6d28d9"
+        if   pct == 0:    rank, rank_color, rank_bg, rank_border = "Unranked",   "#6b7280", "#1e2535", "#374151"
+        elif pct <= 25:   rank, rank_color, rank_bg, rank_border = "Beginner",   "#d97706", "#2a1f12", "#92400e"
+        elif pct <= 50:   rank, rank_color, rank_bg, rank_border = "Builder",    "#94a3b8", "#1a2133", "#475569"
+        elif pct <= 75:   rank, rank_color, rank_bg, rank_border = "Advanced",   "#f59e0b", "#2a2410", "#92700e"
+        elif pct < 100:   rank, rank_color, rank_bg, rank_border = "Expert",     "#a78bfa", "#1a1a2e", "#6d28d9"
+        else:             rank, rank_color, rank_bg, rank_border = "Pro Resume", "#a78bfa", "#1a1a2e", "#6d28d9"
 
-        # ── helper: section row HTML ───────────────────────────────────────────
-        def _section_row(label, icon_key, done):
-            icon_bg   = "#1d3a6e" if done else "#1e2535"
-            icon_col  = "#93c5fd" if done else "#6b7280"
-            name_col  = "#93c5fd" if done else "#6b7280"
-            bar_w     = "100%"    if done else "0%"
-            bar_col   = "#3b82f6" if done else "#374151"
-            row_bg    = "#131c33" if done else "#161b27"
-            row_bdr   = "#1d4ed8" if done else "#1e2535"
-            chk_bg    = "#2563eb" if done else "transparent"
-            chk_bdr   = "#2563eb" if done else "#374151"
-            chk_op    = "1"       if done else "0"
+        # ── helper: section row HTML — now takes fill float 0.0–1.0 ──────────
+        def _section_row(label, icon_key, fill):
+            done      = fill >= 1.0
+            partial   = 0.0 < fill < 1.0
+            bar_pct   = f"{int(fill * 100)}%"
+            # colour ramp: empty=dark, partial=amber, complete=blue
+            if done:
+                icon_bg, icon_col, name_col = "#1d3a6e", "#93c5fd", "#93c5fd"
+                bar_col = "#3b82f6"
+                row_bg  = "#131c33"
+                row_bdr = "#1d4ed8"
+            elif partial:
+                icon_bg, icon_col, name_col = "#2a1f12", "#f59e0b", "#d4a017"
+                bar_col = "#f59e0b"
+                row_bg  = "#1a1600"
+                row_bdr = "#78450a"
+            else:
+                icon_bg, icon_col, name_col = "#1e2535", "#6b7280", "#6b7280"
+                bar_col = "#374151"
+                row_bg  = "#161b27"
+                row_bdr = "#1e2535"
+            chk_bg  = "#2563eb"    if done    else "transparent"
+            chk_bdr = "#2563eb"    if done    else ("#78450a" if partial else "#374151")
+            chk_op  = "1"          if done    else "0"
+            pct_lbl = f"{int(fill*100)}%" if partial else ""
             return f"""
 <div style='display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;
      background:{row_bg};border:0.5px solid {row_bdr};margin-bottom:7px;'>
@@ -12291,9 +12401,12 @@ with tab2:
     {SVG[icon_key]}
   </div>
   <div style='flex:1;min-width:0;'>
-    <div style='font-size:12px;font-weight:500;color:{name_col};'>{label}</div>
+    <div style='display:flex;justify-content:space-between;align-items:center;'>
+      <div style='font-size:12px;font-weight:500;color:{name_col};'>{label}</div>
+      {f"<div style='font-size:9px;color:#f59e0b;font-weight:500;'>{pct_lbl}</div>" if pct_lbl else ""}
+    </div>
     <div style='height:3px;background:#1e2535;border-radius:3px;margin-top:4px;overflow:hidden;'>
-      <div style='height:100%;width:{bar_w};background:{bar_col};border-radius:3px;'></div>
+      <div style='height:100%;width:{bar_pct};background:{bar_col};border-radius:3px;'></div>
     </div>
   </div>
   <div style='width:18px;height:18px;border-radius:50%;background:{chk_bg};
@@ -12305,10 +12418,10 @@ with tab2:
   </div>
 </div>"""
 
-        # ── streak dots ────────────────────────────────────────────────────────
+        # ── streak dots — one dot per section, lit when section is 100% ─────────
         dots_html = "".join(
             f"<div style='flex:1;height:4px;border-radius:3px;"
-            f"background:{'#3b82f6' if i < completed else '#1e2535'};'></div>"
+            f"background:{'#3b82f6' if i < fully_done else '#1e2535'};'></div>"
             for i in range(total)
         )
 
@@ -12335,15 +12448,15 @@ with tab2:
 """, unsafe_allow_html=True)
 
             # ── section rows ──────────────────────────────────────────────────
-            for (label, done), icon_key in zip(SECTIONS.items(), ICON_KEYS):
-                st.markdown(_section_row(label, icon_key, done), unsafe_allow_html=True)
+            for (label, fill), icon_key in zip(SECTIONS.items(), ICON_KEYS):
+                st.markdown(_section_row(label, icon_key, fill), unsafe_allow_html=True)
 
             # ── divider + stats footer ─────────────────────────────────────────
             st.markdown(f"""
 <hr style='border:none;border-top:0.5px solid #1e2535;margin:14px 0;'>
 <div style='display:flex;justify-content:space-between;text-align:center;margin-bottom:18px;'>
   <div>
-    <span style='font-size:16px;font-weight:500;color:#e2e8f0;display:block;'>{completed}</span>
+    <span style='font-size:16px;font-weight:500;color:#e2e8f0;display:block;'>{fully_done}</span>
     <span style='font-size:10px;color:#4b5563;letter-spacing:0.8px;text-transform:uppercase;'>Done</span>
   </div>
   <div>
@@ -12407,12 +12520,12 @@ with tab2:
                     elif mode == "Delete" and len(ss.certificate_links) > 1:
                         ss.certificate_links.pop()
 
-    # ── call gamified sidebar ──────────────────────────────────────────────────
-    render_gamified_sidebar(st.session_state)
+    # ── call gamified sidebar AFTER fk is known so widget keys resolve correctly ──
+    fk = st.session_state["form_key_counter"]
+    render_gamified_sidebar(st.session_state, fk)
     mode = st.session_state.get("edit_mode", "Add")
 
     # ---------------- Resume Form ----------------
-    fk = st.session_state["form_key_counter"]
     with st.form(f"resume_form_{fk}", clear_on_submit=False):
         st.markdown("### 👤 <u>Personal Information</u>", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
