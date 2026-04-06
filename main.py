@@ -12451,14 +12451,33 @@ with tab2:
         # ══════════════════════════════════════════════════════════════════════
 
         def _get_val(ss, widget_key, entry, stored_key, fk):
-            """Read live widget value, fallback to stored entry value."""
-            val = ss.get(widget_key, "") or entry.get(stored_key, "")
-            return str(val).strip()
+            """
+            Read the most up-to-date value for a field.
+            Priority:
+              1. Live Streamlit widget value (ss[widget_key]) — reflects what
+                 the user has typed in the current run.
+              2. Stored entry dict value (entry[stored_key]) — the value that
+                 was committed to session state on the previous run.
+            This two-step fallback ensures the score always reflects the current
+            text-area/input content, eliminating the stale-value bug where
+            editing Education/Projects/Certificate descriptions appeared to have
+            no effect on XP.
+            """
+            # 1) Live widget — only trust it when non-empty (Streamlit sets the
+            #    key in ss as soon as the widget is rendered for the first time)
+            live = ss.get(widget_key, "")
+            if live:          # truthy non-empty string wins
+                return str(live).strip()
+            # 2) Fallback: committed entry-dict value (handles first-render and
+            #    cases where the widget key hasn't been written to ss yet)
+            stored = entry.get(stored_key, "")
+            return str(stored).strip()
 
         # ── Experience scoring ────────────────────────────────────────────────
-        # Required (0.5 weight each): title, company
-        # Quality  (0.25 weight each): duration, description (quality-scored)
-        # Single full entry → max 0.75 (need 2 complete entries → 1.0)
+        # Required (40%): title + company
+        # Quality  (60%): duration 25% + description 75%
+        # Description is the dominant quality signal for experience entries.
+        # Single full entry -> max 0.80 (need 2 complete entries -> 1.0)
         def _score_experience():
             entries = ss.get("experience_entries", [])
             if not entries:
@@ -12470,16 +12489,18 @@ with tab2:
                 company  = _get_val(ss, f"company_{i}_{n}_{fk}",     e, "company",     fk)
                 duration = _get_val(ss, f"duration_{i}_{n}_{fk}",    e, "duration",    fk)
                 desc_raw = _get_val(ss, f"description_{i}_{n}_{fk}", e, "description", fk)
-                # If both core fields empty → stub entry, score 0
+                # If both core fields empty -> stub entry, score 0
                 if not title and not company:
                     total += 0.0
                     continue
-                req_score  = (_filled(title) + _filled(company)) / 2   # 0–1
-                qual_score = ((_filled(duration) * 0.5) + (_desc_score(desc_raw) * 0.5))  # 0–1
-                entry_score = (req_score * 0.55) + (qual_score * 0.45)
+                # Required: title + company -> 40% of entry score
+                req_score  = (_filled(title) + _filled(company)) / 2   # 0-1
+                # Quality: duration 25% weight, description 75% weight (desc is most important)
+                qual_score = ((_filled(duration) * 0.25) + (_desc_score(desc_raw) * 0.75))  # 0-1
+                entry_score = (req_score * 0.40) + (qual_score * 0.60)
                 total += entry_score
             avg = total / n
-            # Bonus for multiple complete entries: 1 entry caps at 0.80, 2+ can reach 1.0
+            # Bonus for multiple entries: 1 entry caps at 0.80, 2+ can reach 1.0
             if n == 1:
                 avg = min(avg, 0.80)
             return round(min(avg, 1.0), 2)
@@ -12487,8 +12508,9 @@ with tab2:
         _fill_exp = _score_experience()
 
         # ── Education scoring ─────────────────────────────────────────────────
-        # Required: institution + degree  (0.55 weight)
-        # Quality : year + details        (0.45 weight)
+        # Required: institution + degree  (40% weight)
+        # Quality : year 20% + details/description 80% (60% of total entry)
+        # Description weight is highest — details matter most for education.
         # Single entry caps at 0.85 (1 education entry is realistic)
         def _score_education():
             entries = ss.get("education_entries", [])
@@ -12504,9 +12526,11 @@ with tab2:
                 if not institution and not degree:
                     total += 0.0
                     continue
+                # Required: institution + degree -> 40% of entry score
                 req_score  = (_filled(institution) + _filled(degree)) / 2
-                qual_score = (_filled(year) * 0.5) + (_desc_score(details_raw) * 0.5)
-                entry_score = (req_score * 0.6) + (qual_score * 0.4)
+                # Quality: year 20% weight, details/description 80% weight
+                qual_score = (_filled(year) * 0.20) + (_desc_score(details_raw) * 0.80)
+                entry_score = (req_score * 0.40) + (qual_score * 0.60)
                 total += entry_score
             avg = total / n
             # 1 entry caps at 0.85; 2+ can reach 1.0
@@ -12517,9 +12541,9 @@ with tab2:
         _fill_edu = _score_education()
 
         # ── Projects scoring ──────────────────────────────────────────────────
-        # Required: title + tech  (0.5 weight)
-        # Quality : duration + description quality (0.5 weight)
-        # Single project caps at 0.75; 2 projects can reach 0.90; 3+ → 1.0
+        # Required: title + tech  (35% weight)
+        # Quality : duration 15% + description 85% (65% of total entry)
+        # Single project caps at 0.75; 2 projects can reach 0.90; 3+ -> 1.0
         def _score_projects():
             entries = ss.get("project_entries", [])
             if not entries:
@@ -12534,9 +12558,11 @@ with tab2:
                 if not title:
                     total += 0.0
                     continue
+                # Required: title + tech -> 35% of entry score
                 req_score  = (_filled(title) + _filled(tech)) / 2
-                qual_score = (_filled(duration) * 0.4) + (_desc_score(desc_raw) * 0.6)
-                entry_score = (req_score * 0.5) + (qual_score * 0.5)
+                # Quality: duration 15% weight, description 85% weight
+                qual_score = (_filled(duration) * 0.15) + (_desc_score(desc_raw) * 0.85)
+                entry_score = (req_score * 0.35) + (qual_score * 0.65)
                 total += entry_score
             avg = total / n
             if n == 1:
@@ -12548,8 +12574,9 @@ with tab2:
         _fill_proj = _score_projects()
 
         # ── Certificates scoring ──────────────────────────────────────────────
-        # Required: name  (0.4 weight)
-        # Quality : link + duration + description (0.6 weight)
+        # Required: name  (30% weight)
+        # Quality : link 20% + duration 20% + description 60% (70% of total entry)
+        # Description is the dominant quality signal — a cert with context scores best.
         # 1 fully-complete cert CAN reach 1.0 (certs are optional, 1 is good)
         def _score_certificates():
             entries = ss.get("certificate_links", [])
@@ -12565,9 +12592,11 @@ with tab2:
                 if not name:
                     total += 0.0
                     continue
+                # Required: name -> 30% of entry score
                 req_score  = _filled(name)   # 0 or 1
-                qual_score = ((_filled(link) * 0.5) + (_filled(duration) * 0.25) + (_desc_score(desc_raw) * 0.25))
-                entry_score = (req_score * 0.4) + (qual_score * 0.6)
+                # Quality: link 20%, duration 20%, description 60%
+                qual_score = ((_filled(link) * 0.20) + (_filled(duration) * 0.20) + (_desc_score(desc_raw) * 0.60))
+                entry_score = (req_score * 0.30) + (qual_score * 0.70)
                 total += entry_score
             avg = total / n
             return round(min(avg, 1.0), 2)
@@ -12589,47 +12618,41 @@ with tab2:
 
         # ── Done thresholds — derived from scoring math, not arbitrary ───────
         #
-        # Each threshold maps to a specific set of filled fields, calculated
-        # from the exact weights in each scoring function above.
+        # EXPERIENCE  entry_score = (req*0.40) + (qual*0.60), n=1 cap 0.80
+        #   title+company only            -> 0.40  (NOT done)
+        #   +duration                     -> ~0.45 (NOT done)
+        #   +desc(>=80 chars)             -> ~0.67 (NOT done)
+        #   +desc(>=180 chars)            -> ~0.76 (Done)  threshold = 0.72
         #
-        # EXPERIENCE  entry_score = (req*0.55) + (qual*0.45), n=1 cap 0.80
-        #   title+company only            → 0.55  (NOT done)
-        #   +duration                     → ~0.65 (NOT done)
-        #   +duration + desc(≥80 chars)   → ~0.80 (Done ✓)  threshold = 0.76
+        # EDUCATION   entry_score = (req*0.40) + (qual*0.60), n=1 cap 0.85
+        #   institution+degree only       -> 0.40  (NOT done)
+        #   +year                         -> ~0.45 (NOT done)
+        #   +details(>=80 chars)          -> ~0.71 (Done)  threshold = 0.68
         #
-        # EDUCATION   entry_score = (req*0.60) + (qual*0.40), n=1 cap 0.85
-        #   institution+degree only       → 0.60  (NOT done)
-        #   +year                         → ~0.70 (NOT done)
-        #   +year + details(≥80 chars)    → ~0.85 (Done ✓)  threshold = 0.76
+        # PROJECTS    entry_score = (req*0.35) + (qual*0.65), n=1 cap 0.75
+        #   title+tech only               -> 0.35  (NOT done)
+        #   +desc(>=80 chars)             -> ~0.69 (Done)  threshold = 0.65
         #
-        # PROJECTS    entry_score = (req*0.50) + (qual*0.50), n=1 cap 0.75
-        #   title+tech only               → 0.50  (NOT done)
-        #   +duration                     → ~0.60 (NOT done)
-        #   +duration + desc(≥80 chars)   → ~0.75 (Done ✓)  threshold = 0.72
-        #
-        # CERTIFICATES entry_score = (req*0.40) + (qual*0.60), no cap
-        #   name only                     → 0.40  (NOT done)
-        #   +link                         → ~0.55 (NOT done)
-        #   +link + duration              → ~0.63 (Done ✓)  threshold = 0.62
+        # CERTIFICATES entry_score = (req*0.30) + (qual*0.70)
+        #   name only                     -> 0.30  (NOT done)
+        #   +link+duration                -> ~0.58 (NOT done)
+        #   +link+duration+desc(>=80)     -> ~0.79 (Done)  threshold = 0.62
         #
         # SKILLS      composite: skills*0.5 + interests*0.2 + soft*0.2 + lang*0.1
-        #   3 skills only                 → 0.33  (NOT done)
-        #   3 skills + 2 soft skills      → 0.47  (NOT done)
-        #   3 skills + 2 soft + 2 int     → ~0.61 (Done ✓)  threshold = 0.57
+        #   3 skills only                 -> 0.33  (NOT done)
+        #   3 skills + 2 soft + 2 int     -> ~0.61 (Done)  threshold = 0.57
         #
         # SUMMARY     length-based: <40=0.25 | <100=0.60 | <200=0.85 | 200+=1.0
-        #   threshold 0.85 = requires ≥100 chars (substantive summary)
-        #
-        # PERSONAL INFO  5 fields × 0.2 each — threshold 1.0 = all 5 required
-        # CONTACT        phone + linkedin × 0.5 each — threshold 1.0 = both required
+        # PERSONAL INFO  5 fields x 0.2 each — threshold 1.0 = all 5 required
+        # CONTACT        phone + linkedin x 0.5 each — threshold 1.0 = both required
         DONE_THRESHOLD = {
             "Personal Info":  1.0,   # all 5: name, email, phone, location, job title
-            "Summary":        0.85,  # ≥100 chars — substantive, not a placeholder
-            "Experience":     0.76,  # title + company + duration + real description
-            "Education":      0.76,  # institution + degree + year + details
-            "Projects":       0.72,  # title + tech + duration + real description
+            "Summary":        0.85,  # >=100 chars — substantive, not a placeholder
+            "Experience":     0.72,  # title + company + rich description (>=180 chars)
+            "Education":      0.68,  # institution + degree + good details
+            "Projects":       0.65,  # title + tech + good description
             "Skills & More":  0.57,  # tech skills + soft skills + interests
-            "Certificates":   0.62,  # name + link + duration (verifiable)
+            "Certificates":   0.62,  # name + link + duration + description
             "Contact":        1.0,   # both phone AND linkedin filled
         }
 
