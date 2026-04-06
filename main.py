@@ -8763,6 +8763,19 @@ def _fmt_desc(text, font_size="14px", color="#374151", line_height="1.75"):
     return "".join(html_parts)
 
 
+def _cert_name_html(cert, link_style, span_style=""):
+    """
+    Returns cert name as a clickable <a> if a link is provided,
+    otherwise as a plain <span> — prevents href='' resolving to the host site.
+    """
+    name = cert.get('name', '')
+    link = cert.get('link', '').strip()
+    if link:
+        return f"<a href='{link}' target='_blank' style='{link_style}'>{name}</a>"
+    else:
+        return f"<span style='{span_style or link_style}'>{name}</span>"
+
+
 def render_template_default(session_state, profile_img_html=""):
     """Default professional template — compact sidebar layout, grey/dark colour scheme"""
     import re as _re_def
@@ -8834,7 +8847,7 @@ def render_template_default(session_state, profile_img_html=""):
             cert_html += (
                 f"<div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);"
                 f"border-radius:6px;border:1px solid rgba(255,255,255,0.2);'>"
-                f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"{_cert_name_html(cert, 'color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;')}"
                 f"<div style='font-size:11px;color:rgba(255,255,255,0.8);'>{cert.get('duration','')}</div></div>"
             )
 
@@ -9060,8 +9073,7 @@ def render_template_modern(session_state, profile_img_html=""):
                 f"<div style='margin-bottom:14px;padding:12px 14px;border-left:3px solid #2563eb;"
                 f"background:#f8faff;border-radius:0 8px 8px 0;'>"
                 f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:4px;'>"
-                f"<a href='{cert.get('link','javascript:void(0)')}' target='_blank' style='font-size:14px;font-weight:700;"
-                f"color:#1e3a8a;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"{_cert_name_html(cert, 'font-size:14px;font-weight:700;color:#1e3a8a;text-decoration:none;')}"
                 f"<span style='font-size:12px;color:#374151;background:#e0e7ff;padding:2px 8px;"
                 f"border-radius:6px;font-weight:600;border:1px solid #c7d2fe;'>{cert.get('duration','')}</span>"
                 f"</div>"
@@ -9253,7 +9265,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_sb_html += (
                 f"<div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);border-radius:6px;border:1px solid rgba(56,189,248,0.3);'>"
-                f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"{_cert_name_html(cert, 'color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;')}"
                 f"<div style='font-size:11px;color:rgba(255,255,255,0.8);'>{cert.get('duration','')}</div></div>"
             )
 
@@ -9442,7 +9454,7 @@ def render_template_classic(session_state, profile_img_html=""):
             cert_html += f"""
             <div style='margin-bottom:12px;'>
                 <div style='display:flex;justify-content:space-between;'>
-                    <a href='{cert.get("link","javascript:void(0)")}' target='_blank' style='font-weight:600;color:#1e3a5f;font-size:15px;text-decoration:none;'>{cert.get("name","")}</a>
+                    {_cert_name_html(cert, 'font-weight:600;color:#1e3a5f;font-size:15px;text-decoration:none;')}
                     <span style='font-size:13px;color:#555;'>{cert.get("duration","")}</span>
                 </div>
                 <div style='font-size:13px;color:#444;'>{desc}</div>
@@ -9601,7 +9613,7 @@ def render_template_executive(session_state, profile_img_html=""):
         if cert.get("name"):
             cert_html += f"""
             <div style='margin-bottom:10px;'>
-                <a href='{cert.get("link","javascript:void(0)")}' target='_blank' style='font-weight:600;font-size:15px;color:#3730a3;text-decoration:none;'>{cert.get("name","")}</a>
+                {_cert_name_html(cert, 'font-weight:600;font-size:15px;color:#3730a3;text-decoration:none;')}
                 <span style='font-size:13px;color:#777;'> &nbsp;·&nbsp; {cert.get("duration","")}</span>
                 <div style='font-size:13px;color:#444;'>{cert.get("description","").replace(chr(10),"<br>")}</div>
             </div>"""
@@ -9767,7 +9779,7 @@ def render_template_timeline(session_state, profile_img_html=""):
     cert_items = "".join(
         f"<div style='margin-bottom:10px;display:flex;align-items:center;gap:10px;'>"
         f"<span style='width:8px;height:8px;background:#0d9488;border-radius:50%;flex-shrink:0;'></span>"
-        f"<a href='{c.get('link','javascript:void(0)')}' target='_blank' style='font-weight:600;color:#0d9488;font-size:14px;text-decoration:none;'>{c.get('name','')}</a>"
+        f"{_cert_name_html(c, 'font-weight:600;color:#0d9488;font-size:14px;text-decoration:none;')}"
         f"<span style='font-size:12px;color:#64748b;'>· {c.get('duration','')}</span></div>"
         for c in session_state.certificate_links if c.get('name')
     )
@@ -9906,7 +9918,7 @@ def render_template_corporate(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_sidebar += f"""
             <div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);border-radius:6px;'>
-                <a href='{cert.get("link","javascript:void(0)")}' style='color:#93c5fd;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>
+                {_cert_name_html(cert, 'color:#93c5fd;font-size:13px;font-weight:600;text-decoration:none;')}
                 <div style='font-size:11px;color:#bfdbfe;'>{cert.get('duration','')}</div>
             </div>"""
 
@@ -10080,7 +10092,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
     for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_html += (f"<div style='margin-bottom:8px;'>"
-                          f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#059669;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
+                          f"{_cert_name_html(cert, 'color:#059669;font-size:13px;font-weight:600;text-decoration:none;')}"
                           f"<span style='font-size:12px;color:#6b7280;'> · {cert.get('duration','')}</span>"
                           f"</div>")
 
@@ -10231,7 +10243,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
     cert_html = ""
     for cert in session_state.certificate_links:
         if cert.get('name'):
-            cert_html += f"<div style='margin-bottom:9px;padding:8px;background:rgba(255,255,255,0.1);border-radius:5px;'><a href='{cert.get('link','javascript:void(0)')}' style='color:#fde68a;font-size:12px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a><div style='font-size:11px;color:#d4b896;'>{cert.get('duration','')}</div></div>"
+            cert_html += f"<div style='margin-bottom:9px;padding:8px;background:rgba(255,255,255,0.1);border-radius:5px;'>{_cert_name_html(cert, 'color:#fde68a;font-size:12px;font-weight:600;text-decoration:none;')}<div style='font-size:11px;color:#d4b896;'>{cert.get('duration','')}</div></div>"
 
     all_links_html = ""
     if proj_links_all:
@@ -10352,7 +10364,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_html_np += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(184,151,42,0.12);"
                              f"border-radius:5px;border:1px solid rgba(184,151,42,0.3);'>"
-                             f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#f5e6b2;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
+                             f"{_cert_name_html(cert, 'color:#f5e6b2;font-size:12px;font-weight:700;text-decoration:none;')}"
                              f"<div style='font-size:11px;color:rgba(245,230,178,0.75);'>{cert.get('duration','')}</div></div>")
 
     proj_links_html_np = ""
@@ -10591,8 +10603,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
             <div style='margin-bottom:14px;padding:10px 12px;background:#f8fafc;
                         border-left:3px solid {C_ACCENT};border-radius:0 6px 6px 0;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;'>
-                    <a href='{cert.get("link","javascript:void(0)")}' target='_blank'
-                       style='font-weight:700;color:{C_PRIMARY};font-size:15px;text-decoration:none;'>{cert.get("name","")}</a>
+                    {_cert_name_html(cert, f'font-weight:700;color:{C_PRIMARY};font-size:15px;text-decoration:none;')}
                     <span style='font-size:13px;color:{C_MUTED};font-weight:600;background:#f1f5f9;
                           padding:2px 8px;border-radius:4px;border:1px solid #cbd5e1;'>{cert.get("duration","")}</span>
                 </div>
@@ -10704,7 +10715,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_html_ti += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(255,255,255,0.1);"
                              f"border-radius:5px;border:1px solid rgba(255,255,255,0.2);'>"
-                             f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#ccfbf1;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
+                             f"{_cert_name_html(cert, 'color:#ccfbf1;font-size:12px;font-weight:700;text-decoration:none;')}"
                              f"<div style='font-size:11px;color:rgba(204,251,241,0.75);'>{cert.get('duration','')}</div></div>")
 
     proj_links_html_ti = ""
@@ -10924,7 +10935,7 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
             cert_html += f"""
             <div style='margin-bottom:12px;'>
                 <div style='display:flex;justify-content:space-between;'>
-                    <a href='{cert.get("link","javascript:void(0)")}' target='_blank' style='font-weight:600;color:#7f1d1d;font-size:15px;text-decoration:none;'>{cert.get("name","")}</a>
+                    {_cert_name_html(cert, 'font-weight:600;color:#7f1d1d;font-size:15px;text-decoration:none;')}
                     <span style='font-size:13px;color:#6b7280;'>{cert.get("duration","")}</span>
                 </div>
                 <div style='font-size:13px;color:#6b7280;'>{desc}</div>
@@ -11034,7 +11045,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_html_it += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(34,211,238,0.1);"
                              f"border-radius:5px;border:1px solid rgba(34,211,238,0.3);'>"
-                             f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#a5f3fc;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
+                             f"{_cert_name_html(cert, 'color:#a5f3fc;font-size:12px;font-weight:700;text-decoration:none;')}"
                              f"<div style='font-size:11px;color:rgba(165,243,252,0.75);'>{cert.get('duration','')}</div></div>")
 
     proj_links_html_it = ""
@@ -11226,7 +11237,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_html_fg += (
                 f"<div style='margin-bottom:10px;padding-left:10px;border-left:2px solid #86efac;'>"
-                f"<a href='{cert.get('link','javascript:void(0)')}' target='_blank' style='font-size:13px;font-weight:700;color:#14532d;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"{_cert_name_html(cert, 'font-size:13px;font-weight:700;color:#14532d;text-decoration:none;')}"
                 f"<span style='font-size:12px;color:#6b7280;'> — {cert.get('duration','')}</span></div>"
             )
 
@@ -13235,13 +13246,13 @@ with tab2:
                 st.session_state["generated_html"]
             ).read()
 
-        col1, col2 = st.columns([1, 1])
+        col1, spacer, col2 = st.columns([1, 0.15, 0.85])
 
         # HTML Resume Download Button
         with col1:
             html_bytes = st.session_state["generated_html"].encode("utf-8")
             html_file = BytesIO(html_bytes)
-            
+
             st.download_button(
                 label="⬇️ Download as Template",
                 data=html_file,
@@ -13250,12 +13261,48 @@ with tab2:
                 key="download_resume_html"
             )
 
-        # Preview Template Button
+        # Preview Template Button — SVG eye-open/closed icon via CSS label trick
         with col2:
-            if st.button("👁️ Preview Template", key="preview_template_btn"):
-                st.session_state["show_template_preview"] = not st.session_state.get(
-                    "show_template_preview", False
-                )
+            is_previewing = st.session_state.get("show_template_preview", False)
+
+            # Inline SVG as base64 data URI for use in CSS content / img
+            svg_eye_open = (
+                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' "
+                "viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' "
+                "stroke-linecap='round' stroke-linejoin='round'%3E"
+                "%3Cpath d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/%3E"
+                "%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"
+            )
+            svg_eye_closed = (
+                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' "
+                "viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' "
+                "stroke-linecap='round' stroke-linejoin='round'%3E"
+                "%3Cpath d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94'/%3E"
+                "%3Cpath d='M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19'/%3E"
+                "%3Cline x1='1' y1='1' x2='23' y2='23'/%3E%3C/svg%3E"
+            )
+
+            icon_uri = svg_eye_open if is_previewing else svg_eye_closed
+            btn_text = "Hide Preview" if is_previewing else "Preview Template"
+
+            # Inject CSS to prepend SVG icon to this specific button via ::before pseudo-element
+            st.markdown(f"""
+            <style>
+            div[data-testid="column"]:nth-child(3) .stButton > button::before {{
+                content: '';
+                display: inline-block;
+                width: 16px;
+                height: 16px;
+                background: url("{icon_uri}") no-repeat center center;
+                background-size: contain;
+                margin-right: 7px;
+                vertical-align: -3px;
+            }}
+            </style>
+            """, unsafe_allow_html=True)
+
+            if st.button(btn_text, key="preview_template_btn"):
+                st.session_state["show_template_preview"] = not is_previewing
 
         # Show/hide the template preview iframe
         if st.session_state.get("show_template_preview", False):
