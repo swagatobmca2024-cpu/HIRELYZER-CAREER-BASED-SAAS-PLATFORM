@@ -12587,14 +12587,63 @@ with tab2:
         }
         ICON_KEYS = ["personal", "summary", "exp", "edu", "projects", "skills", "certs", "contact"]
 
+        # ── Done thresholds — derived from scoring math, not arbitrary ───────
+        #
+        # Each threshold maps to a specific set of filled fields, calculated
+        # from the exact weights in each scoring function above.
+        #
+        # EXPERIENCE  entry_score = (req*0.55) + (qual*0.45), n=1 cap 0.80
+        #   title+company only            → 0.55  (NOT done)
+        #   +duration                     → ~0.65 (NOT done)
+        #   +duration + desc(≥80 chars)   → ~0.80 (Done ✓)  threshold = 0.76
+        #
+        # EDUCATION   entry_score = (req*0.60) + (qual*0.40), n=1 cap 0.85
+        #   institution+degree only       → 0.60  (NOT done)
+        #   +year                         → ~0.70 (NOT done)
+        #   +year + details(≥80 chars)    → ~0.85 (Done ✓)  threshold = 0.76
+        #
+        # PROJECTS    entry_score = (req*0.50) + (qual*0.50), n=1 cap 0.75
+        #   title+tech only               → 0.50  (NOT done)
+        #   +duration                     → ~0.60 (NOT done)
+        #   +duration + desc(≥80 chars)   → ~0.75 (Done ✓)  threshold = 0.72
+        #
+        # CERTIFICATES entry_score = (req*0.40) + (qual*0.60), no cap
+        #   name only                     → 0.40  (NOT done)
+        #   +link                         → ~0.55 (NOT done)
+        #   +link + duration              → ~0.63 (Done ✓)  threshold = 0.62
+        #
+        # SKILLS      composite: skills*0.5 + interests*0.2 + soft*0.2 + lang*0.1
+        #   3 skills only                 → 0.33  (NOT done)
+        #   3 skills + 2 soft skills      → 0.47  (NOT done)
+        #   3 skills + 2 soft + 2 int     → ~0.61 (Done ✓)  threshold = 0.57
+        #
+        # SUMMARY     length-based: <40=0.25 | <100=0.60 | <200=0.85 | 200+=1.0
+        #   threshold 0.85 = requires ≥100 chars (substantive summary)
+        #
+        # PERSONAL INFO  5 fields × 0.2 each — threshold 1.0 = all 5 required
+        # CONTACT        phone + linkedin × 0.5 each — threshold 1.0 = both required
+        DONE_THRESHOLD = {
+            "Personal Info":  1.0,   # all 5: name, email, phone, location, job title
+            "Summary":        0.85,  # ≥100 chars — substantive, not a placeholder
+            "Experience":     0.76,  # title + company + duration + real description
+            "Education":      0.76,  # institution + degree + year + details
+            "Projects":       0.72,  # title + tech + duration + real description
+            "Skills & More":  0.57,  # tech skills + soft skills + interests
+            "Certificates":   0.62,  # name + link + duration (verifiable)
+            "Contact":        1.0,   # both phone AND linkedin filled
+        }
+
         # ── Aggregate XP and progress from fractional scores ──────────────────
         total       = len(SECTIONS)
         xp_raw      = sum(SECTIONS.values())          # 0.0 – 8.0
         xp          = int(round(xp_raw * 10))         # 0 – 80
         max_xp      = total * 10
         pct         = int(round((xp_raw / total) * 100))
-        # "completed" for streak dots = sections at 100%
-        fully_done  = sum(1 for v in SECTIONS.values() if v >= 1.0)
+        # "Done" = section fill meets or exceeds its dedicated done threshold
+        fully_done  = sum(
+            1 for (k, v) in SECTIONS.items()
+            if v >= DONE_THRESHOLD.get(k, 1.0)
+        )
 
         if   pct == 0:    rank, rank_color, rank_bg, rank_border = "Unranked",   "#6b7280", "#1e2535", "#374151"
         elif pct <= 25:   rank, rank_color, rank_bg, rank_border = "Beginner",   "#d97706", "#2a1f12", "#92400e"
@@ -12605,7 +12654,7 @@ with tab2:
 
         # ── helper: section row HTML — now takes fill float 0.0–1.0 ──────────
         def _section_row(label, icon_key, fill):
-            done      = fill >= 1.0
+            done      = fill >= DONE_THRESHOLD.get(label, 1.0)
             partial   = 0.0 < fill < 1.0
             bar_pct   = f"{int(fill * 100)}%"
             # colour ramp: empty=dark, partial=amber, complete=blue
