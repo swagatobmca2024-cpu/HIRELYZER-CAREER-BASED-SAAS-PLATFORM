@@ -12242,6 +12242,87 @@ with tab2:
         All icons are inline SVG — no emojis.
         """
 
+        # ══════════════════════════════════════════════════════════════════════
+        # PRE-SCORING SYNC: push live widget values into entry dicts BEFORE
+        # scoring runs. This eliminates the double-press/stale-score bug that
+        # occurs because the sidebar renders BEFORE the form widgets, so the
+        # entry dicts still hold the previous run's committed values.
+        # By reading directly from session_state widget keys here, we always
+        # score the text the user has typed RIGHT NOW.
+        # ══════════════════════════════════════════════════════════════════════
+        def _sync_entries():
+            # Sync simple scalar fields
+            for widget_key, ss_key in [
+                (f"name_input_{fk}",    "name"),
+                (f"email_input_{fk}",   "email"),
+                (f"phone_input_{fk}",   "phone"),
+                (f"loc_input_{fk}",     "location"),
+                (f"job_input_{fk}",     "job_title"),
+                (f"summary_input_{fk}", "summary"),
+                (f"skills_input_{fk}",  "skills"),
+                (f"lang_input_{fk}",    "languages"),
+                (f"int_input_{fk}",     "interests"),
+                (f"soft_input_{fk}",    "Softskills"),
+                (f"ln_input_{fk}",      "linkedin"),
+                (f"phone_input_{fk}",   "phone"),
+            ]:
+                if widget_key in ss:
+                    ss[ss_key] = ss[widget_key]
+
+            # Sync experience entries
+            entries = ss.get("experience_entries", [])
+            n = len(entries)
+            for i, e in enumerate(entries):
+                for widget_suffix, dict_key in [
+                    (f"title_{i}_{n}_{fk}",       "title"),
+                    (f"company_{i}_{n}_{fk}",     "company"),
+                    (f"duration_{i}_{n}_{fk}",    "duration"),
+                    (f"description_{i}_{n}_{fk}", "description"),
+                ]:
+                    if widget_suffix in ss:
+                        e[dict_key] = ss[widget_suffix]
+
+            # Sync education entries
+            entries = ss.get("education_entries", [])
+            n = len(entries)
+            for i, e in enumerate(entries):
+                for widget_suffix, dict_key in [
+                    (f"degree_{i}_{n}_{fk}",      "degree"),
+                    (f"institution_{i}_{n}_{fk}", "institution"),
+                    (f"edu_year_{i}_{n}_{fk}",    "year"),
+                    (f"edu_details_{i}_{n}_{fk}", "details"),
+                ]:
+                    if widget_suffix in ss:
+                        e[dict_key] = ss[widget_suffix]
+
+            # Sync project entries
+            entries = ss.get("project_entries", [])
+            n = len(entries)
+            for i, e in enumerate(entries):
+                for widget_suffix, dict_key in [
+                    (f"proj_title_{i}_{n}_{fk}",    "title"),
+                    (f"proj_tech_{i}_{n}_{fk}",     "tech"),
+                    (f"proj_duration_{i}_{n}_{fk}", "duration"),
+                    (f"proj_desc_{i}_{n}_{fk}",     "description"),
+                ]:
+                    if widget_suffix in ss:
+                        e[dict_key] = ss[widget_suffix]
+
+            # Sync certificate entries
+            entries = ss.get("certificate_links", [])
+            n = len(entries)
+            for i, e in enumerate(entries):
+                for widget_suffix, dict_key in [
+                    (f"cert_name_{i}_{n}_{fk}",        "name"),
+                    (f"cert_link_{i}_{n}_{fk}",        "link"),
+                    (f"cert_duration_{i}_{n}_{fk}",    "duration"),
+                    (f"cert_description_{i}_{n}_{fk}", "description"),
+                ]:
+                    if widget_suffix in ss:
+                        e[dict_key] = ss[widget_suffix]
+
+        _sync_entries()
+
         # ── SVG icon library ──────────────────────────────────────────────────
         SVG = {
             "personal": '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2.5"/><path d="M2.5 13.5c0-3 2.5-4.5 5.5-4.5s5.5 1.5 5.5 4.5"/></svg>',
@@ -12276,17 +12357,24 @@ with tab2:
             return sum(1 for v in values if str(v).strip())
 
         # ── Personal Info: 5 fields, each worth 0.2 ───────────────────────────
+        # Each field must be non-empty AND not gibberish to count.
         pi_name     = _wv(f"name_input_{fk}",  "name")
         pi_email    = _wv(f"email_input_{fk}",  "email")
         pi_phone    = _wv(f"phone_input_{fk}",  "phone")
         pi_location = _wv(f"loc_input_{fk}",    "location")
         pi_jobtitle = _wv(f"job_input_{fk}",    "job_title")
-        _fill_personal = round(_filled(pi_name, pi_email, pi_phone, pi_location, pi_jobtitle) / 5, 2)
+        def _valid_field(val):
+            """Non-empty and not gibberish."""
+            return bool(val) and not _is_gibberish(val)
+        _fill_personal = round(
+            sum(1 for v in [pi_name, pi_email, pi_phone, pi_location, pi_jobtitle]
+                if _valid_field(v)) / 5, 2
+        )
 
-        # ── Summary: needs meaningful length (≥40 chars = 0.5, ≥100 chars = 1.0) ──
+        # ── Summary: needs meaningful length AND non-gibberish content ──────────
         _summary_text = _wv(f"summary_input_{fk}", "summary")
         _summary_len  = len(_summary_text)
-        if _summary_len == 0:
+        if _summary_len == 0 or _is_gibberish(_summary_text):
             _fill_summary = 0.0
         elif _summary_len < 40:
             _fill_summary = 0.25   # started but too short
@@ -12301,13 +12389,12 @@ with tab2:
         def _is_gibberish(text):
             """
             Detect clearly random / meaningless text.
-            Returns True (gibberish) when the content looks fake.
-            Heuristics:
-              1. Average token length < 2.5  (single chars / 2-char noise)
-              2. > 50% of tokens are 1–2 chars long
-              3. Any single token is longer than 25 chars with very few vowels
-                 (keyboard mash like 'KADGCAskjvgSLJVBLQSjv…')
-              4. All tokens are the SAME word repeated (copy-paste spam)
+            Returns True (gibberish) only when content is clearly fake/noise.
+            Heuristics (conservative — real short words must NOT be flagged):
+              1. Average token length < 2.0 AND > 60% tokens are 1-char  (pure noise)
+              2. Any token > 25 chars with < 15% vowels  (keyboard mash)
+              3. All tokens are the SAME word repeated 3+ times (copy-paste spam)
+              4. 4+ tokens all 1 char each (e.g. "a b c d e")
             """
             t = str(text).strip()
             if not t:
@@ -12315,22 +12402,25 @@ with tab2:
             tokens = [tok for tok in t.replace(',', ' ').replace(';', ' ').split() if tok]
             if not tokens:
                 return True
-            # Rule 3: single mega-token is keyboard mash
-            if len(tokens) == 1 and len(tokens[0]) > 25:
-                return True
-            # Rule 3 extended: any token > 20 chars with very few vowels
+            # Rule 2: any token > 25 chars that is clearly machine/keyboard noise:
+            #   a) < 15% vowels  (e.g. "KADGCAskjvgSLJVBLQSjv" — consonant mash)
+            #   b) <= 2 unique characters (e.g. "aaaaaa", "ababab" — key repeat)
+            # Real long words like "Supercalifragilisticexpialidocious" have 15+ unique chars.
             for tok in tokens:
-                if len(tok) > 20:
+                if len(tok) > 25:
                     vowels = sum(1 for c in tok.lower() if c in 'aeiou')
-                    if vowels / len(tok) < 0.10:   # < 10% vowels → gibberish
+                    if vowels / len(tok) < 0.15:   # consonant mash
                         return True
+                    if len(set(tok.lower())) <= 2:  # single/double char repeat
+                        return True
+            # Rule 1: nearly all tokens are single characters (pure noise like "a b c d")
+            # Require 4+ tokens so single real 1-char inputs ("C" the language) are safe
+            one_char_ratio = sum(1 for tok in tokens if len(tok) == 1) / len(tokens)
             avg_len = sum(len(tok) for tok in tokens) / len(tokens)
-            short_ratio = sum(1 for tok in tokens if len(tok) <= 2) / len(tokens)
-            # Rule 1 + 2
-            if avg_len < 2.5 and short_ratio > 0.50:
+            if len(tokens) >= 4 and avg_len < 2.0 and one_char_ratio > 0.60:
                 return True
-            # Rule 4: all identical tokens repeated 3+ times
-            if len(set(tok.lower() for tok in tokens)) == 1 and len(tokens) > 2:
+            # Rule 3: all identical tokens repeated 3+ times (copy-paste spam)
+            if len(set(tok.lower() for tok in tokens)) == 1 and len(tokens) >= 3:
                 return True
             return False
 
@@ -12428,9 +12518,12 @@ with tab2:
         )
 
         # ── Contact: phone + linkedin, each worth 0.5 ─────────────────────────
+        # Both must be non-empty and non-gibberish to count.
         pi_phone2   = _wv(f"phone_input_{fk}",  "phone")
         pi_linkedin = _wv(f"ln_input_{fk}",      "linkedin")
-        _fill_contact = round(_filled(pi_phone2, pi_linkedin) / 2, 2)
+        _fill_contact = round(
+            sum(1 for v in [pi_phone2, pi_linkedin] if _valid_field(v)) / 2, 2
+        )
 
         # ══════════════════════════════════════════════════════════════════════
         # ENTRY-BASED SECTION SCORING — strict quality gates
@@ -12478,6 +12571,10 @@ with tab2:
         # Quality  (60%): duration 25% + description 75%
         # Description is the dominant quality signal for experience entries.
         # Single full entry -> max 0.80 (need 2 complete entries -> 1.0)
+        def _vf(val):
+            """Valid field: non-empty and not gibberish."""
+            return 1 if (val and not _is_gibberish(val)) else 0
+
         def _score_experience():
             entries = ss.get("experience_entries", [])
             if not entries:
@@ -12489,18 +12586,18 @@ with tab2:
                 company  = _get_val(ss, f"company_{i}_{n}_{fk}",     e, "company",     fk)
                 duration = _get_val(ss, f"duration_{i}_{n}_{fk}",    e, "duration",    fk)
                 desc_raw = _get_val(ss, f"description_{i}_{n}_{fk}", e, "description", fk)
-                # If both core fields empty -> stub entry, score 0
-                if not title and not company:
+                # Stub entry: both core fields empty or gibberish -> skip
+                if not _vf(title) and not _vf(company):
                     total += 0.0
                     continue
-                # Required: title + company -> 40% of entry score
-                req_score  = (_filled(title) + _filled(company)) / 2   # 0-1
-                # Quality: duration 25% weight, description 75% weight (desc is most important)
-                qual_score = ((_filled(duration) * 0.25) + (_desc_score(desc_raw) * 0.75))  # 0-1
+                # Required (40%): title + company — gibberish fields score 0
+                req_score  = (_vf(title) + _vf(company)) / 2
+                # Quality (60%): duration 25% + description 75%
+                # Description is the dominant quality signal.
+                qual_score = (_vf(duration) * 0.25) + (_desc_score(desc_raw) * 0.75)
                 entry_score = (req_score * 0.40) + (qual_score * 0.60)
                 total += entry_score
             avg = total / n
-            # Bonus for multiple entries: 1 entry caps at 0.80, 2+ can reach 1.0
             if n == 1:
                 avg = min(avg, 0.80)
             return round(min(avg, 1.0), 2)
@@ -12523,17 +12620,16 @@ with tab2:
                 degree      = _get_val(ss, f"degree_{i}_{n}_{fk}",      e, "degree",      fk)
                 year        = _get_val(ss, f"edu_year_{i}_{n}_{fk}",    e, "year",        fk)
                 details_raw = _get_val(ss, f"edu_details_{i}_{n}_{fk}", e, "details",     fk)
-                if not institution and not degree:
+                if not _vf(institution) and not _vf(degree):
                     total += 0.0
                     continue
-                # Required: institution + degree -> 40% of entry score
-                req_score  = (_filled(institution) + _filled(degree)) / 2
-                # Quality: year 20% weight, details/description 80% weight
-                qual_score = (_filled(year) * 0.20) + (_desc_score(details_raw) * 0.80)
+                # Required (40%): institution + degree — gibberish fields score 0
+                req_score  = (_vf(institution) + _vf(degree)) / 2
+                # Quality (60%): year 20% + details 80%
+                qual_score = (_vf(year) * 0.20) + (_desc_score(details_raw) * 0.80)
                 entry_score = (req_score * 0.40) + (qual_score * 0.60)
                 total += entry_score
             avg = total / n
-            # 1 entry caps at 0.85; 2+ can reach 1.0
             if n == 1:
                 avg = min(avg, 0.85)
             return round(min(avg, 1.0), 2)
@@ -12555,13 +12651,13 @@ with tab2:
                 tech     = _get_val(ss, f"proj_tech_{i}_{n}_{fk}",     e, "tech",        fk)
                 duration = _get_val(ss, f"proj_duration_{i}_{n}_{fk}", e, "duration",    fk)
                 desc_raw = _get_val(ss, f"proj_desc_{i}_{n}_{fk}",     e, "description", fk)
-                if not title:
+                if not _vf(title):
                     total += 0.0
                     continue
-                # Required: title + tech -> 35% of entry score
-                req_score  = (_filled(title) + _filled(tech)) / 2
-                # Quality: duration 15% weight, description 85% weight
-                qual_score = (_filled(duration) * 0.15) + (_desc_score(desc_raw) * 0.85)
+                # Required (35%): title + tech — gibberish fields score 0
+                req_score  = (_vf(title) + _vf(tech)) / 2
+                # Quality (65%): duration 15% + description 85%
+                qual_score = (_vf(duration) * 0.15) + (_desc_score(desc_raw) * 0.85)
                 entry_score = (req_score * 0.35) + (qual_score * 0.65)
                 total += entry_score
             avg = total / n
@@ -12589,13 +12685,13 @@ with tab2:
                 link     = _get_val(ss, f"cert_link_{i}_{n}_{fk}",        e, "link",        fk)
                 duration = _get_val(ss, f"cert_duration_{i}_{n}_{fk}",    e, "duration",    fk)
                 desc_raw = _get_val(ss, f"cert_description_{i}_{n}_{fk}", e, "description", fk)
-                if not name:
+                if not _vf(name):
                     total += 0.0
                     continue
-                # Required: name -> 30% of entry score
-                req_score  = _filled(name)   # 0 or 1
-                # Quality: link 20%, duration 20%, description 60%
-                qual_score = ((_filled(link) * 0.20) + (_filled(duration) * 0.20) + (_desc_score(desc_raw) * 0.60))
+                # Required (30%): name — gibberish name scores 0
+                req_score  = _vf(name)   # 0 or 1
+                # Quality (70%): link 20% + duration 20% + description 60%
+                qual_score = (_vf(link) * 0.20) + (_vf(duration) * 0.20) + (_desc_score(desc_raw) * 0.60)
                 entry_score = (req_score * 0.30) + (qual_score * 0.70)
                 total += entry_score
             avg = total / n
