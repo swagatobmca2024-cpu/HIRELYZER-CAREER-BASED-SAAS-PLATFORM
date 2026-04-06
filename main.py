@@ -13261,47 +13261,11 @@ with tab2:
                 key="download_resume_html"
             )
 
-        # Preview Template Button — SVG eye-open/closed icon via CSS label trick
+        # Preview Template Button — eye open when previewing, closed when hidden
         with col2:
             is_previewing = st.session_state.get("show_template_preview", False)
-
-            # Inline SVG as base64 data URI for use in CSS content / img
-            svg_eye_open = (
-                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' "
-                "viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' "
-                "stroke-linecap='round' stroke-linejoin='round'%3E"
-                "%3Cpath d='M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'/%3E"
-                "%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"
-            )
-            svg_eye_closed = (
-                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' "
-                "viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' "
-                "stroke-linecap='round' stroke-linejoin='round'%3E"
-                "%3Cpath d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94'/%3E"
-                "%3Cpath d='M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19'/%3E"
-                "%3Cline x1='1' y1='1' x2='23' y2='23'/%3E%3C/svg%3E"
-            )
-
-            icon_uri = svg_eye_open if is_previewing else svg_eye_closed
-            btn_text = "Hide Preview" if is_previewing else "Preview Template"
-
-            # Inject CSS to prepend SVG icon to this specific button via ::before pseudo-element
-            st.markdown(f"""
-            <style>
-            div[data-testid="column"]:nth-child(3) .stButton > button::before {{
-                content: '';
-                display: inline-block;
-                width: 16px;
-                height: 16px;
-                background: url("{icon_uri}") no-repeat center center;
-                background-size: contain;
-                margin-right: 7px;
-                vertical-align: -3px;
-            }}
-            </style>
-            """, unsafe_allow_html=True)
-
-            if st.button(btn_text, key="preview_template_btn"):
+            eye_icon = "👁️" if is_previewing else "🫣"
+            if st.button(f"{eye_icon} Preview Template", key="preview_template_btn"):
                 st.session_state["show_template_preview"] = not is_previewing
 
         # Show/hide the template preview iframe
@@ -13407,6 +13371,7 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
+
 JOB_TITLES = [
     "Software Engineering",
     "Full Stack Development",
