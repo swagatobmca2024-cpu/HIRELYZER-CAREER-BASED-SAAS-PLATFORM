@@ -13264,8 +13264,7 @@ with tab2:
         # Preview Template Button — eye open when previewing, closed when hidden
         with col2:
             is_previewing = st.session_state.get("show_template_preview", False)
-            eye_icon = "👁️" if is_previewing else "🫣"
-            if st.button(f"{eye_icon} Preview Template", key="preview_template_btn"):
+            if st.button("👁️ Preview Template", key="preview_template_btn"):
                 st.session_state["show_template_preview"] = not is_previewing
 
         # Show/hide the template preview iframe
