@@ -12335,20 +12335,33 @@ with tab2:
             return False
 
         def _desc_score(text):
-            """Score description quality: 0 if empty/gibberish, 0.25 if short, 0.6 if medium, 1.0 if rich."""
+            """
+            Score description quality based on length and content.
+            Thresholds calibrated so that genuine content always
+            improves the score:
+              0      — empty or gibberish
+              0.20   — stub (< 20 chars, e.g. "Did stuff")
+              0.45   — brief (20–59 chars, a single short sentence)
+              0.70   — decent (60–119 chars, 1–2 sentences)
+              0.88   — good (120–199 chars, a proper paragraph)
+              1.00   — rich (200+ chars, full detail with bullets or multi-sentence)
+            """
             t = str(text).strip()
             if not t:
                 return 0.0
             if _is_gibberish(t):
                 return 0.0   # reject random noise
-            elif len(t) < 30:
-                return 0.25
-            elif len(t) < 80:
-                return 0.6
-            elif len(t) < 180:
-                return 0.85
+            length = len(t)
+            if length < 20:
+                return 0.20  # stub — started but essentially empty
+            elif length < 60:
+                return 0.45  # brief — one short sentence
+            elif length < 120:
+                return 0.70  # decent — one or two sentences
+            elif length < 200:
+                return 0.88  # good — solid paragraph
             else:
-                return 1.0
+                return 1.00  # rich — detailed with full context
 
         # ── Skills & More: composite score across all four sub-sections ─────────
         # Weights: Skills 50% | Interests 20% | Soft Skills 20% | Languages 10%
@@ -12450,15 +12463,15 @@ with tab2:
         # unless it's certificates (1 cert is realistic).
         # ══════════════════════════════════════════════════════════════════════
 
-        def _get_val(ss, widget_key, entry, stored_key, fk):
+        def _get_val(ss, widget_key, entry, stored_key):
             """Read live widget value, fallback to stored entry value."""
             val = ss.get(widget_key, "") or entry.get(stored_key, "")
             return str(val).strip()
 
         # ── Experience scoring ────────────────────────────────────────────────
-        # Required (0.5 weight each): title, company
-        # Quality  (0.25 weight each): duration, description (quality-scored)
-        # Single full entry → max 0.75 (need 2 complete entries → 1.0)
+        # Required (0.55 weight): title + company (average)
+        # Quality  (0.45 weight): duration (0.5) + _desc_score(description) (0.5)
+        # Single full entry → capped at 0.80 (need 2+ complete entries → 1.0)
         def _score_experience():
             entries = ss.get("experience_entries", [])
             if not entries:
@@ -12466,10 +12479,10 @@ with tab2:
             n = len(entries)
             total = 0.0
             for i, e in enumerate(entries):
-                title    = _get_val(ss, f"title_{i}_{n}_{fk}",       e, "title",       fk)
-                company  = _get_val(ss, f"company_{i}_{n}_{fk}",     e, "company",     fk)
-                duration = _get_val(ss, f"duration_{i}_{n}_{fk}",    e, "duration",    fk)
-                desc_raw = _get_val(ss, f"description_{i}_{n}_{fk}", e, "description", fk)
+                title    = _get_val(ss, f"title_{i}_{n}_{fk}",       e, "title")
+                company  = _get_val(ss, f"company_{i}_{n}_{fk}",     e, "company")
+                duration = _get_val(ss, f"duration_{i}_{n}_{fk}",    e, "duration")
+                desc_raw = _get_val(ss, f"description_{i}_{n}_{fk}", e, "description")
                 # If both core fields empty → stub entry, score 0
                 if not title and not company:
                     total += 0.0
@@ -12487,8 +12500,8 @@ with tab2:
         _fill_exp = _score_experience()
 
         # ── Education scoring ─────────────────────────────────────────────────
-        # Required: institution + degree  (0.55 weight)
-        # Quality : year + details        (0.45 weight)
+        # Required: institution + degree  (0.60 weight)
+        # Quality : year (0.5) + _desc_score(details) (0.5)  (0.40 weight total)
         # Single entry caps at 0.85 (1 education entry is realistic)
         def _score_education():
             entries = ss.get("education_entries", [])
@@ -12497,10 +12510,10 @@ with tab2:
             n = len(entries)
             total = 0.0
             for i, e in enumerate(entries):
-                institution = _get_val(ss, f"institution_{i}_{n}_{fk}", e, "institution", fk)
-                degree      = _get_val(ss, f"degree_{i}_{n}_{fk}",      e, "degree",      fk)
-                year        = _get_val(ss, f"edu_year_{i}_{n}_{fk}",    e, "year",        fk)
-                details_raw = _get_val(ss, f"edu_details_{i}_{n}_{fk}", e, "details",     fk)
+                institution = _get_val(ss, f"institution_{i}_{n}_{fk}", e, "institution")
+                degree      = _get_val(ss, f"degree_{i}_{n}_{fk}",      e, "degree")
+                year        = _get_val(ss, f"edu_year_{i}_{n}_{fk}",    e, "year")
+                details_raw = _get_val(ss, f"edu_details_{i}_{n}_{fk}", e, "details")
                 if not institution and not degree:
                     total += 0.0
                     continue
@@ -12517,8 +12530,8 @@ with tab2:
         _fill_edu = _score_education()
 
         # ── Projects scoring ──────────────────────────────────────────────────
-        # Required: title + tech  (0.5 weight)
-        # Quality : duration + description quality (0.5 weight)
+        # Required: title + tech  (0.50 weight, average)
+        # Quality : duration (0.4) + _desc_score(description) (0.6)  (0.50 weight total)
         # Single project caps at 0.75; 2 projects can reach 0.90; 3+ → 1.0
         def _score_projects():
             entries = ss.get("project_entries", [])
@@ -12527,10 +12540,10 @@ with tab2:
             n = len(entries)
             total = 0.0
             for i, e in enumerate(entries):
-                title    = _get_val(ss, f"proj_title_{i}_{n}_{fk}",    e, "title",       fk)
-                tech     = _get_val(ss, f"proj_tech_{i}_{n}_{fk}",     e, "tech",        fk)
-                duration = _get_val(ss, f"proj_duration_{i}_{n}_{fk}", e, "duration",    fk)
-                desc_raw = _get_val(ss, f"proj_desc_{i}_{n}_{fk}",     e, "description", fk)
+                title    = _get_val(ss, f"proj_title_{i}_{n}_{fk}",    e, "title")
+                tech     = _get_val(ss, f"proj_tech_{i}_{n}_{fk}",     e, "tech")
+                duration = _get_val(ss, f"proj_duration_{i}_{n}_{fk}", e, "duration")
+                desc_raw = _get_val(ss, f"proj_desc_{i}_{n}_{fk}",     e, "description")
                 if not title:
                     total += 0.0
                     continue
@@ -12548,8 +12561,8 @@ with tab2:
         _fill_proj = _score_projects()
 
         # ── Certificates scoring ──────────────────────────────────────────────
-        # Required: name  (0.4 weight)
-        # Quality : link + duration + description (0.6 weight)
+        # Required: name  (0.40 weight)
+        # Quality : link (0.5) + duration (0.25) + _desc_score(description) (0.25)  (0.60 weight total)
         # 1 fully-complete cert CAN reach 1.0 (certs are optional, 1 is good)
         def _score_certificates():
             entries = ss.get("certificate_links", [])
@@ -12558,10 +12571,10 @@ with tab2:
             n = len(entries)
             total = 0.0
             for i, e in enumerate(entries):
-                name     = _get_val(ss, f"cert_name_{i}_{n}_{fk}",        e, "name",        fk)
-                link     = _get_val(ss, f"cert_link_{i}_{n}_{fk}",        e, "link",        fk)
-                duration = _get_val(ss, f"cert_duration_{i}_{n}_{fk}",    e, "duration",    fk)
-                desc_raw = _get_val(ss, f"cert_description_{i}_{n}_{fk}", e, "description", fk)
+                name     = _get_val(ss, f"cert_name_{i}_{n}_{fk}",        e, "name")
+                link     = _get_val(ss, f"cert_link_{i}_{n}_{fk}",        e, "link")
+                duration = _get_val(ss, f"cert_duration_{i}_{n}_{fk}",    e, "duration")
+                desc_raw = _get_val(ss, f"cert_description_{i}_{n}_{fk}", e, "description")
                 if not name:
                     total += 0.0
                     continue
@@ -12591,26 +12604,31 @@ with tab2:
         #
         # Each threshold maps to a specific set of filled fields, calculated
         # from the exact weights in each scoring function above.
+        # _desc_score tiers: <20=0.20 | <60=0.45 | <120=0.70 | <200=0.88 | 200+=1.00
         #
         # EXPERIENCE  entry_score = (req*0.55) + (qual*0.45), n=1 cap 0.80
-        #   title+company only            → 0.55  (NOT done)
-        #   +duration                     → ~0.65 (NOT done)
-        #   +duration + desc(≥80 chars)   → ~0.80 (Done ✓)  threshold = 0.76
+        #   title+company only                     → 0.55  (NOT done)
+        #   +duration                              → ~0.65 (NOT done)
+        #   +duration + desc(60–119 chars, 0.70)   → capped 0.80 (Done ✓)
+        #   threshold = 0.76
         #
         # EDUCATION   entry_score = (req*0.60) + (qual*0.40), n=1 cap 0.85
-        #   institution+degree only       → 0.60  (NOT done)
-        #   +year                         → ~0.70 (NOT done)
-        #   +year + details(≥80 chars)    → ~0.85 (Done ✓)  threshold = 0.76
+        #   institution+degree only                → 0.60  (NOT done)
+        #   +year                                  → ~0.70 (NOT done)
+        #   +year + details(60–119 chars, 0.70)    → capped 0.85 (Done ✓)
+        #   threshold = 0.76
         #
         # PROJECTS    entry_score = (req*0.50) + (qual*0.50), n=1 cap 0.75
-        #   title+tech only               → 0.50  (NOT done)
-        #   +duration                     → ~0.60 (NOT done)
-        #   +duration + desc(≥80 chars)   → ~0.75 (Done ✓)  threshold = 0.72
+        #   title+tech only                        → 0.50  (NOT done)
+        #   +duration                              → ~0.57 (NOT done)
+        #   +duration + desc(60–119 chars, 0.70)   → capped 0.75 (Done ✓)
+        #   threshold = 0.70
         #
         # CERTIFICATES entry_score = (req*0.40) + (qual*0.60), no cap
-        #   name only                     → 0.40  (NOT done)
-        #   +link                         → ~0.55 (NOT done)
-        #   +link + duration              → ~0.63 (Done ✓)  threshold = 0.62
+        #   name only                              → 0.40  (NOT done)
+        #   +link                                  → ~0.70 (NOT done)
+        #   +link + duration                       → ~0.85 (Done ✓)
+        #   threshold = 0.62
         #
         # SKILLS      composite: skills*0.5 + interests*0.2 + soft*0.2 + lang*0.1
         #   3 skills only                 → 0.33  (NOT done)
@@ -12625,9 +12643,9 @@ with tab2:
         DONE_THRESHOLD = {
             "Personal Info":  1.0,   # all 5: name, email, phone, location, job title
             "Summary":        0.85,  # ≥100 chars — substantive, not a placeholder
-            "Experience":     0.76,  # title + company + duration + real description
-            "Education":      0.76,  # institution + degree + year + details
-            "Projects":       0.72,  # title + tech + duration + real description
+            "Experience":     0.76,  # title + company + duration + desc ≥ 60 chars
+            "Education":      0.76,  # institution + degree + year + details ≥ 60 chars
+            "Projects":       0.70,  # title + tech + duration + desc ≥ 60 chars
             "Skills & More":  0.57,  # tech skills + soft skills + interests
             "Certificates":   0.62,  # name + link + duration (verifiable)
             "Contact":        1.0,   # both phone AND linkedin filled
@@ -12815,9 +12833,8 @@ with tab2:
                     elif mode == "Delete" and len(ss.certificate_links) > 1:
                         ss.certificate_links.pop()
 
-    # ── call gamified sidebar AFTER fk is known so widget keys resolve correctly ──
+    # ── fk must be known before form is rendered ──────────────────────────────
     fk = st.session_state["form_key_counter"]
-    render_gamified_sidebar(st.session_state, fk)
     mode = st.session_state.get("edit_mode", "Add")
 
     # ---------------- Resume Form ----------------
@@ -12908,6 +12925,18 @@ with tab2:
                          "cover_letter_html", "encoded_profile_image"]:
                 st.session_state.pop(_key, None)
             st.session_state["form_key_counter"] = _new_counter
+
+    # ✅ FIX: Sidebar rendered AFTER the form so all entry dicts
+    # (education, projects, certificates, experience) already hold the
+    # current-run values typed by the user.  Previously this call sat
+    # BEFORE the form, which meant description fields were always scored
+    # against the stale previous-run values — making Education details,
+    # Project descriptions and Certificate descriptions appear to have no
+    # effect on XP no matter what the user wrote.
+    render_gamified_sidebar(
+        st.session_state,
+        st.session_state["form_key_counter"]
+    )
 
     st.markdown("""
     <style>
