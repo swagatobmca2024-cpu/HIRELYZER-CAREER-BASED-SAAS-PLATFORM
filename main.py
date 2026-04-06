@@ -12283,72 +12283,195 @@ with tab2:
         pi_jobtitle = _wv(f"job_input_{fk}",    "job_title")
         _fill_personal = round(_filled(pi_name, pi_email, pi_phone, pi_location, pi_jobtitle) / 5, 2)
 
-        # ── Summary: single textarea, any text = full ─────────────────────────
-        _fill_summary = 1.0 if _wv(f"summary_input_{fk}", "summary") else 0.0
+        # ── Summary: needs meaningful length (≥40 chars = 0.5, ≥100 chars = 1.0) ──
+        _summary_text = _wv(f"summary_input_{fk}", "summary")
+        _summary_len  = len(_summary_text)
+        if _summary_len == 0:
+            _fill_summary = 0.0
+        elif _summary_len < 40:
+            _fill_summary = 0.25   # started but too short
+        elif _summary_len < 100:
+            _fill_summary = 0.6    # decent but brief
+        elif _summary_len < 200:
+            _fill_summary = 0.85   # good
+        else:
+            _fill_summary = 1.0    # full — rich summary
 
-        # ── Skills: any comma-separated content = full ────────────────────────
-        _fill_skills = 1.0 if _wv(f"skills_input_{fk}", "skills") else 0.0
+        # ── Skills: scored by number of distinct comma-separated skills ────────
+        # 0 skills=0.0 | 1=0.25 | 2=0.5 | 3=0.75 | 4+=1.0
+        _skills_raw = _wv(f"skills_input_{fk}", "skills")
+        _skill_count = len([s for s in _skills_raw.split(",") if s.strip()]) if _skills_raw else 0
+        if _skill_count == 0:
+            _fill_skills = 0.0
+        elif _skill_count == 1:
+            _fill_skills = 0.25
+        elif _skill_count == 2:
+            _fill_skills = 0.5
+        elif _skill_count == 3:
+            _fill_skills = 0.75
+        else:
+            _fill_skills = 1.0    # 4+ skills = full marks
 
         # ── Contact: phone + linkedin, each worth 0.5 ─────────────────────────
         pi_phone2   = _wv(f"phone_input_{fk}",  "phone")
         pi_linkedin = _wv(f"ln_input_{fk}",      "linkedin")
         _fill_contact = round(_filled(pi_phone2, pi_linkedin) / 2, 2)
 
-        # ── Entry-based sections: score = avg fill-ratio across all entries ────
-        # Each entry has N required sub-fields; we score each sub-field 0 or 1
-        # and average across all entries so partial entries count proportionally.
+        # ══════════════════════════════════════════════════════════════════════
+        # ENTRY-BASED SECTION SCORING — strict quality gates
+        #
+        # For each entry-based section, we score across two tiers:
+        #   Tier 1 (REQUIRED): core identity fields — must be filled for any XP
+        #   Tier 2 (QUALITY):  detail fields — needed for full/high marks
+        #
+        # Per-entry score:
+        #   - If ALL required fields empty → 0 (blank/stub entry, ignored)
+        #   - required fields score up to 0.5 of entry weight
+        #   - quality/detail fields score the remaining 0.5
+        #   - Description length is checked: short (<30 chars) = 0.25 credit
+        #
+        # Section score = average of all entry scores, CAPPED so that a single
+        # entry with everything filled = 0.8 max (need 2+ entries for 1.0)
+        # unless it's certificates (1 cert is realistic).
+        # ══════════════════════════════════════════════════════════════════════
 
-        def _entry_fill_ratio(entries_key, widget_prefixes, stored_keys):
-            """
-            entries_key     : session_state key holding the list of entries
-            widget_prefixes : list of widget key prefix strings  e.g. ["title","company"]
-            stored_keys     : list of dict keys in the stored entry  e.g. ["title","company"]
-            Returns float 0.0–1.0.
-            """
-            entries = ss.get(entries_key, [])
-            n = len(entries)
-            if n == 0:
+        def _get_val(ss, widget_key, entry, stored_key, fk):
+            """Read live widget value, fallback to stored entry value."""
+            val = ss.get(widget_key, "") or entry.get(stored_key, "")
+            return str(val).strip()
+
+        def _desc_score(text):
+            """Score description quality: 0 if empty, 0.25 if short, 0.6 if medium, 1.0 if rich."""
+            t = str(text).strip()
+            if not t:
                 return 0.0
-            n_fields = len(widget_prefixes)
-            total_score = 0.0
-            for i, entry in enumerate(entries):
-                entry_score = 0
-                for prefix, skey in zip(widget_prefixes, stored_keys):
-                    # try live widget key first, then stored entry value
-                    wkey = f"{prefix}_{i}_{n}_{fk}"
-                    val  = ss.get(wkey, "") or entry.get(skey, "")
-                    if str(val).strip():
-                        entry_score += 1
-                total_score += entry_score / n_fields
-            return round(total_score / n, 2)
+            elif len(t) < 30:
+                return 0.25
+            elif len(t) < 80:
+                return 0.6
+            elif len(t) < 180:
+                return 0.85
+            else:
+                return 1.0
 
-        # Experience: title + company are required; duration + description optional but scored
-        _fill_exp = _entry_fill_ratio(
-            "experience_entries",
-            ["title", "company", "duration", "description"],
-            ["title", "company", "duration", "description"],
-        )
+        # ── Experience scoring ────────────────────────────────────────────────
+        # Required (0.5 weight each): title, company
+        # Quality  (0.25 weight each): duration, description (quality-scored)
+        # Single full entry → max 0.75 (need 2 complete entries → 1.0)
+        def _score_experience():
+            entries = ss.get("experience_entries", [])
+            if not entries:
+                return 0.0
+            n = len(entries)
+            total = 0.0
+            for i, e in enumerate(entries):
+                title    = _get_val(ss, f"title_{i}_{n}_{fk}",       e, "title",       fk)
+                company  = _get_val(ss, f"company_{i}_{n}_{fk}",     e, "company",     fk)
+                duration = _get_val(ss, f"duration_{i}_{n}_{fk}",    e, "duration",    fk)
+                desc_raw = _get_val(ss, f"description_{i}_{n}_{fk}", e, "description", fk)
+                # If both core fields empty → stub entry, score 0
+                if not title and not company:
+                    total += 0.0
+                    continue
+                req_score  = (_filled(title) + _filled(company)) / 2   # 0–1
+                qual_score = ((_filled(duration) * 0.5) + (_desc_score(desc_raw) * 0.5))  # 0–1
+                entry_score = (req_score * 0.55) + (qual_score * 0.45)
+                total += entry_score
+            avg = total / n
+            # Bonus for multiple complete entries: 1 entry caps at 0.80, 2+ can reach 1.0
+            if n == 1:
+                avg = min(avg, 0.80)
+            return round(min(avg, 1.0), 2)
 
-        # Education: institution + degree required; year + details scored
-        _fill_edu = _entry_fill_ratio(
-            "education_entries",
-            ["degree", "institution", "edu_year", "edu_details"],
-            ["degree", "institution", "year",     "details"],
-        )
+        _fill_exp = _score_experience()
 
-        # Projects: title + tech required; duration + description scored
-        _fill_proj = _entry_fill_ratio(
-            "project_entries",
-            ["proj_title", "proj_tech", "proj_duration", "proj_desc"],
-            ["title",      "tech",      "duration",      "description"],
-        )
+        # ── Education scoring ─────────────────────────────────────────────────
+        # Required: institution + degree  (0.55 weight)
+        # Quality : year + details        (0.45 weight)
+        # Single entry caps at 0.85 (1 education entry is realistic)
+        def _score_education():
+            entries = ss.get("education_entries", [])
+            if not entries:
+                return 0.0
+            n = len(entries)
+            total = 0.0
+            for i, e in enumerate(entries):
+                institution = _get_val(ss, f"institution_{i}_{n}_{fk}", e, "institution", fk)
+                degree      = _get_val(ss, f"degree_{i}_{n}_{fk}",      e, "degree",      fk)
+                year        = _get_val(ss, f"edu_year_{i}_{n}_{fk}",    e, "year",        fk)
+                details_raw = _get_val(ss, f"edu_details_{i}_{n}_{fk}", e, "details",     fk)
+                if not institution and not degree:
+                    total += 0.0
+                    continue
+                req_score  = (_filled(institution) + _filled(degree)) / 2
+                qual_score = (_filled(year) * 0.5) + (_desc_score(details_raw) * 0.5)
+                entry_score = (req_score * 0.6) + (qual_score * 0.4)
+                total += entry_score
+            avg = total / n
+            # 1 entry caps at 0.85; 2+ can reach 1.0
+            if n == 1:
+                avg = min(avg, 0.85)
+            return round(min(avg, 1.0), 2)
 
-        # Certificates: name + link required; duration + description scored
-        _fill_cert = _entry_fill_ratio(
-            "certificate_links",
-            ["cert_name", "cert_link", "cert_duration", "cert_description"],
-            ["name",      "link",      "duration",      "description"],
-        )
+        _fill_edu = _score_education()
+
+        # ── Projects scoring ──────────────────────────────────────────────────
+        # Required: title + tech  (0.5 weight)
+        # Quality : duration + description quality (0.5 weight)
+        # Single project caps at 0.75; 2 projects can reach 0.90; 3+ → 1.0
+        def _score_projects():
+            entries = ss.get("project_entries", [])
+            if not entries:
+                return 0.0
+            n = len(entries)
+            total = 0.0
+            for i, e in enumerate(entries):
+                title    = _get_val(ss, f"proj_title_{i}_{n}_{fk}",    e, "title",       fk)
+                tech     = _get_val(ss, f"proj_tech_{i}_{n}_{fk}",     e, "tech",        fk)
+                duration = _get_val(ss, f"proj_duration_{i}_{n}_{fk}", e, "duration",    fk)
+                desc_raw = _get_val(ss, f"proj_desc_{i}_{n}_{fk}",     e, "description", fk)
+                if not title:
+                    total += 0.0
+                    continue
+                req_score  = (_filled(title) + _filled(tech)) / 2
+                qual_score = (_filled(duration) * 0.4) + (_desc_score(desc_raw) * 0.6)
+                entry_score = (req_score * 0.5) + (qual_score * 0.5)
+                total += entry_score
+            avg = total / n
+            if n == 1:
+                avg = min(avg, 0.75)
+            elif n == 2:
+                avg = min(avg, 0.90)
+            return round(min(avg, 1.0), 2)
+
+        _fill_proj = _score_projects()
+
+        # ── Certificates scoring ──────────────────────────────────────────────
+        # Required: name  (0.4 weight)
+        # Quality : link + duration + description (0.6 weight)
+        # 1 fully-complete cert CAN reach 1.0 (certs are optional, 1 is good)
+        def _score_certificates():
+            entries = ss.get("certificate_links", [])
+            if not entries:
+                return 0.0
+            n = len(entries)
+            total = 0.0
+            for i, e in enumerate(entries):
+                name     = _get_val(ss, f"cert_name_{i}_{n}_{fk}",        e, "name",        fk)
+                link     = _get_val(ss, f"cert_link_{i}_{n}_{fk}",        e, "link",        fk)
+                duration = _get_val(ss, f"cert_duration_{i}_{n}_{fk}",    e, "duration",    fk)
+                desc_raw = _get_val(ss, f"cert_description_{i}_{n}_{fk}", e, "description", fk)
+                if not name:
+                    total += 0.0
+                    continue
+                req_score  = _filled(name)   # 0 or 1
+                qual_score = ((_filled(link) * 0.5) + (_filled(duration) * 0.25) + (_desc_score(desc_raw) * 0.25))
+                entry_score = (req_score * 0.4) + (qual_score * 0.6)
+                total += entry_score
+            avg = total / n
+            return round(min(avg, 1.0), 2)
+
+        _fill_cert = _score_certificates()
 
         # ── SECTIONS dict: float 0.0–1.0 per section ─────────────────────────
         SECTIONS = {
