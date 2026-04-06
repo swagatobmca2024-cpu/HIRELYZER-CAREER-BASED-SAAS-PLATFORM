@@ -12392,31 +12392,42 @@ with tab2:
             chk_bg  = "#2563eb"    if done    else "transparent"
             chk_bdr = "#2563eb"    if done    else ("#78450a" if partial else "#374151")
             chk_op  = "1"          if done    else "0"
-            pct_lbl = f"{int(fill*100)}%" if partial else ""
-            return f"""
-<div style='display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;
-     background:{row_bg};border:0.5px solid {row_bdr};margin-bottom:7px;'>
-  <div style='width:28px;height:28px;border-radius:7px;background:{icon_bg};
-       display:flex;align-items:center;justify-content:center;flex-shrink:0;color:{icon_col};'>
-    {SVG[icon_key]}
-  </div>
-  <div style='flex:1;min-width:0;'>
-    <div style='display:flex;justify-content:space-between;align-items:center;'>
-      <div style='font-size:12px;font-weight:500;color:{name_col};'>{label}</div>
-      {f"<div style='font-size:9px;color:#f59e0b;font-weight:500;'>{pct_lbl}</div>" if pct_lbl else ""}
-    </div>
-    <div style='height:3px;background:#1e2535;border-radius:3px;margin-top:4px;overflow:hidden;'>
-      <div style='height:100%;width:{bar_pct};background:{bar_col};border-radius:3px;'></div>
-    </div>
-  </div>
-  <div style='width:18px;height:18px;border-radius:50%;background:{chk_bg};
-       border:1.5px solid {chk_bdr};display:flex;align-items:center;justify-content:center;flex-shrink:0;'>
-    <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="#fff"
-         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:{chk_op}">
-      <polyline points="2,5 4.5,7.5 8.5,2.5"/>
-    </svg>
-  </div>
-</div>"""
+            # pre-build the partial-% badge so no nested f-string ends up in the HTML
+            if partial:
+                pct_badge = (
+                    "<div style='font-size:9px;color:#f59e0b;font-weight:500;'>"
+                    + str(int(fill * 100)) + "%</div>"
+                )
+            else:
+                pct_badge = ""
+            return (
+                "<div style='display:flex;align-items:center;gap:10px;padding:9px 10px;"
+                "border-radius:9px;background:" + row_bg + ";border:0.5px solid " + row_bdr + ";"
+                "margin-bottom:7px;'>"
+                "<div style='width:28px;height:28px;border-radius:7px;background:" + icon_bg + ";"
+                "display:flex;align-items:center;justify-content:center;flex-shrink:0;color:" + icon_col + ";'>"
+                + SVG[icon_key] +
+                "</div>"
+                "<div style='flex:1;min-width:0;'>"
+                "<div style='display:flex;justify-content:space-between;align-items:center;'>"
+                "<div style='font-size:12px;font-weight:500;color:" + name_col + ";'>" + label + "</div>"
+                + pct_badge +
+                "</div>"
+                "<div style='height:3px;background:#1e2535;border-radius:3px;margin-top:4px;overflow:hidden;'>"
+                "<div style='height:100%;width:" + bar_pct + ";background:" + bar_col + ";border-radius:3px;'></div>"
+                "</div>"
+                "</div>"
+                "<div style='width:18px;height:18px;border-radius:50%;background:" + chk_bg + ";"
+                "border:1.5px solid " + chk_bdr + ";display:flex;align-items:center;"
+                "justify-content:center;flex-shrink:0;'>"
+                "<svg width='9' height='9' viewBox='0 0 10 10' fill='none' stroke='#fff' "
+                "stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round' "
+                "style='opacity:" + chk_op + ";'>"
+                "<polyline points='2,5 4.5,7.5 8.5,2.5'/>"
+                "</svg>"
+                "</div>"
+                "</div>"
+            )
 
         # ── streak dots — one dot per section, lit when section is 100% ─────────
         dots_html = "".join(
@@ -13348,7 +13359,6 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
-
 JOB_TITLES = [
     "Software Engineering",
     "Full Stack Development",
