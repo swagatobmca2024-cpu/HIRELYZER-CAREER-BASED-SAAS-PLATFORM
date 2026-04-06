@@ -8834,7 +8834,7 @@ def render_template_default(session_state, profile_img_html=""):
             cert_html += (
                 f"<div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);"
                 f"border-radius:6px;border:1px solid rgba(255,255,255,0.2);'>"
-                f"<a href='{cert.get('link','#')}' style='color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
                 f"<div style='font-size:11px;color:rgba(255,255,255,0.8);'>{cert.get('duration','')}</div></div>"
             )
 
@@ -9060,7 +9060,7 @@ def render_template_modern(session_state, profile_img_html=""):
                 f"<div style='margin-bottom:14px;padding:12px 14px;border-left:3px solid #2563eb;"
                 f"background:#f8faff;border-radius:0 8px 8px 0;'>"
                 f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;margin-bottom:4px;'>"
-                f"<a href='{cert.get('link','#')}' target='_blank' style='font-size:14px;font-weight:700;"
+                f"<a href='{cert.get('link','javascript:void(0)')}' target='_blank' style='font-size:14px;font-weight:700;"
                 f"color:#1e3a8a;text-decoration:none;'>{cert.get('name','')}</a>"
                 f"<span style='font-size:12px;color:#374151;background:#e0e7ff;padding:2px 8px;"
                 f"border-radius:6px;font-weight:600;border:1px solid #c7d2fe;'>{cert.get('duration','')}</span>"
@@ -9253,7 +9253,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_sb_html += (
                 f"<div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);border-radius:6px;border:1px solid rgba(56,189,248,0.3);'>"
-                f"<a href='{cert.get('link','#')}' style='color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
                 f"<div style='font-size:11px;color:rgba(255,255,255,0.8);'>{cert.get('duration','')}</div></div>"
             )
 
@@ -9442,7 +9442,7 @@ def render_template_classic(session_state, profile_img_html=""):
             cert_html += f"""
             <div style='margin-bottom:12px;'>
                 <div style='display:flex;justify-content:space-between;'>
-                    <a href='{cert.get("link","#")}' target='_blank' style='font-weight:600;color:#1e3a5f;font-size:15px;text-decoration:none;'>{cert.get("name","")}</a>
+                    <a href='{cert.get("link","javascript:void(0)")}' target='_blank' style='font-weight:600;color:#1e3a5f;font-size:15px;text-decoration:none;'>{cert.get("name","")}</a>
                     <span style='font-size:13px;color:#555;'>{cert.get("duration","")}</span>
                 </div>
                 <div style='font-size:13px;color:#444;'>{desc}</div>
@@ -9601,7 +9601,7 @@ def render_template_executive(session_state, profile_img_html=""):
         if cert.get("name"):
             cert_html += f"""
             <div style='margin-bottom:10px;'>
-                <a href='{cert.get("link","#")}' target='_blank' style='font-weight:600;font-size:15px;color:#3730a3;text-decoration:none;'>{cert.get("name","")}</a>
+                <a href='{cert.get("link","javascript:void(0)")}' target='_blank' style='font-weight:600;font-size:15px;color:#3730a3;text-decoration:none;'>{cert.get("name","")}</a>
                 <span style='font-size:13px;color:#777;'> &nbsp;·&nbsp; {cert.get("duration","")}</span>
                 <div style='font-size:13px;color:#444;'>{cert.get("description","").replace(chr(10),"<br>")}</div>
             </div>"""
@@ -9767,7 +9767,7 @@ def render_template_timeline(session_state, profile_img_html=""):
     cert_items = "".join(
         f"<div style='margin-bottom:10px;display:flex;align-items:center;gap:10px;'>"
         f"<span style='width:8px;height:8px;background:#0d9488;border-radius:50%;flex-shrink:0;'></span>"
-        f"<a href='{c.get('link','#')}' target='_blank' style='font-weight:600;color:#0d9488;font-size:14px;text-decoration:none;'>{c.get('name','')}</a>"
+        f"<a href='{c.get('link','javascript:void(0)')}' target='_blank' style='font-weight:600;color:#0d9488;font-size:14px;text-decoration:none;'>{c.get('name','')}</a>"
         f"<span style='font-size:12px;color:#64748b;'>· {c.get('duration','')}</span></div>"
         for c in session_state.certificate_links if c.get('name')
     )
@@ -9906,7 +9906,7 @@ def render_template_corporate(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_sidebar += f"""
             <div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);border-radius:6px;'>
-                <a href='{cert.get("link","#")}' style='color:#93c5fd;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>
+                <a href='{cert.get("link","javascript:void(0)")}' style='color:#93c5fd;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>
                 <div style='font-size:11px;color:#bfdbfe;'>{cert.get('duration','')}</div>
             </div>"""
 
@@ -10080,7 +10080,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
     for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_html += (f"<div style='margin-bottom:8px;'>"
-                          f"<a href='{cert.get('link','#')}' style='color:#059669;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
+                          f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#059669;font-size:13px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a>"
                           f"<span style='font-size:12px;color:#6b7280;'> · {cert.get('duration','')}</span>"
                           f"</div>")
 
@@ -10231,7 +10231,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
     cert_html = ""
     for cert in session_state.certificate_links:
         if cert.get('name'):
-            cert_html += f"<div style='margin-bottom:9px;padding:8px;background:rgba(255,255,255,0.1);border-radius:5px;'><a href='{cert.get('link','#')}' style='color:#fde68a;font-size:12px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a><div style='font-size:11px;color:#d4b896;'>{cert.get('duration','')}</div></div>"
+            cert_html += f"<div style='margin-bottom:9px;padding:8px;background:rgba(255,255,255,0.1);border-radius:5px;'><a href='{cert.get('link','javascript:void(0)')}' style='color:#fde68a;font-size:12px;font-weight:600;text-decoration:none;'>{cert.get('name','')}</a><div style='font-size:11px;color:#d4b896;'>{cert.get('duration','')}</div></div>"
 
     all_links_html = ""
     if proj_links_all:
@@ -10352,7 +10352,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_html_np += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(184,151,42,0.12);"
                              f"border-radius:5px;border:1px solid rgba(184,151,42,0.3);'>"
-                             f"<a href='{cert.get('link','#')}' style='color:#f5e6b2;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
+                             f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#f5e6b2;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
                              f"<div style='font-size:11px;color:rgba(245,230,178,0.75);'>{cert.get('duration','')}</div></div>")
 
     proj_links_html_np = ""
@@ -10591,7 +10591,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
             <div style='margin-bottom:14px;padding:10px 12px;background:#f8fafc;
                         border-left:3px solid {C_ACCENT};border-radius:0 6px 6px 0;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;'>
-                    <a href='{cert.get("link","#")}' target='_blank'
+                    <a href='{cert.get("link","javascript:void(0)")}' target='_blank'
                        style='font-weight:700;color:{C_PRIMARY};font-size:15px;text-decoration:none;'>{cert.get("name","")}</a>
                     <span style='font-size:13px;color:{C_MUTED};font-weight:600;background:#f1f5f9;
                           padding:2px 8px;border-radius:4px;border:1px solid #cbd5e1;'>{cert.get("duration","")}</span>
@@ -10704,7 +10704,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_html_ti += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(255,255,255,0.1);"
                              f"border-radius:5px;border:1px solid rgba(255,255,255,0.2);'>"
-                             f"<a href='{cert.get('link','#')}' style='color:#ccfbf1;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
+                             f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#ccfbf1;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
                              f"<div style='font-size:11px;color:rgba(204,251,241,0.75);'>{cert.get('duration','')}</div></div>")
 
     proj_links_html_ti = ""
@@ -10924,7 +10924,7 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
             cert_html += f"""
             <div style='margin-bottom:12px;'>
                 <div style='display:flex;justify-content:space-between;'>
-                    <a href='{cert.get("link","#")}' target='_blank' style='font-weight:600;color:#7f1d1d;font-size:15px;text-decoration:none;'>{cert.get("name","")}</a>
+                    <a href='{cert.get("link","javascript:void(0)")}' target='_blank' style='font-weight:600;color:#7f1d1d;font-size:15px;text-decoration:none;'>{cert.get("name","")}</a>
                     <span style='font-size:13px;color:#6b7280;'>{cert.get("duration","")}</span>
                 </div>
                 <div style='font-size:13px;color:#6b7280;'>{desc}</div>
@@ -11034,7 +11034,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_html_it += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(34,211,238,0.1);"
                              f"border-radius:5px;border:1px solid rgba(34,211,238,0.3);'>"
-                             f"<a href='{cert.get('link','#')}' style='color:#a5f3fc;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
+                             f"<a href='{cert.get('link','javascript:void(0)')}' style='color:#a5f3fc;font-size:12px;font-weight:700;text-decoration:none;'>{cert.get('name','')}</a>"
                              f"<div style='font-size:11px;color:rgba(165,243,252,0.75);'>{cert.get('duration','')}</div></div>")
 
     proj_links_html_it = ""
@@ -11226,7 +11226,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
         if cert.get('name'):
             cert_html_fg += (
                 f"<div style='margin-bottom:10px;padding-left:10px;border-left:2px solid #86efac;'>"
-                f"<a href='{cert.get('link','#')}' target='_blank' style='font-size:13px;font-weight:700;color:#14532d;text-decoration:none;'>{cert.get('name','')}</a>"
+                f"<a href='{cert.get('link','javascript:void(0)')}' target='_blank' style='font-size:13px;font-weight:700;color:#14532d;text-decoration:none;'>{cert.get('name','')}</a>"
                 f"<span style='font-size:12px;color:#6b7280;'> — {cert.get('duration','')}</span></div>"
             )
 
@@ -12585,8 +12585,7 @@ with tab2:
 
         st.markdown("### 🔗 Project Links")
         project_links_input = st.text_area("Enter one project link per line:", value="\n".join(st.session_state.project_links), key=f"proj_links_input_{fk}")
-        if project_links_input:
-            st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
+        st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
 
         st.markdown("### 🧾 <u>Certificates</u>", unsafe_allow_html=True)
         for idx, cert in enumerate(st.session_state.certificate_links):
@@ -12736,10 +12735,12 @@ with tab2:
             if st.session_state.certificate_links:
                 st.markdown("<h4 style='color:#336699;'>Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
                 for cert in st.session_state.certificate_links:
-                    if cert["name"] and cert["link"]:
+                    if cert["name"]:
+                        name_html = (f"<a href=\"{cert['link']}\" target=\"_blank\"><b>\U0001f4c4 {cert['name']}</b></a>"
+                                     if cert.get("link") else f"<b>\U0001f4c4 {cert['name']}</b>")
                         st.markdown(f"""
                         <div style='display:flex; justify-content:space-between;'>
-                            <a href="{cert['link']}" target="_blank"><b>📄 {cert['name']}</b></a>
+                            {name_html}
                             <span style='color:gray;'>{cert['duration']}</span>
                         </div>
                         <div style='margin-bottom:10px; font-size:14px;'>{cert['description']}</div>
