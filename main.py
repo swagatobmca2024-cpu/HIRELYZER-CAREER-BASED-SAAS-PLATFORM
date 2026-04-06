@@ -12378,78 +12378,260 @@ with tab2:
         else:
             _fill_summary = 1.0    # full — rich summary
 
-        # ── Gibberish / quality helpers (used by both Skills and entry scoring) ─
-        def _is_gibberish(text):
+        # ══════════════════════════════════════════════════════════════════════
+        # TEXT QUALITY VALIDATION ENGINE
+        # Industry-standard validation: prevents garbage inputs from earning XP.
+        # Invalid examples: "aaaaaaa", "test test test", "lorem ipsum lorem ipsum",
+        #                   "123456789", "asdf asdf asdf", placeholder text.
+        # ══════════════════════════════════════════════════════════════════════
+
+        # Common placeholder / filler phrases that must never earn XP
+        # Uses whole-word / whole-phrase matching to avoid false positives
+        # (e.g. "na" as a substring would incorrectly reject "internal", "final", etc.)
+        _FILLER_PHRASES = {
+            "lorem ipsum", "test test", "sample text", "placeholder",
+            "your text here", "enter here", "tbd", "todo",
+            "fill in", "coming soon", "to be added", "add here",
+            "description here", "write here", "dummy text",
+        }
+        # Single-word fillers checked as whole words only (not substrings)
+        _FILLER_WORDS = {"placeholder", "tbd", "todo", "dummy", "example", "test"}
+
+        def _is_low_quality_text(text):
             """
-            Detect clearly random / meaningless text.
-            Returns True (gibberish) when the content looks fake.
-            Heuristics:
-              1. Average token length < 2.5  (single chars / 2-char noise)
-              2. > 50% of tokens are 1–2 chars long
-              3. Any single token is longer than 25 chars with very few vowels
-                 (keyboard mash like 'KADGCAskjvgSLJVBLQSjv…')
-              4. All tokens are the SAME word repeated (copy-paste spam)
+            Comprehensive text quality gate.
+            Returns True when the text is meaningless / should earn 0 XP.
+
+            Checks applied (in order of cheapness):
+              1. Empty / whitespace-only
+              2. Pure numeric string  ("123456789")
+              3. Known filler/placeholder phrases
+              4. All-same character repeated  ("aaaaaaa", "........")
+              5. Keyboard-mash: single long token with < 15% vowels
+              6. Repeated-token spam: dominant word > 55% of all tokens
+              7. Very low unique-word ratio: < 35% unique among 4+ word inputs
+              8. Pathological average token length (< 2.0) with high short ratio
             """
             t = str(text).strip()
             if not t:
-                return False   # empty is handled separately
-            tokens = [tok for tok in t.replace(',', ' ').replace(';', ' ').split() if tok]
+                return True  # empty
+
+            # 1. Pure numeric
+            if t.replace(" ", "").replace("-", "").replace("+", "").replace(".", "").isdigit():
+                return True
+
+            t_lower = t.lower()
+
+            # 2. Known filler phrases (multi-word substring match is safe for phrases)
+            for phrase in _FILLER_PHRASES:
+                if phrase in t_lower:
+                    return True
+
+            # 2b. "n/a" exact or as sole token
+            if t_lower.strip() in {"n/a", "na", "n.a.", "n.a"}:
+                return True
+
+            # 2c. Single-word filler: whole-token match only (not substring)
+            t_tokens_lower = [tok.lower() for tok in t.split() if tok]
+            if len(t_tokens_lower) <= 2 and any(w in _FILLER_WORDS for w in t_tokens_lower):
+                return True
+
+            # 3. All-same character (e.g. "aaaaaaa", "-------")
+            stripped_chars = t.replace(" ", "")
+            if len(stripped_chars) >= 3 and len(set(stripped_chars.lower())) == 1:
+                return True
+
+            tokens = [tok for tok in t.replace(",", " ").replace(";", " ").split() if tok]
             if not tokens:
                 return True
-            # Rule 3: single mega-token is keyboard mash
-            if len(tokens) == 1 and len(tokens[0]) > 25:
-                return True
-            # Rule 3 extended: any token > 20 chars with very few vowels
+
+            # 4. Single mega-token keyboard mash (> 20 chars, < 15% vowels)
+            if len(tokens) == 1 and len(tokens[0]) > 20:
+                vowels = sum(1 for c in tokens[0].lower() if c in "aeiou")
+                if vowels / len(tokens[0]) < 0.15:
+                    return True
+
+            # 5. Any token > 18 chars with < 12% vowels → keyboard mash
             for tok in tokens:
-                if len(tok) > 20:
-                    vowels = sum(1 for c in tok.lower() if c in 'aeiou')
-                    if vowels / len(tok) < 0.10:   # < 10% vowels → gibberish
+                if len(tok) > 18:
+                    vowels = sum(1 for c in tok.lower() if c in "aeiou")
+                    if vowels / len(tok) < 0.12:
                         return True
+
+            # 6. Repeated-token spam: one word dominates > 55% of tokens
+            lowered = [tok.lower() for tok in tokens]
+            if len(tokens) >= 3:
+                from collections import Counter
+                most_common_count = Counter(lowered).most_common(1)[0][1]
+                if most_common_count / len(tokens) > 0.55:
+                    return True
+
+            # 7. Low unique-word ratio: for 4+ word inputs, need ≥ 35% unique
+            if len(tokens) >= 4:
+                unique_ratio = len(set(lowered)) / len(lowered)
+                if unique_ratio < 0.35:
+                    return True
+
+            # 8. Pathological token length pattern
             avg_len = sum(len(tok) for tok in tokens) / len(tokens)
             short_ratio = sum(1 for tok in tokens if len(tok) <= 2) / len(tokens)
-            # Rule 1 + 2
-            if avg_len < 2.5 and short_ratio > 0.50:
+            if avg_len < 2.0 and short_ratio > 0.60:
                 return True
-            # Rule 4: all identical tokens repeated 3+ times
-            if len(set(tok.lower() for tok in tokens)) == 1 and len(tokens) > 2:
-                return True
+
             return False
 
-        def _desc_score(text):
-            """Score description quality: 0 if empty/gibberish, 0.25 if short, 0.6 if medium, 1.0 if rich."""
+        def _text_quality_score(text, min_words=3):
+            """
+            Returns a quality multiplier 0.0–1.0 for free-text fields.
+            Uses _is_low_quality_text as the primary gate, then rewards:
+              - sufficient word count
+              - unique word ratio (vocabulary diversity)
+              - meaningful sentence structure (presence of varied words)
+
+            min_words: minimum word count required for any XP credit.
+            """
             t = str(text).strip()
             if not t:
                 return 0.0
-            if _is_gibberish(t):
-                return 0.0   # reject random noise
-            elif len(t) < 30:
-                return 0.25
-            elif len(t) < 80:
-                return 0.6
-            elif len(t) < 180:
-                return 0.85
-            else:
-                return 1.0
+            if _is_low_quality_text(t):
+                return 0.0  # hard reject — no XP for garbage
 
-        # ── Skills & More: composite score across all four sub-sections ─────────
-        # Weights: Skills 50% | Interests 20% | Soft Skills 20% | Languages 10%
-        #
-        # Each sub-section is scored on count of VALID (non-gibberish) tokens:
-        #   Skills      : 0=0.0 | 1=0.20 | 2=0.45 | 3=0.65 | 4=0.82 | 5+=1.0
-        #   Interests   : 0=0.0 | 1=0.35 | 2=0.70 | 3+=1.0
-        #   Soft Skills : 0=0.0 | 1=0.35 | 2=0.70 | 3+=1.0
-        #   Languages   : 0=0.0 | 1=0.50 | 2+=1.0
-        # Any token detected as gibberish is excluded from the valid count.
-        # ─────────────────────────────────────────────────────────────────────
+            tokens = [tok for tok in t.split() if tok]
+            word_count = len(tokens)
+
+            if word_count < min_words:
+                return 0.0  # below minimum word threshold
+
+            # Unique-word ratio bonus
+            unique_ratio = len(set(w.lower() for w in tokens)) / word_count
+            # Penalise low diversity (< 0.50 unique) in medium-length texts
+            diversity_mult = 1.0
+            if word_count >= 6 and unique_ratio < 0.50:
+                diversity_mult = unique_ratio * 1.5   # e.g. 0.40 ratio → 0.60 mult
+                diversity_mult = max(0.30, min(1.0, diversity_mult))
+
+            # Length-based base score
+            if word_count < 5:
+                base = 0.25
+            elif word_count < 15:
+                base = 0.55
+            elif word_count < 30:
+                base = 0.80
+            elif word_count < 50:
+                base = 0.92
+            else:
+                base = 1.0
+
+            return round(min(base * diversity_mult, 1.0), 3)
+
+        # ── Backwards-compatible helpers ──────────────────────────────────────
+
+        def _is_gibberish(text):
+            """Thin wrapper around the new quality engine for compatibility."""
+            return _is_low_quality_text(str(text).strip())
+
+        def _desc_score(text):
+            """
+            Score long-form description fields (experience, education, project, cert).
+            Combines word-count quality score with char-length signal.
+            Garbage inputs score 0 regardless of length.
+            """
+            t = str(text).strip()
+            if not t:
+                return 0.0
+            if _is_low_quality_text(t):
+                return 0.0  # hard reject
+
+            char_len = len(t)
+            word_score = _text_quality_score(t, min_words=4)
+
+            # Char-length tiers (require meaningful quality to reach upper tiers)
+            if char_len < 30:
+                char_tier = 0.20
+            elif char_len < 80:
+                char_tier = 0.55
+            elif char_len < 180:
+                char_tier = 0.82
+            else:
+                char_tier = 1.0
+
+            # Combined: 60% word quality + 40% char length tier
+            combined = (word_score * 0.60) + (char_tier * 0.40)
+            return round(min(combined, 1.0), 3)
 
         def _count_valid_tokens(raw_str):
-            """Return count of non-empty, non-gibberish comma-separated tokens."""
+            """Return count of unique, non-empty, non-gibberish comma-separated tokens."""
             if not raw_str:
                 return 0
-            tokens = [t.strip() for t in raw_str.split(",") if t.strip()]
-            return sum(1 for tok in tokens if not _is_gibberish(tok))
+            # Normalise capitalisation and deduplicate
+            seen = set()
+            count = 0
+            for tok in raw_str.split(","):
+                tok = tok.strip()
+                if not tok:
+                    continue
+                tok_norm = tok.lower()
+                if tok_norm in seen:
+                    continue  # skip duplicate
+                seen.add(tok_norm)
+                if not _is_low_quality_text(tok):
+                    count += 1
+            return count
 
-        # Technical Skills sub-score (weight 0.50)
+        # ══════════════════════════════════════════════════════════════════════
+        # LIVE VALUE READER
+        # ══════════════════════════════════════════════════════════════════════
+
+        def _get_val(ss, widget_key, entry, stored_key, fk):
+            """
+            Read the most up-to-date value for a field.
+            Priority:
+              1. Live Streamlit widget value (ss[widget_key])
+              2. Stored entry dict value (entry[stored_key])
+            """
+            live = ss.get(widget_key, "")
+            if live:
+                return str(live).strip()
+            stored = entry.get(stored_key, "")
+            return str(stored).strip()
+
+        # ══════════════════════════════════════════════════════════════════════
+        # INDUSTRY-STANDARD XP WEIGHT DISTRIBUTION
+        #
+        # Inspired by LinkedIn Profile Strength, Indeed Resume Score, and
+        # Jobscan completeness models. Weights reflect recruiter priority:
+        #
+        #   Experience    → 30 XP  (highest — core employability signal)
+        #   Projects      → 22 XP  (second — demonstrates practical skills)
+        #   Skills        → 16 XP  (medium — keyword matching & breadth)
+        #   Education     → 14 XP  (medium — credential verification)
+        #   Summary       →  7 XP  (differentiator — first impression text)
+        #   Certificates  →  5 XP  (bonus — validated expertise)
+        #   Personal Info →  4 XP  (baseline — completeness check)
+        #   Contact       →  2 XP  (small — reachability signal)
+        #                  ─────
+        #   TOTAL MAX     → 100 XP  (capped at 100)
+        #
+        # Each section returns a float 0.0–1.0. XP = weight × fill.
+        # calculate_resume_xp() recomputes from scratch on every render —
+        # no accumulation, no double-counting.
+        # ══════════════════════════════════════════════════════════════════════
+
+        XP_WEIGHTS = {
+            "Experience":    30,
+            "Projects":      22,
+            "Skills & More": 16,
+            "Education":     14,
+            "Summary":        7,
+            "Certificates":   5,
+            "Personal Info":  4,
+            "Contact":        2,
+        }
+        XP_TOTAL_MAX = sum(XP_WEIGHTS.values())   # 100
+
+        # ── Skills & More: composite score ────────────────────────────────────
+        # Weights: Skills 50% | Soft Skills 20% | Interests 20% | Languages 10%
+
         _skills_raw   = _wv(f"skills_input_{fk}", "skills")
         _skill_count  = _count_valid_tokens(_skills_raw)
         if _skill_count == 0:
@@ -12465,7 +12647,6 @@ with tab2:
         else:
             _sub_skills = 1.0   # 5+ skills = full marks
 
-        # Interests sub-score (weight 0.20)
         _interests_raw  = _wv(f"int_input_{fk}", "interests")
         _interest_count = _count_valid_tokens(_interests_raw)
         if _interest_count == 0:
@@ -12475,9 +12656,8 @@ with tab2:
         elif _interest_count == 2:
             _sub_interests = 0.70
         else:
-            _sub_interests = 1.0   # 3+ = full marks
+            _sub_interests = 1.0
 
-        # Soft Skills sub-score (weight 0.20)
         _soft_raw   = _wv(f"soft_input_{fk}", "Softskills")
         _soft_count = _count_valid_tokens(_soft_raw)
         if _soft_count == 0:
@@ -12487,9 +12667,8 @@ with tab2:
         elif _soft_count == 2:
             _sub_soft = 0.70
         else:
-            _sub_soft = 1.0   # 3+ = full marks
+            _sub_soft = 1.0
 
-        # Languages sub-score (weight 0.10)
         _lang_raw   = _wv(f"lang_input_{fk}", "languages")
         _lang_count = _count_valid_tokens(_lang_raw)
         if _lang_count == 0:
@@ -12497,68 +12676,26 @@ with tab2:
         elif _lang_count == 1:
             _sub_lang = 0.50
         else:
-            _sub_lang = 1.0   # 2+ = full marks
+            _sub_lang = 1.0
 
-        # Weighted composite
         _fill_skills = round(
-            (_sub_skills   * 0.50) +
+            (_sub_skills    * 0.50) +
             (_sub_interests * 0.20) +
             (_sub_soft      * 0.20) +
             (_sub_lang      * 0.10),
-            2
+            3
         )
 
         # ── Contact: phone + linkedin, each worth 0.5 ─────────────────────────
-        pi_phone2   = _wv(f"phone_input_{fk}",  "phone")
-        pi_linkedin = _wv(f"ln_input_{fk}",      "linkedin")
-        _fill_contact = round(_filled(pi_phone2, pi_linkedin) / 2, 2)
-
-        # ══════════════════════════════════════════════════════════════════════
-        # ENTRY-BASED SECTION SCORING — strict quality gates
-        #
-        # For each entry-based section, we score across two tiers:
-        #   Tier 1 (REQUIRED): core identity fields — must be filled for any XP
-        #   Tier 2 (QUALITY):  detail fields — needed for full/high marks
-        #
-        # Per-entry score:
-        #   - If ALL required fields empty → 0 (blank/stub entry, ignored)
-        #   - required fields score up to 0.5 of entry weight
-        #   - quality/detail fields score the remaining 0.5
-        #   - Description length is checked: short (<30 chars) = 0.25 credit
-        #
-        # Section score = average of all entry scores, CAPPED so that a single
-        # entry with everything filled = 0.8 max (need 2+ entries for 1.0)
-        # unless it's certificates (1 cert is realistic).
-        # ══════════════════════════════════════════════════════════════════════
-
-        def _get_val(ss, widget_key, entry, stored_key, fk):
-            """
-            Read the most up-to-date value for a field.
-            Priority:
-              1. Live Streamlit widget value (ss[widget_key]) — reflects what
-                 the user has typed in the current run.
-              2. Stored entry dict value (entry[stored_key]) — the value that
-                 was committed to session state on the previous run.
-            This two-step fallback ensures the score always reflects the current
-            text-area/input content, eliminating the stale-value bug where
-            editing Education/Projects/Certificate descriptions appeared to have
-            no effect on XP.
-            """
-            # 1) Live widget — only trust it when non-empty (Streamlit sets the
-            #    key in ss as soon as the widget is rendered for the first time)
-            live = ss.get(widget_key, "")
-            if live:          # truthy non-empty string wins
-                return str(live).strip()
-            # 2) Fallback: committed entry-dict value (handles first-render and
-            #    cases where the widget key hasn't been written to ss yet)
-            stored = entry.get(stored_key, "")
-            return str(stored).strip()
+        pi_phone2   = _wv(f"phone_input_{fk}", "phone")
+        pi_linkedin = _wv(f"ln_input_{fk}",    "linkedin")
+        _fill_contact = round(_filled(pi_phone2, pi_linkedin) / 2, 3)
 
         # ── Experience scoring ────────────────────────────────────────────────
-        # Required (40%): title + company
-        # Quality  (60%): duration 25% + description 75%
-        # Description is the dominant quality signal for experience entries.
-        # Single full entry -> max 0.80 (need 2 complete entries -> 1.0)
+        # Required (40%): title + company — structural identity of the entry
+        # Quality  (60%): duration 20% + description 80%
+        # Description uses _desc_score (quality-gated) — garbage earns 0.
+        # 1 entry → max 0.80; 2+ entries can reach 1.0
         def _score_experience():
             entries = ss.get("experience_entries", [])
             if not entries:
@@ -12570,29 +12707,27 @@ with tab2:
                 company  = _get_val(ss, f"company_{i}_{n}_{fk}",     e, "company",     fk)
                 duration = _get_val(ss, f"duration_{i}_{n}_{fk}",    e, "duration",    fk)
                 desc_raw = _get_val(ss, f"description_{i}_{n}_{fk}", e, "description", fk)
-                # If both core fields empty -> stub entry, score 0
                 if not title and not company:
                     total += 0.0
                     continue
-                # Required: title + company -> 40% of entry score
-                req_score  = (_filled(title) + _filled(company)) / 2   # 0-1
-                # Quality: duration 25% weight, description 75% weight (desc is most important)
-                qual_score = ((_filled(duration) * 0.25) + (_desc_score(desc_raw) * 0.75))  # 0-1
+                # Validate required fields — reject gibberish company/role names
+                title_valid   = (not _is_low_quality_text(title))   if title   else False
+                company_valid = (not _is_low_quality_text(company)) if company else False
+                req_score  = (_filled(title_valid) + _filled(company_valid)) / 2
+                qual_score = ((_filled(duration) * 0.20) + (_desc_score(desc_raw) * 0.80))
                 entry_score = (req_score * 0.40) + (qual_score * 0.60)
                 total += entry_score
             avg = total / n
-            # Bonus for multiple entries: 1 entry caps at 0.80, 2+ can reach 1.0
             if n == 1:
                 avg = min(avg, 0.80)
-            return round(min(avg, 1.0), 2)
+            return round(min(avg, 1.0), 3)
 
         _fill_exp = _score_experience()
 
         # ── Education scoring ─────────────────────────────────────────────────
-        # Required: institution + degree  (40% weight)
-        # Quality : year 20% + details/description 80% (60% of total entry)
-        # Description weight is highest — details matter most for education.
-        # Single entry caps at 0.85 (1 education entry is realistic)
+        # Required (40%): institution + degree
+        # Quality  (60%): year 20% + details 80%
+        # 1 entry → max 0.85; 2+ can reach 1.0
         def _score_education():
             entries = ss.get("education_entries", [])
             if not entries:
@@ -12607,24 +12742,24 @@ with tab2:
                 if not institution and not degree:
                     total += 0.0
                     continue
-                # Required: institution + degree -> 40% of entry score
-                req_score  = (_filled(institution) + _filled(degree)) / 2
-                # Quality: year 20% weight, details/description 80% weight
+                inst_valid   = (not _is_low_quality_text(institution)) if institution else False
+                degree_valid = (not _is_low_quality_text(degree))      if degree      else False
+                req_score  = (_filled(inst_valid) + _filled(degree_valid)) / 2
                 qual_score = (_filled(year) * 0.20) + (_desc_score(details_raw) * 0.80)
                 entry_score = (req_score * 0.40) + (qual_score * 0.60)
                 total += entry_score
             avg = total / n
-            # 1 entry caps at 0.85; 2+ can reach 1.0
             if n == 1:
                 avg = min(avg, 0.85)
-            return round(min(avg, 1.0), 2)
+            return round(min(avg, 1.0), 3)
 
         _fill_edu = _score_education()
 
         # ── Projects scoring ──────────────────────────────────────────────────
-        # Required: title + tech  (35% weight)
-        # Quality : duration 15% + description 85% (65% of total entry)
-        # Single project caps at 0.75; 2 projects can reach 0.90; 3+ -> 1.0
+        # Required (35%): title + tech (technologies used)
+        # Quality  (65%): duration 15% + description 85%
+        # Technologies field validated for meaningful content (not "abc, xyz").
+        # 1 project → max 0.75; 2 → max 0.90; 3+ → 1.0
         def _score_projects():
             entries = ss.get("project_entries", [])
             if not entries:
@@ -12639,9 +12774,11 @@ with tab2:
                 if not title:
                     total += 0.0
                     continue
-                # Required: title + tech -> 35% of entry score
-                req_score  = (_filled(title) + _filled(tech)) / 2
-                # Quality: duration 15% weight, description 85% weight
+                title_valid = not _is_low_quality_text(title)
+                # Tech field: count valid comma-separated tokens (at least 1 real tech)
+                tech_valid_count = _count_valid_tokens(tech) if tech else 0
+                tech_score = min(tech_valid_count / 2.0, 1.0)  # 0=0, 1=0.5, 2+=1.0
+                req_score  = (float(title_valid) + tech_score) / 2
                 qual_score = (_filled(duration) * 0.15) + (_desc_score(desc_raw) * 0.85)
                 entry_score = (req_score * 0.35) + (qual_score * 0.65)
                 total += entry_score
@@ -12650,15 +12787,15 @@ with tab2:
                 avg = min(avg, 0.75)
             elif n == 2:
                 avg = min(avg, 0.90)
-            return round(min(avg, 1.0), 2)
+            return round(min(avg, 1.0), 3)
 
         _fill_proj = _score_projects()
 
         # ── Certificates scoring ──────────────────────────────────────────────
-        # Required: name  (30% weight)
-        # Quality : link 20% + duration 20% + description 60% (70% of total entry)
-        # Description is the dominant quality signal — a cert with context scores best.
-        # 1 fully-complete cert CAN reach 1.0 (certs are optional, 1 is good)
+        # Required (30%): cert name (validated — not gibberish)
+        # Quality  (70%): link 20% + duration 20% + description 60%
+        # Issuing organisation (from name field) is validated.
+        # 1 cert CAN reach 1.0 — certs are optional, 1 complete cert is excellent.
         def _score_certificates():
             entries = ss.get("certificate_links", [])
             if not entries:
@@ -12673,95 +12810,96 @@ with tab2:
                 if not name:
                     total += 0.0
                     continue
-                # Required: name -> 30% of entry score
-                req_score  = _filled(name)   # 0 or 1
-                # Quality: link 20%, duration 20%, description 60%
+                # Certificate name must be meaningful
+                name_valid = not _is_low_quality_text(name)
+                req_score  = float(name_valid)
                 qual_score = ((_filled(link) * 0.20) + (_filled(duration) * 0.20) + (_desc_score(desc_raw) * 0.60))
                 entry_score = (req_score * 0.30) + (qual_score * 0.70)
                 total += entry_score
             avg = total / n
-            return round(min(avg, 1.0), 2)
+            return round(min(avg, 1.0), 3)
 
         _fill_cert = _score_certificates()
 
+        # ══════════════════════════════════════════════════════════════════════
+        # calculate_resume_xp() — SINGLE SOURCE OF TRUTH
+        # Recomputes the entire XP score from current section fills.
+        # No accumulation — calling this multiple times always yields the same
+        # result for the same form state (idempotent).
+        # Returns (xp: int, pct: int, section_fills: dict)
+        # ══════════════════════════════════════════════════════════════════════
+
+        def calculate_resume_xp(fills, weights):
+            """
+            Compute total resume XP from section fill scores and weights.
+            XP is capped at XP_TOTAL_MAX (100).
+
+            fills   : dict[section_name → float 0.0–1.0]
+            weights : dict[section_name → int (max XP for that section)]
+            Returns : (raw_xp: float, xp: int, pct: int)
+            """
+            raw_xp = sum(fills.get(k, 0.0) * weights.get(k, 0) for k in weights)
+            raw_xp = min(raw_xp, XP_TOTAL_MAX)
+            xp_int = int(round(raw_xp))
+            pct    = int(round((raw_xp / XP_TOTAL_MAX) * 100))
+            return raw_xp, xp_int, pct
+
         # ── SECTIONS dict: float 0.0–1.0 per section ─────────────────────────
+        # Order matches XP_WEIGHTS for consistent rendering.
         SECTIONS = {
-            "Personal Info":  _fill_personal,
-            "Summary":        _fill_summary,
             "Experience":     _fill_exp,
-            "Education":      _fill_edu,
             "Projects":       _fill_proj,
-            "Skills & More":  _fill_skills,   # composite: skills+interests+softskills+languages
+            "Skills & More":  _fill_skills,
+            "Education":      _fill_edu,
+            "Summary":        _fill_summary,
             "Certificates":   _fill_cert,
+            "Personal Info":  _fill_personal,
             "Contact":        _fill_contact,
         }
-        ICON_KEYS = ["personal", "summary", "exp", "edu", "projects", "skills", "certs", "contact"]
+        ICON_KEYS = ["exp", "projects", "skills", "edu", "summary", "certs", "personal", "contact"]
 
-        # ── Done thresholds — derived from scoring math, not arbitrary ───────
-        #
-        # EXPERIENCE  entry_score = (req*0.40) + (qual*0.60), n=1 cap 0.80
-        #   title+company only            -> 0.40  (NOT done)
-        #   +duration                     -> ~0.45 (NOT done)
-        #   +desc(>=80 chars)             -> ~0.67 (NOT done)
-        #   +desc(>=180 chars)            -> ~0.76 (Done)  threshold = 0.72
-        #
-        # EDUCATION   entry_score = (req*0.40) + (qual*0.60), n=1 cap 0.85
-        #   institution+degree only       -> 0.40  (NOT done)
-        #   +year                         -> ~0.45 (NOT done)
-        #   +details(>=80 chars)          -> ~0.71 (Done)  threshold = 0.68
-        #
-        # PROJECTS    entry_score = (req*0.35) + (qual*0.65), n=1 cap 0.75
-        #   title+tech only               -> 0.35  (NOT done)
-        #   +desc(>=80 chars)             -> ~0.69 (Done)  threshold = 0.65
-        #
-        # CERTIFICATES entry_score = (req*0.30) + (qual*0.70)
-        #   name only                     -> 0.30  (NOT done)
-        #   +link+duration                -> ~0.58 (NOT done)
-        #   +link+duration+desc(>=80)     -> ~0.79 (Done)  threshold = 0.62
-        #
-        # SKILLS      composite: skills*0.5 + interests*0.2 + soft*0.2 + lang*0.1
-        #   3 skills only                 -> 0.33  (NOT done)
-        #   3 skills + 2 soft + 2 int     -> ~0.61 (Done)  threshold = 0.57
-        #
-        # SUMMARY     length-based: <40=0.25 | <100=0.60 | <200=0.85 | 200+=1.0
-        # PERSONAL INFO  5 fields x 0.2 each — threshold 1.0 = all 5 required
-        # CONTACT        phone + linkedin x 0.5 each — threshold 1.0 = both required
+        # ── Done thresholds — matched to new scoring formulas ─────────────────
         DONE_THRESHOLD = {
-            "Personal Info":  1.0,   # all 5: name, email, phone, location, job title
-            "Summary":        0.85,  # >=100 chars — substantive, not a placeholder
-            "Experience":     0.72,  # title + company + rich description (>=180 chars)
-            "Education":      0.68,  # institution + degree + good details
-            "Projects":       0.65,  # title + tech + good description
-            "Skills & More":  0.57,  # tech skills + soft skills + interests
+            "Personal Info":  1.0,   # all 5 fields filled
+            "Summary":        0.85,  # rich summary with good word quality
+            "Experience":     0.72,  # role + company + quality description
+            "Education":      0.68,  # institution + degree + year + details
+            "Projects":       0.65,  # title + techs + quality description
+            "Skills & More":  0.57,  # 3+ tech skills + soft skills + interests
             "Certificates":   0.62,  # name + link + duration + description
-            "Contact":        1.0,   # both phone AND linkedin filled
+            "Contact":        1.0,   # both phone AND linkedin
         }
 
-        # ── Aggregate XP and progress from fractional scores ──────────────────
-        total       = len(SECTIONS)
-        xp_raw      = sum(SECTIONS.values())          # 0.0 – 8.0
-        xp          = int(round(xp_raw * 10))         # 0 – 80
-        max_xp      = total * 10
-        pct         = int(round((xp_raw / total) * 100))
-        # "Done" = section fill meets or exceeds its dedicated done threshold
-        fully_done  = sum(
+        # ── Aggregate XP via calculate_resume_xp() — idempotent, no accumulation ──
+        _raw_xp, xp, pct = calculate_resume_xp(SECTIONS, XP_WEIGHTS)
+        max_xp    = XP_TOTAL_MAX   # always 100
+        total     = len(SECTIONS)
+        fully_done = sum(
             1 for (k, v) in SECTIONS.items()
             if v >= DONE_THRESHOLD.get(k, 1.0)
         )
 
+        # Store computed XP in session state for external access
+        ss["resume_xp"]  = xp
+        ss["resume_pct"] = pct
+
         if   pct == 0:    rank, rank_color, rank_bg, rank_border = "Unranked",   "#6b7280", "#1e2535", "#374151"
-        elif pct <= 25:   rank, rank_color, rank_bg, rank_border = "Beginner",   "#d97706", "#2a1f12", "#92400e"
-        elif pct <= 50:   rank, rank_color, rank_bg, rank_border = "Builder",    "#94a3b8", "#1a2133", "#475569"
-        elif pct <= 75:   rank, rank_color, rank_bg, rank_border = "Advanced",   "#f59e0b", "#2a2410", "#92700e"
+        elif pct <= 20:   rank, rank_color, rank_bg, rank_border = "Beginner",   "#d97706", "#2a1f12", "#92400e"
+        elif pct <= 40:   rank, rank_color, rank_bg, rank_border = "Builder",    "#94a3b8", "#1a2133", "#475569"
+        elif pct <= 60:   rank, rank_color, rank_bg, rank_border = "Proficient", "#22d3ee", "#0c2233", "#0e4f60"
+        elif pct <= 80:   rank, rank_color, rank_bg, rank_border = "Advanced",   "#f59e0b", "#2a2410", "#92700e"
         elif pct < 100:   rank, rank_color, rank_bg, rank_border = "Expert",     "#a78bfa", "#1a1a2e", "#6d28d9"
-        else:             rank, rank_color, rank_bg, rank_border = "Pro Resume", "#a78bfa", "#1a1a2e", "#6d28d9"
+        else:             rank, rank_color, rank_bg, rank_border = "Pro Resume", "#34d399", "#0a2318", "#065f46"
 
         # ── helper: section row HTML — now takes fill float 0.0–1.0 ──────────
         def _section_row(label, icon_key, fill):
             done      = fill >= DONE_THRESHOLD.get(label, 1.0)
             partial   = 0.0 < fill < 1.0
             bar_pct   = f"{int(fill * 100)}%"
-            # colour ramp: empty=dark, partial=amber, complete=blue
+            # Per-section XP earned vs max for this section
+            _sec_max  = XP_WEIGHTS.get(label, 0)
+            _sec_earned = int(round(fill * _sec_max))
+            # colour ramp: empty=dark, partial=amber, done=blue
             if done:
                 icon_bg, icon_col, name_col = "#1d3a6e", "#93c5fd", "#93c5fd"
                 bar_col = "#3b82f6"
@@ -12780,14 +12918,19 @@ with tab2:
             chk_bg  = "#2563eb"    if done    else "transparent"
             chk_bdr = "#2563eb"    if done    else ("#78450a" if partial else "#374151")
             chk_op  = "1"          if done    else "0"
-            # pre-build the partial-% badge so no nested f-string ends up in the HTML
-            if partial:
-                pct_badge = (
-                    "<div style='font-size:9px;color:#f59e0b;font-weight:500;'>"
-                    + str(int(fill * 100)) + "%</div>"
-                )
+            # XP badge: shows "earned/max XP" — always visible, colour-coded
+            if done:
+                xp_badge_col = "#93c5fd"
+            elif partial:
+                xp_badge_col = "#f59e0b"
             else:
-                pct_badge = ""
+                xp_badge_col = "#4b5563"
+            xp_badge = (
+                "<div style='font-size:9px;color:" + xp_badge_col + ";font-weight:600;"
+                "white-space:nowrap;'>"
+                + str(_sec_earned) + "<span style='opacity:0.55;font-weight:400;'>/"
+                + str(_sec_max) + "</span></div>"
+            )
             return (
                 "<div style='display:flex;align-items:center;gap:10px;padding:9px 10px;"
                 "border-radius:9px;background:" + row_bg + ";border:0.5px solid " + row_bdr + ";"
@@ -12799,7 +12942,7 @@ with tab2:
                 "<div style='flex:1;min-width:0;'>"
                 "<div style='display:flex;justify-content:space-between;align-items:center;'>"
                 "<div style='font-size:12px;font-weight:500;color:" + name_col + ";'>" + label + "</div>"
-                + pct_badge +
+                + xp_badge +
                 "</div>"
                 "<div style='height:3px;background:#1e2535;border-radius:3px;margin-top:4px;overflow:hidden;'>"
                 "<div style='height:100%;width:" + bar_pct + ";background:" + bar_col + ";border-radius:3px;'></div>"
@@ -12850,6 +12993,95 @@ with tab2:
             for (label, fill), icon_key in zip(SECTIONS.items(), ICON_KEYS):
                 st.markdown(_section_row(label, icon_key, fill), unsafe_allow_html=True)
 
+            # ── UX Feedback Panel ─────────────────────────────────────────────
+            # Generate actionable, ranked feedback tips based on current state.
+            # Tips are prioritised by XP weight (highest-impact sections first).
+            _feedback_tips = []
+
+            # Experience feedback
+            if _fill_exp == 0.0:
+                _feedback_tips.append("Add work experience to strengthen your resume (+30 XP potential)")
+            elif _fill_exp < DONE_THRESHOLD["Experience"]:
+                _exp_entries = ss.get("experience_entries", [])
+                _has_desc = any(
+                    len(str(e.get("description", "")).strip()) > 40
+                    for e in _exp_entries
+                )
+                if not _has_desc:
+                    _feedback_tips.append("Add detailed descriptions to your work experience to unlock more XP")
+                else:
+                    _feedback_tips.append("Enrich your experience descriptions with specific achievements and metrics")
+
+            # Projects feedback
+            if _fill_proj == 0.0:
+                _feedback_tips.append("Add a project to gain up to 22 XP — projects are highly valued")
+            elif _fill_proj < DONE_THRESHOLD["Projects"]:
+                _proj_entries = ss.get("project_entries", [])
+                _has_tech = any(
+                    _count_valid_tokens(e.get("tech", "")) >= 1
+                    for e in _proj_entries if e.get("title")
+                )
+                if not _has_tech:
+                    _feedback_tips.append("List the technologies used in your projects to improve your score")
+                else:
+                    _feedback_tips.append("Improve your project descriptions — explain the problem solved and your impact")
+            elif _fill_proj < 0.90:
+                n_projs = len([e for e in ss.get("project_entries", []) if e.get("title")])
+                if n_projs < 2:
+                    _feedback_tips.append("Add another project to increase your Projects score further")
+
+            # Skills feedback
+            if _fill_skills < DONE_THRESHOLD["Skills & More"]:
+                if _skill_count < 3:
+                    _feedback_tips.append(f"Add more technical skills — you have {_skill_count}, aim for 5+ (comma-separated)")
+                if _soft_count < 2:
+                    _feedback_tips.append("Add 2–3 soft skills (e.g. Leadership, Communication) to boost your score")
+
+            # Education feedback
+            if _fill_edu == 0.0:
+                _feedback_tips.append("Add your education details to build a complete resume")
+            elif _fill_edu < DONE_THRESHOLD["Education"]:
+                _feedback_tips.append("Add graduation year and academic details/achievements to complete education")
+
+            # Summary feedback
+            if _fill_summary == 0.0:
+                _feedback_tips.append("Write a professional summary — it's your first impression on recruiters")
+            elif _fill_summary < DONE_THRESHOLD["Summary"]:
+                _feedback_tips.append("Expand your summary with more specific skills, experience, and career goals")
+
+            # Certificate feedback
+            if _fill_cert == 0.0 and pct >= 40:
+                _feedback_tips.append("Add a certification to differentiate yourself from other candidates")
+            elif 0.0 < _fill_cert < DONE_THRESHOLD["Certificates"]:
+                _feedback_tips.append("Add a verification link and description to your certificates for full credit")
+
+            # Contact feedback
+            if _fill_contact < 1.0:
+                if not pi_phone2:
+                    _feedback_tips.append("Add your phone number to make your resume complete")
+                if not pi_linkedin:
+                    _feedback_tips.append("Add your LinkedIn profile URL — recruiters always check it")
+
+            # Show up to 3 tips (highest priority = highest XP weight = listed first)
+            if _feedback_tips:
+                _tips_to_show = _feedback_tips[:3]
+                _tip_html_items = "".join(
+                    f"<div style='display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;'>"
+                    f"<span style='color:#f59e0b;font-size:12px;flex-shrink:0;margin-top:1px;'>&#9654;</span>"
+                    f"<span style='font-size:11px;color:#cbd5e1;line-height:1.5;'>{tip}</span>"
+                    f"</div>"
+                    for tip in _tips_to_show
+                )
+                st.markdown(
+                    f"<div style='margin:12px 0 6px;padding:10px 12px;background:#111827;"
+                    f"border-radius:8px;border:0.5px solid #374151;'>"
+                    f"<div style='font-size:9px;letter-spacing:1.2px;text-transform:uppercase;"
+                    f"color:#6b7280;font-weight:600;margin-bottom:8px;'>Tips to Boost XP</div>"
+                    f"{_tip_html_items}"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+
             # ── divider + stats footer ─────────────────────────────────────────
             st.markdown(f"""
 <hr style='border:none;border-top:0.5px solid #1e2535;margin:14px 0;'>
@@ -12859,7 +13091,7 @@ with tab2:
     <span style='font-size:10px;color:#4b5563;letter-spacing:0.8px;text-transform:uppercase;'>Done</span>
   </div>
   <div>
-    <span style='font-size:16px;font-weight:500;color:#e2e8f0;display:block;'>{xp}</span>
+    <span style='font-size:16px;font-weight:500;color:#e2e8f0;display:block;'>{xp}<span style='font-size:10px;color:#4b5563;'>/{max_xp}</span></span>
     <span style='font-size:10px;color:#4b5563;letter-spacing:0.8px;text-transform:uppercase;'>XP</span>
   </div>
   <div>
