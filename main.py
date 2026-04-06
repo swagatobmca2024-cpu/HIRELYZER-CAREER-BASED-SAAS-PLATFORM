@@ -12297,20 +12297,135 @@ with tab2:
         else:
             _fill_summary = 1.0    # full — rich summary
 
-        # ── Skills: scored by number of distinct comma-separated skills ────────
-        # 0 skills=0.0 | 1=0.25 | 2=0.5 | 3=0.75 | 4+=1.0
-        _skills_raw = _wv(f"skills_input_{fk}", "skills")
-        _skill_count = len([s for s in _skills_raw.split(",") if s.strip()]) if _skills_raw else 0
+        # ── Gibberish / quality helpers (used by both Skills and entry scoring) ─
+        def _is_gibberish(text):
+            """
+            Detect clearly random / meaningless text.
+            Returns True (gibberish) when the content looks fake.
+            Heuristics:
+              1. Average token length < 2.5  (single chars / 2-char noise)
+              2. > 50% of tokens are 1–2 chars long
+              3. Any single token is longer than 25 chars with very few vowels
+                 (keyboard mash like 'KADGCAskjvgSLJVBLQSjv…')
+              4. All tokens are the SAME word repeated (copy-paste spam)
+            """
+            t = str(text).strip()
+            if not t:
+                return False   # empty is handled separately
+            tokens = [tok for tok in t.replace(',', ' ').replace(';', ' ').split() if tok]
+            if not tokens:
+                return True
+            # Rule 3: single mega-token is keyboard mash
+            if len(tokens) == 1 and len(tokens[0]) > 25:
+                return True
+            # Rule 3 extended: any token > 20 chars with very few vowels
+            for tok in tokens:
+                if len(tok) > 20:
+                    vowels = sum(1 for c in tok.lower() if c in 'aeiou')
+                    if vowels / len(tok) < 0.10:   # < 10% vowels → gibberish
+                        return True
+            avg_len = sum(len(tok) for tok in tokens) / len(tokens)
+            short_ratio = sum(1 for tok in tokens if len(tok) <= 2) / len(tokens)
+            # Rule 1 + 2
+            if avg_len < 2.5 and short_ratio > 0.50:
+                return True
+            # Rule 4: all identical tokens repeated 3+ times
+            if len(set(tok.lower() for tok in tokens)) == 1 and len(tokens) > 2:
+                return True
+            return False
+
+        def _desc_score(text):
+            """Score description quality: 0 if empty/gibberish, 0.25 if short, 0.6 if medium, 1.0 if rich."""
+            t = str(text).strip()
+            if not t:
+                return 0.0
+            if _is_gibberish(t):
+                return 0.0   # reject random noise
+            elif len(t) < 30:
+                return 0.25
+            elif len(t) < 80:
+                return 0.6
+            elif len(t) < 180:
+                return 0.85
+            else:
+                return 1.0
+
+        # ── Skills & More: composite score across all four sub-sections ─────────
+        # Weights: Skills 50% | Interests 20% | Soft Skills 20% | Languages 10%
+        #
+        # Each sub-section is scored on count of VALID (non-gibberish) tokens:
+        #   Skills      : 0=0.0 | 1=0.20 | 2=0.45 | 3=0.65 | 4=0.82 | 5+=1.0
+        #   Interests   : 0=0.0 | 1=0.35 | 2=0.70 | 3+=1.0
+        #   Soft Skills : 0=0.0 | 1=0.35 | 2=0.70 | 3+=1.0
+        #   Languages   : 0=0.0 | 1=0.50 | 2+=1.0
+        # Any token detected as gibberish is excluded from the valid count.
+        # ─────────────────────────────────────────────────────────────────────
+
+        def _count_valid_tokens(raw_str):
+            """Return count of non-empty, non-gibberish comma-separated tokens."""
+            if not raw_str:
+                return 0
+            tokens = [t.strip() for t in raw_str.split(",") if t.strip()]
+            return sum(1 for tok in tokens if not _is_gibberish(tok))
+
+        # Technical Skills sub-score (weight 0.50)
+        _skills_raw   = _wv(f"skills_input_{fk}", "skills")
+        _skill_count  = _count_valid_tokens(_skills_raw)
         if _skill_count == 0:
-            _fill_skills = 0.0
+            _sub_skills = 0.0
         elif _skill_count == 1:
-            _fill_skills = 0.25
+            _sub_skills = 0.20
         elif _skill_count == 2:
-            _fill_skills = 0.5
+            _sub_skills = 0.45
         elif _skill_count == 3:
-            _fill_skills = 0.75
+            _sub_skills = 0.65
+        elif _skill_count == 4:
+            _sub_skills = 0.82
         else:
-            _fill_skills = 1.0    # 4+ skills = full marks
+            _sub_skills = 1.0   # 5+ skills = full marks
+
+        # Interests sub-score (weight 0.20)
+        _interests_raw  = _wv(f"int_input_{fk}", "interests")
+        _interest_count = _count_valid_tokens(_interests_raw)
+        if _interest_count == 0:
+            _sub_interests = 0.0
+        elif _interest_count == 1:
+            _sub_interests = 0.35
+        elif _interest_count == 2:
+            _sub_interests = 0.70
+        else:
+            _sub_interests = 1.0   # 3+ = full marks
+
+        # Soft Skills sub-score (weight 0.20)
+        _soft_raw   = _wv(f"soft_input_{fk}", "Softskills")
+        _soft_count = _count_valid_tokens(_soft_raw)
+        if _soft_count == 0:
+            _sub_soft = 0.0
+        elif _soft_count == 1:
+            _sub_soft = 0.35
+        elif _soft_count == 2:
+            _sub_soft = 0.70
+        else:
+            _sub_soft = 1.0   # 3+ = full marks
+
+        # Languages sub-score (weight 0.10)
+        _lang_raw   = _wv(f"lang_input_{fk}", "languages")
+        _lang_count = _count_valid_tokens(_lang_raw)
+        if _lang_count == 0:
+            _sub_lang = 0.0
+        elif _lang_count == 1:
+            _sub_lang = 0.50
+        else:
+            _sub_lang = 1.0   # 2+ = full marks
+
+        # Weighted composite
+        _fill_skills = round(
+            (_sub_skills   * 0.50) +
+            (_sub_interests * 0.20) +
+            (_sub_soft      * 0.20) +
+            (_sub_lang      * 0.10),
+            2
+        )
 
         # ── Contact: phone + linkedin, each worth 0.5 ─────────────────────────
         pi_phone2   = _wv(f"phone_input_{fk}",  "phone")
@@ -12339,20 +12454,6 @@ with tab2:
             """Read live widget value, fallback to stored entry value."""
             val = ss.get(widget_key, "") or entry.get(stored_key, "")
             return str(val).strip()
-
-        def _desc_score(text):
-            """Score description quality: 0 if empty, 0.25 if short, 0.6 if medium, 1.0 if rich."""
-            t = str(text).strip()
-            if not t:
-                return 0.0
-            elif len(t) < 30:
-                return 0.25
-            elif len(t) < 80:
-                return 0.6
-            elif len(t) < 180:
-                return 0.85
-            else:
-                return 1.0
 
         # ── Experience scoring ────────────────────────────────────────────────
         # Required (0.5 weight each): title, company
@@ -12475,14 +12576,14 @@ with tab2:
 
         # ── SECTIONS dict: float 0.0–1.0 per section ─────────────────────────
         SECTIONS = {
-            "Personal Info": _fill_personal,
-            "Summary":       _fill_summary,
-            "Experience":    _fill_exp,
-            "Education":     _fill_edu,
-            "Projects":      _fill_proj,
-            "Skills":        _fill_skills,
-            "Certificates":  _fill_cert,
-            "Contact":       _fill_contact,
+            "Personal Info":  _fill_personal,
+            "Summary":        _fill_summary,
+            "Experience":     _fill_exp,
+            "Education":      _fill_edu,
+            "Projects":       _fill_proj,
+            "Skills & More":  _fill_skills,   # composite: skills+interests+softskills+languages
+            "Certificates":   _fill_cert,
+            "Contact":        _fill_contact,
         }
         ICON_KEYS = ["personal", "summary", "exp", "edu", "projects", "skills", "certs", "contact"]
 
