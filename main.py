@@ -12216,56 +12216,211 @@ with tab2:
     st.session_state.setdefault("certificate_links", [{"name": "", "link": "", "duration": "", "description": ""}])
     st.session_state.setdefault("form_key_counter", 0)
 
-    # ---------------- Sidebar (ONLY in Tab 2) ----------------
-    with st.sidebar:
-        st.markdown("### ✨ Manage Resume Sections")
+    # ─────────────────────────────────────────────────────────────────────────
+    # GAMIFIED SIDEBAR
+    # ─────────────────────────────────────────────────────────────────────────
+    def render_gamified_sidebar(ss):
+        """
+        Renders a fully gamified sidebar with:
+        - XP counter + rank badge
+        - Master progress bar
+        - Streak dot row
+        - Per-section rows with inline SVG icons, mini-bars, and check circles
+        - Stats footer (Done / XP / % Complete)
+        - Section add/delete controls (Experience, Education, Projects, Certificates)
+        All icons are inline SVG — no emojis.
+        """
 
-        if "edit_mode" not in st.session_state:
-            st.session_state.edit_mode = "Add"
+        # ── SVG icon library ──────────────────────────────────────────────────
+        SVG = {
+            "personal": '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5" r="2.5"/><path d="M2.5 13.5c0-3 2.5-4.5 5.5-4.5s5.5 1.5 5.5 4.5"/></svg>',
+            "summary":  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2"/><line x1="5" y1="6" x2="11" y2="6"/><line x1="5" y1="9" x2="9" y2="9"/></svg>',
+            "exp":      '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="12" height="8" rx="1.5"/><path d="M5 6V4.5A2.5 2.5 0 0 1 11 4.5V6"/><line x1="8" y1="9" x2="8" y2="11"/></svg>',
+            "edu":      '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2L14 5.5 8 9 2 5.5Z"/><path d="M4.5 7.5V11.5c0 0 1.5 1.5 3.5 1.5s3.5-1.5 3.5-1.5V7.5"/><line x1="14" y1="5.5" x2="14" y2="9"/></svg>',
+            "projects": '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,12 6,7 9,10 12,5 14,7"/><circle cx="14" cy="4" r="1.2" fill="currentColor" stroke="none"/></svg>',
+            "skills":   '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5l1 1-7 7-1-1z"/><path d="M12 4l1.5-1.5-1-1L11 3"/><path d="M3 11l-0.5 2 2-0.5"/></svg>',
+            "certs":    '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="7" r="3.5"/><path d="M5.5 10L4 14l4-2 4 2-1.5-4"/></svg>',
+            "contact":  '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h12v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3z"/><polyline points="2,3 8,8.5 14,3"/></svg>',
+            "add":      '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="6" y1="2" x2="6" y2="10"/><line x1="2" y1="6" x2="10" y2="6"/></svg>',
+            "remove":   '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="2" y1="6" x2="10" y2="6"/></svg>',
+        }
 
-        mode = st.selectbox("Mode", ["Add", "Delete"], index=0, key="mode_dropdown")
-        st.session_state.edit_mode = mode
-        st.markdown("---")
+        # ── completion state ───────────────────────────────────────────────────
+        SECTIONS = {
+            "Personal Info": bool(ss.get("name") and ss.get("email")),
+            "Summary":       bool(ss.get("summary", "").strip()),
+            "Experience":    any(e.get("company") or e.get("title") for e in ss.get("experience_entries", [])),
+            "Education":     any(e.get("institution") for e in ss.get("education_entries", [])),
+            "Projects":      any(p.get("title") for p in ss.get("project_entries", [])),
+            "Skills":        bool(ss.get("skills", "").strip()),
+            "Certificates":  any(c.get("name") for c in ss.get("certificate_links", [])),
+            "Contact":       bool(ss.get("phone") or ss.get("linkedin")),
+        }
+        ICON_KEYS = ["personal", "summary", "exp", "edu", "projects", "skills", "certs", "contact"]
 
-        # 💼 Experience
-        with st.expander("💼 Experience"):
-            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Experience", key="exp_btn"):
-                if mode == "Add":
-                    st.session_state.experience_entries.append(
-                        {"title": "", "company": "", "duration": "", "description": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.experience_entries) > 1:
-                    st.session_state.experience_entries.pop()
+        completed  = sum(SECTIONS.values())
+        total      = len(SECTIONS)
+        xp         = completed * 10
+        max_xp     = total * 10
+        pct        = int((completed / total) * 100)
 
-        # 🎓 Education
-        with st.expander("🎓 Education"):
-            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Education", key="edu_btn"):
-                if mode == "Add":
-                    st.session_state.education_entries.append(
-                        {"degree": "", "institution": "", "year": "", "details": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.education_entries) > 1:
-                    st.session_state.education_entries.pop()
+        if   completed == 0:      rank, rank_color, rank_bg, rank_border = "Unranked",   "#6b7280", "#1e2535",  "#374151"
+        elif completed <= 2:      rank, rank_color, rank_bg, rank_border = "Beginner",   "#d97706", "#2a1f12",  "#92400e"
+        elif completed <= 4:      rank, rank_color, rank_bg, rank_border = "Builder",    "#94a3b8", "#1a2133",  "#475569"
+        elif completed <= 6:      rank, rank_color, rank_bg, rank_border = "Advanced",   "#f59e0b", "#2a2410",  "#92700e"
+        elif completed < total:   rank, rank_color, rank_bg, rank_border = "Expert",     "#a78bfa", "#1a1a2e",  "#6d28d9"
+        else:                     rank, rank_color, rank_bg, rank_border = "Pro Resume", "#a78bfa", "#1a1a2e",  "#6d28d9"
 
-        # 🛠 Projects
-        with st.expander("🛠 Projects"):
-            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Project", key="proj_btn"):
-                if mode == "Add":
-                    st.session_state.project_entries.append(
-                        {"title": "", "tech": "", "duration": "", "description": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.project_entries) > 1:
-                    st.session_state.project_entries.pop()
+        # ── helper: section row HTML ───────────────────────────────────────────
+        def _section_row(label, icon_key, done):
+            icon_bg   = "#1d3a6e" if done else "#1e2535"
+            icon_col  = "#93c5fd" if done else "#6b7280"
+            name_col  = "#93c5fd" if done else "#6b7280"
+            bar_w     = "100%"    if done else "0%"
+            bar_col   = "#3b82f6" if done else "#374151"
+            row_bg    = "#131c33" if done else "#161b27"
+            row_bdr   = "#1d4ed8" if done else "#1e2535"
+            chk_bg    = "#2563eb" if done else "transparent"
+            chk_bdr   = "#2563eb" if done else "#374151"
+            chk_op    = "1"       if done else "0"
+            return f"""
+<div style='display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;
+     background:{row_bg};border:0.5px solid {row_bdr};margin-bottom:7px;'>
+  <div style='width:28px;height:28px;border-radius:7px;background:{icon_bg};
+       display:flex;align-items:center;justify-content:center;flex-shrink:0;color:{icon_col};'>
+    {SVG[icon_key]}
+  </div>
+  <div style='flex:1;min-width:0;'>
+    <div style='font-size:12px;font-weight:500;color:{name_col};'>{label}</div>
+    <div style='height:3px;background:#1e2535;border-radius:3px;margin-top:4px;overflow:hidden;'>
+      <div style='height:100%;width:{bar_w};background:{bar_col};border-radius:3px;'></div>
+    </div>
+  </div>
+  <div style='width:18px;height:18px;border-radius:50%;background:{chk_bg};
+       border:1.5px solid {chk_bdr};display:flex;align-items:center;justify-content:center;flex-shrink:0;'>
+    <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="#fff"
+         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:{chk_op}">
+      <polyline points="2,5 4.5,7.5 8.5,2.5"/>
+    </svg>
+  </div>
+</div>"""
 
-        # 📜 Certificates
-        with st.expander("📜 Certificates"):
-            if st.button(f"{'➕ Add' if mode=='Add' else '❌ Delete'} Certificate", key="cert_btn"):
-                if mode == "Add":
-                    st.session_state.certificate_links.append(
-                        {"name": "", "link": "", "duration": "", "description": ""}
-                    )
-                elif mode == "Delete" and len(st.session_state.certificate_links) > 1:
-                    st.session_state.certificate_links.pop()
+        # ── helper: control button HTML ────────────────────────────────────────
+        def _ctrl_btn(icon_key, label):
+            return (
+                f"<span style='display:inline-flex;align-items:center;gap:5px;"
+                f"font-size:11px;color:#6b7280;'>{SVG[icon_key]} {label}</span>"
+            )
+
+        # ── streak dots ────────────────────────────────────────────────────────
+        dots_html = "".join(
+            f"<div style='flex:1;height:4px;border-radius:3px;"
+            f"background:{'#3b82f6' if i < completed else '#1e2535'};'></div>"
+            for i in range(total)
+        )
+
+        # ── render into sidebar ────────────────────────────────────────────────
+        with st.sidebar:
+
+            # ── XP header ─────────────────────────────────────────────────────
+            st.markdown(f"""
+<div style='margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;'>
+  <span style='font-size:10px;letter-spacing:1.2px;text-transform:uppercase;
+               color:#6b7280;font-weight:500;'>Resume XP</span>
+  <span style='font-size:11px;color:#9ca3af;font-weight:500;'>{xp} / {max_xp} XP</span>
+</div>
+<div style='margin-bottom:8px;'>
+  <span style='font-size:11px;font-weight:500;padding:2px 10px;border-radius:20px;
+               background:{rank_bg};border:0.5px solid {rank_border};color:{rank_color};'>{rank}</span>
+</div>
+<div style='width:100%;height:7px;background:#1e2535;border-radius:6px;overflow:hidden;margin-bottom:10px;'>
+  <div style='height:100%;width:{pct}%;background:#3b82f6;border-radius:6px;'></div>
+</div>
+<div style='display:flex;gap:4px;margin-bottom:18px;'>{dots_html}</div>
+<div style='font-size:10px;letter-spacing:1.4px;text-transform:uppercase;
+            color:#4b5563;margin-bottom:10px;font-weight:500;'>Sections</div>
+""", unsafe_allow_html=True)
+
+            # ── section rows ──────────────────────────────────────────────────
+            for (label, done), icon_key in zip(SECTIONS.items(), ICON_KEYS):
+                st.markdown(_section_row(label, icon_key, done), unsafe_allow_html=True)
+
+            # ── divider + stats footer ─────────────────────────────────────────
+            st.markdown(f"""
+<hr style='border:none;border-top:0.5px solid #1e2535;margin:14px 0;'>
+<div style='display:flex;justify-content:space-between;text-align:center;margin-bottom:18px;'>
+  <div>
+    <span style='font-size:16px;font-weight:500;color:#e2e8f0;display:block;'>{completed}</span>
+    <span style='font-size:10px;color:#4b5563;letter-spacing:0.8px;text-transform:uppercase;'>Done</span>
+  </div>
+  <div>
+    <span style='font-size:16px;font-weight:500;color:#e2e8f0;display:block;'>{xp}</span>
+    <span style='font-size:10px;color:#4b5563;letter-spacing:0.8px;text-transform:uppercase;'>XP</span>
+  </div>
+  <div>
+    <span style='font-size:16px;font-weight:500;color:#e2e8f0;display:block;'>{pct}%</span>
+    <span style='font-size:10px;color:#4b5563;letter-spacing:0.8px;text-transform:uppercase;'>Complete</span>
+  </div>
+</div>
+<hr style='border:none;border-top:0.5px solid #1e2535;margin:0 0 14px;'>
+<div style='font-size:10px;letter-spacing:1.4px;text-transform:uppercase;
+            color:#4b5563;margin-bottom:10px;font-weight:500;'>Manage Sections</div>
+""", unsafe_allow_html=True)
+
+            # ── section add/delete controls ────────────────────────────────────
+            if "edit_mode" not in ss:
+                ss.edit_mode = "Add"
+
+            mode = st.selectbox(
+                "Mode",
+                ["Add", "Delete"],
+                index=0,
+                key="mode_dropdown",
+                label_visibility="collapsed",
+            )
+            ss.edit_mode = mode
+
+            st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+
+            # Experience
+            with st.expander(f"{SVG['exp']} Experience", expanded=False):
+                st.markdown(f"<div style='margin-bottom:6px;'>{_ctrl_btn('add' if mode=='Add' else 'remove', ('Add' if mode=='Add' else 'Delete') + ' entry')}</div>", unsafe_allow_html=True)
+                if st.button(("Add" if mode == "Add" else "Delete") + " Experience", key="exp_btn", use_container_width=True):
+                    if mode == "Add":
+                        ss.experience_entries.append({"title": "", "company": "", "duration": "", "description": ""})
+                    elif mode == "Delete" and len(ss.experience_entries) > 1:
+                        ss.experience_entries.pop()
+
+            # Education
+            with st.expander(f"{SVG['edu']} Education", expanded=False):
+                st.markdown(f"<div style='margin-bottom:6px;'>{_ctrl_btn('add' if mode=='Add' else 'remove', ('Add' if mode=='Add' else 'Delete') + ' entry')}</div>", unsafe_allow_html=True)
+                if st.button(("Add" if mode == "Add" else "Delete") + " Education", key="edu_btn", use_container_width=True):
+                    if mode == "Add":
+                        ss.education_entries.append({"degree": "", "institution": "", "year": "", "details": ""})
+                    elif mode == "Delete" and len(ss.education_entries) > 1:
+                        ss.education_entries.pop()
+
+            # Projects
+            with st.expander(f"{SVG['projects']} Projects", expanded=False):
+                st.markdown(f"<div style='margin-bottom:6px;'>{_ctrl_btn('add' if mode=='Add' else 'remove', ('Add' if mode=='Add' else 'Delete') + ' entry')}</div>", unsafe_allow_html=True)
+                if st.button(("Add" if mode == "Add" else "Delete") + " Project", key="proj_btn", use_container_width=True):
+                    if mode == "Add":
+                        ss.project_entries.append({"title": "", "tech": "", "duration": "", "description": ""})
+                    elif mode == "Delete" and len(ss.project_entries) > 1:
+                        ss.project_entries.pop()
+
+            # Certificates
+            with st.expander(f"{SVG['certs']} Certificates", expanded=False):
+                st.markdown(f"<div style='margin-bottom:6px;'>{_ctrl_btn('add' if mode=='Add' else 'remove', ('Add' if mode=='Add' else 'Delete') + ' entry')}</div>", unsafe_allow_html=True)
+                if st.button(("Add" if mode == "Add" else "Delete") + " Certificate", key="cert_btn", use_container_width=True):
+                    if mode == "Add":
+                        ss.certificate_links.append({"name": "", "link": "", "duration": "", "description": ""})
+                    elif mode == "Delete" and len(ss.certificate_links) > 1:
+                        ss.certificate_links.pop()
+
+    # ── call gamified sidebar ──────────────────────────────────────────────────
+    render_gamified_sidebar(st.session_state)
+    mode = st.session_state.get("edit_mode", "Add")
 
     # ---------------- Resume Form ----------------
     fk = st.session_state["form_key_counter"]
