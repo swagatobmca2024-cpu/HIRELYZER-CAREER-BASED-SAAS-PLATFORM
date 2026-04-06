@@ -12305,13 +12305,6 @@ with tab2:
   </div>
 </div>"""
 
-        # ── helper: control button HTML ────────────────────────────────────────
-        def _ctrl_btn(icon_key, label):
-            return (
-                f"<span style='display:inline-flex;align-items:center;gap:5px;"
-                f"font-size:11px;color:#6b7280;'>{SVG[icon_key]} {label}</span>"
-            )
-
         # ── streak dots ────────────────────────────────────────────────────────
         dots_html = "".join(
             f"<div style='flex:1;height:4px;border-radius:3px;"
@@ -12383,8 +12376,7 @@ with tab2:
             st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
             # Experience
-            with st.expander(f"{SVG['exp']} Experience", expanded=False):
-                st.markdown(f"<div style='margin-bottom:6px;'>{_ctrl_btn('add' if mode=='Add' else 'remove', ('Add' if mode=='Add' else 'Delete') + ' entry')}</div>", unsafe_allow_html=True)
+            with st.expander("Experience", expanded=False):
                 if st.button(("Add" if mode == "Add" else "Delete") + " Experience", key="exp_btn", use_container_width=True):
                     if mode == "Add":
                         ss.experience_entries.append({"title": "", "company": "", "duration": "", "description": ""})
@@ -12392,8 +12384,7 @@ with tab2:
                         ss.experience_entries.pop()
 
             # Education
-            with st.expander(f"{SVG['edu']} Education", expanded=False):
-                st.markdown(f"<div style='margin-bottom:6px;'>{_ctrl_btn('add' if mode=='Add' else 'remove', ('Add' if mode=='Add' else 'Delete') + ' entry')}</div>", unsafe_allow_html=True)
+            with st.expander("Education", expanded=False):
                 if st.button(("Add" if mode == "Add" else "Delete") + " Education", key="edu_btn", use_container_width=True):
                     if mode == "Add":
                         ss.education_entries.append({"degree": "", "institution": "", "year": "", "details": ""})
@@ -12401,8 +12392,7 @@ with tab2:
                         ss.education_entries.pop()
 
             # Projects
-            with st.expander(f"{SVG['projects']} Projects", expanded=False):
-                st.markdown(f"<div style='margin-bottom:6px;'>{_ctrl_btn('add' if mode=='Add' else 'remove', ('Add' if mode=='Add' else 'Delete') + ' entry')}</div>", unsafe_allow_html=True)
+            with st.expander("Projects", expanded=False):
                 if st.button(("Add" if mode == "Add" else "Delete") + " Project", key="proj_btn", use_container_width=True):
                     if mode == "Add":
                         ss.project_entries.append({"title": "", "tech": "", "duration": "", "description": ""})
@@ -12410,8 +12400,7 @@ with tab2:
                         ss.project_entries.pop()
 
             # Certificates
-            with st.expander(f"{SVG['certs']} Certificates", expanded=False):
-                st.markdown(f"<div style='margin-bottom:6px;'>{_ctrl_btn('add' if mode=='Add' else 'remove', ('Add' if mode=='Add' else 'Delete') + ' entry')}</div>", unsafe_allow_html=True)
+            with st.expander("Certificates", expanded=False):
                 if st.button(("Add" if mode == "Add" else "Delete") + " Certificate", key="cert_btn", use_container_width=True):
                     if mode == "Add":
                         ss.certificate_links.append({"name": "", "link": "", "duration": "", "description": ""})
