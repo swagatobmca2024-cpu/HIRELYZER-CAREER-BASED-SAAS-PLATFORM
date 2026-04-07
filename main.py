@@ -8776,6 +8776,475 @@ def _cert_name_html(cert, link_style, span_style=""):
         return f"<span style='{span_style or link_style}'>{name}</span>"
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# MODULE-LEVEL XP VALIDATION & SCORING ENGINE
+# Industry-standard text quality, garbage detection, and weighted XP scoring.
+# These functions are the single source of truth — used by render_gamified_sidebar
+# and available for import by any other module in the project.
+# ══════════════════════════════════════════════════════════════════════════════
+
+from collections import Counter as _Counter
+
+# ── Filler phrase / word constants ────────────────────────────────────────────
+_FILLER_PHRASES = {
+    "lorem ipsum", "test test", "sample text", "placeholder",
+    "your text here", "enter here", "tbd", "todo",
+    "fill in", "coming soon", "to be added", "add here",
+    "description here", "write here", "dummy text",
+    "hello world", "foo bar", "asdf", "qwerty",
+}
+_FILLER_WORDS = {"placeholder", "tbd", "todo", "dummy", "example", "test", "asdf", "qwerty"}
+
+
+def detect_garbage_text(text: str) -> bool:
+    """
+    Returns True when the text is meaningless / garbage — should earn 0 XP.
+
+    Detection layers (cheapest first):
+      1. Empty / whitespace-only
+      2. Pure numeric string  ("123456789", "+91 98765")
+      3. Known filler/placeholder phrases (multi-word substring match)
+      4. All-same character repeated  ("aaaaaaa", "--------")
+      5. Keyboard-mash: any token > 18 chars with < 12% vowels
+      6. Single long token (> 20 chars) with < 15% vowels
+      7. Repeated-token spam: dominant word > 55% of all tokens (≥ 3 tokens)
+      8. Very low unique-word ratio: < 35% unique among 4+ word inputs
+      9. Pathological token length: avg < 2.0 chars with > 60% short tokens
+    """
+    t = str(text).strip()
+    if not t:
+        return True
+
+    # 1. Pure numeric (phone-safe: strip spaces, +, -, .)
+    stripped_num = t.replace(" ", "").replace("-", "").replace("+", "").replace(".", "")
+    if stripped_num.isdigit() and len(stripped_num) > 5:
+        return True
+
+    t_lower = t.lower()
+
+    # 2. Known filler phrases (substring match)
+    for phrase in _FILLER_PHRASES:
+        if phrase in t_lower:
+            return True
+
+    # 3. "n/a" exact or sole token
+    if t_lower.strip() in {"n/a", "na", "n.a.", "n.a"}:
+        return True
+
+    # 4. Single-word filler: whole-token match only
+    t_tokens_lower = [tok.lower() for tok in t.split() if tok]
+    if len(t_tokens_lower) <= 2 and any(w in _FILLER_WORDS for w in t_tokens_lower):
+        return True
+
+    # 5. All-same character ("aaaaaaa", "-------")
+    stripped_chars = t.replace(" ", "")
+    if len(stripped_chars) >= 3 and len(set(stripped_chars.lower())) == 1:
+        return True
+
+    tokens = [tok for tok in t.replace(",", " ").replace(";", " ").split() if tok]
+    if not tokens:
+        return True
+
+    # 6. Any token > 18 chars with < 12% vowels → keyboard mash
+    for tok in tokens:
+        if len(tok) > 18:
+            vowels = sum(1 for c in tok.lower() if c in "aeiou")
+            if vowels / len(tok) < 0.12:
+                return True
+
+    # 7. Single mega-token keyboard mash (> 20 chars, < 15% vowels)
+    if len(tokens) == 1 and len(tokens[0]) > 20:
+        vowels = sum(1 for c in tokens[0].lower() if c in "aeiou")
+        if vowels / len(tokens[0]) < 0.15:
+            return True
+
+    # 8. Repeated-token spam: one word > 55% of all tokens
+    lowered = [tok.lower() for tok in tokens]
+    if len(tokens) >= 3:
+        most_common_count = _Counter(lowered).most_common(1)[0][1]
+        if most_common_count / len(tokens) > 0.55:
+            return True
+
+    # 9. Low unique-word ratio: for 4+ word inputs, require ≥ 35% unique
+    if len(tokens) >= 4:
+        if calculate_unique_word_ratio(t) < 0.35:
+            return True
+
+    # 10. Pathological token length pattern
+    avg_len = sum(len(tok) for tok in tokens) / len(tokens)
+    short_ratio = sum(1 for tok in tokens if len(tok) <= 2) / len(tokens)
+    if avg_len < 2.0 and short_ratio > 0.60:
+        return True
+
+    return False
+
+
+def is_meaningful_text(text: str, min_words: int = 5) -> bool:
+    """
+    Returns True when text passes quality gates and meets the minimum word count.
+    Inverse of detect_garbage_text with an additional word-count floor.
+
+    Parameters
+    ----------
+    text      : the raw string to validate
+    min_words : minimum number of space-separated tokens required (default 5)
+
+    Usage
+    -----
+    Suitable for experience / project / education description fields.
+    Short-form fields (skills, cert name) should use detect_garbage_text directly.
+    """
+    t = str(text).strip()
+    if detect_garbage_text(t):
+        return False
+    tokens = [tok for tok in t.split() if tok]
+    return len(tokens) >= min_words
+
+
+def detect_repeated_words(text: str, threshold: float = 0.55) -> bool:
+    """
+    Returns True when a single word dominates more than `threshold` fraction
+    of all tokens — indicating repetitive / spam input.
+
+    Parameters
+    ----------
+    text      : raw input string
+    threshold : fraction above which dominant word is considered spam (default 0.55)
+    """
+    tokens = [tok.lower() for tok in str(text).split() if tok]
+    if len(tokens) < 3:
+        return False
+    most_common_count = _Counter(tokens).most_common(1)[0][1]
+    return (most_common_count / len(tokens)) > threshold
+
+
+def calculate_unique_word_ratio(text: str) -> float:
+    """
+    Returns the ratio of unique lowercase words to total words (0.0 – 1.0).
+    A ratio of 1.0 means every word is unique; 0.0 means only one distinct word.
+    Returns 0.0 for empty / single-token input.
+
+    Example
+    -------
+    "hello world hello" → 2 unique / 3 total → 0.667
+    """
+    tokens = [tok.lower() for tok in str(text).split() if tok]
+    if not tokens:
+        return 0.0
+    return round(len(set(tokens)) / len(tokens), 4)
+
+
+# ── Internal quality scorer (used by all section scorers) ─────────────────────
+
+def _text_quality_score(text: str, min_words: int = 3) -> float:
+    """
+    Returns a quality multiplier 0.0–1.0 for free-text fields.
+    Garbage inputs always score 0.0.
+    Rewards: sufficient word count + unique-word diversity.
+    """
+    t = str(text).strip()
+    if not t:
+        return 0.0
+    if detect_garbage_text(t):
+        return 0.0
+
+    tokens = [tok for tok in t.split() if tok]
+    word_count = len(tokens)
+
+    if word_count < min_words:
+        return 0.0
+
+    unique_ratio = calculate_unique_word_ratio(t)
+    diversity_mult = 1.0
+    if word_count >= 6 and unique_ratio < 0.50:
+        diversity_mult = max(0.30, min(1.0, unique_ratio * 1.5))
+
+    if word_count < 5:
+        base = 0.25
+    elif word_count < 15:
+        base = 0.55
+    elif word_count < 30:
+        base = 0.80
+    elif word_count < 50:
+        base = 0.92
+    else:
+        base = 1.0
+
+    return round(min(base * diversity_mult, 1.0), 3)
+
+
+def _desc_score(text: str) -> float:
+    """
+    Score a long-form description field (experience / project / education / cert).
+    Combines word-count quality with character-length signal.
+    Garbage → 0.0 always.
+    """
+    t = str(text).strip()
+    if not t or detect_garbage_text(t):
+        return 0.0
+
+    char_len = len(t)
+    word_score = _text_quality_score(t, min_words=4)
+
+    if char_len < 30:
+        char_tier = 0.20
+    elif char_len < 80:
+        char_tier = 0.55
+    elif char_len < 180:
+        char_tier = 0.82
+    else:
+        char_tier = 1.0
+
+    return round(min((word_score * 0.60) + (char_tier * 0.40), 1.0), 3)
+
+
+def _count_valid_tokens(raw_str: str) -> int:
+    """Return count of unique, non-empty, non-garbage comma-separated tokens."""
+    if not raw_str:
+        return 0
+    seen = set()
+    count = 0
+    for tok in raw_str.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        tok_norm = tok.lower()
+        if tok_norm in seen:
+            continue
+        seen.add(tok_norm)
+        if not detect_garbage_text(tok):
+            count += 1
+    return count
+
+
+# ── Industry-standard XP weights ──────────────────────────────────────────────
+# Inspired by LinkedIn Profile Strength, Indeed Resume Score, and Jobscan:
+#   Experience    → 30 XP  (highest — core employability signal)
+#   Projects      → 22 XP  (second — demonstrates practical skills)
+#   Skills & More → 16 XP  (medium — keyword matching & breadth)
+#   Education     → 14 XP  (medium — credential verification)
+#   Summary       →  7 XP  (differentiator — first impression text)
+#   Certificates  →  5 XP  (bonus — validated expertise)
+#   Personal Info →  4 XP  (baseline — completeness check)
+#   Contact       →  2 XP  (small — reachability signal)
+#                  ─────
+#   TOTAL MAX     → 100 XP
+XP_WEIGHTS = {
+    "Experience":    30,
+    "Projects":      22,
+    "Skills & More": 16,
+    "Education":     14,
+    "Summary":        7,
+    "Certificates":   5,
+    "Personal Info":  4,
+    "Contact":        2,
+}
+XP_TOTAL_MAX = sum(XP_WEIGHTS.values())  # 100
+
+
+def score_experience_section(experience_entries: list) -> float:
+    """
+    Score the Experience section. Returns float 0.0–1.0.
+
+    Scoring per entry:
+      Required (40%): job title + company — both validated (non-garbage)
+      Quality  (60%): duration 20% + rich description 80%
+    Cap: 1 entry → max 0.80; 2+ entries can reach 1.0.
+    """
+    if not experience_entries:
+        return 0.0
+    n = len(experience_entries)
+    total = 0.0
+    for e in experience_entries:
+        title   = str(e.get("title",       "")).strip()
+        company = str(e.get("company",     "")).strip()
+        dur     = str(e.get("duration",    "")).strip()
+        desc    = str(e.get("description", "")).strip()
+        if not title and not company:
+            continue
+        title_ok   = bool(title)   and not detect_garbage_text(title)
+        company_ok = bool(company) and not detect_garbage_text(company)
+        req   = (float(title_ok) + float(company_ok)) / 2
+        qual  = (float(bool(dur)) * 0.20) + (_desc_score(desc) * 0.80)
+        total += (req * 0.40) + (qual * 0.60)
+    avg = total / n
+    if n == 1:
+        avg = min(avg, 0.80)
+    return round(min(avg, 1.0), 3)
+
+
+def score_education_section(education_entries: list) -> float:
+    """
+    Score the Education section. Returns float 0.0–1.0.
+
+    Scoring per entry:
+      Required (40%): institution + degree — both validated
+      Quality  (60%): year 20% + academic details 80%
+    Cap: 1 entry → max 0.85; 2+ can reach 1.0.
+    """
+    if not education_entries:
+        return 0.0
+    n = len(education_entries)
+    total = 0.0
+    for e in education_entries:
+        inst   = str(e.get("institution", "")).strip()
+        degree = str(e.get("degree",      "")).strip()
+        if isinstance(degree, list):
+            degree = ", ".join(degree)
+        year   = str(e.get("year",    "")).strip()
+        det    = str(e.get("details", "")).strip()
+        if not inst and not degree:
+            continue
+        inst_ok   = bool(inst)   and not detect_garbage_text(inst)
+        degree_ok = bool(degree) and not detect_garbage_text(degree)
+        req  = (float(inst_ok) + float(degree_ok)) / 2
+        qual = (float(bool(year)) * 0.20) + (_desc_score(det) * 0.80)
+        total += (req * 0.40) + (qual * 0.60)
+    avg = total / n
+    if n == 1:
+        avg = min(avg, 0.85)
+    return round(min(avg, 1.0), 3)
+
+
+def score_project_section(project_entries: list, project_links: list = None) -> float:
+    """
+    Score the Projects section. Returns float 0.0–1.0.
+
+    Scoring per entry:
+      Required (35%): title (validated) + tech stack (≥ 1 valid token)
+      Quality  (65%): duration 15% + rich description 85%
+    Cap: 1 project → max 0.75; 2 → max 0.90; 3+ → 1.0.
+    """
+    if not project_entries:
+        return 0.0
+    n = len(project_entries)
+    total = 0.0
+    for e in project_entries:
+        title = str(e.get("title",       "")).strip()
+        tech  = str(e.get("tech",        "")).strip()
+        dur   = str(e.get("duration",    "")).strip()
+        desc  = str(e.get("description", "")).strip()
+        if not title:
+            continue
+        title_ok  = not detect_garbage_text(title)
+        tech_cnt  = _count_valid_tokens(tech)
+        tech_sc   = min(tech_cnt / 2.0, 1.0)
+        req  = (float(title_ok) + tech_sc) / 2
+        qual = (float(bool(dur)) * 0.15) + (_desc_score(desc) * 0.85)
+        total += (req * 0.35) + (qual * 0.65)
+    avg = total / n
+    if n == 1:
+        avg = min(avg, 0.75)
+    elif n == 2:
+        avg = min(avg, 0.90)
+    return round(min(avg, 1.0), 3)
+
+
+def score_certificate_section(certificate_entries: list) -> float:
+    """
+    Score the Certificates section. Returns float 0.0–1.0.
+
+    Scoring per entry:
+      Required (30%): certificate name (validated — non-garbage)
+      Quality  (70%): link 20% + duration 20% + description 60%
+    1 complete cert CAN reach 1.0 (certs are optional, 1 complete = excellent).
+    """
+    if not certificate_entries:
+        return 0.0
+    n = len(certificate_entries)
+    total = 0.0
+    for e in certificate_entries:
+        name = str(e.get("name",        "")).strip()
+        link = str(e.get("link",        "")).strip()
+        dur  = str(e.get("duration",    "")).strip()
+        desc = str(e.get("description", "")).strip()
+        if not name:
+            continue
+        name_ok = not detect_garbage_text(name)
+        req  = float(name_ok)
+        qual = (float(bool(link)) * 0.20) + (float(bool(dur)) * 0.20) + (_desc_score(desc) * 0.60)
+        total += (req * 0.30) + (qual * 0.70)
+    return round(min(total / n, 1.0), 3)
+
+
+def score_skills_section(
+    skills: str,
+    soft_skills: str = "",
+    interests: str = "",
+    languages: str = "",
+) -> float:
+    """
+    Score the Skills & More composite section. Returns float 0.0–1.0.
+
+    Sub-weights: Skills 50% | Soft Skills 20% | Interests 20% | Languages 10%
+    Each sub-score uses _count_valid_tokens for garbage rejection.
+    Skills: 0 → 0.0, 1 → 0.20, 2 → 0.45, 3 → 0.65, 4 → 0.82, 5+ → 1.0
+    Soft/Interests: 0 → 0.0, 1 → 0.35, 2 → 0.70, 3+ → 1.0
+    Languages: 0 → 0.0, 1 → 0.50, 2+ → 1.0
+    """
+    skill_count = _count_valid_tokens(skills)
+    if skill_count == 0:    sub_skills = 0.0
+    elif skill_count == 1:  sub_skills = 0.20
+    elif skill_count == 2:  sub_skills = 0.45
+    elif skill_count == 3:  sub_skills = 0.65
+    elif skill_count == 4:  sub_skills = 0.82
+    else:                   sub_skills = 1.0
+
+    interest_count = _count_valid_tokens(interests)
+    sub_interests = 0.0 if interest_count == 0 else (0.35 if interest_count == 1 else (0.70 if interest_count == 2 else 1.0))
+
+    soft_count = _count_valid_tokens(soft_skills)
+    sub_soft = 0.0 if soft_count == 0 else (0.35 if soft_count == 1 else (0.70 if soft_count == 2 else 1.0))
+
+    lang_count = _count_valid_tokens(languages)
+    sub_lang = 0.0 if lang_count == 0 else (0.50 if lang_count == 1 else 1.0)
+
+    return round(
+        (sub_skills * 0.50) + (sub_interests * 0.20) + (sub_soft * 0.20) + (sub_lang * 0.10),
+        3
+    )
+
+
+def calculate_resume_xp(section_fills: dict, weights: dict = None) -> tuple:
+    """
+    Compute total resume XP from section fill scores and weights.
+    XP is capped at XP_TOTAL_MAX (100).
+
+    Parameters
+    ----------
+    section_fills : dict[section_name → float 0.0–1.0]
+    weights       : dict[section_name → int] — defaults to module XP_WEIGHTS
+
+    Returns
+    -------
+    (raw_xp: float, xp: int, pct: int)
+
+    Usage
+    -----
+    xp_score = calculate_resume_xp(st.session_state)  # legacy call
+    raw, xp, pct = calculate_resume_xp(fills, XP_WEIGHTS)
+    """
+    if weights is None:
+        weights = XP_WEIGHTS
+    raw_xp = sum(section_fills.get(k, 0.0) * weights.get(k, 0) for k in weights)
+    raw_xp = min(raw_xp, XP_TOTAL_MAX)
+    xp_int = int(round(raw_xp))
+    pct    = int(round((raw_xp / XP_TOTAL_MAX) * 100))
+    return raw_xp, xp_int, pct
+
+
+# ── Public aliases used in external imports / tests ───────────────────────────
+score_experience_section.__module__ = __name__
+score_project_section.__module__    = __name__
+score_education_section.__module__  = __name__
+score_certificate_section.__module__ = __name__
+score_skills_section.__module__     = __name__
+
+# ══════════════════════════════════════════════════════════════════════════════
+# END OF MODULE-LEVEL XP ENGINE
+# ══════════════════════════════════════════════════════════════════════════════
+
+
 def render_template_default(session_state, profile_img_html=""):
     """Default professional template — compact sidebar layout, grey/dark colour scheme"""
     import re as _re_def
@@ -12364,219 +12833,28 @@ with tab2:
         pi_jobtitle = _wv(f"job_input_{fk}",    "job_title")
         _fill_personal = round(_filled(pi_name, pi_email, pi_phone, pi_location, pi_jobtitle) / 5, 2)
 
-        # ── Summary: needs meaningful length (≥40 chars = 0.5, ≥100 chars = 1.0) ──
+        # ── Summary: quality-gated length scoring ─────────────────────────────
+        # Garbage text earns 0 regardless of length. Valid text is scored by
+        # character length tiers, rewarding rich professional summaries.
         _summary_text = _wv(f"summary_input_{fk}", "summary")
         _summary_len  = len(_summary_text)
-        if _summary_len == 0:
+        if _summary_len == 0 or detect_garbage_text(_summary_text):
             _fill_summary = 0.0
         elif _summary_len < 40:
             _fill_summary = 0.25   # started but too short
         elif _summary_len < 100:
-            _fill_summary = 0.6    # decent but brief
+            _fill_summary = 0.60   # decent but brief
         elif _summary_len < 200:
             _fill_summary = 0.85   # good
         else:
             _fill_summary = 1.0    # full — rich summary
 
         # ══════════════════════════════════════════════════════════════════════
-        # TEXT QUALITY VALIDATION ENGINE
-        # Industry-standard validation: prevents garbage inputs from earning XP.
-        # Invalid examples: "aaaaaaa", "test test test", "lorem ipsum lorem ipsum",
-        #                   "123456789", "asdf asdf asdf", placeholder text.
+        # TEXT QUALITY VALIDATION ENGINE — delegates to module-level functions
+        # All logic lives at module scope for reuse; these are local aliases.
         # ══════════════════════════════════════════════════════════════════════
-
-        # Common placeholder / filler phrases that must never earn XP
-        # Uses whole-word / whole-phrase matching to avoid false positives
-        # (e.g. "na" as a substring would incorrectly reject "internal", "final", etc.)
-        _FILLER_PHRASES = {
-            "lorem ipsum", "test test", "sample text", "placeholder",
-            "your text here", "enter here", "tbd", "todo",
-            "fill in", "coming soon", "to be added", "add here",
-            "description here", "write here", "dummy text",
-        }
-        # Single-word fillers checked as whole words only (not substrings)
-        _FILLER_WORDS = {"placeholder", "tbd", "todo", "dummy", "example", "test"}
-
-        def _is_low_quality_text(text):
-            """
-            Comprehensive text quality gate.
-            Returns True when the text is meaningless / should earn 0 XP.
-
-            Checks applied (in order of cheapness):
-              1. Empty / whitespace-only
-              2. Pure numeric string  ("123456789")
-              3. Known filler/placeholder phrases
-              4. All-same character repeated  ("aaaaaaa", "........")
-              5. Keyboard-mash: single long token with < 15% vowels
-              6. Repeated-token spam: dominant word > 55% of all tokens
-              7. Very low unique-word ratio: < 35% unique among 4+ word inputs
-              8. Pathological average token length (< 2.0) with high short ratio
-            """
-            t = str(text).strip()
-            if not t:
-                return True  # empty
-
-            # 1. Pure numeric
-            if t.replace(" ", "").replace("-", "").replace("+", "").replace(".", "").isdigit():
-                return True
-
-            t_lower = t.lower()
-
-            # 2. Known filler phrases (multi-word substring match is safe for phrases)
-            for phrase in _FILLER_PHRASES:
-                if phrase in t_lower:
-                    return True
-
-            # 2b. "n/a" exact or as sole token
-            if t_lower.strip() in {"n/a", "na", "n.a.", "n.a"}:
-                return True
-
-            # 2c. Single-word filler: whole-token match only (not substring)
-            t_tokens_lower = [tok.lower() for tok in t.split() if tok]
-            if len(t_tokens_lower) <= 2 and any(w in _FILLER_WORDS for w in t_tokens_lower):
-                return True
-
-            # 3. All-same character (e.g. "aaaaaaa", "-------")
-            stripped_chars = t.replace(" ", "")
-            if len(stripped_chars) >= 3 and len(set(stripped_chars.lower())) == 1:
-                return True
-
-            tokens = [tok for tok in t.replace(",", " ").replace(";", " ").split() if tok]
-            if not tokens:
-                return True
-
-            # 4. Single mega-token keyboard mash (> 20 chars, < 15% vowels)
-            if len(tokens) == 1 and len(tokens[0]) > 20:
-                vowels = sum(1 for c in tokens[0].lower() if c in "aeiou")
-                if vowels / len(tokens[0]) < 0.15:
-                    return True
-
-            # 5. Any token > 18 chars with < 12% vowels → keyboard mash
-            for tok in tokens:
-                if len(tok) > 18:
-                    vowels = sum(1 for c in tok.lower() if c in "aeiou")
-                    if vowels / len(tok) < 0.12:
-                        return True
-
-            # 6. Repeated-token spam: one word dominates > 55% of tokens
-            lowered = [tok.lower() for tok in tokens]
-            if len(tokens) >= 3:
-                from collections import Counter
-                most_common_count = Counter(lowered).most_common(1)[0][1]
-                if most_common_count / len(tokens) > 0.55:
-                    return True
-
-            # 7. Low unique-word ratio: for 4+ word inputs, need ≥ 35% unique
-            if len(tokens) >= 4:
-                unique_ratio = len(set(lowered)) / len(lowered)
-                if unique_ratio < 0.35:
-                    return True
-
-            # 8. Pathological token length pattern
-            avg_len = sum(len(tok) for tok in tokens) / len(tokens)
-            short_ratio = sum(1 for tok in tokens if len(tok) <= 2) / len(tokens)
-            if avg_len < 2.0 and short_ratio > 0.60:
-                return True
-
-            return False
-
-        def _text_quality_score(text, min_words=3):
-            """
-            Returns a quality multiplier 0.0–1.0 for free-text fields.
-            Uses _is_low_quality_text as the primary gate, then rewards:
-              - sufficient word count
-              - unique word ratio (vocabulary diversity)
-              - meaningful sentence structure (presence of varied words)
-
-            min_words: minimum word count required for any XP credit.
-            """
-            t = str(text).strip()
-            if not t:
-                return 0.0
-            if _is_low_quality_text(t):
-                return 0.0  # hard reject — no XP for garbage
-
-            tokens = [tok for tok in t.split() if tok]
-            word_count = len(tokens)
-
-            if word_count < min_words:
-                return 0.0  # below minimum word threshold
-
-            # Unique-word ratio bonus
-            unique_ratio = len(set(w.lower() for w in tokens)) / word_count
-            # Penalise low diversity (< 0.50 unique) in medium-length texts
-            diversity_mult = 1.0
-            if word_count >= 6 and unique_ratio < 0.50:
-                diversity_mult = unique_ratio * 1.5   # e.g. 0.40 ratio → 0.60 mult
-                diversity_mult = max(0.30, min(1.0, diversity_mult))
-
-            # Length-based base score
-            if word_count < 5:
-                base = 0.25
-            elif word_count < 15:
-                base = 0.55
-            elif word_count < 30:
-                base = 0.80
-            elif word_count < 50:
-                base = 0.92
-            else:
-                base = 1.0
-
-            return round(min(base * diversity_mult, 1.0), 3)
-
-        # ── Backwards-compatible helpers ──────────────────────────────────────
-
-        def _is_gibberish(text):
-            """Thin wrapper around the new quality engine for compatibility."""
-            return _is_low_quality_text(str(text).strip())
-
-        def _desc_score(text):
-            """
-            Score long-form description fields (experience, education, project, cert).
-            Combines word-count quality score with char-length signal.
-            Garbage inputs score 0 regardless of length.
-            """
-            t = str(text).strip()
-            if not t:
-                return 0.0
-            if _is_low_quality_text(t):
-                return 0.0  # hard reject
-
-            char_len = len(t)
-            word_score = _text_quality_score(t, min_words=4)
-
-            # Char-length tiers (require meaningful quality to reach upper tiers)
-            if char_len < 30:
-                char_tier = 0.20
-            elif char_len < 80:
-                char_tier = 0.55
-            elif char_len < 180:
-                char_tier = 0.82
-            else:
-                char_tier = 1.0
-
-            # Combined: 60% word quality + 40% char length tier
-            combined = (word_score * 0.60) + (char_tier * 0.40)
-            return round(min(combined, 1.0), 3)
-
-        def _count_valid_tokens(raw_str):
-            """Return count of unique, non-empty, non-gibberish comma-separated tokens."""
-            if not raw_str:
-                return 0
-            # Normalise capitalisation and deduplicate
-            seen = set()
-            count = 0
-            for tok in raw_str.split(","):
-                tok = tok.strip()
-                if not tok:
-                    continue
-                tok_norm = tok.lower()
-                if tok_norm in seen:
-                    continue  # skip duplicate
-                seen.add(tok_norm)
-                if not _is_low_quality_text(tok):
-                    count += 1
-            return count
+        _is_low_quality_text  = detect_garbage_text      # module-level
+        _is_gibberish         = detect_garbage_text      # backwards-compat alias
 
         # ══════════════════════════════════════════════════════════════════════
         # LIVE VALUE READER
@@ -12595,95 +12873,21 @@ with tab2:
             stored = entry.get(stored_key, "")
             return str(stored).strip()
 
-        # ══════════════════════════════════════════════════════════════════════
-        # INDUSTRY-STANDARD XP WEIGHT DISTRIBUTION
-        #
-        # Inspired by LinkedIn Profile Strength, Indeed Resume Score, and
-        # Jobscan completeness models. Weights reflect recruiter priority:
-        #
-        #   Experience    → 30 XP  (highest — core employability signal)
-        #   Projects      → 22 XP  (second — demonstrates practical skills)
-        #   Skills        → 16 XP  (medium — keyword matching & breadth)
-        #   Education     → 14 XP  (medium — credential verification)
-        #   Summary       →  7 XP  (differentiator — first impression text)
-        #   Certificates  →  5 XP  (bonus — validated expertise)
-        #   Personal Info →  4 XP  (baseline — completeness check)
-        #   Contact       →  2 XP  (small — reachability signal)
-        #                  ─────
-        #   TOTAL MAX     → 100 XP  (capped at 100)
-        #
-        # Each section returns a float 0.0–1.0. XP = weight × fill.
-        # calculate_resume_xp() recomputes from scratch on every render —
-        # no accumulation, no double-counting.
-        # ══════════════════════════════════════════════════════════════════════
+        # XP_WEIGHTS and XP_TOTAL_MAX are defined at module level — use them directly.
 
-        XP_WEIGHTS = {
-            "Experience":    30,
-            "Projects":      22,
-            "Skills & More": 16,
-            "Education":     14,
-            "Summary":        7,
-            "Certificates":   5,
-            "Personal Info":  4,
-            "Contact":        2,
-        }
-        XP_TOTAL_MAX = sum(XP_WEIGHTS.values())   # 100
-
-        # ── Skills & More: composite score ────────────────────────────────────
-        # Weights: Skills 50% | Soft Skills 20% | Interests 20% | Languages 10%
-
-        _skills_raw   = _wv(f"skills_input_{fk}", "skills")
-        _skill_count  = _count_valid_tokens(_skills_raw)
-        if _skill_count == 0:
-            _sub_skills = 0.0
-        elif _skill_count == 1:
-            _sub_skills = 0.20
-        elif _skill_count == 2:
-            _sub_skills = 0.45
-        elif _skill_count == 3:
-            _sub_skills = 0.65
-        elif _skill_count == 4:
-            _sub_skills = 0.82
-        else:
-            _sub_skills = 1.0   # 5+ skills = full marks
-
-        _interests_raw  = _wv(f"int_input_{fk}", "interests")
-        _interest_count = _count_valid_tokens(_interests_raw)
-        if _interest_count == 0:
-            _sub_interests = 0.0
-        elif _interest_count == 1:
-            _sub_interests = 0.35
-        elif _interest_count == 2:
-            _sub_interests = 0.70
-        else:
-            _sub_interests = 1.0
-
-        _soft_raw   = _wv(f"soft_input_{fk}", "Softskills")
-        _soft_count = _count_valid_tokens(_soft_raw)
-        if _soft_count == 0:
-            _sub_soft = 0.0
-        elif _soft_count == 1:
-            _sub_soft = 0.35
-        elif _soft_count == 2:
-            _sub_soft = 0.70
-        else:
-            _sub_soft = 1.0
-
-        _lang_raw   = _wv(f"lang_input_{fk}", "languages")
-        _lang_count = _count_valid_tokens(_lang_raw)
-        if _lang_count == 0:
-            _sub_lang = 0.0
-        elif _lang_count == 1:
-            _sub_lang = 0.50
-        else:
-            _sub_lang = 1.0
-
-        _fill_skills = round(
-            (_sub_skills    * 0.50) +
-            (_sub_interests * 0.20) +
-            (_sub_soft      * 0.20) +
-            (_sub_lang      * 0.10),
-            3
+        # ── Skills & More — delegates to module-level score_skills_section ──────
+        _skills_raw    = _wv(f"skills_input_{fk}", "skills")
+        _interests_raw = _wv(f"int_input_{fk}",    "interests")
+        _soft_raw      = _wv(f"soft_input_{fk}",   "Softskills")
+        _lang_raw      = _wv(f"lang_input_{fk}",   "languages")
+        # Keep individual counts for feedback tips
+        _skill_count   = _count_valid_tokens(_skills_raw)
+        _soft_count    = _count_valid_tokens(_soft_raw)
+        _fill_skills   = score_skills_section(
+            skills=_skills_raw,
+            soft_skills=_soft_raw,
+            interests=_interests_raw,
+            languages=_lang_raw,
         )
 
         # ── Contact: phone + linkedin, each worth 0.5 ─────────────────────────
@@ -12691,160 +12895,80 @@ with tab2:
         pi_linkedin = _wv(f"ln_input_{fk}",    "linkedin")
         _fill_contact = round(_filled(pi_phone2, pi_linkedin) / 2, 3)
 
-        # ── Experience scoring ────────────────────────────────────────────────
-        # Required (40%): title + company — structural identity of the entry
-        # Quality  (60%): duration 20% + description 80%
-        # Description uses _desc_score (quality-gated) — garbage earns 0.
-        # 1 entry → max 0.80; 2+ entries can reach 1.0
+        # ── Experience scoring — delegates to module-level score_experience_section ──
         def _score_experience():
             entries = ss.get("experience_entries", [])
             if not entries:
                 return 0.0
             n = len(entries)
-            total = 0.0
+            # Merge live widget values into a temporary list for scoring
+            merged = []
             for i, e in enumerate(entries):
-                title    = _get_val(ss, f"title_{i}_{n}_{fk}",       e, "title",       fk)
-                company  = _get_val(ss, f"company_{i}_{n}_{fk}",     e, "company",     fk)
-                duration = _get_val(ss, f"duration_{i}_{n}_{fk}",    e, "duration",    fk)
-                desc_raw = _get_val(ss, f"description_{i}_{n}_{fk}", e, "description", fk)
-                if not title and not company:
-                    total += 0.0
-                    continue
-                # Validate required fields — reject gibberish company/role names
-                title_valid   = (not _is_low_quality_text(title))   if title   else False
-                company_valid = (not _is_low_quality_text(company)) if company else False
-                req_score  = (_filled(title_valid) + _filled(company_valid)) / 2
-                qual_score = ((_filled(duration) * 0.20) + (_desc_score(desc_raw) * 0.80))
-                entry_score = (req_score * 0.40) + (qual_score * 0.60)
-                total += entry_score
-            avg = total / n
-            if n == 1:
-                avg = min(avg, 0.80)
-            return round(min(avg, 1.0), 3)
+                merged.append({
+                    "title":       _get_val(ss, f"title_{i}_{n}_{fk}",       e, "title",       fk),
+                    "company":     _get_val(ss, f"company_{i}_{n}_{fk}",     e, "company",     fk),
+                    "duration":    _get_val(ss, f"duration_{i}_{n}_{fk}",    e, "duration",    fk),
+                    "description": _get_val(ss, f"description_{i}_{n}_{fk}", e, "description", fk),
+                })
+            return score_experience_section(merged)  # module-level
 
         _fill_exp = _score_experience()
 
-        # ── Education scoring ─────────────────────────────────────────────────
-        # Required (40%): institution + degree
-        # Quality  (60%): year 20% + details 80%
-        # 1 entry → max 0.85; 2+ can reach 1.0
+        # ── Education scoring — delegates to module-level score_education_section ──
         def _score_education():
             entries = ss.get("education_entries", [])
             if not entries:
                 return 0.0
             n = len(entries)
-            total = 0.0
+            merged = []
             for i, e in enumerate(entries):
-                institution = _get_val(ss, f"institution_{i}_{n}_{fk}", e, "institution", fk)
-                degree      = _get_val(ss, f"degree_{i}_{n}_{fk}",      e, "degree",      fk)
-                year        = _get_val(ss, f"edu_year_{i}_{n}_{fk}",    e, "year",        fk)
-                details_raw = _get_val(ss, f"edu_details_{i}_{n}_{fk}", e, "details",     fk)
-                if not institution and not degree:
-                    total += 0.0
-                    continue
-                inst_valid   = (not _is_low_quality_text(institution)) if institution else False
-                degree_valid = (not _is_low_quality_text(degree))      if degree      else False
-                req_score  = (_filled(inst_valid) + _filled(degree_valid)) / 2
-                qual_score = (_filled(year) * 0.20) + (_desc_score(details_raw) * 0.80)
-                entry_score = (req_score * 0.40) + (qual_score * 0.60)
-                total += entry_score
-            avg = total / n
-            if n == 1:
-                avg = min(avg, 0.85)
-            return round(min(avg, 1.0), 3)
+                merged.append({
+                    "institution": _get_val(ss, f"institution_{i}_{n}_{fk}", e, "institution", fk),
+                    "degree":      _get_val(ss, f"degree_{i}_{n}_{fk}",      e, "degree",      fk),
+                    "year":        _get_val(ss, f"edu_year_{i}_{n}_{fk}",    e, "year",        fk),
+                    "details":     _get_val(ss, f"edu_details_{i}_{n}_{fk}", e, "details",     fk),
+                })
+            return score_education_section(merged)  # module-level
 
         _fill_edu = _score_education()
 
-        # ── Projects scoring ──────────────────────────────────────────────────
-        # Required (35%): title + tech (technologies used)
-        # Quality  (65%): duration 15% + description 85%
-        # Technologies field validated for meaningful content (not "abc, xyz").
-        # 1 project → max 0.75; 2 → max 0.90; 3+ → 1.0
+        # ── Projects scoring — delegates to module-level score_project_section ──
         def _score_projects():
             entries = ss.get("project_entries", [])
             if not entries:
                 return 0.0
             n = len(entries)
-            total = 0.0
+            merged = []
             for i, e in enumerate(entries):
-                title    = _get_val(ss, f"proj_title_{i}_{n}_{fk}",    e, "title",       fk)
-                tech     = _get_val(ss, f"proj_tech_{i}_{n}_{fk}",     e, "tech",        fk)
-                duration = _get_val(ss, f"proj_duration_{i}_{n}_{fk}", e, "duration",    fk)
-                desc_raw = _get_val(ss, f"proj_desc_{i}_{n}_{fk}",     e, "description", fk)
-                if not title:
-                    total += 0.0
-                    continue
-                title_valid = not _is_low_quality_text(title)
-                # Tech field: count valid comma-separated tokens (at least 1 real tech)
-                tech_valid_count = _count_valid_tokens(tech) if tech else 0
-                tech_score = min(tech_valid_count / 2.0, 1.0)  # 0=0, 1=0.5, 2+=1.0
-                req_score  = (float(title_valid) + tech_score) / 2
-                qual_score = (_filled(duration) * 0.15) + (_desc_score(desc_raw) * 0.85)
-                entry_score = (req_score * 0.35) + (qual_score * 0.65)
-                total += entry_score
-            avg = total / n
-            if n == 1:
-                avg = min(avg, 0.75)
-            elif n == 2:
-                avg = min(avg, 0.90)
-            return round(min(avg, 1.0), 3)
+                merged.append({
+                    "title":       _get_val(ss, f"proj_title_{i}_{n}_{fk}",    e, "title",       fk),
+                    "tech":        _get_val(ss, f"proj_tech_{i}_{n}_{fk}",     e, "tech",        fk),
+                    "duration":    _get_val(ss, f"proj_duration_{i}_{n}_{fk}", e, "duration",    fk),
+                    "description": _get_val(ss, f"proj_desc_{i}_{n}_{fk}",     e, "description", fk),
+                })
+            return score_project_section(merged)  # module-level
 
         _fill_proj = _score_projects()
 
-        # ── Certificates scoring ──────────────────────────────────────────────
-        # Required (30%): cert name (validated — not gibberish)
-        # Quality  (70%): link 20% + duration 20% + description 60%
-        # Issuing organisation (from name field) is validated.
-        # 1 cert CAN reach 1.0 — certs are optional, 1 complete cert is excellent.
+        # ── Certificates scoring — delegates to module-level score_certificate_section ──
         def _score_certificates():
             entries = ss.get("certificate_links", [])
             if not entries:
                 return 0.0
             n = len(entries)
-            total = 0.0
+            merged = []
             for i, e in enumerate(entries):
-                name     = _get_val(ss, f"cert_name_{i}_{n}_{fk}",        e, "name",        fk)
-                link     = _get_val(ss, f"cert_link_{i}_{n}_{fk}",        e, "link",        fk)
-                duration = _get_val(ss, f"cert_duration_{i}_{n}_{fk}",    e, "duration",    fk)
-                desc_raw = _get_val(ss, f"cert_description_{i}_{n}_{fk}", e, "description", fk)
-                if not name:
-                    total += 0.0
-                    continue
-                # Certificate name must be meaningful
-                name_valid = not _is_low_quality_text(name)
-                req_score  = float(name_valid)
-                qual_score = ((_filled(link) * 0.20) + (_filled(duration) * 0.20) + (_desc_score(desc_raw) * 0.60))
-                entry_score = (req_score * 0.30) + (qual_score * 0.70)
-                total += entry_score
-            avg = total / n
-            return round(min(avg, 1.0), 3)
+                merged.append({
+                    "name":        _get_val(ss, f"cert_name_{i}_{n}_{fk}",        e, "name",        fk),
+                    "link":        _get_val(ss, f"cert_link_{i}_{n}_{fk}",        e, "link",        fk),
+                    "duration":    _get_val(ss, f"cert_duration_{i}_{n}_{fk}",    e, "duration",    fk),
+                    "description": _get_val(ss, f"cert_description_{i}_{n}_{fk}", e, "description", fk),
+                })
+            return score_certificate_section(merged)  # module-level
 
         _fill_cert = _score_certificates()
 
-        # ══════════════════════════════════════════════════════════════════════
-        # calculate_resume_xp() — SINGLE SOURCE OF TRUTH
-        # Recomputes the entire XP score from current section fills.
-        # No accumulation — calling this multiple times always yields the same
-        # result for the same form state (idempotent).
-        # Returns (xp: int, pct: int, section_fills: dict)
-        # ══════════════════════════════════════════════════════════════════════
-
-        def calculate_resume_xp(fills, weights):
-            """
-            Compute total resume XP from section fill scores and weights.
-            XP is capped at XP_TOTAL_MAX (100).
-
-            fills   : dict[section_name → float 0.0–1.0]
-            weights : dict[section_name → int (max XP for that section)]
-            Returns : (raw_xp: float, xp: int, pct: int)
-            """
-            raw_xp = sum(fills.get(k, 0.0) * weights.get(k, 0) for k in weights)
-            raw_xp = min(raw_xp, XP_TOTAL_MAX)
-            xp_int = int(round(raw_xp))
-            pct    = int(round((raw_xp / XP_TOTAL_MAX) * 100))
-            return raw_xp, xp_int, pct
-
-        # ── SECTIONS dict: float 0.0–1.0 per section ─────────────────────────
+        # ── Aggregate XP via module-level calculate_resume_xp() — idempotent ──
         # Order matches XP_WEIGHTS for consistent rendering.
         SECTIONS = {
             "Experience":     _fill_exp,
