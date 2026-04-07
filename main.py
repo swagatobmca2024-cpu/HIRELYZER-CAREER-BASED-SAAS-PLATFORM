@@ -11330,7 +11330,7 @@ def prune_old_searches(username):
             WHERE username = %s AND id NOT IN (
                 SELECT id FROM user_jobs
                 WHERE username = %s
-                ORDER BY timestamp DESC
+                ORDER BY timestamp DESC, id DESC
                 LIMIT 50
             )
         """, (username, username))
@@ -11369,7 +11369,7 @@ def get_saved_job_searches(username, limit=10, offset=0, platform_filter=None):
                 SELECT id, role, location, platform, url, timestamp
                 FROM user_jobs
                 WHERE username = %s AND platform = %s
-                ORDER BY timestamp DESC
+                ORDER BY timestamp DESC, id DESC
                 LIMIT %s OFFSET %s
             """, (username, platform_filter, limit, offset))
         else:
@@ -11377,7 +11377,7 @@ def get_saved_job_searches(username, limit=10, offset=0, platform_filter=None):
                 SELECT id, role, location, platform, url, timestamp
                 FROM user_jobs
                 WHERE username = %s
-                ORDER BY timestamp DESC
+                ORDER BY timestamp DESC, id DESC
                 LIMIT %s OFFSET %s
             """, (username, limit, offset))
 
@@ -12024,15 +12024,28 @@ def _job_search_interactive():
 
                 # Save search results if user is logged in
                 if hasattr(st.session_state, 'username') and st.session_state.username:
-                    # Convert results to format expected by save_job_search
+                    # Use explicit platform name mapping — never rely on split(":")[0]
+                    # because "FoundIt (Monster)" has no colon but other future platforms might.
+                    _platform_name_map = {
+                        "linkedin": "LinkedIn",
+                        "naukri":   "Naukri",
+                        "foundit":  "FoundIt (Monster)",
+                    }
                     formatted_results = []
                     for result in results:
-                        platform_name = result["title"].split(":")[0]
+                        _title_lower = result["title"].lower()
+                        _pname = next(
+                            (v for k, v in _platform_name_map.items() if k in _title_lower),
+                            result["title"].split(":")[0]   # safe fallback
+                        )
                         formatted_results.append({
-                            "platform": platform_name,
+                            "platform": _pname,
                             "apply_link": result["link"]
                         })
                     save_job_search(st.session_state.username, job_role, location, formatted_results)
+                    # Signal pagination to reset to page 1 so stale offset never
+                    # causes a row to be skipped or duplicated in Saved Searches.
+                    st.session_state["_search_just_saved"] = True
 
                 st.markdown("""<div style="display:flex; align-items:center; gap:10px; margin:18px 0 14px;"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#gext)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gext" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#818cf8"/></linearGradient></defs><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span style="font-size:1.35rem; font-weight:800; letter-spacing:-0.025em; background:linear-gradient(135deg,#38bdf8,#818cf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; font-family:var(--t3-font);">External Job Search Results</span></div>""", unsafe_allow_html=True)
 
@@ -12185,6 +12198,9 @@ def _job_search_interactive():
                     rapid_location,
                     formatted_results
                 )
+                # Signal pagination to reset to page 1 so stale offset never
+                # causes a row to be skipped or duplicated in Saved Searches.
+                st.session_state["_search_just_saved"] = True
 
             st.markdown("""<div style="display:flex; align-items:center; gap:10px; margin:18px 0 14px;"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#grap)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="grap" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#38bdf8"/></linearGradient></defs><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg><span style="font-size:1.35rem; font-weight:800; letter-spacing:-0.025em; background:linear-gradient(135deg,#34d399,#38bdf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; font-family:var(--t3-font);">RapidAPI Job Results</span></div>""", unsafe_allow_html=True)
 
@@ -12326,6 +12342,20 @@ def _job_search_interactive():
         # Get available platforms for filtering
         available_platforms = get_available_platforms(st.session_state.username)
         platform_options = ["All"] + available_platforms
+
+        # ── Pagination reset guard ────────────────────────────────────────────
+        # When a new search was just saved, the count/page caches may still hold
+        # stale values.  Force-clear them NOW (before computing max_pages) and
+        # reset the slider to page 1 so the offset is always 0 → no skipped or
+        # duplicated rows (the FoundIt-vanishes / Naukri-twice bug).
+        if st.session_state.get("_search_just_saved"):
+            get_saved_job_searches.clear()
+            get_total_saved_searches_count.clear()
+            get_available_platforms.clear()
+            # Reset the page slider key so Streamlit re-creates it at value=1
+            if "page_slider" in st.session_state:
+                st.session_state["page_slider"] = 1
+            st.session_state["_search_just_saved"] = False
 
         # Get total count of searches
         total_searches = get_total_saved_searches_count(st.session_state.username)
