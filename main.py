@@ -11102,7 +11102,7 @@ def get_companies_by_industry(industry):
 # Sample job search function
 import uuid
 import urllib.parse
-import datetime
+from datetime import datetime
 import streamlit as st
 from zoneinfo import ZoneInfo
 import requests
@@ -11288,7 +11288,7 @@ def save_job_search(username, role, location, results):
     for attempt in range(2):  # retry once on stale connection
         try:
             cur = _pg().cursor()
-            now = datetime.datetime.now(ZoneInfo('UTC'))
+            now = datetime.now(ZoneInfo('UTC'))
             psycopg2.extras.execute_batch(
                 cur,
                 """
@@ -12222,7 +12222,7 @@ def _job_search_interactive():
                     )
                     if raw_date and str(raw_date).strip() not in ("N/A", "None", "null", ""):
                         try:
-                            date_obj = datetime.datetime.fromisoformat(
+                            date_obj = datetime.fromisoformat(
                                 str(raw_date).replace("Z", "+00:00")
                             )
                             formatted_date = date_obj.strftime("%b %d, %Y")
@@ -12321,8 +12321,8 @@ def _job_search_interactive():
         elif rapid_search_clicked:
             st.warning("Please select both a Job Domain and Location to perform the search.")
 
-    # Display saved job searches if user is logged in
-    if hasattr(st.session_state, 'username') and st.session_state.username:
+    # Display saved job searches if user is logged in (skip for admin)
+    if hasattr(st.session_state, 'username') and st.session_state.username and st.session_state.username != "admin":
         # Get available platforms for filtering
         available_platforms = get_available_platforms(st.session_state.username)
         platform_options = ["All"] + available_platforms
@@ -12992,7 +12992,7 @@ def _analytics_dashboard():
 
             # ── Footer ────────────────────────────────────────────
             scope_label = f"@{current_user}" if is_my_analytics else "all users"
-            ist_now = datetime.datetime.now(ZoneInfo('Asia/Kolkata')).strftime("%b %d, %Y %I:%M %p IST")
+            ist_now = datetime.now(ZoneInfo('Asia/Kolkata')).strftime("%b %d, %Y %I:%M %p IST")
             st.markdown(f"""
             <div class="analytics-footer">
                 {total_searches:,} records · {scope_label} · Updated {ist_now} · Supabase PostgreSQL
