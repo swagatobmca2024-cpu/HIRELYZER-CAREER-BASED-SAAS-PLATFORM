@@ -9214,7 +9214,7 @@ with tab2:
     </style>
 
     <div class="glass-title">
-        <h2>🧾 Advanced Resume Builder</h2>
+        <h2><span style="color:#4da6ff;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg></span>&nbsp;Advanced Resume Builder</h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -9422,7 +9422,7 @@ with tab2:
     if "selected_template_name" not in st.session_state:
         st.session_state["selected_template_name"] = TEMPLATE_NAMES[0]
 
-    st.markdown("<div style='margin:18px 0 8px;font-size:14px;font-weight:600;color:#93c5fd;'>🎨 Choose Resume Template</div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin:18px 0 8px;font-size:14px;font-weight:600;color:#93c5fd;'><span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg></span>&nbsp;Choose Resume Template</div>", unsafe_allow_html=True)
 
     # Show 5 cards per row
     _tpl_rows = [TEMPLATE_META[i:i+5] for i in range(0, len(TEMPLATE_META), 5)]
@@ -9448,21 +9448,23 @@ with tab2:
     selected_template = st.session_state["selected_template_name"]
 
     # 📸 Upload profile photo
-    st.markdown("<div style='margin:18px 0 6px;font-size:14px;font-weight:600;color:#93c5fd;'>📸 Profile Photo</div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin:18px 0 6px;font-size:14px;font-weight:600;color:#93c5fd;'><span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>&nbsp;Profile Photo</div>", unsafe_allow_html=True)
     _img_col1, _img_col2 = st.columns([3, 1])
     with _img_col1:
         uploaded_image = st.file_uploader("Upload a Profile Image (PNG/JPG, square preferred)", type=["png", "jpg", "jpeg"], key="profile_img_upload", label_visibility="collapsed")
-        # ── FIX: Encode and store as soon as a new file is uploaded, then rerun
-        # so the preview column (already rendered above) refreshes immediately.
+        # FIX: encode immediately on upload and rerun so preview refreshes at once
         if uploaded_image is not None:
             import base64 as _base64
             _new_encoded = _base64.b64encode(uploaded_image.read()).decode()
             if _new_encoded != st.session_state.get("encoded_profile_image"):
                 st.session_state["encoded_profile_image"] = _new_encoded
                 st.rerun()
-        # ── FIX: "Remove Photo" button clears session state so image disappears.
+        # FIX: Remove Photo button — clears session state so image disappears
         if st.session_state.get("encoded_profile_image"):
-            if st.button("🗑️ Remove Photo", key="remove_profile_photo"):
+            if st.button(
+                '<span style="color:#ef4444;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span>&nbsp;Remove Photo',
+                key="remove_profile_photo"
+            ):
                 st.session_state.pop("encoded_profile_image", None)
                 st.rerun()
     with _img_col2:
@@ -9476,7 +9478,7 @@ with tab2:
             st.markdown(
                 "<div style='width:72px;height:72px;border-radius:50%;background:#1e2535;"
                 "border:2px dashed #374151;display:flex;align-items:center;justify-content:center;"
-                "font-size:22px;margin:4px auto;'>👤</div>",
+                "font-size:22px;margin:4px auto;color:#6b7280;'><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"32\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"display:block;margin:auto;\"><path d=\"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/></svg></div>",
                 unsafe_allow_html=True,
             )
     profile_img_html = ""
@@ -9505,7 +9507,7 @@ with tab2:
         </div>
         """
     else:
-        st.markdown("<div style='font-size:12px;color:#4b5563;margin-top:4px;'>📸 Upload a clear, front-facing photo (square or portrait preferred)</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:12px;color:#4b5563;margin-top:4px;'><span style="color:#4b5563;"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>&nbsp;Upload a clear, front-facing photo (square or portrait preferred)</div>", unsafe_allow_html=True)
 
     # ---------------- Session State Defaults ----------------
     fields = ["name", "email", "phone", "linkedin", "location", "portfolio", "summary",
@@ -10169,7 +10171,7 @@ with tab2:
         )
 
     def _hint(text):
-        st.markdown(f"<div class='field-hint'>💡 {text}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='field-hint'><span style="color:#f59e0b;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span>&nbsp;{text}</div>", unsafe_allow_html=True)
 
     def _tag_chips(raw, label):
         items = [s.strip() for s in raw.split(",") if s.strip()]
@@ -10184,19 +10186,19 @@ with tab2:
 
     # ---------------- Resume Form ----------------
     with st.form(f"resume_form_{fk}", clear_on_submit=False):
-        _sec_hdr("👤", "Personal Information")
+        _sec_hdr("<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>", "Personal Information")
         col1, col2 = st.columns(2)
         with col1:
-            st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, placeholder="e.g., Arjun Sharma", key=f"name_input_{fk}")
-            st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, placeholder="e.g., +91 98765 43210", key=f"phone_input_{fk}")
-            st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, placeholder="e.g., Kolkata, West Bengal", key=f"loc_input_{fk}")
+            st.session_state.name = st.text_input("<span style="color:#6b7280;"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>&nbsp;Full Name", value=st.session_state.name, placeholder="e.g., Arjun Sharma", key=f"name_input_{fk}")
+            st.session_state.phone = st.text_input("<span style="color:#6b7280;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.36 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.73 5.73l1.62-1.62a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>&nbsp;Phone Number", value=st.session_state.phone, placeholder="e.g., +91 98765 43210", key=f"phone_input_{fk}")
+            st.session_state.location = st.text_input("<span style="color:#6b7280;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>&nbsp;Location", value=st.session_state.location, placeholder="e.g., Kolkata, West Bengal", key=f"loc_input_{fk}")
         with col2:
-            st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, placeholder="e.g., arjun@gmail.com", key=f"email_input_{fk}")
-            st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, placeholder="e.g., linkedin.com/in/arjun", key=f"ln_input_{fk}")
-            st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, placeholder="e.g., arjun.dev or github.com/arjun", key=f"port_input_{fk}")
-            st.session_state.job_title = st.text_input("💼 Job Title / Target Role", value=st.session_state.job_title, placeholder="e.g., Full Stack Developer", key=f"job_input_{fk}")
+            st.session_state.email = st.text_input("<span style="color:#6b7280;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>&nbsp;Email", value=st.session_state.email, placeholder="e.g., arjun@gmail.com", key=f"email_input_{fk}")
+            st.session_state.linkedin = st.text_input("<span style="color:#6b7280;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>&nbsp;LinkedIn", value=st.session_state.linkedin, placeholder="e.g., linkedin.com/in/arjun", key=f"ln_input_{fk}")
+            st.session_state.portfolio = st.text_input("<span style="color:#6b7280;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>&nbsp;Portfolio", value=st.session_state.portfolio, placeholder="e.g., arjun.dev or github.com/arjun", key=f"port_input_{fk}")
+            st.session_state.job_title = st.text_input("<span style="color:#6b7280;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span>&nbsp;Job Title / Target Role", value=st.session_state.job_title, placeholder="e.g., Full Stack Developer", key=f"job_input_{fk}")
 
-        _sec_hdr("📝", "Professional Summary")
+        _sec_hdr("<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>", "Professional Summary")
         st.session_state.summary = st.text_area(
             "Summary",
             value=st.session_state.summary,
@@ -10206,7 +10208,7 @@ with tab2:
         )
         _hint("Aim for 80–200 characters. Recruiters read this first — make it count.")
 
-        _sec_hdr("🛠️", "Skills, Languages, Interests & Soft Skills")
+        _sec_hdr("<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>", "Skills, Languages, Interests & Soft Skills")
         st.session_state.skills = st.text_area(
             "Technical Skills (comma-separated)",
             value=st.session_state.skills,
@@ -10239,12 +10241,12 @@ with tab2:
             key=f"soft_input_{fk}",
         )
 
-        _sec_hdr("🧱", "Work Experience", badge=f"{len(st.session_state.experience_entries)} entr{'y' if len(st.session_state.experience_entries)==1 else 'ies'}")
+        _sec_hdr("<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>", "Work Experience", badge=f"{len(st.session_state.experience_entries)} entr{'y' if len(st.session_state.experience_entries)==1 else 'ies'}")
         for idx, exp in enumerate(st.session_state.experience_entries):
             _entry_label = exp.get("title", "") or f"Experience #{idx+1}"
             _entry_company = exp.get("company", "")
             _display = f"{_entry_label} @ {_entry_company}" if _entry_company else _entry_label
-            with st.expander(f"🏢 {_display}", expanded=True):
+            with st.expander(f"<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01"/></svg></span>&nbsp;{_display}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Entry #{idx+1}</div>", unsafe_allow_html=True)
                 exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), placeholder="e.g., Software Engineer", key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
                 exp["company"] = st.text_input("Company", value=exp.get("company", ""), placeholder="e.g., Infosys, TCS, Google", key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
@@ -10252,22 +10254,22 @@ with tab2:
                 exp["description"] = st.text_area("Description", value=exp.get("description", ""), placeholder="• Developed REST APIs using Node.js that reduced response time by 35%\n• Led a team of 4 engineers to deliver the project 2 weeks ahead of schedule", height=100, key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
                 _hint("Use bullet points starting with action verbs. Include metrics where possible.")
 
-        _sec_hdr("🎓", "Education", badge=f"{len(st.session_state.education_entries)} entr{'y' if len(st.session_state.education_entries)==1 else 'ies'}")
+        _sec_hdr("<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>", "Education", badge=f"{len(st.session_state.education_entries)} entr{'y' if len(st.session_state.education_entries)==1 else 'ies'}")
         for idx, edu in enumerate(st.session_state.education_entries):
             _edu_label = edu.get("degree", "") or f"Education #{idx+1}"
             _edu_inst = edu.get("institution", "")
             _edu_display = f"{_edu_label} — {_edu_inst}" if _edu_inst else _edu_label
-            with st.expander(f"🏫 {_edu_display}", expanded=True):
+            with st.expander(f"<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14 22V12H10v10"/><path d="M18 22V6l-6-4-6 4v16"/><path d="M2 22h20"/><path d="M12 7v5"/></svg></span>&nbsp;{_edu_display}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Entry #{idx+1}</div>", unsafe_allow_html=True)
                 edu["degree"] = st.text_input("Degree / Qualification", value=edu.get("degree", ""), placeholder="e.g., B.Tech in Computer Science", key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
                 edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), placeholder="e.g., Jadavpur University", key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
                 edu["year"] = st.text_input("Year / Duration", value=edu.get("year", ""), placeholder="e.g., 2019 – 2023", key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
                 edu["details"] = st.text_area("Academic Details", value=edu.get("details", ""), placeholder="e.g., CGPA: 8.7/10 | Relevant: Data Structures, OS, DBMS | Dean's List 2022", height=80, key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
 
-        _sec_hdr("🚀", "Projects", badge=f"{len(st.session_state.project_entries)} entr{'y' if len(st.session_state.project_entries)==1 else 'ies'}")
+        _sec_hdr("<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></span>", "Projects", badge=f"{len(st.session_state.project_entries)} entr{'y' if len(st.session_state.project_entries)==1 else 'ies'}")
         for idx, proj in enumerate(st.session_state.project_entries):
             _proj_label = proj.get("title", "") or f"Project #{idx+1}"
-            with st.expander(f"📌 {_proj_label}", expanded=True):
+            with st.expander(f"<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z"/></svg></span>&nbsp;{_proj_label}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Project #{idx+1}</div>", unsafe_allow_html=True)
                 proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), placeholder="e.g., AI Resume Builder", key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
                 proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), placeholder="e.g., Python, Streamlit, OpenAI API, PostgreSQL", key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
@@ -10275,7 +10277,7 @@ with tab2:
                 proj["description"] = st.text_area("Description", value=proj.get("description", ""), placeholder="• Built a full-stack resume builder with AI-powered cover letter generation\n• Reduced resume creation time by 70% compared to manual methods", height=100, key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
                 _hint("Describe the problem solved, your role, and the impact or outcome.")
 
-        _sec_hdr("🔗", "Project Links")
+        _sec_hdr("<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>", "Project Links")
         project_links_input = st.text_area(
             "Enter one project link per line:",
             value="\n".join(st.session_state.project_links),
@@ -10285,10 +10287,10 @@ with tab2:
         )
         st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
 
-        _sec_hdr("🏅", "Certificates", badge=f"{len(st.session_state.certificate_links)} entr{'y' if len(st.session_state.certificate_links)==1 else 'ies'}")
+        _sec_hdr("<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg></span>", "Certificates", badge=f"{len(st.session_state.certificate_links)} entr{'y' if len(st.session_state.certificate_links)==1 else 'ies'}")
         for idx, cert in enumerate(st.session_state.certificate_links):
             _cert_label = cert.get("name", "") or f"Certificate #{idx+1}"
-            with st.expander(f"🎖️ {_cert_label}", expanded=True):
+            with st.expander(f"<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M7.21 15 2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><path d="M11 12 5.12 2.2"/><path d="m13 12 5.88-9.8"/><path d="M8 7h8"/><circle cx="12" cy="17" r="5"/><path d="M12 18v-2h-.5"/></svg></span>&nbsp;{_cert_label}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Certificate #{idx+1}</div>", unsafe_allow_html=True)
                 cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), placeholder="e.g., AWS Certified Solutions Architect", key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
                 cert["link"] = st.text_input("Verification Link", value=cert.get("link", ""), placeholder="e.g., https://credly.com/badges/...", key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
@@ -10299,13 +10301,13 @@ with tab2:
         btn_col1, btn_col2 = st.columns([1, 1])
         with btn_col1:
             submitted = st.form_submit_button(
-                "📑 Generate Resume",
+                "<span style="color:#ffffff;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span>&nbsp;Generate Resume",
                 use_container_width=True,
                 type="primary",
             )
         with btn_col2:
             clear_clicked = st.form_submit_button(
-                "🗑️ Clear All",
+                "<span style="color:#ffffff;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></span>&nbsp;Clear All",
                 use_container_width=True,
             )
 
@@ -10318,13 +10320,13 @@ with tab2:
     # ── Clear confirmation (outside form so it can render fresh buttons) ──────
     if st.session_state.get("_confirm_clear"):
         st.markdown(
-            "<div class='confirm-warn'>⚠️ <strong>This will erase all entered data.</strong> "
+            "<div class='confirm-warn'><span style="color:#f59e0b;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>&nbsp;<strong>This will erase all entered data.</strong> "
             "This cannot be undone.</div>",
             unsafe_allow_html=True,
         )
         cc1, cc2 = st.columns([1, 1])
         with cc1:
-            if st.button("✅ Yes, Clear", key="confirm_clear_yes", use_container_width=True):
+            if st.button("<span style="color:#ffffff;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg></span>&nbsp;Yes, Clear", key="confirm_clear_yes", use_container_width=True):
                 _new_counter = st.session_state.get("form_key_counter", 0) + 1
                 resume_fields = ["name", "email", "phone", "linkedin", "location",
                                  "portfolio", "summary", "skills", "languages",
@@ -10343,7 +10345,7 @@ with tab2:
                 st.session_state.pop("_confirm_clear", None)
                 st.rerun()
         with cc2:
-            if st.button("❌ Cancel", key="confirm_clear_no", use_container_width=True):
+            if st.button("<span style="color:#ffffff;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>&nbsp;Cancel", key="confirm_clear_no", use_container_width=True):
                 st.session_state.pop("_confirm_clear", None)
                 st.rerun()
 
@@ -10367,11 +10369,11 @@ with tab2:
 
     # --- Visual Resume Preview Section (only shown after form is submitted) ---
     if st.session_state.get("_resume_generated_msg"):
-        st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
+        st.success("<span style="color:#22c55e;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg></span>&nbsp;Resume Generated Successfully! Scroll down to preview or download.")
         st.session_state["_resume_generated_msg"] = False  # show only once per submit
 
     if "generated_html" in st.session_state:
-        st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
+        st.markdown("## <span style="color:#336699;"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg></span>&nbsp;<span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
         st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
 
         left, right = st.columns([1, 2])
@@ -10381,11 +10383,11 @@ with tab2:
                 <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
                 <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
                 <p style='font-size:14px;'>
-                📍 {st.session_state['location']}<br>
-                📞 {st.session_state['phone']}<br>
-                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
-                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
-                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
+                <span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>&nbsp;{st.session_state['location']}<br>
+                <span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.36 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.73 5.73l1.62-1.62a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>&nbsp;{st.session_state['phone']}<br>
+                <span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>&nbsp;<a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
+                <span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>&nbsp;<a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
+                <span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>&nbsp;<a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
                 </p>
             """, unsafe_allow_html=True)
 
@@ -10422,24 +10424,24 @@ with tab2:
                     st.markdown(f"""
                     <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
                         <div style='display:flex; justify-content:space-between;'>
-                            <b>🏢 {exp['company']}</b><span style='color:gray;'>📆 {exp['duration']}</span>
+                            <b><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01"/></svg></span>&nbsp;{exp['company']}</b><span style='color:gray;'><span style="color:#aaa;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>&nbsp;{exp['duration']}</span>
                         </div>
-                        <div style='font-size:14px;'>💼 <i>{exp['title']}</i></div>
-                        <div style='font-size:17px;'>📝 {exp['description']}</div>
+                        <div style='font-size:14px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span>&nbsp;<i>{exp['title']}</i></div>
+                        <div style='font-size:17px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>&nbsp;{exp['description']}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
-            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color:#336699;'><span style="color:#336699;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>&nbsp;Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
             for edu in st.session_state.education_entries:
                 if edu["institution"] or edu["degree"]:
                     st.markdown(f"""
                     <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px;'>
                         <div style='display:flex; justify-content:space-between; font-size:16px; font-weight:bold;'>
-                            <span>🏫 {edu['institution']}</span>
-                            <span style='color:gray;'>📅 {edu['year']}</span>
+                            <span><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14 22V12H10v10"/><path d="M18 22V6l-6-4-6 4v16"/><path d="M2 22h20"/><path d="M12 7v5"/></svg></span>&nbsp;{edu['institution']}</span>
+                            <span style='color:gray;'><span style="color:#aaa;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>&nbsp;{edu['year']}</span>
                         </div>
-                        <div style='font-size:14px;'>🎓 <i>{edu['degree']}</i></div>
-                        <div style='font-size:14px;'>📄 {edu['details']}</div>
+                        <div style='font-size:14px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>&nbsp;<i>{edu['degree']}</i></div>
+                        <div style='font-size:14px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>&nbsp;{edu['details']}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -10449,16 +10451,16 @@ with tab2:
                     st.markdown(f"""
                     <div style='margin-bottom:15px; padding:10px;'>
                         <strong style='font-size:16px;'>{proj['title']}</strong><br>
-                        <span style='font-size:14px;'>🛠️ <strong>Tech Stack:</strong> {proj['tech']}</span><br>
+                        <span style='font-size:14px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>&nbsp;<strong>Tech Stack:</strong> {proj['tech']}</span><br>
                         <span style='font-size:14px;'>⏳ <strong>Duration:</strong> {proj['duration']}</span><br>
-                        <span style='font-size:17px;'>📝 <strong>Description:</strong> {proj['description']}</span>
+                        <span style='font-size:17px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>&nbsp;<strong>Description:</strong> {proj['description']}</span>
                     </div>
                     """, unsafe_allow_html=True)
 
             if st.session_state.project_links:
                 st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
                 for i, link in enumerate(st.session_state.project_links):
-                    st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
+                    st.markdown(f"[<span style="color:#4da6ff;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>&nbsp;Project {i+1}]({link})", unsafe_allow_html=True)
 
             if st.session_state.certificate_links:
                 st.markdown("<h4 style='color:#336699;'>Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
@@ -10477,17 +10479,17 @@ with tab2:
 import re
 
 with tab2:
-    st.markdown("## ✨ <span style='color:#336699;'>Enhanced AI Resume Preview</span>", unsafe_allow_html=True)
+    st.markdown("## <span style="color:#336699;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg></span>&nbsp;<span style='color:#336699;'>Enhanced AI Resume Preview</span>", unsafe_allow_html=True)
     st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
 
     col1, spacer, col2 = st.columns([1, 0.2, 1])
 
     with col1:
-        if st.button("🔁 Clear Preview"):
+        if st.button("<span style="color:#6b7280;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></span>&nbsp;Clear Preview"):
             st.session_state.pop("ai_output", None)
 
     with col2:
-        if st.button("🚀 Generate AI Resume Preview"):
+        if st.button("<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></span>&nbsp;Generate AI Resume Preview"):
             # Normalize and ensure at least 2 experience entries
             experience_entries = st.session_state.get('experience_entries', [])
             normalized_experience_entries = []
@@ -10764,7 +10766,7 @@ with tab2:
 
 
 
-            with st.spinner("🧠 Thinking..."):
+            with st.spinner("<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96-.46 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.14Z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96-.46 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.14Z"/></svg></span>&nbsp;Thinking..."):
                 ai_output = call_llm(enhance_prompt, session=st.session_state)
                 st.session_state["ai_output"] = ai_output
 
@@ -10795,11 +10797,11 @@ with tab2:
                 <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
                 <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
                 <p style='font-size:14px;'>
-                📍 {st.session_state['location']}<br>
-                📞 {st.session_state['phone']}<br>
-                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
-                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
-                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
+                <span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>&nbsp;{st.session_state['location']}<br>
+                <span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.36 2 2 0 0 1 3.58 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 5.73 5.73l1.62-1.62a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>&nbsp;{st.session_state['phone']}<br>
+                <span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>&nbsp;<a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
+                <span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>&nbsp;<a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
+                <span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span>&nbsp;<a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
                 </p>
             """, unsafe_allow_html=True)
 
@@ -10836,24 +10838,24 @@ with tab2:
                     st.markdown(f"""
                     <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
                         <div style='display:flex; justify-content:space-between;'>
-                            <b>🏢 {company.upper()}</b><span style='color:gray;'>📆 {duration}</span>
+                            <b><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01"/></svg></span>&nbsp;{company.upper()}</b><span style='color:gray;'><span style="color:#aaa;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>&nbsp;{duration}</span>
                         </div>
-                        <div style='font-size:14px;'>💼 <i>{role}</i></div>
-                        <div style='font-size:17px;'>📝 {formatted_exp}</div>
+                        <div style='font-size:14px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span>&nbsp;<i>{role}</i></div>
+                        <div style='font-size:17px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>&nbsp;{formatted_exp}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
             # Education
-            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color:#336699;'><span style="color:#336699;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>&nbsp;Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
             for edu in st.session_state.education_entries:
                 st.markdown(f"""
                 <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px;'>
                     <div style='display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;'>
-                        <span>🏫 {edu['institution']}</span>
-                        <span style='color: gray;'>📅 {edu['year']}</span>
+                        <span><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14 22V12H10v10"/><path d="M18 22V6l-6-4-6 4v16"/><path d="M2 22h20"/><path d="M12 7v5"/></svg></span>&nbsp;{edu['institution']}</span>
+                        <span style='color: gray;'><span style="color:#aaa;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>&nbsp;{edu['year']}</span>
                     </div>
-                    <div style='font-size: 14px;'>🎓 <i>{edu['degree']}</i></div>
-                    <div style='font-size: 14px;'>📄 {edu['details']}</div>
+                    <div style='font-size: 14px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>&nbsp;<i>{edu['degree']}</i></div>
+                    <div style='font-size: 14px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>&nbsp;{edu['details']}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -10874,17 +10876,17 @@ with tab2:
 
                     st.markdown(f"""
                     <div style='margin-bottom:15px; padding: 10px;'>
-                        <strong style='font-size:16px;'>📌 <span style='color:#444;'>{label}. </span>{title}</strong><br>
+                        <strong style='font-size:16px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z"/></svg></span>&nbsp;<span style='color:#444;'>{label}. </span>{title}</strong><br>
                         <span style='font-size:14px;'>🛠️ <strong>Tech Stack:</strong> {tech}</span><br>
                         <span style='font-size:14px;'>⏳ <strong>Duration:</strong> {duration}</span><br>
-                        <span style='font-size:17px;'>📄 <strong>Description:</strong></span><br>
+                        <span style='font-size:17px;'><span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>&nbsp;<strong>Description:</strong></span><br>
                         <div style='margin-top:4px; font-size:15px;'>{formatted_proj}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
             # Certificates
             if certificates_list:
-                st.markdown("<h4 style='color:#336699;'>📜 Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+                st.markdown("<h4 style='color:#336699;'><span style="color:#336699;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4"/><path d="M19 3H5"/></svg></span>&nbsp;Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
                 certs = re.split(r"\n|(?<=\))(?=\s*[A-Z])|(?<=[a-z]\))(?= [A-Z])", certificates_list)
                 for cert in [c.strip() for c in certs if c.strip()]:
                     st.markdown(f"<div style='margin-left:10px;'>• {cert}</div>", unsafe_allow_html=True)
@@ -10892,7 +10894,7 @@ with tab2:
             if st.session_state.project_links:
                 st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
                 for i, link in enumerate(st.session_state.project_links):
-                    st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
+                    st.markdown(f"[<span style="color:#4da6ff;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>&nbsp;Project {i+1}]({link})", unsafe_allow_html=True)
 
     # Generate HTML content based on selected template — only on submit, stored in session_state
     if submitted:
@@ -10915,7 +10917,7 @@ with tab2:
             """
             <div style='text-align: center; margin-top: 20px; margin-bottom: 30px;'>
                 <h2 style='color: #2f4f6f; font-family: Arial, sans-serif; font-size: 24px;'>
-                    📥 Download Your Resume
+                    <span style="color:#2f4f6f;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>&nbsp;Download Your Resume
                 </h2>
                 <p style="color:#555; font-size:14px;">
                     Choose your preferred format below
@@ -10939,7 +10941,7 @@ with tab2:
             html_file = BytesIO(html_bytes)
 
             st.download_button(
-                label="⬇️ Download as Template",
+                label="<span style="color:#ffffff;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>&nbsp;Download as Template",
                 data=html_file,
                 file_name=f"{st.session_state['name'].replace(' ', '_')}_Resume.html",
                 mime="text/html",
@@ -10949,7 +10951,7 @@ with tab2:
         # Preview Template Button — eye open when previewing, closed when hidden
         with col2:
             is_previewing = st.session_state.get("show_template_preview", False)
-            if st.button("👁️ Preview Template", key="preview_template_btn"):
+            if st.button("<span style="color:#ffffff;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>&nbsp;Preview Template", key="preview_template_btn"):
                 st.session_state["show_template_preview"] = not is_previewing
 
         # Show/hide the template preview iframe
@@ -10957,7 +10959,7 @@ with tab2:
             import streamlit.components.v1 as components
             st.markdown(
                 "<p style='color:#555; font-size:13px; margin-top:8px;'>"
-                "📄 Template Preview (scroll to explore):</p>",
+                "<span style="color:#555;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>&nbsp;Template Preview (scroll to explore):</p>",
                 unsafe_allow_html=True,
             )
             components.html(
@@ -10971,7 +10973,7 @@ with tab2:
         
         # ✅ Extra Help Note
         st.markdown("""
-        ✅ After downloading your HTML resume, you can 
+        <span style="color:#22c55e;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg></span>&nbsp;After downloading your HTML resume, you can 
         <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
         convert it to PDF using Sejda's free online tool</a>.
         """, unsafe_allow_html=True)
@@ -10979,7 +10981,7 @@ with tab2:
         # ==========================
         # 📩 Cover Letter Expander
         # ==========================
-        with st.expander("📩 Generate Cover Letter from This Resume"):
+        with st.expander("<span style="color:#93c5fd;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></span>&nbsp;Generate Cover Letter from This Resume"):
             generate_cover_letter_from_resume_builder()
 
         # ==========================
@@ -10989,7 +10991,7 @@ with tab2:
             st.markdown(
                 """
                 <div style="margin-top: 30px; margin-bottom: 20px;">
-                    <h3 style="color: #003366;">✉️ Generated Cover Letter</h3>
+                    <h3 style="color: #003366;"><span style="color:#003366;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></span>&nbsp;Generated Cover Letter</h3>
                     <p style="color:#555; font-size:14px;">
                         You can download your generated cover letter in multiple formats.
                     </p>
@@ -11033,7 +11035,7 @@ with tab2:
             col1,col2 = st.columns(2)
             with col1:
                 st.download_button(
-                    label="📥 Download Cover Letter (.docx)",
+                    label="<span style="color:#ffffff;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>&nbsp;Download Cover Letter (.docx)",
                     data=create_docx_from_text(st.session_state["cover_letter"]),
                     file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -11042,7 +11044,7 @@ with tab2:
             
             with col2:
                 st.download_button(
-                    label="📥 Download Cover Letter (Template)",
+                    label="<span style="color:#ffffff;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>&nbsp;Download Cover Letter (Template)",
                     data=styled_cover_letter.encode("utf-8"),
                     file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.html",
                     mime="text/html",
@@ -11051,7 +11053,7 @@ with tab2:
 
             # ✅ Helper note
             st.markdown("""
-            ✅ If the HTML cover letter doesn't display properly, you can 
+            <span style="color:#22c55e;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg></span>&nbsp;If the HTML cover letter doesn't display properly, you can 
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
