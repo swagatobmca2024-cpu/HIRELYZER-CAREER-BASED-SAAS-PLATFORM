@@ -522,29 +522,34 @@ def generate_cover_letter_from_resume_builder():
     IST = timezone(timedelta(hours=5, minutes=30))
     today_date = datetime.now(IST).strftime("%B %d, %Y")
 
-    # ✅ FIX 1 — Template selector dropdown
-    cover_letter_template = st.selectbox(
-        "🎨 Choose Cover Letter Template",
-        options=list(COVER_LETTER_TEMPLATES.keys()),
-        index=0,
-        key="cover_letter_template_select",
-        help="Select the style/format for your cover letter"
-    )
+    # Wrap all inputs + submit in a form so Streamlit only reruns on submit,
+    # not on every keystroke (which was causing the page-reload flicker).
+    with st.form(key="cover_letter_form"):
+        # ✅ FIX 1 — Template selector dropdown
+        cover_letter_template = st.selectbox(
+            "🎨 Choose Cover Letter Template",
+            options=list(COVER_LETTER_TEMPLATES.keys()),
+            index=0,
+            key="cover_letter_template_select",
+            help="Select the style/format for your cover letter"
+        )
 
-    # ✅ FIX 3 — Accent color picker (only relevant for Creative template)
-    if cover_letter_template == "Creative":
-        accent_color = st.color_picker("🎨 Choose Accent Color", value="#7c3aed", key="cl_accent_color")
-    else:
+        # ✅ FIX 3 — Accent color picker (only relevant for Creative template)
+        accent_color = st.color_picker("🎨 Choose Accent Color (Creative template only)", value="#7c3aed", key="cl_accent_color")
+
+        # ✅ Input boxes for contact info
+        company = st.text_input("🏢 Target Company", placeholder="e.g., Google")
+        linkedin = st.text_input("🔗 LinkedIn URL", placeholder="e.g., https://linkedin.com/in/username")
+        email = st.text_input("📧 Email", placeholder="e.g., you@example.com")
+        mobile = st.text_input("📞 Mobile Number", placeholder="e.g., +91 9876543210")
+
+        submitted_cl = st.form_submit_button("✉️ Generate Cover Letter")
+
+    # Resolve accent color: only use picked color for Creative, else default
+    if cover_letter_template != "Creative":
         accent_color = "#003366"
 
-    # ✅ Input boxes for contact info
-    company = st.text_input("🏢 Target Company", placeholder="e.g., Google")
-    linkedin = st.text_input("🔗 LinkedIn URL", placeholder="e.g., https://linkedin.com/in/username")
-    email = st.text_input("📧 Email", placeholder="e.g., you@example.com")
-    mobile = st.text_input("📞 Mobile Number", placeholder="e.g., +91 9876543210")
-
-    # ✅ Button to prevent relooping
-    if st.button("✉️ Generate Cover Letter"):
+    if submitted_cl:
         # ✅ Validate input before generating
         if not all([name, job_title, summary, skills, company, linkedin, email, mobile]):
             st.warning("⚠️ Please fill in all fields including LinkedIn, email, and mobile.")
