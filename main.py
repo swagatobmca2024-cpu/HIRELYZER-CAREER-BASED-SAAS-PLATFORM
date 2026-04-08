@@ -9393,32 +9393,89 @@ with tab2:
         </style>
     """, unsafe_allow_html=True)
 
-    # 🎨 Template Selection
-    st.markdown("### 🎨 Choose Resume Template")
-    selected_template = st.selectbox(
-        "🎨 Choose Resume Template",
-        [
-            "Default (Professional)",
-            "Modern Minimal",
-            "Elegant Sidebar",
-            "Classic Clean (Single Column)",
-            "Executive (Single Column)",
-            "Timeline (Single Column)",
-            "Corporate Blue (Two Column)",
-            "Creative Green (Two Column)",
-            "Warm Terracotta (Two Column)",
-            "Navy Prestige (Two Column)",
-            "Slate Gray (Single Column)",
-            "Teal Impact (Two Column)",
-            "Burgundy Classic (Single Column)",
-            "Indigo Tech (Two Column)",
-            "Forest Green (Single Column)",
-        ],
-        key="template_selector"
+    # 🎨 Template Selection — visual card grid
+    st.markdown("""
+    <style>
+    div[data-testid="stHorizontalBlock"] .tpl-card-wrap { padding: 4px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    TEMPLATE_META = [
+        ("Default (Professional)",        "#2f4f6f", "#e8f0fe"),
+        ("Modern Minimal",                 "#0d9488", "#f0fdfa"),
+        ("Elegant Sidebar",                "#7c3aed", "#f5f3ff"),
+        ("Classic Clean (Single Column)",  "#374151", "#f9fafb"),
+        ("Executive (Single Column)",      "#1e3a5f", "#eff6ff"),
+        ("Timeline (Single Column)",       "#b45309", "#fffbeb"),
+        ("Corporate Blue (Two Column)",    "#1d4ed8", "#eff6ff"),
+        ("Creative Green (Two Column)",    "#166534", "#f0fdf4"),
+        ("Warm Terracotta (Two Column)",   "#c2410c", "#fff7ed"),
+        ("Navy Prestige (Two Column)",     "#1e3a5f", "#f0f4ff"),
+        ("Slate Gray (Single Column)",     "#475569", "#f8fafc"),
+        ("Teal Impact (Two Column)",       "#0f766e", "#f0fdfa"),
+        ("Burgundy Classic (Single Column)","#881337","#fff1f2"),
+        ("Indigo Tech (Two Column)",       "#4338ca", "#eef2ff"),
+        ("Forest Green (Single Column)",   "#14532d", "#f0fdf4"),
+    ]
+    TEMPLATE_NAMES = [t[0] for t in TEMPLATE_META]
+
+    if "selected_template_name" not in st.session_state:
+        st.session_state["selected_template_name"] = TEMPLATE_NAMES[0]
+
+    st.markdown("<div style='margin:18px 0 8px;font-size:14px;font-weight:600;color:#93c5fd;'>🎨 Choose Resume Template</div>", unsafe_allow_html=True)
+
+    # Show 5 cards per row
+    _tpl_rows = [TEMPLATE_META[i:i+5] for i in range(0, len(TEMPLATE_META), 5)]
+    for _row in _tpl_rows:
+        _cols = st.columns(len(_row))
+        for _ci, (_tname, _color, _light) in enumerate(_row):
+            with _cols[_ci]:
+                _is_sel = st.session_state["selected_template_name"] == _tname
+                _border = "2px solid #4da6ff" if _is_sel else "1px solid rgba(0,180,255,0.15)"
+                _glow   = "box-shadow: 0 0 12px rgba(77,166,255,0.45);" if _is_sel else ""
+                st.markdown(
+                    f"<div style='background:rgba(13,20,40,0.6);border:{_border};border-radius:10px;"
+                    f"padding:8px 6px 6px;text-align:center;{_glow}'>"
+                    f"<div style='height:28px;border-radius:6px;background:{_color};margin-bottom:6px;'></div>"
+                    f"<div style='font-size:9.5px;color:{'#93c5fd' if _is_sel else '#6b7280'};font-weight:{'700' if _is_sel else '500'};line-height:1.3;'>{_tname}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+                if st.button("✓" if _is_sel else "Select", key=f"tpl_btn_{_tname}", use_container_width=True):
+                    st.session_state["selected_template_name"] = _tname
+                    st.rerun()
+
+    selected_template = st.session_state["selected_template_name"]
+    # Hidden selectbox to keep compatibility with form logic below
+    st.markdown("<div style='display:none;'>", unsafe_allow_html=True)
+    _hidden_sel = st.selectbox(
+        "template_hidden",
+        TEMPLATE_NAMES,
+        index=TEMPLATE_NAMES.index(selected_template),
+        key="template_selector",
+        label_visibility="collapsed",
     )
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # 📸 Upload profile photo
-    uploaded_image = st.file_uploader("Upload a Profile Image", type=["png", "jpg", "jpeg"], key="profile_img_upload")
+    st.markdown("<div style='margin:18px 0 6px;font-size:14px;font-weight:600;color:#93c5fd;'>📸 Profile Photo</div>", unsafe_allow_html=True)
+    _img_col1, _img_col2 = st.columns([3, 1])
+    with _img_col1:
+        uploaded_image = st.file_uploader("Upload a Profile Image (PNG/JPG, square preferred)", type=["png", "jpg", "jpeg"], key="profile_img_upload", label_visibility="collapsed")
+    with _img_col2:
+        if st.session_state.get("encoded_profile_image"):
+            st.markdown(
+                f"<img src='data:image/png;base64,{st.session_state['encoded_profile_image']}' "
+                f"class='photo-preview' />",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                "<div style='width:72px;height:72px;border-radius:50%;background:#1e2535;"
+                "border:2px dashed #374151;display:flex;align-items:center;justify-content:center;"
+                "font-size:22px;margin:4px auto;'>👤</div>",
+                unsafe_allow_html=True,
+            )
     profile_img_html = ""
 
     if uploaded_image:
@@ -9447,9 +9504,18 @@ with tab2:
              />
         </div>
         """
-        st.markdown(profile_img_html, unsafe_allow_html=True)
+    elif st.session_state.get("encoded_profile_image"):
+        encoded_image = st.session_state["encoded_profile_image"]
+        profile_img_html = f"""
+        <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+            <img src="data:image/png;base64,{encoded_image}" alt="Profile Photo"
+                 style="width:140px;height:140px;border-radius:50%;object-fit:cover;
+                    border:4px solid rgba(255,255,255,0.6);
+                    box-shadow:0 0 0 3px #4da6ff,0 8px 25px rgba(77,166,255,0.3);" />
+        </div>
+        """
     else:
-        st.info("📸 Please upload a clear, front-facing profile photo (square or vertical preferred).")
+        st.markdown("<div style='font-size:12px;color:#4b5563;margin-top:4px;'>📸 Upload a clear, front-facing photo (square or portrait preferred)</div>", unsafe_allow_html=True)
 
     # ---------------- Session State Defaults ----------------
     fields = ["name", "email", "phone", "linkedin", "location", "portfolio", "summary",
@@ -10048,94 +10114,248 @@ with tab2:
     render_gamified_sidebar(st.session_state, fk)
     mode = st.session_state.get("edit_mode", "Add")
 
+    # ── Shared section-header style injected once ────────────────────────────
+    st.markdown("""
+    <style>
+    .sec-header {
+        display: flex; align-items: center; gap: 10px;
+        background: linear-gradient(90deg, rgba(0,180,255,0.10) 0%, rgba(0,180,255,0.03) 100%);
+        border-left: 3px solid #4da6ff;
+        border-radius: 0 10px 10px 0;
+        padding: 9px 14px; margin: 18px 0 10px;
+    }
+    .sec-header .sec-icon { font-size: 18px; line-height: 1; }
+    .sec-header .sec-title {
+        font-size: 15px; font-weight: 700;
+        color: #93c5fd; letter-spacing: 0.4px; margin: 0;
+    }
+    .sec-header .sec-badge {
+        margin-left: auto; font-size: 10px; font-weight: 600;
+        color: #4b5563; background: #1e2535;
+        padding: 2px 8px; border-radius: 20px;
+        border: 0.5px solid #374151;
+    }
+    .entry-card {
+        background: rgba(13,20,40,0.55);
+        border: 0.5px solid rgba(0,180,255,0.18);
+        border-radius: 12px; padding: 14px 16px; margin-bottom: 12px;
+    }
+    .entry-card-label {
+        font-size: 12px; font-weight: 600; color: #4da6ff;
+        margin-bottom: 10px; letter-spacing: 0.3px;
+    }
+    .field-hint { font-size: 11px; color: #4b5563; margin-top: -8px; margin-bottom: 6px; }
+    .tag-chip {
+        display: inline-block; background: rgba(0,180,255,0.12);
+        border: 0.5px solid rgba(0,180,255,0.35); color: #93c5fd;
+        font-size: 12px; font-weight: 500;
+        padding: 3px 10px; border-radius: 20px; margin: 3px 3px 3px 0;
+    }
+    .confirm-warn {
+        background: rgba(239,68,68,0.10); border: 0.5px solid rgba(239,68,68,0.35);
+        border-radius: 10px; padding: 10px 14px; margin-top: 6px;
+        font-size: 13px; color: #fca5a5;
+    }
+    .photo-preview {
+        width: 90px; height: 90px; border-radius: 50%; object-fit: cover;
+        border: 3px solid #4da6ff;
+        box-shadow: 0 0 14px rgba(77,166,255,0.4);
+        display: block; margin: 8px auto 0;
+    }
+    @media (max-width: 768px) {
+        [data-testid="column"] { min-width: 100% !important; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    def _sec_hdr(icon, title, badge=None):
+        badge_html = f"<span class='sec-badge'>{badge}</span>" if badge else ""
+        st.markdown(
+            f"<div class='sec-header'>"
+            f"<span class='sec-icon'>{icon}</span>"
+            f"<span class='sec-title'>{title}</span>"
+            f"{badge_html}</div>",
+            unsafe_allow_html=True,
+        )
+
+    def _hint(text):
+        st.markdown(f"<div class='field-hint'>💡 {text}</div>", unsafe_allow_html=True)
+
+    def _tag_chips(raw, label):
+        items = [s.strip() for s in raw.split(",") if s.strip()]
+        if not items:
+            return
+        chips = "".join(f"<span class='tag-chip'>{t}</span>" for t in items)
+        st.markdown(
+            f"<div style='margin-bottom:4px;font-size:11px;color:#6b7280;'>{label}</div>"
+            f"<div style='margin-bottom:10px;'>{chips}</div>",
+            unsafe_allow_html=True,
+        )
+
     # ---------------- Resume Form ----------------
     with st.form(f"resume_form_{fk}", clear_on_submit=False):
-        st.markdown("### 👤 <u>Personal Information</u>", unsafe_allow_html=True)
+        _sec_hdr("👤", "Personal Information")
         col1, col2 = st.columns(2)
         with col1:
-            st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, key=f"name_input_{fk}")
-            st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, key=f"phone_input_{fk}")
-            st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, key=f"loc_input_{fk}")
+            st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, placeholder="e.g., Arjun Sharma", key=f"name_input_{fk}")
+            st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, placeholder="e.g., +91 98765 43210", key=f"phone_input_{fk}")
+            st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, placeholder="e.g., Kolkata, West Bengal", key=f"loc_input_{fk}")
         with col2:
-            st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, key=f"email_input_{fk}")
-            st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, key=f"ln_input_{fk}")
-            st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, key=f"port_input_{fk}")
-            st.session_state.job_title = st.text_input("💼 Job Title", value=st.session_state.job_title, key=f"job_input_{fk}")
+            st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, placeholder="e.g., arjun@gmail.com", key=f"email_input_{fk}")
+            st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, placeholder="e.g., linkedin.com/in/arjun", key=f"ln_input_{fk}")
+            st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, placeholder="e.g., arjun.dev or github.com/arjun", key=f"port_input_{fk}")
+            st.session_state.job_title = st.text_input("💼 Job Title / Target Role", value=st.session_state.job_title, placeholder="e.g., Full Stack Developer", key=f"job_input_{fk}")
 
-        st.markdown("### 📝 <u>Professional Summary</u>", unsafe_allow_html=True)
-        st.session_state.summary = st.text_area("Summary", value=st.session_state.summary, key=f"summary_input_{fk}")
+        _sec_hdr("📝", "Professional Summary")
+        st.session_state.summary = st.text_area(
+            "Summary",
+            value=st.session_state.summary,
+            placeholder="Write 3–5 sentences about your career goals, key strengths, and what makes you stand out. E.g., 'Results-driven software engineer with 3+ years building scalable web apps...'",
+            height=120,
+            key=f"summary_input_{fk}",
+        )
+        _hint("Aim for 80–200 characters. Recruiters read this first — make it count.")
 
-        st.markdown("### 💼 <u>Skills, Languages, Interests & Soft Skills</u>", unsafe_allow_html=True)
-        st.session_state.skills = st.text_area("Skills (comma-separated)", value=st.session_state.skills, key=f"skills_input_{fk}")
-        st.session_state.languages = st.text_area("Languages (comma-separated)", value=st.session_state.languages, key=f"lang_input_{fk}")
-        st.session_state.interests = st.text_area("Interests (comma-separated)", value=st.session_state.interests, key=f"int_input_{fk}")
-        st.session_state.Softskills = st.text_area("Softskills (comma-separated)", value=st.session_state.Softskills, key=f"soft_input_{fk}")
+        _sec_hdr("🛠️", "Skills, Languages, Interests & Soft Skills")
+        st.session_state.skills = st.text_area(
+            "Technical Skills (comma-separated)",
+            value=st.session_state.skills,
+            placeholder="e.g., Python, React, Node.js, PostgreSQL, Docker, AWS",
+            height=70,
+            key=f"skills_input_{fk}",
+        )
+        _hint("List 5+ skills for best score. Separate each with a comma.")
+        _tag_chips(st.session_state.skills, "Preview:")
 
-        st.markdown("### 🧱 <u>Work Experience</u>", unsafe_allow_html=True)
+        st.session_state.languages = st.text_area(
+            "Languages (comma-separated)",
+            value=st.session_state.languages,
+            placeholder="e.g., English, Bengali, Hindi",
+            height=60,
+            key=f"lang_input_{fk}",
+        )
+        st.session_state.interests = st.text_area(
+            "Interests / Hobbies (comma-separated)",
+            value=st.session_state.interests,
+            placeholder="e.g., Open Source, Machine Learning, Chess, Blogging",
+            height=60,
+            key=f"int_input_{fk}",
+        )
+        st.session_state.Softskills = st.text_area(
+            "Soft Skills (comma-separated)",
+            value=st.session_state.Softskills,
+            placeholder="e.g., Leadership, Communication, Problem Solving, Teamwork",
+            height=60,
+            key=f"soft_input_{fk}",
+        )
+
+        _sec_hdr("🧱", "Work Experience", badge=f"{len(st.session_state.experience_entries)} entr{'y' if len(st.session_state.experience_entries)==1 else 'ies'}")
         for idx, exp in enumerate(st.session_state.experience_entries):
-            with st.expander(f"Experience #{idx+1}", expanded=True):
-                exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["company"] = st.text_input("Company", value=exp.get("company", ""), key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["description"] = st.text_area("Description", value=exp.get("description", ""), key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+            _entry_label = exp.get("title", "") or f"Experience #{idx+1}"
+            _entry_company = exp.get("company", "")
+            _display = f"{_entry_label} @ {_entry_company}" if _entry_company else _entry_label
+            with st.expander(f"🏢 {_display}", expanded=True):
+                st.markdown(f"<div class='entry-card-label'>Entry #{idx+1}</div>", unsafe_allow_html=True)
+                exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), placeholder="e.g., Software Engineer", key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                exp["company"] = st.text_input("Company", value=exp.get("company", ""), placeholder="e.g., Infosys, TCS, Google", key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), placeholder="e.g., Jun 2022 – Present", key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                exp["description"] = st.text_area("Description", value=exp.get("description", ""), placeholder="• Developed REST APIs using Node.js that reduced response time by 35%\n• Led a team of 4 engineers to deliver the project 2 weeks ahead of schedule", height=100, key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                _hint("Use bullet points starting with action verbs. Include metrics where possible.")
 
-        st.markdown("### 🎓 <u>Education</u>", unsafe_allow_html=True)
+        _sec_hdr("🎓", "Education", badge=f"{len(st.session_state.education_entries)} entr{'y' if len(st.session_state.education_entries)==1 else 'ies'}")
         for idx, edu in enumerate(st.session_state.education_entries):
-            with st.expander(f"Education #{idx+1}", expanded=True):
-                edu["degree"] = st.text_input("Degree", value=edu.get("degree", ""), key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["year"] = st.text_input("Year", value=edu.get("year", ""), key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["details"] = st.text_area("Details", value=edu.get("details", ""), key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
+            _edu_label = edu.get("degree", "") or f"Education #{idx+1}"
+            _edu_inst = edu.get("institution", "")
+            _edu_display = f"{_edu_label} — {_edu_inst}" if _edu_inst else _edu_label
+            with st.expander(f"🏫 {_edu_display}", expanded=True):
+                st.markdown(f"<div class='entry-card-label'>Entry #{idx+1}</div>", unsafe_allow_html=True)
+                edu["degree"] = st.text_input("Degree / Qualification", value=edu.get("degree", ""), placeholder="e.g., B.Tech in Computer Science", key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), placeholder="e.g., Jadavpur University", key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                edu["year"] = st.text_input("Year / Duration", value=edu.get("year", ""), placeholder="e.g., 2019 – 2023", key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                edu["details"] = st.text_area("Academic Details", value=edu.get("details", ""), placeholder="e.g., CGPA: 8.7/10 | Relevant: Data Structures, OS, DBMS | Dean's List 2022", height=80, key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
 
-        st.markdown("### 🛠 <u>Projects</u>", unsafe_allow_html=True)
+        _sec_hdr("🚀", "Projects", badge=f"{len(st.session_state.project_entries)} entr{'y' if len(st.session_state.project_entries)==1 else 'ies'}")
         for idx, proj in enumerate(st.session_state.project_entries):
-            with st.expander(f"Project #{idx+1}", expanded=True):
-                proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["description"] = st.text_area("Description", value=proj.get("description", ""), key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
+            _proj_label = proj.get("title", "") or f"Project #{idx+1}"
+            with st.expander(f"📌 {_proj_label}", expanded=True):
+                st.markdown(f"<div class='entry-card-label'>Project #{idx+1}</div>", unsafe_allow_html=True)
+                proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), placeholder="e.g., AI Resume Builder", key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), placeholder="e.g., Python, Streamlit, OpenAI API, PostgreSQL", key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), placeholder="e.g., Jan 2024 – Mar 2024  (or  2 months)", key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                proj["description"] = st.text_area("Description", value=proj.get("description", ""), placeholder="• Built a full-stack resume builder with AI-powered cover letter generation\n• Reduced resume creation time by 70% compared to manual methods", height=100, key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                _hint("Describe the problem solved, your role, and the impact or outcome.")
 
-        st.markdown("### 🔗 Project Links")
-        project_links_input = st.text_area("Enter one project link per line:", value="\n".join(st.session_state.project_links), key=f"proj_links_input_{fk}")
+        _sec_hdr("🔗", "Project Links")
+        project_links_input = st.text_area(
+            "Enter one project link per line:",
+            value="\n".join(st.session_state.project_links),
+            placeholder="https://github.com/yourname/project1\nhttps://yourproject.netlify.app",
+            height=80,
+            key=f"proj_links_input_{fk}",
+        )
         st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
 
-        st.markdown("### 🧾 <u>Certificates</u>", unsafe_allow_html=True)
+        _sec_hdr("🏅", "Certificates", badge=f"{len(st.session_state.certificate_links)} entr{'y' if len(st.session_state.certificate_links)==1 else 'ies'}")
         for idx, cert in enumerate(st.session_state.certificate_links):
-            with st.expander(f"Certificate #{idx+1}", expanded=True):
-                cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["link"] = st.text_input("Certificate Link", value=cert.get("link", ""), key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["duration"] = st.text_input("Duration", value=cert.get("duration", ""), key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["description"] = st.text_area("Description", value=cert.get("description", ""), key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+            _cert_label = cert.get("name", "") or f"Certificate #{idx+1}"
+            with st.expander(f"🎖️ {_cert_label}", expanded=True):
+                st.markdown(f"<div class='entry-card-label'>Certificate #{idx+1}</div>", unsafe_allow_html=True)
+                cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), placeholder="e.g., AWS Certified Solutions Architect", key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                cert["link"] = st.text_input("Verification Link", value=cert.get("link", ""), placeholder="e.g., https://credly.com/badges/...", key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                cert["duration"] = st.text_input("Issued Date", value=cert.get("duration", ""), placeholder="e.g., March 2024", key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                cert["description"] = st.text_area("Description", value=cert.get("description", ""), placeholder="e.g., Demonstrates expertise in designing distributed systems on AWS. Covers EC2, S3, RDS, and networking.", height=80, key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
 
-        btn_col1, btn_col2 = st.columns([1, 1])
+        st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
+        btn_col1, btn_col2 = st.columns([2, 1])
         with btn_col1:
-            submitted = st.form_submit_button("📑 Generate Resume", use_container_width=True)
+            submitted = st.form_submit_button(
+                "📑 Generate Resume",
+                use_container_width=True,
+                type="primary",
+            )
         with btn_col2:
-            clear_clicked = st.form_submit_button("🗑️ Clear Form", use_container_width=True)
+            clear_clicked = st.form_submit_button(
+                "🗑️ Clear All",
+                use_container_width=True,
+            )
 
         if submitted:
             st.session_state["_resume_generated_msg"] = True
 
         if clear_clicked:
-            # Reset only resume-related keys — do NOT clear() or rerun() as that
-            # wipes tab context and navigates back to the main/home page.
-            # Instead, reset values in-place and bump the form key counter so
-            # all widgets re-render empty on this same run, no page jump.
-            _new_counter = st.session_state.get("form_key_counter", 0) + 1
-            resume_fields = ["name", "email", "phone", "linkedin", "location",
-                             "portfolio", "summary", "skills", "languages",
-                             "interests", "Softskills", "job_title"]
-            for _f in resume_fields:
-                st.session_state[_f] = ""
-            st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
-            st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
-            st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
-            st.session_state["project_links"] = []
-            st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
-            for _key in ["generated_html", "ai_output", "cover_letter",
-                         "cover_letter_html", "encoded_profile_image"]:
-                st.session_state.pop(_key, None)
-            st.session_state["form_key_counter"] = _new_counter
+            st.session_state["_confirm_clear"] = True
+
+    # ── Clear confirmation (outside form so it can render fresh buttons) ──────
+    if st.session_state.get("_confirm_clear"):
+        st.markdown(
+            "<div class='confirm-warn'>⚠️ <strong>This will erase all entered data.</strong> "
+            "This cannot be undone.</div>",
+            unsafe_allow_html=True,
+        )
+        cc1, cc2, cc3 = st.columns([1, 1, 3])
+        with cc1:
+            if st.button("✅ Yes, Clear", key="confirm_clear_yes"):
+                _new_counter = st.session_state.get("form_key_counter", 0) + 1
+                resume_fields = ["name", "email", "phone", "linkedin", "location",
+                                 "portfolio", "summary", "skills", "languages",
+                                 "interests", "Softskills", "job_title"]
+                for _f in resume_fields:
+                    st.session_state[_f] = ""
+                st.session_state["experience_entries"] = [{"title": "", "company": "", "duration": "", "description": ""}]
+                st.session_state["education_entries"] = [{"degree": "", "institution": "", "year": "", "details": ""}]
+                st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
+                st.session_state["project_links"] = []
+                st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
+                for _key in ["generated_html", "ai_output", "cover_letter",
+                             "cover_letter_html", "encoded_profile_image"]:
+                    st.session_state.pop(_key, None)
+                st.session_state["form_key_counter"] = _new_counter
+                st.session_state.pop("_confirm_clear", None)
+                st.rerun()
+        with cc2:
+            if st.button("❌ Cancel", key="confirm_clear_no"):
+                st.session_state.pop("_confirm_clear", None)
+                st.rerun()
 
     st.markdown("""
     <style>
@@ -10180,20 +10400,26 @@ with tab2:
             """, unsafe_allow_html=True)
 
             st.markdown("<h4 style='color:#336699;'>Skills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for skill in [s.strip() for s in st.session_state["skills"].split(",") if s.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {skill}</div>", unsafe_allow_html=True)
+            _skill_items = [s.strip() for s in st.session_state["skills"].split(",") if s.strip()]
+            if _skill_items:
+                _chips = "".join(f"<span class='tag-chip'>{s}</span>" for s in _skill_items)
+                st.markdown(f"<div style='margin-bottom:8px;'>{_chips}</div>", unsafe_allow_html=True)
 
             st.markdown("<h4 style='color:#336699;'>Languages</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
             for lang in [l.strip() for l in st.session_state["languages"].split(",") if l.strip()]:
                 st.markdown(f"<div style='margin-left:10px;'>• {lang}</div>", unsafe_allow_html=True)
 
             st.markdown("<h4 style='color:#336699;'>Interests</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for interest in [i.strip() for i in st.session_state["interests"].split(",") if i.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {interest}</div>", unsafe_allow_html=True)
+            _int_items = [i.strip() for i in st.session_state["interests"].split(",") if i.strip()]
+            if _int_items:
+                _int_chips = "".join(f"<span class='tag-chip'>{t}</span>" for t in _int_items)
+                st.markdown(f"<div style='margin-bottom:8px;'>{_int_chips}</div>", unsafe_allow_html=True)
 
-            st.markdown("<h4 style='color:#336699;'>Softskills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for ss in [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {ss}</div>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color:#336699;'>Soft Skills</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+            _soft_items = [i.strip() for i in st.session_state["Softskills"].split(",") if i.strip()]
+            if _soft_items:
+                _soft_chips = "".join(f"<span class='tag-chip'>{t}</span>" for t in _soft_items)
+                st.markdown(f"<div style='margin-bottom:8px;'>{_soft_chips}</div>", unsafe_allow_html=True)
 
         with right:
             st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
