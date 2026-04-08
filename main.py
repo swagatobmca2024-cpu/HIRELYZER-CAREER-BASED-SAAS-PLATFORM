@@ -9452,6 +9452,19 @@ with tab2:
     _img_col1, _img_col2 = st.columns([3, 1])
     with _img_col1:
         uploaded_image = st.file_uploader("Upload a Profile Image (PNG/JPG, square preferred)", type=["png", "jpg", "jpeg"], key="profile_img_upload", label_visibility="collapsed")
+        # ── FIX: Encode and store as soon as a new file is uploaded, then rerun
+        # so the preview column (already rendered above) refreshes immediately.
+        if uploaded_image is not None:
+            import base64 as _base64
+            _new_encoded = _base64.b64encode(uploaded_image.read()).decode()
+            if _new_encoded != st.session_state.get("encoded_profile_image"):
+                st.session_state["encoded_profile_image"] = _new_encoded
+                st.rerun()
+        # ── FIX: "Remove Photo" button clears session state so image disappears.
+        if st.session_state.get("encoded_profile_image"):
+            if st.button("🗑️ Remove Photo", key="remove_profile_photo"):
+                st.session_state.pop("encoded_profile_image", None)
+                st.rerun()
     with _img_col2:
         if st.session_state.get("encoded_profile_image"):
             st.markdown(
@@ -9468,11 +9481,8 @@ with tab2:
             )
     profile_img_html = ""
 
-    if uploaded_image:
-        import base64
-        encoded_image = base64.b64encode(uploaded_image.read()).decode()
-        st.session_state["encoded_profile_image"] = encoded_image
-
+    if st.session_state.get("encoded_profile_image"):
+        encoded_image = st.session_state["encoded_profile_image"]
         profile_img_html = f"""
         <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
             <img src="data:image/png;base64,{encoded_image}" alt="Profile Photo"
@@ -9492,16 +9502,6 @@ with tab2:
                 onmouseover="this.style.transform='scale(1.07)'"
                 onmouseout="this.style.transform='scale(1)'"
              />
-        </div>
-        """
-    elif st.session_state.get("encoded_profile_image"):
-        encoded_image = st.session_state["encoded_profile_image"]
-        profile_img_html = f"""
-        <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
-            <img src="data:image/png;base64,{encoded_image}" alt="Profile Photo"
-                 style="width:140px;height:140px;border-radius:50%;object-fit:cover;
-                    border:4px solid rgba(255,255,255,0.6);
-                    box-shadow:0 0 0 3px #4da6ff,0 8px 25px rgba(77,166,255,0.3);" />
         </div>
         """
     else:
