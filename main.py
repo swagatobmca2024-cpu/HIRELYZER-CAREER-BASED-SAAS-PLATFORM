@@ -10224,6 +10224,7 @@ with tab2:
             height=60,
             key=f"lang_input_{fk}",
         )
+        _tag_chips(st.session_state.languages, "Preview:")
         st.session_state.interests = st.text_area(
             "Interests / Hobbies (comma-separated)",
             value=st.session_state.interests,
@@ -10231,6 +10232,7 @@ with tab2:
             height=60,
             key=f"int_input_{fk}",
         )
+        _tag_chips(st.session_state.interests, "Preview:")
         st.session_state.Softskills = st.text_area(
             "Soft Skills (comma-separated)",
             value=st.session_state.Softskills,
@@ -10238,6 +10240,7 @@ with tab2:
             height=60,
             key=f"soft_input_{fk}",
         )
+        _tag_chips(st.session_state.Softskills, "Preview:")
 
         _sec_hdr("🧱", "Work Experience", badge=f"{len(st.session_state.experience_entries)} entr{'y' if len(st.session_state.experience_entries)==1 else 'ies'}")
         for idx, exp in enumerate(st.session_state.experience_entries):
@@ -10396,8 +10399,10 @@ with tab2:
                 st.markdown(f"<div style='margin-bottom:8px;'>{_chips}</div>", unsafe_allow_html=True)
 
             st.markdown("<h4 style='color:#336699;'>Languages</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for lang in [l.strip() for l in st.session_state["languages"].split(",") if l.strip()]:
-                st.markdown(f"<div style='margin-left:10px;'>• {lang}</div>", unsafe_allow_html=True)
+            _lang_items = [l.strip() for l in st.session_state["languages"].split(",") if l.strip()]
+            if _lang_items:
+                _lang_chips = "".join(f"<span class='tag-chip'>{l}</span>" for l in _lang_items)
+                st.markdown(f"<div style='margin-bottom:8px;'>{_lang_chips}</div>", unsafe_allow_html=True)
 
             st.markdown("<h4 style='color:#336699;'>Interests</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
             _int_items = [i.strip() for i in st.session_state["interests"].split(",") if i.strip()]
