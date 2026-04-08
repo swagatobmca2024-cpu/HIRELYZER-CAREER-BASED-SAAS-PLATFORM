@@ -9446,16 +9446,6 @@ with tab2:
                     st.rerun()
 
     selected_template = st.session_state["selected_template_name"]
-    # Hidden selectbox to keep compatibility with form logic below
-    st.markdown("<div style='display:none;'>", unsafe_allow_html=True)
-    _hidden_sel = st.selectbox(
-        "template_hidden",
-        TEMPLATE_NAMES,
-        index=TEMPLATE_NAMES.index(selected_template),
-        key="template_selector",
-        label_visibility="collapsed",
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # 📸 Upload profile photo
     st.markdown("<div style='margin:18px 0 6px;font-size:14px;font-weight:600;color:#93c5fd;'>📸 Profile Photo</div>", unsafe_allow_html=True)
@@ -10306,7 +10296,7 @@ with tab2:
                 cert["description"] = st.text_area("Description", value=cert.get("description", ""), placeholder="e.g., Demonstrates expertise in designing distributed systems on AWS. Covers EC2, S3, RDS, and networking.", height=80, key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
 
         st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
-        btn_col1, btn_col2 = st.columns([2, 1])
+        btn_col1, btn_col2 = st.columns([1, 1])
         with btn_col1:
             submitted = st.form_submit_button(
                 "📑 Generate Resume",
@@ -10332,9 +10322,9 @@ with tab2:
             "This cannot be undone.</div>",
             unsafe_allow_html=True,
         )
-        cc1, cc2, cc3 = st.columns([1, 1, 3])
+        cc1, cc2 = st.columns([1, 1])
         with cc1:
-            if st.button("✅ Yes, Clear", key="confirm_clear_yes"):
+            if st.button("✅ Yes, Clear", key="confirm_clear_yes", use_container_width=True):
                 _new_counter = st.session_state.get("form_key_counter", 0) + 1
                 resume_fields = ["name", "email", "phone", "linkedin", "location",
                                  "portfolio", "summary", "skills", "languages",
@@ -10353,7 +10343,7 @@ with tab2:
                 st.session_state.pop("_confirm_clear", None)
                 st.rerun()
         with cc2:
-            if st.button("❌ Cancel", key="confirm_clear_no"):
+            if st.button("❌ Cancel", key="confirm_clear_no", use_container_width=True):
                 st.session_state.pop("_confirm_clear", None)
                 st.rerun()
 
