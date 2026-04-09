@@ -1874,23 +1874,22 @@ if not st.session_state.get("authenticated", False):
 
                     if st.button("Sign In", key="login_btn", use_container_width=True):
                         if user.strip() and pwd.strip():
-                            _is_admin = user.strip().lower() in ("admin",)
+                            # Detect admin: either typed "admin" as username,
+                            # or typed an email that belongs to the admin account.
+                            _input = user.strip()
+                            _is_admin = _input.lower() == "admin"
+                            if not _is_admin and '@' in _input:
+                                # Check if this email maps to the admin username
+                                _resolved = get_user_by_email(_input.lower())
+                                if _resolved and _resolved.lower() == "admin":
+                                    _is_admin = True
 
                             if _is_admin:
                                 # ── Admin: magic link flow ──
-                                status, message, _uname = send_login_link(user.strip(), pwd.strip())
+                                status, message, _uname = send_login_link(_input, pwd.strip())
                                 if status == "link_sent":
-                                    def _mask_email(e: str) -> str:
-                                        try:
-                                            local, domain = e.split("@", 1)
-                                            visible = local[:2] if len(local) >= 2 else local[:1]
-                                            stars = "*" * min(5, max(2, len(local) - 2))
-                                            return f"{visible}{stars}@{domain}"
-                                        except Exception:
-                                            return "your registered email"
-                                    _masked_email = "your registered email"
                                     st.session_state["_magic_link_pending"] = True
-                                    st.session_state["_magic_link_email"] = _masked_email
+                                    st.session_state["_magic_link_email"] = "your registered email"
                                     notify("login", "success", "📧 Login link sent to admin email! Click it to sign in.")
                                     st.rerun()
                                 elif status == "bad_creds":
@@ -1901,7 +1900,7 @@ if not st.session_state.get("authenticated", False):
                                     st.rerun()
                             else:
                                 # ── Regular users: direct login ──
-                                success, saved_key = verify_user(user.strip(), pwd.strip())
+                                success, saved_key = verify_user(_input, pwd.strip())
                                 if success:
                                     st.session_state.authenticated = True
                                     if saved_key:
