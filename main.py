@@ -2469,7 +2469,7 @@ if st.session_state.username == "admin":
         st.metric(label="Total Logins (All Time)", value=_total_logins)
         st.markdown('<p style="font-size:0.7rem;color:#8b949e;margin-top:-14px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Cumulative logins</p>', unsafe_allow_html=True)
     with col4:
-        st.metric(label="Peak Hour", value=f"{_peak_hour:02d}:00")
+        st.metric(label="Peak Hour", value=f"{_peak_hour:02d}:00–{(_peak_hour+1)%24:02d}:00")
         st.markdown('<p style="font-size:0.7rem;color:#8b949e;margin-top:-14px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Busiest login hour</p>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -2630,6 +2630,26 @@ if st.session_state.username == "admin":
                 """<p class='section-label'><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Action Breakdown</p>""",
                 _make_actions_chart,
                 _actions[["Action", "Count"]],
+            )
+            # Legend below donut
+            _total_actions_count = _actions["Count"].sum()
+            _legend_items = "".join([
+                f'<div style="display:flex;align-items:center;justify-content:space-between;'
+                f'padding:5px 10px;border-radius:6px;background:rgba(255,255,255,0.03);margin-bottom:4px;">'
+                f'<span style="display:flex;align-items:center;gap:7px;">'
+                f'<svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="{_action_colors.get(row["Action"], "#a78bfa")}"/></svg>'
+                f'<span style="color:#c9d1d9;font-size:0.8rem;text-transform:capitalize;">{row["Action"].replace("_"," ")}</span>'
+                f'</span>'
+                f'<span style="color:#8b949e;font-size:0.8rem;">'
+                f'<b style="color:#e6edf3;">{row["Count"]}</b>'
+                f'&nbsp;<span style="font-size:0.72rem;">({100*row["Count"]//_total_actions_count}%)</span>'
+                f'</span>'
+                f'</div>'
+                for _, row in _actions.iterrows()
+            ])
+            st.markdown(
+                f'<div style="margin-top:6px;">{_legend_items}</div>',
+                unsafe_allow_html=True,
             )
 
         with ch_col6:
