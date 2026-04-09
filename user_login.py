@@ -504,12 +504,40 @@ MAX_LOGIN_ATTEMPTS = 5          # max failures allowed
 LOCKOUT_WINDOW_SECONDS = 900    # 15-minute rolling window
 
 
-def _record_failed_login(identifier: str):
-    """Log one failed login attempt for the given username/email."""
+def _resolve_canonical_key(username_or_email: str) -> str:
+    """
+    Always resolve to the lowercase username so that logging in with
+    an email vs username always hits the same counter in login_attempts.
+    Falls back to the raw input (lowercased) if user doesn't exist —
+    this still prevents enumeration since the counter tracks the typed value.
+    """
     try:
+        if '@' in username_or_email:
+            row = _execute(
+                "SELECT username FROM users WHERE email = %s",
+                (username_or_email.lower(),),
+                fetch="one",
+            )
+        else:
+            row = _execute(
+                "SELECT username FROM users WHERE username = %s",
+                (username_or_email.lower(),),
+                fetch="one",
+            )
+        if row:
+            return row["username"].lower()
+    except Exception:
+        pass
+    return username_or_email.lower()  # unknown user — track raw input
+
+
+def _record_failed_login(identifier: str):
+    """Log one failed login attempt using the canonical username key."""
+    try:
+        key = _resolve_canonical_key(identifier)
         _execute(
             "INSERT INTO login_attempts (identifier) VALUES (%s)",
-            (identifier.lower(),),
+            (key,),
         )
     except Exception:
         pass  # non-fatal
@@ -518,9 +546,10 @@ def _record_failed_login(identifier: str):
 def _clear_failed_logins(identifier: str):
     """Remove all failed attempts after a successful login."""
     try:
+        key = _resolve_canonical_key(identifier)
         _execute(
             "DELETE FROM login_attempts WHERE identifier = %s",
-            (identifier.lower(),),
+            (key,),
         )
     except Exception:
         pass  # non-fatal
@@ -529,16 +558,18 @@ def _clear_failed_logins(identifier: str):
 def check_brute_force(identifier: str):
     """
     Check if the identifier (username or email) is locked out.
+    Resolves to canonical username first so email/username share one counter.
     Returns (allowed: bool, message: str).
     """
     try:
+        key = _resolve_canonical_key(identifier)
         row = _execute(
             """
             SELECT COUNT(*) AS cnt FROM login_attempts
             WHERE identifier = %s
               AND attempted_at > NOW() - INTERVAL '15 minutes'
             """,
-            (identifier.lower(),),
+            (key,),
             fetch="one",
         )
         count = row["cnt"] if row else 0
@@ -569,7 +600,7 @@ def verify_user(username_or_email, password):
         stored_key      = row["groq_api_key"]
 
         if bcrypt.checkpw(password.encode('utf-8'), stored_hashed.encode('utf-8')):
-            _clear_failed_logins(username_or_email)
+            _clear_failed_logins(actual_username)
             st.session_state.username      = actual_username
             st.session_state.user_groq_key = stored_key or ""
             return True, stored_key
