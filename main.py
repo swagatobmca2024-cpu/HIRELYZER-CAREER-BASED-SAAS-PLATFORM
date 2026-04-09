@@ -1843,14 +1843,14 @@ if not st.session_state.get("authenticated", False):
 
                 # ── Pending magic link state ──
                 if st.session_state.get("_magic_link_pending"):
-                    _pending_email_display = st.session_state.get("_magic_link_email", "your email")
+                    _masked = st.session_state.get("_magic_link_email", "your registered email")
                     st.markdown(f"""
                     <div style='text-align:center; padding:28px 12px;'>
                         <div style='font-size:2.2rem; margin-bottom:10px;'>📬</div>
                         <div style='color:#e6edf3; font-size:1.05rem; font-weight:600; margin-bottom:8px;'>Check your inbox!</div>
                         <div style='color:#8b949e; font-size:0.88rem; line-height:1.6;'>
                             A login link has been sent to<br>
-                            <strong style='color:#38bdf8;'>{_pending_email_display}</strong><br><br>
+                            <strong style='color:#38bdf8; font-family:monospace;'>{_masked}</strong><br><br>
                             Click the link in the email to sign in.<br>
                             <span style='font-size:0.8rem;'>Link expires in 10 minutes.</span>
                         </div>
@@ -1876,11 +1876,25 @@ if not st.session_state.get("authenticated", False):
                         if user.strip() and pwd.strip():
                             status, message, _uname = send_login_link(user.strip(), pwd.strip())
                             if status == "link_sent":
-                                # Determine the email shown in the pending screen
-                                _disp = user.strip() if "@" in user.strip() else f"your registered email"
+                                # Mask the email before storing — never show full address on screen
+                                def _mask_email(e: str) -> str:
+                                    try:
+                                        local, domain = e.split("@", 1)
+                                        visible = local[:2] if len(local) >= 2 else local[:1]
+                                        stars = "*" * min(5, max(2, len(local) - 2))
+                                        return f"{visible}{stars}@{domain}"
+                                    except Exception:
+                                        return "your registered email"
+                                _raw_email = message.split("**")[1] if "**" in message else ""
+                                # Fetch actual email from DB for masking if user logged in with username
+                                if "@" in user.strip():
+                                    _masked_email = _mask_email(user.strip())
+                                else:
+                                    # We only have username — show generic masked hint
+                                    _masked_email = "your registered email"
                                 st.session_state["_magic_link_pending"] = True
-                                st.session_state["_magic_link_email"] = _disp
-                                notify("login", "success", message)
+                                st.session_state["_magic_link_email"] = _masked_email
+                                notify("login", "success", "📧 Login link sent! Check your inbox and click the link to sign in.")
                                 st.rerun()
                             elif status == "bad_creds":
                                 notify("login", "error", message)
