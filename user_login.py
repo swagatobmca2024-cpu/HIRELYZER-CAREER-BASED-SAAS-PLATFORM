@@ -9,6 +9,7 @@ import os
 import random
 import threading
 import smtplib
+import uuid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import dns.resolver
@@ -174,6 +175,14 @@ def create_user_table():
     );
     CREATE INDEX IF NOT EXISTS idx_feature_usage_lookup
         ON feature_usage (username, feature, used_at);
+    CREATE TABLE IF NOT EXISTS login_tokens (
+        id         SERIAL PRIMARY KEY,
+        token      TEXT UNIQUE NOT NULL,
+        username   TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        used       BOOLEAN NOT NULL DEFAULT FALSE
+    );
+    CREATE INDEX IF NOT EXISTS idx_login_tokens_token ON login_tokens (token);
     """
     conn = _conn()
     try:
@@ -330,6 +339,154 @@ def complete_registration(entered_otp):
         return False, "🚫 Registration failed. Username or email already exists."
     except Exception as e:
         return False, f"❌ Database error: {e}"
+
+
+# ── Magic Link Login ──────────────────────────────────────────────────────────
+
+def _get_app_url() -> str:
+    """Return the base app URL from secrets, falling back to localhost."""
+    try:
+        return st.secrets.get("APP_URL", "http://localhost:8501").rstrip("/")
+    except Exception:
+        return "http://localhost:8501"
+
+
+def _send_login_link_email(to_email: str, username: str, token: str) -> bool:
+    """Email a magic login link to the user."""
+    app_url = _get_app_url()
+    link = f"{app_url}/?login_token={token}"
+    body = f"""Hello {username},
+
+Someone (hopefully you!) requested a login to HIRELYZER.
+
+Click the link below to confirm and complete your login:
+
+{link}
+
+This link will expire in 10 minutes and can only be used once.
+
+If you did not attempt to log in, please ignore this email — your account remains secure.
+
+Best regards,
+HIRELYZER Team
+"""
+    return _send_email(to_email, "🔐 Confirm Your HIRELYZER Login", body)
+
+
+def send_login_link(username_or_email: str, password: str):
+    """
+    Verify credentials, then send a magic login link.
+    Returns (status, message, username_or_None).
+
+    status values:
+      'link_sent'   — credentials OK, email sent
+      'bad_creds'   — wrong username/password
+      'no_email'    — user has no email on record
+      'email_fail'  — credentials OK but SMTP failed
+    """
+    # Resolve username + password + email
+    if '@' in username_or_email:
+        sql = "SELECT username, password, email, groq_api_key FROM users WHERE email = %s"
+    else:
+        sql = "SELECT username, password, email, groq_api_key FROM users WHERE username = %s"
+
+    row = _execute(sql, (username_or_email,), fetch="one")
+    if not row:
+        return "bad_creds", "❌ Invalid credentials. Please try again.", None
+
+    stored_hashed = row["password"]
+    if not bcrypt.checkpw(password.encode("utf-8"), stored_hashed.encode("utf-8")):
+        return "bad_creds", "❌ Invalid credentials. Please try again.", None
+
+    actual_username = row["username"]
+    email = row["email"]
+    groq_key = row["groq_api_key"]
+
+    if not email:
+        return "no_email", "⚠️ No email linked to this account. Contact support.", None
+
+    # Generate a secure token and persist it
+    token = str(uuid.uuid4())
+    try:
+        _execute(
+            "INSERT INTO login_tokens (token, username) VALUES (%s, %s)",
+            (token, actual_username),
+        )
+    except Exception as e:
+        return "email_fail", f"❌ Could not create login token: {e}", None
+
+    # Send the email
+    if not _send_login_link_email(email, actual_username, token):
+        return "email_fail", "❌ Failed to send login email. Please try again.", None
+
+    # Stash groq_key in session so verify_login_token can restore it
+    st.session_state["_pending_login_groq_key"] = groq_key or ""
+    return "link_sent", f"📧 Login link sent to **{email}**. Check your inbox and click the link to sign in.", actual_username
+
+
+def verify_login_token(token: str):
+    """
+    Validate a magic login token from the URL query param.
+    If valid: sets session state and returns (True, username).
+    If invalid/expired/used: returns (False, error_message).
+    Token TTL = 10 minutes.
+    """
+    if not token:
+        return False, "⚠️ No login token provided."
+
+    row = _execute(
+        "SELECT username, created_at, used FROM login_tokens WHERE token = %s",
+        (token,),
+        fetch="one",
+    )
+    if not row:
+        return False, "❌ Invalid or expired login link."
+    if row["used"]:
+        return False, "⚠️ This login link has already been used. Please log in again."
+
+    # Check expiry (10 minutes)
+    created_at = row["created_at"]
+    # created_at from Supabase is tz-aware UTC
+    now_utc = datetime.now(pytz.utc)
+    if isinstance(created_at, datetime) and created_at.tzinfo is None:
+        created_at = pytz.utc.localize(created_at)
+    age_seconds = (now_utc - created_at).total_seconds()
+    if age_seconds > 600:
+        return False, "⏱️ Login link has expired (10 min limit). Please log in again."
+
+    username = row["username"]
+
+    # Mark token as used
+    try:
+        _execute(
+            "UPDATE login_tokens SET used = TRUE WHERE token = %s",
+            (token,),
+        )
+    except Exception:
+        pass  # non-fatal — proceed with login
+
+    # Fetch groq key for session
+    key_row = _execute(
+        "SELECT groq_api_key FROM users WHERE username = %s", (username,), fetch="one"
+    )
+    groq_key = key_row["groq_api_key"] if key_row and key_row["groq_api_key"] else ""
+
+    # Set session state
+    st.session_state.username = username
+    st.session_state.authenticated = True
+    st.session_state.user_groq_key = groq_key
+
+    return True, username
+
+
+def cleanup_expired_login_tokens():
+    """Delete login tokens older than 1 hour. Call once on app startup."""
+    try:
+        _execute(
+            "DELETE FROM login_tokens WHERE created_at < NOW() - INTERVAL '1 hour'"
+        )
+    except Exception:
+        pass  # non-fatal
 
 
 # ── Authentication ────────────────────────────────────────────────────────────
