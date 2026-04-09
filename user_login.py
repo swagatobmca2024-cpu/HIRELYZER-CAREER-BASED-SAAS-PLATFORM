@@ -183,6 +183,13 @@ def create_user_table():
         used       BOOLEAN NOT NULL DEFAULT FALSE
     );
     CREATE INDEX IF NOT EXISTS idx_login_tokens_token ON login_tokens (token);
+    CREATE TABLE IF NOT EXISTS login_attempts (
+        id         SERIAL PRIMARY KEY,
+        identifier TEXT NOT NULL,
+        attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_login_attempts_lookup
+        ON login_attempts (identifier, attempted_at);
     """
     conn = _conn()
     try:
@@ -191,6 +198,8 @@ def create_user_table():
             # Prune feature_usage rows older than 2 hours — they are only needed
             # for the 1-hour rate-limit window. Without this the table grows forever.
             cur.execute("DELETE FROM feature_usage WHERE used_at < NOW() - INTERVAL '2 hours'")
+            # Prune login_attempts older than 15 minutes — only needed for lockout window.
+            cur.execute("DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '15 minutes'")
         conn.commit()
     except Exception as e:
         # FIX: rollback on the SAME connection object, not a fresh _conn() call
@@ -489,6 +498,62 @@ def cleanup_expired_login_tokens():
         pass  # non-fatal
 
 
+# ── Brute-force protection ────────────────────────────────────────────────────
+
+MAX_LOGIN_ATTEMPTS = 5          # max failures allowed
+LOCKOUT_WINDOW_SECONDS = 900    # 15-minute rolling window
+
+
+def _record_failed_login(identifier: str):
+    """Log one failed login attempt for the given username/email."""
+    try:
+        _execute(
+            "INSERT INTO login_attempts (identifier) VALUES (%s)",
+            (identifier.lower(),),
+        )
+    except Exception:
+        pass  # non-fatal
+
+
+def _clear_failed_logins(identifier: str):
+    """Remove all failed attempts after a successful login."""
+    try:
+        _execute(
+            "DELETE FROM login_attempts WHERE identifier = %s",
+            (identifier.lower(),),
+        )
+    except Exception:
+        pass  # non-fatal
+
+
+def check_brute_force(identifier: str):
+    """
+    Check if the identifier (username or email) is locked out.
+    Returns (allowed: bool, message: str).
+    """
+    try:
+        row = _execute(
+            """
+            SELECT COUNT(*) AS cnt FROM login_attempts
+            WHERE identifier = %s
+              AND attempted_at > NOW() - INTERVAL '15 minutes'
+            """,
+            (identifier.lower(),),
+            fetch="one",
+        )
+        count = row["cnt"] if row else 0
+    except Exception:
+        return True, ""  # fail open — don't block on DB hiccup
+
+    if count >= MAX_LOGIN_ATTEMPTS:
+        remaining = LOCKOUT_WINDOW_SECONDS // 60
+        return False, (
+            f"🔒 Too many failed attempts. Account temporarily locked — "
+            f"please try again in {remaining} minutes."
+        )
+    return True, ""
+
+
 # ── Authentication ────────────────────────────────────────────────────────────
 
 def verify_user(username_or_email, password):
@@ -504,9 +569,12 @@ def verify_user(username_or_email, password):
         stored_key      = row["groq_api_key"]
 
         if bcrypt.checkpw(password.encode('utf-8'), stored_hashed.encode('utf-8')):
+            _clear_failed_logins(username_or_email)
             st.session_state.username      = actual_username
             st.session_state.user_groq_key = stored_key or ""
             return True, stored_key
+
+    _record_failed_login(username_or_email)
     return False, None
 
 
