@@ -2480,12 +2480,13 @@ if st.session_state.username == "admin":
         _tkey = f"_tbl_view_{key}"
         if _tkey not in st.session_state:
             st.session_state[_tkey] = False
-        _hdr, _btn = st.columns([5, 1])
+        _hdr, _btn = st.columns([6, 1])
         with _hdr:
             st.markdown(title_html, unsafe_allow_html=True)
         with _btn:
-            _label = "📊 Chart" if st.session_state[_tkey] else "📋 Table"
-            if st.button(_label, key=f"_toggle_{key}", use_container_width=True):
+            _label = "📊" if st.session_state[_tkey] else "📋"
+            _tip   = "Back to Chart" if st.session_state[_tkey] else "View as Table"
+            if st.button(_label, key=f"_toggle_{key}", use_container_width=True, help=_tip):
                 st.session_state[_tkey] = not st.session_state[_tkey]
                 st.rerun()
         if st.session_state[_tkey]:
@@ -2560,8 +2561,8 @@ if st.session_state.username == "admin":
             _all_hours = pd.DataFrame({"Hour": range(24)})
             _hourly = _all_hours.merge(_hourly, on="Hour", how="left").fillna(0)
             _hourly["Logins"] = _hourly["Logins"].astype(int)
-            _hourly["HourLabel"] = _hourly["Hour"].apply(lambda h: f"{h:02d}:00")
-            _peak_label = f"{_peak_hour:02d}:00 – {_peak_hour+1:02d}:00"
+            _hourly["HourLabel"] = _hourly["Hour"].apply(lambda h: f"{h:02d}:00-{(h+1)%24:02d}:00")
+            _peak_label = f"{_peak_hour:02d}:00 – {(_peak_hour+1)%24:02d}:00"
             def _make_hour_chart():
                 return (
                     alt.Chart(_hourly)
