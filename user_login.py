@@ -199,7 +199,7 @@ def create_user_table():
             # for the 1-hour rate-limit window. Without this the table grows forever.
             cur.execute("DELETE FROM feature_usage WHERE used_at < NOW() - INTERVAL '2 hours'")
             # Prune login_attempts older than 15 minutes — only needed for lockout window.
-            cur.execute("DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '15 minutes'")
+            cur.execute("DELETE FROM login_attempts WHERE attempted_at < (NOW() AT TIME ZONE 'Asia/Kolkata') - INTERVAL '15 minutes'")
         conn.commit()
     except Exception as e:
         # FIX: rollback on the SAME connection object, not a fresh _conn() call
@@ -532,12 +532,13 @@ def _resolve_canonical_key(username_or_email: str) -> str:
 
 
 def _record_failed_login(identifier: str):
-    """Log one failed login attempt using the canonical username key."""
+    """Log one failed login attempt using the canonical username key, timestamped in IST."""
     try:
         key = _resolve_canonical_key(identifier)
+        ist_now = get_ist_time()
         _execute(
-            "INSERT INTO login_attempts (identifier) VALUES (%s)",
-            (key,),
+            "INSERT INTO login_attempts (identifier, attempted_at) VALUES (%s, %s)",
+            (key, ist_now),
         )
     except Exception:
         pass  # non-fatal
@@ -567,7 +568,7 @@ def check_brute_force(identifier: str):
             """
             SELECT COUNT(*) AS cnt FROM login_attempts
             WHERE identifier = %s
-              AND attempted_at > NOW() - INTERVAL '15 minutes'
+              AND attempted_at > (NOW() AT TIME ZONE 'Asia/Kolkata') - INTERVAL '15 minutes'
             """,
             (key,),
             fetch="one",
