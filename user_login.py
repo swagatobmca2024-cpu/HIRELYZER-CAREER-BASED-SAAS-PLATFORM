@@ -199,7 +199,9 @@ def create_user_table():
             # for the 1-hour rate-limit window. Without this the table grows forever.
             cur.execute("DELETE FROM feature_usage WHERE used_at < NOW() - INTERVAL '2 hours'")
             # Prune login_attempts older than 15 minutes — only needed for lockout window.
-            cur.execute("DELETE FROM login_attempts WHERE attempted_at < (NOW() AT TIME ZONE 'Asia/Kolkata') - INTERVAL '15 minutes'")
+            # FIX: attempted_at is TIMESTAMPTZ stored in UTC by Postgres; compare against
+            # plain NOW() (UTC) so the window is always accurate regardless of timezone.
+            cur.execute("DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '15 minutes'")
         conn.commit()
     except Exception as e:
         # FIX: rollback on the SAME connection object, not a fresh _conn() call
@@ -401,10 +403,12 @@ def send_login_link(username_or_email: str, password: str):
 
     row = _execute(sql, (username_or_email,), fetch="one")
     if not row:
+        _record_failed_login(username_or_email)  # FIX: count failures toward brute-force lockout
         return "bad_creds", "❌ Invalid credentials. Please try again.", None
 
     stored_hashed = row["password"]
     if not bcrypt.checkpw(password.encode("utf-8"), stored_hashed.encode("utf-8")):
+        _record_failed_login(username_or_email)  # FIX: count failures toward brute-force lockout
         return "bad_creds", "❌ Invalid credentials. Please try again.", None
 
     actual_username = row["username"]
@@ -484,6 +488,9 @@ def verify_login_token(token: str):
     st.session_state.username = username
     st.session_state.authenticated = True
     st.session_state.user_groq_key = groq_key
+
+    # FIX: log the login so it appears in the admin activity log and today's login count
+    log_user_action(username, "login")
 
     return True, username
 
@@ -568,7 +575,7 @@ def check_brute_force(identifier: str):
             """
             SELECT COUNT(*) AS cnt FROM login_attempts
             WHERE identifier = %s
-              AND attempted_at > (NOW() AT TIME ZONE 'Asia/Kolkata') - INTERVAL '15 minutes'
+              AND attempted_at > NOW() - INTERVAL '15 minutes'
             """,
             (key,),
             fetch="one",
@@ -649,7 +656,7 @@ def get_logins_today():
     row = _execute(
         """
         SELECT COUNT(*) AS cnt FROM user_logs
-        WHERE action = 'login' AND DATE(timestamp) = %s
+        WHERE action = 'login' AND DATE(timestamp::timestamp) = %s
         """,
         (today,),
         fetch="one",
