@@ -489,8 +489,6 @@ def verify_login_token(token: str):
     st.session_state.authenticated = True
     st.session_state.user_groq_key = groq_key
 
-    # FIX: log the login so it appears in the admin activity log and today's login count
-    log_user_action(username, "login")
 
     return True, username
 
