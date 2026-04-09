@@ -100,7 +100,7 @@ from user_login import (
 )
 
 # ============================================================
-# 💾 Persistent Storage Configuration for Streamlit Cloud
+# Persistent Storage Configuration for Streamlit Cloud
 # ============================================================
 # SQLite storage removed — data persists in Supabase PostgreSQL
 
@@ -201,17 +201,17 @@ def generate_cover_letter_from_resume_builder():
     location = st.session_state.get("location", "")
     today_date = datetime.today().strftime("%B %d, %Y")
 
-    # ✅ Input boxes for contact info
-    company = st.text_input("🏢 Target Company", placeholder="e.g., Google")
-    linkedin = st.text_input("🔗 LinkedIn URL", placeholder="e.g., https://linkedin.com/in/username")
-    email = st.text_input("📧 Email", placeholder="e.g., you@example.com")
-    mobile = st.text_input("📞 Mobile Number", placeholder="e.g., +91 9876543210")
+    # Input boxes for contact info
+    company = st.text_input("Target Company", placeholder="e.g., Google")
+    linkedin = st.text_input("LinkedIn URL", placeholder="e.g., https://linkedin.com/in/username")
+    email = st.text_input("Email", placeholder="e.g., you@example.com")
+    mobile = st.text_input("Mobile Number", placeholder="e.g., +91 9876543210")
 
-    # ✅ Button to prevent relooping
-    if st.button("✉️ Generate Cover Letter"):
-        # ✅ Validate input before generating
+    # Button to prevent relooping
+    if st.button("Generate Cover Letter"):
+        # Validate input before generating
         if not all([name, job_title, summary, skills, company, linkedin, email, mobile]):
-            st.warning("⚠️ Please fill in all fields including LinkedIn, email, and mobile.")
+            st.warning("Please fill in all fields including LinkedIn, email, and mobile.")
             return
 
         prompt = f"""
@@ -252,18 +252,18 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
 - End with: "Sincerely," followed by the candidate's full name
 """
 
-        # ✅ Call LLM
-        with st.spinner("✉️ Generating cover letter..."):
+        # Call LLM
+        with st.spinner("Generating cover letter..."):
             try:
                 cover_letter = call_llm(prompt, session=st.session_state).strip()
             except Exception as e:
-                st.error(f"❌ Failed to generate cover letter: {e}")
+                st.error(f"Failed to generate cover letter: {e}")
                 return
 
-        # ✅ Store plain text
+        # Store plain text
         st.session_state["cover_letter"] = cover_letter
 
-        # ✅ Build HTML wrapper for preview (safe)
+        # Build HTML wrapper for preview (safe)
         cover_letter_html = f"""
         <div style="font-family: Georgia, serif; font-size: 13pt; line-height: 1.6; 
                     color: #000; background: #fff; padding: 25px; 
@@ -274,7 +274,7 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
                 <div style="font-size:14pt; color:#555;">{job_title}</div>
                 <div style="font-size:10pt; margin-top:5px;">
                     <a href="{linkedin}" style="color:#003366;">{linkedin}</a><br/>
-                    📧 {email} | 📞 {mobile}
+                    {email} | {mobile}
                 </div>
             </div>
             <hr/>
@@ -286,11 +286,11 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
 
         st.session_state["cover_letter_html"] = cover_letter_html
 
-        # ✅ Show nicely in Streamlit
+        # Show nicely in Streamlit
         st.markdown(cover_letter_html, unsafe_allow_html=True)
 
 # ------------------- Initialize -------------------
-# ✅ Initialize database in persistent storage
+# Initialize database in persistent storage
 create_user_table()
 cleanup_expired_login_tokens()
 
@@ -401,7 +401,7 @@ def display_timer(remaining_seconds, expired=False, key_suffix=""):
                 font-weight: bold;
                 font-family: 'Orbitron', sans-serif;
                 text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
-            ">⏱️ Time Remaining: <span id='countdown-{key_suffix}'>{minutes:02d}:{seconds:02d}</span></span>
+            "><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Time Remaining: <span id='countdown-{key_suffix}'>{minutes:02d}:{seconds:02d}</span></span>
         </div>
         <script>
         (function() {{
@@ -416,7 +416,7 @@ def display_timer(remaining_seconds, expired=False, key_suffix=""):
                     if (timerEl) {{
                         timerEl.style.background = 'linear-gradient(135deg, rgba(255, 99, 71, 0.18) 0%, rgba(255, 99, 71, 0.08) 100%)';
                         timerEl.style.border = '2px solid rgba(255, 99, 71, 0.4)';
-                        timerEl.innerHTML = "<span style='color: #FF6347; font-size: 1.15em; font-weight: bold; font-family: Orbitron, sans-serif; text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);'>⏱️ OTP Expired</span>";
+                        timerEl.innerHTML = "<span style='color: #FF6347; font-size: 1.15em; font-weight: bold; font-family: Orbitron, sans-serif; text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);'>OTP Expired</span>";
                     }}
                 }} else {{
                     const mins = Math.floor(remaining / 60);
@@ -1465,7 +1465,7 @@ h3, .stMarkdown h3 {
 }
 </style>
 """, unsafe_allow_html=True)
-# 🔹 VIDEO BACKGROUND & GLOW TEXT
+# VIDEO BACKGROUND & GLOW TEXT
 
 # ------------------- BEFORE LOGIN -------------------
 if not st.session_state.authenticated:
@@ -1846,7 +1846,7 @@ if not st.session_state.get("authenticated", False):
                     _masked = st.session_state.get("_magic_link_email", "your registered email")
                     st.markdown(f"""
                     <div style='text-align:center; padding:28px 12px;'>
-                        <div style='font-size:2.2rem; margin-bottom:10px;'>📬</div>
+                        <div style='margin-bottom:10px;'><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
                         <div style='color:#e6edf3; font-size:1.05rem; font-weight:600; margin-bottom:8px;'>Check your inbox!</div>
                         <div style='color:#8b949e; font-size:0.88rem; line-height:1.6;'>
                             A login link has been sent to<br>
@@ -1857,7 +1857,7 @@ if not st.session_state.get("authenticated", False):
                     </div>
                     """, unsafe_allow_html=True)
                     render_notification("login")
-                    if st.button("↩️ Back / Try Again", key="magic_link_back_btn", use_container_width=True):
+                    if st.button("Back / Try Again", key="magic_link_back_btn", use_container_width=True):
                         st.session_state.pop("_magic_link_pending", None)
                         st.session_state.pop("_magic_link_email", None)
                         st.rerun()
@@ -1890,7 +1890,7 @@ if not st.session_state.get("authenticated", False):
                                 if status == "link_sent":
                                     st.session_state["_magic_link_pending"] = True
                                     st.session_state["_magic_link_email"] = "your registered email"
-                                    notify("login", "success", "📧 Login link sent to admin email! Click it to sign in.")
+                                    notify("login", "success", "Login link sent to admin email. Click it to sign in.")
                                     st.rerun()
                                 elif status == "bad_creds":
                                     notify("login", "error", message)
@@ -1906,14 +1906,14 @@ if not st.session_state.get("authenticated", False):
                                     if saved_key:
                                         st.session_state["user_groq_key"] = saved_key
                                     log_user_action(st.session_state.username, "login")
-                                    notify("login", "success", "✅ Login successful!")
+                                    notify("login", "success", "Login successful.")
                                     time.sleep(3.0)
                                     st.rerun()
                                 else:
-                                    notify("login", "error", "❌ Invalid credentials. Please try again.")
+                                    notify("login", "error", "Invalid credentials. Please try again.")
                                     st.rerun()
                         else:
-                            notify("login", "warning", "⚠️ Please enter your username/email and password.")
+                            notify("login", "warning", "Please enter your username/email and password.")
                             st.rerun()
 
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -1937,7 +1937,7 @@ if not st.session_state.get("authenticated", False):
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("📤 Send OTP", key="send_otp_btn", use_container_width=True):
+                    if st.button("Send OTP", key="send_otp_btn", use_container_width=True):
                         if email_input.strip():
                             if get_user_by_email(email_input.strip()):
                                 # Generate and send OTP
@@ -1950,21 +1950,21 @@ if not st.session_state.get("authenticated", False):
                                     st.session_state.reset_otp_time = time.time()
                                     st.session_state.reset_stage = "verify_otp"
 
-                                    notify("login", "success", "✅ OTP sent successfully to your email!")
+                                    notify("login", "success", "OTP sent successfully to your email.")
                                     time.sleep(0.5)
                                     st.rerun()
                                 else:
-                                    notify("login", "error", "❌ Failed to send OTP. Please try again.")
+                                    notify("login", "error", "Failed to send OTP. Please try again.")
                                     st.rerun()
                             else:
-                                notify("login", "error", "❌ Email not found. Please register first.")
+                                notify("login", "error", "Email not found. Please register first.")
                                 st.rerun()
                         else:
-                            notify("login", "warning", "⚠️ Please enter your email address.")
+                            notify("login", "warning", "Please enter your email address.")
                             st.rerun()
 
                 with col2:
-                    if st.button("↩️ Back to Login", key="back_to_login_1", use_container_width=True):
+                    if st.button("Back to Login", key="back_to_login_1", use_container_width=True):
                         st.session_state.reset_stage = "none"
                         st.rerun()
 
@@ -1988,11 +1988,11 @@ if not st.session_state.get("authenticated", False):
                 if remaining_time == 0:
                     # OTP Expired - Show resend option
                     render_notification("login")
-                    notify("login", "error", "⏱️ OTP expired. Please request a new one.")
+                    notify("login", "error", "OTP expired. Please request a new one.")
 
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("🔄 Resend OTP", key="resend_otp_btn", use_container_width=True):
+                        if st.button("Resend OTP", key="resend_otp_btn", use_container_width=True):
                             # Generate new OTP
                             otp = generate_otp()
                             success = send_email_otp(st.session_state.reset_email, otp)
@@ -2000,43 +2000,43 @@ if not st.session_state.get("authenticated", False):
                             if success:
                                 st.session_state.reset_otp = otp
                                 st.session_state.reset_otp_time = time.time()
-                                notify("login", "info", "📨 New OTP sent!")
+                                notify("login", "info", "New OTP sent.")
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
-                                notify("login", "error", "❌ Failed to send OTP. Please try again.")
+                                notify("login", "error", "Failed to send OTP. Please try again.")
                                 st.rerun()
 
                     with col2:
-                        if st.button("↩️ Back to Login", key="back_to_login_expired", use_container_width=True):
+                        if st.button("Back to Login", key="back_to_login_expired", use_container_width=True):
                             st.session_state.reset_stage = "none"
                             st.rerun()
                 else:
                     # OTP still valid - Show verification form
-                    otp_input = st.text_input("🔢 Enter 6-Digit OTP", key="otp_input", max_chars=6)
+                    otp_input = st.text_input("Enter 6-Digit OTP", key="otp_input", max_chars=6)
 
                     # Render notification area (reserves space)
                     render_notification("login")
 
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("✅ Verify OTP", key="verify_otp_btn", use_container_width=True):
+                        if st.button("Verify OTP", key="verify_otp_btn", use_container_width=True):
                             # Re-check expiry on server side before verifying
                             current_elapsed = time.time() - st.session_state.reset_otp_time
                             if current_elapsed >= 180:
-                                notify("login", "error", "⏱️ OTP has expired. Please request a new one.")
+                                notify("login", "error", "OTP has expired. Please request a new one.")
                                 st.rerun()
                             elif otp_input.strip() == st.session_state.reset_otp:
                                 st.session_state.reset_stage = "reset_password"
-                                notify("login", "success", "✅ OTP verified successfully!")
+                                notify("login", "success", "OTP verified successfully.")
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
-                                notify("login", "error", "❌ Invalid OTP. Please try again.")
+                                notify("login", "error", "Invalid OTP. Please try again.")
                                 st.rerun()
 
                     with col2:
-                        if st.button("↩️ Back to Login", key="back_to_login_2", use_container_width=True):
+                        if st.button("Back to Login", key="back_to_login_2", use_container_width=True):
                             st.session_state.reset_stage = "none"
                             st.rerun()
 
@@ -2057,13 +2057,13 @@ if not st.session_state.get("authenticated", False):
                 # Render notification area (reserves space)
                 render_notification("login")
 
-                if st.button("✅ Reset Password", key="reset_password_btn", use_container_width=True):
+                if st.button("Reset Password", key="reset_password_btn", use_container_width=True):
                     if new_password.strip() and confirm_password.strip():
                         if new_password == confirm_password:
                             success = update_password_by_email(st.session_state.reset_email, new_password)
 
                             if success:
-                                notify("login", "success", "✅ Password reset successful! Please log in again.")
+                                notify("login", "success", "Password reset successful. Please log in again.")
 
                                 # Log the password reset action
                                 log_user_action(st.session_state.reset_email, "password_reset")
@@ -2077,16 +2077,16 @@ if not st.session_state.get("authenticated", False):
                                 time.sleep(1)
                                 st.rerun()
                             else:
-                                notify("login", "error", "❌ Failed to reset password. Please try again.")
+                                notify("login", "error", "Failed to reset password. Please try again.")
                                 st.rerun()
                         else:
-                            notify("login", "error", "❌ Passwords do not match.")
+                            notify("login", "error", "Passwords do not match.")
                             st.rerun()
                     else:
-                        notify("login", "warning", "⚠️ Please fill in both password fields.")
+                        notify("login", "warning", "Please fill in both password fields.")
                         st.rerun()
 
-                if st.button("↩️ Back to Login", key="back_to_login_3"):
+                if st.button("Back to Login", key="back_to_login_3"):
                     st.session_state.reset_stage = "none"
                     st.rerun()
 
@@ -2110,41 +2110,41 @@ if not st.session_state.get("authenticated", False):
                 if remaining == 0:
                     # OTP Expired
                     render_notification("register")
-                    notify("register", "error", "⏱️ OTP expired. Please request a new one.")
+                    notify("register", "error", "OTP expired. Please request a new one.")
 
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("🔄 Resend OTP", key="reg_resend_expired_btn", use_container_width=True):
+                        if st.button("Resend OTP", key="reg_resend_expired_btn", use_container_width=True):
                             pending = st.session_state.pending_registration
                             success, message = add_user(pending['username'], pending['password'], pending['email'])
                             if success:
-                                notify("register", "success", "✅ New OTP sent!")
+                                notify("register", "success", "New OTP sent.")
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
-                                notify("register", "error", f"❌ {message}")
+                                notify("register", "error", f"{message}")
                                 st.rerun()
                     with col2:
-                        if st.button("↩️ Start Over", key="reg_start_over_btn", use_container_width=True):
+                        if st.button("Start Over", key="reg_start_over_btn", use_container_width=True):
                             del st.session_state.pending_registration
                             st.rerun()
                 else:
                     # OTP still valid
-                    otp_input = st.text_input("🔢 Enter 6-Digit OTP", key="reg_otp_input", max_chars=6)
+                    otp_input = st.text_input("Enter 6-Digit OTP", key="reg_otp_input", max_chars=6)
 
                     # Render notification area (reserves space)
                     render_notification("register")
 
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        if st.button("✅ Verify", key="verify_reg_otp_btn", use_container_width=True):
+                        if st.button("Verify", key="verify_reg_otp_btn", use_container_width=True):
                             # Cache username BEFORE calling complete_registration
                             cached_username = st.session_state.pending_registration['username']
 
                             # Re-check expiry before verification
                             current_elapsed = (datetime.now(st.session_state.pending_registration['timestamp'].tzinfo) - st.session_state.pending_registration['timestamp']).total_seconds()
                             if current_elapsed >= 180:
-                                notify("register", "error", "⏱️ OTP has expired. Please request a new one.")
+                                notify("register", "error", "OTP has expired. Please request a new one.")
                                 st.rerun()
                             else:
                                 success, message = complete_registration(otp_input.strip())
@@ -2158,25 +2158,25 @@ if not st.session_state.get("authenticated", False):
                                     st.rerun()
 
                     with col2:
-                        if st.button("🔄 Resend", key="resend_reg_otp_btn", use_container_width=True):
+                        if st.button("Resend", key="resend_reg_otp_btn", use_container_width=True):
                             pending = st.session_state.pending_registration
                             success, message = add_user(pending['username'], pending['password'], pending['email'])
                             if success:
-                                notify("register", "info", "📨 New OTP sent successfully!")
+                                notify("register", "info", "New OTP sent successfully.")
                                 time.sleep(0.5)
                                 st.rerun()
                             else:
-                                notify("register", "error", f"❌ {message}")
+                                notify("register", "error", f"{message}")
                                 st.rerun()
 
                     with col3:
-                        if st.button("↩️ Back", key="back_to_reg_btn", use_container_width=True):
+                        if st.button("Back", key="back_to_reg_btn", use_container_width=True):
                             del st.session_state.pending_registration
                             st.rerun()
 
             else:
                 # Normal registration form
-                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>🧾 Register New User</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='color:#00BFFF; text-align:center;'>Register New User</h3>", unsafe_allow_html=True)
 
                 # ── CSS: fixed-height validation slot — zero layout shift ──
                 st.markdown("""
@@ -2252,11 +2252,11 @@ if not st.session_state.get("authenticated", False):
                         st.session_state._email_msg = ("", "")
                         return
                     if not is_valid_email(val):
-                        st.session_state._email_msg = ("warn", "⚠️ Invalid email format.")
+                        st.session_state._email_msg = ("warn", "Invalid email format.")
                     elif email_exists(val):
-                        st.session_state._email_msg = ("error", "❌ Email already registered.")
+                        st.session_state._email_msg = ("error", "Email already registered.")
                     else:
-                        st.session_state._email_msg = ("success", "✅ Email is available.")
+                        st.session_state._email_msg = ("success", "Email is available.")
 
                 def _validate_username():
                     val = st.session_state.get("reg_user", "").strip()
@@ -2264,9 +2264,9 @@ if not st.session_state.get("authenticated", False):
                         st.session_state._user_msg = ("", "")
                         return
                     if username_exists(val):
-                        st.session_state._user_msg = ("error", "❌ Username already exists.")
+                        st.session_state._user_msg = ("error", "Username already exists.")
                     else:
-                        st.session_state._user_msg = ("success", "✅ Username is available.")
+                        st.session_state._user_msg = ("success", "Username is available.")
 
                 def _validate_password():
                     val = st.session_state.get("reg_pass", "")
@@ -2274,9 +2274,9 @@ if not st.session_state.get("authenticated", False):
                         st.session_state._pass_msg = ("", "")
                         return
                     if not is_strong_password(val):
-                        st.session_state._pass_msg = ("warn", "⚠️ Password must be at least 8 characters and strong.")
+                        st.session_state._pass_msg = ("warn", "Password must be at least 8 characters and strong.")
                     else:
-                        st.session_state._pass_msg = ("success", "✅ Strong password.")
+                        st.session_state._pass_msg = ("success", "Strong password.")
 
                 # Initialise message state once
                 if "_email_msg" not in st.session_state:
@@ -2306,20 +2306,20 @@ if not st.session_state.get("authenticated", False):
 
                 # ── Inputs wired to on_change — NO inline DB calls ──
                 new_email = st.text_input(
-                    "📧 Email", key="reg_email",
+                    "Email", key="reg_email",
                     placeholder="your@email.com",
                     on_change=_validate_email
                 )
                 _render_val_msg("_email_msg")
 
                 new_user = st.text_input(
-                    "👤 Username", key="reg_user",
+                    "Username", key="reg_user",
                     on_change=_validate_username
                 )
                 _render_val_msg("_user_msg")
 
                 new_pass = st.text_input(
-                    "🔑 Password", type="password", key="reg_pass",
+                    "Password", type="password", key="reg_pass",
                     on_change=_validate_password
                 )
                 st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
@@ -2328,17 +2328,17 @@ if not st.session_state.get("authenticated", False):
                 # Render notification area (reserves space)
                 render_notification("register")
 
-                if st.button("📧 Register & Send OTP", key="register_btn", use_container_width=True):
+                if st.button("Register & Send OTP", key="register_btn", use_container_width=True):
                     if new_email.strip() and new_user.strip() and new_pass.strip():
                         # Validate before attempting registration
                         if not is_valid_email(new_email.strip()):
-                            notify("register", "warning", "⚠️ Invalid email format.")
+                            notify("register", "warning", "Invalid email format.")
                             st.rerun()
                         elif email_exists(new_email.strip()):
-                            notify("register", "error", "🚫 Email already registered.")
+                            notify("register", "error", "Email already registered.")
                             st.rerun()
                         elif username_exists(new_user.strip()):
-                            notify("register", "error", "🚫 Username already exists.")
+                            notify("register", "error", "Username already exists.")
                             st.rerun()
                         else:
                             success, message = add_user(new_user.strip(), new_pass.strip(), new_email.strip())
@@ -2350,7 +2350,7 @@ if not st.session_state.get("authenticated", False):
                                 notify("register", "error", message)
                                 st.rerun()
                     else:
-                        notify("register", "warning", "⚠️ Please fill in all fields (email, username, and password).")
+                        notify("register", "warning", "Please fill in all fields (email, username, and password).")
                         st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
@@ -2362,7 +2362,7 @@ if st.session_state.get("authenticated"):
     st.markdown(
         f'<div class="welcome-banner">'
         f'<div>'
-        f'<div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span> 👋</div>'
+        f'<div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span></div>'
         f'<div class="welcome-subtitle">HIRELYZER — AI-Powered Resume Intelligence Platform</div>'
         f'</div>'
         f'<div style="display:flex;align-items:center;gap:8px;">'
@@ -2372,24 +2372,24 @@ if st.session_state.get("authenticated"):
         unsafe_allow_html=True
     )
 
-    # 🔓 LOGOUT BUTTON
-    if st.button("🚪 Logout"):
+    # LOGOUT BUTTON
+    if st.button("Logout"):
         log_user_action(st.session_state.get("username", "unknown"), "logout")
 
-        # ✅ Clear all session keys safely
+        # Clear all session keys safely
         for key in list(st.session_state.keys()):
             del st.session_state[key]
 
-        st.success("✅ Logged out successfully.")
+        st.success("Logged out successfully.")
         st.rerun()  # Force rerun to prevent stale UI
 
-    # 🔑 GROQ API KEY SECTION (SIDEBAR)
+    # GROQ API KEY SECTION (SIDEBAR)
     st.sidebar.markdown(
         "<p style='font-size:0.72rem;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;color:#4a5568;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:8px;margin-bottom:12px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;'>Groq API Key</p>",
         unsafe_allow_html=True
     )
 
-    # ✅ Load saved key from DB (cached — won't re-query on every rerun)
+    # Load saved key from DB (cached — won't re-query on every rerun)
     saved_key = _cached_user_api_key(st.session_state.username)
     masked_preview = f"****{saved_key[-6:]}" if saved_key else ""
 
@@ -2399,28 +2399,28 @@ if st.session_state.get("authenticated"):
         type="password"
     )
 
-    # ✅ Save or reuse key — guarded so save_user_api_key only fires once per
+    # Save or reuse key — guarded so save_user_api_key only fires once per
     #    new value, not on every rerun while the field holds a value.
     if user_api_key_input:
         if user_api_key_input != st.session_state.get("_last_saved_api_key"):
             save_user_api_key(st.session_state.username, user_api_key_input)
             st.session_state["_last_saved_api_key"] = user_api_key_input
             _cached_user_api_key.clear()  # bust cache so next read gets new value
-            st.sidebar.success("✅ New key saved and in use.")
+            st.sidebar.success("New key saved and in use.")
         st.session_state["user_groq_key"] = user_api_key_input
     elif saved_key:
         st.session_state["user_groq_key"] = saved_key
-        st.sidebar.info(f"ℹ️ Using your previously saved API key ({masked_preview})")
+        st.sidebar.info(f"Using your previously saved API key ({masked_preview})")
     else:
-        st.sidebar.warning("⚠ Using shared admin key with possible usage limits")
+        st.sidebar.warning("Using shared admin key with possible usage limits")
 
-    # 🧹 Clear saved key
-    if st.sidebar.button("🗑️ Clear My API Key"):
+    # Clear saved key
+    if st.sidebar.button("Clear My API Key"):
         st.session_state["user_groq_key"] = None
         st.session_state.pop("_last_saved_api_key", None)
         save_user_api_key(st.session_state.username, None)
         _cached_user_api_key.clear()
-        st.sidebar.success("✅ Cleared saved Groq API key. Now using shared admin key.")
+        st.sidebar.success("Cleared saved Groq API key. Now using shared admin key.")
 
 if st.session_state.username == "admin":
     st.markdown("""
@@ -2474,14 +2474,30 @@ if st.session_state.username == "admin":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # ── Charts — helper to render chart OR table with a toggle button ─────────
+    def _chart_panel(key, title_html, chart_fn, table_df):
+        """Render a labelled chart with a chart/table toggle. chart_fn() returns an Altair chart."""
+        _tkey = f"_tbl_view_{key}"
+        if _tkey not in st.session_state:
+            st.session_state[_tkey] = False
+        _hdr, _btn = st.columns([5, 1])
+        with _hdr:
+            st.markdown(title_html, unsafe_allow_html=True)
+        with _btn:
+            _label = "View Chart" if st.session_state[_tkey] else "View Table"
+            if st.button(_label, key=f"_toggle_{key}", use_container_width=True):
+                st.session_state[_tkey] = not st.session_state[_tkey]
+                st.rerun()
+        if st.session_state[_tkey]:
+            st.dataframe(table_df.reset_index(drop=True), use_container_width=True, height=260)
+        else:
+            st.altair_chart(chart_fn(), use_container_width=True)
+
     # ── Charts Row 1: Logins per Day + Logins by Day of Week ─────────────────
     if not _login_df.empty:
         ch_col1, ch_col2 = st.columns(2)
 
         with ch_col1:
-            st.markdown("""<p class='section-label'>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                Daily Login Trend</p>""", unsafe_allow_html=True)
             _daily = _login_df.groupby("Date").size().reset_index(name="Logins")
             _daily["Date"] = _daily["Date"].astype(str)
             _max_day = _daily.loc[_daily["Logins"].idxmax(), "Date"]
@@ -2489,96 +2505,161 @@ if st.session_state.username == "admin":
             _daily["Color"] = _daily["Date"].apply(
                 lambda d: "#34d399" if d == _max_day else ("#f87171" if d == _min_day else "#38bdf8")
             )
-            _chart_daily = alt.Chart(_daily).mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
-                x=alt.X("Date:O", axis=alt.Axis(labelAngle=-35, labelColor="#8b949e", titleColor="#8b949e"), title="Date"),
-                y=alt.Y("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Login Count"),
-                color=alt.Color("Color:N", scale=None, legend=None),
-                tooltip=[alt.Tooltip("Date:O", title="Date"), alt.Tooltip("Logins:Q", title="Logins")]
-            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
-            st.altair_chart(_chart_daily, use_container_width=True)
+            # Dynamic width: 28px per bar, min 260, so large datasets scroll properly
+            _daily_w = max(260, len(_daily) * 28)
+            def _make_daily_chart():
+                return (
+                    alt.Chart(_daily)
+                    .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+                    .encode(
+                        x=alt.X("Date:O", axis=alt.Axis(labelAngle=-45, labelColor="#8b949e", titleColor="#8b949e", labelFontSize=10), title="Date"),
+                        y=alt.Y("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Login Count"),
+                        color=alt.Color("Color:N", scale=None, legend=None),
+                        tooltip=[alt.Tooltip("Date:O", title="Date"), alt.Tooltip("Logins:Q", title="Logins")]
+                    )
+                    .properties(height=260, width=_daily_w, background="transparent")
+                    .configure_view(strokeWidth=0)
+                    .configure_axis(labelLimit=120)
+                )
+            _chart_panel(
+                "daily",
+                """<p class='section-label'><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Daily Login Trend</p>""",
+                _make_daily_chart,
+                _daily[["Date", "Logins"]],
+            )
             st.markdown(f'<p style="font-size:0.75rem;color:#8b949e;display:flex;gap:14px;"><span style="color:#34d399;display:flex;align-items:center;gap:4px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="#34d399"><circle cx="12" cy="12" r="10"/></svg> Peak: <b style="color:#e6edf3;">{_max_day}</b></span><span style="color:#f87171;display:flex;align-items:center;gap:4px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="#f87171"><circle cx="12" cy="12" r="10"/></svg> Lowest: <b style="color:#e6edf3;">{_min_day}</b></span></p>', unsafe_allow_html=True)
 
         with ch_col2:
-            st.markdown("""<p class='section-label'>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Logins by Day of Week</p>""", unsafe_allow_html=True)
             _dow_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
             _dow = _login_df.groupby("DayName").size().reset_index(name="Logins")
             _dow["DayName"] = pd.Categorical(_dow["DayName"], categories=_dow_order, ordered=True)
             _dow = _dow.sort_values("DayName")
-            _chart_dow = alt.Chart(_dow).mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4, color="#818cf8").encode(
-                x=alt.X("DayName:O", sort=_dow_order, axis=alt.Axis(labelAngle=-25, labelColor="#8b949e", titleColor="#8b949e"), title="Day"),
-                y=alt.Y("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Login Count"),
-                tooltip=[alt.Tooltip("DayName:O", title="Day"), alt.Tooltip("Logins:Q", title="Logins")]
-            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
-            st.altair_chart(_chart_dow, use_container_width=True)
+            def _make_dow_chart():
+                return (
+                    alt.Chart(_dow)
+                    .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4, color="#818cf8")
+                    .encode(
+                        x=alt.X("DayName:O", sort=_dow_order, axis=alt.Axis(labelAngle=-25, labelColor="#8b949e", titleColor="#8b949e"), title="Day"),
+                        y=alt.Y("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Login Count"),
+                        tooltip=[alt.Tooltip("DayName:O", title="Day"), alt.Tooltip("Logins:Q", title="Logins")]
+                    )
+                    .properties(height=260, background="transparent")
+                    .configure_view(strokeWidth=0)
+                )
+            _chart_panel(
+                "dow",
+                """<p class='section-label'><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Logins by Day of Week</p>""",
+                _make_dow_chart,
+                _dow[["DayName", "Logins"]],
+            )
 
         # ── Charts Row 2: Peak Hour + Top Users ───────────────────────────────
         ch_col3, ch_col4 = st.columns(2)
 
         with ch_col3:
-            st.markdown("""<p class='section-label'>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                Peak Login Hours</p>""", unsafe_allow_html=True)
             _hourly = _login_df.groupby("Hour").size().reset_index(name="Logins")
             _all_hours = pd.DataFrame({"Hour": range(24)})
             _hourly = _all_hours.merge(_hourly, on="Hour", how="left").fillna(0)
             _hourly["Logins"] = _hourly["Logins"].astype(int)
             _hourly["HourLabel"] = _hourly["Hour"].apply(lambda h: f"{h:02d}:00")
-            _chart_hour = alt.Chart(_hourly).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
-                x=alt.X("HourLabel:O", sort=None, axis=alt.Axis(labelAngle=-45, labelColor="#8b949e", titleColor="#8b949e", labelFontSize=9), title="Hour (IST)"),
-                y=alt.Y("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Logins"),
-                color=alt.Color("Logins:Q", scale=alt.Scale(scheme="blues"), legend=None),
-                tooltip=[alt.Tooltip("HourLabel:O", title="Hour"), alt.Tooltip("Logins:Q", title="Logins")]
-            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
-            st.altair_chart(_chart_hour, use_container_width=True)
             _peak_label = f"{_peak_hour:02d}:00 – {_peak_hour+1:02d}:00"
+            def _make_hour_chart():
+                return (
+                    alt.Chart(_hourly)
+                    .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+                    .encode(
+                        x=alt.X("HourLabel:O", sort=None, axis=alt.Axis(labelAngle=-45, labelColor="#8b949e", titleColor="#8b949e", labelFontSize=9), title="Hour (IST)"),
+                        y=alt.Y("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Logins"),
+                        color=alt.Color("Logins:Q", scale=alt.Scale(scheme="blues"), legend=None),
+                        tooltip=[alt.Tooltip("HourLabel:O", title="Hour"), alt.Tooltip("Logins:Q", title="Logins")]
+                    )
+                    .properties(height=260, background="transparent")
+                    .configure_view(strokeWidth=0)
+                )
+            _chart_panel(
+                "hour",
+                """<p class='section-label'><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Peak Login Hours</p>""",
+                _make_hour_chart,
+                _hourly[["HourLabel", "Logins"]].rename(columns={"HourLabel": "Hour (IST)"}),
+            )
             st.markdown(f'<p style="font-size:0.75rem;color:#8b949e;display:flex;align-items:center;gap:5px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Busiest: <b style="color:#e6edf3;">{_peak_label} IST</b></p>', unsafe_allow_html=True)
 
         with ch_col4:
-            st.markdown("""<p class='section-label'>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                Most Active Users</p>""", unsafe_allow_html=True)
             _top_users = _login_df.groupby("Username").size().reset_index(name="Logins").sort_values("Logins", ascending=False).head(10)
-            _chart_users = alt.Chart(_top_users).mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4, color="#f472b6").encode(
-                x=alt.X("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Login Count"),
-                y=alt.Y("Username:N", sort="-x", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="User"),
-                tooltip=[alt.Tooltip("Username:N", title="User"), alt.Tooltip("Logins:Q", title="Logins")]
-            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
-            st.altair_chart(_chart_users, use_container_width=True)
+            # Dynamic height: 32px per user bar, min 260
+            _users_h = max(260, len(_top_users) * 32)
+            def _make_users_chart():
+                return (
+                    alt.Chart(_top_users)
+                    .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4, color="#f472b6")
+                    .encode(
+                        x=alt.X("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Login Count"),
+                        y=alt.Y("Username:N", sort="-x", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e", labelLimit=150), title="User"),
+                        tooltip=[alt.Tooltip("Username:N", title="User"), alt.Tooltip("Logins:Q", title="Logins")]
+                    )
+                    .properties(height=_users_h, background="transparent")
+                    .configure_view(strokeWidth=0)
+                )
+            _chart_panel(
+                "users",
+                """<p class='section-label'><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Most Active Users</p>""",
+                _make_users_chart,
+                _top_users[["Username", "Logins"]],
+            )
 
         # ── Charts Row 3: Action Breakdown + Login vs Logout ──────────────────
         ch_col5, ch_col6 = st.columns(2)
 
         with ch_col5:
-            st.markdown("""<p class='section-label'>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                Action Breakdown</p>""", unsafe_allow_html=True)
             _actions = _df_logs.groupby("Action").size().reset_index(name="Count")
             _action_colors = {"login": "#34d399", "logout": "#f87171", "register": "#38bdf8", "password_reset": "#fbbf24"}
             _actions["Color"] = _actions["Action"].map(lambda a: _action_colors.get(a, "#a78bfa"))
-            _chart_actions = alt.Chart(_actions).mark_arc(innerRadius=55, outerRadius=100).encode(
-                theta=alt.Theta("Count:Q"),
-                color=alt.Color("Color:N", scale=None, legend=alt.Legend(labelColor="#8b949e", titleColor="#8b949e")),
-                tooltip=[alt.Tooltip("Action:N", title="Action"), alt.Tooltip("Count:Q", title="Count")]
-            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
-            st.altair_chart(_chart_actions, use_container_width=True)
+            def _make_actions_chart():
+                return (
+                    alt.Chart(_actions)
+                    .mark_arc(innerRadius=55, outerRadius=100)
+                    .encode(
+                        theta=alt.Theta("Count:Q"),
+                        color=alt.Color("Color:N", scale=None, legend=alt.Legend(labelColor="#8b949e", titleColor="#8b949e")),
+                        tooltip=[alt.Tooltip("Action:N", title="Action"), alt.Tooltip("Count:Q", title="Count")]
+                    )
+                    .properties(height=260, background="transparent")
+                    .configure_view(strokeWidth=0)
+                )
+            _chart_panel(
+                "actions",
+                """<p class='section-label'><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Action Breakdown</p>""",
+                _make_actions_chart,
+                _actions[["Action", "Count"]],
+            )
 
         with ch_col6:
-            st.markdown("""<p class='section-label'>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                Login vs Logout Over Time</p>""", unsafe_allow_html=True)
             _ll = _df_logs[_df_logs["Action"].isin(["login","logout"])].copy()
             _ll["Date"] = _ll["Date"].astype(str)
             _ll_grouped = _ll.groupby(["Date","Action"]).size().reset_index(name="Count")
-            _chart_ll = alt.Chart(_ll_grouped).mark_line(point=True, strokeWidth=2).encode(
-                x=alt.X("Date:O", axis=alt.Axis(labelAngle=-35, labelColor="#8b949e", titleColor="#8b949e"), title="Date"),
-                y=alt.Y("Count:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Count"),
-                color=alt.Color("Action:N", scale=alt.Scale(domain=["login","logout"], range=["#34d399","#f87171"]),
-                                legend=alt.Legend(labelColor="#c9d1d9", titleColor="#8b949e")),
-                tooltip=[alt.Tooltip("Date:O"), alt.Tooltip("Action:N"), alt.Tooltip("Count:Q")]
-            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
-            st.altair_chart(_chart_ll, use_container_width=True)
+            _ll_dates = _ll_grouped["Date"].nunique()
+            _ll_w = max(260, _ll_dates * 28)
+            def _make_ll_chart():
+                return (
+                    alt.Chart(_ll_grouped)
+                    .mark_line(point=True, strokeWidth=2)
+                    .encode(
+                        x=alt.X("Date:O", axis=alt.Axis(labelAngle=-45, labelColor="#8b949e", titleColor="#8b949e", labelFontSize=10), title="Date"),
+                        y=alt.Y("Count:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Count"),
+                        color=alt.Color("Action:N", scale=alt.Scale(domain=["login","logout"], range=["#34d399","#f87171"]),
+                                        legend=alt.Legend(labelColor="#c9d1d9", titleColor="#8b949e")),
+                        tooltip=[alt.Tooltip("Date:O"), alt.Tooltip("Action:N"), alt.Tooltip("Count:Q")]
+                    )
+                    .properties(height=260, width=_ll_w, background="transparent")
+                    .configure_view(strokeWidth=0)
+                    .configure_axis(labelLimit=120)
+                )
+            _chart_panel(
+                "ll",
+                """<p class='section-label'><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Login vs Logout Over Time</p>""",
+                _make_ll_chart,
+                _ll_grouped,
+            )
 
     else:
         st.markdown("""
@@ -2635,15 +2716,15 @@ if st.session_state.username == "admin":
     </div>""", unsafe_allow_html=True)
 # Always-visible tabs
 tab_labels = [
-    "📊 Dashboard",
-    "🧾 Resume Builder",
-    "💼 Job Search",
-    "📚 Course Recommendation"
+    "Dashboard",
+    "Resume Builder",
+    "Job Search",
+    "Course Recommendation"
 ]
 
 # Add Admin tab only for admin user
 if st.session_state.username == "admin":
-    tab_labels.append("📁 Admin DB View")
+    tab_labels.append("Admin DB View")
 
 # Create tabs dynamically
 tabs = st.tabs(tab_labels)
