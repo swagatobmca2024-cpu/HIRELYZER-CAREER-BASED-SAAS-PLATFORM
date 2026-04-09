@@ -1874,34 +1874,45 @@ if not st.session_state.get("authenticated", False):
 
                     if st.button("Sign In", key="login_btn", use_container_width=True):
                         if user.strip() and pwd.strip():
-                            status, message, _uname = send_login_link(user.strip(), pwd.strip())
-                            if status == "link_sent":
-                                # Mask the email before storing — never show full address on screen
-                                def _mask_email(e: str) -> str:
-                                    try:
-                                        local, domain = e.split("@", 1)
-                                        visible = local[:2] if len(local) >= 2 else local[:1]
-                                        stars = "*" * min(5, max(2, len(local) - 2))
-                                        return f"{visible}{stars}@{domain}"
-                                    except Exception:
-                                        return "your registered email"
-                                _raw_email = message.split("**")[1] if "**" in message else ""
-                                # Fetch actual email from DB for masking if user logged in with username
-                                if "@" in user.strip():
-                                    _masked_email = _mask_email(user.strip())
-                                else:
-                                    # We only have username — show generic masked hint
+                            _is_admin = user.strip().lower() in ("admin",)
+
+                            if _is_admin:
+                                # ── Admin: magic link flow ──
+                                status, message, _uname = send_login_link(user.strip(), pwd.strip())
+                                if status == "link_sent":
+                                    def _mask_email(e: str) -> str:
+                                        try:
+                                            local, domain = e.split("@", 1)
+                                            visible = local[:2] if len(local) >= 2 else local[:1]
+                                            stars = "*" * min(5, max(2, len(local) - 2))
+                                            return f"{visible}{stars}@{domain}"
+                                        except Exception:
+                                            return "your registered email"
                                     _masked_email = "your registered email"
-                                st.session_state["_magic_link_pending"] = True
-                                st.session_state["_magic_link_email"] = _masked_email
-                                notify("login", "success", "📧 Login link sent! Check your inbox and click the link to sign in.")
-                                st.rerun()
-                            elif status == "bad_creds":
-                                notify("login", "error", message)
-                                st.rerun()
+                                    st.session_state["_magic_link_pending"] = True
+                                    st.session_state["_magic_link_email"] = _masked_email
+                                    notify("login", "success", "📧 Login link sent to admin email! Click it to sign in.")
+                                    st.rerun()
+                                elif status == "bad_creds":
+                                    notify("login", "error", message)
+                                    st.rerun()
+                                else:
+                                    notify("login", "error", message)
+                                    st.rerun()
                             else:
-                                notify("login", "error", message)
-                                st.rerun()
+                                # ── Regular users: direct login ──
+                                success, saved_key = verify_user(user.strip(), pwd.strip())
+                                if success:
+                                    st.session_state.authenticated = True
+                                    if saved_key:
+                                        st.session_state["user_groq_key"] = saved_key
+                                    log_user_action(st.session_state.username, "login")
+                                    notify("login", "success", "✅ Login successful!")
+                                    time.sleep(3.0)
+                                    st.rerun()
+                                else:
+                                    notify("login", "error", "❌ Invalid credentials. Please try again.")
+                                    st.rerun()
                         else:
                             notify("login", "warning", "⚠️ Please enter your username/email and password.")
                             st.rerun()
