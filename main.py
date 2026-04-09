@@ -2426,36 +2426,214 @@ if st.session_state.get("authenticated"):
 if st.session_state.username == "admin":
     st.markdown("""
     <div class="admin-header">
-        <h2>⬡ Admin Control Panel</h2>
+        <h2>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f8cff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:8px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Admin Control Panel</h2>
     </div>
     """, unsafe_allow_html=True)
 
     # Metrics row — cached, no Supabase hit on every rerun
     _reg_users, _logins_today, _logs = _cached_admin_metrics()
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("👤 Total Registered Users", _reg_users)
-    with col2:
-        st.metric("📅 Logins Today (IST)", _logins_today)
 
-    # Removed API key usage section (no longer tracked)
-    # Activity log
-    st.markdown("<p class='section-label'>📋 Activity Log</p>", unsafe_allow_html=True)
-    logs = _logs
-    if logs:
-        st.dataframe(
-            {
-                "Username": [log[0] for log in logs],
-                "Action": [log[1] for log in logs],
-                "Timestamp": [log[2] for log in logs]
-            },
-            use_container_width=True
-        )
+    # ── Build analytics dataframe from logs ──────────────────────────────────
+    import pandas as pd
+    from collections import Counter
+
+    if _logs:
+        _df_logs = pd.DataFrame(_logs, columns=["Username", "Action", "Timestamp"])
+        _df_logs["Timestamp"] = pd.to_datetime(_df_logs["Timestamp"], errors="coerce")
+        _df_logs = _df_logs.dropna(subset=["Timestamp"])
+        _df_logs["Date"]     = _df_logs["Timestamp"].dt.date
+        _df_logs["Hour"]     = _df_logs["Timestamp"].dt.hour
+        _df_logs["DayName"]  = _df_logs["Timestamp"].dt.day_name()
+        _login_df  = _df_logs[_df_logs["Action"] == "login"]
+        _logout_df = _df_logs[_df_logs["Action"] == "logout"]
     else:
-        st.info("No logs found yet.")
+        _df_logs = pd.DataFrame(columns=["Username","Action","Timestamp","Date","Hour","DayName"])
+        _login_df  = _df_logs.copy()
+        _logout_df = _df_logs.copy()
+
+    # ── KPI Row ───────────────────────────────────────────────────────────────
+    _total_logins   = len(_login_df)
+    _unique_users   = _login_df["Username"].nunique() if not _login_df.empty else 0
+    _total_actions  = len(_df_logs)
+    _peak_hour      = int(_login_df["Hour"].mode()[0]) if not _login_df.empty else 0
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric(label="Registered Users", value=_reg_users)
+        st.markdown('<p style="font-size:0.7rem;color:#8b949e;margin-top:-14px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Total accounts</p>', unsafe_allow_html=True)
+    with col2:
+        st.metric(label="Logins Today (IST)", value=_logins_today)
+        st.markdown('<p style="font-size:0.7rem;color:#8b949e;margin-top:-14px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Since midnight IST</p>', unsafe_allow_html=True)
+    with col3:
+        st.metric(label="Total Logins (All Time)", value=_total_logins)
+        st.markdown('<p style="font-size:0.7rem;color:#8b949e;margin-top:-14px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Cumulative logins</p>', unsafe_allow_html=True)
+    with col4:
+        st.metric(label="Peak Hour", value=f"{_peak_hour:02d}:00")
+        st.markdown('<p style="font-size:0.7rem;color:#8b949e;margin-top:-14px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Busiest login hour</p>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Charts Row 1: Logins per Day + Logins by Day of Week ─────────────────
+    if not _login_df.empty:
+        ch_col1, ch_col2 = st.columns(2)
+
+        with ch_col1:
+            st.markdown("""<p class='section-label'>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                Daily Login Trend</p>""", unsafe_allow_html=True)
+            _daily = _login_df.groupby("Date").size().reset_index(name="Logins")
+            _daily["Date"] = _daily["Date"].astype(str)
+            _max_day = _daily.loc[_daily["Logins"].idxmax(), "Date"]
+            _min_day = _daily.loc[_daily["Logins"].idxmin(), "Date"]
+            _daily["Color"] = _daily["Date"].apply(
+                lambda d: "#34d399" if d == _max_day else ("#f87171" if d == _min_day else "#38bdf8")
+            )
+            _chart_daily = alt.Chart(_daily).mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4).encode(
+                x=alt.X("Date:O", axis=alt.Axis(labelAngle=-35, labelColor="#8b949e", titleColor="#8b949e"), title="Date"),
+                y=alt.Y("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Login Count"),
+                color=alt.Color("Color:N", scale=None, legend=None),
+                tooltip=[alt.Tooltip("Date:O", title="Date"), alt.Tooltip("Logins:Q", title="Logins")]
+            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
+            st.altair_chart(_chart_daily, use_container_width=True)
+            st.markdown(f'<p style="font-size:0.75rem;color:#8b949e;display:flex;gap:14px;"><span style="color:#34d399;display:flex;align-items:center;gap:4px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="#34d399"><circle cx="12" cy="12" r="10"/></svg> Peak: <b style="color:#e6edf3;">{_max_day}</b></span><span style="color:#f87171;display:flex;align-items:center;gap:4px;"><svg width="10" height="10" viewBox="0 0 24 24" fill="#f87171"><circle cx="12" cy="12" r="10"/></svg> Lowest: <b style="color:#e6edf3;">{_min_day}</b></span></p>', unsafe_allow_html=True)
+
+        with ch_col2:
+            st.markdown("""<p class='section-label'>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Logins by Day of Week</p>""", unsafe_allow_html=True)
+            _dow_order = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+            _dow = _login_df.groupby("DayName").size().reset_index(name="Logins")
+            _dow["DayName"] = pd.Categorical(_dow["DayName"], categories=_dow_order, ordered=True)
+            _dow = _dow.sort_values("DayName")
+            _chart_dow = alt.Chart(_dow).mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4, color="#818cf8").encode(
+                x=alt.X("DayName:O", sort=_dow_order, axis=alt.Axis(labelAngle=-25, labelColor="#8b949e", titleColor="#8b949e"), title="Day"),
+                y=alt.Y("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Login Count"),
+                tooltip=[alt.Tooltip("DayName:O", title="Day"), alt.Tooltip("Logins:Q", title="Logins")]
+            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
+            st.altair_chart(_chart_dow, use_container_width=True)
+
+        # ── Charts Row 2: Peak Hour + Top Users ───────────────────────────────
+        ch_col3, ch_col4 = st.columns(2)
+
+        with ch_col3:
+            st.markdown("""<p class='section-label'>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Peak Login Hours</p>""", unsafe_allow_html=True)
+            _hourly = _login_df.groupby("Hour").size().reset_index(name="Logins")
+            _all_hours = pd.DataFrame({"Hour": range(24)})
+            _hourly = _all_hours.merge(_hourly, on="Hour", how="left").fillna(0)
+            _hourly["Logins"] = _hourly["Logins"].astype(int)
+            _hourly["HourLabel"] = _hourly["Hour"].apply(lambda h: f"{h:02d}:00")
+            _chart_hour = alt.Chart(_hourly).mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3).encode(
+                x=alt.X("HourLabel:O", sort=None, axis=alt.Axis(labelAngle=-45, labelColor="#8b949e", titleColor="#8b949e", labelFontSize=9), title="Hour (IST)"),
+                y=alt.Y("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Logins"),
+                color=alt.Color("Logins:Q", scale=alt.Scale(scheme="blues"), legend=None),
+                tooltip=[alt.Tooltip("HourLabel:O", title="Hour"), alt.Tooltip("Logins:Q", title="Logins")]
+            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
+            st.altair_chart(_chart_hour, use_container_width=True)
+            _peak_label = f"{_peak_hour:02d}:00 – {_peak_hour+1:02d}:00"
+            st.markdown(f'<p style="font-size:0.75rem;color:#8b949e;display:flex;align-items:center;gap:5px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Busiest: <b style="color:#e6edf3;">{_peak_label} IST</b></p>', unsafe_allow_html=True)
+
+        with ch_col4:
+            st.markdown("""<p class='section-label'>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Most Active Users</p>""", unsafe_allow_html=True)
+            _top_users = _login_df.groupby("Username").size().reset_index(name="Logins").sort_values("Logins", ascending=False).head(10)
+            _chart_users = alt.Chart(_top_users).mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4, color="#f472b6").encode(
+                x=alt.X("Logins:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Login Count"),
+                y=alt.Y("Username:N", sort="-x", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="User"),
+                tooltip=[alt.Tooltip("Username:N", title="User"), alt.Tooltip("Logins:Q", title="Logins")]
+            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
+            st.altair_chart(_chart_users, use_container_width=True)
+
+        # ── Charts Row 3: Action Breakdown + Login vs Logout ──────────────────
+        ch_col5, ch_col6 = st.columns(2)
+
+        with ch_col5:
+            st.markdown("""<p class='section-label'>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                Action Breakdown</p>""", unsafe_allow_html=True)
+            _actions = _df_logs.groupby("Action").size().reset_index(name="Count")
+            _action_colors = {"login": "#34d399", "logout": "#f87171", "register": "#38bdf8", "password_reset": "#fbbf24"}
+            _actions["Color"] = _actions["Action"].map(lambda a: _action_colors.get(a, "#a78bfa"))
+            _chart_actions = alt.Chart(_actions).mark_arc(innerRadius=55, outerRadius=100).encode(
+                theta=alt.Theta("Count:Q"),
+                color=alt.Color("Color:N", scale=None, legend=alt.Legend(labelColor="#8b949e", titleColor="#8b949e")),
+                tooltip=[alt.Tooltip("Action:N", title="Action"), alt.Tooltip("Count:Q", title="Count")]
+            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
+            st.altair_chart(_chart_actions, use_container_width=True)
+
+        with ch_col6:
+            st.markdown("""<p class='section-label'>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                Login vs Logout Over Time</p>""", unsafe_allow_html=True)
+            _ll = _df_logs[_df_logs["Action"].isin(["login","logout"])].copy()
+            _ll["Date"] = _ll["Date"].astype(str)
+            _ll_grouped = _ll.groupby(["Date","Action"]).size().reset_index(name="Count")
+            _chart_ll = alt.Chart(_ll_grouped).mark_line(point=True, strokeWidth=2).encode(
+                x=alt.X("Date:O", axis=alt.Axis(labelAngle=-35, labelColor="#8b949e", titleColor="#8b949e"), title="Date"),
+                y=alt.Y("Count:Q", axis=alt.Axis(labelColor="#8b949e", titleColor="#8b949e"), title="Count"),
+                color=alt.Color("Action:N", scale=alt.Scale(domain=["login","logout"], range=["#34d399","#f87171"]),
+                                legend=alt.Legend(labelColor="#c9d1d9", titleColor="#8b949e")),
+                tooltip=[alt.Tooltip("Date:O"), alt.Tooltip("Action:N"), alt.Tooltip("Count:Q")]
+            ).properties(height=260, background="transparent").configure_view(strokeWidth=0)
+            st.altair_chart(_chart_ll, use_container_width=True)
+
+    else:
+        st.markdown("""
+        <div style="display:flex;align-items:center;gap:10px;padding:16px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.15);border-radius:8px;color:#8b949e;font-size:0.88rem;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Not enough data yet to render charts. Check back after more users log in.
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Activity Log with filters ─────────────────────────────────────────────
+    st.markdown("""<p class='section-label'>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Activity Log</p>""", unsafe_allow_html=True)
+
+    if _logs:
+        _f1, _f2, _f3 = st.columns([2, 2, 1])
+        with _f1:
+            _all_users = ["All"] + sorted(_df_logs["Username"].unique().tolist())
+            _filter_user = st.selectbox("Filter by User", _all_users, key="admin_filter_user")
+        with _f2:
+            _all_actions = ["All"] + sorted(_df_logs["Action"].unique().tolist())
+            _filter_action = st.selectbox("Filter by Action", _all_actions, key="admin_filter_action")
+        with _f3:
+            _filter_rows = st.selectbox("Show rows", [25, 50, 100, 200, "All"], key="admin_filter_rows")
+
+        _filtered = _df_logs.copy()
+        if _filter_user != "All":
+            _filtered = _filtered[_filtered["Username"] == _filter_user]
+        if _filter_action != "All":
+            _filtered = _filtered[_filtered["Action"] == _filter_action]
+        _filtered = _filtered.sort_values("Timestamp", ascending=False)
+        if _filter_rows != "All":
+            _filtered = _filtered.head(int(_filter_rows))
+
+        st.dataframe(
+            _filtered[["Username", "Action", "Timestamp"]].reset_index(drop=True),
+            use_container_width=True,
+            height=320
+        )
+        st.markdown(f'<p style="font-size:0.75rem;color:#8b949e;display:flex;align-items:center;gap:5px;margin-top:4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Showing <b style="color:#c9d1d9;">{len(_filtered)}</b> of <b style="color:#c9d1d9;">{len(_df_logs)}</b> total records</p>', unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="display:flex;align-items:center;gap:10px;padding:16px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.15);border-radius:8px;color:#8b949e;font-size:0.88rem;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            No logs found yet.
+        </div>""", unsafe_allow_html=True)
 
     st.divider()
-    st.info("ℹ️ Data is stored in Supabase PostgreSQL. Use the Admin DB View tab to export records as CSV.")
+    st.markdown("""
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.15);border-radius:8px;color:#8b949e;font-size:0.82rem;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Data is stored in Supabase PostgreSQL. Use the Admin DB View tab to export records as CSV.
+    </div>""", unsafe_allow_html=True)
 # Always-visible tabs
 tab_labels = [
     "📊 Dashboard",
