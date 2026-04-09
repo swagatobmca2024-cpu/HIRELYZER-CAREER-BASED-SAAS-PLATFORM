@@ -97,6 +97,8 @@ from user_login import (
     check_and_gate_feature,
     record_feature_usage,
     get_usage_count_last_hour,
+    # ── Brute-force protection ──
+    check_brute_force,
 )
 
 # ============================================================
@@ -1900,18 +1902,23 @@ if not st.session_state.get("authenticated", False):
                                     st.rerun()
                             else:
                                 # ── Regular users: direct login ──
-                                success, saved_key = verify_user(_input, pwd.strip())
-                                if success:
-                                    st.session_state.authenticated = True
-                                    if saved_key:
-                                        st.session_state["user_groq_key"] = saved_key
-                                    log_user_action(st.session_state.username, "login")
-                                    notify("login", "success", "✅ Login successful!")
-                                    time.sleep(3.0)
+                                _allowed, _lock_msg = check_brute_force(_input)
+                                if not _allowed:
+                                    notify("login", "error", _lock_msg)
                                     st.rerun()
                                 else:
-                                    notify("login", "error", "❌ Invalid credentials. Please try again.")
-                                    st.rerun()
+                                    success, saved_key = verify_user(_input, pwd.strip())
+                                    if success:
+                                        st.session_state.authenticated = True
+                                        if saved_key:
+                                            st.session_state["user_groq_key"] = saved_key
+                                        log_user_action(st.session_state.username, "login")
+                                        notify("login", "success", "✅ Login successful!")
+                                        time.sleep(3.0)
+                                        st.rerun()
+                                    else:
+                                        notify("login", "error", "❌ Invalid credentials. Please try again.")
+                                        st.rerun()
                         else:
                             notify("login", "warning", "⚠️ Please enter your username/email and password.")
                             st.rerun()
