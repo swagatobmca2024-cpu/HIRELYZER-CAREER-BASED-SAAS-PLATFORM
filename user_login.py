@@ -421,7 +421,7 @@ def send_login_link(username_or_email: str, password: str):
 
     # Stash groq_key in session so verify_login_token can restore it
     st.session_state["_pending_login_groq_key"] = groq_key or ""
-    return "link_sent", f"📧 Login link sent to **{email}**. Check your inbox and click the link to sign in.", actual_username
+    return "link_sent", "📧 Login link sent! Check your inbox and click the link to sign in.", actual_username
 
 
 def verify_login_token(token: str):
