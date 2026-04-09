@@ -2466,19 +2466,127 @@ if st.session_state.username == "admin":
     _total_actions  = len(_df_logs)
     _peak_hour      = int(_login_df["Hour"].mode()[0]) if not _login_df.empty else 0
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric(label="Registered Users", value=_reg_users)
-        st.markdown('<p style="font-size:0.7rem;color:#8b949e;margin-top:-14px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Total accounts</p>', unsafe_allow_html=True)
-    with col2:
-        st.metric(label="Logins Today (IST)", value=_logins_today)
-        st.markdown('<p style="font-size:0.7rem;color:#8b949e;margin-top:-14px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Since midnight IST</p>', unsafe_allow_html=True)
-    with col3:
-        st.metric(label="Total Logins (All Time)", value=_total_logins)
-        st.markdown('<p style="font-size:0.7rem;color:#8b949e;margin-top:-14px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Cumulative logins</p>', unsafe_allow_html=True)
-    with col4:
-        st.metric(label="Peak Hour", value=f"{_peak_hour:02d}:00–{(_peak_hour+1)%24:02d}:00")
-        st.markdown('<p style="font-size:0.7rem;color:#8b949e;margin-top:-14px;display:flex;align-items:center;gap:4px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Busiest login hour</p>', unsafe_allow_html=True)
+    _peak_full = f"{_peak_hour:02d}:00 – {(_peak_hour+1)%24:02d}:00"
+    st.markdown(f"""
+    <style>
+    .kpi-grid {{
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        margin-bottom: 8px;
+    }}
+    .kpi-card {{
+        background: #0d1117;
+        border: 1px solid rgba(56,189,248,0.18);
+        border-radius: 12px;
+        padding: 18px 20px 14px 20px;
+        position: relative;
+        cursor: default;
+        transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
+        overflow: visible;
+    }}
+    .kpi-card:hover {{
+        border-color: rgba(56,189,248,0.55);
+        box-shadow: 0 0 18px rgba(56,189,248,0.15);
+        transform: translateY(-2px);
+    }}
+    .kpi-label {{
+        font-size: 0.78rem;
+        color: #8b949e;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        margin-bottom: 6px;
+    }}
+    .kpi-value {{
+        font-size: 1.95rem;
+        font-weight: 700;
+        color: #e6edf3;
+        line-height: 1.15;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }}
+    .kpi-sub {{
+        font-size: 0.7rem;
+        color: #8b949e;
+        margin-top: 8px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }}
+    /* Tooltip */
+    .kpi-card .kpi-tooltip {{
+        visibility: hidden;
+        opacity: 0;
+        background: #161b22;
+        border: 1px solid rgba(56,189,248,0.4);
+        color: #e6edf3;
+        font-size: 0.8rem;
+        padding: 7px 13px;
+        border-radius: 8px;
+        white-space: nowrap;
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9999;
+        pointer-events: none;
+        transition: opacity 0.2s;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    }}
+    .kpi-card .kpi-tooltip::after {{
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border: 6px solid transparent;
+        border-top-color: rgba(56,189,248,0.4);
+    }}
+    .kpi-card:hover .kpi-tooltip {{
+        visibility: visible;
+        opacity: 1;
+    }}
+    </style>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-tooltip">Total registered accounts: {_reg_users}</div>
+        <div class="kpi-label">Registered Users</div>
+        <div class="kpi-value">{_reg_users}</div>
+        <div class="kpi-sub">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Total accounts
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-tooltip">Logins since midnight IST: {_logins_today}</div>
+        <div class="kpi-label">Logins Today (IST)</div>
+        <div class="kpi-value">{_logins_today}</div>
+        <div class="kpi-sub">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Since midnight IST
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-tooltip">All-time cumulative logins: {_total_logins}</div>
+        <div class="kpi-label">Total Logins (All Time)</div>
+        <div class="kpi-value">{_total_logins}</div>
+        <div class="kpi-sub">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          Cumulative logins
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-tooltip">Busiest login window: {_peak_full} IST</div>
+        <div class="kpi-label">Peak Hour</div>
+        <div class="kpi-value" style="font-size:1.55rem;">{_peak_full}</div>
+        <div class="kpi-sub">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b949e" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Busiest login hour
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
