@@ -2756,6 +2756,12 @@ if st.session_state.username == "admin":
             )
             # Legend below donut
             _total_actions_count = _actions["Count"].sum()
+            # Largest remainder method — guarantees percentages always sum to exactly 100%
+            _exact_pcts = [100 * r["Count"] / _total_actions_count for _, r in _actions.iterrows()]
+            _floored_pcts = [int(x) for x in _exact_pcts]
+            _remainders = sorted(enumerate(_exact_pcts), key=lambda x: x[1] - int(x[1]), reverse=True)
+            for i in range(100 - sum(_floored_pcts)):
+                _floored_pcts[_remainders[i][0]] += 1
             _legend_items = "".join([
                 f'<div style="display:flex;align-items:center;justify-content:space-between;'
                 f'padding:5px 10px;border-radius:6px;background:rgba(255,255,255,0.03);margin-bottom:4px;">'
@@ -2765,10 +2771,10 @@ if st.session_state.username == "admin":
                 f'</span>'
                 f'<span style="color:#8b949e;font-size:0.8rem;">'
                 f'<b style="color:#e6edf3;">{row["Count"]}</b>'
-                f'&nbsp;<span style="font-size:0.72rem;">({100*row["Count"]//_total_actions_count}%)</span>'
+                f'&nbsp;<span style="font-size:0.72rem;">({_floored_pcts[idx]}%)</span>'
                 f'</span>'
                 f'</div>'
-                for _, row in _actions.iterrows()
+                for idx, (_, row) in enumerate(_actions.iterrows())
             ])
             st.markdown(
                 f'<div style="margin-top:6px;">{_legend_items}</div>',
