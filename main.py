@@ -2423,13 +2423,21 @@ if st.session_state.get("authenticated"):
         st.sidebar.success("✅ Cleared saved Groq API key. Now using shared admin key.")
 
 if st.session_state.username == "admin":
-    st.markdown("""
+    _adm_hdr_col, _adm_btn_col = st.columns([6, 1])
+    with _adm_hdr_col:
+        st.markdown("""
     <div class="admin-header">
         <h2>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f8cff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:8px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         Admin Control Panel</h2>
     </div>
     """, unsafe_allow_html=True)
+    with _adm_btn_col:
+        st.markdown("<div style='padding-top:18px;'>", unsafe_allow_html=True)
+        if st.button("↻ Refresh", key="admin_refresh_btn", help="Force fetch latest data from database", use_container_width=True):
+            _cached_admin_metrics.clear()
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # Metrics row — cached, no Supabase hit on every rerun
     _reg_users, _logins_today, _logs = _cached_admin_metrics()
