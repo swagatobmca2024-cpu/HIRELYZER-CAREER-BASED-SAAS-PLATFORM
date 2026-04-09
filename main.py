@@ -89,6 +89,10 @@ from user_login import (
     update_password_by_email,
     is_strong_password,
     domain_has_mx_record,
+    # ── Magic link login ──
+    send_login_link,
+    verify_login_token,
+    cleanup_expired_login_tokens,
     # ── Usage rate limiting ──
     check_and_gate_feature,
     record_feature_usage,
@@ -288,6 +292,26 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
 # ------------------- Initialize -------------------
 # ✅ Initialize database in persistent storage
 create_user_table()
+cleanup_expired_login_tokens()
+
+# ── Magic link token check — runs on every page load ──────────────────────────
+# When user clicks the login link, ?login_token=<uuid> is in the URL.
+# We handle it here BEFORE rendering any UI so the session is set instantly.
+if not st.session_state.get("authenticated"):
+    _qp = st.query_params
+    _token = _qp.get("login_token", "")
+    if _token:
+        _ok, _result = verify_login_token(_token)
+        if _ok:
+            log_user_action(st.session_state.username, "login")
+            # Clear the token from the URL so a refresh doesn't re-trigger
+            st.query_params.clear()
+            st.rerun()
+        else:
+            # Show the error on the login page — don't block the app
+            st.session_state["_token_error"] = _result
+            st.query_params.clear()
+# ──────────────────────────────────────────────────────────────────────────────
 
 # ------------------- Tab-Specific Notification System -------------------
 if "login_notification" not in st.session_state:
@@ -1812,37 +1836,68 @@ if not st.session_state.get("authenticated", False):
         with login_tab:
             # Show login or forgot password flow based on reset_stage
             if st.session_state.reset_stage == "none":
-                # Normal Login UI
-                st.markdown("""<h3 style='color:#9aa4af; text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:0.82rem; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:24px;'>Welcome Back</h3>""", unsafe_allow_html=True)
 
-                user = st.text_input("Username or Email", key="login_user")
-                pwd = st.text_input("Password", type="password", key="login_pass")
+                # ── Show token error if magic link was invalid ──
+                if st.session_state.get("_token_error"):
+                    st.error(st.session_state.pop("_token_error"))
 
-                # Render notification area (reserves space)
-                render_notification("login")
-
-                if st.button("Sign In", key="login_btn", use_container_width=True):
-                    success, saved_key = verify_user(user.strip(), pwd.strip())
-                    if success:
-                        st.session_state.authenticated = True
-                        # username is already set in session by verify_user()
-                        if saved_key:
-                            st.session_state["user_groq_key"] = saved_key
-                        log_user_action(st.session_state.username, "login")
-
-                        notify("login", "success", "✅ Login successful!")
-                        time.sleep(3.0)
+                # ── Pending magic link state ──
+                if st.session_state.get("_magic_link_pending"):
+                    _pending_email_display = st.session_state.get("_magic_link_email", "your email")
+                    st.markdown(f"""
+                    <div style='text-align:center; padding:28px 12px;'>
+                        <div style='font-size:2.2rem; margin-bottom:10px;'>📬</div>
+                        <div style='color:#e6edf3; font-size:1.05rem; font-weight:600; margin-bottom:8px;'>Check your inbox!</div>
+                        <div style='color:#8b949e; font-size:0.88rem; line-height:1.6;'>
+                            A login link has been sent to<br>
+                            <strong style='color:#38bdf8;'>{_pending_email_display}</strong><br><br>
+                            Click the link in the email to sign in.<br>
+                            <span style='font-size:0.8rem;'>Link expires in 10 minutes.</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    render_notification("login")
+                    if st.button("↩️ Back / Try Again", key="magic_link_back_btn", use_container_width=True):
+                        st.session_state.pop("_magic_link_pending", None)
+                        st.session_state.pop("_magic_link_email", None)
                         st.rerun()
-                    else:
-                        notify("login", "error", "❌ Invalid credentials. Please try again.")
+
+                else:
+                    # Normal Login UI
+                    st.markdown("""<h3 style='color:#9aa4af; text-align:center; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif; font-size:0.82rem; font-weight:500; letter-spacing:0.06em; text-transform:uppercase; margin-bottom:24px;'>Welcome Back</h3>""", unsafe_allow_html=True)
+
+                    user = st.text_input("Username or Email", key="login_user")
+                    pwd = st.text_input("Password", type="password", key="login_pass")
+
+                    # Render notification area (reserves space)
+                    render_notification("login")
+
+                    if st.button("Sign In", key="login_btn", use_container_width=True):
+                        if user.strip() and pwd.strip():
+                            status, message, _uname = send_login_link(user.strip(), pwd.strip())
+                            if status == "link_sent":
+                                # Determine the email shown in the pending screen
+                                _disp = user.strip() if "@" in user.strip() else f"your registered email"
+                                st.session_state["_magic_link_pending"] = True
+                                st.session_state["_magic_link_email"] = _disp
+                                notify("login", "success", message)
+                                st.rerun()
+                            elif status == "bad_creds":
+                                notify("login", "error", message)
+                                st.rerun()
+                            else:
+                                notify("login", "error", message)
+                                st.rerun()
+                        else:
+                            notify("login", "warning", "⚠️ Please enter your username/email and password.")
+                            st.rerun()
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    # Forgot Password Link
+                    if st.button("Forgot Password?", key="forgot_pw_link"):
+                        st.session_state.reset_stage = "request_email"
                         st.rerun()
-
-                st.markdown("<br>", unsafe_allow_html=True)
-
-                # Forgot Password Link
-                if st.button("Forgot Password?", key="forgot_pw_link"):
-                    st.session_state.reset_stage = "request_email"
-                    st.rerun()
 
             # ============================================================
             # FORGOT PASSWORD FLOW - Stage 1: Request Email
