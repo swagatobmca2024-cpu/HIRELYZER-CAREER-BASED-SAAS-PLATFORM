@@ -4411,7 +4411,7 @@ Work Experience → Projects → Education → Certifications & Links
 
 CONTACT HEADER: Full Name | Job Title | Email | Phone | Location | LinkedIn URL | GitHub/Portfolio URL
 
-PROFESSIONAL SUMMARY (2–3 sentences):
+PROFESSIONAL SUMMARY (2–3 sentences, max 80 words):
   FIRST — assess the candidate's actual experience level from the resume:
   • No experience / student / fresher → use "Aspiring [Role]" or "Recent [Degree] graduate"
   • 0–2 years → "Entry-level" or "Junior"
@@ -4545,7 +4545,7 @@ FIELD RULES:
 - "skills" = flat array of individual skill strings. Minimum 8. No duplicates.
 - "soft_skills" = professional competency phrases. Must NOT duplicate items in "skills".
 - "contact.*" = extract exactly as written. Use "" not null for missing fields.
-- "summary" = 2–3 sentences, max 80 words, no pronouns. Must be the COMPLETE summary — do NOT truncate mid-sentence. Must match the Professional Summary written in Part 1 exactly. MUST reflect actual experience level: freshers get "Aspiring/Entry-level", never "experienced professional" or fabricated years of experience.
+- "summary" = 2–3 sentences, max 80 words, no pronouns. Must be the COMPLETE summary — do NOT truncate mid-sentence. MUST reflect actual experience level: freshers get "Aspiring/Entry-level", never "experienced professional" or fabricated years of experience.
 - "experience" = if candidate has NO work experience AND no internships, set to [] (empty array). Never populate with placeholder roles.
   If only internships exist, include them with role/company/duration/bullets — DO NOT write "0 years" in any field.
 - "experience[].description" = 1-sentence role scope, unique from bullets.
@@ -4925,46 +4925,18 @@ def _build_contact_header(doc, data: dict, name_size: int, name_color_rgb: tuple
     portfolio_raw= contact.get("portfolio", "") or ""
     github_val   = _clean(github_raw if github_raw and github_raw not in ("", "[Not Provided]") else portfolio_raw)
 
-    _link_color = (
-        int(contact_color_hex[0:2], 16),
-        int(contact_color_hex[2:4], 16),
-        int(contact_color_hex[4:6], 16),
-    )
+    parts = [email_val, phone_val, location_val, linkedin_val, github_val]
+    contact_line = "  |  ".join(parts)
 
     p_contact = doc.add_paragraph()
     p_contact.clear()
+    r_contact = p_contact.add_run(contact_line)
+    r_contact.font.size = Pt(contact_size)
+    r_contact.font.name = contact_font
+    r_contact.font.color.rgb = cc
     p_contact.alignment = 1
     p_contact.paragraph_format.space_before = Pt(2)
     p_contact.paragraph_format.space_after = Pt(6)
-
-    def _plain_run(para, text):
-        r = para.add_run(text)
-        r.font.size = Pt(contact_size)
-        r.font.name = contact_font
-        r.font.color.rgb = cc
-        return r
-
-    SEP = "  |  "
-    plain_parts = [email_val, phone_val, location_val]
-    _plain_run(p_contact, SEP.join(plain_parts))
-
-    # LinkedIn — clickable if it looks like a URL
-    _plain_run(p_contact, SEP)
-    if linkedin_val.startswith("http"):
-        _add_hyperlink(p_contact, linkedin_val, linkedin_val,
-                       font_name=contact_font, font_size=contact_size,
-                       color_rgb=_link_color)
-    else:
-        _plain_run(p_contact, linkedin_val)
-
-    # GitHub/Portfolio — clickable if it looks like a URL
-    _plain_run(p_contact, SEP)
-    if github_val.startswith("http"):
-        _add_hyperlink(p_contact, github_val, github_val,
-                       font_name=contact_font, font_size=contact_size,
-                       color_rgb=_link_color)
-    else:
-        _plain_run(p_contact, github_val)
 
     # ── ④ Thin bottom rule below contact block ────────────────────────────
     # Signals end of header to ATS parsers and improves recruiter readability.
@@ -8471,24 +8443,7 @@ with tab1:
 def generate_resume_report_html(resume):
     candidate_name = resume.get('Candidate Name', 'Not Found')
     resume_name = resume.get('Resume Name', 'Unknown')
-    _raw_rewritten = resume.get('Rewritten Text', '')
-    if "### 🎯 Suggested Job Titles" in _raw_rewritten:
-        _resume_part, _jobs_part = _raw_rewritten.split("### 🎯 Suggested Job Titles", 1)
-    else:
-        _resume_part, _jobs_part = _raw_rewritten, ""
-    rewritten_text = _resume_part.replace("\n", "<br/>")
-    _job_titles_html = ""
-    if _jobs_part:
-        _job_titles_html = "<div class='section-title'>Suggested Job Titles</div><div class='box'><ul>"
-        for _line in _jobs_part.split('\n'):
-            _m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—-]?\s*(.*)', _line.strip())
-            if _m:
-                _title = _m.group(1).strip()
-                _desc = re.sub(r'https?://\S+', '', _m.group(2)).strip().rstrip('.')
-                _encoded = urllib.parse.quote(_title)
-                _url = f"https://www.linkedin.com/jobs/search/?keywords={_encoded}&location=KOLKATA%2CINDIA"
-                _job_titles_html += f'<li><b><a href="{_url}">{_title}</a></b>{(" — " + _desc) if _desc else ""}</li>'
-        _job_titles_html += "</ul></div>"
+    rewritten_text = resume.get('Rewritten Text', '').replace("\n", "<br/>")
 
     masculine_words_list = resume.get("Detected Masculine Words", [])
     masculine_words = "".join(
@@ -8638,8 +8593,6 @@ def generate_resume_report_html(resume):
 
     <h2>Rewritten Bias-Free Resume</h2>
     <div class="box">{rewritten_text}</div>
-
-    {_job_titles_html}
 
     </body>
     </html>
@@ -9069,41 +9022,7 @@ with tab1:
                                     letter-spacing:0.08em;text-transform:uppercase;font-family:-apple-system,sans-serif;">
                             Job Title Suggestions (for reference only — not included in resume files)
                         </div>""", unsafe_allow_html=True)
-
-                        # Parse titles and build inline LinkedIn links beside each title
-                        location = "KOLKATA%2CINDIA"
-                        lines = job_suggestions_display.split('\n')
-                        items_html = ""
-                        for line in lines:
-                            if re.match(r'^[🔗\s]*https?://', line.strip()):
-                                continue
-                            m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—-]?\s*(.*)', line.strip())
-                            if m:
-                                title = m.group(1).strip()
-                                desc = re.sub(r'https?://\S+', '', m.group(2)).strip().rstrip('.')
-                                desc = re.sub(r'🔗', '', desc).strip()
-                                encoded = urllib.parse.quote(title)
-                                linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={location}"
-                                link_icon = (
-                                    '<a href="' + linkedin_url + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
-                                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" '
-                                    'stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
-                                    'style="display:inline-block;vertical-align:middle;">'
-                                    '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'
-                                    '<polyline points="15 3 21 3 21 9"/>'
-                                    '<line x1="10" y1="14" x2="21" y2="3"/>'
-                                    '</svg></a>'
-                                )
-                                items_html += (
-                                    f'<div style="margin-bottom:8px;font-size:0.88rem;color:#c9d1d9;">'
-                                    f'<b style="color:#e6edf3;">{title}</b>{link_icon}'
-                                    f'{(" — " + desc) if desc else ""}'
-                                    f'</div>'
-                                )
-                        if items_html:
-                            st.markdown(f'<div style="margin-top:4px;">{items_html}</div>', unsafe_allow_html=True)
-                        else:
-                            st.markdown(job_suggestions_display)
+                        st.markdown(job_suggestions_display)
 
                     # ── 3-Template DOCX Download Buttons (Optimization Module — JSON data only) ──
                     st.markdown("""
