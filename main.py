@@ -4450,7 +4450,7 @@ PROJECTS: Name | Tech Stack | Duration
   • [Achievement bullet with action verb and metric]
   (3–5 bullets)
 
-EDUCATION: Degree, Major | Institution | Graduation Year | CGPA (if present, e.g. "8.5/10")
+EDUCATION: Degree, Major | Institution | Graduation Year | CGPA/Percentage (preserve exactly as written — e.g. "CGPA: 8.5/10" or "Percentage: 78.3%" — NEVER convert between the two, NEVER relabel a percentage as CGPA)
   • Include honors, distinctions, or relevant coursework if mentioned in the original resume.
 CERTIFICATIONS: • Name | Issuing Body | MMM YYYY
 
@@ -4551,7 +4551,7 @@ FIELD RULES:
 - "experience[].description" = 1-sentence role scope, unique from bullets.
 - "experience[].bullets" = 3–5 bullets each. Strong verb + task + tech + impact.
 - "projects[].bullets" = must NOT restate experience bullets.
-- "education[].cgpa" = extract CGPA/GPA exactly as written (e.g., "8.5/10", "3.9/4.0", "First Class"). Use "" if not present.
+- "education[].cgpa" = extract the grade/score EXACTLY as written in the resume. If it is a percentage (e.g. "78.3%", "87.4%"), store it as-is (e.g. "78.3%"). If it is a CGPA/GPA (e.g. "8.44", "8.5/10", "3.9/4.0"), store it as-is. NEVER convert a percentage to CGPA or vice versa. NEVER relabel a percentage as CGPA. Use "" if not present.
 - "education[].bullets" = include honors, distinctions, or relevant coursework if mentioned. Use [] if none.
 - "additional" items MUST use object format: {{"name":"","description":"","duration":""}}.
 - Missing fields: use "[Not Provided]" for text, [] for arrays.
@@ -5547,7 +5547,14 @@ def generate_modern_docx(data: dict) -> BytesIO:
             if edu.get("cgpa") and edu["cgpa"] not in ("", "[Not Provided]"):
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
-                r_cgpa = p_cgpa.add_run(f"CGPA: {edu['cgpa']}")
+                _cgpa_val = edu['cgpa']
+                try:
+                    _numeric = float(str(_cgpa_val).replace('%', '').strip().split('/')[0])
+                    _is_percent = "%" in str(_cgpa_val) or _numeric > 10
+                except Exception:
+                    _is_percent = "%" in str(_cgpa_val)
+                _cgpa_label = "Percentage" if _is_percent else "CGPA"
+                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_val}")
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
@@ -5860,7 +5867,14 @@ def generate_minimal_docx(data: dict) -> BytesIO:
             if edu.get("cgpa") and edu["cgpa"] not in ("", "[Not Provided]"):
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
-                r_cgpa = p_cgpa.add_run(f"CGPA: {edu['cgpa']}")
+                _cgpa_val = edu['cgpa']
+                try:
+                    _numeric = float(str(_cgpa_val).replace('%', '').strip().split('/')[0])
+                    _is_percent = "%" in str(_cgpa_val) or _numeric > 10
+                except Exception:
+                    _is_percent = "%" in str(_cgpa_val)
+                _cgpa_label = "Percentage" if _is_percent else "CGPA"
+                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_val}")
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
@@ -6183,7 +6197,14 @@ def generate_creative_docx(data: dict) -> BytesIO:
             if edu.get("cgpa") and edu["cgpa"] not in ("", "[Not Provided]"):
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
-                r_cgpa = p_cgpa.add_run(f"CGPA: {edu['cgpa']}")
+                _cgpa_val = edu['cgpa']
+                try:
+                    _numeric = float(str(_cgpa_val).replace('%', '').strip().split('/')[0])
+                    _is_percent = "%" in str(_cgpa_val) or _numeric > 10
+                except Exception:
+                    _is_percent = "%" in str(_cgpa_val)
+                _cgpa_label = "Percentage" if _is_percent else "CGPA"
+                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_val}")
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT_BODY
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
