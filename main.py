@@ -8443,7 +8443,24 @@ with tab1:
 def generate_resume_report_html(resume):
     candidate_name = resume.get('Candidate Name', 'Not Found')
     resume_name = resume.get('Resume Name', 'Unknown')
-    rewritten_text = resume.get('Rewritten Text', '').replace("\n", "<br/>")
+    _raw_rewritten = resume.get('Rewritten Text', '')
+    if "### 🎯 Suggested Job Titles" in _raw_rewritten:
+        _resume_part, _jobs_part = _raw_rewritten.split("### 🎯 Suggested Job Titles", 1)
+    else:
+        _resume_part, _jobs_part = _raw_rewritten, ""
+    rewritten_text = _resume_part.replace("\n", "<br/>")
+    _job_titles_html = ""
+    if _jobs_part:
+        _job_titles_html = "<div class='section-title'>Suggested Job Titles</div><div class='box'><ul>"
+        for _line in _jobs_part.split('\n'):
+            _m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—-]?\s*(.*)', _line.strip())
+            if _m:
+                _title = _m.group(1).strip()
+                _desc = re.sub(r'https?://\S+', '', _m.group(2)).strip().rstrip('.')
+                _encoded = urllib.parse.quote(_title)
+                _url = f"https://www.linkedin.com/jobs/search/?keywords={_encoded}&location=KOLKATA%2CINDIA"
+                _job_titles_html += f'<li><b><a href="{_url}">{_title}</a></b>{(" — " + _desc) if _desc else ""}</li>'
+        _job_titles_html += "</ul></div>"
 
     masculine_words_list = resume.get("Detected Masculine Words", [])
     masculine_words = "".join(
@@ -8593,6 +8610,8 @@ def generate_resume_report_html(resume):
 
     <h2>Rewritten Bias-Free Resume</h2>
     <div class="box">{rewritten_text}</div>
+
+    {_job_titles_html}
 
     </body>
     </html>
@@ -9028,10 +9047,12 @@ with tab1:
                         lines = job_suggestions_display.split('\n')
                         items_html = ""
                         for line in lines:
+                            if re.match(r'^[🔗\s]*https?://', line.strip()):
+                                continue
                             m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—-]?\s*(.*)', line.strip())
                             if m:
                                 title = m.group(1).strip()
-                                desc = m.group(2).strip()
+                                desc = re.sub(r'https?://\S+', '', m.group(2)).strip().rstrip('.')
                                 encoded = urllib.parse.quote(title)
                                 linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={location}"
                                 link_icon = (
