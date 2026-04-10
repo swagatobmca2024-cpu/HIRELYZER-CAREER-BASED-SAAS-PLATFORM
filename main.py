@@ -4411,7 +4411,7 @@ Work Experience → Projects → Education → Certifications & Links
 
 CONTACT HEADER: Full Name | Job Title | Email | Phone | Location | LinkedIn URL | GitHub/Portfolio URL
 
-PROFESSIONAL SUMMARY (2–3 sentences, max 80 words):
+PROFESSIONAL SUMMARY (2–3 sentences):
   FIRST — assess the candidate's actual experience level from the resume:
   • No experience / student / fresher → use "Aspiring [Role]" or "Recent [Degree] graduate"
   • 0–2 years → "Entry-level" or "Junior"
@@ -4545,7 +4545,7 @@ FIELD RULES:
 - "skills" = flat array of individual skill strings. Minimum 8. No duplicates.
 - "soft_skills" = professional competency phrases. Must NOT duplicate items in "skills".
 - "contact.*" = extract exactly as written. Use "" not null for missing fields.
-- "summary" = 2–3 sentences, max 80 words, no pronouns. Must be the COMPLETE summary — do NOT truncate mid-sentence. MUST reflect actual experience level: freshers get "Aspiring/Entry-level", never "experienced professional" or fabricated years of experience.
+- "summary" = 2–3 sentences, max 80 words, no pronouns. Must be the COMPLETE summary — do NOT truncate mid-sentence. Must match the Professional Summary written in Part 1 exactly. MUST reflect actual experience level: freshers get "Aspiring/Entry-level", never "experienced professional" or fabricated years of experience.
 - "experience" = if candidate has NO work experience AND no internships, set to [] (empty array). Never populate with placeholder roles.
   If only internships exist, include them with role/company/duration/bullets — DO NOT write "0 years" in any field.
 - "experience[].description" = 1-sentence role scope, unique from bullets.
