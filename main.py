@@ -7198,8 +7198,12 @@ SCORING SCALE for language ({lang_weight} pts max):
     # Normalise LLM components to 90-pt scale (format takes the remaining 10 pts)
     # This keeps total = 100 while giving format meaningful, visible weight.
     weight_total = edu_weight + exp_weight + skills_weight + lang_weight + keyword_weight
+    # weight_total should always be > 0 here because the sidebar hard blocks evaluation
+    # when total != 90 (min slider values are all >= 2). Guard kept as last-resort safety.
     if weight_total > 0:
         content_score = round(content_score / weight_total * 90)
+    else:
+        content_score = 0  # should never reach here after sidebar guard
     content_score = max(0, min(90, content_score))
 
     # Step 2: format score (0–100) contributes a fixed 10-pt component
@@ -7448,20 +7452,23 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
         "Adjust the remaining <b>90 pts</b> below.</div>",
         unsafe_allow_html=True
     )
-    edu_weight = st.slider("![Education](https://img.icons8.com/ios-filled/20/graduation-cap.png) Education Weight", 0, 50, 20)
-    exp_weight = st.slider("![Experience](https://img.icons8.com/ios-filled/20/portfolio.png) Experience Weight", 0, 50, 35)
-    skills_weight = st.slider("![Skills](https://img.icons8.com/ios-filled/20/gear.png) Skills Match Weight", 0, 50, 20)
-    lang_weight = st.slider("![Language](https://img.icons8.com/ios-filled/20/language.png) Language Quality Weight", 0, 10, 5)
-    keyword_weight = st.slider("![Keyword](https://img.icons8.com/ios-filled/20/key.png) Keyword Match Weight", 0, 20, 10)
+    edu_weight     = st.slider("![Education](https://img.icons8.com/ios-filled/20/graduation-cap.png) Education Weight",     5, 40, 20)
+    exp_weight     = st.slider("![Experience](https://img.icons8.com/ios-filled/20/portfolio.png) Experience Weight",         5, 45, 35)
+    skills_weight  = st.slider("![Skills](https://img.icons8.com/ios-filled/20/gear.png) Skills Match Weight",               5, 40, 20)
+    lang_weight    = st.slider("![Language](https://img.icons8.com/ios-filled/20/language.png) Language Quality Weight",     2, 10,  5)
+    keyword_weight = st.slider("![Keyword](https://img.icons8.com/ios-filled/20/key.png) Keyword Match Weight",              3, 20, 10)
 
     total_weight = edu_weight + exp_weight + skills_weight + lang_weight + keyword_weight
+    weights_valid = (total_weight == 90)
 
     # ---------------- Inline SVG Validation ----------------
-    if total_weight != 90:
+    if not weights_valid:
+        _remaining = 90 - total_weight
+        _direction = f"remove {abs(_remaining)}" if _remaining < 0 else f"add {_remaining}"
         st.markdown(
             f"<div style=\"display:flex;align-items:center;gap:8px;border:1px solid rgba(251,113,133,0.3);background:linear-gradient(135deg,rgba(251,113,133,0.12) 0%,rgba(251,113,133,0.05) 100%);padding:10px 14px;border-radius:10px;backdrop-filter:blur(12px);\">"
             f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#fb7185\" style=\"flex-shrink:0;vertical-align:middle;\"><path d=\"M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.83 0-1.5.67-1.5 1.5S11.17 20 12 20s1.5-.67 1.5-1.5S12.83 17 12 17zm1-4V7h-2v6h2z\"/></svg>"
-            f"<span style=\"color:#fca5a5;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;\">Total = {total_weight}. Adjust to exactly 90 (Format = 10 pts fixed).</span>"
+            f"<span style=\"color:#fca5a5;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;\">Total = {total_weight} / 90 — {_direction} pts to balance. Analysis is blocked until weights = 90.</span>"
             f"</div>",
             unsafe_allow_html=True
         )
@@ -7570,7 +7577,14 @@ if "processed_files" not in st.session_state:
 resume_data = st.session_state.resume_data
 
 # ✏️ Resume Evaluation Logic
-if uploaded_files and job_description:
+if uploaded_files and job_description and not weights_valid:
+    st.warning(
+        f"⚠️ Resume analysis is blocked — your scoring weights add up to **{total_weight}/90**. "
+        f"Please adjust the sliders in the sidebar until the total equals exactly **90**.",
+        icon=None
+    )
+
+if uploaded_files and job_description and weights_valid:
     # ── Usage gate: only check when there are NEW files not yet processed ─────
     _gate_username = st.session_state.get("username")
     _new_files = [
