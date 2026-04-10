@@ -4450,7 +4450,16 @@ PROJECTS: Name | Tech Stack | Duration
   • [Achievement bullet with action verb and metric]
   (3–5 bullets)
 
-EDUCATION: Degree, Major | Institution | Graduation Year | CGPA/Percentage (preserve exactly as written — e.g. "CGPA: 8.5/10" or "Percentage: 78.3%" — NEVER convert between the two, NEVER relabel a percentage as CGPA)
+EDUCATION: Degree, Major | Institution | Graduation Year | CGPA/Percentage
+  • YEAR EXTRACTION (CRITICAL — scan the ENTIRE education block, not just the degree line):
+    - Year can appear ANYWHERE in the education block: above, below, beside, or after the degree/institution
+    - Accept ANY of these formats: "Oct 2021 – Jul 2024", "2021-2024", "October 2021 - July 2024",
+      "Batch: 2024", "Passout: 2024", "Expected: 2025", "graduating 2025", "2024", "May 2023",
+      right-aligned dates, dates below GPA line, dates on a separate line entirely
+    - If only one year found → use it as graduation year
+    - If a range found → preserve the full range as written (e.g. "October 2021 - July 2024")
+    - NEVER leave year blank if ANY date pattern exists anywhere near the education block
+  • CGPA/Percentage (preserve exactly as written — e.g. "CGPA: 8.5/10", "7.0 GPA", "78.3%", "8.44" — NEVER convert between the two, NEVER relabel)
   • Include honors, distinctions, or relevant coursework if mentioned in the original resume.
 CERTIFICATIONS: • Name | Issuing Body | MMM YYYY
 
@@ -4551,8 +4560,22 @@ FIELD RULES:
 - "experience[].description" = 1-sentence role scope, unique from bullets.
 - "experience[].bullets" = 3–5 bullets each. Strong verb + task + tech + impact.
 - "projects[].bullets" = must NOT restate experience bullets.
-- "education[].cgpa" = extract the grade/score EXACTLY as written in the resume. If it is a percentage (e.g. "78.3%", "87.4%"), store it as-is (e.g. "78.3%"). If it is a CGPA/GPA (e.g. "8.44", "8.5/10", "3.9/4.0"), store it as-is. NEVER convert a percentage to CGPA or vice versa. NEVER relabel a percentage as CGPA. Use "" if not present.
-- "education[].bullets" = include honors, distinctions, or relevant coursework if mentioned. Use [] if none.
+- "education[].year" = SCAN THE ENTIRE EDUCATION BLOCK for any date or year pattern — do NOT only look at the degree line.
+    Accepted formats (extract ALL of these): "October 2021 - July 2024", "2021-2024", "Oct 2021 – Jul 2024",
+    "Batch: 2024", "Passout: 2024", "Expected: 2025", "graduating 2025", standalone "2024", "May 2023",
+    dates written below CGPA, dates written to the right of institution, dates on a completely separate line.
+    Store the FULL date range as found (e.g. "October 2021 - July 2024") — do NOT truncate to just the year.
+    ONLY use "" if absolutely zero date/year information exists anywhere in the education section.
+- "education[].cgpa" = SCAN THE ENTIRE EDUCATION BLOCK for any grade/score pattern.
+    Accepted formats: "7.0 GPA", "CGPA: 8.5", "8.5/10", "GPA: 3.9/4.0", "78.3%", "87%", "87.4 percent", "8.44".
+    Store EXACTLY as written in the resume — do NOT reformat, do NOT add labels, do NOT convert.
+    If it is a percentage (e.g. "78.3%", "87%") → store as-is. If it is a CGPA/GPA (e.g. "8.44", "7.0 GPA", "8.5/10") → store as-is.
+    NEVER convert percentage to CGPA or vice versa. NEVER relabel. Use "" if not present.
+- "education[].degree" = extract the FULL degree name including type (B.SC, B.Tech, M.SC, MCA, etc.) AND major/subject.
+    If degree type and subject are on separate lines, combine them (e.g. "B.SC" + "Computer Science" → "B.SC Computer Science").
+    NEVER leave degree blank if any degree-related text exists in the education block.
+- "education[].institution" = extract university/college name exactly as written. Include full name, not abbreviation.
+- "education[].bullets" = include honors, distinctions, relevant coursework, or industrial training if mentioned. Use [] if none.
 - "additional" items MUST use object format: {{"name":"","description":"","duration":""}}.
 - Missing fields: use "[Not Provided]" for text, [] for arrays.
 
