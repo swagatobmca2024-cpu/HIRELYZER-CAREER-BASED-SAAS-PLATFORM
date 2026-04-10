@@ -9022,7 +9022,38 @@ with tab1:
                                     letter-spacing:0.08em;text-transform:uppercase;font-family:-apple-system,sans-serif;">
                             Job Title Suggestions (for reference only — not included in resume files)
                         </div>""", unsafe_allow_html=True)
-                        st.markdown(job_suggestions_display)
+
+                        # Parse titles and build inline LinkedIn links beside each title
+                        location = "KOLKATA%2CINDIA"
+                        lines = job_suggestions_display.split('\n')
+                        items_html = ""
+                        for line in lines:
+                            m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—-]?\s*(.*)', line.strip())
+                            if m:
+                                title = m.group(1).strip()
+                                desc = m.group(2).strip()
+                                encoded = urllib.parse.quote(title)
+                                linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={location}"
+                                link_icon = (
+                                    '<a href="' + linkedin_url + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
+                                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" '
+                                    'stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+                                    'style="display:inline-block;vertical-align:middle;">'
+                                    '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'
+                                    '<polyline points="15 3 21 3 21 9"/>'
+                                    '<line x1="10" y1="14" x2="21" y2="3"/>'
+                                    '</svg></a>'
+                                )
+                                items_html += (
+                                    f'<div style="margin-bottom:8px;font-size:0.88rem;color:#c9d1d9;">'
+                                    f'<b style="color:#e6edf3;">{title}</b>{link_icon}'
+                                    f'{(" — " + desc) if desc else ""}'
+                                    f'</div>'
+                                )
+                        if items_html:
+                            st.markdown(f'<div style="margin-top:4px;">{items_html}</div>', unsafe_allow_html=True)
+                        else:
+                            st.markdown(job_suggestions_display)
 
                     # ── 3-Template DOCX Download Buttons (Optimization Module — JSON data only) ──
                     st.markdown("""
