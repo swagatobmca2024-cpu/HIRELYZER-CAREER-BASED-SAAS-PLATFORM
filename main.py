@@ -8468,7 +8468,7 @@ with tab1:
         time.sleep(3)
         msg_placeholder.empty()
 
-def generate_resume_report_html(resume):
+def generate_resume_report_html(resume, user_location=""):
     candidate_name = resume.get('Candidate Name', 'Not Found')
     resume_name = resume.get('Resume Name', 'Unknown')
     _raw_rewritten = resume.get('Rewritten Text', '')
@@ -8478,6 +8478,7 @@ def generate_resume_report_html(resume):
         _resume_part, _jobs_part = _raw_rewritten, ""
     rewritten_text = _resume_part.replace("\n", "<br/>")
     _job_titles_html = ""
+    _location_param = urllib.parse.quote(user_location) if user_location else "India"
     if _jobs_part:
         _job_titles_html = "<div class='section-title'>Suggested Job Titles</div><div class='box'><ul>"
         for _line in _jobs_part.split('\n'):
@@ -8486,7 +8487,7 @@ def generate_resume_report_html(resume):
                 _title = _m.group(1).strip()
                 _desc = re.sub(r'https?://\S+', '', _m.group(2)).strip().rstrip('.')
                 _encoded = urllib.parse.quote(_title)
-                _url = f"https://www.linkedin.com/jobs/search/?keywords={_encoded}&location=KOLKATA%2CINDIA"
+                _url = f"https://www.linkedin.com/jobs/search/?keywords={_encoded}&location={_location_param}"
                 _job_titles_html += f'<li><b><a href="{_url}">{_title}</a></b>{(" — " + _desc) if _desc else ""}</li>'
         _job_titles_html += "</ul></div>"
 
@@ -9071,7 +9072,7 @@ with tab1:
                         </div>""", unsafe_allow_html=True)
 
                         # Parse titles and build inline LinkedIn links beside each title
-                        location = "KOLKATA%2CINDIA"
+                        _loc_param = urllib.parse.quote(user_location) if user_location else "India"
                         lines = job_suggestions_display.split('\n')
                         items_html = ""
                         for line in lines:
@@ -9083,7 +9084,7 @@ with tab1:
                                 desc = re.sub(r'https?://\S+', '', m.group(2)).strip().rstrip('.')
                                 desc = re.sub(r'🔗', '', desc).strip()
                                 encoded = urllib.parse.quote(title)
-                                linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={location}"
+                                linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={_loc_param}"
                                 link_icon = (
                                     '<a href="' + linkedin_url + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
                                     '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" '
@@ -9163,7 +9164,7 @@ with tab1:
                         except Exception as e:
                             st.error(f"Executive template error: {e}")
 
-                    html_report = generate_resume_report_html(resume)
+                    html_report = generate_resume_report_html(resume, user_location=user_location)
                     pdf_file = html_to_pdf_bytes(html_report)
                     st.download_button(
                         label="Download Full Analysis Report (.pdf)",
