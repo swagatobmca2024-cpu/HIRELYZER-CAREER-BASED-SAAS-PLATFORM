@@ -4925,18 +4925,46 @@ def _build_contact_header(doc, data: dict, name_size: int, name_color_rgb: tuple
     portfolio_raw= contact.get("portfolio", "") or ""
     github_val   = _clean(github_raw if github_raw and github_raw not in ("", "[Not Provided]") else portfolio_raw)
 
-    parts = [email_val, phone_val, location_val, linkedin_val, github_val]
-    contact_line = "  |  ".join(parts)
+    _link_color = (
+        int(contact_color_hex[0:2], 16),
+        int(contact_color_hex[2:4], 16),
+        int(contact_color_hex[4:6], 16),
+    )
 
     p_contact = doc.add_paragraph()
     p_contact.clear()
-    r_contact = p_contact.add_run(contact_line)
-    r_contact.font.size = Pt(contact_size)
-    r_contact.font.name = contact_font
-    r_contact.font.color.rgb = cc
     p_contact.alignment = 1
     p_contact.paragraph_format.space_before = Pt(2)
     p_contact.paragraph_format.space_after = Pt(6)
+
+    def _plain_run(para, text):
+        r = para.add_run(text)
+        r.font.size = Pt(contact_size)
+        r.font.name = contact_font
+        r.font.color.rgb = cc
+        return r
+
+    SEP = "  |  "
+    plain_parts = [email_val, phone_val, location_val]
+    _plain_run(p_contact, SEP.join(plain_parts))
+
+    # LinkedIn — clickable if it looks like a URL
+    _plain_run(p_contact, SEP)
+    if linkedin_val.startswith("http"):
+        _add_hyperlink(p_contact, linkedin_val, linkedin_val,
+                       font_name=contact_font, font_size=contact_size,
+                       color_rgb=_link_color)
+    else:
+        _plain_run(p_contact, linkedin_val)
+
+    # GitHub/Portfolio — clickable if it looks like a URL
+    _plain_run(p_contact, SEP)
+    if github_val.startswith("http"):
+        _add_hyperlink(p_contact, github_val, github_val,
+                       font_name=contact_font, font_size=contact_size,
+                       color_rgb=_link_color)
+    else:
+        _plain_run(p_contact, github_val)
 
     # ── ④ Thin bottom rule below contact block ────────────────────────────
     # Signals end of header to ATS parsers and improves recruiter readability.
@@ -9053,6 +9081,7 @@ with tab1:
                             if m:
                                 title = m.group(1).strip()
                                 desc = re.sub(r'https?://\S+', '', m.group(2)).strip().rstrip('.')
+                                desc = re.sub(r'🔗', '', desc).strip()
                                 encoded = urllib.parse.quote(title)
                                 linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={location}"
                                 link_icon = (
