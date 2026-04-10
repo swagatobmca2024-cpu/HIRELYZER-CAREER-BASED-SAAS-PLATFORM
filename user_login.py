@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pytz
 import re
 import os
-import random
+import secrets
 import threading
 import smtplib
 import uuid
@@ -215,7 +215,7 @@ def create_user_table():
 # ── OTP helpers ───────────────────────────────────────────────────────────────
 
 def generate_otp():
-    return str(random.randint(100000, 999999))
+    return str(secrets.randbelow(900000) + 100000)
 
 
 def _send_email(to_email: str, subject: str, body: str) -> bool:
