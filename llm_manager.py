@@ -30,12 +30,26 @@ import streamlit as st
 from langchain_groq import ChatGroq
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-CACHE_EXPIRY_HOURS       = 24
-FAILURE_COOLDOWN_MINUTES = 5
-QUOTA_COOLDOWN_MINUTES   = 60
-DAILY_KEY_LIMIT          = 800
-DEAD_KEY_REMOVE_DAYS     = 3
-CLEANUP_INTERVAL_SECONDS = 1800
+CACHE_EXPIRY_HOURS        = 24
+FAILURE_COOLDOWN_MINUTES  = 5
+QUOTA_COOLDOWN_MINUTES    = 65      # RPM — recovers in ~1 min, 65 is safe buffer
+TPD_COOLDOWN_MINUTES      = 180     # TPD (tokens per day) — needs ~2-3hr cooldown
+DAILY_KEY_LIMIT           = 800     # kept for backward compat, token limit takes priority
+DEAD_KEY_REMOVE_DAYS      = 3
+CLEANUP_INTERVAL_SECONDS  = 1800
+
+# ── Model routing — maps task name → Groq model ───────────────────────────────
+# Small/fast model for lightweight tasks, big model only for quality writing
+TASK_MODEL_MAP = {
+    "rewrite":   "llama-3.3-70b-versatile",   # bias-free rewrite — needs quality
+    "optimize":  "llama-3.3-70b-versatile",   # structured JSON resume — needs quality
+    "score":     "llama-3.1-8b-instant",       # ATS scoring + domain detection — fast
+    "bias":      "llama-3.1-8b-instant",       # bias detection — pattern matching
+    "grammar":   "llama-3.1-8b-instant",       # grammar check — lightweight
+    "jobtitles": "gemma2-9b-it",               # job title suggestions — simple list
+    "cover":     "llama-3.3-70b-versatile",   # cover letter — needs quality writing
+    "domain":    "llama-3.1-8b-instant",       # domain classification — single word output
+}
 
 # FIX 2: module-level lock so parallel threads never pick the same key
 _key_rotation_lock = threading.Lock()
@@ -47,7 +61,8 @@ _reconnect_lock = threading.Lock()
 _llm_conn_holder: dict = {"conn": None}
 
 # Groq errors that mean the KEY itself is bad (not a transient server issue)
-_QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests"]
+_TPD_SIGNALS      = ["tokens per day", "tpd", "daily token", "token limit"]   # daily exhaustion — long cooldown
+_QUOTA_SIGNALS    = ["rate limit", "429", "too many requests", "quota"]        # RPM/general — short cooldown
 _DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
                      "api key", "authentication", "permission denied"]
 
@@ -301,11 +316,14 @@ def _classify_error(error: Exception):
     """
     Classify an exception so we only penalise keys for real key errors.
     Returns:
-        'quota'     — rate limited, put key in 60-min cooldown
+        'tpd'       — daily token limit exhausted, put key in 180-min cooldown
+        'quota'     — RPM rate limited, put key in 65-min cooldown
         'dead'      — bad/invalid key, put in 5-min cooldown
         'transient' — network blip / server 500 / timeout, do NOT touch the key
     """
     msg = str(error).lower()
+    if any(s in msg for s in _TPD_SIGNALS):
+        return "tpd"
     if any(s in msg for s in _QUOTA_SIGNALS):
         return "quota"
     if any(s in msg for s in _DEAD_KEY_SIGNALS):
@@ -360,8 +378,8 @@ def get_healthy_keys(api_keys: list) -> list:
             if fail_dt.tzinfo is None:
                 fail_dt = pytz.utc.localize(fail_dt)
             cooldown = (
-                QUOTA_COOLDOWN_MINUTES
-                if f["reason"] == "quota"
+                TPD_COOLDOWN_MINUTES      if f["reason"] == "tpd"
+                else QUOTA_COOLDOWN_MINUTES if f["reason"] == "quota"
                 else FAILURE_COOLDOWN_MINUTES
             )
             if (now - fail_dt).total_seconds() < cooldown * 60:
@@ -402,14 +420,22 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
 def call_llm(
     prompt: str,
     session,
-    model: str = "llama-3.3-70b-versatile",
+    model: str = None,
+    task: str = "rewrite",
     temperature: float = 0,
 ) -> str:
     """
     1. Check Supabase cache — return immediately on hit.
     2. Try user-provided Groq key (if set).
     3. Rotate through healthy admin keys.
+
+    task: one of 'rewrite' | 'optimize' | 'score' | 'bias' | 'grammar' |
+                 'jobtitles' | 'cover' | 'domain'
+    model: if explicitly passed, overrides task routing.
     """
+    # Auto-select model based on task if no model explicitly passed
+    if model is None:
+        model = TASK_MODEL_MAP.get(task, "llama-3.3-70b-versatile")
     # Guard against None session (e.g. called from db_manager without session)
     if session is None:
         session = {}
@@ -454,8 +480,12 @@ def call_llm(
             return response
         except Exception as e:
             err_type = _classify_error(e)
-            if err_type != "transient":
-                mark_key_failure(user_key, "quota" if err_type == "quota" else "error")
+            if err_type == "tpd":
+                mark_key_failure(user_key, "tpd")
+            elif err_type == "quota":
+                mark_key_failure(user_key, "quota")
+            elif err_type == "dead":
+                mark_key_failure(user_key, "error")
             last_error = e
 
     # ── Step 3: admin key rotation ────────────────────────────────────────────
@@ -491,7 +521,9 @@ def call_llm(
             return response
         except Exception as e:
             err_type = _classify_error(e)
-            if err_type == "quota":
+            if err_type == "tpd":
+                mark_key_failure(key, "tpd")
+            elif err_type == "quota":
                 mark_key_failure(key, "quota")
             elif err_type == "dead":
                 mark_key_failure(key, "error")
