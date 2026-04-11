@@ -4551,33 +4551,112 @@ RETURN ONLY THIS EXACT JSON STRUCTURE:
 }}
 
 FIELD RULES:
-- "skills" = flat array of individual skill strings. Minimum 8. No duplicates.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
+  • NEVER fabricate names, companies, degrees, institutions, skills, URLs, or metrics.
+  • NEVER write "[Not Provided]", "N/A", "Unknown" anywhere — use "" for missing text, [] for missing arrays.
+  • NEVER invent a date with zero context — if no clue exists anywhere → store "".
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3-TIER DATE INFERENCE RULE — APPLIES TO ALL duration/year FIELDS:
+
+  TIER 1 — EXPLICIT (highest priority):
+    Date is clearly written in the resume near this entry.
+    → Extract and store EXACTLY as written. Never reformat.
+    → Examples: "Aug 2021 – Dec 2024", "October 2021 - July 2024", "Jul 2025", "2023", "45 days"
+
+  TIER 2 — INFERRED FROM CONTEXT (use ONLY when strong evidence exists):
+    Date is NOT written for this entry BUT can be confidently derived from surrounding resume context.
+    Strong context signals (ALL must be true to infer):
+      ✓ Project is explicitly described as part of an internship/job role that HAS dates → use those dates
+      ✓ Project description mentions the company/internship period → use that period
+      ✓ Certification is clearly tied to a dated training program mentioned elsewhere
+      ✓ Education year can be derived from a "Batch of YYYY" or "Passout YYYY" written elsewhere
+    → Store with "~" prefix to signal inference: e.g. "~Aug 2022 – Dec 2023"
+    → NEVER infer just because two entries are near each other on the page.
+    → NEVER infer from education dates for a project unless project explicitly says "college project" + education has clear dates.
+
+  TIER 3 — UNKNOWN (no context at all):
+    No date written, no strong context to infer from.
+    → Store "" (empty string). The DOCX template will silently skip it.
+    → NEVER guess. NEVER copy a random date from elsewhere.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+── CONTACT ──
+- "contact.*" = extract exactly as written. Use "" not null for missing fields. Never invent email, phone, or URLs.
+
+── SUMMARY ──
+- "summary" = 2–3 sentences, max 80 words, no pronouns. Must be COMPLETE — do NOT truncate mid-sentence.
+  Must match the Professional Summary written in Part 1 exactly.
+  MUST reflect actual experience level: freshers → "Aspiring/Entry-level", never fabricate years of experience.
+
+── SKILLS ──
+- "skills" = flat array of individual skill strings. Minimum 8. No duplicates. Only extract skills actually present in resume.
 - "soft_skills" = professional competency phrases. Must NOT duplicate items in "skills".
-- "contact.*" = extract exactly as written. Use "" not null for missing fields.
-- "summary" = 2–3 sentences, max 80 words, no pronouns. Must be the COMPLETE summary — do NOT truncate mid-sentence. Must match the Professional Summary written in Part 1 exactly. MUST reflect actual experience level: freshers get "Aspiring/Entry-level", never "experienced professional" or fabricated years of experience.
-- "experience" = if candidate has NO work experience AND no internships, set to [] (empty array). Never populate with placeholder roles.
-  If only internships exist, include them with role/company/duration/bullets — DO NOT write "0 years" in any field.
+
+── EXPERIENCE ──
+- "experience" = if NO work experience AND no internships → set to [] (empty array). Never populate with placeholder roles.
+  If only internships exist → include them with role/company/duration/bullets. Label role accurately (e.g. "Intern").
+- "experience[].role" = exact job title as written. Never upgrade title (e.g. do NOT change "Intern" to "Developer").
+- "experience[].company" = exact company name as written.
+- "experience[].duration" = Apply 3-TIER DATE INFERENCE RULE.
+    SCAN THE ENTIRE EXPERIENCE BLOCK for date patterns near this role (dates can appear above, below, or beside).
+    Accepted formats: "Aug 2021 – Dec 2024", "August 2021 - December 2024", "Jan 2023 – Present",
+    "2022–2023", "Feb 2024 - Nov 2025", month+year ranges, standalone years.
+    If end date says "Present" / "present" / "current" / "Ongoing" → store as written (e.g. "Dec 2024 – Present").
+    Tier 1: date found → store exactly. Tier 2: infer with "~" prefix. Tier 3: store "".
 - "experience[].description" = 1-sentence role scope, unique from bullets.
-- "experience[].bullets" = 3–5 bullets each. Strong verb + task + tech + impact.
-- "projects[].bullets" = must NOT restate experience bullets.
-- "education[].year" = SCAN THE ENTIRE EDUCATION BLOCK for any date or year pattern — do NOT only look at the degree line.
-    Accepted formats (extract ALL of these): "October 2021 - July 2024", "2021-2024", "Oct 2021 – Jul 2024",
+- "experience[].bullets" = 3–5 bullets each. Strong verb + task + tech + quantified impact. No pronouns.
+
+── PROJECTS ──
+- "projects[].name" = exact project name as written.
+- "projects[].duration" = Apply 3-TIER DATE INFERENCE RULE.
+    SCAN THE ENTIRE PROJECT BLOCK for any date/time pattern near this project.
+    Accepted formats: "Mar 2025 – Aug 2025", "October 2021 – December 2021", "3 months", "45 days",
+    "Jan 2024", standalone year "2023", any time range written near the project.
+    Tier 1: date found → store exactly as written (e.g. "October 2021 – December 2021").
+    Tier 2: project is explicitly described as part of a dated internship/job → infer with "~" prefix
+            e.g. project says "built during internship at XYZ (Aug 2022–Dec 2023)" → "~Aug 2022 – Dec 2023"
+    Tier 3: no date, no context → store "".
+- "projects[].tech_stack" = comma-separated technologies mentioned for this project.
+- "projects[].url" = project URL/GitHub link if present. Use "" if not present.
+- "projects[].description" = 1-sentence project purpose. Unique, not repeated in bullets.
+- "projects[].bullets" = 3–5 bullets. Must NOT restate experience bullets. Strong verb + task + tech + impact.
+
+── EDUCATION ──
+- "education[].degree" = extract the FULL degree name including type AND major/subject.
+    If degree type and subject are on separate lines → combine them (e.g. "B.SC" + "Computer Science" → "B.SC Computer Science").
+    NEVER leave blank if any degree-related text exists in the education block.
+- "education[].institution" = university/college name exactly as written. Full name, not abbreviation.
+- "education[].year" = Apply 3-TIER DATE INFERENCE RULE.
+    SCAN THE ENTIRE EDUCATION BLOCK — year can appear ANYWHERE (above, below, beside, far from degree line).
+    Accepted formats: "October 2021 - July 2024", "2021–2024", "Oct 2021 – Jul 2024",
     "Batch: 2024", "Passout: 2024", "Expected: 2025", "graduating 2025", standalone "2024", "May 2023",
-    dates written below CGPA, dates written to the right of institution, dates on a completely separate line.
-    Store the FULL date range as found (e.g. "October 2021 - July 2024") — do NOT truncate to just the year.
-    ONLY use "" if absolutely zero date/year information exists anywhere in the education section.
-- "education[].cgpa" = SCAN THE ENTIRE EDUCATION BLOCK for any grade/score pattern.
+    dates below CGPA line, dates to the right of institution, dates on completely separate lines.
+    Tier 1: date found → store FULL range exactly as written (e.g. "October 2021 - July 2024").
+    Tier 2: "Batch YYYY" or "Passout YYYY" found elsewhere in resume clearly tied to this degree → infer with "~" prefix.
+    Tier 3: absolutely zero date/year exists anywhere → store "".
+- "education[].cgpa" = Apply 3-TIER DATE INFERENCE RULE for grade (Tier 1 only — NEVER infer grades).
+    SCAN THE ENTIRE EDUCATION BLOCK for any grade/score pattern.
     Accepted formats: "7.0 GPA", "CGPA: 8.5", "8.5/10", "GPA: 3.9/4.0", "78.3%", "87%", "87.4 percent", "8.44".
-    Store EXACTLY as written in the resume — do NOT reformat, do NOT add labels, do NOT convert.
-    If it is a percentage (e.g. "78.3%", "87%") → store as-is. If it is a CGPA/GPA (e.g. "8.44", "7.0 GPA", "8.5/10") → store as-is.
-    NEVER convert percentage to CGPA or vice versa. NEVER relabel. Use "" if not present.
-- "education[].degree" = extract the FULL degree name including type (B.SC, B.Tech, M.SC, MCA, etc.) AND major/subject.
-    If degree type and subject are on separate lines, combine them (e.g. "B.SC" + "Computer Science" → "B.SC Computer Science").
-    NEVER leave degree blank if any degree-related text exists in the education block.
-- "education[].institution" = extract university/college name exactly as written. Include full name, not abbreviation.
-- "education[].bullets" = include honors, distinctions, relevant coursework, or industrial training if mentioned. Use [] if none.
+    Store EXACTLY as written. NEVER convert percentage to CGPA or vice versa. NEVER relabel. Use "" if not present.
+- "education[].bullets" = honors, distinctions, relevant coursework, or industrial training if mentioned. Use [] if none.
+
+── CERTIFICATIONS ──
+- "certifications[].name" = exact certification name as written.
+- "certifications[].issuer" = issuing organization as written. Use "" if not present.
+- "certifications[].duration" = Apply 3-TIER DATE INFERENCE RULE.
+    SCAN THE ENTIRE CERTIFICATION BLOCK for any date near this certification.
+    Accepted formats: "July 2025 – October 2025", "Oct 2024", "2023", month+year, date ranges.
+    Tier 1: date found → store exactly as written (full range if present).
+    Tier 2: certification is explicitly tied to a dated training/internship program → infer with "~" prefix.
+    Tier 3: no date, no context → store "".
+
+── ADDITIONAL ──
 - "additional" items MUST use object format: {{"name":"","description":"","duration":""}}.
-- Missing fields: use "[Not Provided]" for text, [] for arrays.
+- "additional[].duration" = Apply 3-TIER DATE INFERENCE RULE. Use "" if no context exists.
 
 RESUME TEXT:
 \"\"\"{text}\"\"\"
