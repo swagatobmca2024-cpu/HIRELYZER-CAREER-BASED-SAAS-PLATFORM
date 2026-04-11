@@ -40,10 +40,6 @@ CLEANUP_INTERVAL_SECONDS = 1800
 # FIX 2: module-level lock so parallel threads never pick the same key
 _key_rotation_lock = threading.Lock()
 
-# FIX 5 (new): module-level index so key rotation is truly shared across all
-# users/sessions rather than each session starting from 0 independently.
-_global_key_index: int = 0
-
 # FIX 7: per-module reconnect lock so only one thread reconnects at a time
 _reconnect_lock = threading.Lock()
 
@@ -51,13 +47,9 @@ _reconnect_lock = threading.Lock()
 _llm_conn_holder: dict = {"conn": None}
 
 # Groq errors that mean the KEY itself is bad (not a transient server issue)
-_QUOTA_SIGNALS     = ["quota", "rate limit", "429", "too many requests"]
-_ORG_LIMIT_SIGNALS = ["tokens per day", "tpd", "organization limit",
-                      "daily token limit", "org token"]
-# Removed bare "api key", "401", "403" — too broad, caused healthy keys to be
-# incorrectly marked dead on unrelated 4xx responses.
-_DEAD_KEY_SIGNALS  = ["invalid api key", "unauthorized",
-                      "authentication", "permission denied"]
+_QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests"]
+_DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
+                     "api key", "authentication", "permission denied"]
 
 
 # ── Timezone helper ───────────────────────────────────────────────────────────
@@ -162,8 +154,8 @@ def init_db():
 
     CREATE TABLE IF NOT EXISTS key_usage (
         api_key     TEXT PRIMARY KEY,
-        usage_count INTEGER     NOT NULL DEFAULT 0,
-        last_reset  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        usage_count INTEGER  NOT NULL DEFAULT 0,
+        last_reset  DATE     NOT NULL DEFAULT CURRENT_DATE
     );
     """
     conn = _conn()
@@ -265,18 +257,14 @@ def increment_key_usage(api_key: str):
         _execute(
             """
             INSERT INTO key_usage (api_key, usage_count, last_reset)
-            VALUES (%s, 1, NOW())
+            VALUES (%s, 1, CURRENT_DATE)
             ON CONFLICT (api_key) DO UPDATE
                 SET usage_count = CASE
-                        WHEN key_usage.last_reset::date = CURRENT_DATE
+                        WHEN key_usage.last_reset = CURRENT_DATE
                         THEN key_usage.usage_count + 1
                         ELSE 1
                     END,
-                    last_reset = CASE
-                        WHEN key_usage.last_reset::date = CURRENT_DATE
-                        THEN key_usage.last_reset
-                        ELSE NOW()
-                    END
+                    last_reset = CURRENT_DATE
             """,
             (api_key,),
         )
@@ -285,16 +273,15 @@ def increment_key_usage(api_key: str):
 
 
 def mark_key_failure(api_key: str, reason: str = "error"):
-    """Record a key failure only if it is not already in the failures table.
-    Deliberately does NOT update fail_time on conflict — we want the FIRST failure
-    timestamp so cooldown expires correctly rather than being refreshed every retry.
-    """
+    """Record (or update) a key failure with a timestamp and reason."""
     try:
         _execute(
             """
             INSERT INTO key_failures (api_key, fail_time, reason)
             VALUES (%s, NOW(), %s)
-            ON CONFLICT (api_key) DO NOTHING
+            ON CONFLICT (api_key) DO UPDATE
+                SET fail_time = EXCLUDED.fail_time,
+                    reason    = EXCLUDED.reason
             """,
             (api_key, reason),
         )
@@ -314,14 +301,11 @@ def _classify_error(error: Exception):
     """
     Classify an exception so we only penalise keys for real key errors.
     Returns:
-        'org_limit' — org-wide daily token budget exhausted; stop rotating immediately
         'quota'     — rate limited, put key in 60-min cooldown
         'dead'      — bad/invalid key, put in 5-min cooldown
         'transient' — network blip / server 500 / timeout, do NOT touch the key
     """
     msg = str(error).lower()
-    if any(s in msg for s in _ORG_LIMIT_SIGNALS):
-        return "org_limit"
     if any(s in msg for s in _QUOTA_SIGNALS):
         return "quota"
     if any(s in msg for s in _DEAD_KEY_SIGNALS):
@@ -341,6 +325,7 @@ def get_healthy_keys(api_keys: list) -> list:
             within a single call_llm() invocation.
     """
     now   = get_utc_now()
+    today = now.strftime("%Y-%m-%d")
 
     try:
         failures_rows = _execute(
@@ -386,14 +371,11 @@ def get_healthy_keys(api_keys: list) -> list:
         if key in usages:
             u          = usages[key]
             last_reset = u["last_reset"]
-            # last_reset is TIMESTAMPTZ — extract .date() to compare against today
             if isinstance(last_reset, datetime):
-                reset_date = last_reset.date()
-            elif hasattr(last_reset, "date") and callable(last_reset.date):
-                reset_date = last_reset.date()
-            else:
-                reset_date = datetime.strptime(str(last_reset)[:10], "%Y-%m-%d").date()
-            usage_count = u["usage_count"] if reset_date == now.date() else 0
+                last_reset = last_reset.strftime("%Y-%m-%d")
+            elif hasattr(last_reset, "isoformat"):
+                last_reset = last_reset.isoformat()
+            usage_count = u["usage_count"] if last_reset == today else 0
             if usage_count >= DAILY_KEY_LIMIT:
                 quota_keys.append(key)
                 continue
@@ -449,6 +431,13 @@ def call_llm(
     if cached:
         return cached
 
+    # Initialise key_index safely (works for both dict and st.session_state)
+    if "key_index" not in session:
+        try:
+            session["key_index"] = 0
+        except Exception:
+            pass
+
     user_key = ""
     raw_user_key = session.get("user_groq_key", "")
     if isinstance(raw_user_key, str):
@@ -480,14 +469,16 @@ def call_llm(
     if not admin_keys:
         return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
 
-    # FIX 2: lock while picking index; FIX 5: use module-level index for real
-    # cross-user rotation (session key_index only ever advanced within one session)
+    # FIX 2: lock while picking index; FIX 5: guard against shrunk list
     with _key_rotation_lock:
-        global _global_key_index
-        if _global_key_index >= len(admin_keys):
-            _global_key_index = 0
-        start = _global_key_index
-        _global_key_index = (start + 1) % len(admin_keys)
+        current_idx = session.get("key_index", 0)
+        if current_idx >= len(admin_keys):
+            current_idx = 0
+        start = current_idx
+        try:
+            session["key_index"] = (start + 1) % len(admin_keys)
+        except Exception:
+            pass
 
     for offset in range(len(admin_keys)):
         idx = (start + offset) % len(admin_keys)
@@ -500,11 +491,7 @@ def call_llm(
             return response
         except Exception as e:
             err_type = _classify_error(e)
-            if err_type == "org_limit":
-                # Org-wide daily budget exhausted — hammering the other 100 keys
-                # won't help; they all share the same org limit. Exit immediately.
-                return "❌ Daily token limit reached for this organisation. Resets at midnight UTC."
-            elif err_type == "quota":
+            if err_type == "quota":
                 mark_key_failure(key, "quota")
             elif err_type == "dead":
                 mark_key_failure(key, "error")
