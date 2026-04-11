@@ -4697,8 +4697,18 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
 - "additional[].duration" = Apply 3-TIER DATE INFERENCE RULE. Use "" if no context exists.
 
 RESUME TEXT:
-\"\"\"{text}\"\"\"
+\"\"\"{text[:8000]}\"\"\"
 """
+
+    # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
+    try:
+        from llm_manager import load_groq_api_keys, get_healthy_keys
+        _all_keys = load_groq_api_keys()
+        _healthy  = get_healthy_keys(_all_keys)
+        if len(_healthy) <= 1:
+            time.sleep(3)   # 3-second pause to let the per-minute window recover
+    except Exception:
+        pass
 
     raw_response = call_llm(prompt, session=st.session_state)
 
@@ -6885,7 +6895,7 @@ Before answering, verify:
 
 ════════════════════════════════════════════════════════
 Resume Text:
-{resume_text[:6000]}
+{resume_text[:2500]}
 ════════════════════════════════════════════════════════
 
 Return ONLY one domain from this list, nothing else:
@@ -6958,7 +6968,7 @@ STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE JD BELOW
 ════════════════════════════════════════════════════════
 
 Job Description:
-{job_description[:3000]}
+{job_description[:2000]}
 
 Classification rules:
   • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
@@ -7270,10 +7280,10 @@ SCORING SCALE for language ({lang_weight} pts max):
 ---
 
 📄 **JOB DESCRIPTION:**
-{job_description}
+{job_description[:4000]}
 
 📄 **RESUME TEXT:**
-{resume_text}
+{resume_text[:5000]}
 
 {logic_score_note}
 """
@@ -8215,7 +8225,7 @@ Ask yourself:
 
 ════════════════════════════════════════════════════════
 Resume Text:
-{full_text[:6000]}
+{full_text[:2500]}
 ════════════════════════════════════════════════════════
 
 Return ONLY one domain from this list, nothing else:
@@ -8284,7 +8294,7 @@ STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE JD BELOW
 ════════════════════════════════════════════════════════
 
 Job Description:
-{job_description[:3000]}
+{job_description[:2000]}
 
 Classification rules:
   • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
@@ -8359,20 +8369,42 @@ Return ONLY one domain from this list, nothing else:
             )
 
         with st.spinner("✍️ Rewriting resume & running ATS evaluation in parallel..."):
-            with ThreadPoolExecutor(max_workers=2) as _executor:
-                _future_rewrite = _executor.submit(_task_rewrite)
-                _future_ats     = _executor.submit(_task_ats)
+            # ── Key-aware parallel/sequential decision ────────────────────────
+            # When only 1–2 healthy keys remain, running both tasks in parallel
+            # bursts the same key simultaneously and triggers rate limiting.
+            # Switch to sequential mode with a short gap to let the TPM window recover.
+            try:
+                from llm_manager import load_groq_api_keys, get_healthy_keys as _ghk
+                _n_healthy = len(_ghk(load_groq_api_keys()))
+            except Exception:
+                _n_healthy = 99  # assume enough keys if check fails
 
-                # Collect rewrite result
+            if _n_healthy >= 3:
+                # Enough keys: run truly in parallel (original behaviour)
+                with ThreadPoolExecutor(max_workers=2) as _executor:
+                    _future_rewrite = _executor.submit(_task_rewrite)
+                    _future_ats     = _executor.submit(_task_ats)
+
+                    try:
+                        highlighted_text, rewritten_text, _, _, _, _, json_str = _future_rewrite.result()
+                    except Exception:
+                        highlighted_text = full_text
+                        rewritten_text   = full_text
+                        json_str         = ""
+
+                    ats_result, ats_scores = _future_ats.result()
+            else:
+                # Low on keys: run sequentially with a gap to protect the TPM window
                 try:
-                    highlighted_text, rewritten_text, _, _, _, _, json_str = _future_rewrite.result()
+                    highlighted_text, rewritten_text, _, _, _, _, json_str = _task_rewrite()
                 except Exception:
                     highlighted_text = full_text
                     rewritten_text   = full_text
                     json_str         = ""
 
-                # Collect ATS result
-                ats_result, ats_scores = _future_ats.result()
+                time.sleep(4)   # let per-minute token window partially recover
+
+                ats_result, ats_scores = _task_ats()
 
         # ✅ Resume Optimization Module — reuse JSON already produced above (0 extra LLM calls)
         try:
