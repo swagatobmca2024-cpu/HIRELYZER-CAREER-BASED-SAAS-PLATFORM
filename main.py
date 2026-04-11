@@ -4393,10 +4393,26 @@ ABSOLUTE RULES — NEVER VIOLATE:
 • DO NOT fabricate companies, job titles, degrees, institutions, or dates.
 • DO NOT invent statistics or metrics not implied by the resume content.
 • DO NOT add certifications, tools, or skills absent from the resume.
-• DO NOT use personal pronouns (I, my, me, we, our) anywhere.
+• DO NOT use personal pronouns ANYWHERE — not in summary, bullets, descriptions, or any section.
+  BANNED WORDS/PHRASES (zero tolerance across the ENTIRE resume):
+  ✗ "I", "I am", "I have", "I worked", "I built", "I led", "I developed"
+  ✗ "My", "Me", "We", "Our", "Us"
+  ✗ "As a [role]..." — NEVER start any sentence with "As a"
+  ✗ "With a passion for...", "Passionate about...", "I am passionate..."
+  ✗ "Highly motivated", "Dynamic professional", "Results-driven", "Go-getter"
+  ✗ "Seasoned", "Veteran", "Proven track record", "Rockstar", "Ninja", "Guru"
+  ✗ "I believe", "I feel", "I think", "In my experience"
+  ✗ "Looking for", "Seeking to", "Hoping to" — in summary (use in objective only if truly fresher)
+• VOICE: Write in THIRD-PERSON IMPLICIT (omit the subject entirely).
+  ✓ CORRECT: "Full Stack Developer with 3 years of experience building scalable web apps."
+  ✓ CORRECT: "Developed RESTful APIs using Django and PostgreSQL, reducing latency by 40%."
+  ✓ CORRECT: "Aspiring Data Scientist with hands-on ML project experience in Python and TensorFlow."
+  ✗ WRONG:   "As a Full Stack Developer, I have 3 years of experience..."
+  ✗ WRONG:   "I developed RESTful APIs using Django..."
+  ✗ WRONG:   "I am an aspiring Data Scientist..."
 • DO NOT repeat the same phrase or word across multiple sections.
 • EVERY section must contain unique, non-overlapping content.
-• DO NOT exaggerate experience level. If the candidate has no work experience or is a fresher/student, the summary MUST use honest framing: "Aspiring", "Entry-level", "Recent graduate", or "Seeking first role in...". NEVER use "seasoned", "veteran", "proven track record", or imply years of experience that do not exist in the resume.
+• DO NOT exaggerate experience level. If the candidate has no work experience or is a fresher/student, the summary MUST use honest framing: "Aspiring", "Entry-level", "Recent graduate". NEVER use "seasoned", "veteran", "proven track record", or imply years of experience that do not exist in the resume.
 • PROFESSIONAL SUMMARY must reflect ONLY what is actually present in the resume. Do not upgrade a fresher to a professional or a junior to a senior.
 
 YOU MAY:
@@ -4418,20 +4434,31 @@ PROFESSIONAL SUMMARY (2–3 sentences):
   • 2–5 years → "Mid-level" or just state domain + years honestly
   • 5+ years → "Senior" or "Lead" only if the resume clearly supports it
 
-  Sentence 1: [Honest seniority label] + [core domain] + [years of experience IF present, else omit]
-  Sentence 2: [Top 2–3 specific technical or functional strengths from the resume]
-  Sentence 3: [What the candidate brings or is seeking — honest career value proposition]
+  SENTENCE STRUCTURE — STRICTLY FOLLOW:
+  Sentence 1: [Seniority label] + [Job Title/Domain] + ["with X years of experience in" OR "specializing in"] + [core domain/stack]
+              NEVER start with "As a", "I am", "I have", or any pronoun.
+              ✓ "Mid-level Full Stack Developer with 3 years of experience building scalable web applications."
+              ✓ "Entry-level Python Developer specializing in backend development and RESTful API design."
+              ✓ "Aspiring Data Scientist with hands-on project experience in ML pipelines and NLP."
+  Sentence 2: [Top 2–3 specific technical strengths from resume — tools, frameworks, proven skills]
+              Start with a strong action noun or skill cluster. Never start with "I" or "As a".
+              ✓ "Proficient in React.js, Node.js, and MongoDB with demonstrated experience in full-stack deployment."
+              ✓ "Skilled in LangChain, FAISS, and LLaMA with hands-on RAG pipeline development."
+  Sentence 3: [Career value proposition — what they bring or are seeking]
+              ✓ "Committed to building efficient, scalable solutions that drive measurable business impact."
+              ✓ "Seeking to contribute strong backend expertise to a growth-focused engineering team."
 
 CORE SKILLS: labeled lines — Technical Skills: [...] and Professional Skills: [...]
 
 WORK EXPERIENCE (reverse chronological):
   Job Title | Company Name | MMM YYYY – MMM YYYY
-  [1-sentence role scope]
+  [1-sentence role scope — NO pronouns, NO "As a", starts with a noun or action word]
   • [Action Verb] + [Task] + [Technology] + [Quantified impact]
   (3–5 bullets per role)
   Strong verbs ONLY: Architected, Engineered, Developed, Implemented, Optimized, Automated,
-  Spearheaded, Deployed, Designed, Reduced, Increased, Streamlined, Led, Built.
-  NEVER: helped, assisted, worked on, involved in, responsible for.
+  Spearheaded, Deployed, Designed, Reduced, Increased, Streamlined, Led, Built, Delivered, Launched.
+  NEVER: helped, assisted, worked on, involved in, responsible for, I did, I built, I led.
+  EVERY bullet must start with a strong past-tense action verb — NEVER with "I", "We", or "As a".
 
   ⚠️ ZERO EXPERIENCE / FRESHER RULE — CRITICAL:
   If the candidate has NO work experience (no jobs, no internships):
@@ -4446,9 +4473,12 @@ WORK EXPERIENCE (reverse chronological):
   • DO NOT write "0 years of full-time experience" anywhere.
 
 PROJECTS: Name | Tech Stack | Duration
-  [1-sentence purpose]
-  • [Achievement bullet with action verb and metric]
+  [1-sentence purpose — starts with a noun/verb, NO pronouns, NO "As a", NO "I built"]
+  • [Achievement bullet — starts with strong action verb, NO pronouns]
   (3–5 bullets)
+  ✓ "Built a real-time chat application using Socket.io and React.js."
+  ✗ "I built a real-time chat application..."
+  ✗ "As a developer, I created..."
 
 EDUCATION: Degree, Major | Institution | Graduation Year | CGPA/Percentage
   • YEAR EXTRACTION (CRITICAL — scan the ENTIRE education block, not just the degree line):
@@ -4588,9 +4618,13 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
 - "contact.*" = extract exactly as written. Use "" not null for missing fields. Never invent email, phone, or URLs.
 
 ── SUMMARY ──
-- "summary" = 2–3 sentences, max 80 words, no pronouns. Must be COMPLETE — do NOT truncate mid-sentence.
+- "summary" = 2–3 sentences, max 80 words, NO pronouns anywhere. Must be COMPLETE — do NOT truncate mid-sentence.
   Must match the Professional Summary written in Part 1 exactly.
   MUST reflect actual experience level: freshers → "Aspiring/Entry-level", never fabricate years of experience.
+  MUST follow third-person implicit voice — no "I", "My", "As a", "I am", "I have" anywhere.
+  ✓ "Mid-level Full Stack Developer with 3 years of experience..."
+  ✗ "As a mid-level Full Stack Developer, I have 3 years..."
+  ✗ "I am an entry-level developer with..."
 
 ── SKILLS ──
 - "skills" = flat array of individual skill strings. Minimum 8. No duplicates. Only extract skills actually present in resume.
@@ -4607,8 +4641,10 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
     "2022–2023", "Feb 2024 - Nov 2025", month+year ranges, standalone years.
     If end date says "Present" / "present" / "current" / "Ongoing" → store as written (e.g. "Dec 2024 – Present").
     Tier 1: date found → store exactly. Tier 2: infer with "~" prefix. Tier 3: store "".
-- "experience[].description" = 1-sentence role scope, unique from bullets.
-- "experience[].bullets" = 3–5 bullets each. Strong verb + task + tech + quantified impact. No pronouns.
+- "experience[].description" = 1-sentence role scope, unique from bullets. NO pronouns. NO "As a". NO "I".
+    ✓ "Full-stack role focused on building responsive web applications using React.js and Node.js."
+    ✗ "As a developer, I was responsible for building web applications."
+- "experience[].bullets" = 3–5 bullets each. Strong past-tense verb + task + tech + quantified impact. NO pronouns. NO "I". NO "As a".
 
 ── PROJECTS ──
 - "projects[].name" = exact project name as written.
@@ -4622,8 +4658,10 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
     Tier 3: no date, no context → store "".
 - "projects[].tech_stack" = comma-separated technologies mentioned for this project.
 - "projects[].url" = project URL/GitHub link if present. Use "" if not present.
-- "projects[].description" = 1-sentence project purpose. Unique, not repeated in bullets.
-- "projects[].bullets" = 3–5 bullets. Must NOT restate experience bullets. Strong verb + task + tech + impact.
+- "projects[].description" = 1-sentence project purpose. NO pronouns. NO "I built". NO "As a". Unique, not repeated in bullets.
+    ✓ "Real-time food delivery platform built with React.js, Node.js, and MongoDB."
+    ✗ "I built a food delivery platform..."
+- "projects[].bullets" = 3–5 bullets. Must NOT restate experience bullets. Strong past-tense verb + task + tech + impact. NO pronouns.
 
 ── EDUCATION ──
 - "education[].degree" = extract the FULL degree name including type AND major/subject.
@@ -5117,6 +5155,7 @@ def _section_heading_bordered(doc, text: str, font_name: str,
     pPr.append(pBdr)
     p.paragraph_format.space_before = Pt(space_before)
     p.paragraph_format.space_after = Pt(space_after)
+    _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
     return p
 
 
@@ -5218,7 +5257,31 @@ def _add_bullet(doc, text: str, font_size: int = 10, font_name: str = "Arial",
     pPr.append(ind)
     p.paragraph_format.space_before = Pt(1)
     p.paragraph_format.space_after = Pt(1.5)
+    _set_para_keep(p, keep_together=True, keep_with_next=False, widow_control=True)
     return p
+
+
+def _set_para_keep(paragraph, keep_together: bool = True, keep_with_next: bool = False, widow_control: bool = True):
+    """
+    Apply paragraph-level page-break control to a python-docx paragraph.
+    - keep_together:  prevents a paragraph from splitting across pages (good for bullets)
+    - keep_with_next: keeps this paragraph on the same page as the next one (good for headings/role lines)
+    - widow_control:  prevents single orphan/widow lines at top or bottom of page
+    All three are set via the paragraph's XML pPr element.
+    """
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    pPr = paragraph._p.get_or_add_pPr()
+    if keep_together:
+        kT = OxmlElement('w:keepLines')
+        pPr.append(kT)
+    if keep_with_next:
+        kN = OxmlElement('w:keepNext')
+        pPr.append(kN)
+    if widow_control:
+        wC = OxmlElement('w:widowControl')
+        wC.set(qn('w:val'), '1')
+        pPr.append(wC)
 
 
 def _add_role_line(doc, role: str, company: str, duration: str,
@@ -5247,6 +5310,7 @@ def _add_role_line(doc, role: str, company: str, duration: str,
         r3.font.color.rgb = RGBColor(*duration_color)
     p.paragraph_format.space_before = Pt(6)
     p.paragraph_format.space_after = Pt(2)
+    _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
     return p
 
 
@@ -5283,6 +5347,7 @@ def _add_project_header(doc, name: str, duration: str, tech_stack: str, url: str
         r3.underline = True
     p.paragraph_format.space_before = Pt(6)
     p.paragraph_format.space_after = Pt(2)
+    _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
     return p
 
 
@@ -5314,6 +5379,7 @@ def _add_education_row(doc, degree: str, institution: str, year: str,
         r3.font.color.rgb = RGBColor(*year_color)
     p.paragraph_format.space_before = Pt(5)
     p.paragraph_format.space_after = Pt(1)
+    _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
     for b in (edu_bullets or []):
         if b and b != "[Not Provided]":
             _add_bullet(doc, b, font_size=degree_size - 1, font_name=font_name)
@@ -5533,6 +5599,7 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 r_co.font.color.rgb = RGBColor(74, 74, 74)
             p.paragraph_format.space_before = Pt(7)
             p.paragraph_format.space_after = Pt(0)
+            _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
 
             # ── Row 2: Duration (italic, smaller, dark-gray) ─────────────────
             if _duration:
@@ -5545,6 +5612,7 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 r_dur.font.color.rgb = RGBColor(110, 110, 110)
                 p_dur.paragraph_format.space_before = Pt(0)
                 p_dur.paragraph_format.space_after = Pt(2)
+                _set_para_keep(p_dur, keep_together=True, keep_with_next=True, widow_control=True)
 
             # ── Row 3: Role scope summary (italic gray) ────────────────────
             if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
@@ -5585,6 +5653,7 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 r_dur.font.color.rgb = RGBColor(110, 110, 110)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(1)
+            _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
             # Line 2: Tech Stack (plain text) + URL (clickable hyperlink)
             has_tech = proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]")
             has_url  = proj.get("url") and proj["url"] not in ("", "[Not Provided]")
@@ -5636,6 +5705,7 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 r_inst.font.color.rgb = RGBColor(74, 74, 74)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(0)
+            _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
             if edu.get("year") and edu["year"] not in ("", "[Not Provided]"):
                 p_yr = doc.add_paragraph()
                 p_yr.clear()
@@ -5646,6 +5716,7 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 r_yr.font.color.rgb = RGBColor(110, 110, 110)
                 p_yr.paragraph_format.space_before = Pt(0)
                 p_yr.paragraph_format.space_after = Pt(2)
+                _set_para_keep(p_yr, keep_together=True, keep_with_next=True, widow_control=True)
             if edu.get("cgpa") and edu["cgpa"] not in ("", "[Not Provided]"):
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
@@ -5662,6 +5733,7 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
                 p_cgpa.paragraph_format.space_before = Pt(0)
                 p_cgpa.paragraph_format.space_after = Pt(2)
+                _set_para_keep(p_cgpa, keep_together=True, keep_with_next=False, widow_control=True)
             for b in (edu.get("bullets") or []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT)
@@ -5863,6 +5935,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 r2.font.color.rgb = RGBColor(*MID_GRAY)
             p.paragraph_format.space_before = Pt(7)
             p.paragraph_format.space_after = Pt(1)
+            _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
 
             # Line 2: Company Name
             if _company:
@@ -5874,6 +5947,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 r_co.font.color.rgb = RGBColor(*DARK_GRAY)
                 p_co.paragraph_format.space_before = Pt(0)
                 p_co.paragraph_format.space_after = Pt(2)
+                _set_para_keep(p_co, keep_together=True, keep_with_next=True, widow_control=True)
 
             if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
                 _body_para(exp["description"], italic=True)
@@ -5906,6 +5980,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 rd.font.color.rgb = RGBColor(*MID_GRAY)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(1)
+            _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
             # Line 2: Tech Stack (plain) + URL (clickable hyperlink)
             has_tech = proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]")
             has_url  = proj.get("url") and proj["url"] not in ("", "[Not Provided]")
@@ -5926,6 +6001,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                     _add_hyperlink(p_meta, proj["url"], proj["url"], font_name=FONT, font_size=BODY - 1, color_rgb=(0, 0, 0))
                 p_meta.paragraph_format.space_before = Pt(0)
                 p_meta.paragraph_format.space_after = Pt(2)
+                _set_para_keep(p_meta, keep_together=True, keep_with_next=True, widow_control=True)
             if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
                 _body_para(proj["description"], italic=True)
             for b in proj.get("bullets", []):
@@ -5956,6 +6032,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 r_inst.font.color.rgb = RGBColor(*DARK_GRAY)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(0)
+            _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
             if edu.get("year") and edu["year"] not in ("", "[Not Provided]"):
                 p_yr = doc.add_paragraph()
                 p_yr.clear()
@@ -5966,6 +6043,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 r_yr.font.color.rgb = RGBColor(*MID_GRAY)
                 p_yr.paragraph_format.space_before = Pt(0)
                 p_yr.paragraph_format.space_after = Pt(2)
+                _set_para_keep(p_yr, keep_together=True, keep_with_next=True, widow_control=True)
             if edu.get("cgpa") and edu["cgpa"] not in ("", "[Not Provided]"):
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
@@ -5982,6 +6060,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
                 p_cgpa.paragraph_format.space_before = Pt(0)
                 p_cgpa.paragraph_format.space_after = Pt(2)
+                _set_para_keep(p_cgpa, keep_together=True, keep_with_next=False, widow_control=True)
             for b in (edu.get("bullets") or []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT)
@@ -6192,6 +6271,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 r3.font.color.rgb = RGBColor(110, 110, 110)
             p.paragraph_format.space_before = Pt(7)
             p.paragraph_format.space_after = Pt(1)
+            _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
 
             # Line 2: Company Name (teal)
             if _company:
@@ -6203,6 +6283,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 r_co.font.color.rgb = RGBColor(*TEAL)
                 p_co.paragraph_format.space_before = Pt(0)
                 p_co.paragraph_format.space_after = Pt(2)
+                _set_para_keep(p_co, keep_together=True, keep_with_next=True, widow_control=True)
 
             if exp.get("description") and exp["description"] not in ("", "[Not Provided]"):
                 _body_para(exp["description"], italic=True, color_rgb=(80, 80, 80))
@@ -6236,6 +6317,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 rd.font.color.rgb = RGBColor(110, 110, 110)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(1)
+            _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
             # Line 2: Tech (teal plain text) + URL (clickable hyperlink)
             has_tech = proj.get("tech_stack") and proj["tech_stack"] not in ("", "[Not Provided]")
             has_url  = proj.get("url") and proj["url"] not in ("", "[Not Provided]")
@@ -6256,6 +6338,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
                     _add_hyperlink(p_meta, proj["url"], proj["url"], font_name=FONT_BODY, font_size=BODY - 1, color_rgb=(0, 128, 128))
                 p_meta.paragraph_format.space_before = Pt(0)
                 p_meta.paragraph_format.space_after = Pt(2)
+                _set_para_keep(p_meta, keep_together=True, keep_with_next=True, widow_control=True)
             if proj.get("description") and proj["description"] not in ("", "[Not Provided]"):
                 _body_para(proj["description"], italic=True, color_rgb=(80, 80, 80))
             for b in proj.get("bullets", []):
@@ -6286,6 +6369,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 r2.font.color.rgb = RGBColor(*TEAL)
             p.paragraph_format.space_before = Pt(6)
             p.paragraph_format.space_after = Pt(0)
+            _set_para_keep(p, keep_together=True, keep_with_next=True, widow_control=True)
             if edu.get("year") and edu["year"] not in ("", "[Not Provided]"):
                 p_yr = doc.add_paragraph()
                 p_yr.clear()
@@ -6296,6 +6380,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 r3.font.color.rgb = RGBColor(110, 110, 110)
                 p_yr.paragraph_format.space_before = Pt(0)
                 p_yr.paragraph_format.space_after = Pt(2)
+                _set_para_keep(p_yr, keep_together=True, keep_with_next=True, widow_control=True)
             if edu.get("cgpa") and edu["cgpa"] not in ("", "[Not Provided]"):
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
@@ -6312,6 +6397,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
                 p_cgpa.paragraph_format.space_before = Pt(0)
                 p_cgpa.paragraph_format.space_after = Pt(2)
+                _set_para_keep(p_cgpa, keep_together=True, keep_with_next=False, widow_control=True)
             for b in (edu.get("bullets") or []):
                 if b and b != "[Not Provided]":
                     _add_bullet(doc, b, font_size=BODY - 1, font_name=FONT_BODY)
