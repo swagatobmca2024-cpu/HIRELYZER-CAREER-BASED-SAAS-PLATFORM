@@ -19243,7 +19243,6 @@ Generate {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
-
 if tab5:
 	with tab5:
 		# sqlite3 removed — using Supabase PostgreSQL via db_manager
@@ -20104,5 +20103,3 @@ if tab5:
 			<p>Last updated: {}</p>
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
-
-    
