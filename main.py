@@ -6607,7 +6607,7 @@ Suggestions:
 ---
 """
 
-    response = call_llm(grammar_prompt, session=st.session_state).strip()
+    response = call_llm(grammar_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
     score_match = re.search(r"Score:\s*(\d+)", response)
     feedback_match = re.search(r"Feedback:\s*(.+)", response)
     suggestions = re.findall(r"- (.+)", response)
@@ -6892,7 +6892,7 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _r = call_llm(_resume_domain_prompt, session=st.session_state).strip()
+            _r = call_llm(_resume_domain_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
             if _r in _valid_domains:
                 st.session_state[_resume_cache_key] = _r
             else:
@@ -6994,7 +6994,7 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _j = call_llm(_jd_domain_prompt, session=st.session_state).strip()
+            _j = call_llm(_jd_domain_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
             if _j in _valid_domains:
                 st.session_state[_jd_cache_key] = _j
             else:
@@ -8222,7 +8222,7 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
+                _r = call_llm(_pre_resume_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
                 if _r in _pre_valid_domains:
                     st.session_state[_pre_resume_cache_key] = _r
                 else:
@@ -8320,7 +8320,7 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
+                _j = call_llm(_pre_jd_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
                 if _j in _pre_valid_domains:
                     st.session_state[_pre_jd_cache_key] = _j
                 else:
