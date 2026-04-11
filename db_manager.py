@@ -282,7 +282,7 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            result = call_llm(prompt, session=session, model="llama-3.1-8b-instant").strip()
+            result = call_llm(prompt, session=session).strip()
             if result in self.VALID_DOMAINS:
                 return result
             logger.warning(f"LLM returned invalid domain '{result}' — falling back to keyword detection")
@@ -381,7 +381,7 @@ STEP 3 — RETURN ANSWER
 Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
-            raw = call_llm(prompt, session=session, model="llama-3.1-8b-instant").strip()
+            raw = call_llm(prompt, session=session).strip()
             llm_domain = raw if raw in self.VALID_DOMAINS else None
             if llm_domain is None:
                 logger.warning(f"LLM returned invalid domain '{raw}' in two-stage detection")
