@@ -37,6 +37,19 @@ DAILY_KEY_LIMIT          = 800
 DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
+# ── Per-minute token rate limiter (Groq free tier: ~6000 TPM per key) ─────────
+# Tracks estimated tokens sent per key in a rolling 60-second window.
+# Prevents burst exhaustion when multiple users/resumes hit the same key.
+TPM_LIMIT          = 5500          # stay slightly under the 6000 hard limit
+TPM_WINDOW_SECONDS = 60
+# Rough token estimator: 1 token ≈ 4 chars (conservative for English prompts)
+CHARS_PER_TOKEN    = 4
+
+# In-memory store: { api_key: [(timestamp, token_count), ...] }
+# Using a plain dict + lock — no DB round-trip for hot path.
+_tpm_tracker: dict = {}
+_tpm_lock = threading.Lock()
+
 # FIX 2: module-level lock so parallel threads never pick the same key
 _key_rotation_lock = threading.Lock()
 
@@ -180,6 +193,50 @@ def cleanup_cache():
     cutoff_dead  = get_utc_now() - timedelta(days=DEAD_KEY_REMOVE_DAYS)
     _execute("DELETE FROM llm_cache WHERE timestamp < %s", (cutoff_cache,))
     _execute("DELETE FROM key_failures WHERE fail_time < %s", (cutoff_dead,))
+
+
+# ── Per-minute token rate limiter helpers ────────────────────────────────────
+def _estimate_tokens(text: str) -> int:
+    """Rough token count estimate: 1 token ≈ 4 chars."""
+    return max(1, len(text) // CHARS_PER_TOKEN)
+
+
+def _get_key_tpm(api_key: str, now: float) -> int:
+    """Return total tokens sent with this key in the last 60 seconds."""
+    window_start = now - TPM_WINDOW_SECONDS
+    entries = _tpm_tracker.get(api_key, [])
+    return sum(cnt for ts, cnt in entries if ts >= window_start)
+
+
+def _record_key_tokens(api_key: str, token_count: int, now: float):
+    """Record a token usage event and prune stale entries."""
+    window_start = now - TPM_WINDOW_SECONDS
+    with _tpm_lock:
+        entries = _tpm_tracker.get(api_key, [])
+        # Prune entries outside the rolling window
+        entries = [(ts, cnt) for ts, cnt in entries if ts >= window_start]
+        entries.append((now, token_count))
+        _tpm_tracker[api_key] = entries
+
+
+def _key_has_tpm_headroom(api_key: str, estimated_tokens: int) -> bool:
+    """Return True if this key has enough TPM budget for the given call."""
+    now = time.time()
+    with _tpm_lock:
+        current_tpm = _get_key_tpm(api_key, now)
+    return (current_tpm + estimated_tokens) <= TPM_LIMIT
+
+
+def get_keys_with_tpm_headroom(api_keys: list, estimated_tokens: int) -> list:
+    """
+    Filter api_keys to those with remaining TPM budget.
+    Falls back to the full list if none have headroom (avoids hard block).
+    """
+    now = time.time()
+    with _tpm_lock:
+        headroom = [k for k in api_keys
+                    if (_get_key_tpm(k, now) + estimated_tokens) <= TPM_LIMIT]
+    return headroom if headroom else api_keys  # graceful fallback
 
 
 # ── API key loader ────────────────────────────────────────────────────────────
@@ -407,8 +464,15 @@ def call_llm(
 ) -> str:
     """
     1. Check Supabase cache — return immediately on hit.
-    2. Try user-provided Groq key (if set).
-    3. Rotate through healthy admin keys.
+    2. Try user-provided Groq key (if set and has TPM headroom).
+    3. Rotate through healthy admin keys, preferring those with TPM headroom.
+       TPM-limited keys are tried last as a graceful fallback (not hard-blocked).
+
+    Multi-user safe:
+    - Per-minute token tracking (_tpm_tracker) is in-process memory per worker.
+    - Each Streamlit worker/thread sees its own TPM window but keys are still
+      shared across users, so the TPM guard reduces burst collisions significantly.
+    - Daily quota tracking remains in Supabase (shared across workers).
     """
     # Guard against None session (e.g. called from db_manager without session)
     if session is None:
@@ -431,6 +495,9 @@ def call_llm(
     if cached:
         return cached
 
+    # ── Estimate token cost for this prompt ──────────────────────────────────
+    estimated_tokens = _estimate_tokens(prompt)
+
     # Initialise key_index safely (works for both dict and st.session_state)
     if "key_index" not in session:
         try:
@@ -447,16 +514,26 @@ def call_llm(
 
     # ── Step 2: user-supplied key ─────────────────────────────────────────────
     if user_key:
-        try:
-            response = try_call_llm(prompt, user_key, model, temperature)
-            set_cached_response(prompt, model, response)
-            increment_key_usage(user_key)
-            return response
-        except Exception as e:
-            err_type = _classify_error(e)
-            if err_type != "transient":
-                mark_key_failure(user_key, "quota" if err_type == "quota" else "error")
-            last_error = e
+        # Check TPM headroom — if over limit, skip and fall through to admin keys
+        if _key_has_tpm_headroom(user_key, estimated_tokens):
+            try:
+                response = try_call_llm(prompt, user_key, model, temperature)
+                _record_key_tokens(user_key, estimated_tokens, time.time())
+                set_cached_response(prompt, model, response)
+                increment_key_usage(user_key)
+                return response
+            except Exception as e:
+                err_type = _classify_error(e)
+                if err_type == "quota":
+                    mark_key_failure(user_key, "quota")
+                    # Also saturate the TPM window to avoid retrying this key
+                    _record_key_tokens(user_key, TPM_LIMIT, time.time())
+                elif err_type == "dead":
+                    mark_key_failure(user_key, "error")
+                last_error = e
+        else:
+            # User key is TPM-throttled — fall through silently to admin keys
+            pass
 
     # ── Step 3: admin key rotation ────────────────────────────────────────────
     try:
@@ -464,10 +541,21 @@ def call_llm(
     except ValueError as e:
         return f"❌ LLM unavailable: {e}"
 
-    admin_keys = get_healthy_keys(all_admin_keys)
+    # Get health-filtered keys, then sort by TPM headroom (most headroom first)
+    healthy_keys = get_healthy_keys(all_admin_keys)
 
-    if not admin_keys:
+    if not healthy_keys:
         return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
+
+    # Partition: keys with TPM headroom go first, over-budget keys are last resort
+    now = time.time()
+    with _tpm_lock:
+        keys_with_headroom = [k for k in healthy_keys
+                               if (_get_key_tpm(k, now) + estimated_tokens) <= TPM_LIMIT]
+        keys_over_budget   = [k for k in healthy_keys if k not in keys_with_headroom]
+
+    # Always try headroom keys first; fall back to over-budget only if all fail
+    admin_keys = keys_with_headroom + keys_over_budget
 
     # FIX 2: lock while picking index; FIX 5: guard against shrunk list
     with _key_rotation_lock:
@@ -483,8 +571,14 @@ def call_llm(
     for offset in range(len(admin_keys)):
         idx = (start + offset) % len(admin_keys)
         key = admin_keys[idx]
+
+        # If this is an over-budget key, add a small back-off to reduce burst
+        if key in keys_over_budget:
+            time.sleep(1.5)
+
         try:
             response = try_call_llm(prompt, key, model, temperature)
+            _record_key_tokens(key, estimated_tokens, time.time())
             set_cached_response(prompt, model, response)
             increment_key_usage(key)
             clear_key_failure(key)
@@ -493,6 +587,8 @@ def call_llm(
             err_type = _classify_error(e)
             if err_type == "quota":
                 mark_key_failure(key, "quota")
+                # Saturate TPM window so this key is deprioritised instantly
+                _record_key_tokens(key, TPM_LIMIT, time.time())
             elif err_type == "dead":
                 mark_key_failure(key, "error")
             # transient: key stays healthy, try the next one
