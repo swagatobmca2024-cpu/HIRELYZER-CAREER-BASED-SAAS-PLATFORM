@@ -258,11 +258,11 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
         with st.spinner("✉️ Generating cover letter..."):
             try:
                 cover_letter = call_llm(prompt, session=st.session_state).strip()
-                if cover_letter.startswith("❌ Daily token limit"):
-                    st.error("⏳ Daily token limit reached for all API keys. Resets at midnight UTC — please try again later.")
-                    return
-                if cover_letter.startswith("❌ LLM unavailable"):
-                    st.error("❌ LLM unavailable. All API keys are exhausted or in cooldown. Please try again in a few minutes.")
+                if cover_letter.startswith("❌"):
+                    if "daily token limit" in cover_letter.lower() or "midnight utc" in cover_letter.lower():
+                        st.error("⏳ Daily token limit reached across all API keys. This resets at midnight UTC — please try again later.")
+                    else:
+                        st.error(cover_letter)
                     return
             except Exception as e:
                 st.error(f"❌ Failed to generate cover letter: {e}")
@@ -4708,19 +4708,7 @@ RESUME TEXT:
 
     raw_response = call_llm(prompt, session=st.session_state)
 
-    # Guard: if all keys are exhausted, raise immediately so the caller's
-    # except block shows a clear message rather than silently mis-parsing
-    # an error string as resume content.
-    if raw_response.startswith("❌ Daily token limit"):
-        raise RuntimeError(
-            "⏳ Daily token limit reached for all API keys. "
-            "Resets at midnight UTC — please try again later."
-        )
-    if raw_response.startswith("❌ LLM unavailable"):
-        raise RuntimeError(
-            "❌ LLM unavailable. All API keys are exhausted or in cooldown. "
-            "Please try again in a few minutes."
-        )
+    # ── Parse the two sections out of the combined response ──────────────
     rewritten_text = ""
     json_str = ""
 
@@ -6910,7 +6898,7 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _r = call_llm(_resume_domain_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
+            _r = call_llm(_resume_domain_prompt, session=st.session_state).strip()
             if _r in _valid_domains:
                 st.session_state[_resume_cache_key] = _r
             else:
@@ -7012,7 +7000,7 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _j = call_llm(_jd_domain_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
+            _j = call_llm(_jd_domain_prompt, session=st.session_state).strip()
             if _j in _valid_domains:
                 st.session_state[_jd_cache_key] = _j
             else:
@@ -7299,19 +7287,15 @@ SCORING SCALE for language ({lang_weight} pts max):
    
     ats_result = call_llm(prompt, session=st.session_state).strip()
 
-    # ── Guard: surface meaningful error messages instead of silently parsing
-    # an error string as if it were a valid ATS report. ───────────────────────
-    if ats_result.startswith("❌ Daily token limit"):
-        raise RuntimeError(
-            "⏳ Daily token limit reached for all API keys. "
-            "This resets at midnight UTC — please try again later."
-        )
-    if ats_result.startswith("❌ LLM unavailable"):
-        raise RuntimeError(
-            "❌ LLM unavailable. All API keys are either exhausted or in cooldown. "
-            "Please try again in a few minutes."
-        )
-    # ─────────────────────────────────────────────────────────────────────────
+    # ── FIX 16: Surface LLM error messages clearly instead of silently mangling them ──
+    if ats_result.startswith("❌"):
+        if "daily token limit" in ats_result.lower() or "midnight utc" in ats_result.lower():
+            raise RuntimeError(
+                "⏳ Daily token limit reached across all API keys. "
+                "This resets at midnight UTC — please try again later."
+            )
+        raise RuntimeError(ats_result)
+    # ─────────────────────────────────────────────────────────────────────────────────
     # The LLM sometimes rewrites these despite instructions. Force the true
     # system-computed values back in so UI and narrative always match.
     _true_fmt_score = format_data.get("format_score", 75) if format_data else 75
@@ -8252,7 +8236,7 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _r = call_llm(_pre_resume_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
+                _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
                 if _r in _pre_valid_domains:
                     st.session_state[_pre_resume_cache_key] = _r
                 else:
@@ -8350,7 +8334,7 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _j = call_llm(_pre_jd_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
+                _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
                 if _j in _pre_valid_domains:
                     st.session_state[_pre_jd_cache_key] = _j
                 else:
@@ -8402,7 +8386,11 @@ Return ONLY one domain from this list, nothing else:
                     json_str         = ""
 
                 # Collect ATS result
-                ats_result, ats_scores = _future_ats.result()
+                try:
+                    ats_result, ats_scores = _future_ats.result()
+                except RuntimeError as _llm_err:
+                    st.error(str(_llm_err))
+                    st.stop()
 
         # ✅ Resume Optimization Module — reuse JSON already produced above (0 extra LLM calls)
         try:
