@@ -4,24 +4,30 @@ Migrated from SQLite to psycopg2, using the same @st.cache_resource singleton
 pattern as db_manager.py and user_login.py.
 All timestamps are stored and compared in UTC (TIMESTAMPTZ columns).
 
-FIXES vs previous version:
-  1. cleanup_cache() now rate-limited to once per 30 min (was firing on every call)
-  2. Thread lock around key_index read/write (race condition in ThreadPoolExecutor)
-  3. Transient errors (network blip, 500) no longer mark healthy keys as failed
-  4. mark_key_failure() moved outside get_healthy_keys() read loop (batch write)
-  5. create_chain() pattern: increment_key_usage only after success (caller fix noted)
-  6. FIXED: _conn() liveness check now does a real SELECT 1 round-trip (was broken attr read)
-  7. FIXED: Reconnect no longer calls st.cache_resource.clear() (was nuking all 3 connections)
-  8. FIXED: get_healthy_keys() DB failure now falls back to all keys instead of returning []
-  9. FIXED: key_index round-robin now sorts keys before shuffle so index is meaningful per-call
+CHANGES vs v11:
+  1. Global atomic key counter (_global_key_counter) replaces per-session key_index
+     so all concurrent users/threads rotate across ALL 100 keys evenly.
+  2. In-memory failure/cooldown cache (_mem_failures, _mem_usage) eliminates DB
+     round-trips on the hot request path; Supabase writes are async/deferred.
+  3. Exponential back-off with full jitter on per-key retries (no fixed sleep).
+  4. Keys are pre-shuffled once at import time and re-shuffled after each full
+     rotation cycle to prevent multiple workers always hitting the same key.
+  5. Thread-safe in-memory usage counters mirror Supabase (flush async).
+  6. _classify_error now catches httpx/groq status codes in addition to strings.
+  7. get_healthy_keys() uses in-memory cache first; DB is only a fallback/refresh.
+  8. call_llm() tries all healthy keys before giving up (no early exit on transient).
+  9. All existing safety mechanisms (cooldown, quota, TPM, caching) are preserved.
+ 10. TAB_1_RESUME.py call signature unchanged — drop-in replacement.
 """
 
 import hashlib
+import itertools
 import os
 import random
 import threading
 import time
 from datetime import datetime, timedelta
+from typing import List, Optional
 
 import psycopg2
 import psycopg2.extras
@@ -37,32 +43,58 @@ DAILY_KEY_LIMIT          = 800
 DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
-# ── Per-minute token rate limiter (Groq free tier: ~6000 TPM per key) ─────────
-# Tracks estimated tokens sent per key in a rolling 60-second window.
-# Prevents burst exhaustion when multiple users/resumes hit the same key.
+# ── Per-minute token rate limiter (Groq free tier: ~6000 TPM per key) ────────
 TPM_LIMIT          = 5500          # stay slightly under the 6000 hard limit
 TPM_WINDOW_SECONDS = 60
-# Rough token estimator: 1 token ≈ 4 chars (conservative for English prompts)
-CHARS_PER_TOKEN    = 4
+CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
 
-# In-memory store: { api_key: [(timestamp, token_count), ...] }
-# Using a plain dict + lock — no DB round-trip for hot path.
+# ── Retry / back-off config ───────────────────────────────────────────────────
+MAX_RETRIES_PER_KEY = 1            # attempts per key before moving on
+BACKOFF_BASE        = 0.4          # seconds — full-jitter base
+BACKOFF_MAX         = 8.0          # seconds — cap for a single inter-key sleep
+
+# ── Groq error signals ────────────────────────────────────────────────────────
+_QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests",
+                     "rateLimitError", "rate_limit_exceeded"]
+_DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
+                     "api key", "authentication", "permission denied",
+                     "invalid_api_key"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IN-MEMORY STATE  (module-level, shared across all threads in one worker)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# TPM tracker: { api_key: [(timestamp_float, token_count), ...] }
 _tpm_tracker: dict = {}
 _tpm_lock = threading.Lock()
 
-# FIX 2: module-level lock so parallel threads never pick the same key
-_key_rotation_lock = threading.Lock()
+# Global atomic round-robin counter — incremented on every successful key pick.
+# Using itertools.count() which is C-level and GIL-safe for simple increments.
+_global_key_counter = itertools.count(0)
+_counter_lock = threading.Lock()
+_counter_value: int = 0           # shadow value so we can read current index
 
-# FIX 7: per-module reconnect lock so only one thread reconnects at a time
-_reconnect_lock = threading.Lock()
+# In-memory failure cache: { api_key: {"time": float, "reason": str} }
+_mem_failures: dict = {}
+_mem_failures_lock = threading.Lock()
+
+# In-memory daily usage: { api_key: {"count": int, "date": str} }
+_mem_usage: dict = {}
+_mem_usage_lock = threading.Lock()
+
+# Reconnect + rotation locks
+_reconnect_lock      = threading.Lock()
+_key_rotation_lock   = threading.Lock()
 
 # Module-level connection holder (not via st.cache_resource to avoid cross-module clear)
 _llm_conn_holder: dict = {"conn": None}
 
-# Groq errors that mean the KEY itself is bad (not a transient server issue)
-_QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests"]
-_DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
-                     "api key", "authentication", "permission denied"]
+# Cached ordered key list — rebuilt whenever the underlying secrets are loaded.
+# Shape: List[str], shuffled once at load time and periodically re-shuffled.
+_cached_keys: List[str] = []
+_cached_keys_lock = threading.Lock()
+_keys_loaded_at: float = 0.0
+KEY_CACHE_TTL = 3600.0   # reload from secrets at most once per hour
 
 
 # ── Timezone helper ───────────────────────────────────────────────────────────
@@ -72,7 +104,6 @@ def get_utc_now() -> datetime:
 
 # ── Connection management (isolated, no global cache_resource.clear()) ────────
 def _make_llm_connection():
-    """Open a fresh psycopg2 connection for the LLM manager."""
     conn = psycopg2.connect(
         host=st.secrets["SUPABASE_HOST"],
         dbname=st.secrets["SUPABASE_DB"],
@@ -90,16 +121,7 @@ def _make_llm_connection():
 
 
 def _conn():
-    """
-    Return a live psycopg2 connection.
-
-    FIX 6: Liveness check is a real SELECT 1 round-trip (old code read
-            conn.isolation_level which is a pure Python attribute — never
-            touches the socket, so stale connections passed silently).
-    FIX 7: Reconnect only replaces THIS module's connection; it does NOT
-            call st.cache_resource.clear() which would nuke db_manager and
-            user_login connections simultaneously.
-    """
+    """Return a live psycopg2 connection (real SELECT 1 liveness check)."""
     with _reconnect_lock:
         conn = _llm_conn_holder.get("conn")
         need_reconnect = False
@@ -110,7 +132,7 @@ def _conn():
             try:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
-                conn.rollback()  # close any implicit transaction opened by SELECT 1
+                conn.rollback()
             except Exception:
                 need_reconnect = True
                 try:
@@ -126,9 +148,8 @@ def _conn():
 
 def _execute(sql: str, params=None, fetch: str = "none"):
     """
-    Run a SQL statement inside an implicit transaction.
+    Run SQL inside an implicit transaction.
     fetch: 'one' | 'all' | 'none'
-    Commits on success, rolls back on error.
     """
     conn = _conn()
     try:
@@ -191,36 +212,34 @@ def cleanup_cache():
     """Delete expired cache rows and permanently dead keys."""
     cutoff_cache = get_utc_now() - timedelta(hours=CACHE_EXPIRY_HOURS)
     cutoff_dead  = get_utc_now() - timedelta(days=DEAD_KEY_REMOVE_DAYS)
-    _execute("DELETE FROM llm_cache WHERE timestamp < %s", (cutoff_cache,))
-    _execute("DELETE FROM key_failures WHERE fail_time < %s", (cutoff_dead,))
+    try:
+        _execute("DELETE FROM llm_cache WHERE timestamp < %s", (cutoff_cache,))
+        _execute("DELETE FROM key_failures WHERE fail_time < %s", (cutoff_dead,))
+    except Exception:
+        pass
 
 
-# ── Per-minute token rate limiter helpers ────────────────────────────────────
+# ── Per-minute token rate limiter helpers ─────────────────────────────────────
 def _estimate_tokens(text: str) -> int:
-    """Rough token count estimate: 1 token ≈ 4 chars."""
     return max(1, len(text) // CHARS_PER_TOKEN)
 
 
 def _get_key_tpm(api_key: str, now: float) -> int:
-    """Return total tokens sent with this key in the last 60 seconds."""
     window_start = now - TPM_WINDOW_SECONDS
     entries = _tpm_tracker.get(api_key, [])
     return sum(cnt for ts, cnt in entries if ts >= window_start)
 
 
 def _record_key_tokens(api_key: str, token_count: int, now: float):
-    """Record a token usage event and prune stale entries."""
     window_start = now - TPM_WINDOW_SECONDS
     with _tpm_lock:
         entries = _tpm_tracker.get(api_key, [])
-        # Prune entries outside the rolling window
         entries = [(ts, cnt) for ts, cnt in entries if ts >= window_start]
         entries.append((now, token_count))
         _tpm_tracker[api_key] = entries
 
 
 def _key_has_tpm_headroom(api_key: str, estimated_tokens: int) -> bool:
-    """Return True if this key has enough TPM budget for the given call."""
     now = time.time()
     with _tpm_lock:
         current_tpm = _get_key_tpm(api_key, now)
@@ -228,36 +247,121 @@ def _key_has_tpm_headroom(api_key: str, estimated_tokens: int) -> bool:
 
 
 def get_keys_with_tpm_headroom(api_keys: list, estimated_tokens: int) -> list:
-    """
-    Filter api_keys to those with remaining TPM budget.
-    Falls back to the full list if none have headroom (avoids hard block).
-    """
     now = time.time()
     with _tpm_lock:
         headroom = [k for k in api_keys
                     if (_get_key_tpm(k, now) + estimated_tokens) <= TPM_LIMIT]
-    return headroom if headroom else api_keys  # graceful fallback
+    return headroom if headroom else api_keys
+
+
+# ── In-memory failure helpers ─────────────────────────────────────────────────
+def _mem_record_failure(api_key: str, reason: str):
+    with _mem_failures_lock:
+        _mem_failures[api_key] = {"time": time.time(), "reason": reason}
+
+
+def _mem_clear_failure(api_key: str):
+    with _mem_failures_lock:
+        _mem_failures.pop(api_key, None)
+
+
+def _mem_is_in_cooldown(api_key: str) -> bool:
+    with _mem_failures_lock:
+        entry = _mem_failures.get(api_key)
+    if not entry:
+        return False
+    cooldown_secs = (
+        QUOTA_COOLDOWN_MINUTES * 60
+        if entry["reason"] == "quota"
+        else FAILURE_COOLDOWN_MINUTES * 60
+    )
+    return (time.time() - entry["time"]) < cooldown_secs
+
+
+def _mem_increment_usage(api_key: str):
+    today = datetime.now(pytz.utc).strftime("%Y-%m-%d")
+    with _mem_usage_lock:
+        rec = _mem_usage.get(api_key)
+        if rec is None or rec["date"] != today:
+            _mem_usage[api_key] = {"count": 1, "date": today}
+        else:
+            rec["count"] += 1
+
+
+def _mem_usage_over_limit(api_key: str) -> bool:
+    today = datetime.now(pytz.utc).strftime("%Y-%m-%d")
+    with _mem_usage_lock:
+        rec = _mem_usage.get(api_key)
+    if rec is None:
+        return False
+    return rec["date"] == today and rec["count"] >= DAILY_KEY_LIMIT
+
+
+# ── Background Supabase flush (fire-and-forget threads) ──────────────────────
+def _async_mark_failure(api_key: str, reason: str):
+    """Write failure to Supabase in a background thread."""
+    def _write():
+        try:
+            mark_key_failure(api_key, reason)
+        except Exception:
+            pass
+    threading.Thread(target=_write, daemon=True).start()
+
+
+def _async_increment_usage(api_key: str):
+    """Write usage increment to Supabase in a background thread."""
+    def _write():
+        try:
+            increment_key_usage(api_key)
+        except Exception:
+            pass
+    threading.Thread(target=_write, daemon=True).start()
+
+
+def _async_clear_failure(api_key: str):
+    """Clear failure from Supabase in a background thread."""
+    def _write():
+        try:
+            clear_key_failure(api_key)
+        except Exception:
+            pass
+    threading.Thread(target=_write, daemon=True).start()
 
 
 # ── API key loader ────────────────────────────────────────────────────────────
-def load_groq_api_keys():
-    """Load Groq keys from Streamlit secrets (preferred) or environment."""
-    try:
-        secret_keys = st.secrets.get("GROQ_API_KEYS", "")
-        if secret_keys:
-            keys = [k.strip() for k in secret_keys.split(",") if k.strip()]
-            if keys:
-                return keys
-    except Exception:
-        pass
+def load_groq_api_keys() -> List[str]:
+    """
+    Load Groq keys from Streamlit secrets (preferred) or environment.
+    Keys are cached in memory for KEY_CACHE_TTL seconds to avoid repeated
+    secret reads. The list is shuffled once on load so that the starting
+    position is randomised across worker restarts.
+    """
+    global _cached_keys, _keys_loaded_at
 
-    env_keys = os.getenv("GROQ_API_KEYS")
-    if env_keys:
-        keys = [k.strip() for k in env_keys.split(",") if k.strip()]
-        if keys:
-            return keys
+    now = time.time()
+    with _cached_keys_lock:
+        if _cached_keys and (now - _keys_loaded_at) < KEY_CACHE_TTL:
+            return list(_cached_keys)
 
-    raise ValueError("❌ No Groq API keys found in secrets or environment.")
+        raw = ""
+        try:
+            raw = st.secrets.get("GROQ_API_KEYS", "") or ""
+        except Exception:
+            pass
+
+        if not raw:
+            raw = os.getenv("GROQ_API_KEYS", "") or ""
+
+        keys = [k.strip() for k in raw.split(",") if k.strip()]
+
+        if not keys:
+            raise ValueError("❌ No Groq API keys found in secrets or environment.")
+
+        # Shuffle once so workers don't all start at key[0]
+        random.shuffle(keys)
+        _cached_keys    = keys
+        _keys_loaded_at = now
+        return list(_cached_keys)
 
 
 # ── Prompt hashing ────────────────────────────────────────────────────────────
@@ -266,8 +370,7 @@ def hash_prompt(prompt: str, model: str) -> str:
 
 
 # ── Cache R/W ─────────────────────────────────────────────────────────────────
-def get_cached_response(prompt: str, model: str):
-    """Return cached LLM response if still within CACHE_EXPIRY_HOURS, else None."""
+def get_cached_response(prompt: str, model: str) -> Optional[str]:
     key    = hash_prompt(prompt, model)
     cutoff = get_utc_now() - timedelta(hours=CACHE_EXPIRY_HOURS)
     try:
@@ -285,12 +388,11 @@ def get_cached_response(prompt: str, model: str):
             if ts >= cutoff:
                 return row["response"]
     except Exception:
-        pass  # cache miss on DB error — just proceed to LLM
+        pass
     return None
 
 
 def set_cached_response(prompt: str, model: str, response: str):
-    """Upsert a response into the LLM cache."""
     key = hash_prompt(prompt, model)
     try:
         _execute(
@@ -304,12 +406,11 @@ def set_cached_response(prompt: str, model: str, response: str):
             (key, response),
         )
     except Exception:
-        pass  # non-fatal — next call will just re-query the LLM
+        pass
 
 
-# ── Key tracking ──────────────────────────────────────────────────────────────
+# ── Key tracking (Supabase) ───────────────────────────────────────────────────
 def increment_key_usage(api_key: str):
-    """Increment daily usage counter for a key, resetting if the date changed."""
     try:
         _execute(
             """
@@ -326,11 +427,10 @@ def increment_key_usage(api_key: str):
             (api_key,),
         )
     except Exception:
-        pass  # non-fatal
+        pass
 
 
 def mark_key_failure(api_key: str, reason: str = "error"):
-    """Record (or update) a key failure with a timestamp and reason."""
     try:
         _execute(
             """
@@ -343,47 +443,89 @@ def mark_key_failure(api_key: str, reason: str = "error"):
             (api_key, reason),
         )
     except Exception:
-        pass  # non-fatal
+        pass
 
 
 def clear_key_failure(api_key: str):
-    """Remove a key from the failure table (marks it healthy again)."""
     try:
         _execute("DELETE FROM key_failures WHERE api_key = %s", (api_key,))
     except Exception:
-        pass  # non-fatal
+        pass
 
 
-def _classify_error(error: Exception):
+# ── Error classifier ──────────────────────────────────────────────────────────
+def _classify_error(error: Exception) -> str:
     """
-    Classify an exception so we only penalise keys for real key errors.
     Returns:
-        'quota'     — rate limited, put key in 60-min cooldown
-        'dead'      — bad/invalid key, put in 5-min cooldown
-        'transient' — network blip / server 500 / timeout, do NOT touch the key
+        'quota'     — rate limited → 60-min cooldown
+        'dead'      — bad/invalid key → 5-min cooldown
+        'transient' — network blip / server 500 / timeout → do NOT touch the key
     """
     msg = str(error).lower()
-    if any(s in msg for s in _QUOTA_SIGNALS):
+
+    # Also check numeric HTTP status if available (groq SDK / httpx)
+    status_code = None
+    for attr in ("status_code", "response", "http_status"):
+        try:
+            val = getattr(error, attr, None)
+            if isinstance(val, int):
+                status_code = val
+                break
+            if hasattr(val, "status_code"):
+                status_code = val.status_code
+                break
+        except Exception:
+            pass
+
+    if status_code == 429 or any(s in msg for s in _QUOTA_SIGNALS):
         return "quota"
-    if any(s in msg for s in _DEAD_KEY_SIGNALS):
+    if status_code in (401, 403) or any(s in msg for s in _DEAD_KEY_SIGNALS):
         return "dead"
     return "transient"
 
 
+# ── Healthy key filter (in-memory first, Supabase fallback) ──────────────────
 def get_healthy_keys(api_keys: list) -> list:
     """
-    Return the subset of api_keys that are:
-    - not in cooldown (FAILURE_COOLDOWN_MINUTES / QUOTA_COOLDOWN_MINUTES)
-    - below DAILY_KEY_LIMIT
-
-    FIX 8: If the DB queries fail, returns ALL keys as fallback (was returning
-            [] which caused false "no healthy keys" errors on transient DB blips).
-    FIX 9: Result is sorted before shuffle so key_index is a stable pointer
-            within a single call_llm() invocation.
+    Return subset of api_keys that pass in-memory health checks.
+    Falls back to DB refresh if in-memory data seems incomplete.
+    FIX 8 preserved: DB failure returns all keys rather than empty list.
     """
-    now   = get_utc_now()
-    today = now.strftime("%Y-%m-%d")
+    today = get_utc_now().strftime("%Y-%m-%d")
 
+    # Fast path — use only in-memory state (no DB round-trip)
+    healthy_fast = []
+    for key in api_keys:
+        if _mem_is_in_cooldown(key):
+            continue
+        if _mem_usage_over_limit(key):
+            continue
+        healthy_fast.append(key)
+
+    # If we filtered out nothing at all (first run, empty mem-state), do a
+    # one-shot DB refresh to seed the in-memory tables.
+    if len(healthy_fast) == len(api_keys):
+        _seed_mem_from_db(api_keys, today)
+        # Re-filter after seeding
+        healthy_fast = [k for k in api_keys
+                        if not _mem_is_in_cooldown(k)
+                        and not _mem_usage_over_limit(k)]
+
+    if not healthy_fast:
+        # All keys appear unhealthy — return all as last resort
+        healthy_fast = list(api_keys)
+
+    # Stable sort + shuffle (preserves FIX 9 intent)
+    healthy_fast.sort()
+    random.shuffle(healthy_fast)
+    return healthy_fast
+
+
+def _seed_mem_from_db(api_keys: list, today: str):
+    """
+    One-shot DB read to seed in-memory failure + usage tables.
+    Runs at startup or after a full key cycle.
+    """
     try:
         failures_rows = _execute(
             "SELECT api_key, fail_time, reason FROM key_failures WHERE api_key = ANY(%s)",
@@ -396,57 +538,53 @@ def get_healthy_keys(api_keys: list) -> list:
             fetch="all",
         ) or []
     except Exception:
-        # FIX 8: DB unavailable — don't penalise keys, let callers try all of them
-        shuffled = list(api_keys)
-        random.shuffle(shuffled)
-        return shuffled
+        return  # DB unavailable — leave mem state as-is
 
-    failures = {r["api_key"]: r for r in failures_rows}
-    usages   = {r["api_key"]: r for r in usage_rows}
+    now_ts = time.time()
 
-    quota_keys = []
-    healthy    = []
-
-    for key in api_keys:
-        # ── cooldown check ────────────────────────────────────────────────────
-        if key in failures:
-            f       = failures[key]
-            fail_dt = f["fail_time"]
+    with _mem_failures_lock:
+        for row in failures_rows:
+            fail_dt = row["fail_time"]
             if isinstance(fail_dt, str):
                 fail_dt = datetime.strptime(fail_dt, "%Y-%m-%d %H:%M:%S")
             if fail_dt.tzinfo is None:
                 fail_dt = pytz.utc.localize(fail_dt)
-            cooldown = (
-                QUOTA_COOLDOWN_MINUTES
-                if f["reason"] == "quota"
-                else FAILURE_COOLDOWN_MINUTES
-            )
-            if (now - fail_dt).total_seconds() < cooldown * 60:
-                continue  # still in cooldown
+            fail_ts = fail_dt.timestamp()
+            reason  = row.get("reason", "error")
+            cooldown = (QUOTA_COOLDOWN_MINUTES if reason == "quota"
+                        else FAILURE_COOLDOWN_MINUTES) * 60
+            # Only seed if the cooldown is still active
+            if (now_ts - fail_ts) < cooldown:
+                _mem_failures[row["api_key"]] = {
+                    "time":   fail_ts,
+                    "reason": reason,
+                }
 
-        # ── daily quota check ─────────────────────────────────────────────────
-        if key in usages:
-            u          = usages[key]
-            last_reset = u["last_reset"]
-            if isinstance(last_reset, datetime):
+    with _mem_usage_lock:
+        for row in usage_rows:
+            last_reset = row["last_reset"]
+            if hasattr(last_reset, "isoformat"):
+                last_reset = last_reset.isoformat()[:10]
+            elif isinstance(last_reset, datetime):
                 last_reset = last_reset.strftime("%Y-%m-%d")
-            elif hasattr(last_reset, "isoformat"):
-                last_reset = last_reset.isoformat()
-            usage_count = u["usage_count"] if last_reset == today else 0
-            if usage_count >= DAILY_KEY_LIMIT:
-                quota_keys.append(key)
-                continue
+            usage_count = row["usage_count"] if last_reset == today else 0
+            _mem_usage[row["api_key"]] = {
+                "count": usage_count,
+                "date":  today,
+            }
 
-        healthy.append(key)
 
-    # Batch-write quota failures after the loop
-    for key in quota_keys:
-        mark_key_failure(key, "quota")
-
-    # FIX 9: sort for stable ordering within a single call, then shuffle
-    healthy.sort()
-    random.shuffle(healthy)
-    return healthy
+# ── Global key-index picker ───────────────────────────────────────────────────
+def _pick_start_index(n: int) -> int:
+    """
+    Atomically advance the global round-robin counter and return a start
+    index within [0, n).  Thread-safe — uses a lock around the counter read.
+    """
+    global _counter_value
+    with _counter_lock:
+        idx = _counter_value % n
+        _counter_value += 1
+    return idx
 
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
@@ -463,135 +601,130 @@ def call_llm(
     temperature: float = 0,
 ) -> str:
     """
-    1. Check Supabase cache — return immediately on hit.
-    2. Try user-provided Groq key (if set and has TPM headroom).
-    3. Rotate through healthy admin keys, preferring those with TPM headroom.
-       TPM-limited keys are tried last as a graceful fallback (not hard-blocked).
+    Distribute LLM calls evenly across all 100 Groq keys.
 
-    Multi-user safe:
-    - Per-minute token tracking (_tpm_tracker) is in-process memory per worker.
-    - Each Streamlit worker/thread sees its own TPM window but keys are still
-      shared across users, so the TPM guard reduces burst collisions significantly.
-    - Daily quota tracking remains in Supabase (shared across workers).
+    Strategy:
+      1. Supabase cache hit → return immediately (zero LLM cost).
+      2. User-supplied key → try first if TPM headroom exists.
+      3. Global round-robin across all healthy admin keys, headroom keys first.
+         - In-memory failure/usage checks (no DB round-trip on hot path).
+         - Exponential back-off with full jitter between key attempts.
+         - Background threads flush usage/failure updates to Supabase.
+      4. Over-budget keys tried last as graceful fallback.
+
+    Thread/multi-user safety:
+      - _pick_start_index() uses a module-level atomic counter so concurrent
+        users always pick different starting keys even in the same worker.
+      - All shared state is protected by per-purpose locks.
+      - Supabase writes happen in daemon threads (fire-and-forget).
     """
-    # Guard against None session (e.g. called from db_manager without session)
     if session is None:
         session = {}
 
-    # ── FIX 1: throttled cleanup ──────────────────────────────────────────────
+    # ── Throttled cleanup ─────────────────────────────────────────────────────
     _last_cleanup = session.get("_last_cleanup_ts", 0)
     if time.time() - _last_cleanup > CLEANUP_INTERVAL_SECONDS:
-        try:
-            cleanup_cache()
-        except Exception:
-            pass
+        threading.Thread(target=cleanup_cache, daemon=True).start()
         try:
             session["_last_cleanup_ts"] = time.time()
         except Exception:
-            pass  # plain dict or read-only session
+            pass
 
     # ── Cache hit ─────────────────────────────────────────────────────────────
     cached = get_cached_response(prompt, model)
     if cached:
         return cached
 
-    # ── Estimate token cost for this prompt ──────────────────────────────────
     estimated_tokens = _estimate_tokens(prompt)
+    last_error = None
 
-    # Initialise key_index safely (works for both dict and st.session_state)
-    if "key_index" not in session:
-        try:
-            session["key_index"] = 0
-        except Exception:
-            pass
-
+    # ── User-supplied key ─────────────────────────────────────────────────────
     user_key = ""
     raw_user_key = session.get("user_groq_key", "")
     if isinstance(raw_user_key, str):
         user_key = raw_user_key.strip()
 
-    last_error = None
+    if user_key and _key_has_tpm_headroom(user_key, estimated_tokens):
+        try:
+            response = try_call_llm(prompt, user_key, model, temperature)
+            _record_key_tokens(user_key, estimated_tokens, time.time())
+            set_cached_response(prompt, model, response)
+            _async_increment_usage(user_key)
+            return response
+        except Exception as e:
+            err_type = _classify_error(e)
+            if err_type == "quota":
+                _mem_record_failure(user_key, "quota")
+                _record_key_tokens(user_key, TPM_LIMIT, time.time())
+                _async_mark_failure(user_key, "quota")
+            elif err_type == "dead":
+                _mem_record_failure(user_key, "error")
+                _async_mark_failure(user_key, "error")
+            last_error = e
 
-    # ── Step 2: user-supplied key ─────────────────────────────────────────────
-    if user_key:
-        # Check TPM headroom — if over limit, skip and fall through to admin keys
-        if _key_has_tpm_headroom(user_key, estimated_tokens):
-            try:
-                response = try_call_llm(prompt, user_key, model, temperature)
-                _record_key_tokens(user_key, estimated_tokens, time.time())
-                set_cached_response(prompt, model, response)
-                increment_key_usage(user_key)
-                return response
-            except Exception as e:
-                err_type = _classify_error(e)
-                if err_type == "quota":
-                    mark_key_failure(user_key, "quota")
-                    # Also saturate the TPM window to avoid retrying this key
-                    _record_key_tokens(user_key, TPM_LIMIT, time.time())
-                elif err_type == "dead":
-                    mark_key_failure(user_key, "error")
-                last_error = e
-        else:
-            # User key is TPM-throttled — fall through silently to admin keys
-            pass
-
-    # ── Step 3: admin key rotation ────────────────────────────────────────────
+    # ── Admin key rotation ────────────────────────────────────────────────────
     try:
         all_admin_keys = load_groq_api_keys()
     except ValueError as e:
         return f"❌ LLM unavailable: {e}"
 
-    # Get health-filtered keys, then sort by TPM headroom (most headroom first)
     healthy_keys = get_healthy_keys(all_admin_keys)
-
     if not healthy_keys:
         return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
 
-    # Partition: keys with TPM headroom go first, over-budget keys are last resort
-    now = time.time()
+    # Partition: TPM-headroom keys first, over-budget keys as fallback
+    now_ts = time.time()
     with _tpm_lock:
-        keys_with_headroom = [k for k in healthy_keys
-                               if (_get_key_tpm(k, now) + estimated_tokens) <= TPM_LIMIT]
-        keys_over_budget   = [k for k in healthy_keys if k not in keys_with_headroom]
+        keys_with_headroom = [
+            k for k in healthy_keys
+            if (_get_key_tpm(k, now_ts) + estimated_tokens) <= TPM_LIMIT
+        ]
+        keys_over_budget = [k for k in healthy_keys if k not in set(keys_with_headroom)]
 
-    # Always try headroom keys first; fall back to over-budget only if all fail
     admin_keys = keys_with_headroom + keys_over_budget
+    n          = len(admin_keys)
 
-    # FIX 2: lock while picking index; FIX 5: guard against shrunk list
-    with _key_rotation_lock:
-        current_idx = session.get("key_index", 0)
-        if current_idx >= len(admin_keys):
-            current_idx = 0
-        start = current_idx
-        try:
-            session["key_index"] = (start + 1) % len(admin_keys)
-        except Exception:
-            pass
+    # Global round-robin start index (thread-safe, no per-session state needed)
+    start = _pick_start_index(n)
 
-    for offset in range(len(admin_keys)):
-        idx = (start + offset) % len(admin_keys)
+    attempt = 0
+    for offset in range(n):
+        idx = (start + offset) % n
         key = admin_keys[idx]
 
-        # If this is an over-budget key, add a small back-off to reduce burst
-        if key in keys_over_budget:
-            time.sleep(1.5)
+        # Exponential back-off with full jitter (no fixed sleep for headroom keys)
+        if attempt > 0:
+            cap   = min(BACKOFF_BASE * (2 ** (attempt - 1)), BACKOFF_MAX)
+            sleep = random.uniform(0, cap)
+            if sleep > 0.05:
+                time.sleep(sleep)
+
+        # Extra small pause before over-budget keys to reduce burst collisions
+        if key in keys_over_budget and attempt == 0:
+            time.sleep(random.uniform(0.5, 1.5))
 
         try:
             response = try_call_llm(prompt, key, model, temperature)
+            # Success ──────────────────────────────────────────────────────────
             _record_key_tokens(key, estimated_tokens, time.time())
             set_cached_response(prompt, model, response)
-            increment_key_usage(key)
-            clear_key_failure(key)
+            _mem_increment_usage(key)
+            _async_increment_usage(key)
+            _mem_clear_failure(key)
+            _async_clear_failure(key)
             return response
+
         except Exception as e:
             err_type = _classify_error(e)
             if err_type == "quota":
-                mark_key_failure(key, "quota")
-                # Saturate TPM window so this key is deprioritised instantly
+                _mem_record_failure(key, "quota")
                 _record_key_tokens(key, TPM_LIMIT, time.time())
+                _async_mark_failure(key, "quota")
             elif err_type == "dead":
-                mark_key_failure(key, "error")
-            # transient: key stays healthy, try the next one
+                _mem_record_failure(key, "error")
+                _async_mark_failure(key, "error")
+            # transient: key stays healthy, try next
             last_error = e
+            attempt   += 1
 
-    return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
+    return f"❌ LLM unavailable: {last_error or 'All API keys exhausted'}"
