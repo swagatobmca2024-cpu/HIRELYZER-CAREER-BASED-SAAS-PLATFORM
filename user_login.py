@@ -163,9 +163,9 @@ def create_user_table():
     );
     CREATE TABLE IF NOT EXISTS user_logs (
         id        SERIAL PRIMARY KEY,
-        username  TEXT NOT NULL,
-        action    TEXT NOT NULL,
-        timestamp TEXT NOT NULL
+        username  TEXT        NOT NULL,
+        action    TEXT        NOT NULL,
+        timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS feature_usage (
         id       SERIAL PRIMARY KEY,
@@ -443,40 +443,44 @@ def verify_login_token(token: str):
     If valid: sets session state and returns (True, username).
     If invalid/expired/used: returns (False, error_message).
     Token TTL = 10 minutes.
+
+    FIX: The old SELECT-then-UPDATE had a race condition — two concurrent
+    requests for the same token could both pass the `used` check before either
+    marked it used.  The atomic UPDATE...WHERE used = FALSE RETURNING pattern
+    guarantees only one request wins; the other gets zero rows back.
     """
     if not token:
         return False, "⚠️ No login token provided."
 
+    # Atomic claim: only succeeds if the token exists, is unused, and is fresh.
     row = _execute(
-        "SELECT username, created_at, used FROM login_tokens WHERE token = %s",
+        """
+        UPDATE login_tokens
+           SET used = TRUE
+         WHERE token      = %s
+           AND used       = FALSE
+           AND created_at > NOW() - INTERVAL '10 minutes'
+        RETURNING username, created_at
+        """,
         (token,),
         fetch="one",
     )
-    if not row:
-        return False, "❌ Invalid or expired login link."
-    if row["used"]:
-        return False, "⚠️ This login link has already been used. Please log in again."
 
-    # Check expiry (10 minutes)
-    created_at = row["created_at"]
-    # created_at from Supabase is tz-aware UTC
-    now_utc = datetime.now(pytz.utc)
-    if isinstance(created_at, datetime) and created_at.tzinfo is None:
-        created_at = pytz.utc.localize(created_at)
-    age_seconds = (now_utc - created_at).total_seconds()
-    if age_seconds > 600:
+    if not row:
+        # Could be: never existed, already used, or expired — check which to give
+        # a helpful message without a second round-trip race.
+        exists = _execute(
+            "SELECT used, created_at FROM login_tokens WHERE token = %s",
+            (token,),
+            fetch="one",
+        )
+        if not exists:
+            return False, "❌ Invalid or expired login link."
+        if exists["used"]:
+            return False, "⚠️ This login link has already been used. Please log in again."
         return False, "⏱️ Login link has expired (10 min limit). Please log in again."
 
     username = row["username"]
-
-    # Mark token as used
-    try:
-        _execute(
-            "UPDATE login_tokens SET used = TRUE WHERE token = %s",
-            (token,),
-        )
-    except Exception:
-        pass  # non-fatal — proceed with login
 
     # Fetch groq key for session
     key_row = _execute(
@@ -635,10 +639,11 @@ def get_user_api_key(username):
 # ── Logging ───────────────────────────────────────────────────────────────────
 
 def log_user_action(username, action):
-    timestamp = get_ist_time().strftime("%Y-%m-%d %H:%M:%S")
+    # Store a proper TIMESTAMPTZ (IST-aware datetime) instead of a formatted string.
+    # The column is now TIMESTAMPTZ so Postgres handles timezone-aware comparisons correctly.
     _execute(
         "INSERT INTO user_logs (username, action, timestamp) VALUES (%s, %s, %s)",
-        (username, action, timestamp),
+        (username, action, get_ist_time()),
     )
 
 
@@ -650,13 +655,16 @@ def get_total_registered_users():
 
 
 def get_logins_today():
-    today = get_ist_time().strftime('%Y-%m-%d')
+    # timestamp is TIMESTAMPTZ stored in UTC by Postgres.
+    # Convert to IST before extracting date so the "today" boundary matches
+    # the user's local midnight (UTC+5:30) rather than UTC midnight.
     row = _execute(
         """
         SELECT COUNT(*) AS cnt FROM user_logs
-        WHERE action = 'login' AND DATE(timestamp::timestamp) = %s
+        WHERE action = 'login'
+          AND (timestamp AT TIME ZONE 'Asia/Kolkata')::date
+              = (NOW() AT TIME ZONE 'Asia/Kolkata')::date
         """,
-        (today,),
         fetch="one",
     )
     return row["cnt"] if row else 0
