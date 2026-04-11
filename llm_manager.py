@@ -25,6 +25,7 @@ from datetime import datetime, timedelta
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 import pytz
 import streamlit as st
 from langchain_groq import ChatGroq
@@ -40,24 +41,18 @@ CLEANUP_INTERVAL_SECONDS = 1800
 # FIX 2: module-level lock so parallel threads never pick the same key
 _key_rotation_lock = threading.Lock()
 
-# FIX 5 (new): module-level index so key rotation is truly shared across all
-# users/sessions rather than each session starting from 0 independently.
-_global_key_index: int = 0
+# FIX 7: module-level key index so cross-user rotation actually advances
+_global_key_index = 0
 
-# FIX 7: per-module reconnect lock so only one thread reconnects at a time
-_reconnect_lock = threading.Lock()
-
-# Module-level connection holder (not via st.cache_resource to avoid cross-module clear)
-_llm_conn_holder: dict = {"conn": None}
+# FIX 8: ThreadedConnectionPool replaces single shared connection
+# minconn=2 keeps two connections warm; maxconn=10 handles burst concurrency.
+_pool_lock = threading.Lock()
+_llm_pool: "psycopg2.pool.ThreadedConnectionPool | None" = None
 
 # Groq errors that mean the KEY itself is bad (not a transient server issue)
-_QUOTA_SIGNALS     = ["quota", "rate limit", "429", "too many requests"]
-_ORG_LIMIT_SIGNALS = ["tokens per day", "tpd", "organization limit",
-                      "daily token limit", "org token"]
-# Removed bare "api key", "401", "403" — too broad, caused healthy keys to be
-# incorrectly marked dead on unrelated 4xx responses.
-_DEAD_KEY_SIGNALS  = ["invalid api key", "unauthorized",
-                      "authentication", "permission denied"]
+_QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests"]
+_ORG_LIMIT_SIGNALS = ["tokens per day", "tpd", "organization limit", "daily limit", "org limit"]
+_DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "authentication", "permission denied"]
 
 
 # ── Timezone helper ───────────────────────────────────────────────────────────
@@ -65,65 +60,63 @@ def get_utc_now() -> datetime:
     return datetime.now(pytz.utc)
 
 
-# ── Connection management (isolated, no global cache_resource.clear()) ────────
-def _make_llm_connection():
-    """Open a fresh psycopg2 connection for the LLM manager."""
-    conn = psycopg2.connect(
-        host=st.secrets["SUPABASE_HOST"],
-        dbname=st.secrets["SUPABASE_DB"],
-        user=st.secrets["SUPABASE_USER"],
-        password=st.secrets["SUPABASE_PASSWORD"],
-        port=st.secrets["SUPABASE_PORT"],
-        connect_timeout=30,
-        keepalives=1,
-        keepalives_idle=30,
-        keepalives_interval=10,
-        keepalives_count=5,
-    )
-    conn.autocommit = False
-    return conn
+# ── Connection pool management ────────────────────────────────────────────────
+def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
+    """Return the module-level ThreadedConnectionPool, creating it if needed."""
+    global _llm_pool
+    with _pool_lock:
+        if _llm_pool is None or _llm_pool.closed:
+            _llm_pool = psycopg2.pool.ThreadedConnectionPool(
+                minconn=2,
+                maxconn=10,
+                host=st.secrets["SUPABASE_HOST"],
+                dbname=st.secrets["SUPABASE_DB"],
+                user=st.secrets["SUPABASE_USER"],
+                password=st.secrets["SUPABASE_PASSWORD"],
+                port=st.secrets["SUPABASE_PORT"],
+                connect_timeout=30,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5,
+            )
+        return _llm_pool
 
 
 def _conn():
     """
-    Return a live psycopg2 connection.
-
-    FIX 6: Liveness check is a real SELECT 1 round-trip (old code read
-            conn.isolation_level which is a pure Python attribute — never
-            touches the socket, so stale connections passed silently).
-    FIX 7: Reconnect only replaces THIS module's connection; it does NOT
-            call st.cache_resource.clear() which would nuke db_manager and
-            user_login connections simultaneously.
+    Borrow a connection from the pool; test liveness and return a live connection.
+    The caller MUST return it via _put_conn() — use _execute() for automatic handling.
     """
-    with _reconnect_lock:
-        conn = _llm_conn_holder.get("conn")
-        need_reconnect = False
+    pool = _get_pool()
+    conn = pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+        conn.rollback()
+    except Exception:
+        # Connection is dead — discard it and get a fresh one
+        try:
+            pool.putconn(conn, close=True)
+        except Exception:
+            pass
+        conn = pool.getconn()
+    return conn
 
-        if conn is None:
-            need_reconnect = True
-        else:
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT 1")
-                conn.rollback()  # close any implicit transaction opened by SELECT 1
-            except Exception:
-                need_reconnect = True
-                try:
-                    conn.close()
-                except Exception:
-                    pass
 
-        if need_reconnect:
-            _llm_conn_holder["conn"] = _make_llm_connection()
-
-        return _llm_conn_holder["conn"]
+def _put_conn(conn, close: bool = False):
+    """Return a connection to the pool."""
+    try:
+        pool = _get_pool()
+        pool.putconn(conn, close=close)
+    except Exception:
+        pass
 
 
 def _execute(sql: str, params=None, fetch: str = "none"):
     """
-    Run a SQL statement inside an implicit transaction.
+    Borrow a connection from the pool, run SQL, commit, then return the connection.
     fetch: 'one' | 'all' | 'none'
-    Commits on success, rolls back on error.
     """
     conn = _conn()
     try:
@@ -135,12 +128,14 @@ def _execute(sql: str, params=None, fetch: str = "none"):
             elif fetch == "all":
                 result = cur.fetchall()
         conn.commit()
+        _put_conn(conn)
         return result
     except Exception:
         try:
             conn.rollback()
         except Exception:
             pass
+        _put_conn(conn, close=True)
         raise
 
 
@@ -171,11 +166,13 @@ def init_db():
         with conn.cursor() as cur:
             cur.execute(ddl)
         conn.commit()
+        _put_conn(conn)
     except Exception:
         try:
             conn.rollback()
         except Exception:
             pass
+        _put_conn(conn, close=True)
         raise
 
 init_db()
@@ -268,15 +265,11 @@ def increment_key_usage(api_key: str):
             VALUES (%s, 1, NOW())
             ON CONFLICT (api_key) DO UPDATE
                 SET usage_count = CASE
-                        WHEN key_usage.last_reset::date = CURRENT_DATE
+                        WHEN key_usage.last_reset::date = NOW()::date
                         THEN key_usage.usage_count + 1
                         ELSE 1
                     END,
-                    last_reset = CASE
-                        WHEN key_usage.last_reset::date = CURRENT_DATE
-                        THEN key_usage.last_reset
-                        ELSE NOW()
-                    END
+                    last_reset = NOW()
             """,
             (api_key,),
         )
@@ -285,10 +278,7 @@ def increment_key_usage(api_key: str):
 
 
 def mark_key_failure(api_key: str, reason: str = "error"):
-    """Record a key failure only if it is not already in the failures table.
-    Deliberately does NOT update fail_time on conflict — we want the FIRST failure
-    timestamp so cooldown expires correctly rather than being refreshed every retry.
-    """
+    """Record a key failure only if not already tracked (prevents fail_time refresh loop)."""
     try:
         _execute(
             """
@@ -314,7 +304,7 @@ def _classify_error(error: Exception):
     """
     Classify an exception so we only penalise keys for real key errors.
     Returns:
-        'org_limit' — org-wide daily token budget exhausted; stop rotating immediately
+        'org_limit' — org-level daily token cap hit (stop hammering ALL keys)
         'quota'     — rate limited, put key in 60-min cooldown
         'dead'      — bad/invalid key, put in 5-min cooldown
         'transient' — network blip / server 500 / timeout, do NOT touch the key
@@ -341,6 +331,7 @@ def get_healthy_keys(api_keys: list) -> list:
             within a single call_llm() invocation.
     """
     now   = get_utc_now()
+    today = now.date()  # datetime.date object for proper comparison
 
     try:
         failures_rows = _execute(
@@ -386,14 +377,17 @@ def get_healthy_keys(api_keys: list) -> list:
         if key in usages:
             u          = usages[key]
             last_reset = u["last_reset"]
-            # last_reset is TIMESTAMPTZ — extract .date() to compare against today
+            # Normalise to a date object regardless of whether Postgres returns
+            # a datetime, date, or string (TIMESTAMPTZ always comes back as datetime)
             if isinstance(last_reset, datetime):
-                reset_date = last_reset.date()
-            elif hasattr(last_reset, "date") and callable(last_reset.date):
-                reset_date = last_reset.date()
+                last_reset_date = last_reset.date()
+            elif hasattr(last_reset, "isoformat"):
+                # date object (legacy DATE column)
+                last_reset_date = last_reset
             else:
-                reset_date = datetime.strptime(str(last_reset)[:10], "%Y-%m-%d").date()
-            usage_count = u["usage_count"] if reset_date == now.date() else 0
+                # Fallback: parse string
+                last_reset_date = datetime.strptime(str(last_reset)[:10], "%Y-%m-%d").date()
+            usage_count = u["usage_count"] if last_reset_date == today else 0
             if usage_count >= DAILY_KEY_LIMIT:
                 quota_keys.append(key)
                 continue
@@ -449,6 +443,13 @@ def call_llm(
     if cached:
         return cached
 
+    # Initialise key_index safely (works for both dict and st.session_state)
+    if "key_index" not in session:
+        try:
+            session["key_index"] = 0
+        except Exception:
+            pass
+
     user_key = ""
     raw_user_key = session.get("user_groq_key", "")
     if isinstance(raw_user_key, str):
@@ -480,10 +481,10 @@ def call_llm(
     if not admin_keys:
         return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
 
-    # FIX 2: lock while picking index; FIX 5: use module-level index for real
-    # cross-user rotation (session key_index only ever advanced within one session)
+    # FIX 2: lock while picking index; FIX 5: guard against shrunk list
+    # FIX 7: use module-level index so cross-user rotation actually advances
+    global _global_key_index
     with _key_rotation_lock:
-        global _global_key_index
         if _global_key_index >= len(admin_keys):
             _global_key_index = 0
         start = _global_key_index
@@ -501,14 +502,18 @@ def call_llm(
         except Exception as e:
             err_type = _classify_error(e)
             if err_type == "org_limit":
-                # Org-wide daily budget exhausted — hammering the other 100 keys
-                # won't help; they all share the same org limit. Exit immediately.
-                return "❌ Daily token limit reached for this organisation. Resets at midnight UTC."
+                # Org-level daily cap: no point trying other keys — they share the same org limit
+                last_error = e
+                break
             elif err_type == "quota":
                 mark_key_failure(key, "quota")
             elif err_type == "dead":
                 mark_key_failure(key, "error")
             # transient: key stays healthy, try the next one
             last_error = e
+
+    # Surface org_limit with a clear, actionable message
+    if last_error and _classify_error(last_error) == "org_limit":
+        return "❌ Daily token limit reached. This resets at midnight UTC — please try again later."
 
     return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
