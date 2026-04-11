@@ -60,7 +60,20 @@ from langchain_groq import ChatGroq  # optional if you're using it
 
 
 # Local project imports
-from llm_manager import call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage, mark_key_failure
+from llm_manager import (
+    call_llm,
+    load_groq_api_keys,
+    get_healthy_keys,
+    increment_key_usage,
+    mark_key_failure,
+    # In-memory helpers — update state instantly without a DB round-trip
+    _mem_record_failure,
+    _mem_clear_failure,
+    _mem_increment_usage,
+    _async_mark_failure,
+    _async_increment_usage,
+    _async_clear_failure,
+)
 from db_manager import (
     db_manager,
     insert_candidate,
@@ -7561,14 +7574,20 @@ def create_chain(vectorstore):
             retriever=vectorstore.as_retriever(),
             return_source_documents=True
         )
-        increment_key_usage(groq_api_key)   # ✅ FIX: only count on success
+        # Update in-memory usage instantly; flush to Supabase in background thread
+        _mem_increment_usage(groq_api_key)
+        _async_increment_usage(groq_api_key)
+        _mem_clear_failure(groq_api_key)
+        _async_clear_failure(groq_api_key)
         return chain
     except Exception as e:
         err_str = str(e).lower()
         if any(w in err_str for w in ["quota", "rate limit", "429", "too many requests"]):
-            mark_key_failure(groq_api_key, "quota")
+            _mem_record_failure(groq_api_key, "quota")
+            _async_mark_failure(groq_api_key, "quota")
         elif any(w in err_str for w in ["invalid api key", "unauthorized", "401", "403", "authentication"]):
-            mark_key_failure(groq_api_key, "error")
+            _mem_record_failure(groq_api_key, "error")
+            _async_mark_failure(groq_api_key, "error")
         # transient errors (network blip, 500) — don't mark the key failed at all
         raise
 
