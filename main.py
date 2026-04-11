@@ -258,6 +258,12 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
         with st.spinner("✉️ Generating cover letter..."):
             try:
                 cover_letter = call_llm(prompt, session=st.session_state).strip()
+                if cover_letter.startswith("❌ Daily token limit"):
+                    st.error("⏳ Daily token limit reached for all API keys. Resets at midnight UTC — please try again later.")
+                    return
+                if cover_letter.startswith("❌ LLM unavailable"):
+                    st.error("❌ LLM unavailable. All API keys are exhausted or in cooldown. Please try again in a few minutes.")
+                    return
             except Exception as e:
                 st.error(f"❌ Failed to generate cover letter: {e}")
                 return
@@ -4702,7 +4708,19 @@ RESUME TEXT:
 
     raw_response = call_llm(prompt, session=st.session_state)
 
-    # ── Parse the two sections out of the combined response ──────────────
+    # Guard: if all keys are exhausted, raise immediately so the caller's
+    # except block shows a clear message rather than silently mis-parsing
+    # an error string as resume content.
+    if raw_response.startswith("❌ Daily token limit"):
+        raise RuntimeError(
+            "⏳ Daily token limit reached for all API keys. "
+            "Resets at midnight UTC — please try again later."
+        )
+    if raw_response.startswith("❌ LLM unavailable"):
+        raise RuntimeError(
+            "❌ LLM unavailable. All API keys are exhausted or in cooldown. "
+            "Please try again in a few minutes."
+        )
     rewritten_text = ""
     json_str = ""
 
@@ -6892,7 +6910,7 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _r = call_llm(_resume_domain_prompt, session=st.session_state).strip()
+            _r = call_llm(_resume_domain_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
             if _r in _valid_domains:
                 st.session_state[_resume_cache_key] = _r
             else:
@@ -6994,7 +7012,7 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _j = call_llm(_jd_domain_prompt, session=st.session_state).strip()
+            _j = call_llm(_jd_domain_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
             if _j in _valid_domains:
                 st.session_state[_jd_cache_key] = _j
             else:
@@ -7281,7 +7299,19 @@ SCORING SCALE for language ({lang_weight} pts max):
    
     ats_result = call_llm(prompt, session=st.session_state).strip()
 
-    # ── CRITICAL: Overwrite any LLM-modified Format Score/Grade lines ────
+    # ── Guard: surface meaningful error messages instead of silently parsing
+    # an error string as if it were a valid ATS report. ───────────────────────
+    if ats_result.startswith("❌ Daily token limit"):
+        raise RuntimeError(
+            "⏳ Daily token limit reached for all API keys. "
+            "This resets at midnight UTC — please try again later."
+        )
+    if ats_result.startswith("❌ LLM unavailable"):
+        raise RuntimeError(
+            "❌ LLM unavailable. All API keys are either exhausted or in cooldown. "
+            "Please try again in a few minutes."
+        )
+    # ─────────────────────────────────────────────────────────────────────────
     # The LLM sometimes rewrites these despite instructions. Force the true
     # system-computed values back in so UI and narrative always match.
     _true_fmt_score = format_data.get("format_score", 75) if format_data else 75
@@ -8222,7 +8252,7 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
+                _r = call_llm(_pre_resume_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
                 if _r in _pre_valid_domains:
                     st.session_state[_pre_resume_cache_key] = _r
                 else:
@@ -8320,7 +8350,7 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
+                _j = call_llm(_pre_jd_prompt, session=st.session_state, model="llama-3.1-8b-instant").strip()
                 if _j in _pre_valid_domains:
                     st.session_state[_pre_jd_cache_key] = _j
                 else:
@@ -17750,6 +17780,10 @@ Generate {num_questions} questions now:
 
                         if diff == "Hard" and can_add_followup:
                             # ── Hard mode: use adaptive engine (single source of truth) ──
+                            # Always reset preview first so a failed generation doesn't show stale text
+                            st.session_state.pending_followup_display = ""
+                            st.session_state.pending_followup_strategy = ""
+
                             weakness_data = analyze_answer_weaknesses(ans_text, eval_res)
                             strategy = weakness_data["strategy"]
                             layer = getattr(st.session_state, 'escalation_layer', 1)
@@ -17757,6 +17791,15 @@ Generate {num_questions} questions now:
                                 q_text, ans_text, strategy, layer, selected_role, selected_domain
                             )
                             followup_q = followup_q.strip() if followup_q else ""
+
+                            # Retry once if LLM returned empty — the most common cause of the
+                            # follow-up card intermittently not appearing after submission.
+                            if not followup_q:
+                                followup_q = generate_adaptive_followup(
+                                    q_text, ans_text, strategy, layer, selected_role, selected_domain
+                                )
+                                followup_q = followup_q.strip() if followup_q else ""
+
                             if followup_q:
                                 st.session_state.dynamic_interview_questions.insert(
                                     q_idx + 1, followup_q
@@ -17842,7 +17885,9 @@ Generate {num_questions} questions now:
                         _preview_fq = st.session_state.get('pending_followup_display', '')
                         _preview_strategy = st.session_state.get('pending_followup_strategy', '')
                         if st.session_state.interview_difficulty == "Hard" and _preview_fq:
-                            _esc_layer = st.session_state.get("escalation_layer", 1)
+                            # escalation_layer is incremented during submission, so subtract 1 to
+                            # show the layer that actually generated this follow-up question.
+                            _esc_layer = max(1, st.session_state.get("escalation_layer", 1) - 1)
                             _layer_info = ESCALATION_LAYER_MAP.get(_esc_layer, {})
                             _layer_name = _layer_info.get("name", "")
                             _pressure = _layer_info.get("cognitive_pressure", "")
