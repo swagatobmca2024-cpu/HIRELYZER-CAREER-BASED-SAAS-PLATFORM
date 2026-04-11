@@ -1583,4 +1583,4 @@ def close_all_connections():
 if __name__ == "__main__":
     print("Database Manager (Supabase PostgreSQL) initialised successfully!")
     stats = get_database_stats()
-    print(f"Database Statistics: {stats}")s
+    print(f"Database Statistics: {stats}")
