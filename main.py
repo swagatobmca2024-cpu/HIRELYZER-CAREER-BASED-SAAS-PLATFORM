@@ -17750,10 +17750,6 @@ Generate {num_questions} questions now:
 
                         if diff == "Hard" and can_add_followup:
                             # ── Hard mode: use adaptive engine (single source of truth) ──
-                            # Always reset preview first so a failed generation doesn't show stale text
-                            st.session_state.pending_followup_display = ""
-                            st.session_state.pending_followup_strategy = ""
-
                             weakness_data = analyze_answer_weaknesses(ans_text, eval_res)
                             strategy = weakness_data["strategy"]
                             layer = getattr(st.session_state, 'escalation_layer', 1)
@@ -17761,15 +17757,6 @@ Generate {num_questions} questions now:
                                 q_text, ans_text, strategy, layer, selected_role, selected_domain
                             )
                             followup_q = followup_q.strip() if followup_q else ""
-
-                            # Retry once if LLM returned empty — the most common cause of the
-                            # follow-up card intermittently not appearing after submission.
-                            if not followup_q:
-                                followup_q = generate_adaptive_followup(
-                                    q_text, ans_text, strategy, layer, selected_role, selected_domain
-                                )
-                                followup_q = followup_q.strip() if followup_q else ""
-
                             if followup_q:
                                 st.session_state.dynamic_interview_questions.insert(
                                     q_idx + 1, followup_q
@@ -17855,9 +17842,7 @@ Generate {num_questions} questions now:
                         _preview_fq = st.session_state.get('pending_followup_display', '')
                         _preview_strategy = st.session_state.get('pending_followup_strategy', '')
                         if st.session_state.interview_difficulty == "Hard" and _preview_fq:
-                            # escalation_layer is incremented during submission, so subtract 1 to
-                            # show the layer that actually generated this follow-up question.
-                            _esc_layer = max(1, st.session_state.get("escalation_layer", 1) - 1)
+                            _esc_layer = st.session_state.get("escalation_layer", 1)
                             _layer_info = ESCALATION_LAYER_MAP.get(_esc_layer, {})
                             _layer_name = _layer_info.get("name", "")
                             _pressure = _layer_info.get("cognitive_pressure", "")
@@ -19258,6 +19243,7 @@ Generate {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
+
 if tab5:
 	with tab5:
 		# sqlite3 removed — using Supabase PostgreSQL via db_manager
