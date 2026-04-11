@@ -1,65 +1,31 @@
-"""
-LLM Manager — Supabase PostgreSQL backend
-Migrated from SQLite to psycopg2, using the same @st.cache_resource singleton
-pattern as db_manager.py and user_login.py.
-All timestamps are stored and compared in UTC (TIMESTAMPTZ columns).
-
-FIXES vs previous version:
-  1. cleanup_cache() now rate-limited to once per 30 min (was firing on every call)
-  2. Thread lock around key_index read/write (race condition in ThreadPoolExecutor)
-  3. Transient errors (network blip, 500) no longer mark healthy keys as failed
-  4. mark_key_failure() moved outside get_healthy_keys() read loop (batch write)
-  5. create_chain() pattern: increment_key_usage only after success (caller fix noted)
-  6. FIXED: _conn() liveness check now does a real SELECT 1 round-trip (was broken attr read)
-  7. FIXED: Reconnect no longer calls st.cache_resource.clear() (was nuking all 3 connections)
-  8. FIXED: get_healthy_keys() DB failure now falls back to all keys instead of returning []
-  9. FIXED: key_index round-robin now sorts keys before shuffle so index is meaningful per-call
-"""
-
-import hashlib
-import os
-import random
-import threading
-import time
-from datetime import datetime, timedelta
-
 import psycopg2
 import psycopg2.extras
-import pytz
+import bcrypt
 import streamlit as st
-from langchain_groq import ChatGroq
-
-# ── CONFIG ────────────────────────────────────────────────────────────────────
-CACHE_EXPIRY_HOURS       = 24
-FAILURE_COOLDOWN_MINUTES = 5
-QUOTA_COOLDOWN_MINUTES   = 60
-DAILY_KEY_LIMIT          = 800
-DEAD_KEY_REMOVE_DAYS     = 3
-CLEANUP_INTERVAL_SECONDS = 1800
-
-# FIX 2: module-level lock so parallel threads never pick the same key
-_key_rotation_lock = threading.Lock()
-
-# FIX 7: per-module reconnect lock so only one thread reconnects at a time
-_reconnect_lock = threading.Lock()
-
-# Module-level connection holder (not via st.cache_resource to avoid cross-module clear)
-_llm_conn_holder: dict = {"conn": None}
-
-# Groq errors that mean the KEY itself is bad (not a transient server issue)
-_QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests"]
-_DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
-                     "api key", "authentication", "permission denied"]
+from datetime import datetime, timedelta
+import pytz
+import re
+import os
+import secrets
+import threading
+import smtplib
+import uuid
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import dns.resolver
 
 
-# ── Timezone helper ───────────────────────────────────────────────────────────
-def get_utc_now() -> datetime:
-    return datetime.now(pytz.utc)
+# ── Connection management (isolated — never touches other modules' connections) ─
+# FIX: replaced st.cache_resource singleton + .clear() with a module-level holder.
+# st.cache_resource.clear() nukes ALL cached resources app-wide, which killed
+# llm_manager and db_manager connections whenever a login DB hiccup occurred.
+
+_user_conn_holder: dict = {"conn": None}
+_user_reconnect_lock = threading.Lock()
 
 
-# ── Connection management (isolated, no global cache_resource.clear()) ────────
-def _make_llm_connection():
-    """Open a fresh psycopg2 connection for the LLM manager."""
+def _make_user_connection():
+    """Open a fresh psycopg2 connection for user_login operations."""
     conn = psycopg2.connect(
         host=st.secrets["SUPABASE_HOST"],
         dbname=st.secrets["SUPABASE_DB"],
@@ -80,15 +46,14 @@ def _conn():
     """
     Return a live psycopg2 connection.
 
-    FIX 6: Liveness check is a real SELECT 1 round-trip (old code read
-            conn.isolation_level which is a pure Python attribute — never
-            touches the socket, so stale connections passed silently).
-    FIX 7: Reconnect only replaces THIS module's connection; it does NOT
-            call st.cache_resource.clear() which would nuke db_manager and
-            user_login connections simultaneously.
+    FIX: Liveness check is a real SELECT 1 round-trip — the old code read
+         conn.isolation_level which is a pure Python attribute and never
+         touches the socket, so stale connections passed silently.
+    FIX: Reconnect only replaces THIS module's connection; does NOT call
+         st.cache_resource.clear() which would destroy all other connections.
     """
-    with _reconnect_lock:
-        conn = _llm_conn_holder.get("conn")
+    with _user_reconnect_lock:
+        conn = _user_conn_holder.get("conn")
         need_reconnect = False
 
         if conn is None:
@@ -97,7 +62,7 @@ def _conn():
             try:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
-                conn.rollback()  # close any implicit transaction opened by SELECT 1
+                conn.rollback()
             except Exception:
                 need_reconnect = True
                 try:
@@ -106,9 +71,9 @@ def _conn():
                     pass
 
         if need_reconnect:
-            _llm_conn_holder["conn"] = _make_llm_connection()
+            _user_conn_holder["conn"] = _make_user_connection()
 
-        return _llm_conn_holder["conn"]
+        return _user_conn_holder["conn"]
 
 
 def _execute(sql: str, params=None, fetch: str = "none"):
@@ -136,366 +101,674 @@ def _execute(sql: str, params=None, fetch: str = "none"):
         raise
 
 
-# ── Schema initialisation ─────────────────────────────────────────────────────
-def init_db():
-    """Create llm_manager tables in Supabase if they don't already exist."""
+# ── Utility ──────────────────────────────────────────────────────────────────
+
+def get_ist_time():
+    ist = pytz.timezone("Asia/Kolkata")
+    return datetime.now(ist)
+
+
+def is_strong_password(password):
+    return (
+        len(password) >= 8 and
+        re.search(r'[A-Z]', password) and
+        re.search(r'[a-z]', password) and
+        re.search(r'[0-9]', password) and
+        re.search(r'[!@#$%^&*(),.?":{}|<>]', password)
+    )
+
+
+def is_valid_email(email):
+    return re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email) is not None
+
+
+def domain_has_mx_record(email):
+    try:
+        domain = email.split('@')[1]
+        dns.resolver.resolve(domain, 'MX')
+        return True
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN,
+            dns.resolver.NoNameservers, IndexError):
+        return False
+    except Exception:
+        return True
+
+
+# ── Existence checks ─────────────────────────────────────────────────────────
+
+def username_exists(username):
+    row = _execute(
+        "SELECT 1 FROM users WHERE username = %s", (username,), fetch="one"
+    )
+    return row is not None
+
+
+def email_exists(email):
+    row = _execute(
+        "SELECT 1 FROM users WHERE email = %s", (email,), fetch="one"
+    )
+    return row is not None
+
+
+# ── Table creation ───────────────────────────────────────────────────────────
+
+def create_user_table():
     ddl = """
-    CREATE TABLE IF NOT EXISTS llm_cache (
-        prompt_hash TEXT PRIMARY KEY,
-        response    TEXT            NOT NULL,
-        timestamp   TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+    CREATE TABLE IF NOT EXISTS users (
+        id           SERIAL PRIMARY KEY,
+        username     TEXT UNIQUE NOT NULL,
+        password     TEXT NOT NULL,
+        email        TEXT UNIQUE,
+        groq_api_key TEXT
     );
-
-    CREATE TABLE IF NOT EXISTS key_failures (
-        api_key   TEXT PRIMARY KEY,
-        fail_time TIMESTAMPTZ NOT NULL,
-        reason    TEXT        NOT NULL DEFAULT 'error'
+    CREATE TABLE IF NOT EXISTS user_logs (
+        id        SERIAL PRIMARY KEY,
+        username  TEXT NOT NULL,
+        action    TEXT NOT NULL,
+        timestamp TEXT NOT NULL
     );
-
-    CREATE TABLE IF NOT EXISTS key_usage (
-        api_key     TEXT PRIMARY KEY,
-        usage_count INTEGER  NOT NULL DEFAULT 0,
-        last_reset  DATE     NOT NULL DEFAULT CURRENT_DATE
+    CREATE TABLE IF NOT EXISTS feature_usage (
+        id       SERIAL PRIMARY KEY,
+        username TEXT NOT NULL,
+        feature  TEXT NOT NULL,
+        used_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    CREATE INDEX IF NOT EXISTS idx_feature_usage_lookup
+        ON feature_usage (username, feature, used_at);
+    CREATE TABLE IF NOT EXISTS login_tokens (
+        id         SERIAL PRIMARY KEY,
+        token      TEXT UNIQUE NOT NULL,
+        username   TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        used       BOOLEAN NOT NULL DEFAULT FALSE
+    );
+    CREATE INDEX IF NOT EXISTS idx_login_tokens_token ON login_tokens (token);
+    CREATE TABLE IF NOT EXISTS login_attempts (
+        id         SERIAL PRIMARY KEY,
+        identifier TEXT NOT NULL,
+        attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_login_attempts_lookup
+        ON login_attempts (identifier, attempted_at);
     """
     conn = _conn()
     try:
         with conn.cursor() as cur:
             cur.execute(ddl)
+            # Prune feature_usage rows older than 2 hours — they are only needed
+            # for the 1-hour rate-limit window. Without this the table grows forever.
+            cur.execute("DELETE FROM feature_usage WHERE used_at < NOW() - INTERVAL '2 hours'")
+            # Prune login_attempts older than 15 minutes — only needed for lockout window.
+            # FIX: attempted_at is TIMESTAMPTZ stored in UTC by Postgres; compare against
+            # plain NOW() (UTC) so the window is always accurate regardless of timezone.
+            cur.execute("DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '15 minutes'")
         conn.commit()
-    except Exception:
+    except Exception as e:
+        # FIX: rollback on the SAME connection object, not a fresh _conn() call
         try:
             conn.rollback()
         except Exception:
             pass
-        raise
-
-init_db()
+        st.error(f"Error creating tables: {e}")
 
 
-# ── Cache cleanup ─────────────────────────────────────────────────────────────
-def cleanup_cache():
-    """Delete expired cache rows and permanently dead keys."""
-    cutoff_cache = get_utc_now() - timedelta(hours=CACHE_EXPIRY_HOURS)
-    cutoff_dead  = get_utc_now() - timedelta(days=DEAD_KEY_REMOVE_DAYS)
-    _execute("DELETE FROM llm_cache WHERE timestamp < %s", (cutoff_cache,))
-    _execute("DELETE FROM key_failures WHERE fail_time < %s", (cutoff_dead,))
+# ── OTP helpers ───────────────────────────────────────────────────────────────
+
+def generate_otp():
+    return str(secrets.randbelow(900000) + 100000)
 
 
-# ── API key loader ────────────────────────────────────────────────────────────
-def load_groq_api_keys():
-    """Load Groq keys from Streamlit secrets (preferred) or environment."""
+def _send_email(to_email: str, subject: str, body: str) -> bool:
+    """Internal SMTP helper used by both registration and password reset."""
     try:
-        secret_keys = st.secrets.get("GROQ_API_KEYS", "")
-        if secret_keys:
-            keys = [k.strip() for k in secret_keys.split(",") if k.strip()]
-            if keys:
-                return keys
+        sender_email = st.secrets["email_address"]
+        sender_password = st.secrets["email_password"]
+
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        try:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, to_email, msg.as_string())
+        finally:
+            server.quit()  # always close — prevents SMTP connection leak on exception
+        return True
+    except smtplib.SMTPException as e:
+        st.error(f"SMTP Error: {e}")
+        return False
+    except Exception as e:
+        st.error(f"Error sending email: {e}")
+        return False
+
+
+def send_registration_otp(to_email: str, otp: str) -> bool:
+    body = f"""Hello,
+
+Welcome! Your verification OTP for registration is: {otp}
+
+This OTP will expire in 3 minutes.
+
+If you did not request this registration, please ignore this email.
+
+Best regards,
+Resume App Team
+"""
+    return _send_email(to_email, "Email Verification OTP", body)
+
+
+def send_email_otp(to_email: str, otp: str) -> bool:
+    body = f"""Hello,
+
+Your OTP for password reset is: {otp}
+
+This OTP will expire in 3 minutes.
+
+If you did not request this password reset, please ignore this email.
+
+Best regards,
+Resume App Team
+"""
+    return _send_email(to_email, "Password Reset OTP", body)
+
+
+# ── Registration ─────────────────────────────────────────────────────────────
+
+def add_user(username, password, email=None):
+    """
+    Validate details and send OTP.  Does NOT write to DB yet.
+    Returns (success: bool, message: str).
+    """
+    if not is_strong_password(password):
+        return False, "⚠ Password must be at least 8 characters long and include uppercase, lowercase, number, and special character."
+    if not email:
+        return False, "⚠ Email is required for registration."
+    if not is_valid_email(email):
+        return False, "⚠ Invalid email format. Please provide a valid email address."
+    if not domain_has_mx_record(email):
+        return False, "⚠ Email domain does not exist or has no valid mail server."
+    if email_exists(email):
+        return False, "🚫 Email already exists. Please use a different email."
+    if username_exists(username):
+        return False, "🚫 Username already exists."
+
+    otp = generate_otp()
+    if not send_registration_otp(email, otp):
+        return False, "❌ Failed to send OTP email. Please check your email address and try again."
+
+    st.session_state.pending_registration = {
+        'username': username,
+        'password': password,
+        'email': email,
+        'otp': otp,
+        'timestamp': get_ist_time(),
+    }
+    return True, "📧 Verification email sent! Please check your inbox for OTP."
+
+
+def complete_registration(entered_otp):
+    """
+    Verify OTP and insert the new user into Supabase.
+    Returns (success: bool, message: str).
+    """
+    if 'pending_registration' not in st.session_state:
+        return False, "⚠ No pending registration found. Please start registration again."
+
+    pending = st.session_state.pending_registration
+    stored_otp = pending['otp']
+    timestamp  = pending['timestamp']
+
+    time_elapsed = (get_ist_time() - timestamp).total_seconds()
+    if time_elapsed > 180:
+        del st.session_state.pending_registration
+        return False, "⏱ OTP has expired. Please register again."
+    if entered_otp != stored_otp:
+        return False, "❌ Invalid OTP. Please try again."
+
+    username        = pending['username']
+    password        = pending['password']
+    email           = pending['email']
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    try:
+        _execute(
+            "INSERT INTO users (username, password, email) VALUES (%s, %s, %s)",
+            (username, hashed_password, email),
+        )
+        del st.session_state.pending_registration
+        return True, "✅ Registration completed! You can now login."
+    except psycopg2.errors.UniqueViolation as e:
+        err = str(e)
+        if 'username' in err:
+            return False, "🚫 Username already exists."
+        elif 'email' in err:
+            return False, "🚫 Email already exists."
+        return False, "🚫 Registration failed. Username or email already exists."
+    except Exception as e:
+        return False, f"❌ Database error: {e}"
+
+
+# ── Magic Link Login ──────────────────────────────────────────────────────────
+
+def _get_app_url() -> str:
+    """Return the base app URL from secrets, falling back to localhost."""
+    try:
+        return st.secrets.get("APP_URL", "http://localhost:8501").rstrip("/")
+    except Exception:
+        return "http://localhost:8501"
+
+
+def _send_login_link_email(to_email: str, username: str, token: str) -> bool:
+    """Email a magic login link to the user."""
+    app_url = _get_app_url()
+    link = f"{app_url}/?login_token={token}"
+    body = f"""Hello {username},
+
+Someone (hopefully you!) requested a login to HIRELYZER.
+
+Click the link below to confirm and complete your login:
+
+{link}
+
+This link will expire in 10 minutes and can only be used once.
+
+If you did not attempt to log in, please ignore this email — your account remains secure.
+
+Best regards,
+HIRELYZER Team
+"""
+    return _send_email(to_email, "🔐 Confirm Your HIRELYZER Login", body)
+
+
+def send_login_link(username_or_email: str, password: str):
+    """
+    Verify credentials, then send a magic login link.
+    Returns (status, message, username_or_None).
+
+    status values:
+      'link_sent'   — credentials OK, email sent
+      'bad_creds'   — wrong username/password
+      'no_email'    — user has no email on record
+      'email_fail'  — credentials OK but SMTP failed
+    """
+    # Resolve username + password + email
+    if '@' in username_or_email:
+        sql = "SELECT username, password, email, groq_api_key FROM users WHERE email = %s"
+    else:
+        sql = "SELECT username, password, email, groq_api_key FROM users WHERE username = %s"
+
+    row = _execute(sql, (username_or_email,), fetch="one")
+    if not row:
+        _record_failed_login(username_or_email)  # FIX: count failures toward brute-force lockout
+        return "bad_creds", "❌ Invalid credentials. Please try again.", None
+
+    stored_hashed = row["password"]
+    if not bcrypt.checkpw(password.encode("utf-8"), stored_hashed.encode("utf-8")):
+        _record_failed_login(username_or_email)  # FIX: count failures toward brute-force lockout
+        return "bad_creds", "❌ Invalid credentials. Please try again.", None
+
+    actual_username = row["username"]
+    email = row["email"]
+    groq_key = row["groq_api_key"]
+
+    if not email:
+        return "no_email", "⚠️ No email linked to this account. Contact support.", None
+
+    # Generate a secure token and persist it
+    token = str(uuid.uuid4())
+    try:
+        _execute(
+            "INSERT INTO login_tokens (token, username) VALUES (%s, %s)",
+            (token, actual_username),
+        )
+    except Exception as e:
+        return "email_fail", f"❌ Could not create login token: {e}", None
+
+    # Send the email
+    if not _send_login_link_email(email, actual_username, token):
+        return "email_fail", "❌ Failed to send login email. Please try again.", None
+
+    # Stash groq_key in session so verify_login_token can restore it
+    st.session_state["_pending_login_groq_key"] = groq_key or ""
+    return "link_sent", "📧 Login link sent! Check your inbox and click the link to sign in.", actual_username
+
+
+def verify_login_token(token: str):
+    """
+    Validate a magic login token from the URL query param.
+    If valid: sets session state and returns (True, username).
+    If invalid/expired/used: returns (False, error_message).
+    Token TTL = 10 minutes.
+    """
+    if not token:
+        return False, "⚠️ No login token provided."
+
+    row = _execute(
+        "SELECT username, created_at, used FROM login_tokens WHERE token = %s",
+        (token,),
+        fetch="one",
+    )
+    if not row:
+        return False, "❌ Invalid or expired login link."
+    if row["used"]:
+        return False, "⚠️ This login link has already been used. Please log in again."
+
+    # Check expiry (10 minutes)
+    created_at = row["created_at"]
+    # created_at from Supabase is tz-aware UTC
+    now_utc = datetime.now(pytz.utc)
+    if isinstance(created_at, datetime) and created_at.tzinfo is None:
+        created_at = pytz.utc.localize(created_at)
+    age_seconds = (now_utc - created_at).total_seconds()
+    if age_seconds > 600:
+        return False, "⏱️ Login link has expired (10 min limit). Please log in again."
+
+    username = row["username"]
+
+    # Mark token as used
+    try:
+        _execute(
+            "UPDATE login_tokens SET used = TRUE WHERE token = %s",
+            (token,),
+        )
+    except Exception:
+        pass  # non-fatal — proceed with login
+
+    # Fetch groq key for session
+    key_row = _execute(
+        "SELECT groq_api_key FROM users WHERE username = %s", (username,), fetch="one"
+    )
+    groq_key = key_row["groq_api_key"] if key_row and key_row["groq_api_key"] else ""
+
+    # Set session state
+    st.session_state.username = username
+    st.session_state.authenticated = True
+    st.session_state.user_groq_key = groq_key
+
+
+    return True, username
+
+
+def cleanup_expired_login_tokens():
+    """Delete login tokens older than 1 hour. Call once on app startup."""
+    try:
+        _execute(
+            "DELETE FROM login_tokens WHERE created_at < NOW() - INTERVAL '1 hour'"
+        )
+    except Exception:
+        pass  # non-fatal
+
+
+# ── Brute-force protection ────────────────────────────────────────────────────
+
+MAX_LOGIN_ATTEMPTS = 5          # max failures allowed
+LOCKOUT_WINDOW_SECONDS = 900    # 15-minute rolling window
+
+
+def _resolve_canonical_key(username_or_email: str) -> str:
+    """
+    Always resolve to the lowercase username so that logging in with
+    an email vs username always hits the same counter in login_attempts.
+    Falls back to the raw input (lowercased) if user doesn't exist —
+    this still prevents enumeration since the counter tracks the typed value.
+    """
+    try:
+        if '@' in username_or_email:
+            row = _execute(
+                "SELECT username FROM users WHERE email = %s",
+                (username_or_email.lower(),),
+                fetch="one",
+            )
+        else:
+            row = _execute(
+                "SELECT username FROM users WHERE username = %s",
+                (username_or_email.lower(),),
+                fetch="one",
+            )
+        if row:
+            return row["username"].lower()
     except Exception:
         pass
-
-    env_keys = os.getenv("GROQ_API_KEYS")
-    if env_keys:
-        keys = [k.strip() for k in env_keys.split(",") if k.strip()]
-        if keys:
-            return keys
-
-    raise ValueError("❌ No Groq API keys found in secrets or environment.")
+    return username_or_email.lower()  # unknown user — track raw input
 
 
-# ── Prompt hashing ────────────────────────────────────────────────────────────
-def hash_prompt(prompt: str, model: str) -> str:
-    return hashlib.sha256(f"{model}|{prompt}".encode("utf-8")).hexdigest()
-
-
-# ── Cache R/W ─────────────────────────────────────────────────────────────────
-def get_cached_response(prompt: str, model: str):
-    """Return cached LLM response if still within CACHE_EXPIRY_HOURS, else None."""
-    key    = hash_prompt(prompt, model)
-    cutoff = get_utc_now() - timedelta(hours=CACHE_EXPIRY_HOURS)
+def _record_failed_login(identifier: str):
+    """Log one failed login attempt using the canonical username key, timestamped in IST."""
     try:
+        key = _resolve_canonical_key(identifier)
+        ist_now = get_ist_time()
+        _execute(
+            "INSERT INTO login_attempts (identifier, attempted_at) VALUES (%s, %s)",
+            (key, ist_now),
+        )
+    except Exception:
+        pass  # non-fatal
+
+
+def _clear_failed_logins(identifier: str):
+    """Remove all failed attempts after a successful login."""
+    try:
+        key = _resolve_canonical_key(identifier)
+        _execute(
+            "DELETE FROM login_attempts WHERE identifier = %s",
+            (key,),
+        )
+    except Exception:
+        pass  # non-fatal
+
+
+def check_brute_force(identifier: str):
+    """
+    Check if the identifier (username or email) is locked out.
+    Resolves to canonical username first so email/username share one counter.
+    Returns (allowed: bool, message: str).
+    """
+    try:
+        key = _resolve_canonical_key(identifier)
         row = _execute(
-            "SELECT response, timestamp FROM llm_cache WHERE prompt_hash = %s",
+            """
+            SELECT COUNT(*) AS cnt FROM login_attempts
+            WHERE identifier = %s
+              AND attempted_at > NOW() - INTERVAL '15 minutes'
+            """,
             (key,),
             fetch="one",
         )
-        if row:
-            ts = row["timestamp"]
-            if isinstance(ts, str):
-                ts = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
-            if ts.tzinfo is None:
-                ts = pytz.utc.localize(ts)
-            if ts >= cutoff:
-                return row["response"]
+        count = row["cnt"] if row else 0
     except Exception:
-        pass  # cache miss on DB error — just proceed to LLM
-    return None
+        return True, ""  # fail open — don't block on DB hiccup
 
-
-def set_cached_response(prompt: str, model: str, response: str):
-    """Upsert a response into the LLM cache."""
-    key = hash_prompt(prompt, model)
-    try:
-        _execute(
-            """
-            INSERT INTO llm_cache (prompt_hash, response, timestamp)
-            VALUES (%s, %s, NOW())
-            ON CONFLICT (prompt_hash)
-            DO UPDATE SET response = EXCLUDED.response,
-                          timestamp = EXCLUDED.timestamp
-            """,
-            (key, response),
+    if count >= MAX_LOGIN_ATTEMPTS:
+        remaining = LOCKOUT_WINDOW_SECONDS // 60
+        return False, (
+            f"🔒 Too many failed attempts. Account temporarily locked — "
+            f"please try again in {remaining} minutes."
         )
-    except Exception:
-        pass  # non-fatal — next call will just re-query the LLM
+    return True, ""
 
 
-# ── Key tracking ──────────────────────────────────────────────────────────────
-def increment_key_usage(api_key: str):
-    """Increment daily usage counter for a key, resetting if the date changed."""
+# ── Authentication ────────────────────────────────────────────────────────────
+
+def verify_user(username_or_email, password):
+    if '@' in username_or_email:
+        sql = "SELECT username, password, groq_api_key FROM users WHERE email = %s"
+    else:
+        sql = "SELECT username, password, groq_api_key FROM users WHERE username = %s"
+
+    row = _execute(sql, (username_or_email,), fetch="one")
+    if row:
+        actual_username = row["username"]
+        stored_hashed   = row["password"]
+        stored_key      = row["groq_api_key"]
+
+        if bcrypt.checkpw(password.encode('utf-8'), stored_hashed.encode('utf-8')):
+            _clear_failed_logins(actual_username)
+            st.session_state.username      = actual_username
+            st.session_state.user_groq_key = stored_key or ""
+            return True, stored_key
+
+    _record_failed_login(username_or_email)
+    return False, None
+
+
+# ── API key management ────────────────────────────────────────────────────────
+
+def save_user_api_key(username, api_key):
+    _execute(
+        "UPDATE users SET groq_api_key = %s WHERE username = %s",
+        (api_key, username),
+    )
+    st.session_state.user_groq_key = api_key
+
+
+def get_user_api_key(username):
+    row = _execute(
+        "SELECT groq_api_key FROM users WHERE username = %s", (username,), fetch="one"
+    )
+    return row["groq_api_key"] if row and row["groq_api_key"] else None
+
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+
+def log_user_action(username, action):
+    timestamp = get_ist_time().strftime("%Y-%m-%d %H:%M:%S")
+    _execute(
+        "INSERT INTO user_logs (username, action, timestamp) VALUES (%s, %s, %s)",
+        (username, action, timestamp),
+    )
+
+
+# ── Stats ─────────────────────────────────────────────────────────────────────
+
+def get_total_registered_users():
+    row = _execute("SELECT COUNT(*) AS cnt FROM users", fetch="one")
+    return row["cnt"] if row else 0
+
+
+def get_logins_today():
+    today = get_ist_time().strftime('%Y-%m-%d')
+    row = _execute(
+        """
+        SELECT COUNT(*) AS cnt FROM user_logs
+        WHERE action = 'login' AND DATE(timestamp::timestamp) = %s
+        """,
+        (today,),
+        fetch="one",
+    )
+    return row["cnt"] if row else 0
+
+
+def get_all_user_logs():
+    rows = _execute(
+        "SELECT username, action, timestamp FROM user_logs ORDER BY timestamp DESC",
+        fetch="all",
+    )
+    return [(r["username"], r["action"], r["timestamp"]) for r in (rows or [])]
+
+
+# ── Forgot password ───────────────────────────────────────────────────────────
+
+def get_user_by_email(email):
+    row = _execute(
+        "SELECT username FROM users WHERE email = %s", (email,), fetch="one"
+    )
+    return row["username"] if row else None
+
+
+def update_password_by_email(email, new_password):
+    if not is_strong_password(new_password):
+        st.error("Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.")
+        return False
+
+    hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    # FIX: acquire conn once and reuse it for both execute and rollback.
+    # Old code called _conn() again in the except block which could return a
+    # brand-new connection and rollback nothing, leaving the original transaction
+    # in a broken state (InFailedSqlTransaction on all subsequent calls).
+    conn = _conn()
     try:
-        _execute(
-            """
-            INSERT INTO key_usage (api_key, usage_count, last_reset)
-            VALUES (%s, 1, CURRENT_DATE)
-            ON CONFLICT (api_key) DO UPDATE
-                SET usage_count = CASE
-                        WHEN key_usage.last_reset = CURRENT_DATE
-                        THEN key_usage.usage_count + 1
-                        ELSE 1
-                    END,
-                    last_reset = CURRENT_DATE
-            """,
-            (api_key,),
-        )
-    except Exception:
-        pass  # non-fatal
-
-
-def mark_key_failure(api_key: str, reason: str = "error"):
-    """Record (or update) a key failure with a timestamp and reason."""
-    try:
-        _execute(
-            """
-            INSERT INTO key_failures (api_key, fail_time, reason)
-            VALUES (%s, NOW(), %s)
-            ON CONFLICT (api_key) DO UPDATE
-                SET fail_time = EXCLUDED.fail_time,
-                    reason    = EXCLUDED.reason
-            """,
-            (api_key, reason),
-        )
-    except Exception:
-        pass  # non-fatal
-
-
-def clear_key_failure(api_key: str):
-    """Remove a key from the failure table (marks it healthy again)."""
-    try:
-        _execute("DELETE FROM key_failures WHERE api_key = %s", (api_key,))
-    except Exception:
-        pass  # non-fatal
-
-
-def _classify_error(error: Exception):
-    """
-    Classify an exception so we only penalise keys for real key errors.
-    Returns:
-        'quota'     — rate limited, put key in 60-min cooldown
-        'dead'      — bad/invalid key, put in 5-min cooldown
-        'transient' — network blip / server 500 / timeout, do NOT touch the key
-    """
-    msg = str(error).lower()
-    if any(s in msg for s in _QUOTA_SIGNALS):
-        return "quota"
-    if any(s in msg for s in _DEAD_KEY_SIGNALS):
-        return "dead"
-    return "transient"
-
-
-def get_healthy_keys(api_keys: list) -> list:
-    """
-    Return the subset of api_keys that are:
-    - not in cooldown (FAILURE_COOLDOWN_MINUTES / QUOTA_COOLDOWN_MINUTES)
-    - below DAILY_KEY_LIMIT
-
-    FIX 8: If the DB queries fail, returns ALL keys as fallback (was returning
-            [] which caused false "no healthy keys" errors on transient DB blips).
-    FIX 9: Result is sorted before shuffle so key_index is a stable pointer
-            within a single call_llm() invocation.
-    """
-    now   = get_utc_now()
-    today = now.strftime("%Y-%m-%d")
-
-    try:
-        failures_rows = _execute(
-            "SELECT api_key, fail_time, reason FROM key_failures WHERE api_key = ANY(%s)",
-            (api_keys,),
-            fetch="all",
-        ) or []
-        usage_rows = _execute(
-            "SELECT api_key, usage_count, last_reset FROM key_usage WHERE api_key = ANY(%s)",
-            (api_keys,),
-            fetch="all",
-        ) or []
-    except Exception:
-        # FIX 8: DB unavailable — don't penalise keys, let callers try all of them
-        shuffled = list(api_keys)
-        random.shuffle(shuffled)
-        return shuffled
-
-    failures = {r["api_key"]: r for r in failures_rows}
-    usages   = {r["api_key"]: r for r in usage_rows}
-
-    quota_keys = []
-    healthy    = []
-
-    for key in api_keys:
-        # ── cooldown check ────────────────────────────────────────────────────
-        if key in failures:
-            f       = failures[key]
-            fail_dt = f["fail_time"]
-            if isinstance(fail_dt, str):
-                fail_dt = datetime.strptime(fail_dt, "%Y-%m-%d %H:%M:%S")
-            if fail_dt.tzinfo is None:
-                fail_dt = pytz.utc.localize(fail_dt)
-            cooldown = (
-                QUOTA_COOLDOWN_MINUTES
-                if f["reason"] == "quota"
-                else FAILURE_COOLDOWN_MINUTES
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE users SET password = %s WHERE email = %s",
+                (hashed_password, email),
             )
-            if (now - fail_dt).total_seconds() < cooldown * 60:
-                continue  # still in cooldown
-
-        # ── daily quota check ─────────────────────────────────────────────────
-        if key in usages:
-            u          = usages[key]
-            last_reset = u["last_reset"]
-            if isinstance(last_reset, datetime):
-                last_reset = last_reset.strftime("%Y-%m-%d")
-            elif hasattr(last_reset, "isoformat"):
-                last_reset = last_reset.isoformat()
-            usage_count = u["usage_count"] if last_reset == today else 0
-            if usage_count >= DAILY_KEY_LIMIT:
-                quota_keys.append(key)
-                continue
-
-        healthy.append(key)
-
-    # Batch-write quota failures after the loop
-    for key in quota_keys:
-        mark_key_failure(key, "quota")
-
-    # FIX 9: sort for stable ordering within a single call, then shuffle
-    healthy.sort()
-    random.shuffle(healthy)
-    return healthy
-
-
-# ── Single LLM call ───────────────────────────────────────────────────────────
-def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
-    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key)
-    return llm.invoke(prompt).content
-
-
-# ── Main entry point ──────────────────────────────────────────────────────────
-def call_llm(
-    prompt: str,
-    session,
-    model: str = "llama-3.3-70b-versatile",
-    temperature: float = 0,
-) -> str:
-    """
-    1. Check Supabase cache — return immediately on hit.
-    2. Try user-provided Groq key (if set).
-    3. Rotate through healthy admin keys.
-    """
-    # Guard against None session (e.g. called from db_manager without session)
-    if session is None:
-        session = {}
-
-    # ── FIX 1: throttled cleanup ──────────────────────────────────────────────
-    _last_cleanup = session.get("_last_cleanup_ts", 0)
-    if time.time() - _last_cleanup > CLEANUP_INTERVAL_SECONDS:
+            updated = cur.rowcount
+        conn.commit()
+        return updated > 0
+    except Exception as e:
         try:
-            cleanup_cache()
+            conn.rollback()
         except Exception:
             pass
-        try:
-            session["_last_cleanup_ts"] = time.time()
-        except Exception:
-            pass  # plain dict or read-only session
+        st.error(f"Database error: {e}")
+        return False
 
-    # ── Cache hit ─────────────────────────────────────────────────────────────
-    cached = get_cached_response(prompt, model)
-    if cached:
-        return cached
 
-    # Initialise key_index safely (works for both dict and st.session_state)
-    if "key_index" not in session:
-        try:
-            session["key_index"] = 0
-        except Exception:
-            pass
+# ── Feature usage rate limiting ───────────────────────────────────────────────
 
-    user_key = ""
-    raw_user_key = session.get("user_groq_key", "")
-    if isinstance(raw_user_key, str):
-        user_key = raw_user_key.strip()
+USAGE_LIMITS = {
+    "resume_analyzer": 2,
+    "ai_coach": 2,
+}
 
-    last_error = None
 
-    # ── Step 2: user-supplied key ─────────────────────────────────────────────
-    if user_key:
-        try:
-            response = try_call_llm(prompt, user_key, model, temperature)
-            set_cached_response(prompt, model, response)
-            increment_key_usage(user_key)
-            return response
-        except Exception as e:
-            err_type = _classify_error(e)
-            if err_type != "transient":
-                mark_key_failure(user_key, "quota" if err_type == "quota" else "error")
-            last_error = e
-
-    # ── Step 3: admin key rotation ────────────────────────────────────────────
+def get_usage_count_last_hour(username: str, feature: str) -> int:
+    """Return how many times username used feature in the last 60 minutes."""
     try:
-        all_admin_keys = load_groq_api_keys()
-    except ValueError as e:
-        return f"❌ LLM unavailable: {e}"
+        row = _execute(
+            """
+            SELECT COUNT(*) AS cnt FROM feature_usage
+            WHERE username = %s
+              AND feature  = %s
+              AND used_at  > NOW() - INTERVAL '1 hour'
+            """,
+            (username, feature),
+            fetch="one",
+        )
+        return row["cnt"] if row else 0
+    except Exception:
+        return 0  # fail open — don't block users due to a DB hiccup
 
-    admin_keys = get_healthy_keys(all_admin_keys)
 
-    if not admin_keys:
-        return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
+def record_feature_usage(username: str, feature: str):
+    """Log one usage event. Call AFTER the feature successfully runs."""
+    try:
+        _execute(
+            "INSERT INTO feature_usage (username, feature) VALUES (%s, %s)",
+            (username, feature),
+        )
+    except Exception:
+        pass  # non-fatal
 
-    # FIX 2: lock while picking index; FIX 5: guard against shrunk list
-    with _key_rotation_lock:
-        current_idx = session.get("key_index", 0)
-        if current_idx >= len(admin_keys):
-            current_idx = 0
-        start = current_idx
-        try:
-            session["key_index"] = (start + 1) % len(admin_keys)
-        except Exception:
-            pass
 
-    for offset in range(len(admin_keys)):
-        idx = (start + offset) % len(admin_keys)
-        key = admin_keys[idx]
-        try:
-            response = try_call_llm(prompt, key, model, temperature)
-            set_cached_response(prompt, model, response)
-            increment_key_usage(key)
-            clear_key_failure(key)
-            return response
-        except Exception as e:
-            err_type = _classify_error(e)
-            if err_type == "quota":
-                mark_key_failure(key, "quota")
-            elif err_type == "dead":
-                mark_key_failure(key, "error")
-            # transient: key stays healthy, try the next one
-            last_error = e
-
-    return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
+def check_and_gate_feature(username: str, feature: str):
+    """
+    Check if user is within their hourly limit.
+    Returns (allowed: bool, message: str).
+    Call BEFORE running the feature.
+    """
+    limit = USAGE_LIMITS.get(feature, 999)
+    count = get_usage_count_last_hour(username, feature)
+    feature_label = "AI Coach" if feature == "ai_coach" else feature.replace('_', ' ').title()
+    if count >= limit:
+        svg_block = (
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
+            'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+            'style="display:inline-block;vertical-align:middle;margin-right:6px;">'
+            '<circle cx="12" cy="12" r="10"/>'
+            '<line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>'
+            '</svg>'
+        )
+        msg = (
+            f'<div style="display:flex;align-items:center;font-size:0.88rem;color:#fca5a5;'
+            f'background:rgba(251,113,133,0.08);border:1px solid rgba(251,113,133,0.25);'
+            f'border-radius:8px;padding:10px 14px;font-family:-apple-system,sans-serif;">'
+            f'{svg_block} You have reached the <b style="margin:0 4px;">{feature_label}</b> '
+            f'limit of <b style="margin:0 4px;">{limit}</b> uses per hour. Please try again later.</div>'
+        )
+        return False, msg
+    return True, f"{count}/{limit} uses this hour."
