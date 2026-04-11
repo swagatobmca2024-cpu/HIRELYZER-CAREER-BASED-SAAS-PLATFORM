@@ -1,5 +1,6 @@
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 import bcrypt
 import streamlit as st
 from datetime import datetime, timedelta
@@ -15,72 +16,67 @@ from email.mime.multipart import MIMEMultipart
 import dns.resolver
 
 
-# ── Connection management (isolated — never touches other modules' connections) ─
-# FIX: replaced st.cache_resource singleton + .clear() with a module-level holder.
-# st.cache_resource.clear() nukes ALL cached resources app-wide, which killed
-# llm_manager and db_manager connections whenever a login DB hiccup occurred.
+# ── Connection pool (FIX 12) ──────────────────────────────────────────────────
+# Replaces the single-connection module-level holder with a ThreadedConnectionPool
+# so concurrent Streamlit sessions each get their own connection.
 
-_user_conn_holder: dict = {"conn": None}
-_user_reconnect_lock = threading.Lock()
+_user_pool_lock = threading.Lock()
+_user_pool: "psycopg2.pool.ThreadedConnectionPool | None" = None
 
 
-def _make_user_connection():
-    """Open a fresh psycopg2 connection for user_login operations."""
-    conn = psycopg2.connect(
-        host=st.secrets["SUPABASE_HOST"],
-        dbname=st.secrets["SUPABASE_DB"],
-        user=st.secrets["SUPABASE_USER"],
-        password=st.secrets["SUPABASE_PASSWORD"],
-        port=st.secrets["SUPABASE_PORT"],
-        connect_timeout=30,
-        keepalives=1,
-        keepalives_idle=30,
-        keepalives_interval=10,
-        keepalives_count=5,
-    )
-    conn.autocommit = False
-    return conn
+def _get_user_pool() -> psycopg2.pool.ThreadedConnectionPool:
+    global _user_pool
+    with _user_pool_lock:
+        if _user_pool is None or _user_pool.closed:
+            _user_pool = psycopg2.pool.ThreadedConnectionPool(
+                minconn=2,
+                maxconn=10,
+                host=st.secrets["SUPABASE_HOST"],
+                dbname=st.secrets["SUPABASE_DB"],
+                user=st.secrets["SUPABASE_USER"],
+                password=st.secrets["SUPABASE_PASSWORD"],
+                port=st.secrets["SUPABASE_PORT"],
+                connect_timeout=30,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5,
+            )
+        return _user_pool
 
 
 def _conn():
     """
-    Return a live psycopg2 connection.
-
-    FIX: Liveness check is a real SELECT 1 round-trip — the old code read
-         conn.isolation_level which is a pure Python attribute and never
-         touches the socket, so stale connections passed silently.
-    FIX: Reconnect only replaces THIS module's connection; does NOT call
-         st.cache_resource.clear() which would destroy all other connections.
+    Borrow a live connection from the pool.
+    Use _execute() for automatic borrow/return, or pair with _put_user_conn().
     """
-    with _user_reconnect_lock:
-        conn = _user_conn_holder.get("conn")
-        need_reconnect = False
+    pool = _get_user_pool()
+    conn = pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+        conn.rollback()
+    except Exception:
+        try:
+            pool.putconn(conn, close=True)
+        except Exception:
+            pass
+        conn = pool.getconn()
+    return conn
 
-        if conn is None:
-            need_reconnect = True
-        else:
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT 1")
-                conn.rollback()
-            except Exception:
-                need_reconnect = True
-                try:
-                    conn.close()
-                except Exception:
-                    pass
 
-        if need_reconnect:
-            _user_conn_holder["conn"] = _make_user_connection()
-
-        return _user_conn_holder["conn"]
+def _put_user_conn(conn, close: bool = False):
+    """Return a borrowed connection to the pool."""
+    try:
+        _get_user_pool().putconn(conn, close=close)
+    except Exception:
+        pass
 
 
 def _execute(sql: str, params=None, fetch: str = "none"):
     """
-    Run a SQL statement inside an implicit transaction.
+    Borrow a connection from the pool, run SQL, commit, then return it.
     fetch: 'one' | 'all' | 'none'
-    Commits on success, rolls back on error.
     """
     conn = _conn()
     try:
@@ -92,12 +88,14 @@ def _execute(sql: str, params=None, fetch: str = "none"):
             elif fetch == "all":
                 result = cur.fetchall()
         conn.commit()
+        _put_user_conn(conn)
         return result
     except Exception:
         try:
             conn.rollback()
         except Exception:
             pass
+        _put_user_conn(conn, close=True)
         raise
 
 
@@ -203,12 +201,13 @@ def create_user_table():
             # plain NOW() (UTC) so the window is always accurate regardless of timezone.
             cur.execute("DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '15 minutes'")
         conn.commit()
+        _put_user_conn(conn)
     except Exception as e:
-        # FIX: rollback on the SAME connection object, not a fresh _conn() call
         try:
             conn.rollback()
         except Exception:
             pass
+        _put_user_conn(conn, close=True)
         st.error(f"Error creating tables: {e}")
 
 
@@ -444,21 +443,21 @@ def verify_login_token(token: str):
     If invalid/expired/used: returns (False, error_message).
     Token TTL = 10 minutes.
 
-    FIX: The old SELECT-then-UPDATE had a race condition — two concurrent
-    requests for the same token could both pass the `used` check before either
-    marked it used.  The atomic UPDATE...WHERE used = FALSE RETURNING pattern
-    guarantees only one request wins; the other gets zero rows back.
+    FIX 15: Mark-as-used is now atomic — a single
+    UPDATE ... WHERE token = %s AND used = FALSE RETURNING ...
+    replaces the old SELECT-then-UPDATE pattern which had a race
+    condition allowing a token to be consumed twice.
     """
     if not token:
         return False, "⚠️ No login token provided."
 
-    # Atomic claim: only succeeds if the token exists, is unused, and is fresh.
+    # Atomic claim: only succeeds if token exists AND used=FALSE
     row = _execute(
         """
         UPDATE login_tokens
            SET used = TRUE
-         WHERE token      = %s
-           AND used       = FALSE
+         WHERE token = %s
+           AND used  = FALSE
            AND created_at > NOW() - INTERVAL '10 minutes'
         RETURNING username, created_at
         """,
@@ -467,16 +466,16 @@ def verify_login_token(token: str):
     )
 
     if not row:
-        # Could be: never existed, already used, or expired — check which to give
-        # a helpful message without a second round-trip race.
-        exists = _execute(
+        # Could be: never existed, already used, or expired — give a safe generic message
+        # Check whether the token exists at all to give a better hint
+        existing = _execute(
             "SELECT used, created_at FROM login_tokens WHERE token = %s",
             (token,),
             fetch="one",
         )
-        if not exists:
+        if not existing:
             return False, "❌ Invalid or expired login link."
-        if exists["used"]:
+        if existing["used"]:
             return False, "⚠️ This login link has already been used. Please log in again."
         return False, "⏱️ Login link has expired (10 min limit). Please log in again."
 
@@ -489,10 +488,9 @@ def verify_login_token(token: str):
     groq_key = key_row["groq_api_key"] if key_row and key_row["groq_api_key"] else ""
 
     # Set session state
-    st.session_state.username = username
+    st.session_state.username      = username
     st.session_state.authenticated = True
     st.session_state.user_groq_key = groq_key
-
 
     return True, username
 
@@ -639,8 +637,7 @@ def get_user_api_key(username):
 # ── Logging ───────────────────────────────────────────────────────────────────
 
 def log_user_action(username, action):
-    # Store a proper TIMESTAMPTZ (IST-aware datetime) instead of a formatted string.
-    # The column is now TIMESTAMPTZ so Postgres handles timezone-aware comparisons correctly.
+    # Store a timezone-aware datetime object; Postgres TIMESTAMPTZ handles the rest.
     _execute(
         "INSERT INTO user_logs (username, action, timestamp) VALUES (%s, %s, %s)",
         (username, action, get_ist_time()),
@@ -655,9 +652,6 @@ def get_total_registered_users():
 
 
 def get_logins_today():
-    # timestamp is TIMESTAMPTZ stored in UTC by Postgres.
-    # Convert to IST before extracting date so the "today" boundary matches
-    # the user's local midnight (UTC+5:30) rather than UTC midnight.
     row = _execute(
         """
         SELECT COUNT(*) AS cnt FROM user_logs
@@ -706,12 +700,14 @@ def update_password_by_email(email, new_password):
             )
             updated = cur.rowcount
         conn.commit()
+        _put_user_conn(conn)
         return updated > 0
     except Exception as e:
         try:
             conn.rollback()
         except Exception:
             pass
+        _put_user_conn(conn, close=True)
         st.error(f"Database error: {e}")
         return False
 
