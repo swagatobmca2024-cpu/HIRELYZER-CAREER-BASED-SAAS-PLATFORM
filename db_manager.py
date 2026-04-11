@@ -16,7 +16,6 @@ FIXES vs previous version:
 
 import psycopg2
 import psycopg2.extras
-import psycopg2.pool
 import pandas as pd
 from datetime import datetime
 import pytz
@@ -33,63 +32,66 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# ── Connection pool (FIX 10) ──────────────────────────────────────────────────
-# Replaces the single-connection module-level holder.  minconn=2 keeps two
-# connections warm; maxconn=10 handles concurrent Streamlit threads.
+# ── Connection management (isolated — never touches other modules' connections) ─
+# FIX 2: replaced st.cache_resource singleton + .clear() with a module-level holder.
+# st.cache_resource.clear() nuked ALL cached resources app-wide, which killed
+# llm_manager and user_login connections whenever a DB hiccup occurred here.
 
-_db_pool_lock = threading.Lock()
-_db_pool: "psycopg2.pool.ThreadedConnectionPool | None" = None
+_db_conn_holder: dict = {"conn": None}
+_db_reconnect_lock = threading.Lock()
 
 
-def _get_db_pool() -> psycopg2.pool.ThreadedConnectionPool:
-    global _db_pool
-    with _db_pool_lock:
-        if _db_pool is None or _db_pool.closed:
-            _db_pool = psycopg2.pool.ThreadedConnectionPool(
-                minconn=2,
-                maxconn=10,
-                host=st.secrets["SUPABASE_HOST"],
-                dbname=st.secrets["SUPABASE_DB"],
-                user=st.secrets["SUPABASE_USER"],
-                password=st.secrets["SUPABASE_PASSWORD"],
-                port=st.secrets["SUPABASE_PORT"],
-                connect_timeout=30,
-                keepalives=1,
-                keepalives_idle=30,
-                keepalives_interval=10,
-                keepalives_count=5,
-            )
-        return _db_pool
+def _make_db_connection():
+    """Open a fresh psycopg2 connection for DatabaseManager operations."""
+    conn = psycopg2.connect(
+        host=st.secrets["SUPABASE_HOST"],
+        dbname=st.secrets["SUPABASE_DB"],
+        user=st.secrets["SUPABASE_USER"],
+        password=st.secrets["SUPABASE_PASSWORD"],
+        port=st.secrets["SUPABASE_PORT"],
+        connect_timeout=30,
+        keepalives=1,
+        keepalives_idle=30,
+        keepalives_interval=10,
+        keepalives_count=5,
+    )
+    conn.autocommit = False
+    logger.info("New Supabase PostgreSQL connection established for db_manager.")
+    return conn
 
 
 def _get_fresh_cursor():
     """
-    Borrow a live connection from the pool.
-    Callers that use get_connection() context manager have automatic return.
-    Direct callers (e.g. _read_df, get_database_stats) must call _return_conn().
+    Return a live psycopg2 connection.
+
+    FIX 1: Liveness check is a real SELECT 1 round-trip — the old code read
+            conn.isolation_level which is a pure Python attribute and never
+            touches the socket, so stale connections passed silently.
+    FIX 2: Reconnect only replaces THIS module's connection; does NOT call
+            st.cache_resource.clear() which would destroy all other connections.
     """
-    pool = _get_db_pool()
-    conn = pool.getconn()
-    # Liveness check
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
-        conn.rollback()
-    except Exception:
-        try:
-            pool.putconn(conn, close=True)
-        except Exception:
-            pass
-        conn = pool.getconn()
-    return conn
+    with _db_reconnect_lock:
+        conn = _db_conn_holder.get("conn")
+        need_reconnect = False
 
+        if conn is None:
+            need_reconnect = True
+        else:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                conn.rollback()  # close implicit transaction opened by SELECT 1
+            except Exception:
+                need_reconnect = True
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
-def _return_conn(conn, close: bool = False):
-    """Return a borrowed connection to the pool."""
-    try:
-        _get_db_pool().putconn(conn, close=close)
-    except Exception:
-        pass
+        if need_reconnect:
+            _db_conn_holder["conn"] = _make_db_connection()
+
+        return _db_conn_holder["conn"]
 
 
 class DatabaseManager:
@@ -107,20 +109,19 @@ class DatabaseManager:
     @contextmanager
     def get_connection(self):
         """
-        Context manager that borrows a connection from the pool.
-        Commits on success, rolls back + discards on error.
+        Context manager that yields a psycopg2 connection.
+        Commits on success, rolls back on error.
+        The underlying connection is the module-level singleton.
         """
         conn = _get_fresh_cursor()
         try:
             yield conn
             conn.commit()
-            _return_conn(conn)
         except Exception as e:
             try:
                 conn.rollback()
             except Exception:
                 pass
-            _return_conn(conn, close=True)
             logger.error(f"Database error: {e}")
             raise
 
@@ -141,14 +142,18 @@ class DatabaseManager:
     def _read_df(self, sql: str, params=None) -> pd.DataFrame:
         """
         Execute a SELECT and return a pandas DataFrame.
-        Borrows a connection from the pool and returns it when done.
+
+        FIX 3: Uses a cursor directly instead of routing through get_connection()
+                context manager — get_connection() calls conn.commit() on every exit,
+                which is harmless for writes but can interrupt in-flight transactions
+                on the shared singleton if called concurrently.
         """
         conn = _get_fresh_cursor()
         try:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(sql, params)
                 rows = cur.fetchall()
-            _return_conn(conn)
+            # No commit needed for SELECT; do not close any outer transaction.
             return pd.DataFrame([dict(r) for r in rows]) if rows else pd.DataFrame()
         except Exception as e:
             logger.error(f"read_df error: {e}")
@@ -156,7 +161,6 @@ class DatabaseManager:
                 conn.rollback()
             except Exception:
                 pass
-            _return_conn(conn, close=True)
             return pd.DataFrame()
 
     # ── Schema initialisation ─────────────────────────────────────────────────
@@ -1452,35 +1456,27 @@ Return ONLY one domain from this list, nothing else:
     def get_database_stats(self) -> Dict[str, Any]:
         try:
             conn = _get_fresh_cursor()
-            try:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute("SELECT COUNT(*) AS cnt FROM candidates")
-                    total_candidates = cur.fetchone()["cnt"]
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT COUNT(*) AS cnt FROM candidates")
+                total_candidates = cur.fetchone()["cnt"]
 
-                    cur.execute("""
-                        SELECT
-                            ROUND(AVG(ats_score)::numeric, 2)  AS avg_ats,
-                            ROUND(AVG(bias_score)::numeric, 3) AS avg_bias,
-                            COUNT(DISTINCT domain)             AS unique_domains
-                        FROM candidates
-                    """)
-                    avg_stats = cur.fetchone()
+                cur.execute("""
+                    SELECT
+                        ROUND(AVG(ats_score)::numeric, 2)  AS avg_ats,
+                        ROUND(AVG(bias_score)::numeric, 3) AS avg_bias,
+                        COUNT(DISTINCT domain)             AS unique_domains
+                    FROM candidates
+                """)
+                avg_stats = cur.fetchone()
 
-                    cur.execute("""
-                        SELECT
-                            MIN(DATE(timestamp)) AS earliest_date,
-                            MAX(DATE(timestamp)) AS latest_date
-                        FROM candidates
-                    """)
-                    date_range = cur.fetchone()
-                _return_conn(conn)
-            except Exception:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-                _return_conn(conn, close=True)
-                raise
+                cur.execute("""
+                    SELECT
+                        MIN(DATE(timestamp)) AS earliest_date,
+                        MAX(DATE(timestamp)) AS latest_date
+                    FROM candidates
+                """)
+                date_range = cur.fetchone()
+            # No commit needed for SELECT-only block
             return {
                 'total_candidates': total_candidates,
                 'avg_ats_score':    float(avg_stats["avg_ats"])  if avg_stats["avg_ats"]  else 0,
