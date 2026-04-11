@@ -394,7 +394,7 @@ def get_healthy_keys(api_keys: list) -> list:
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
-    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key)
+    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key, max_tokens=8000)
     return llm.invoke(prompt).content
 
 
