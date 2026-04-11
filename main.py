@@ -257,7 +257,7 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
         # ✅ Call LLM
         with st.spinner("✉️ Generating cover letter..."):
             try:
-                cover_letter = call_llm(prompt, session=st.session_state).strip()
+                cover_letter = call_llm(prompt, session=st.session_state, task="cover").strip()
             except Exception as e:
                 st.error(f"❌ Failed to generate cover letter: {e}")
                 return
@@ -4700,7 +4700,7 @@ RESUME TEXT:
 \"\"\"{text}\"\"\"
 """
 
-    raw_response = call_llm(prompt, session=st.session_state)
+    raw_response = call_llm(prompt, session=st.session_state, task="rewrite")
 
     # ── Parse the two sections out of the combined response ──────────────
     rewritten_text = ""
@@ -6607,7 +6607,7 @@ Suggestions:
 ---
 """
 
-    response = call_llm(grammar_prompt, session=st.session_state).strip()
+    response = call_llm(grammar_prompt, session=st.session_state, task="grammar").strip()
     score_match = re.search(r"Score:\s*(\d+)", response)
     feedback_match = re.search(r"Feedback:\s*(.+)", response)
     suggestions = re.findall(r"- (.+)", response)
@@ -6892,7 +6892,7 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _r = call_llm(_resume_domain_prompt, session=st.session_state).strip()
+            _r = call_llm(_resume_domain_prompt, session=st.session_state, task="domain").strip()
             if _r in _valid_domains:
                 st.session_state[_resume_cache_key] = _r
             else:
@@ -6994,7 +6994,7 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _j = call_llm(_jd_domain_prompt, session=st.session_state).strip()
+            _j = call_llm(_jd_domain_prompt, session=st.session_state, task="domain").strip()
             if _j in _valid_domains:
                 st.session_state[_jd_cache_key] = _j
             else:
@@ -7279,7 +7279,7 @@ SCORING SCALE for language ({lang_weight} pts max):
 """
    
    
-    ats_result = call_llm(prompt, session=st.session_state).strip()
+    ats_result = call_llm(prompt, session=st.session_state, task="score").strip()
 
     # ── CRITICAL: Overwrite any LLM-modified Format Score/Grade lines ────
     # The LLM sometimes rewrites these despite instructions. Force the true
@@ -8222,7 +8222,7 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
+                _r = call_llm(_pre_resume_prompt, session=st.session_state, task="domain").strip()
                 if _r in _pre_valid_domains:
                     st.session_state[_pre_resume_cache_key] = _r
                 else:
@@ -8320,7 +8320,7 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
+                _j = call_llm(_pre_jd_prompt, session=st.session_state, task="domain").strip()
                 if _j in _pre_valid_domains:
                     st.session_state[_pre_jd_cache_key] = _j
                 else:
