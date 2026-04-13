@@ -1,66 +1,12 @@
-import os
-os.environ["STREAMLIT_WATCHDOG"] = "false"
-import json
-import random
-import string
 import re
-import asyncio
-import io
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.parse
-import base64
 from io import BytesIO
-from collections import Counter
-from datetime import datetime
-import time
 
-import streamlit as st
-import streamlit.components.v1 as components
-from base64 import b64encode
-import requests
-import fitz
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import altair as alt
-from PIL import Image
-from pdf2image import convert_from_path
-from dotenv import load_dotenv
-from nltk.stem import WordNetLemmatizer
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
-from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from xhtml2pdf import pisa
-from pydantic import BaseModel
-from streamlit_pdf_viewer import pdf_viewer
-import torch
-from langchain_text_splitters import CharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_groq import ChatGroq
-from llm_manager import (
-    call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
-    mark_key_failure, _mem_record_failure, _mem_clear_failure,
-    _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure,
-)
-from db_manager import (
-    db_manager, insert_candidate, get_top_domains_by_score,
-    get_database_stats, detect_domain_from_title_and_description,
-    get_domain_similarity
-)
-from user_login import (
-    create_user_table, add_user, complete_registration, verify_user,
-    get_logins_today, get_total_registered_users, log_user_action,
-    username_exists, email_exists, is_valid_email, save_user_api_key,
-    get_user_api_key, get_all_user_logs, generate_otp, send_email_otp,
-    get_user_by_email, update_password_by_email, is_strong_password,
-    domain_has_mx_record, send_login_link, verify_login_token,
-    cleanup_expired_login_tokens, check_and_gate_feature,
-    record_feature_usage, get_usage_count_last_hour, check_brute_force,
-)
 
 # ── report_generator.py ─────────────────────────────────────────────────────
 def html_to_pdf_bytes(html_string):
