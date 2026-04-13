@@ -1,55 +1,28 @@
 import os
-os.environ["STREAMLIT_WATCHDOG"] = "false"
-import json
-import random
-import string
 import re
-import asyncio
-import io
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.parse
-import base64
-from io import BytesIO
-from collections import Counter
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 import time
 
 import streamlit as st
 import streamlit.components.v1 as components
-from base64 import b64encode
-import requests
 import fitz
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import altair as alt
-from PIL import Image
-from pdf2image import convert_from_path
 from dotenv import load_dotenv
-from nltk.stem import WordNetLemmatizer
-from docx import Document
-from docx.shared import Pt, RGBColor, Inches
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docx.opc.constants import RELATIONSHIP_TYPE as RT
-from xhtml2pdf import pisa
-from pydantic import BaseModel
-from streamlit_pdf_viewer import pdf_viewer
 import torch
-from langchain_text_splitters import CharacterTextSplitter
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_groq import ChatGroq
+from streamlit_pdf_viewer import pdf_viewer
 from llm_manager import (
-    call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
-    mark_key_failure, _mem_record_failure, _mem_clear_failure,
+    call_llm,
+    _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
     _async_clear_failure,
 )
 from db_manager import (
-    db_manager, insert_candidate, get_top_domains_by_score,
-    get_database_stats, detect_domain_from_title_and_description,
-    get_domain_similarity
+    db_manager, insert_candidate,
+    get_database_stats,
 )
 from user_login import (
     create_user_table, add_user, complete_registration, verify_user,
@@ -57,7 +30,7 @@ from user_login import (
     username_exists, email_exists, is_valid_email, save_user_api_key,
     get_user_api_key, get_all_user_logs, generate_otp, send_email_otp,
     get_user_by_email, update_password_by_email, is_strong_password,
-    domain_has_mx_record, send_login_link, verify_login_token,
+    send_login_link, verify_login_token,
     cleanup_expired_login_tokens, check_and_gate_feature,
     record_feature_usage, get_usage_count_last_hour, check_brute_force,
 )
@@ -85,6 +58,7 @@ from report_generator import (
 )
 
 # ── TAB_1_RESUME.py — Main UI Entrypoint ─────────────────────────────────────
+@st.cache_data(ttl=60)   # refresh hero counters every 60 s
 def _cached_hero_stats():
     return (
         get_total_registered_users(),
@@ -104,70 +78,6 @@ def _cached_admin_metrics():
 def _cached_user_api_key(username: str):
     return get_user_api_key(username)
 # ─────────────────────────────────────────────────────────────────────────────
-
-def html_to_pdf_bytes(html_string):
-    styled_html = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{
-                size: 400mm 297mm;  /* Original custom large page size */
-                margin-top: 10mm;
-                margin-bottom: 10mm;
-                margin-left: 10mm;
-                margin-right: 10mm;
-            }}
-            body {{
-                font-size: 14pt;
-                font-family: "Segoe UI", "Helvetica", sans-serif;
-                line-height: 1.5;
-                color: #000;
-            }}
-            h1, h2, h3 {{
-                color: #2f4f6f;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 15px;
-            }}
-            td {{
-                padding: 4px;
-                vertical-align: top;
-                border: 1px solid #ccc;
-            }}
-            .section-title {{
-                background-color: #e0e0e0;
-                font-weight: bold;
-                padding: 6px;
-                margin-top: 10px;
-            }}
-            .box {{
-                padding: 8px;
-                margin-top: 6px;
-                background-color: #f9f9f9;
-                border-left: 4px solid #999;  /* More elegant than full border */
-            }}
-            ul {{
-                margin: 0.5em 0;
-                padding-left: 1.5em;
-            }}
-            li {{
-                margin-bottom: 5px;
-            }}
-        </style>
-    </head>
-    <body>
-        {html_string}
-    </body>
-    </html>
-    """
-
-    pdf_io = BytesIO()
-    pisa.CreatePDF(styled_html, dest=pdf_io)
-    pdf_io.seek(0)
-    return pdf_io
 
 def generate_cover_letter_from_resume_builder():
     name = st.session_state.get("name", "")
@@ -413,6 +323,8 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "processed_files" not in st.session_state:
     st.session_state.processed_files = set()
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 # Forgot password session states
 if "reset_stage" not in st.session_state:
