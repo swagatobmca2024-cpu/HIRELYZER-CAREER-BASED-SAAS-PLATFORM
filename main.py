@@ -14,7 +14,6 @@ from collections import Counter
 from datetime import datetime
 import time
 
-# Third-party library imports
 import streamlit as st
 import streamlit.components.v1 as components
 from base64 import b64encode
@@ -36,94 +35,56 @@ from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from xhtml2pdf import pisa
 from pydantic import BaseModel
 from streamlit_pdf_viewer import pdf_viewer
-
-# Heavy libraries - loaded with caching
 import torch
-
-# Langchain & Embeddings
-
-from langchain_text_splitters import CharacterTextSplitter 
-from langchain_community.vectorstores import FAISS 
-from langchain_community.embeddings import HuggingFaceEmbeddings 
-from langchain_groq import ChatGroq  # optional if you're using it
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Local project imports
+from langchain_text_splitters import CharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_groq import ChatGroq
 from llm_manager import (
-    call_llm,
-    load_groq_api_keys,
-    get_healthy_keys,
-    increment_key_usage,
-    mark_key_failure,
-    # In-memory helpers — update state instantly without a DB round-trip
-    _mem_record_failure,
-    _mem_clear_failure,
-    _mem_increment_usage,
-    _async_mark_failure,
-    _async_increment_usage,
+    call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
+    mark_key_failure, _mem_record_failure, _mem_clear_failure,
+    _mem_increment_usage, _async_mark_failure, _async_increment_usage,
     _async_clear_failure,
 )
 from db_manager import (
-    db_manager,
-    insert_candidate,
-    get_top_domains_by_score,
-    get_database_stats,
-    detect_domain_from_title_and_description,
+    db_manager, insert_candidate, get_top_domains_by_score,
+    get_database_stats, detect_domain_from_title_and_description,
     get_domain_similarity
 )
 from user_login import (
-    create_user_table,
-    add_user,
-    complete_registration,
-    verify_user,
-    get_logins_today,
-    get_total_registered_users,
-    log_user_action,
-    username_exists,
-    email_exists,
-    is_valid_email,
-    save_user_api_key,
-    get_user_api_key,
-    get_all_user_logs,
-    generate_otp,
-    send_email_otp,
-    get_user_by_email,
-    update_password_by_email,
-    is_strong_password,
-    domain_has_mx_record,
-    # ── Magic link login ──
-    send_login_link,
-    verify_login_token,
-    cleanup_expired_login_tokens,
-    # ── Usage rate limiting ──
-    check_and_gate_feature,
-    record_feature_usage,
-    get_usage_count_last_hour,
-    # ── Brute-force protection ──
-    check_brute_force,
+    create_user_table, add_user, complete_registration, verify_user,
+    get_logins_today, get_total_registered_users, log_user_action,
+    username_exists, email_exists, is_valid_email, save_user_api_key,
+    get_user_api_key, get_all_user_logs, generate_otp, send_email_otp,
+    get_user_by_email, update_password_by_email, is_strong_password,
+    domain_has_mx_record, send_login_link, verify_login_token,
+    cleanup_expired_login_tokens, check_and_gate_feature,
+    record_feature_usage, get_usage_count_last_hour, check_brute_force,
 )
 
-# ============================================================
-# 💾 Persistent Storage Configuration for Streamlit Cloud
-# ============================================================
-# SQLite storage removed — data persists in Supabase PostgreSQL
+from resume_processor import (
+    get_easyocr_reader, ensure_nltk, generate_docx,
+    _extract_page_text_smart, _classify_pdf, _render_scanned_rejection_card,
+    extract_text_from_pdf, extract_text_from_images, safe_extract_text,
+    _detect_multicolumn_pdf, check_resume_format, _SCANNED_SENTINEL,
+)
+from resume_engine import (
+    gender_words, detect_bias, replacement_mapping,
+    rewrite_and_optimize_resume, rewrite_text_with_llm,
+    optimize_resume_to_json, _salvage_additional_str, extract_resume_json,
+    rewrite_and_highlight, get_grammar_score_with_llm,
+    ats_percentage_score, setup_vectorstore, create_chain,
+)
+from report_generator import (
+    html_to_pdf_bytes, _val, _build_contact_header,
+    _section_heading_bordered, _add_hyperlink, _add_bullet,
+    _set_para_keep, _add_role_line, _add_project_header,
+    _add_education_row, _render_additional,
+    generate_modern_docx, generate_minimal_docx, generate_creative_docx,
+    generate_resume_report_html,
+)
 
-# ── Cached DB helpers — prevent re-querying Supabase on every rerun ──────────
-# These are the functions called in the script body (hero stats, admin panel,
-# sidebar). Without caching they fire on EVERY widget interaction / tab click.
-
-@st.cache_data(ttl=60)   # refresh hero counters every 60 s
+# ── TAB_1_RESUME.py — Main UI Entrypoint ─────────────────────────────────────
 def _cached_hero_stats():
     return (
         get_total_registered_users(),
@@ -143,70 +104,6 @@ def _cached_admin_metrics():
 def _cached_user_api_key(username: str):
     return get_user_api_key(username)
 # ─────────────────────────────────────────────────────────────────────────────
-
-def html_to_pdf_bytes(html_string):
-    styled_html = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{
-                size: 400mm 297mm;  /* Original custom large page size */
-                margin-top: 10mm;
-                margin-bottom: 10mm;
-                margin-left: 10mm;
-                margin-right: 10mm;
-            }}
-            body {{
-                font-size: 14pt;
-                font-family: "Segoe UI", "Helvetica", sans-serif;
-                line-height: 1.5;
-                color: #000;
-            }}
-            h1, h2, h3 {{
-                color: #2f4f6f;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 15px;
-            }}
-            td {{
-                padding: 4px;
-                vertical-align: top;
-                border: 1px solid #ccc;
-            }}
-            .section-title {{
-                background-color: #e0e0e0;
-                font-weight: bold;
-                padding: 6px;
-                margin-top: 10px;
-            }}
-            .box {{
-                padding: 8px;
-                margin-top: 6px;
-                background-color: #f9f9f9;
-                border-left: 4px solid #999;  /* More elegant than full border */
-            }}
-            ul {{
-                margin: 0.5em 0;
-                padding-left: 1.5em;
-            }}
-            li {{
-                margin-bottom: 5px;
-            }}
-        </style>
-    </head>
-    <body>
-        {html_string}
-    </body>
-    </html>
-    """
-
-    pdf_io = BytesIO()
-    pisa.CreatePDF(styled_html, dest=pdf_io)
-    pdf_io.seek(0)
-    return pdf_io
 
 def generate_cover_letter_from_resume_builder():
     name = st.session_state.get("name", "")
