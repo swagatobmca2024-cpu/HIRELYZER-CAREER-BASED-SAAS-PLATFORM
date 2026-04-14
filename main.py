@@ -85,6 +85,7 @@ from report_generator import (
 )
 
 # ── TAB_1_RESUME.py — Main UI Entrypoint ─────────────────────────────────────
+@st.cache_data(ttl=60)
 def _cached_hero_stats():
     return (
         get_total_registered_users(),
