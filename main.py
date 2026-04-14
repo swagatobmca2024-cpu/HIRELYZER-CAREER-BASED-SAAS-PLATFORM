@@ -12399,6 +12399,8 @@ Generate {num_questions} questions now:
                 st.session_state.interview_result_saved = False
                 st.session_state.interview_final_duration_seconds = None
                 st.session_state.interview_actual_start_time = None
+                # Reset usage flag so the next interview is properly counted
+                st.session_state._ac_usage_recorded_this_session = False
                 st.rerun()
 
         # Only show domain/role selection if resume is uploaded
@@ -12493,6 +12495,8 @@ Generate {num_questions} questions now:
                 st.session_state.interview_result_saved = False
                 st.session_state.interview_final_duration_seconds = None
                 st.session_state.interview_actual_start_time = None
+                # Reset usage flag so the next interview is properly counted
+                st.session_state._ac_usage_recorded_this_session = False
             if 'question_timer_start' not in st.session_state:
                 st.session_state.question_timer_start = None
             if 'timer_seconds' not in st.session_state:
@@ -13014,6 +13018,8 @@ Generate {num_questions} questions now:
                         # Clear all thread-armed flags on full refresh
                         for _k in [k for k in st.session_state if k.startswith("_timer_thread_armed_")]:
                             st.session_state.pop(_k, None)
+                        # Reset usage flag so the next interview is properly counted
+                        st.session_state._ac_usage_recorded_this_session = False
                         st.rerun()
 
                     # Answer input with character limit
