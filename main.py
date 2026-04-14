@@ -12400,7 +12400,7 @@ Generate {num_questions} questions now:
                         '<div><b style="color:#fb7185;font-size:0.92rem;">Upload Limit Reached</b>'
                         '<p style="color:#fca5a5;font-size:0.82rem;margin:4px 0 0 0;">'
                         'You have used both of your mock interviews for this hour. '
-                        'Please try again later or upgrade your plan.</p></div>'
+                        'Please try again later.</p></div>'
                         '</div>',
                         unsafe_allow_html=True
                     )
@@ -12802,7 +12802,9 @@ Generate {num_questions} questions now:
                 # ─────────────────────────────────────────────────────────────────────
 
                 if st.button("🚀 Start Mock Interview"):
-                    # ── Usage gate — guarded by session flag to prevent double-count ──
+                    # ── Usage gate — only CHECK limit here, do NOT record yet ──
+                    # Usage is recorded on first answer submission (standard approach).
+                    # This means accidental refreshes before answering don't burn a slot.
                     _ac_gate_user = st.session_state.get("username")
                     _ac_already_recorded = st.session_state.get("_ac_usage_recorded_this_session", False)
                     if _ac_gate_user and not _ac_already_recorded:
@@ -12823,9 +12825,6 @@ Generate {num_questions} questions now:
                                 unsafe_allow_html=True
                             )
                             st.stop()
-                        else:
-                            record_feature_usage(_ac_gate_user, "ai_coach")
-                            st.session_state._ac_usage_recorded_this_session = True
                     # ─────────────────────────────────────────────────────────────────
                     with st.spinner("Generating personalised interview questions..."):
                         _username_for_bias = st.session_state.get("username", "Guest")
@@ -13110,6 +13109,17 @@ Generate {num_questions} questions now:
                         # FIX 8: Idempotency check using answered count vs question index
                         if len(st.session_state.dynamic_interview_answers) > q_idx:
                             return  # Already processed this question index — do not re-evaluate
+
+                        # ── Record usage on FIRST answer only (standard approach) ──
+                        # Refresh before answering = no usage consumed.
+                        # Refresh after answering 1+ questions = usage already counted.
+                        if q_idx == 0 and not st.session_state.get("_ac_usage_recorded_this_session", False):
+                            _usage_user = st.session_state.get("username")
+                            if _usage_user:
+                                record_feature_usage(_usage_user, "ai_coach")
+                                st.session_state._ac_usage_recorded_this_session = True
+                        # ─────────────────────────────────────────────────────────
+
                         diff = st.session_state.interview_difficulty
                         eval_res = evaluate_interview_answer_for_scores(
                             ans_text, q_text, diff,
