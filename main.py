@@ -12359,29 +12359,6 @@ Generate {num_questions} questions now:
         st.markdown("---")
         st.markdown("<h3 style='color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Display\",sans-serif;font-weight:600;letter-spacing:-0.02em;'>📄 Step 1: Upload Your Resume</h3>", unsafe_allow_html=True)
 
-        # ── AI Coach quota badge (always visible, even before resume upload) ──
-        _ac_username_early = st.session_state.get("username")
-        if _ac_username_early:
-            _ac_used_early = get_usage_count_last_hour(_ac_username_early, "ai_coach")
-            _ac_remaining_early = max(0, 2 - _ac_used_early)
-            _ac_color_early = "#34d399" if _ac_remaining_early > 0 else "#fb7185"
-            _ac_bg_early = "rgba(52,211,153,0.07)" if _ac_remaining_early > 0 else "rgba(251,113,133,0.07)"
-            _ac_border_early = "rgba(52,211,153,0.25)" if _ac_remaining_early > 0 else "rgba(251,113,133,0.25)"
-            _ac_icon_early = "🟢" if _ac_remaining_early > 0 else "🔴"
-            _ac_status_early = f"{_ac_remaining_early}/2 mock interviews remaining this hour"
-            if _ac_remaining_early == 0:
-                _ac_status_early = "0/2 — Limit reached. Resets on a rolling 60-minute window."
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:8px;font-size:0.82rem;'
-                f'color:{_ac_color_early};background:{_ac_bg_early};'
-                f'border:1px solid {_ac_border_early};border-radius:8px;'
-                f'padding:9px 14px;margin-bottom:12px;font-family:-apple-system,sans-serif;">'
-                f'{_ac_icon_early} <b>AI Coach Quota:</b>&nbsp;{_ac_status_early}'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-        # ─────────────────────────────────────────────────────────────────────
-
         if st.session_state.resume_file is None:
             uploaded_resume = st.file_uploader(
                 "Upload your resume (PDF format)",
@@ -12422,8 +12399,6 @@ Generate {num_questions} questions now:
                 st.session_state.interview_result_saved = False
                 st.session_state.interview_final_duration_seconds = None
                 st.session_state.interview_actual_start_time = None
-                # Reset usage flag so the next interview is properly counted
-                st.session_state._ac_usage_recorded_this_session = False
                 st.rerun()
 
         # Only show domain/role selection if resume is uploaded
@@ -12518,11 +12493,6 @@ Generate {num_questions} questions now:
                 st.session_state.interview_result_saved = False
                 st.session_state.interview_final_duration_seconds = None
                 st.session_state.interview_actual_start_time = None
-                # Reset usage flag so the next interview is properly counted
-                st.session_state._ac_usage_recorded_this_session = False
-                # Clear timer thread keys so auto-submit works on next interview
-                for _k in [k for k in st.session_state if k.startswith("_timer_thread_armed_")]:
-                    st.session_state.pop(_k, None)
             if 'question_timer_start' not in st.session_state:
                 st.session_state.question_timer_start = None
             if 'timer_seconds' not in st.session_state:
@@ -12776,9 +12746,17 @@ Generate {num_questions} questions now:
                 # ─────────────────────────────────────────────────────────────────────
 
                 if st.button("🚀 Start Mock Interview"):
-                    # ── Usage gate — guarded by session flag to prevent double-count ──
+                    # ── Usage gate ────────────────────────────────────────────────────
+                    # FIX: Always reset the session flag here so every new "Start Mock
+                    # Interview" press is evaluated against the real DB count.
+                    # Previously the flag was only cleared in "Practice Again", which
+                    # meant interview 2 (and beyond) within the same session skipped
+                    # record_feature_usage() entirely — the DB only ever saw 1 usage,
+                    # so the quota badge always showed "1/2 remaining" even after 2
+                    # completed interviews.
                     _ac_gate_user = st.session_state.get("username")
-                    _ac_already_recorded = st.session_state.get("_ac_usage_recorded_this_session", False)
+                    st.session_state._ac_usage_recorded_this_session = False
+                    _ac_already_recorded = False
                     if _ac_gate_user and not _ac_already_recorded:
                         _ac_allowed, _ac_msg = check_and_gate_feature(_ac_gate_user, "ai_coach")
                         if not _ac_allowed:
@@ -12800,6 +12778,10 @@ Generate {num_questions} questions now:
                         else:
                             record_feature_usage(_ac_gate_user, "ai_coach")
                             st.session_state._ac_usage_recorded_this_session = True
+                            # FIX: force a rerun so the quota badge re-reads the DB
+                            # and shows the updated count (e.g. "0/2 remaining") before
+                            # the interview begins — prevents stale display after recording.
+                            st.rerun()
                     # ─────────────────────────────────────────────────────────────────
                     with st.spinner("Generating personalised interview questions..."):
                         _username_for_bias = st.session_state.get("username", "Guest")
@@ -13000,15 +12982,6 @@ Generate {num_questions} questions now:
                         )
                         _t.start()
 
-                    # Edge case: if timer already expired on this render (e.g. user
-                    # navigated away and came back) but no thread is running to trigger
-                    # the rerun — force one immediately so the auto-submit block fires.
-                    elif (not _submitted_now
-                            and remaining_time <= 0
-                            and not st.session_state.get(_thread_key, False)):
-                        st.session_state[_thread_key] = True
-                        st.rerun()
-
 
                     # Refresh button — always visible, right-aligned, small
                     st.markdown("""
@@ -13053,8 +13026,6 @@ Generate {num_questions} questions now:
                         # Clear all thread-armed flags on full refresh
                         for _k in [k for k in st.session_state if k.startswith("_timer_thread_armed_")]:
                             st.session_state.pop(_k, None)
-                        # Reset usage flag so the next interview is properly counted
-                        st.session_state._ac_usage_recorded_this_session = False
                         st.rerun()
 
                     # Answer input with character limit
@@ -13572,9 +13543,6 @@ Generate {num_questions} questions now:
                     st.session_state.question_db_ids = []
                     # ── Reset usage flag so next interview is properly gated ──
                     st.session_state._ac_usage_recorded_this_session = False
-                    # ── Clear timer thread keys so auto-submit works on next interview ──
-                    for _k in [k for k in st.session_state if k.startswith("_timer_thread_armed_")]:
-                        st.session_state.pop(_k, None)
                     st.rerun()
         else:
             st.info("Please select both a career domain and target role to start the interview practice.")
