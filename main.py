@@ -7237,6 +7237,7 @@ with tab3:
 
     # ---------- Salary Insights ----------
     render_salary_insights()
+
 def evaluate_interview_answer(answer: str, question: str = None):
     """
     Uses an LLM to strictly evaluate an interview answer.
@@ -12383,11 +12384,36 @@ Generate {num_questions} questions now:
         # ─────────────────────────────────────────────────────────────────────
 
         if st.session_state.resume_file is None:
-            uploaded_resume = st.file_uploader(
-                "Upload your resume (PDF format)",
-                type=['pdf'],
-                key="resume_uploader"
-            )
+            # ── Quota gate: block upload entirely if limit is reached ──────────
+            _upload_quota_user = st.session_state.get("username")
+            _upload_blocked = False
+            if _upload_quota_user:
+                _upload_used = get_usage_count_last_hour(_upload_quota_user, "ai_coach")
+                _upload_remaining = max(0, 2 - _upload_used)
+                if _upload_remaining == 0:
+                    _upload_blocked = True
+                    st.markdown(
+                        '<div style="display:flex;align-items:center;gap:10px;'
+                        'background:rgba(251,113,133,0.08);border:1px solid rgba(251,113,133,0.35);'
+                        'border-radius:10px;padding:14px 18px;margin-bottom:12px;">'
+                        '<span style="font-size:1.3rem;">🚫</span>'
+                        '<div><b style="color:#fb7185;font-size:0.92rem;">Upload Limit Reached</b>'
+                        '<p style="color:#fca5a5;font-size:0.82rem;margin:4px 0 0 0;">'
+                        'You have used both of your mock interviews for this hour. '
+                        'Please try again later or upgrade your plan.</p></div>'
+                        '</div>',
+                        unsafe_allow_html=True
+                    )
+            # ────────────────────────────────────────────────────────────────────
+
+            if not _upload_blocked:
+                uploaded_resume = st.file_uploader(
+                    "Upload your resume (PDF format)",
+                    type=['pdf'],
+                    key="resume_uploader"
+                )
+            else:
+                uploaded_resume = None
 
             if uploaded_resume:
                 with st.spinner("Processing your resume..."):
@@ -14627,7 +14653,6 @@ Generate {num_questions} questions now:
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
                 </p>
                 """, unsafe_allow_html=True)
-
 if tab5:
 	with tab5:
 		# sqlite3 removed — using Supabase PostgreSQL via db_manager
