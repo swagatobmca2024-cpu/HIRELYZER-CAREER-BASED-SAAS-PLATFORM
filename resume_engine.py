@@ -3295,14 +3295,55 @@ SCORING SCALE for language ({lang_weight} pts max):
     # Fallback: also accept old ### style headers so any cached legacy LLM
     # responses still parse correctly without re-running them.
 
+    # ── PRE-CLEAN: normalise common LLM formatting deviations ────────────
+    # Fix 1: LLM wraps tags in **bold** → strip the asterisks around tags
+    #        e.g. **[SEC:LANGUAGE]** → [SEC:LANGUAGE]
+    ats_result = re.sub(r'\*\*(\[SEC:[^\]]+\])\*\*', r'\1', ats_result)
+    # Fix 2: LLM lowercases tags → uppercase them
+    #        e.g. [sec:language] → [SEC:LANGUAGE]
+    ats_result = re.sub(
+        r'\[sec:([a-z_]+)\]',
+        lambda m: '[SEC:' + m.group(1).upper() + ']',
+        ats_result
+    )
+    # ─────────────────────────────────────────────────────────────────────
+
+    # Known tag aliases — LLM sometimes shortens or renames tags
+    _TAG_ALIASES = {
+        "LANGUAGE":       ["LANG", "LANG_QUALITY", "LANGUAGE_QUALITY"],
+        "KEYWORD":        ["KEYWORDS", "KW", "KEYWORD_ANALYSIS"],
+        "CANDIDATE_NAME": ["NAME", "CANDIDATE"],
+        "EXPERIENCE":     ["EXP", "WORK_EXPERIENCE"],
+        "EDUCATION":      ["EDU"],
+        "SKILLS":         ["SKILL"],
+        "FORMAT":         ["FORMATTING"],
+        "FINAL":          ["FINAL_THOUGHTS", "CONCLUSION"],
+    }
+
     def _extract(tag, fallback_keyword, text, default="N/A"):
-        """Primary: [SEC:TAG] sentinel. Fallback: ### line containing keyword."""
+        """
+        Primary:  [SEC:TAG] sentinel (case-insensitive after pre-clean).
+        Aliases:  known shortened/alternate tag names the LLM might use.
+        Fallback: ### line containing keyword (legacy responses).
+        """
+        # Primary — exact tag (already uppercased by pre-clean)
         m = re.search(
             r'\[SEC:' + re.escape(tag) + r'\][^\n]*\n(.*?)(?=\[SEC:|\Z)',
-            text, re.DOTALL
+            text, re.DOTALL | re.IGNORECASE
         )
         if m:
             return m.group(1).strip()
+
+        # Alias fallback — try known alternate tag names
+        for alias in _TAG_ALIASES.get(tag, []):
+            m = re.search(
+                r'\[SEC:' + re.escape(alias) + r'\][^\n]*\n(.*?)(?=\[SEC:|\Z)',
+                text, re.DOTALL | re.IGNORECASE
+            )
+            if m:
+                return m.group(1).strip()
+
+        # Legacy fallback — old ### markdown style headers
         m = re.search(
             r'###[^\n]*' + re.escape(fallback_keyword) + r'[^\n]*\n(.*?)(?=###|\Z)',
             text, re.DOTALL | re.IGNORECASE
