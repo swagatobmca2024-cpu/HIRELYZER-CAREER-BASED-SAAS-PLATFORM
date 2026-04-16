@@ -3287,8 +3287,15 @@ SCORING SCALE for language ({lang_weight} pts max):
         match = re.search(pattern, text)
         return int(match.group(1)) if match else default
 
-    # Extract key sections
-    _raw_name = extract_section(r"### 🏷️ Candidate Name(.*?)###", ats_result, "")
+    # ── Robust section extraction ──────────────────────────────────────────
+    # Each pattern uses:
+    #   - \S*  after the emoji to tolerate emoji variant bytes
+    #   - [^\n]* to absorb any heading wording differences (e.g. "Analysis" vs "Match Analysis")
+    #   - (?=###|\Z) so the LAST section (format/final) never needs a trailing ### to close
+    # This prevents N/A on resumes where the LLM slightly paraphrases section headers
+    # or where token limits truncate the trailing ### delimiter.
+
+    _raw_name = extract_section(r"###\s*\S*\s*Candidate Name[^\n]*(.*?)(?=###|\Z)", ats_result, "")
     candidate_name = re.sub(r"[*_`#\[\]<>]", "", _raw_name).strip()
     candidate_name = " ".join(candidate_name.split())
     _placeholder_values = {
@@ -3300,13 +3307,14 @@ SCORING SCALE for language ({lang_weight} pts max):
     }
     if candidate_name.lower() in _placeholder_values:
         candidate_name = "Not Found"
-    edu_analysis = extract_section(r"### 🏫 Education Analysis(.*?)###", ats_result)
-    exp_analysis = extract_section(r"### 💼 Experience Analysis(.*?)###", ats_result)
-    skills_analysis = extract_section(r"### 🛠 Skills Analysis(.*?)###", ats_result)
-    lang_analysis = extract_section(r"### 🗣 Language Quality Analysis(.*?)###", ats_result)
-    keyword_analysis = extract_section(r"### 🔑 Keyword Analysis(.*?)###", ats_result)
-    format_analysis = extract_section(r"### 📐 Format & ATS Compatibility Analysis(.*?)###", ats_result)
-    final_thoughts = extract_section(r"### ✅ Final Assessment(.*)", ats_result)
+
+    edu_analysis     = extract_section(r"###\s*\S*\s*Education[^\n]*(.*?)(?=###|\Z)",              ats_result)
+    exp_analysis     = extract_section(r"###\s*\S*\s*Experience[^\n]*(.*?)(?=###|\Z)",             ats_result)
+    skills_analysis  = extract_section(r"###\s*\S*\s*Skills[^\n]*(.*?)(?=###|\Z)",                 ats_result)
+    lang_analysis    = extract_section(r"###\s*\S*\s*Language[^\n]*(.*?)(?=###|\Z)",               ats_result)
+    keyword_analysis = extract_section(r"###\s*\S*\s*Keyword[^\n]*(.*?)(?=###|\Z)",                ats_result)
+    format_analysis  = extract_section(r"###\s*\S*\s*Format[^\n]*(.*?)(?=###\s*\S*\s*Final|###\s*✅|\Z)", ats_result)
+    final_thoughts   = extract_section(r"###\s*\S*\s*Final[^\n]*(.*?)(?=###|\Z)",                  ats_result)
 
     # Extract scores with improved patterns (LLM now scores directly using sidebar weights)
     edu_score     = extract_score(r"\*\*Score:\*\*\s*(\d+)", edu_analysis)
