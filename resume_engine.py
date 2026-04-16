@@ -3111,12 +3111,12 @@ Compare against resume. Credit synonyms and equivalent terms.
 📋 REQUIRED OUTPUT FORMAT
 ═══════════════════════════════════════════════════
 
-Follow this EXACT structure. Do not skip any section:
+Follow this EXACT structure. Do not skip any section. Use the EXACT section markers shown (they are used by the parser — do not alter them):
 
-### 🏷️ Candidate Name
+[SEC:CANDIDATE_NAME]
 <Copy the candidate's full name EXACTLY as it appears in the resume — character by character. Do NOT correct spelling, do NOT infer from context, do NOT paraphrase. Look at the very top of the resume (header/contact section). Output ONLY the name, nothing else. If you cannot find a name, write: Not Found>
 
-### 🏫 Education Analysis
+[SEC:EDUCATION]
 **Score:** <0–{edu_weight}> / {edu_weight}
 
 **Scoring Rationale:**
@@ -3125,7 +3125,7 @@ Follow this EXACT structure. Do not skip any section:
 - Academic Quality Indicators: <GPA, honors, relevant coursework if mentioned>
 - **Score Justification:** <Explain exact score with evidence from resume>
 
-### 💼 Experience Analysis
+[SEC:EXPERIENCE]
 **Score:** <0–{exp_weight}> / {exp_weight}
 
 **Experience Breakdown:**
@@ -3137,7 +3137,7 @@ Follow this EXACT structure. Do not skip any section:
 - Technology Currency: <Are skills/tools recent and relevant (last 3 years)?>
 - **Score Justification:** <Explain score with specific resume evidence>
 
-### 🛠 Skills Analysis
+[SEC:SKILLS]
 **Score:** <0–{skills_weight}> / {skills_weight}
 
 **Skills Assessment:**
@@ -3156,7 +3156,7 @@ Follow this EXACT structure. Do not skip any section:
 
 **Score Justification:** <Explain with matched vs. required skills ratio>
 
-### 🗣 Language Quality Analysis
+[SEC:LANGUAGE]
 **Score:** <evaluate and provide a score 0–{lang_weight}> / {lang_weight}
 **Grammar & Professional Tone:** <single sentence summarising overall language quality>
 **Suggestions:**
@@ -3174,7 +3174,7 @@ SCORING SCALE for language ({lang_weight} pts max):
 - {lang_weight-3}: Fair — Noticeable grammar or clarity problems
 - 0-1: Poor — Significant language issues
 
-### 🔑 Keyword Analysis
+[SEC:KEYWORD]
 **Score:** <0–{keyword_weight}> / {keyword_weight}
 
 **Keyword Assessment:**
@@ -3195,7 +3195,7 @@ SCORING SCALE for language ({lang_weight} pts max):
 
 **Score Justification:** <Evidence-based explanation>
 
-### 📐 Format & ATS Compatibility Analysis
+[SEC:FORMAT]
 **Format Score:** {format_data.get("format_score", "N/A") if format_data else "N/A"} / 100  
 **Format Grade:** {format_data.get("letter_grade", "N/A") if format_data else "N/A"} — {format_data.get("label", "") if format_data else ""}
 
@@ -3220,7 +3220,7 @@ SCORING SCALE for language ({lang_weight} pts max):
 - <Top format fix 2>
 - <Top format fix 3>
 
-### ✅ Final Assessment
+[SEC:FINAL]
 
 **Overall Evaluation:**
 <5–7 sentences covering: candidate's unique value proposition, strongest evidence-backed qualifications, key gaps, culture/team fit signals, and a clear hire/interview recommendation>
@@ -3287,15 +3287,37 @@ SCORING SCALE for language ({lang_weight} pts max):
         match = re.search(pattern, text)
         return int(match.group(1)) if match else default
 
-    # ── Robust section extraction ──────────────────────────────────────────
-    # Each pattern uses:
-    #   - \S*  after the emoji to tolerate emoji variant bytes
-    #   - [^\n]* to absorb any heading wording differences (e.g. "Analysis" vs "Match Analysis")
-    #   - (?=###|\Z) so the LAST section (format/final) never needs a trailing ### to close
-    # This prevents N/A on resumes where the LLM slightly paraphrases section headers
-    # or where token limits truncate the trailing ### delimiter.
+    # ── Section extraction using ASCII sentinel tags ──────────────────────
+    # The prompt now uses [SEC:TAG] markers instead of emoji ### headers.
+    # These are plain ASCII so the LLM can never accidentally alter them
+    # (no emoji variation selectors, no rephrasing of heading words).
+    # Pattern: \[SEC:TAG\][^\n]*\n  captures body until next sentinel or end.
+    # Fallback: also accept old ### style headers so any cached legacy LLM
+    # responses still parse correctly without re-running them.
 
-    _raw_name = extract_section(r"###\s*\S*\s*Candidate Name[^\n]*(.*?)(?=###|\Z)", ats_result, "")
+    def _extract(tag, fallback_keyword, text, default="N/A"):
+        """Primary: [SEC:TAG] sentinel. Fallback: ### line containing keyword."""
+        m = re.search(
+            r'\[SEC:' + re.escape(tag) + r'\][^\n]*\n(.*?)(?=\[SEC:|\Z)',
+            text, re.DOTALL
+        )
+        if m:
+            return m.group(1).strip()
+        m = re.search(
+            r'###[^\n]*' + re.escape(fallback_keyword) + r'[^\n]*\n(.*?)(?=###|\Z)',
+            text, re.DOTALL | re.IGNORECASE
+        )
+        return m.group(1).strip() if m else default
+
+    _raw_name        = _extract("CANDIDATE_NAME", "Candidate Name", ats_result, "")
+    edu_analysis     = _extract("EDUCATION",      "Education",      ats_result)
+    exp_analysis     = _extract("EXPERIENCE",     "Experience",     ats_result)
+    skills_analysis  = _extract("SKILLS",         "Skills",         ats_result)
+    lang_analysis    = _extract("LANGUAGE",       "Language",       ats_result)
+    keyword_analysis = _extract("KEYWORD",        "Keyword",        ats_result)
+    format_analysis  = _extract("FORMAT",         "Format",         ats_result)
+    final_thoughts   = _extract("FINAL",          "Final",          ats_result)
+
     candidate_name = re.sub(r"[*_`#\[\]<>]", "", _raw_name).strip()
     candidate_name = " ".join(candidate_name.split())
     _placeholder_values = {
@@ -3307,14 +3329,6 @@ SCORING SCALE for language ({lang_weight} pts max):
     }
     if candidate_name.lower() in _placeholder_values:
         candidate_name = "Not Found"
-
-    edu_analysis     = extract_section(r"###\s*\S*\s*Education[^\n]*(.*?)(?=###|\Z)",              ats_result)
-    exp_analysis     = extract_section(r"###\s*\S*\s*Experience[^\n]*(.*?)(?=###|\Z)",             ats_result)
-    skills_analysis  = extract_section(r"###\s*\S*\s*Skills[^\n]*(.*?)(?=###|\Z)",                 ats_result)
-    lang_analysis    = extract_section(r"###\s*\S*\s*Language[^\n]*(.*?)(?=###|\Z)",               ats_result)
-    keyword_analysis = extract_section(r"###\s*\S*\s*Keyword[^\n]*(.*?)(?=###|\Z)",                ats_result)
-    format_analysis  = extract_section(r"###\s*\S*\s*Format[^\n]*(.*?)(?=###\s*\S*\s*Final|###\s*✅|\Z)", ats_result)
-    final_thoughts   = extract_section(r"###\s*\S*\s*Final[^\n]*(.*?)(?=###|\Z)",                  ats_result)
 
     # Extract scores with improved patterns (LLM now scores directly using sidebar weights)
     edu_score     = extract_score(r"\*\*Score:\*\*\s*(\d+)", edu_analysis)
