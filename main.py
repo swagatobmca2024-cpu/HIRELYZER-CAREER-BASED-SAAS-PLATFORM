@@ -4538,25 +4538,72 @@ with tab1:
                 st.altair_chart(ats_chart, use_container_width=True)
 
                 st.markdown("<p class='section-label'>Detailed ATS Section Analyses</p>", unsafe_allow_html=True)
-                for section_title, key in [
-                    ("Education Analysis", "Education Analysis"),
-                    ("Experience Analysis", "Experience Analysis"),
-                    ("Skills Analysis", "Skills Analysis"),
-                    ("Language Quality", "Language Analysis"),
-                    ("Keyword Analysis", "Keyword Analysis"),
+
+                # ── Fixed section order — always rendered in this sequence ──────────
+                # Markdown is converted to HTML so **bold**, bullet lists etc. render
+                # correctly instead of showing raw asterisks.
+                def _md_to_html(text: str) -> str:
+                    """Minimal markdown → HTML converter for ATS section bodies."""
+                    import html as _html
+                    lines = text.split("\n")
+                    out, in_ul = [], False
+                    for line in lines:
+                        # Bold  **text**
+                        line = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', line)
+                        # Italic *text*
+                        line = re.sub(r'\*(.+?)\*', r'<i>\1</i>', line)
+                        # Bullet point lines  - item  or  • item
+                        if re.match(r'^\s*[-•]\s+', line):
+                            if not in_ul:
+                                out.append("<ul style='margin:6px 0 6px 16px;padding:0;'>")
+                                in_ul = True
+                            content = re.sub(r'^\s*[-•]\s+', '', line)
+                            out.append(f"<li style='margin-bottom:3px;'>{content}</li>")
+                        else:
+                            if in_ul:
+                                out.append("</ul>")
+                                in_ul = False
+                            if line.strip():
+                                out.append(f"<p style='margin:4px 0;'>{line}</p>")
+                    if in_ul:
+                        out.append("</ul>")
+                    return "".join(out)
+
+                _SECTION_ORDER = [
+                    ("Education Analysis",        "Education Analysis"),
+                    ("Experience Analysis",        "Experience Analysis"),
+                    ("Skills Analysis",            "Skills Analysis"),
+                    ("Language Quality",           "Language Analysis"),
+                    ("Keyword Analysis",           "Keyword Analysis"),
                     ("Format & ATS Compatibility", "Format Analysis"),
-                    ("Final Assessment", "Final Thoughts")
-                ]:
-                    analysis_content = resume.get(key, "N/A")
-                    if "**Score:**" in analysis_content:
-                        parts = analysis_content.split("**Score:**")
-                        rest = parts[1].split("**", 1)
-                        score_text = rest[0].strip()
-                        remaining = rest[1].strip() if len(rest) > 1 else ""
-                        score_html = f"<span class='score-badge'>Score: {score_text}</span>"
-                        body_html = f"{score_html}<div style='margin-top:8px;'>{remaining}</div>"
+                    ("Final Assessment",           "Final Thoughts"),
+                ]
+
+                for section_title, key in _SECTION_ORDER:
+                    analysis_content = resume.get(key, "") or ""
+                    # Guard: treat empty / whitespace-only / literal "N/A" the same way
+                    _is_empty = not analysis_content.strip() or analysis_content.strip().upper() == "N/A"
+
+                    if _is_empty:
+                        body_html = (
+                            "<div style='color:#94a3b8;font-size:0.85rem;font-style:italic;padding:4px 0;'>"
+                            "Analysis not available for this resume — the LLM response did not include this section."
+                            "</div>"
+                        )
+                    elif "**Score:**" in analysis_content:
+                        parts    = analysis_content.split("**Score:**", 1)
+                        after    = parts[1]
+                        # Score value ends at next ** or newline
+                        score_end = re.search(r'[\n*]', after)
+                        score_text = after[:score_end.start()].strip() if score_end else after[:20].strip()
+                        remaining  = after[score_end.start():].strip() if score_end else ""
+                        score_html = (
+                            f"<span class='score-badge' style='display:inline-block;margin-bottom:8px;'>"
+                            f"Score: {score_text}</span>"
+                        )
+                        body_html = f"{score_html}<div style='margin-top:6px;'>{_md_to_html(remaining)}</div>"
                     else:
-                        body_html = f"<div>{analysis_content}</div>"
+                        body_html = f"<div>{_md_to_html(analysis_content)}</div>"
 
                     st.markdown(f"""
 <div class="ats-section-header">{section_title}</div>
