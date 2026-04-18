@@ -404,7 +404,13 @@ PROFESSIONAL SUMMARY (2–3 sentences):
   • 5+ years → "Senior" or "Lead" only if the resume clearly supports it
 
   SENTENCE STRUCTURE — STRICTLY FOLLOW:
-  Sentence 1: [Seniority label] + [Job Title/Domain] + ["with X years of experience in" OR "specializing in"] + [core domain/stack]
+  Sentence 1: [Seniority label] + [Job Title/Domain] + [experience framing] + [core domain/stack]
+              NEVER start with "As a", "I am", "I have", or any pronoun.
+              ⚠️ FRESHER RULE — if candidate has 0 or no work experience:
+                NEVER write "with 0 years of experience" — this is BANNED.
+                Use "specializing in" OR "with hands-on project experience in" instead.
+                ✓ "Aspiring Software Developer specializing in Python, Django, and problem-solving."
+                ✓ "Entry-level Java Developer with hands-on project experience in backend development."
               NEVER start with "As a", "I am", "I have", or any pronoun.
               ✓ "Mid-level Full Stack Developer with 3 years of experience building scalable web applications."
               ✓ "Entry-level Python Developer specializing in backend development and RESTful API design."
@@ -464,8 +470,18 @@ CERTIFICATIONS: • Name | Issuing Body | MMM YYYY
 
 ATS FORMATTING:
 • Single-column structure — no tables, columns, text boxes.
-• Bullet points: "•" only. Section headings: ALL CAPS.
+• Bullet points: "•" only.
+• Section headings: ALL CAPS (e.g. PROFESSIONAL SUMMARY, CORE SKILLS, WORK EXPERIENCE).
+• ⚠️ ALL CAPS applies to SECTION HEADINGS ONLY — NEVER apply ALL CAPS to body text,
+  summary sentences, bullet points, skill names, or any other content.
 • No emojis, no personal pronouns.
+
+GRADE/GPA FORMATTING RULES (CRITICAL — applies to Education section):
+• Preserve EXACTLY as written in the original resume — do NOT relabel or convert.
+• If resume says "SGPA" → write SGPA. If resume says "CGPA" → write CGPA. NEVER swap them.
+• If resume says "SGPA - 7.4" → write exactly "SGPA - 7.4". Do NOT write "CGPA - 7.4 SGPA" or "CGPA - 7.0 GPA".
+• NEVER add a second label — if value already has SGPA/CGPA/GPA/Percentage prefix, do NOT add another.
+• Bare numbers (e.g. "8.44") → write "CGPA: 8.44". Numbers with % → write "Percentage: 78.3%".
 
 BIAS REPLACEMENT RULES — APPLY EXACTLY:
 {formatted_mapping}
