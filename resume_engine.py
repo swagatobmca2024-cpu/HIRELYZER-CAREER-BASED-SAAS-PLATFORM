@@ -603,13 +603,14 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
 - "contact.*" = extract exactly as written. Use "" not null for missing fields. Never invent email, phone, or URLs.
 
 ── SUMMARY ──
-- "summary" = 2–3 sentences, max 80 words, NO pronouns anywhere. Must be COMPLETE — do NOT truncate mid-sentence.
-  Must match the Professional Summary written in Part 1 exactly.
-  MUST reflect actual experience level: freshers → "Aspiring/Entry-level", never fabricate years of experience.
-  MUST follow third-person implicit voice — no "I", "My", "As a", "I am", "I have" anywhere.
-  ✓ "Mid-level Full Stack Developer with 3 years of experience..."
-  ✗ "As a mid-level Full Stack Developer, I have 3 years..."
-  ✗ "I am an entry-level developer with..."
+- "summary" = COPY THE PROFESSIONAL SUMMARY FROM PART 1 VERBATIM — every word, every sentence, nothing omitted.
+  ⚠️ DO NOT rewrite, shorten, paraphrase, or summarize. The 2–3 sentence / 80-word guidance was for Part 1 ONLY.
+  ⚠️ DO NOT stop after the first sentence — copy ALL sentences from Part 1's Professional Summary.
+  ⚠️ If Part 1 has 3 sentences, this field MUST contain all 3 sentences.
+  NO pronouns anywhere. No "I", "My", "As a", "I am", "I have".
+  MUST be a single unbroken string — no newlines inside the JSON value.
+  ✓ Correct: copy all sentences exactly as written in Part 1.
+  ✗ Wrong: stopping after sentence 1 or rewriting in shorter form.
 
 ── SKILLS ──
 - "skills" = flat array of individual skill strings. Minimum 8. No duplicates. Only extract skills actually present in resume.
@@ -742,6 +743,39 @@ RESUME TEXT:
         # fallback: try to extract JSON object from anywhere in the response
         json_fallback = re.search(r'\{[\s\S]*\}', raw_response)
         json_str = json_fallback.group(0).strip() if json_fallback else ""
+
+    # ── Summary rescue: patch JSON summary from Part 1 if LLM truncated it ──
+    # If the JSON summary is shorter than Part 1's summary, replace it with
+    # the full Part 1 version. Wrapped in try/except — never breaks main flow.
+    try:
+        _summary_match = re.search(
+            r'PROFESSIONAL SUMMARY\s*\n?(.*?)(?=\n[A-Z][A-Z\s&/]{3,}\n|\Z)',
+            rewritten_text, re.DOTALL | re.IGNORECASE
+        )
+        if _summary_match:
+            _part1_summary = _summary_match.group(1).strip()
+            # Collapse internal newlines to single space (safe for JSON string)
+            _part1_summary = re.sub(r'\s*\n\s*', ' ', _part1_summary).strip()
+
+            if _part1_summary and json_str:
+                _json_summary_match = re.search(
+                    r'"summary"\s*:\s*"(.*?)"(?=\s*,|\s*\})',
+                    json_str, re.DOTALL
+                )
+                if _json_summary_match:
+                    _json_summary = _json_summary_match.group(1).strip()
+                    _json_words   = len(_json_summary.split())
+                    _part1_words  = len(_part1_summary.split())
+                    # Only patch if Part 1 has meaningfully more words → truncation happened
+                    if _part1_words > _json_words + 5:
+                        _escaped = _part1_summary.replace('\\', '\\\\').replace('"', '\\"')
+                        json_str = re.sub(
+                            r'("summary"\s*:\s*)".*?"',
+                            lambda m: m.group(1) + '"' + _escaped + '"',
+                            json_str, count=1, flags=re.DOTALL
+                        )
+    except Exception:
+        pass  # Best-effort only — never break the main flow
 
     return rewritten_text, json_str
 
@@ -1079,6 +1113,18 @@ def extract_resume_json(llm_response: str) -> dict:
             elif isinstance(c, str) and c.strip():
                 norm_certs.append({"name": c.strip(), "issuer": "", "duration": ""})
         data["certifications"] = norm_certs
+
+        # ── Summary safety: collapse any embedded newlines (invalid in JSON strings) ──
+        # Also strip pronouns that LLM may have slipped in despite instructions
+        if isinstance(data.get("summary"), str):
+            # Collapse newlines → single space
+            data["summary"] = re.sub(r'\s*\n\s*', ' ', data["summary"]).strip()
+            # Strip leading banned phrases if LLM ignored the rule
+            data["summary"] = re.sub(
+                r'^(As a|I am|I have|I\'m)\s+', '', data["summary"],
+                flags=re.IGNORECASE
+            ).strip()
+
         return data
     except (json.JSONDecodeError, ValueError):
         return EMPTY
