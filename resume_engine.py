@@ -458,7 +458,7 @@ EDUCATION: Degree, Major | Institution | Graduation Year | CGPA/Percentage
     - If only one year found → use it as graduation year
     - If a range found → preserve the full range as written (e.g. "October 2021 - July 2024")
     - NEVER leave year blank if ANY date pattern exists anywhere near the education block
-  • CGPA/Percentage (preserve exactly as written — e.g. "CGPA: 8.5/10", "7.0 GPA", "78.3%", "8.44" — NEVER convert between the two, NEVER relabel)
+  • CGPA/SGPA/Percentage (preserve exactly as written — e.g. "CGPA: 8.5/10", "SGPA: 8.2", "SGPA 7.9", "7.0 GPA", "78.3%", "8.44" — NEVER convert between formats, NEVER relabel)
   • Include honors, distinctions, or relevant coursework if mentioned in the original resume.
 CERTIFICATIONS: • Name | Issuing Body | MMM YYYY
 
@@ -647,8 +647,8 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
     Tier 3: absolutely zero date/year exists anywhere → store "".
 - "education[].cgpa" = Apply 3-TIER DATE INFERENCE RULE for grade (Tier 1 only — NEVER infer grades).
     SCAN THE ENTIRE EDUCATION BLOCK for any grade/score pattern.
-    Accepted formats: "7.0 GPA", "CGPA: 8.5", "8.5/10", "GPA: 3.9/4.0", "78.3%", "87%", "87.4 percent", "8.44".
-    Store EXACTLY as written. NEVER convert percentage to CGPA or vice versa. NEVER relabel. Use "" if not present.
+    Accepted formats: "7.0 GPA", "CGPA: 8.5", "SGPA: 8.2", "SGPA 7.9", "8.2 SGPA", "8.5/10", "GPA: 3.9/4.0", "78.3%", "87%", "87.4 percent", "8.44".
+    Store EXACTLY as written. NEVER convert percentage to CGPA/SGPA or vice versa. NEVER relabel. Use "" if not present.
 - "education[].bullets" = honors, distinctions, relevant coursework, or industrial training if mentioned. Use [] if none.
 
 ── CERTIFICATIONS ──
@@ -1700,13 +1700,21 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                try:
-                    _numeric = float(str(_cgpa_val).replace('%', '').strip().split('/')[0])
-                    _is_percent = "%" in str(_cgpa_val) or _numeric > 10
-                except Exception:
-                    _is_percent = "%" in str(_cgpa_val)
-                _cgpa_label = "Percentage" if _is_percent else "CGPA"
-                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_val}")
+                # Detect SGPA/CGPA/Percentage label from stored value
+                _cgpa_str = str(_cgpa_val).strip()
+                _cgpa_upper = _cgpa_str.upper()
+                if "SGPA" in _cgpa_upper:
+                    _cgpa_label = "SGPA"
+                else:
+                    try:
+                        # Strip known prefixes before numeric parse
+                        _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
+                        _numeric = float(_parse_str.replace('%', '').strip().split('/')[0])
+                        _is_percent = "%" in _cgpa_str or _numeric > 10
+                    except Exception:
+                        _is_percent = "%" in _cgpa_str
+                    _cgpa_label = "Percentage" if _is_percent else "CGPA"
+                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_str}")
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
@@ -2027,13 +2035,21 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                try:
-                    _numeric = float(str(_cgpa_val).replace('%', '').strip().split('/')[0])
-                    _is_percent = "%" in str(_cgpa_val) or _numeric > 10
-                except Exception:
-                    _is_percent = "%" in str(_cgpa_val)
-                _cgpa_label = "Percentage" if _is_percent else "CGPA"
-                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_val}")
+                # Detect SGPA/CGPA/Percentage label from stored value
+                _cgpa_str = str(_cgpa_val).strip()
+                _cgpa_upper = _cgpa_str.upper()
+                if "SGPA" in _cgpa_upper:
+                    _cgpa_label = "SGPA"
+                else:
+                    try:
+                        # Strip known prefixes before numeric parse
+                        _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
+                        _numeric = float(_parse_str.replace('%', '').strip().split('/')[0])
+                        _is_percent = "%" in _cgpa_str or _numeric > 10
+                    except Exception:
+                        _is_percent = "%" in _cgpa_str
+                    _cgpa_label = "Percentage" if _is_percent else "CGPA"
+                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_str}")
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
@@ -2364,13 +2380,21 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                try:
-                    _numeric = float(str(_cgpa_val).replace('%', '').strip().split('/')[0])
-                    _is_percent = "%" in str(_cgpa_val) or _numeric > 10
-                except Exception:
-                    _is_percent = "%" in str(_cgpa_val)
-                _cgpa_label = "Percentage" if _is_percent else "CGPA"
-                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_val}")
+                # Detect SGPA/CGPA/Percentage label from stored value
+                _cgpa_str = str(_cgpa_val).strip()
+                _cgpa_upper = _cgpa_str.upper()
+                if "SGPA" in _cgpa_upper:
+                    _cgpa_label = "SGPA"
+                else:
+                    try:
+                        # Strip known prefixes before numeric parse
+                        _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
+                        _numeric = float(_parse_str.replace('%', '').strip().split('/')[0])
+                        _is_percent = "%" in _cgpa_str or _numeric > 10
+                    except Exception:
+                        _is_percent = "%" in _cgpa_str
+                    _cgpa_label = "Percentage" if _is_percent else "CGPA"
+                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_str}")
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT_BODY
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
@@ -3359,6 +3383,39 @@ SCORING SCALE for language ({lang_weight} pts max):
     format_analysis  = _extract("FORMAT",         "Format",         ats_result)
     final_thoughts   = _extract("FINAL",          "Final",          ats_result)
 
+    # ── LEAK GUARD: strip prompt content if LLM echoed it back ──────────
+    # Badly formatted resumes can cause the LLM to echo back parts of the
+    # prompt (EVALUATION CONTEXT, JOB DESCRIPTION, RESUME TEXT) inside the
+    # response sections. Truncate at the first leaked marker found.
+    _LEAK_MARKERS = [
+        "**EVALUATION CONTEXT:**",
+        "EVALUATION CONTEXT:",
+        "📄 **JOB DESCRIPTION:**",
+        "📄 **RESUME TEXT:**",
+        "**JOB DESCRIPTION:**",
+        "**RESUME TEXT:**",
+        "JOB DESCRIPTION:",
+        "RESUME TEXT:",
+    ]
+    def _strip_leaked_prompt(text: str) -> str:
+        if not text:
+            return text
+        earliest = len(text)
+        for marker in _LEAK_MARKERS:
+            idx = text.find(marker)
+            if idx != -1 and idx < earliest:
+                earliest = idx
+        return text[:earliest].strip()
+
+    final_thoughts   = _strip_leaked_prompt(final_thoughts)
+    edu_analysis     = _strip_leaked_prompt(edu_analysis)
+    exp_analysis     = _strip_leaked_prompt(exp_analysis)
+    skills_analysis  = _strip_leaked_prompt(skills_analysis)
+    lang_analysis    = _strip_leaked_prompt(lang_analysis)
+    keyword_analysis = _strip_leaked_prompt(keyword_analysis)
+    format_analysis  = _strip_leaked_prompt(format_analysis)
+    # ─────────────────────────────────────────────────────────────────────
+
     candidate_name = re.sub(r"[*_`#\[\]<>]", "", _raw_name).strip()
     candidate_name = " ".join(candidate_name.split())
     _placeholder_values = {
@@ -3372,13 +3429,14 @@ SCORING SCALE for language ({lang_weight} pts max):
         candidate_name = "Not Found"
 
     # Extract scores with improved patterns (LLM now scores directly using sidebar weights)
-    edu_score     = extract_score(r"\*\*Score:\*\*\s*(\d+)", edu_analysis)
-    exp_score     = extract_score(r"\*\*Score:\*\*\s*(\d+)", exp_analysis)
-    skills_score  = extract_score(r"\*\*Score:\*\*\s*(\d+)", skills_analysis)
-    keyword_score = extract_score(r"\*\*Score:\*\*\s*(\d+)", keyword_analysis)
+    # NOTE: \s* between Score and : tolerates "Score :" (space before colon) LLM deviation
+    edu_score     = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", edu_analysis)
+    exp_score     = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", exp_analysis)
+    skills_score  = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", skills_analysis)
+    keyword_score = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", keyword_analysis)
     # ⚡ Parse grammar score + feedback from ATS result (no separate LLM call needed)
-    _grammar_score_match    = re.search(r"\*\*Score:\*\*\s*<evaluate.*?(\d+)>|Score.*?(\d+)\s*/\s*" + str(lang_weight), lang_analysis)
-    _grammar_score_match2   = re.search(r"\*\*Score:\*\*\s*(\d+)", lang_analysis)
+    _grammar_score_match    = re.search(r"\*\*Score\s*:\*\*\s*<evaluate.*?(\d+)>|Score.*?(\d+)\s*/\s*" + str(lang_weight), lang_analysis)
+    _grammar_score_match2   = re.search(r"\*\*Score\s*:\*\*\s*(\d+)", lang_analysis)
     _grammar_feedback_match = re.search(r"\*\*Grammar & Professional Tone:\*\*\s*(.+)", lang_analysis)
     _grammar_sugg_raw       = re.findall(r"^- (.+)", lang_analysis, re.MULTILINE)
 
