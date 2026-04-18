@@ -63,6 +63,90 @@ from user_login import (
 )
 
 # ── report_generator.py ─────────────────────────────────────────────────────
+
+# ── Grade normaliser — single source of truth for ALL templates ─────────────
+def _normalize_cgpa(raw: str) -> str:
+    """
+    Normalize academic score strings to a clean 'LABEL: value' format.
+    Handles all input variants the LLM or raw PDF text might produce.
+    Rules:
+      - Never convert between score types (SGPA != CGPA != GPA != Percentage)
+      - Never duplicate labels (e.g. 'CGPA: 7.0 GPA' -> 'CGPA: 7.0')
+      - Numeric-only values -> assumed CGPA if <= 10, Percentage if > 10
+      - Semester suffixes are preserved (e.g. 'SGPA: 7.4 (Semester 1)')
+    """
+    if not raw:
+        return ""
+    s = raw.strip()
+    if not s:
+        return ""
+
+    # Pre-normalise: collapse spaces around slash e.g. "8.5 / 10" -> "8.5/10"
+    s = re.sub(r'\s*/\s*', '/', s)
+
+    # Pre-normalise: collapse "LABEL : value" (space before colon)
+    s = re.sub(r'^(cgpa|sgpa|gpa|percentage)\s*:\s*', lambda m: m.group(1).upper() + ': ', s, flags=re.IGNORECASE)
+
+    # Already clean: CGPA/GPA/SGPA prefixes — strip only trailing duplicate labels
+    for prefix in ("CGPA:", "GPA:", "SGPA:"):
+        if s.upper().startswith(prefix.upper()):
+            val = s[len(prefix):].strip()
+            val = re.sub(r'\s+(cgpa|gpa|sgpa)\s*$', '', val, flags=re.IGNORECASE).strip()
+            return f"{prefix} {val}"
+
+    # Already clean: Percentage: prefix
+    if s.upper().startswith("PERCENTAGE:"):
+        val = s[len("Percentage:"):].strip()
+        val = re.sub(r'\s+percent(?:age)?\s*$', '', val, flags=re.IGNORECASE).strip()
+        if not val.endswith('%'):
+            val = val.rstrip('%').strip() + '%'
+        return f"Percentage: {val}"
+
+    # Pattern: value then label + optional semester suffix e.g. "8.2 SGPA", "7.0 GPA"
+    m = re.match(
+        r'^(\d+(?:\.\d+)?(?:/\d+(?:\.\d+)?)?)\s*(cgpa|sgpa|gpa)((?:\s*[\(\[].*?[\)\]]|\s+Sem(?:ester)?\s*\d+)?)$',
+        s, re.IGNORECASE
+    )
+    if m:
+        val, label, suffix = m.group(1), m.group(2).upper(), m.group(3).strip()
+        return f"{label}: {val}{(' ' + suffix) if suffix else ''}"
+
+    # Pattern: label then value + optional semester suffix e.g. "CGPA 8.5", "SGPA 7.9"
+    m = re.match(
+        r'^(cgpa|sgpa|gpa)\s+(\d+(?:\.\d+)?(?:/\d+(?:\.\d+)?)?)((?:\s*[\(\[].*?[\)\]]|\s+Sem(?:ester)?\s*\d+)?)$',
+        s, re.IGNORECASE
+    )
+    if m:
+        label, val, suffix = m.group(1).upper(), m.group(2), m.group(3).strip()
+        return f"{label}: {val}{(' ' + suffix) if suffix else ''}"
+
+    # Pattern: percentage e.g. "78%", "78.3%", "87.4 percent", "83 %"
+    m = re.match(r'^(\d+(?:\.\d+)?)\s*(%|percent(?:age)?)$', s, re.IGNORECASE)
+    if m:
+        return f"Percentage: {m.group(1)}%"
+
+    # Pattern: x/y e.g. "8.5/10", "3.9/4.0", "85/100"
+    m = re.match(r'^(\d+(?:\.\d+)?)/(\d+(?:\.\d+)?)$', s)
+    if m:
+        try:
+            label = 'Percentage' if float(m.group(1)) > 10 else 'CGPA'
+        except Exception:
+            label = 'CGPA'
+        return f"{label}: {m.group(1)}/{m.group(2)}"
+
+    # Pattern: bare numeric (decimal or integer) e.g. "8.44", "7.0", "7", "85"
+    m = re.match(r'^(\d+(?:\.\d+)?)$', s)
+    if m:
+        try:
+            numeric = float(m.group(1))
+            return f"{'Percentage' if numeric > 10 else 'CGPA'}: {m.group(1)}"
+        except Exception:
+            pass
+
+    # Fallback: return as-is (unknown format, don't corrupt)
+    return s
+
+
 def html_to_pdf_bytes(html_string):
     styled_html = f"""
     <html>
@@ -868,23 +952,8 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                # ── Smart grade label — never double-prefix ──────────────────
-                _cgpa_str   = str(_cgpa_val).strip()
-                _cgpa_upper = _cgpa_str.upper()
-                _KNOWN_PREFIXES = ["SGPA", "CGPA", "GPA", "PERCENTAGE"]
-                if any(_cgpa_upper.startswith(p) for p in _KNOWN_PREFIXES):
-                    _cgpa_display = _cgpa_str
-                else:
-                    if "SGPA" in _cgpa_upper:
-                        _cgpa_display = f"SGPA: {_cgpa_str}"
-                    else:
-                        try:
-                            _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
-                            _numeric   = float(_parse_str.replace('%', '').strip().split('/')[0])
-                            _is_percent = "%" in _cgpa_str or _numeric > 10
-                        except Exception:
-                            _is_percent = "%" in _cgpa_str
-                        _cgpa_display = f"{'Percentage' if _is_percent else 'CGPA'}: {_cgpa_str}"
+                # ── Smart grade label — delegates to _normalize_cgpa() ───────
+                _cgpa_display = _normalize_cgpa(str(_cgpa_val).strip())
                 r_cgpa = p_cgpa.add_run(_cgpa_display)
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT
@@ -1206,23 +1275,8 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                # ── Smart grade label — never double-prefix ──────────────────
-                _cgpa_str   = str(_cgpa_val).strip()
-                _cgpa_upper = _cgpa_str.upper()
-                _KNOWN_PREFIXES = ["SGPA", "CGPA", "GPA", "PERCENTAGE"]
-                if any(_cgpa_upper.startswith(p) for p in _KNOWN_PREFIXES):
-                    _cgpa_display = _cgpa_str
-                else:
-                    if "SGPA" in _cgpa_upper:
-                        _cgpa_display = f"SGPA: {_cgpa_str}"
-                    else:
-                        try:
-                            _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
-                            _numeric   = float(_parse_str.replace('%', '').strip().split('/')[0])
-                            _is_percent = "%" in _cgpa_str or _numeric > 10
-                        except Exception:
-                            _is_percent = "%" in _cgpa_str
-                        _cgpa_display = f"{'Percentage' if _is_percent else 'CGPA'}: {_cgpa_str}"
+                # ── Smart grade label — delegates to _normalize_cgpa() ───────
+                _cgpa_display = _normalize_cgpa(str(_cgpa_val).strip())
                 r_cgpa = p_cgpa.add_run(_cgpa_display)
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT
@@ -1554,23 +1608,8 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                # ── Smart grade label — never double-prefix ──────────────────
-                _cgpa_str   = str(_cgpa_val).strip()
-                _cgpa_upper = _cgpa_str.upper()
-                _KNOWN_PREFIXES = ["SGPA", "CGPA", "GPA", "PERCENTAGE"]
-                if any(_cgpa_upper.startswith(p) for p in _KNOWN_PREFIXES):
-                    _cgpa_display = _cgpa_str
-                else:
-                    if "SGPA" in _cgpa_upper:
-                        _cgpa_display = f"SGPA: {_cgpa_str}"
-                    else:
-                        try:
-                            _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
-                            _numeric   = float(_parse_str.replace('%', '').strip().split('/')[0])
-                            _is_percent = "%" in _cgpa_str or _numeric > 10
-                        except Exception:
-                            _is_percent = "%" in _cgpa_str
-                        _cgpa_display = f"{'Percentage' if _is_percent else 'CGPA'}: {_cgpa_str}"
+                # ── Smart grade label — delegates to _normalize_cgpa() ───────
+                _cgpa_display = _normalize_cgpa(str(_cgpa_val).strip())
                 r_cgpa = p_cgpa.add_run(_cgpa_display)
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT_BODY
