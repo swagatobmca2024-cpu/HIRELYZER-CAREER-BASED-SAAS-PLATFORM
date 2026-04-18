@@ -87,6 +87,12 @@ def _normalize_cgpa(raw: str) -> str:
     # Pre-normalise: collapse "LABEL : value" (space before colon)
     s = re.sub(r'^(cgpa|sgpa|gpa|percentage)\s*:\s*', lambda m: m.group(1).upper() + ': ', s, flags=re.IGNORECASE)
 
+    # Pre-normalise: collapse "LABEL - value" (dash format) → "LABEL: value"
+    # e.g. "SGPA - 7.4 (1st Sem)" → "SGPA: 7.4 (1st Sem)"
+    # e.g. "CGPA - 8.44" → "CGPA: 8.44"
+    # e.g. "Percentage - 78.3%" → "Percentage: 78.3%"
+    s = re.sub(r'^(cgpa|sgpa|gpa|percentage)\s*-\s*', lambda m: m.group(1).upper() + ': ', s, flags=re.IGNORECASE)
+
     # Already clean: CGPA/GPA/SGPA prefixes — strip only trailing duplicate labels
     for prefix in ("CGPA:", "GPA:", "SGPA:"):
         if s.upper().startswith(prefix.upper()):
