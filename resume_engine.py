@@ -1700,21 +1700,29 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                # Detect SGPA/CGPA/Percentage label from stored value
-                _cgpa_str = str(_cgpa_val).strip()
+                # ── Smart grade label — never double-prefix ──────────────────
+                # If the stored value already starts with a known label
+                # (e.g. "CGPA - 8.44", "SGPA - 7.4", "Percentage - 78.3%")
+                # render it as-is. Only add a label for bare numeric values.
+                _cgpa_str   = str(_cgpa_val).strip()
                 _cgpa_upper = _cgpa_str.upper()
-                if "SGPA" in _cgpa_upper:
-                    _cgpa_label = "SGPA"
+                _KNOWN_PREFIXES = ["SGPA", "CGPA", "GPA", "PERCENTAGE"]
+                if any(_cgpa_upper.startswith(p) for p in _KNOWN_PREFIXES):
+                    # Already labelled — print exactly as stored
+                    _cgpa_display = _cgpa_str
                 else:
-                    try:
-                        # Strip known prefixes before numeric parse
-                        _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
-                        _numeric = float(_parse_str.replace('%', '').strip().split('/')[0])
-                        _is_percent = "%" in _cgpa_str or _numeric > 10
-                    except Exception:
-                        _is_percent = "%" in _cgpa_str
-                    _cgpa_label = "Percentage" if _is_percent else "CGPA"
-                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_str}")
+                    # Bare value — detect type and add label
+                    if "SGPA" in _cgpa_upper:
+                        _cgpa_display = f"SGPA: {_cgpa_str}"
+                    else:
+                        try:
+                            _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
+                            _numeric   = float(_parse_str.replace('%', '').strip().split('/')[0])
+                            _is_percent = "%" in _cgpa_str or _numeric > 10
+                        except Exception:
+                            _is_percent = "%" in _cgpa_str
+                        _cgpa_display = f"{'Percentage' if _is_percent else 'CGPA'}: {_cgpa_str}"
+                r_cgpa = p_cgpa.add_run(_cgpa_display)
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
@@ -2035,21 +2043,29 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                # Detect SGPA/CGPA/Percentage label from stored value
-                _cgpa_str = str(_cgpa_val).strip()
+                # ── Smart grade label — never double-prefix ──────────────────
+                # If the stored value already starts with a known label
+                # (e.g. "CGPA - 8.44", "SGPA - 7.4", "Percentage - 78.3%")
+                # render it as-is. Only add a label for bare numeric values.
+                _cgpa_str   = str(_cgpa_val).strip()
                 _cgpa_upper = _cgpa_str.upper()
-                if "SGPA" in _cgpa_upper:
-                    _cgpa_label = "SGPA"
+                _KNOWN_PREFIXES = ["SGPA", "CGPA", "GPA", "PERCENTAGE"]
+                if any(_cgpa_upper.startswith(p) for p in _KNOWN_PREFIXES):
+                    # Already labelled — print exactly as stored
+                    _cgpa_display = _cgpa_str
                 else:
-                    try:
-                        # Strip known prefixes before numeric parse
-                        _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
-                        _numeric = float(_parse_str.replace('%', '').strip().split('/')[0])
-                        _is_percent = "%" in _cgpa_str or _numeric > 10
-                    except Exception:
-                        _is_percent = "%" in _cgpa_str
-                    _cgpa_label = "Percentage" if _is_percent else "CGPA"
-                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_str}")
+                    # Bare value — detect type and add label
+                    if "SGPA" in _cgpa_upper:
+                        _cgpa_display = f"SGPA: {_cgpa_str}"
+                    else:
+                        try:
+                            _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
+                            _numeric   = float(_parse_str.replace('%', '').strip().split('/')[0])
+                            _is_percent = "%" in _cgpa_str or _numeric > 10
+                        except Exception:
+                            _is_percent = "%" in _cgpa_str
+                        _cgpa_display = f"{'Percentage' if _is_percent else 'CGPA'}: {_cgpa_str}"
+                r_cgpa = p_cgpa.add_run(_cgpa_display)
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
@@ -2380,21 +2396,29 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                # Detect SGPA/CGPA/Percentage label from stored value
-                _cgpa_str = str(_cgpa_val).strip()
+                # ── Smart grade label — never double-prefix ──────────────────
+                # If the stored value already starts with a known label
+                # (e.g. "CGPA - 8.44", "SGPA - 7.4", "Percentage - 78.3%")
+                # render it as-is. Only add a label for bare numeric values.
+                _cgpa_str   = str(_cgpa_val).strip()
                 _cgpa_upper = _cgpa_str.upper()
-                if "SGPA" in _cgpa_upper:
-                    _cgpa_label = "SGPA"
+                _KNOWN_PREFIXES = ["SGPA", "CGPA", "GPA", "PERCENTAGE"]
+                if any(_cgpa_upper.startswith(p) for p in _KNOWN_PREFIXES):
+                    # Already labelled — print exactly as stored
+                    _cgpa_display = _cgpa_str
                 else:
-                    try:
-                        # Strip known prefixes before numeric parse
-                        _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
-                        _numeric = float(_parse_str.replace('%', '').strip().split('/')[0])
-                        _is_percent = "%" in _cgpa_str or _numeric > 10
-                    except Exception:
-                        _is_percent = "%" in _cgpa_str
-                    _cgpa_label = "Percentage" if _is_percent else "CGPA"
-                r_cgpa = p_cgpa.add_run(f"{_cgpa_label}: {_cgpa_str}")
+                    # Bare value — detect type and add label
+                    if "SGPA" in _cgpa_upper:
+                        _cgpa_display = f"SGPA: {_cgpa_str}"
+                    else:
+                        try:
+                            _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
+                            _numeric   = float(_parse_str.replace('%', '').strip().split('/')[0])
+                            _is_percent = "%" in _cgpa_str or _numeric > 10
+                        except Exception:
+                            _is_percent = "%" in _cgpa_str
+                        _cgpa_display = f"{'Percentage' if _is_percent else 'CGPA'}: {_cgpa_str}"
+                r_cgpa = p_cgpa.add_run(_cgpa_display)
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT_BODY
                 r_cgpa.font.color.rgb = RGBColor(80, 80, 80)
@@ -3301,6 +3325,30 @@ SCORING SCALE for language ({lang_weight} pts max):
         f'**Format Grade:** {_true_fmt_grade} — {_true_fmt_label}',
         ats_result
     )
+    # ─────────────────────────────────────────────────────────────────────
+
+    # ── GLOBAL LEAK GUARD: strip echoed prompt content from ats_result ───
+    # Badly formatted resumes can cause the LLM to echo back the prompt
+    # tail (EVALUATION CONTEXT / JOB DESCRIPTION / RESUME TEXT) anywhere
+    # inside ats_result — which then renders visibly in the UI before the
+    # ATS Score Breakdown chart. Strip at the first leaked marker found.
+    _ATS_LEAK_MARKERS = [
+        "**EVALUATION CONTEXT:**",
+        "EVALUATION CONTEXT:",
+        "📄 **JOB DESCRIPTION:**",
+        "📄 **RESUME TEXT:**",
+        "**JOB DESCRIPTION:**",
+        "**RESUME TEXT:**",
+        "JOB DESCRIPTION:",
+        "RESUME TEXT:",
+    ]
+    _earliest_leak = len(ats_result)
+    for _marker in _ATS_LEAK_MARKERS:
+        _idx = ats_result.find(_marker)
+        if _idx != -1 and _idx < _earliest_leak:
+            _earliest_leak = _idx
+    if _earliest_leak < len(ats_result):
+        ats_result = ats_result[:_earliest_leak].strip()
     # ─────────────────────────────────────────────────────────────────────
 
     def extract_section(pattern, text, default="N/A"):
