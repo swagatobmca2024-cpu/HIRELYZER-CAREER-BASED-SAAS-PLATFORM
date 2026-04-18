@@ -1797,28 +1797,8 @@ def generate_modern_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                # ── Smart grade label — never double-prefix ──────────────────
-                # If the stored value already starts with a known label
-                # (e.g. "CGPA - 8.44", "SGPA - 7.4", "Percentage - 78.3%")
-                # render it as-is. Only add a label for bare numeric values.
-                _cgpa_str   = str(_cgpa_val).strip()
-                _cgpa_upper = _cgpa_str.upper()
-                _KNOWN_PREFIXES = ["SGPA", "CGPA", "GPA", "PERCENTAGE"]
-                if any(_cgpa_upper.startswith(p) for p in _KNOWN_PREFIXES):
-                    # Already labelled — print exactly as stored
-                    _cgpa_display = _cgpa_str
-                else:
-                    # Bare value — detect type and add label
-                    if "SGPA" in _cgpa_upper:
-                        _cgpa_display = f"SGPA: {_cgpa_str}"
-                    else:
-                        try:
-                            _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
-                            _numeric   = float(_parse_str.replace('%', '').strip().split('/')[0])
-                            _is_percent = "%" in _cgpa_str or _numeric > 10
-                        except Exception:
-                            _is_percent = "%" in _cgpa_str
-                        _cgpa_display = f"{'Percentage' if _is_percent else 'CGPA'}: {_cgpa_str}"
+                # ── Smart grade label — delegates to _normalize_cgpa() ───────
+                _cgpa_display = _normalize_cgpa(str(_cgpa_val).strip())
                 r_cgpa = p_cgpa.add_run(_cgpa_display)
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT
@@ -2140,28 +2120,8 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                # ── Smart grade label — never double-prefix ──────────────────
-                # If the stored value already starts with a known label
-                # (e.g. "CGPA - 8.44", "SGPA - 7.4", "Percentage - 78.3%")
-                # render it as-is. Only add a label for bare numeric values.
-                _cgpa_str   = str(_cgpa_val).strip()
-                _cgpa_upper = _cgpa_str.upper()
-                _KNOWN_PREFIXES = ["SGPA", "CGPA", "GPA", "PERCENTAGE"]
-                if any(_cgpa_upper.startswith(p) for p in _KNOWN_PREFIXES):
-                    # Already labelled — print exactly as stored
-                    _cgpa_display = _cgpa_str
-                else:
-                    # Bare value — detect type and add label
-                    if "SGPA" in _cgpa_upper:
-                        _cgpa_display = f"SGPA: {_cgpa_str}"
-                    else:
-                        try:
-                            _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
-                            _numeric   = float(_parse_str.replace('%', '').strip().split('/')[0])
-                            _is_percent = "%" in _cgpa_str or _numeric > 10
-                        except Exception:
-                            _is_percent = "%" in _cgpa_str
-                        _cgpa_display = f"{'Percentage' if _is_percent else 'CGPA'}: {_cgpa_str}"
+                # ── Smart grade label — delegates to _normalize_cgpa() ───────
+                _cgpa_display = _normalize_cgpa(str(_cgpa_val).strip())
                 r_cgpa = p_cgpa.add_run(_cgpa_display)
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT
@@ -2493,28 +2453,8 @@ def generate_creative_docx(data: dict) -> BytesIO:
                 p_cgpa = doc.add_paragraph()
                 p_cgpa.clear()
                 _cgpa_val = edu['cgpa']
-                # ── Smart grade label — never double-prefix ──────────────────
-                # If the stored value already starts with a known label
-                # (e.g. "CGPA - 8.44", "SGPA - 7.4", "Percentage - 78.3%")
-                # render it as-is. Only add a label for bare numeric values.
-                _cgpa_str   = str(_cgpa_val).strip()
-                _cgpa_upper = _cgpa_str.upper()
-                _KNOWN_PREFIXES = ["SGPA", "CGPA", "GPA", "PERCENTAGE"]
-                if any(_cgpa_upper.startswith(p) for p in _KNOWN_PREFIXES):
-                    # Already labelled — print exactly as stored
-                    _cgpa_display = _cgpa_str
-                else:
-                    # Bare value — detect type and add label
-                    if "SGPA" in _cgpa_upper:
-                        _cgpa_display = f"SGPA: {_cgpa_str}"
-                    else:
-                        try:
-                            _parse_str = re.sub(r'(?i)(cgpa|sgpa|gpa)\s*:?\s*', '', _cgpa_str).strip()
-                            _numeric   = float(_parse_str.replace('%', '').strip().split('/')[0])
-                            _is_percent = "%" in _cgpa_str or _numeric > 10
-                        except Exception:
-                            _is_percent = "%" in _cgpa_str
-                        _cgpa_display = f"{'Percentage' if _is_percent else 'CGPA'}: {_cgpa_str}"
+                # ── Smart grade label — delegates to _normalize_cgpa() ───────
+                _cgpa_display = _normalize_cgpa(str(_cgpa_val).strip())
                 r_cgpa = p_cgpa.add_run(_cgpa_display)
                 r_cgpa.font.size = Pt(BODY - 1)
                 r_cgpa.font.name = FONT_BODY
