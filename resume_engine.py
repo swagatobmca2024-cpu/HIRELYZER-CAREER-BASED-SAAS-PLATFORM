@@ -456,16 +456,40 @@ PROJECTS: Name | Tech Stack | Duration
   ✗ "As a developer, I created..."
 
 EDUCATION: Degree, Major | Institution | Graduation Year | CGPA/Percentage
-  • YEAR EXTRACTION (CRITICAL — scan the ENTIRE education block, not just the degree line):
-    - Year can appear ANYWHERE in the education block: above, below, beside, or after the degree/institution
+
+  ⚠️ EDUCATION FORMAT HANDLING — resumes use wildly different layouts. Handle ALL of these:
+
+  LAYOUT VARIANTS (extract correctly from every format):
+  • Standard inline:       "B.Tech (CSE) | Techno India University | 2021-2024 | CGPA: 7.94"
+  • Degree first:          "B.Tech Computer Science\n  XYZ University\n  2020-2024"
+  • Institution first:     "XYZ University\n  Bachelor of Technology in CSE\n  2020-2024"
+  • Institution as heading + degree as bullet:
+                           "Behala Aryya Vidyamandir(H.S) 2019-2021\n  ● WBCHSE (Class XII)"
+                           → degree = "WBCHSE (Class XII)", institution = "Behala Aryya Vidyamandir(H.S)"
+  • Board style (Class X/XII):
+                           "XYZ School | CBSE | Class X | 2018 | 95%"
+                           "CBSE - Class X (2019) — 91%"
+                           → degree = "CBSE Class X", institution = school name if present
+  • All on one line:       "B.Tech CSE, ABC University, 2024, CGPA 8.5"
+  • Pursuing/Expected:     "B.Tech (CSE) — Expected 2025" / "Currently pursuing MBA from XYZ"
+  • Multiple degrees same institution:
+                           "ABC University\n  M.Tech 2022-2024 CGPA 8.2\n  B.Tech 2018-2022 CGPA 7.8"
+                           → treat as TWO separate education entries
+  • Short forms: B.E, B.Sc, M.Sc, MCA, BCA, MBA, Ph.D, Diploma — all valid degrees
+  • Honours/Distinction:   "B.Tech (Hons) CSE" — preserve exactly including (Hons)
+
+  YEAR EXTRACTION (CRITICAL — scan the ENTIRE education block):
+    - Year can appear ANYWHERE: above, below, beside, or after the degree/institution
     - Accept ANY of these formats: "Oct 2021 – Jul 2024", "2021-2024", "October 2021 - July 2024",
       "Batch: 2024", "Passout: 2024", "Expected: 2025", "graduating 2025", "2024", "May 2023",
       right-aligned dates, dates below GPA line, dates on a separate line entirely
     - If only one year found → use it as graduation year
     - If a range found → preserve the full range as written (e.g. "October 2021 - July 2024")
     - NEVER leave year blank if ANY date pattern exists anywhere near the education block
-  • CGPA/SGPA/Percentage (preserve exactly as written, character for character — e.g. "CGPA: 8.5/10", "SGPA: 8.2", "SGPA 7.9", "7.0 GPA", "78.3%", "8.44" — NEVER convert between formats, NEVER relabel, NEVER reorder label and value)
-  • Include honors, distinctions, or relevant coursework if mentioned in the original resume.
+
+  CGPA/SGPA/Percentage: preserve exactly as written, character for character.
+  Also accept: "Marks: 456/500", "First Class", "Distinction", "Pass" as valid score formats.
+  Include honors, distinctions, or relevant coursework if mentioned.
 CERTIFICATIONS: • Name | Issuing Body | MMM YYYY
 
 ATS FORMATTING:
@@ -603,14 +627,13 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
 - "contact.*" = extract exactly as written. Use "" not null for missing fields. Never invent email, phone, or URLs.
 
 ── SUMMARY ──
-- "summary" = COPY THE PROFESSIONAL SUMMARY FROM PART 1 VERBATIM — every word, every sentence, nothing omitted.
-  ⚠️ DO NOT rewrite, shorten, paraphrase, or summarize. The 2–3 sentence / 80-word guidance was for Part 1 ONLY.
-  ⚠️ DO NOT stop after the first sentence — copy ALL sentences from Part 1's Professional Summary.
-  ⚠️ If Part 1 has 3 sentences, this field MUST contain all 3 sentences.
-  NO pronouns anywhere. No "I", "My", "As a", "I am", "I have".
-  MUST be a single unbroken string — no newlines inside the JSON value.
-  ✓ Correct: copy all sentences exactly as written in Part 1.
-  ✗ Wrong: stopping after sentence 1 or rewriting in shorter form.
+- "summary" = 2–3 sentences, max 80 words, NO pronouns anywhere. Must be COMPLETE — do NOT truncate mid-sentence.
+  Must match the Professional Summary written in Part 1 exactly.
+  MUST reflect actual experience level: freshers → "Aspiring/Entry-level", never fabricate years of experience.
+  MUST follow third-person implicit voice — no "I", "My", "As a", "I am", "I have" anywhere.
+  ✓ "Mid-level Full Stack Developer with 3 years of experience..."
+  ✗ "As a mid-level Full Stack Developer, I have 3 years..."
+  ✗ "I am an entry-level developer with..."
 
 ── SKILLS ──
 - "skills" = flat array of individual skill strings. Minimum 8. No duplicates. Only extract skills actually present in resume.
@@ -650,10 +673,49 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
 - "projects[].bullets" = 3–5 bullets. Must NOT restate experience bullets. Strong past-tense verb + task + tech + impact. NO pronouns.
 
 ── EDUCATION ──
+⚠️ EDUCATION IS THE MOST FORMAT-VARIABLE SECTION. Handle every layout — never skip an entry.
+
+LAYOUT RECOGNITION RULES (apply before extracting any field):
+
+  A) Institution-as-heading + degree-as-bullet (VERY COMMON in Indian resumes):
+     "Behala Aryya Vidyamandir(H.S)  2019-2021"   ← this is the INSTITUTION
+     "● WBCHSE (Class XII)"                         ← this is the DEGREE
+     → degree = "WBCHSE (Class XII)", institution = "Behala Aryya Vidyamandir(H.S)", year = "2019-2021"
+     NEVER skip this entry. NEVER treat the institution line as the degree.
+
+  B) Degree-first + institution on next line:
+     "B.Tech Computer Science"  → degree
+     "XYZ University"           → institution
+
+  C) Institution-first + degree on next line:
+     "XYZ University"                          → institution
+     "Bachelor of Technology in CSE"           → degree
+
+  D) All inline (comma or pipe separated):
+     "B.Tech CSE, ABC University, 2024, CGPA 8.5" → parse all fields from single line
+
+  E) Multiple degrees at same institution → create SEPARATE education entries for each
+
+  F) Class X / Class XII board entries:
+     "XYZ School | CBSE | Class X | 2018 | 95%"
+     → degree = "CBSE Class X", institution = "XYZ School", year = "2018", cgpa = "Percentage: 95%"
+     "CBSE - Class X (2019) — 91%" (no school name)
+     → degree = "CBSE Class X", institution = "", year = "2019", cgpa = "Percentage: 91%"
+
+  G) Pursuing / Expected:
+     "Currently pursuing B.Tech (CSE) from XYZ University, Expected 2026"
+     → degree = "B.Tech (CSE)", institution = "XYZ University", year = "Expected 2026"
+
+  H) Short degree forms — ALL valid, extract as-is:
+     B.E, B.Sc, M.Sc, MCA, BCA, MBA, Ph.D, Diploma, Polytechnic, ITI
+
 - "education[].degree" = extract the FULL degree name including type AND major/subject.
     If degree type and subject are on separate lines → combine them (e.g. "B.SC" + "Computer Science" → "B.SC Computer Science").
+    If degree is in a bullet under the institution → extract from the bullet (Layout A above).
     NEVER leave blank if any degree-related text exists in the education block.
-- "education[].institution" = university/college name exactly as written. Full name, not abbreviation.
+    NEVER treat a school/university name as the degree.
+- "education[].institution" = university/college/school name exactly as written. Full name, not abbreviation.
+    If institution appears as a heading above the degree bullet → still extract it correctly (Layout A).
 - "education[].year" = Apply 3-TIER DATE INFERENCE RULE.
     SCAN THE ENTIRE EDUCATION BLOCK — year can appear ANYWHERE (above, below, beside, far from degree line).
     Accepted formats: "October 2021 - July 2024", "2021–2024", "Oct 2021 – Jul 2024",
@@ -743,39 +805,6 @@ RESUME TEXT:
         # fallback: try to extract JSON object from anywhere in the response
         json_fallback = re.search(r'\{[\s\S]*\}', raw_response)
         json_str = json_fallback.group(0).strip() if json_fallback else ""
-
-    # ── Summary rescue: patch JSON summary from Part 1 if LLM truncated it ──
-    # If the JSON summary is shorter than Part 1's summary, replace it with
-    # the full Part 1 version. Wrapped in try/except — never breaks main flow.
-    try:
-        _summary_match = re.search(
-            r'PROFESSIONAL SUMMARY\s*\n?(.*?)(?=\n[A-Z][A-Z\s&/]{3,}\n|\Z)',
-            rewritten_text, re.DOTALL | re.IGNORECASE
-        )
-        if _summary_match:
-            _part1_summary = _summary_match.group(1).strip()
-            # Collapse internal newlines to single space (safe for JSON string)
-            _part1_summary = re.sub(r'\s*\n\s*', ' ', _part1_summary).strip()
-
-            if _part1_summary and json_str:
-                _json_summary_match = re.search(
-                    r'"summary"\s*:\s*"(.*?)"(?=\s*,|\s*\})',
-                    json_str, re.DOTALL
-                )
-                if _json_summary_match:
-                    _json_summary = _json_summary_match.group(1).strip()
-                    _json_words   = len(_json_summary.split())
-                    _part1_words  = len(_part1_summary.split())
-                    # Only patch if Part 1 has meaningfully more words → truncation happened
-                    if _part1_words > _json_words + 5:
-                        _escaped = _part1_summary.replace('\\', '\\\\').replace('"', '\\"')
-                        json_str = re.sub(
-                            r'("summary"\s*:\s*)".*?"',
-                            lambda m: m.group(1) + '"' + _escaped + '"',
-                            json_str, count=1, flags=re.DOTALL
-                        )
-    except Exception:
-        pass  # Best-effort only — never break the main flow
 
     return rewritten_text, json_str
 
@@ -1113,18 +1142,6 @@ def extract_resume_json(llm_response: str) -> dict:
             elif isinstance(c, str) and c.strip():
                 norm_certs.append({"name": c.strip(), "issuer": "", "duration": ""})
         data["certifications"] = norm_certs
-
-        # ── Summary safety: collapse any embedded newlines (invalid in JSON strings) ──
-        # Also strip pronouns that LLM may have slipped in despite instructions
-        if isinstance(data.get("summary"), str):
-            # Collapse newlines → single space
-            data["summary"] = re.sub(r'\s*\n\s*', ' ', data["summary"]).strip()
-            # Strip leading banned phrases if LLM ignored the rule
-            data["summary"] = re.sub(
-                r'^(As a|I am|I have|I\'m)\s+', '', data["summary"],
-                flags=re.IGNORECASE
-            ).strip()
-
         return data
     except (json.JSONDecodeError, ValueError):
         return EMPTY
