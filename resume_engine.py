@@ -664,17 +664,25 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
 - "education[].cgpa" = Apply 3-TIER DATE INFERENCE RULE for grade (Tier 1 only — NEVER infer grades).
     SCAN THE ENTIRE EDUCATION BLOCK for any grade/score pattern.
     Normalize using THESE EXACT RULES — one label only, no duplicates:
-      "7.0 GPA"        → store as "GPA: 7.0"
-      "8.2 SGPA"       → store as "SGPA: 8.2"
-      "SGPA 7.4"       → store as "SGPA: 7.4"
-      "CGPA 8.5"       → store as "CGPA: 8.5"
-      "CGPA: 7.0 GPA"  → store as "CGPA: 7.0"   ← strip the trailing duplicate label
-      "8.5/10"         → store as "CGPA: 8.5/10"
-      "GPA: 3.9/4.0"   → store as "GPA: 3.9/4.0"
-      "78.3%"          → store as "Percentage: 78.3%"
-      "87%"            → store as "Percentage: 87%"
-      "87.4 percent"   → store as "Percentage: 87.4%"
-      "8.44" (no label)→ store as "CGPA: 8.44"
+      "7.0 GPA"              → store as "GPA: 7.0"
+      "8.2 SGPA"             → store as "SGPA: 8.2"
+      "SGPA 7.4"             → store as "SGPA: 7.4"
+      "SGPA - 7.4"           → store as "SGPA: 7.4"
+      "SGPA - 7.4 (1st Sem)" → store as "SGPA: 7.4 (1st Sem)"   ← preserve semester suffix
+      "SGPA - 7.4 (Sem 2)"   → store as "SGPA: 7.4 (Sem 2)"     ← preserve semester suffix
+      "CGPA 8.5"             → store as "CGPA: 8.5"
+      "CGPA - 8.44"          → store as "CGPA: 8.44"
+      "CGPA: 7.0 GPA"        → store as "CGPA: 7.0"   ← strip the trailing duplicate label
+      "8.5/10"               → store as "CGPA: 8.5/10"
+      "GPA: 3.9/4.0"         → store as "GPA: 3.9/4.0"
+      "Percentage - 78.3%"   → store as "Percentage: 78.3%"
+      "Percentage - 87.4%"   → store as "Percentage: 87.4%"
+      "78.3%"                → store as "Percentage: 78.3%"
+      "87%"                  → store as "Percentage: 87%"
+      "87.4 percent"         → store as "Percentage: 87.4%"
+      "8.44" (no label)      → store as "CGPA: 8.44"
+    ⚠️ DASH FORMAT RULE: "LABEL - value" and "LABEL: value" are the same — both are valid.
+       "SGPA - 7.4 (1st Sem)" is a valid SGPA score — NEVER drop it, NEVER treat dash as a separator meaning absence of score.
     NEVER convert SGPA to CGPA. NEVER convert GPA to CGPA. NEVER convert percentage to CGPA.
     NEVER produce duplicate labels like "CGPA: 7.0 GPA". Use "" if no score present.
 - "education[].bullets" = honors, distinctions, relevant coursework, or industrial training if mentioned. Use [] if none.
@@ -823,6 +831,12 @@ def _normalize_cgpa(raw: str) -> str:
 
     # -- Pre-normalise: collapse "LABEL : value" (space before colon) ------
     s = re.sub(r'^(cgpa|sgpa|gpa|percentage)\s*:\s*', lambda m: m.group(1).upper() + ': ', s, flags=re.IGNORECASE)
+
+    # -- Pre-normalise: collapse "LABEL - value" (dash format) → "LABEL: value"
+    # e.g. "SGPA - 7.4 (1st Sem)" → "SGPA: 7.4 (1st Sem)"
+    # e.g. "CGPA - 8.44" → "CGPA: 8.44"
+    # e.g. "Percentage - 78.3%" → "Percentage: 78.3%"
+    s = re.sub(r'^(cgpa|sgpa|gpa|percentage)\s*-\s*', lambda m: m.group(1).upper() + ': ', s, flags=re.IGNORECASE)
 
     # -- Already clean: CGPA/GPA/SGPA prefixes -----------------------------
     # Strip only trailing duplicate word labels, preserve semester suffixes
