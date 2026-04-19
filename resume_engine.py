@@ -801,7 +801,7 @@ LAYOUT RECOGNITION RULES (apply before extracting any field):
 - "additional[].duration" = Apply 3-TIER DATE INFERENCE RULE. Use "" if no context exists.
 
 RESUME TEXT:
-\"\"\"{text[:8000]}\"\"\"
+\"\"\"{text[:15000]}\"\"\"
 """
 
     # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
