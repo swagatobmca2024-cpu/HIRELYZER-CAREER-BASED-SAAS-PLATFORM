@@ -631,10 +631,15 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
   ⚠️ DO NOT rewrite, shorten, paraphrase, or summarize. The 2–3 sentence / 80-word guidance was for Part 1 ONLY.
   ⚠️ DO NOT stop after the first sentence — copy ALL sentences from Part 1's Professional Summary.
   ⚠️ If Part 1 has 3 sentences, this field MUST contain all 3 sentences.
+  ⚠️ STRICT LIMIT: "summary" must contain ONLY the Professional Summary — maximum 3 sentences.
+     NEVER include skills, projects, education, certifications, job titles, or any other section content here.
+     If the resume is messy or unstructured, extract ONLY the summary sentences — do NOT dump the entire resume here.
+     If no clear summary exists in the resume → write a clean 2–3 sentence summary from the candidate's experience.
+  ⚠️ NEVER include "### 🎯 Suggested Job Titles" or any job title suggestions in this field.
   NO pronouns anywhere. No "I", "My", "As a", "I am", "I have".
   MUST be a single unbroken string — no newlines inside the JSON value.
-  ✓ Correct: copy all sentences exactly as written in Part 1.
-  ✗ Wrong: stopping after sentence 1 or rewriting in shorter form.
+  ✓ Correct: 2–3 sentences about the candidate's role, skills, and value proposition.
+  ✗ Wrong: dumping the entire resume content, skills list, or job titles into this field.
 
 ── SKILLS ──
 - "skills" = flat array of individual skill strings. Minimum 8. No duplicates. Only extract skills actually present in resume.
@@ -811,9 +816,17 @@ RESUME TEXT:
     # If the JSON summary is shorter than Part 1's summary, replace it with
     # the full Part 1 version. Wrapped in try/except — never breaks main flow.
     try:
+        # Strip job title suggestions block from rewritten_text before rescue
+        # so it never leaks into the JSON summary field
+        _rewritten_clean = rewritten_text
+        for _marker in ["### 🎯 Suggested Job Titles", "### Suggested Job Titles"]:
+            if _marker in _rewritten_clean:
+                _rewritten_clean = _rewritten_clean.split(_marker)[0].strip()
+                break
+
         _summary_match = re.search(
             r'PROFESSIONAL SUMMARY\s*\n?(.*?)(?=\n[A-Z][A-Z\s&/]{3,}\n|\Z)',
-            rewritten_text, re.DOTALL | re.IGNORECASE
+            _rewritten_clean, re.DOTALL | re.IGNORECASE
         )
         if _summary_match:
             _part1_summary = _summary_match.group(1).strip()
@@ -1177,16 +1190,31 @@ def extract_resume_json(llm_response: str) -> dict:
                 norm_certs.append({"name": c.strip(), "issuer": "", "duration": ""})
         data["certifications"] = norm_certs
 
-        # ── Summary safety: collapse any embedded newlines (invalid in JSON strings) ──
-        # Also strip pronouns that LLM may have slipped in despite instructions
+        # ── Summary safety: collapse newlines, strip pronouns, cap overflow ──
         if isinstance(data.get("summary"), str):
-            # Collapse newlines → single space
+            # Collapse newlines → single space (invalid in JSON strings)
             data["summary"] = re.sub(r'\s*\n\s*', ' ', data["summary"]).strip()
             # Strip leading banned phrases if LLM ignored the rule
             data["summary"] = re.sub(
                 r'^(As a|I am|I have|I\'m)\s+', '', data["summary"],
                 flags=re.IGNORECASE
             ).strip()
+            # ── Overflow guard: if LLM dumped entire resume into summary ──
+            # Cap at 3 sentences — anything beyond is a mis-extraction
+            _summary_text = data["summary"]
+            _sentences = re.split(r'(?<=[.!?])\s+', _summary_text.strip())
+            if len(_sentences) > 3:
+                # Keep only first 3 sentences
+                data["summary"] = ' '.join(_sentences[:3]).strip()
+            # Strip any job title suggestions block that leaked in
+            for _leak_marker in ["### 🎯", "Suggested Job Titles", "linkedin.com/jobs/search"]:
+                if _leak_marker in data["summary"]:
+                    data["summary"] = data["summary"].split(_leak_marker)[0].strip()
+                    # Re-cap to 3 sentences after stripping leak
+                    _sentences = re.split(r'(?<=[.!?])\s+', data["summary"].strip())
+                    if len(_sentences) > 3:
+                        data["summary"] = ' '.join(_sentences[:3]).strip()
+                    break
 
         return data
     except (json.JSONDecodeError, ValueError):
