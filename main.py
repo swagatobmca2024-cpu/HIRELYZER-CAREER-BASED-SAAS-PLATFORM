@@ -4711,13 +4711,27 @@ with tab1:
                         lines = job_suggestions_display.split('\n')
                         items_html = ""
                         for line in lines:
+                            # Always skip raw URL lines — never render them
                             if re.match(r'^[🔗\s]*https?://', line.strip()):
                                 continue
+                            # Skip empty lines
+                            if not line.strip():
+                                continue
+                            # Pattern A: "1. **Title** — description" (standard LLM format)
                             m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—-]?\s*(.*)', line.strip())
+                            # Pattern B: "**Title** — description" (no number)
+                            if not m:
+                                m = re.match(r'^\*\*(.+?)\*\*\s*[—-]?\s*(.*)', line.strip())
+                            # Pattern C: "1. Title — description" (no bold markers)
+                            if not m:
+                                m = re.match(r'^\d+\.\s+([^—\-]+?)\s*[—-]\s*(.*)', line.strip())
                             if m:
                                 title = m.group(1).strip()
                                 desc = re.sub(r'https?://\S+', '', m.group(2)).strip().rstrip('.')
                                 desc = re.sub(r'🔗', '', desc).strip()
+                                # Skip if title looks like a URL or is empty
+                                if not title or title.startswith('http'):
+                                    continue
                                 encoded = urllib.parse.quote(title)
                                 linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={_loc_param}"
                                 link_icon = (
@@ -4740,7 +4754,13 @@ with tab1:
                             st.markdown("### 🎯 Suggested Job Titles (Based on Resume)")
                             st.markdown(f'<div style="margin-top:4px;">{items_html}</div>', unsafe_allow_html=True)
                         else:
-                            st.markdown(job_suggestions_display)
+                            # Fallback: strip all URLs before rendering — never show raw links
+                            _clean_titles = re.sub(r'https?://\S+', '', job_suggestions_display)
+                            _clean_titles = re.sub(r'🔗', '', _clean_titles)
+                            _clean_titles = re.sub(r'\n{3,}', '\n\n', _clean_titles).strip()
+                            if _clean_titles:
+                                st.markdown("### 🎯 Suggested Job Titles (Based on Resume)")
+                                st.markdown(_clean_titles)
 
                     # ── 3-Template DOCX Download Buttons (Optimization Module — JSON data only) ──
                     st.markdown("""
