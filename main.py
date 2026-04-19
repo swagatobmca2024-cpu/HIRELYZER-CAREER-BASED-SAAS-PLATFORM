@@ -67,6 +67,7 @@ from resume_processor import (
     _extract_page_text_smart, _classify_pdf, _render_scanned_rejection_card,
     extract_text_from_pdf, extract_text_from_images, safe_extract_text,
     _detect_multicolumn_pdf, check_resume_format, _SCANNED_SENTINEL, _NON_ENGLISH_SENTINEL,
+    _render_long_resume_warning, _LONG_RESUME_THRESHOLD,
 )
 from resume_engine import (
     gender_words, detect_bias, replacement_mapping,
@@ -3505,6 +3506,14 @@ if uploaded_files and job_description and weights_valid:
 
         all_text.append(full_text)
 
+        # ── Long resume warning — styled card, non-blocking ──────────────────
+        # Content beyond 8000 chars is silently truncated in the LLM prompt.
+        # _render_long_resume_warning is imported from resume_processor and
+        # matches the app's glassmorphism dark theme exactly.
+        if len(full_text) > _LONG_RESUME_THRESHOLD:
+            with tab1:
+                _render_long_resume_warning(uploaded_file.name, len(full_text), container=tab1)
+
         # ✅ Bias detection
         bias_score, masc_count, fem_count, detected_masc, detected_fem = detect_bias(full_text)
 
@@ -3872,25 +3881,41 @@ Return ONLY one domain from this list, nothing else:
                     _future_ats     = _executor.submit(_task_ats)
 
                     try:
-                        highlighted_text, rewritten_text, _, _, _, _, json_str = _future_rewrite.result()
+                        highlighted_text, rewritten_text, _, _, _, _, json_str, rewrite_ok = _future_rewrite.result()
                     except Exception:
                         highlighted_text = full_text
                         rewritten_text   = full_text
                         json_str         = ""
+                        rewrite_ok       = False
 
                     ats_result, ats_scores = _future_ats.result()
             else:
                 # Low on keys: run sequentially with a gap to protect the TPM window
                 try:
-                    highlighted_text, rewritten_text, _, _, _, _, json_str = _task_rewrite()
+                    highlighted_text, rewritten_text, _, _, _, _, json_str, rewrite_ok = _task_rewrite()
                 except Exception:
                     highlighted_text = full_text
                     rewritten_text   = full_text
                     json_str         = ""
+                    rewrite_ok       = False
 
                 time.sleep(4)   # let per-minute token window partially recover
 
                 ats_result, ats_scores = _task_ats()
+
+        # ── Rewrite failure warning — shown once, immediately after processing ──
+        # rewrite_ok=False means all API keys were exhausted and the LLM never ran.
+        # The user would otherwise see their original resume silently presented as
+        # "optimized" with no explanation — this makes the failure explicit.
+        if not rewrite_ok:
+            with tab1:
+                st.warning(
+                    "⚠️ **Resume rewrite unavailable** — API keys are currently exhausted. "
+                    "The original resume is shown below. "
+                    "Download buttons will produce a document based on the original text. "
+                    "Please try again in a few minutes.",
+                    icon=None,
+                )
 
         # ✅ Resume Optimization Module — reuse JSON already produced above (0 extra LLM calls)
         try:
