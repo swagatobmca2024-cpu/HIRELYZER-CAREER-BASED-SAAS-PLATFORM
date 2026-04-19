@@ -4745,9 +4745,11 @@ with tab1:
                                     '</svg></a>'
                                 )
                                 items_html += (
-                                    f'<div style="margin-bottom:8px;font-size:0.88rem;color:#c9d1d9;">'
+                                    f'<div style="margin-bottom:10px;font-size:0.88rem;color:#c9d1d9;display:flex;align-items:baseline;flex-wrap:wrap;gap:0 4px;">'
+                                    f'<span style="white-space:nowrap;">'
                                     f'<b style="color:#e6edf3;">{title}</b>{link_icon}'
-                                    f'{(" — " + desc) if desc else ""}'
+                                    f'</span>'
+                                    f'{("<span style=\"color:#94a3b8;\"> — " + desc + "</span>") if desc else ""}'
                                     f'</div>'
                                 )
                         if items_html:
