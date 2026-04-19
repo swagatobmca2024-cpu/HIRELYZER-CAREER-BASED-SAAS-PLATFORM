@@ -540,9 +540,14 @@ MANDATORY JOB TITLE SUGGESTIONS (append after the resume text):
 ### 🎯 Suggested Job Titles (Based on Resume)
 
 Provide EXACTLY 5 job titles suited for a candidate in {user_location}.
-FORMAT:
+FORMAT (STRICT — follow exactly, no extra lines, no URLs, no links):
 1. **[Job Title]** — [Specific reason tied to resume evidence]
-🔗 https://www.linkedin.com/jobs/search/?keywords=[URL+encoded+title]&location={urllib.parse.quote(user_location)}
+2. **[Job Title]** — [Specific reason tied to resume evidence]
+3. **[Job Title]** — [Specific reason tied to resume evidence]
+4. **[Job Title]** — [Specific reason tied to resume evidence]
+5. **[Job Title]** — [Specific reason tied to resume evidence]
+
+IMPORTANT: Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
 
 ════════════════════════════════════════════════════════
 PART 2 — JSON OBJECT (inside JSON tags)
