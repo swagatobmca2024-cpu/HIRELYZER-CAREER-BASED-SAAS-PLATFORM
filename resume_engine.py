@@ -867,6 +867,8 @@ RESUME TEXT:
             _part1_summary = _summary_match.group(1).strip()
             # Collapse internal newlines to single space (safe for JSON string)
             _part1_summary = re.sub(r'\s*\n\s*', ' ', _part1_summary).strip()
+            # Strip leading punctuation artifacts (": ", "- " etc.) from Part 1 summary
+            _part1_summary = re.sub(r'^[:\-–—|•·]+\s*', '', _part1_summary).strip()
 
             if _part1_summary and json_str:
                 _json_summary_match = re.search(
@@ -1229,6 +1231,8 @@ def extract_resume_json(llm_response: str) -> dict:
         if isinstance(data.get("summary"), str):
             # Collapse newlines → single space (invalid in JSON strings)
             data["summary"] = re.sub(r'\s*\n\s*', ' ', data["summary"]).strip()
+            # Strip leading punctuation artifacts — LLM sometimes starts with ": " or "- "
+            data["summary"] = re.sub(r'^[:\-–—|•·]+\s*', '', data["summary"]).strip()
             # Strip leading banned phrases if LLM ignored the rule
             data["summary"] = re.sub(
                 r'^(As a|I am|I have|I\'m)\s+', '', data["summary"],
