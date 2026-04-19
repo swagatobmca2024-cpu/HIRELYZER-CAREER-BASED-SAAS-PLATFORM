@@ -330,8 +330,33 @@ def rewrite_and_optimize_resume(text, replacement_mapping, user_location):
     Single LLM call that returns BOTH:
       - rewritten_text : plain-text ATS-optimised resume + job title suggestions (for UI display)
       - json_str       : strict JSON object (for DOCX generation)
+      - rewrite_ok     : bool — False when LLM was unavailable and original text was returned
     Saves 1 API key call per resume analysis (6 → 5 calls total).
     """
+
+    # ── ALL CAPS normalization ────────────────────────────────────────────────
+    # Resumes written entirely in uppercase confuse the LLM's section detection
+    # and bias replacement. Normalize body lines that are fully uppercase.
+    # Section headers (short ALL-CAPS labels like "EXPERIENCE") are intentionally
+    # preserved — only longer uppercase body lines (sentences, bullet content) are
+    # title-cased so the LLM receives readable prose.
+    _normalized_lines = []
+    for _line in text.split('\n'):
+        _stripped = _line.strip()
+        # Normalize only if: fully uppercase, more than 15 chars, no leading emoji/symbol
+        if (
+            _stripped
+            and _stripped.isupper()
+            and len(_stripped) > 15
+            and _stripped[0].isalpha()
+        ):
+            # Title-case the content, preserving original leading whitespace
+            _leading = _line[: len(_line) - len(_line.lstrip())]
+            _normalized_lines.append(_leading + _stripped.title())
+        else:
+            _normalized_lines.append(_line)
+    text = '\n'.join(_normalized_lines)
+    # ─────────────────────────────────────────────────────────────────────────
 
     formatted_mapping = "\n".join(
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
@@ -784,7 +809,17 @@ RESUME TEXT:
     except Exception:
         pass
 
-    raw_response = call_llm(prompt, session=st.session_state)
+    try:
+        raw_response = call_llm(prompt, session=st.session_state)
+    except Exception as _e:
+        raw_response = ""
+
+    # ── Guard: if LLM returned an error string or empty, return safe fallback ──
+    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+    if not raw_response or any(raw_response.strip().startswith(p) for p in _ERROR_PREFIXES):
+        # Return original text as-is + empty JSON + failure flag
+        # Callers MUST check the 3rd value to know the rewrite did not happen
+        return text, "", False
 
     # ── Parse the two sections out of the combined response ──────────────
     rewritten_text = ""
@@ -853,20 +888,20 @@ RESUME TEXT:
     except Exception:
         pass  # Best-effort only — never break the main flow
 
-    return rewritten_text, json_str
+    return rewritten_text, json_str, True
 
 
 # ── Thin compatibility wrappers — keep callers working without changes ────────
 
 def rewrite_text_with_llm(text, replacement_mapping, user_location):
     """Compatibility wrapper — calls merged rewrite_and_optimize_resume()."""
-    rewritten_text, _ = rewrite_and_optimize_resume(text, replacement_mapping, user_location)
+    rewritten_text, _, _ok = rewrite_and_optimize_resume(text, replacement_mapping, user_location)
     return rewritten_text
 
 
 def optimize_resume_to_json(raw_text: str) -> str:
     """Compatibility wrapper — calls merged rewrite_and_optimize_resume()."""
-    _, json_str = rewrite_and_optimize_resume(raw_text, {}, "")
+    _, json_str, _ok = rewrite_and_optimize_resume(raw_text, {}, "")
     return json_str
 
 
@@ -2788,15 +2823,15 @@ def rewrite_and_highlight(text, replacement_mapping, user_location):
 
     # ⚡ Single LLM call — returns BOTH plain-text rewrite (for UI) AND JSON (for DOCX)
     # Replaces the old rewrite_text_with_llm call which discarded the JSON half.
-    rewritten_text, json_str = rewrite_and_optimize_resume(
+    rewritten_text, json_str, rewrite_ok = rewrite_and_optimize_resume(
         text,
         replacement_mapping["masculine"] | replacement_mapping["feminine"],
         user_location
     )
 
-    # Return json_str as 7th value so the caller can reuse it directly
-    # without triggering a second optimize_resume_to_json() LLM call.
-    return highlighted_text, rewritten_text, masculine_count, feminine_count, detected_masculine_words, detected_feminine_words, json_str
+    # Return rewrite_ok as 8th value so the caller can show a warning
+    # when the LLM failed and rewritten_text is just the original unchanged text.
+    return highlighted_text, rewritten_text, masculine_count, feminine_count, detected_masculine_words, detected_feminine_words, json_str, rewrite_ok
 
 # ✅ Enhanced Grammar evaluation using LLM with suggestions
 def get_grammar_score_with_llm(text, max_score=5):
@@ -2838,12 +2873,21 @@ Suggestions:
 ---
 """
 
-    response = call_llm(grammar_prompt, session=st.session_state).strip()
+    try:
+        response = call_llm(grammar_prompt, session=st.session_state).strip()
+    except Exception:
+        response = ""
+
+    # Guard: LLM error string or empty → return safe defaults
+    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+    if not response or any(response.startswith(p) for p in _ERROR_PREFIXES):
+        return max(0, min(max_score, max(3, max_score - 2))), "Language quality appears adequate for professional communication.", []
+
     score_match = re.search(r"Score:\s*(\d+)", response)
     feedback_match = re.search(r"Feedback:\s*(.+)", response)
     suggestions = re.findall(r"- (.+)", response)
 
-    score = int(score_match.group(1)) if score_match else max(0, min(max_score, max(3, max_score - 2)))  # Generous default, clamped to max_score
+    score = int(score_match.group(1)) if score_match else max(0, min(max_score, max(3, max_score - 2)))
     feedback = feedback_match.group(1).strip() if feedback_match else "Language quality appears adequate for professional communication."
     return score, feedback, suggestions
 
@@ -3143,7 +3187,20 @@ Return ONLY one domain from this list, nothing else:
         resume_domain = st.session_state.get(_resume_cache_key, "Software Engineering")
 
     # ── JOB DOMAIN: use pre-detected value if passed in, else detect here ──
+    # If JD is non-English → skip LLM domain detection, use keyword fallback directly
     _jd_cache_key = f"jd_domain_{hash(job_description[:500])}"
+    _jd_non_english = False
+    if job_description:
+        _jd_alpha = [c for c in job_description if c.isalpha()]
+        if _jd_alpha:
+            _jd_ascii_ratio = sum(1 for c in _jd_alpha if ord(c) < 128) / len(_jd_alpha)
+            _jd_non_english = _jd_ascii_ratio < 0.70
+    if _jd_non_english and job_domain is None:
+        try:
+            _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+            st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
+        except Exception:
+            st.session_state[_jd_cache_key] = "Software Engineering"
     if job_domain is None and _jd_cache_key not in st.session_state:
         _jd_domain_prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions across all industries and levels.
 
@@ -3510,7 +3567,19 @@ SCORING SCALE for language ({lang_weight} pts max):
 """
    
    
-    ats_result = call_llm(prompt, session=st.session_state).strip()
+    try:
+        ats_result = call_llm(prompt, session=st.session_state).strip()
+    except Exception:
+        ats_result = ""
+
+    # Guard: LLM error string or empty → return a safe fallback ATS result
+    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+    if not ats_result or any(ats_result.startswith(p) for p in _ERROR_PREFIXES):
+        ats_result = (
+            "**ATS Evaluation temporarily unavailable.**\n"
+            "All API keys are currently exhausted or unavailable. "
+            "Please try again in a few minutes."
+        )
 
     # ── CRITICAL: Overwrite any LLM-modified Format Score/Grade lines ────
     # The LLM sometimes rewrites these despite instructions. Force the true
