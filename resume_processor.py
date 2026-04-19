@@ -503,6 +503,200 @@ def extract_text_from_images(pdf_path):
         return []
 
 
+
+# ============================================================
+# 🌐 Non-English Resume Detection & Rejection Card
+# ============================================================
+
+# Sentinel returned when resume is non-English
+_NON_ENGLISH_SENTINEL = "__NON_ENGLISH_RESUME__"
+
+def _detect_non_english(text: str) -> dict:
+    """
+    Detects whether resume text is non-English using character-level analysis.
+    Strategy:
+      - Count ASCII alphabetic characters vs total alphabetic characters
+      - Real English resumes are overwhelmingly ASCII (>85%)
+      - Also check for high-frequency non-Latin Unicode blocks (Devanagari,
+        Arabic, CJK, Cyrillic, etc.) as a secondary signal
+    Returns dict with: is_non_english, confidence, ascii_ratio, script_detected
+    """
+    if not text or len(text.strip()) < 50:
+        return {"is_non_english": False, "confidence": "uncertain",
+                "ascii_ratio": 1.0, "script_detected": "unknown"}
+
+    alpha_chars = [c for c in text if c.isalpha()]
+    if not alpha_chars:
+        return {"is_non_english": False, "confidence": "uncertain",
+                "ascii_ratio": 1.0, "script_detected": "unknown"}
+
+    ascii_alpha  = sum(1 for c in alpha_chars if ord(c) < 128)
+    ascii_ratio  = ascii_alpha / len(alpha_chars)
+
+    # Detect dominant non-Latin script
+    script_detected = "Unknown Script"
+    script_ranges = [
+        ((0x0900, 0x097F), "Devanagari (Hindi/Marathi/Sanskrit)"),
+        ((0x0980, 0x09FF), "Bengali"),
+        ((0x0A00, 0x0A7F), "Gurmukhi (Punjabi)"),
+        ((0x0A80, 0x0AFF), "Gujarati"),
+        ((0x0B00, 0x0B7F), "Odia"),
+        ((0x0B80, 0x0BFF), "Tamil"),
+        ((0x0C00, 0x0C7F), "Telugu"),
+        ((0x0C80, 0x0CFF), "Kannada"),
+        ((0x0D00, 0x0D7F), "Malayalam"),
+        ((0x0600, 0x06FF), "Arabic"),
+        ((0x0400, 0x04FF), "Cyrillic (Russian/Ukrainian)"),
+        ((0x4E00, 0x9FFF), "Chinese (CJK)"),
+        ((0x3040, 0x30FF), "Japanese (Hiragana/Katakana)"),
+        ((0xAC00, 0xD7AF), "Korean (Hangul)"),
+        ((0x0E00, 0x0E7F), "Thai"),
+    ]
+    for (start, end), name in script_ranges:
+        count = sum(1 for c in text if start <= ord(c) <= end)
+        if count > 20:
+            script_detected = name
+            break
+
+    is_non_english = ascii_ratio < 0.70
+    confidence = "definite" if ascii_ratio < 0.50 else "likely" if ascii_ratio < 0.70 else "uncertain"
+
+    return {
+        "is_non_english": is_non_english,
+        "confidence":     confidence,
+        "ascii_ratio":    round(ascii_ratio, 3),
+        "script_detected": script_detected,
+    }
+
+
+def _render_non_english_card(filename: str, detection: dict, container=None):
+    """
+    Renders a rejection card for non-English resumes.
+    Matches the app's existing glassmorphism dark theme exactly.
+    """
+    confidence  = detection.get("confidence", "likely")
+    ascii_ratio = detection.get("ascii_ratio", 0.0)
+    script      = detection.get("script_detected", "Non-Latin Script")
+    english_pct = round(ascii_ratio * 100)
+
+    _dot_svg = {
+        "definite": '<svg width="9" height="9" viewBox="0 0 9 9" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;margin-top:1px;"><circle cx="4.5" cy="4.5" r="4.5" fill="#fb7185"/></svg>',
+        "likely":   '<svg width="9" height="9" viewBox="0 0 9 9" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;margin-top:1px;"><circle cx="4.5" cy="4.5" r="4.5" fill="#fb923c"/></svg>',
+    }
+    dot_svg = _dot_svg.get(confidence, _dot_svg["likely"])
+
+    text_color   = "#fb7185" if confidence == "definite" else "#fb923c"
+    bg_color     = "rgba(251,113,133,0.18)" if confidence == "definite" else "rgba(251,146,60,0.18)"
+    border_color = "rgba(251,113,133,0.35)" if confidence == "definite" else "rgba(251,146,60,0.35)"
+    badge_text   = "Non-English Resume Detected"
+
+    _svg_header = f'''<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="{text_color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>'''
+
+    _svg_lang  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>'
+    _svg_pct   = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>'
+
+    # How to fix items
+    _svg_translate = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>'
+    _svg_word      = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>'
+    _svg_tip       = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+
+    fix_items = [
+        (_svg_translate, "Translate your resume to <strong>English</strong> using Google Translate or DeepL"),
+        (_svg_word,      "Open the translated text in <strong>Microsoft Word or Google Docs</strong> and format it as a resume"),
+        (_svg_tip,       "Re-export as PDF and upload again — English resumes get significantly better ATS scores"),
+    ]
+    fix_html = "".join(
+        f"<li style='display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;list-style:none;'>"
+        f"{icon}<span>{text}</span></li>"
+        for icon, text in fix_items
+    )
+
+    _svg_label_why = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
+    _svg_label_fix = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+
+    card_html = (
+        f'<div style="background:linear-gradient(135deg,{bg_color} 0%,rgba(0,0,0,0) 100%);border:1px solid {border_color};border-radius:16px;padding:22px 24px;margin:14px 0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 8px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.06);font-family:-apple-system,BlinkMacSystemFont,sans-serif;position:relative;overflow:hidden;">'
+        f'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,{text_color},transparent);opacity:0.6;"></div>'
+        f'<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">'
+        f'<div style="width:44px;height:44px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">{_svg_header}</div>'
+        f'<div style="flex:1;">'
+        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:{text_color};margin-bottom:4px;">{dot_svg}{badge_text}</div>'
+        f'<div style="font-size:1rem;font-weight:600;color:#f0f4f8;word-break:break-all;">{filename}</div>'
+        f'</div></div>'
+        f'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">'
+        f'<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#94a3b8;">{_svg_lang} {script}</div>'
+        f'<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#94a3b8;">{_svg_pct} {english_pct}% English characters</div>'
+        f'</div>'
+        f'<div style="background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px 16px;margin-bottom:16px;">'
+        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#64748b;margin-bottom:10px;">{_svg_label_why} Why This Happened</div>'
+        f'<p style="margin:0;color:#94a3b8;font-size:0.82rem;line-height:1.6;">This tool is optimized for <strong style="color:#cbd5e1;">English-language resumes</strong>. Non-English content cannot be accurately parsed, rewritten, or ATS-scored. The detected script is <strong style="color:#cbd5e1;">{script}</strong> ({100 - english_pct}% non-English characters).</p>'
+        f'</div>'
+        f'<div style="background:rgba(56,189,248,0.07);border:1px solid rgba(56,189,248,0.18);border-radius:10px;padding:12px 16px;">'
+        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#38bdf8;margin-bottom:10px;">{_svg_label_fix} How to Fix This</div>'
+        f'<ul style="margin:0;padding:0;color:#7dd3fc;font-size:0.82rem;line-height:1.8;">{fix_html}</ul>'
+        f'</div>'
+        f'</div>'
+    )
+    _render_target = container if container is not None else st
+    _render_target.markdown(card_html, unsafe_allow_html=True)
+
+
+# ============================================================
+# 📏 Long Resume Warning Card
+# ============================================================
+
+# Character threshold — beyond this, bottom sections may be silently cut
+_LONG_RESUME_THRESHOLD = 8000
+
+def _render_long_resume_warning(filename: str, char_count: int, container=None):
+    """
+    Renders a non-blocking warning card for resumes that exceed 8000 characters.
+    Does NOT block processing — just informs the user.
+    Matches the app's existing glassmorphism dark theme exactly.
+    """
+    _svg_header = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+    _dot_svg    = '<svg width="9" height="9" viewBox="0 0 9 9" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;margin-top:1px;"><circle cx="4.5" cy="4.5" r="4.5" fill="#fbbf24"/></svg>'
+    _svg_chars  = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>'
+
+    _svg_fix1 = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'
+    _svg_fix2 = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+    _svg_fix3 = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:3px;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
+
+    fix_items = [
+        (_svg_fix1, "Keep your resume to <strong>1–2 pages</strong> — ATS systems and recruiters prefer concise resumes"),
+        (_svg_fix2, "Remove outdated roles, redundant bullets, or overly detailed project descriptions"),
+        (_svg_fix3, "Processing will continue — but sections beyond ~8,000 characters may be partially analysed"),
+    ]
+    fix_html = "".join(
+        f"<li style='display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;list-style:none;'>"
+        f"{icon}<span>{text}</span></li>"
+        for icon, text in fix_items
+    )
+
+    _svg_label_fix = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
+
+    card_html = (
+        '<div style="background:linear-gradient(135deg,rgba(251,191,36,0.12) 0%,rgba(0,0,0,0) 100%);border:1px solid rgba(251,191,36,0.30);border-radius:16px;padding:22px 24px;margin:14px 0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 8px 32px rgba(0,0,0,0.3),inset 0 1px 0 rgba(255,255,255,0.06);font-family:-apple-system,BlinkMacSystemFont,sans-serif;position:relative;overflow:hidden;">'
+        '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#fbbf24,transparent);opacity:0.6;"></div>'
+        f'<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:16px;">'
+        f'<div style="width:44px;height:44px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">{_svg_header}</div>'
+        f'<div style="flex:1;">'
+        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#fbbf24;margin-bottom:4px;">{_dot_svg}Resume Too Long</div>'
+        f'<div style="font-size:1rem;font-weight:600;color:#f0f4f8;word-break:break-all;">{filename}</div>'
+        f'</div></div>'
+        f'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">'
+        f'<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#94a3b8;">{_svg_chars} {char_count:,} characters detected</div>'
+        f'<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#94a3b8;">{_svg_chars} Recommended limit: 8,000 characters</div>'
+        f'</div>'
+        f'<div style="background:rgba(56,189,248,0.07);border:1px solid rgba(56,189,248,0.18);border-radius:10px;padding:12px 16px;">'
+        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#38bdf8;margin-bottom:10px;">{_svg_label_fix} What This Means</div>'
+        f'<ul style="margin:0;padding:0;color:#7dd3fc;font-size:0.82rem;line-height:1.8;">{fix_html}</ul>'
+        f'</div>'
+        '</div>'
+    )
+    _render_target = container if container is not None else st
+    _render_target.markdown(card_html, unsafe_allow_html=True)
+
 def safe_extract_text(uploaded_file, container=None):
     """
     Main entry point for PDF text extraction.
@@ -569,7 +763,20 @@ def safe_extract_text(uploaded_file, container=None):
             _render_target.warning("⚠️ This file doesn't look like a resume or contains no readable text.")
             return None
 
-        return "\n".join(text_list)
+        full_text = "\n".join(text_list)
+
+        # ── Step 4: Non-English detection — block if resume is non-English ──
+        lang_result = _detect_non_english(full_text)
+        if lang_result["is_non_english"] and lang_result["confidence"] in ("definite", "likely"):
+            _render_non_english_card(uploaded_file.name, lang_result, container=container)
+            return _NON_ENGLISH_SENTINEL
+
+        # ── Step 5: Long resume warning — non-blocking, informational only ──
+        if len(full_text) > _LONG_RESUME_THRESHOLD:
+            _render_long_resume_warning(uploaded_file.name, len(full_text), container=container)
+            # Processing continues — warning is informational only
+
+        return full_text
 
     except Exception as e:
         st.error(f"⚠️ Could not process this file: {e}")
