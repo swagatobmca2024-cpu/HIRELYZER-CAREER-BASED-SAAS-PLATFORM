@@ -66,7 +66,7 @@ from resume_processor import (
     get_easyocr_reader, ensure_nltk, generate_docx,
     _extract_page_text_smart, _classify_pdf, _render_scanned_rejection_card,
     extract_text_from_pdf, extract_text_from_images, safe_extract_text,
-    _detect_multicolumn_pdf, check_resume_format, _SCANNED_SENTINEL,
+    _detect_multicolumn_pdf, check_resume_format, _SCANNED_SENTINEL, _NON_ENGLISH_SENTINEL,
 )
 from resume_engine import (
     gender_words, detect_bias, replacement_mapping,
@@ -3497,8 +3497,8 @@ if uploaded_files and job_description and weights_valid:
         # ✅ Extract text from PDF (scanned files return _SCANNED_SENTINEL)
         uploaded_file.seek(0)
         full_text = safe_extract_text(uploaded_file, container=tab1)
-        if full_text is None or full_text == _SCANNED_SENTINEL:
-            # Rejection card already rendered by safe_extract_text for scanned files.
+        if full_text is None or full_text in (_SCANNED_SENTINEL, _NON_ENGLISH_SENTINEL):
+            # Rejection card already rendered by safe_extract_text for scanned/non-English files.
             # Plain None means unreadable for another reason — warning already shown.
             scanner_placeholder.empty()
             continue
