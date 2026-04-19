@@ -1741,6 +1741,11 @@ def _render_additional(doc, data: dict, font_name: str, font_size: int,
 
 
 # ─── MODERN TEMPLATE ──────────────────────────────────────────────────────────
+
+def _chunk_skills(skills, size=7, sep="  |  "):
+    """Split skills into rows of `size` joined by sep — prevents single-line overflow on long skill lists."""
+    rows = [skills[i:i+size] for i in range(0, len(skills), size)]
+    return ("\n" + " " * 12).join(sep.join(row) for row in rows)
 def generate_modern_docx(data: dict) -> BytesIO:
     """
     Modern ATS-Optimized template — single-column, Calibri font, navy headings.
@@ -1824,8 +1829,8 @@ def generate_modern_docx(data: dict) -> BytesIO:
             label_run.font.size = Pt(BODY)
             label_run.font.name = FONT
             label_run.font.color.rgb = RGBColor(*NAVY)
-            # Group into rows of max 6 skills for readability — ATS reads all as flat text
-            skills_text = "  |  ".join(tech_skills)
+            # Group into rows of max 7 skills for readability — ATS reads all as flat text
+            skills_text = _chunk_skills(tech_skills, size=7, sep="  |  ")
             skills_run = p.add_run(skills_text)
             skills_run.font.size = Pt(BODY)
             skills_run.font.name = FONT
@@ -1839,7 +1844,7 @@ def generate_modern_docx(data: dict) -> BytesIO:
             label_run.font.size = Pt(BODY)
             label_run.font.name = FONT
             label_run.font.color.rgb = RGBColor(*NAVY)
-            ss_run = p.add_run("  |  ".join(soft_skills))
+            ss_run = p.add_run(_chunk_skills(soft_skills, size=7, sep="  |  "))
             ss_run.font.size = Pt(BODY)
             ss_run.font.name = FONT
             p.paragraph_format.space_before = Pt(1)
@@ -2160,7 +2165,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
             lbl.bold = True
             lbl.font.size = Pt(BODY)
             lbl.font.name = FONT
-            skills_run = p.add_run(", ".join(tech_skills))
+            skills_run = p.add_run(_chunk_skills(tech_skills, size=7, sep=", "))
             skills_run.font.size = Pt(BODY)
             skills_run.font.name = FONT
             p.paragraph_format.space_before = Pt(2)
@@ -2172,7 +2177,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
             lbl.bold = True
             lbl.font.size = Pt(BODY)
             lbl.font.name = FONT
-            ss_run = p.add_run(", ".join(soft_skills))
+            ss_run = p.add_run(_chunk_skills(soft_skills, size=7, sep=", "))
             ss_run.font.size = Pt(BODY)
             ss_run.font.name = FONT
             p.paragraph_format.space_before = Pt(1)
@@ -2276,7 +2281,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                     sep.font.name = FONT
                     sep.font.color.rgb = RGBColor(*DARK_GRAY)
                 if has_url:
-                    _add_hyperlink(p_meta, proj["url"], proj["url"], font_name=FONT, font_size=BODY - 1, color_rgb=(0, 0, 0))
+                    _add_hyperlink(p_meta, proj["url"], proj["url"], font_name=FONT, font_size=BODY - 1, color_rgb=(0, 0, 180))
                 p_meta.paragraph_format.space_before = Pt(0)
                 p_meta.paragraph_format.space_after = Pt(2)
                 _set_para_keep(p_meta, keep_together=True, keep_with_next=True, widow_control=True)
@@ -2368,7 +2373,8 @@ def generate_minimal_docx(data: dict) -> BytesIO:
                 label_run.bold = True
                 label_run.font.size = Pt(BODY)
                 label_run.font.name = FONT
-                _add_hyperlink(p_link, val, val, font_name=FONT, font_size=BODY, color_rgb=(0, 0, 0))
+                label_run.font.color.rgb = RGBColor(*BLACK)
+                _add_hyperlink(p_link, val, val, font_name=FONT, font_size=BODY, color_rgb=(0, 0, 180))
 
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 7: LANGUAGES
@@ -2490,7 +2496,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
             lbl.font.size = Pt(BODY)
             lbl.font.name = FONT_BODY
             lbl.font.color.rgb = RGBColor(*TEAL)
-            skills_run = p.add_run("  |  ".join(tech_skills))
+            skills_run = p.add_run(_chunk_skills(tech_skills, size=7, sep="  |  "))
             skills_run.font.size = Pt(BODY)
             skills_run.font.name = FONT_BODY
             p.paragraph_format.space_before = Pt(2)
@@ -2503,7 +2509,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
             lbl.font.size = Pt(BODY)
             lbl.font.name = FONT_BODY
             lbl.font.color.rgb = RGBColor(*TEAL)
-            ss_run = p.add_run("  |  ".join(soft_skills))
+            ss_run = p.add_run(_chunk_skills(soft_skills, size=7, sep="  |  "))
             ss_run.font.size = Pt(BODY)
             ss_run.font.name = FONT_BODY
             p.paragraph_format.space_before = Pt(1)
