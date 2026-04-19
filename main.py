@@ -4708,28 +4708,35 @@ with tab1:
 
                         # Parse titles and build inline LinkedIn links beside each title
                         _loc_param = urllib.parse.quote(user_location) if user_location else "India"
-                        lines = job_suggestions_display.split('\n')
+
+                        def _strip_urls(text):
+                            """Remove ALL URLs and link emoji from a string — called on every line before processing."""
+                            text = re.sub(r'https?://\S+', '', text)
+                            text = re.sub(r'🔗', '', text)
+                            return text.strip()
+
+                        # Pre-process: collapse all URLs out of the raw block first,
+                        # then split into lines so no URL fragment ever reaches rendering.
+                        _clean_block = re.sub(r'https?://\S+', '', job_suggestions_display)
+                        _clean_block = re.sub(r'🔗', '', _clean_block)
+                        lines = _clean_block.split('\n')
+
                         items_html = ""
                         for line in lines:
-                            # Always skip raw URL lines — never render them
-                            if re.match(r'^[🔗\s]*https?://', line.strip()):
+                            line = line.strip()
+                            if not line:
                                 continue
-                            # Skip empty lines
-                            if not line.strip():
-                                continue
-                            # Pattern A: "1. **Title** — description" (standard LLM format)
-                            m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—-]?\s*(.*)', line.strip())
+                            # Pattern A: "1. **Title** — description"
+                            m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—\-]?\s*(.*)', line)
                             # Pattern B: "**Title** — description" (no number)
                             if not m:
-                                m = re.match(r'^\*\*(.+?)\*\*\s*[—-]?\s*(.*)', line.strip())
+                                m = re.match(r'^\*\*(.+?)\*\*\s*[—\-]?\s*(.*)', line)
                             # Pattern C: "1. Title — description" (no bold markers)
                             if not m:
-                                m = re.match(r'^\d+\.\s+([^—\-]+?)\s*[—-]\s*(.*)', line.strip())
+                                m = re.match(r'^\d+\.\s+([^—\-]+?)\s*[—\-]\s*(.*)', line)
                             if m:
-                                title = m.group(1).strip()
-                                desc = re.sub(r'https?://\S+', '', m.group(2)).strip().rstrip('.')
-                                desc = re.sub(r'🔗', '', desc).strip()
-                                # Skip if title looks like a URL or is empty
+                                title = _strip_urls(m.group(1))
+                                desc  = _strip_urls(m.group(2)).rstrip('.')
                                 if not title or title.startswith('http'):
                                     continue
                                 encoded = urllib.parse.quote(title)
@@ -4745,7 +4752,8 @@ with tab1:
                                     '</svg></a>'
                                 )
                                 items_html += (
-                                    f'<div style="margin-bottom:10px;font-size:0.88rem;color:#c9d1d9;display:flex;align-items:baseline;flex-wrap:wrap;gap:0 4px;">'
+                                    f'<div style="margin-bottom:10px;font-size:0.88rem;color:#c9d1d9;'
+                                    f'display:flex;align-items:baseline;flex-wrap:wrap;gap:0 4px;">'
                                     f'<span style="white-space:nowrap;">'
                                     f'<b style="color:#e6edf3;">{title}</b>{link_icon}'
                                     f'</span>'
@@ -4756,13 +4764,11 @@ with tab1:
                             st.markdown("### 🎯 Suggested Job Titles (Based on Resume)")
                             st.markdown(f'<div style="margin-top:4px;">{items_html}</div>', unsafe_allow_html=True)
                         else:
-                            # Fallback: strip all URLs before rendering — never show raw links
-                            _clean_titles = re.sub(r'https?://\S+', '', job_suggestions_display)
-                            _clean_titles = re.sub(r'🔗', '', _clean_titles)
-                            _clean_titles = re.sub(r'\n{3,}', '\n\n', _clean_titles).strip()
-                            if _clean_titles:
+                            # Fallback: render plain text only — URLs already stripped from _clean_block
+                            _fallback = re.sub(r'\n{3,}', '\n\n', _clean_block).strip()
+                            if _fallback:
                                 st.markdown("### 🎯 Suggested Job Titles (Based on Resume)")
-                                st.markdown(_clean_titles)
+                                st.markdown(_fallback)
 
                     # ── 3-Template DOCX Download Buttons (Optimization Module — JSON data only) ──
                     st.markdown("""
