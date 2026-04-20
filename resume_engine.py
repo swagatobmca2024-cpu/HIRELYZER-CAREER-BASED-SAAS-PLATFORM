@@ -943,23 +943,41 @@ RESUME TEXT:
                 rewritten_text = _header + rewritten_text[_header_end:]
 
             # Sub-case 2: location entirely absent from header.
-            # Check properly: a header has a real location only if there is a pipe field
-            # that is NOT a URL, NOT an email, NOT a phone number, and is NOT the name/title.
-            # Counting pipes alone is unreliable — "name|title|email|phone|URL" has 5 fields
-            # but no location. We check whether any field looks like a location (text, no @, no http).
+            # Uses smart detection — checks all fields for non-URL/email/phone text,
+            # checks field[0] for embedded location (e.g. "Kiran Rao, Bangalore"),
+            # and skips injection if the header isn't pipe-structured at all.
             else:
-                _pipe_fields = [f.strip() for f in _header.split('|')]
-                # Fields 0=name, 1=title, 2=email, 3=phone — everything from index 4 onward
-                # that is not a URL and not an email is a candidate location field
-                _location_fields = [
-                    f for f in _pipe_fields[4:]
-                    if f
-                    and not f.startswith('http')
-                    and '@' not in f
-                    and not re.match(r'^[\d\s\+\-\(\)]{7,}$', f)  # not a phone number
-                ]
-                _has_location_already = bool(_location_fields)
-                if not _has_location_already:
+                def _has_location_in_header(hdr):
+                    # If fewer than 3 original pipe chars → not a real pipe header → skip
+                    if hdr.count('|') < 3:
+                        return True  # treat as "has location" to prevent unsafe injection
+                    # Normalize newlines within header so multi-line headers split correctly
+                    hdr_norm    = re.sub(r'\n', ' | ', hdr)
+                    pipe_fields = [f.strip() for f in hdr_norm.split('|')]
+                    # Too few fields after normalization → skip
+                    if len(pipe_fields) < 4:
+                        return True
+                    # Check field[0] for embedded location: "Kiran Rao, Bangalore"
+                    # Heuristic: comma present AND text after comma is 2+ alpha chars
+                    f0 = pipe_fields[0]
+                    if ',' in f0:
+                        _after = f0.split(',', 1)[1].strip()
+                        if len(_after) >= 2 and re.search(r'[a-zA-Z]', _after):
+                            return True
+                    # Check fields from index 2 onward for any non-URL/email/phone text
+                    for f in pipe_fields[2:]:
+                        if not f:
+                            continue
+                        if f.startswith('http'):
+                            continue
+                        if '@' in f:
+                            continue
+                        if re.match(r'^[\d\s\+\-\(\)\.]{7,}$', f):
+                            continue
+                        return True  # found a real text field → location present
+                    return False
+
+                if not _has_location_in_header(_header):
                     _url_pos = re.search(r'https?://', _header)
                     if _url_pos:
                         _insert_at = _url_pos.start()
