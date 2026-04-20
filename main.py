@@ -4767,8 +4767,20 @@ with tab1:
                                 desc  = _strip_urls(m.group(2)).rstrip('.') if len(m.groups()) > 1 and m.group(2) else ""
                                 if not title or title.startswith('http'):
                                     continue
-                                # Skip lines that look like headers or labels, not job titles
-                                if title.lower().strip() in ('suggested job titles', 'job title', 'job titles', 'title', 'based on resume'):
+                                # Skip markdown heading lines (start with #)
+                                if line.strip().startswith('#'):
+                                    continue
+                                # Skip section labels / heading text — not job titles
+                                _title_lower = title.lower().strip()
+                                _SKIP_LABELS = (
+                                    'suggested job titles', 'job title', 'job titles',
+                                    'title', 'based on resume', 'job title suggestions',
+                                )
+                                if any(_title_lower == s or s in _title_lower for s in _SKIP_LABELS):
+                                    continue
+                                # Skip emoji-only or very short nonsense
+                                _title_stripped = re.sub(r'[^\w\s]', '', title).strip()
+                                if len(_title_stripped) < 3:
                                     continue
                                 encoded = urllib.parse.quote(title)
                                 linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={_loc_param}"
