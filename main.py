@@ -4689,15 +4689,12 @@ with tab1:
 
                     # ── Job Title Suggestions (Analysis Module — displayed here, NOT in DOCX) ──
                     rewritten_raw = resume.get("Rewritten Text", "")
-
-                    # Flexible split: catches ## or ###, any trailing text like "(Based on Resume)"
-                    # e.g. "### 🎯 Suggested Job Titles (Based on Resume)" or "## 🎯 Suggested Job Titles"
-                    _jt_split = re.split(r'(?:#{2,3})\s*🎯\s*Suggested Job Titles', rewritten_raw, maxsplit=1)
-                    if len(_jt_split) == 2:
-                        resume_text_display    = _jt_split[0].strip()
-                        job_suggestions_display = "### 🎯 Suggested Job Titles" + _jt_split[1]
+                    if "### 🎯 Suggested Job Titles" in rewritten_raw:
+                        split_parts = rewritten_raw.split("### 🎯 Suggested Job Titles")
+                        resume_text_display = split_parts[0].strip()
+                        job_suggestions_display = "### 🎯 Suggested Job Titles" + split_parts[1]
                     else:
-                        resume_text_display    = rewritten_raw
+                        resume_text_display = rewritten_raw
                         job_suggestions_display = ""
 
                     st.write(resume_text_display)
@@ -4709,131 +4706,43 @@ with tab1:
                             Job Title Suggestions (for reference only — not included in resume files)
                         </div>""", unsafe_allow_html=True)
 
-                        # Build LinkedIn search location param — fallback to "India" if blank
-                        _loc_param = urllib.parse.quote(user_location.strip()) if user_location and user_location.strip() else "India"
+                        # Parse titles and build inline LinkedIn links beside each title
+                        _loc_param = urllib.parse.quote(user_location) if user_location else "India"
 
-                        def _strip_urls(s):
-                            """Remove ALL URLs and link emoji from a string."""
-                            s = re.sub(r'https?://\S+', '', s)
-                            s = re.sub(r'🔗', '', s)
-                            return s.strip()
+                        def _strip_urls(text):
+                            """Remove ALL URLs and link emoji from a string — called on every line before processing."""
+                            text = re.sub(r'https?://\S+', '', text)
+                            text = re.sub(r'🔗', '', text)
+                            return text.strip()
 
-                        # Pre-process: strip all URLs and 🔗 from the entire block first
-                        # so no URL fragment ever reaches the line-level patterns.
+                        # Pre-process: collapse all URLs out of the raw block first,
+                        # then split into lines so no URL fragment ever reaches rendering.
                         _clean_block = re.sub(r'https?://\S+', '', job_suggestions_display)
                         _clean_block = re.sub(r'🔗', '', _clean_block)
                         lines = _clean_block.split('\n')
-
-                        # Separator group: covers —  –  -  :  →  and variants with spaces
-                        # Made OPTIONAL (?) so bold-titled lines with no separator also match
-                        _SEP     = r'(?:[\s]*[—–\-:→][\s]*)?' # optional separator
-                        _SEP_REQ = r'[\s]*[—–\-:→][\s]*'      # required separator (for non-bold patterns)
-
-                        def _clean_title(t):
-                            """Strip ** bold markers, URLs, 🔗, and leading/trailing punctuation."""
-                            t = re.sub(r'\*\*(.+?)\*\*', r'\1', t)  # remove ** wrappers
-                            t = re.sub(r'\*\*', '', t)               # remove any stray **
-                            t = re.sub(r'https?://\S+', '', t)
-                            t = re.sub(r'🔗', '', t)
-                            return t.strip()
 
                         items_html = ""
                         for line in lines:
                             line = line.strip()
                             if not line:
                                 continue
-
-                            title = ""
-                            desc  = ""
-
-                            # Pattern A: "1. **Title** — desc"  OR  "1. **Title**"  (numbered + bold, sep optional)
-                            _ma = re.match(r'^\d+\.\s+\*\*(.+?)\*\*' + _SEP + r'(.*)', line)
-                            if _ma:
-                                title = _clean_title(_ma.group(1))
-                                desc  = _strip_urls(_ma.group(2).strip())
-
-                            # Pattern B: "**Title** — desc"  OR  "**Title**"  (bold only, sep optional)
-                            if not title:
-                                _mb = re.match(r'^\*\*(.+?)\*\*' + _SEP + r'(.*)', line)
-                                if _mb:
-                                    title = _clean_title(_mb.group(1))
-                                    desc  = _strip_urls(_mb.group(2).strip())
-
-                            # Pattern C: "1. Title — description"  (numbered, no bold, separator required)
-                            if not title:
-                                _mc = re.match(r'^\d+\.\s+(.+?)' + _SEP_REQ + r'(.*)', line)
-                                if _mc:
-                                    title = _clean_title(_mc.group(1))
-                                    desc  = _strip_urls(_mc.group(2).strip())
-
-                            # Pattern D: "1. Title"  (numbered, no separator, no bold — title only line)
-                            if not title:
-                                _md = re.match(r'^\d+\.\s+(.+)', line)
-                                if _md:
-                                    title = _clean_title(_md.group(1))
-                                    desc  = ""
-
-                            # Pattern E: "Title — description"  (no number, no bold, separator required)
-                            if not title:
-                                _me = re.match(r'^([^*\d].+?)' + _SEP_REQ + r'(.*)', line)
-                                if _me:
-                                    _candidate = _clean_title(_me.group(1))
-                                    # Guard: max 6 words, not a header/decoration line
-                                    if _candidate and len(_candidate.split()) <= 6 and not _candidate.startswith('#'):
-                                        title = _candidate
-                                        desc  = _strip_urls(_me.group(2).strip())
-
-                            # Skip if nothing matched, title looks like a URL, or is a decoration line
-                            if not title or title.startswith('http') or title.startswith('#'):
-                                continue
-                            # Skip subtitle lines like "(Based on Resume)"
-                            if re.match(r'^\(.*\)$', title.strip()):
-                                continue
-
-                            desc = desc.rstrip('.')
-
-                            encoded      = urllib.parse.quote(title)
-                            linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={_loc_param}"
-                            link_icon = (
-                                '<a href="' + linkedin_url + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
-                                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" '
-                                'stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
-                                'style="display:inline-block;vertical-align:middle;">'
-                                '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'
-                                '<polyline points="15 3 21 3 21 9"/>'
-                                '<line x1="10" y1="14" x2="21" y2="3"/>'
-                                '</svg></a>'
-                            )
-                            items_html += (
-                                f'<div style="margin-bottom:10px;font-size:0.88rem;color:#c9d1d9;'
-                                f'display:flex;align-items:center;flex-wrap:nowrap;gap:0 4px;overflow:hidden;">'
-                                f'<span style="white-space:nowrap;flex-shrink:0;">'
-                                f'<b style="color:#e6edf3;">{title}</b>{link_icon}'
-                                f'</span>'
-                                f'{("<span style=\"color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\"> — " + desc + "</span>") if desc else ""}'
-                                f'</div>'
-                            )
-
-                        if items_html:
-                            st.markdown("### 🎯 Suggested Job Titles (Based on Resume)")
-                            st.markdown(f'<div style="margin-top:4px;">{items_html}</div>', unsafe_allow_html=True)
-                        else:
-                            # Hard fallback: LLM returned something we couldn't parse at all.
-                            # Strip headers/decorations and render whatever text we got — with links.
-                            _fallback_lines = [
-                                l.strip() for l in _clean_block.split('\n')
-                                if l.strip() and not l.strip().startswith('#') and not re.match(r'^[═─=\-]{3,}', l.strip())
-                            ]
-                            _fallback_html = ""
-                            for _fl in _fallback_lines:
-                                _ft = re.sub(r'\*\*(.+?)\*\*', r'\1', _fl)  # strip bold markers
-                                _ft = _ft.strip()
-                                if not _ft:
+                            # Pattern A: "1. **Title** — description"
+                            m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—\-]?\s*(.*)', line)
+                            # Pattern B: "**Title** — description" (no number)
+                            if not m:
+                                m = re.match(r'^\*\*(.+?)\*\*\s*[—\-]?\s*(.*)', line)
+                            # Pattern C: "1. Title — description" (no bold markers)
+                            if not m:
+                                m = re.match(r'^\d+\.\s+([^—\-]+?)\s*[—\-]\s*(.*)', line)
+                            if m:
+                                title = _strip_urls(m.group(1))
+                                desc  = _strip_urls(m.group(2)).rstrip('.')
+                                if not title or title.startswith('http'):
                                     continue
-                                _fe = urllib.parse.quote(_ft[:60])
-                                _furl = f"https://www.linkedin.com/jobs/search/?keywords={_fe}&location={_loc_param}"
-                                _ficon = (
-                                    '<a href="' + _furl + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
+                                encoded = urllib.parse.quote(title)
+                                linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={_loc_param}"
+                                link_icon = (
+                                    '<a href="' + linkedin_url + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
                                     '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" '
                                     'stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
                                     'style="display:inline-block;vertical-align:middle;">'
@@ -4842,10 +4751,24 @@ with tab1:
                                     '<line x1="10" y1="14" x2="21" y2="3"/>'
                                     '</svg></a>'
                                 )
-                                _fallback_html += f'<div style="margin-bottom:8px;font-size:0.88rem;color:#c9d1d9;">{_ft}{_ficon}</div>'
-                            if _fallback_html:
+                                items_html += (
+                                    f'<div style="margin-bottom:10px;font-size:0.88rem;color:#c9d1d9;'
+                                    f'display:flex;align-items:center;flex-wrap:nowrap;gap:0 4px;overflow:hidden;">'
+                                    f'<span style="white-space:nowrap;flex-shrink:0;">'
+                                    f'<b style="color:#e6edf3;">{title}</b>{link_icon}'
+                                    f'</span>'
+                                    f'{("<span style=\"color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\"> — " + desc + "</span>") if desc else ""}'
+                                    f'</div>'
+                                )
+                        if items_html:
+                            st.markdown("### 🎯 Suggested Job Titles (Based on Resume)")
+                            st.markdown(f'<div style="margin-top:4px;">{items_html}</div>', unsafe_allow_html=True)
+                        else:
+                            # Fallback: render plain text only — URLs already stripped from _clean_block
+                            _fallback = re.sub(r'\n{3,}', '\n\n', _clean_block).strip()
+                            if _fallback:
                                 st.markdown("### 🎯 Suggested Job Titles (Based on Resume)")
-                                st.markdown(f'<div style="margin-top:4px;">{_fallback_html}</div>', unsafe_allow_html=True)
+                                st.markdown(_fallback)
 
                     # ── 3-Template DOCX Download Buttons (Optimization Module — JSON data only) ──
                     st.markdown("""
