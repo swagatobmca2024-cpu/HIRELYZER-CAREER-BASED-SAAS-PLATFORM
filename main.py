@@ -4727,7 +4727,7 @@ with tab1:
                             line = line.strip()
                             if not line:
                                 continue
-                            # Pattern A: "1. **Title** — description" (any dash/colon/arrow separator)
+                            # Pattern A: "1. **Title** — description"  (any dash/colon separator)
                             m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—–\-:→]?\s*(.*)', line)
                             # Pattern B: "**Title** — description" (no number)
                             if not m:
@@ -4735,52 +4735,19 @@ with tab1:
                             # Pattern C: "1. Title — description" (no bold, any separator)
                             if not m:
                                 m = re.match(r'^\d+\.\s+([^—–\-:→]+?)\s*[—–\-:→]\s*(.*)', line)
-                            # Pattern D: "- **Title** — description" (dash/bullet prefix with bold)
-                            if not m:
-                                m = re.match(r'^[\-\*•]\s+\*\*(.+?)\*\*\s*[—–\-:→]?\s*(.*)', line)
-                            # Pattern E: "- Title — description" (dash/bullet prefix, no bold)
-                            if not m:
-                                m = re.match(r'^[\-\*•]\s+([^—–\-:→]+?)\s*[—–\-:→]\s*(.*)', line)
-                            # Pattern F: "**Title**: description" (colon separator with bold)
-                            if not m:
-                                m = re.match(r'^\*\*(.+?)\*\*\s*:\s*(.*)', line)
-                            # Pattern G: "Title: description" (plain colon, no bold)
-                            if not m:
-                                m = re.match(r'^([^:\-—–→]+?)\s*:\s+(.*)', line)
-                            # Pattern H: "1. Title" (no separator at all — title only)
+                            # Pattern D: "1. Title" (no separator, no bold — title only line)
                             if not m:
                                 m = re.match(r'^\d+\.\s+(.+)', line)
                                 if m:
+                                    # wrap so group(2) is empty string
                                     class _FakeMatch:
                                         def __init__(self, g1): self._g = g1
                                         def group(self, n): return self._g if n == 1 else ""
-                                        def groups(self): return (self._g,)
                                     m = _FakeMatch(m.group(1).strip())
-                            # Pattern I: last resort — any plain text line (strip ** and numbers)
-                            if not m:
-                                _clean_line = re.sub(r'^\d+[\.\)]\s*', '', line).strip()
-                                _clean_line = re.sub(r'\*\*', '', _clean_line).strip()
-                                if _clean_line and not _clean_line.startswith('http') and len(_clean_line) > 2:
-                                    m = re.match(r'^(.+)$', _clean_line)
                             if m:
                                 title = _strip_urls(m.group(1))
-                                desc  = _strip_urls(m.group(2)).rstrip('.') if len(m.groups()) > 1 and m.group(2) else ""
+                                desc  = _strip_urls(m.group(2)).rstrip('.')
                                 if not title or title.startswith('http'):
-                                    continue
-                                # Skip markdown heading lines (start with #)
-                                if line.strip().startswith('#'):
-                                    continue
-                                # Skip section labels / heading text — not job titles
-                                _title_lower = title.lower().strip()
-                                _SKIP_LABELS = (
-                                    'suggested job titles', 'job title', 'job titles',
-                                    'title', 'based on resume', 'job title suggestions',
-                                )
-                                if any(_title_lower == s or s in _title_lower for s in _SKIP_LABELS):
-                                    continue
-                                # Skip emoji-only or very short nonsense
-                                _title_stripped = re.sub(r'[^\w\s]', '', title).strip()
-                                if len(_title_stripped) < 3:
                                     continue
                                 encoded = urllib.parse.quote(title)
                                 linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={_loc_param}"
