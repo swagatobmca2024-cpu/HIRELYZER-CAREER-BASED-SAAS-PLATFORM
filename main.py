@@ -4689,10 +4689,11 @@ with tab1:
 
                     # ── Job Title Suggestions (Analysis Module — displayed here, NOT in DOCX) ──
                     rewritten_raw = resume.get("Rewritten Text", "")
-                    if "### 🎯 Suggested Job Titles" in rewritten_raw:
-                        split_parts = rewritten_raw.split("### 🎯 Suggested Job Titles")
-                        resume_text_display = split_parts[0].strip()
-                        job_suggestions_display = "### 🎯 Suggested Job Titles" + split_parts[1]
+                    # FIX: flexible split — catches ## or ###, with or without "(Based on Resume)"
+                    _jt_split = re.split(r'(?:#{2,3})\s*🎯\s*Suggested Job Titles', rewritten_raw, maxsplit=1)
+                    if len(_jt_split) == 2:
+                        resume_text_display = _jt_split[0].strip()
+                        job_suggestions_display = "### 🎯 Suggested Job Titles" + _jt_split[1]
                     else:
                         resume_text_display = rewritten_raw
                         job_suggestions_display = ""
@@ -4726,18 +4727,48 @@ with tab1:
                             line = line.strip()
                             if not line:
                                 continue
-                            # Pattern A: "1. **Title** — description"
-                            m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—\-]?\s*(.*)', line)
+                            # Pattern A: "1. **Title** — description" (any dash/colon/arrow separator)
+                            m = re.match(r'^\d+\.\s+\*\*(.+?)\*\*\s*[—–\-:→]?\s*(.*)', line)
                             # Pattern B: "**Title** — description" (no number)
                             if not m:
-                                m = re.match(r'^\*\*(.+?)\*\*\s*[—\-]?\s*(.*)', line)
-                            # Pattern C: "1. Title — description" (no bold markers)
+                                m = re.match(r'^\*\*(.+?)\*\*\s*[—–\-:→]?\s*(.*)', line)
+                            # Pattern C: "1. Title — description" (no bold, any separator)
                             if not m:
-                                m = re.match(r'^\d+\.\s+([^—\-]+?)\s*[—\-]\s*(.*)', line)
+                                m = re.match(r'^\d+\.\s+([^—–\-:→]+?)\s*[—–\-:→]\s*(.*)', line)
+                            # Pattern D: "- **Title** — description" (dash/bullet prefix with bold)
+                            if not m:
+                                m = re.match(r'^[\-\*•]\s+\*\*(.+?)\*\*\s*[—–\-:→]?\s*(.*)', line)
+                            # Pattern E: "- Title — description" (dash/bullet prefix, no bold)
+                            if not m:
+                                m = re.match(r'^[\-\*•]\s+([^—–\-:→]+?)\s*[—–\-:→]\s*(.*)', line)
+                            # Pattern F: "**Title**: description" (colon separator with bold)
+                            if not m:
+                                m = re.match(r'^\*\*(.+?)\*\*\s*:\s*(.*)', line)
+                            # Pattern G: "Title: description" (plain colon, no bold)
+                            if not m:
+                                m = re.match(r'^([^:\-—–→]+?)\s*:\s+(.*)', line)
+                            # Pattern H: "1. Title" (no separator at all — title only)
+                            if not m:
+                                m = re.match(r'^\d+\.\s+(.+)', line)
+                                if m:
+                                    class _FakeMatch:
+                                        def __init__(self, g1): self._g = g1
+                                        def group(self, n): return self._g if n == 1 else ""
+                                        def groups(self): return (self._g,)
+                                    m = _FakeMatch(m.group(1).strip())
+                            # Pattern I: last resort — any plain text line (strip ** and numbers)
+                            if not m:
+                                _clean_line = re.sub(r'^\d+[\.\)]\s*', '', line).strip()
+                                _clean_line = re.sub(r'\*\*', '', _clean_line).strip()
+                                if _clean_line and not _clean_line.startswith('http') and len(_clean_line) > 2:
+                                    m = re.match(r'^(.+)$', _clean_line)
                             if m:
                                 title = _strip_urls(m.group(1))
-                                desc  = _strip_urls(m.group(2)).rstrip('.')
+                                desc  = _strip_urls(m.group(2)).rstrip('.') if len(m.groups()) > 1 and m.group(2) else ""
                                 if not title or title.startswith('http'):
+                                    continue
+                                # Skip lines that look like headers or labels, not job titles
+                                if title.lower().strip() in ('suggested job titles', 'job title', 'job titles', 'title', 'based on resume'):
                                     continue
                                 encoded = urllib.parse.quote(title)
                                 linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={_loc_param}"
