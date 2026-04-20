@@ -4753,11 +4753,11 @@ with tab1:
                                 )
                                 items_html += (
                                     f'<div style="margin-bottom:10px;font-size:0.88rem;color:#c9d1d9;'
-                                    f'display:flex;align-items:center;flex-wrap:nowrap;gap:0 4px;overflow:hidden;">'
-                                    f'<span style="white-space:nowrap;flex-shrink:0;">'
+                                    f'display:flex;align-items:baseline;flex-wrap:wrap;gap:0 4px;">'
+                                    f'<span style="white-space:nowrap;">'
                                     f'<b style="color:#e6edf3;">{title}</b>{link_icon}'
                                     f'</span>'
-                                    f'{("<span style=\"color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\"> — " + desc + "</span>") if desc else ""}'
+                                    f'{("<span style=\"color:#94a3b8;\"> — " + desc + "</span>") if desc else ""}'
                                     f'</div>'
                                 )
                         if items_html:
