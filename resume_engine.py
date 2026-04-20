@@ -921,11 +921,11 @@ RESUME TEXT:
             pass  # never break main flow
 
     # ── Plain-text rewrite location patch ────────────────────────────────────
-    # The plain-text contact header (Part 1) may show a blank/Not Provided location
-    # OR the LLM may have simply omitted the location field from the pipe header.
-    # Two sub-cases handled:
-    #   1. Pipe slot exists but is empty/Not Provided:  "| Not Provided |" → "| Mumbai |"
-    #   2. Location field absent entirely from header:  insert before LinkedIn/GitHub URL
+    # Only inject sidebar location when the resume genuinely has NO location.
+    # Two sub-cases:
+    #   1. Pipe slot exists but is empty/Not Provided  → replace with sidebar value
+    #   2. Location field entirely absent from header  → insert before first URL
+    # IMPORTANT: never fire if the header already contains a real location value.
     if user_location and user_location.strip() and rewritten_text:
         try:
             _header_break = rewritten_text.find('\n\n')
@@ -933,7 +933,7 @@ RESUME TEXT:
             _header       = rewritten_text[:_header_end]
             _loc_val      = user_location.strip()
 
-            # Sub-case 1: slot exists with empty/Not Provided value
+            # Sub-case 1: slot exists but is explicitly empty or "Not Provided"
             _LOC_EMPTY = re.compile(r'\|\s*(Not Provided|N/A|n/a|)\s*(\|)', re.IGNORECASE)
             if _LOC_EMPTY.search(_header):
                 _header = _LOC_EMPTY.sub(
@@ -942,20 +942,33 @@ RESUME TEXT:
                 )
                 rewritten_text = _header + rewritten_text[_header_end:]
 
-            # Sub-case 2: location entirely absent — inject before first http link or end of header
-            # Only fires if sub-case 1 did NOT already patch (location still not in header)
-            elif _loc_val.lower() not in _header.lower():
-                # Find insertion point: just before first URL in header, or append before last |
-                _url_pos = re.search(r'https?://', _header)
-                if _url_pos:
-                    _insert_at = _url_pos.start()
-                    _header = _header[:_insert_at] + _loc_val + ' | ' + _header[_insert_at:]
-                else:
-                    # Append as last pipe-separated field
-                    _last_pipe = _header.rfind('|')
-                    if _last_pipe != -1:
-                        _header = _header[:_last_pipe + 1] + ' ' + _loc_val + _header[_last_pipe + 1:]
-                rewritten_text = _header + rewritten_text[_header_end:]
+            # Sub-case 2: location entirely absent from header.
+            # Check properly: a header has a real location only if there is a pipe field
+            # that is NOT a URL, NOT an email, NOT a phone number, and is NOT the name/title.
+            # Counting pipes alone is unreliable — "name|title|email|phone|URL" has 5 fields
+            # but no location. We check whether any field looks like a location (text, no @, no http).
+            else:
+                _pipe_fields = [f.strip() for f in _header.split('|')]
+                # Fields 0=name, 1=title, 2=email, 3=phone — everything from index 4 onward
+                # that is not a URL and not an email is a candidate location field
+                _location_fields = [
+                    f for f in _pipe_fields[4:]
+                    if f
+                    and not f.startswith('http')
+                    and '@' not in f
+                    and not re.match(r'^[\d\s\+\-\(\)]{7,}$', f)  # not a phone number
+                ]
+                _has_location_already = bool(_location_fields)
+                if not _has_location_already:
+                    _url_pos = re.search(r'https?://', _header)
+                    if _url_pos:
+                        _insert_at = _url_pos.start()
+                        _header = _header[:_insert_at] + _loc_val + ' | ' + _header[_insert_at:]
+                    else:
+                        _last_pipe = _header.rfind('|')
+                        if _last_pipe != -1:
+                            _header = _header[:_last_pipe + 1] + ' ' + _loc_val + _header[_last_pipe + 1:]
+                    rewritten_text = _header + rewritten_text[_header_end:]
         except Exception:
             pass  # never break main flow
 
