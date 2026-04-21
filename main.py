@@ -3142,6 +3142,1088 @@ _LOCATION_OPTIONS = [
     "Other (type below)",
 ]
 
+# ── Standard JD templates — one per job title (auto-fill on selection) ──────
+_JD_TEMPLATES = {
+    "Software Engineer": """\
+Position: Software Engineer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for a passionate and skilled Software Engineer to join our growing engineering team. You will design, develop, and maintain high-quality software solutions that power our core products.
+
+Key Responsibilities:
+- Design, develop, test, and deploy scalable software applications
+- Write clean, maintainable, and well-documented code
+- Collaborate with cross-functional teams including product managers and designers
+- Participate in code reviews and contribute to engineering best practices
+- Identify and resolve performance bottlenecks and software defects
+- Contribute to architectural decisions and technical roadmap discussions
+- Mentor junior engineers and share knowledge across the team
+- Integrate third-party APIs and services as needed
+- Ensure software security and data protection standards are met
+- Continuously improve development processes and tooling
+
+Required Skills & Qualifications:
+- B.E./B.Tech/M.Tech in Computer Science or related field
+- 2–5 years of software development experience
+- Proficiency in one or more languages: Python, Java, C++, Go, or JavaScript
+- Strong understanding of data structures, algorithms, and design patterns
+- Experience with version control (Git), CI/CD pipelines, and Agile methodologies
+- Familiarity with relational and NoSQL databases
+- Strong problem-solving and analytical skills
+
+Good to Have:
+- Experience with cloud platforms (AWS, GCP, Azure)
+- Knowledge of containerization (Docker, Kubernetes)
+- Open-source contributions
+""",
+
+    "Backend Developer": """\
+Position: Backend Developer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are seeking an experienced Backend Developer to build and maintain robust, scalable server-side systems. You will work closely with frontend teams and DevOps to deliver reliable APIs and microservices.
+
+Key Responsibilities:
+- Design and develop high-performance RESTful and GraphQL APIs
+- Build and maintain microservices architectures
+- Optimize database queries and data models for performance and scalability
+- Implement authentication, authorization, and security best practices
+- Collaborate with frontend developers to define API contracts
+- Write unit and integration tests to ensure code quality
+- Monitor system performance and resolve production issues proactively
+- Participate in system design discussions and technical planning
+- Document APIs using tools like Swagger/OpenAPI
+- Conduct code reviews and enforce coding standards
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 2–5 years of backend development experience
+- Proficiency in Python, Node.js, Java, or Go
+- Strong experience with REST API design and development
+- Hands-on with databases: PostgreSQL, MySQL, MongoDB, or Redis
+- Experience with message queues (RabbitMQ, Kafka)
+- Solid understanding of HTTP, caching, and distributed systems
+
+Good to Have:
+- Experience with AWS Lambda, EC2, or GCP services
+- Knowledge of gRPC and Protobuf
+- Familiarity with containerization (Docker, Kubernetes)
+""",
+
+    "Frontend Developer": """\
+Position: Frontend Developer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for a creative and detail-oriented Frontend Developer to craft exceptional user interfaces. You will translate UI/UX designs into pixel-perfect, performant, and accessible web experiences.
+
+Key Responsibilities:
+- Build responsive, cross-browser-compatible web applications using modern frameworks
+- Translate Figma/Adobe XD designs into high-quality HTML, CSS, and JavaScript
+- Optimize frontend performance for speed, accessibility, and SEO
+- Integrate RESTful APIs and manage application state effectively
+- Write unit and end-to-end tests for frontend components
+- Collaborate closely with designers, backend developers, and product managers
+- Maintain and improve existing frontend codebases
+- Implement animations, transitions, and interactive UI components
+- Participate in design reviews and provide technical feasibility feedback
+- Follow accessibility (WCAG) and web standards best practices
+
+Required Skills & Qualifications:
+- B.E./B.Tech or equivalent in Computer Science or related field
+- 2–5 years of frontend development experience
+- Proficiency in React.js, Vue.js, or Angular
+- Strong command of HTML5, CSS3, and modern JavaScript (ES6+)
+- Experience with state management (Redux, Zustand, Vuex)
+- Familiarity with build tools: Webpack, Vite, or Parcel
+- Understanding of browser rendering, performance optimization, and caching
+
+Good to Have:
+- Experience with TypeScript
+- Knowledge of Next.js or Nuxt.js
+- Familiarity with testing frameworks (Jest, Cypress, Playwright)
+""",
+
+    "Full Stack Developer": """\
+Position: Full Stack Developer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are hiring a Full Stack Developer who is comfortable working across the entire web application stack. You will own features end-to-end — from database design to pixel-perfect UI delivery.
+
+Key Responsibilities:
+- Develop and maintain both frontend and backend components of web applications
+- Design and implement RESTful or GraphQL APIs consumed by web and mobile clients
+- Build responsive UIs using modern JavaScript frameworks (React, Vue, Angular)
+- Design and manage relational and NoSQL databases
+- Write automated tests (unit, integration, E2E) across the stack
+- Deploy and manage applications on cloud infrastructure
+- Collaborate with product managers, designers, and QA engineers
+- Conduct code reviews and mentor junior developers
+- Identify and resolve performance, security, and scalability issues
+- Contribute to CI/CD pipeline setup and maintenance
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 3–6 years of full stack development experience
+- Proficiency in React.js/Vue.js (frontend) and Node.js/Python/Java (backend)
+- Strong knowledge of SQL and NoSQL databases
+- Experience with Git, Docker, and cloud deployment (AWS/GCP/Azure)
+- Understanding of Agile/Scrum methodologies
+
+Good to Have:
+- Experience with TypeScript and serverless architectures
+- Knowledge of microservices and event-driven systems
+- Mobile development experience (React Native / Flutter)
+""",
+
+    "Mobile Developer": """\
+Position: Mobile Developer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for a talented Mobile Developer to build high-quality iOS and/or Android applications. You will collaborate with designers and backend engineers to deliver seamless mobile experiences to millions of users.
+
+Key Responsibilities:
+- Design and develop mobile applications for Android and/or iOS platforms
+- Write clean, maintainable, and testable code following platform best practices
+- Integrate RESTful APIs, push notifications, and third-party SDKs
+- Optimize app performance, memory usage, and battery consumption
+- Implement complex UI/UX designs with smooth animations
+- Debug and resolve production issues reported by users
+- Publish and maintain apps on Google Play Store and Apple App Store
+- Collaborate with backend teams to define and consume APIs
+- Write unit and UI tests using platform-specific testing frameworks
+- Stay updated with the latest mobile platform changes and best practices
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 2–5 years of mobile app development experience
+- Proficiency in Kotlin/Java (Android) or Swift/Objective-C (iOS), or Flutter/React Native
+- Experience with REST API integration and async programming
+- Familiarity with mobile CI/CD tools (Fastlane, Bitrise, Firebase App Distribution)
+- Understanding of MVVM, MVP, or Clean Architecture patterns
+
+Good to Have:
+- Cross-platform experience with Flutter or React Native
+- Experience with Firebase, Google Maps SDK, or payment gateway SDKs
+- Published apps on Play Store or App Store
+""",
+
+    "Data Scientist": """\
+Position: Data Scientist
+Location: [City, India] | Full-Time
+
+About the Role:
+We are seeking an analytical and curious Data Scientist to turn raw data into actionable insights and predictive models. You will work with large, complex datasets and collaborate with engineering and business teams to drive data-driven decision-making.
+
+Key Responsibilities:
+- Collect, clean, and preprocess large structured and unstructured datasets
+- Develop and validate statistical models and machine learning algorithms
+- Build predictive and prescriptive models to solve business problems
+- Perform exploratory data analysis (EDA) and communicate findings clearly
+- Design and run A/B experiments to measure product impact
+- Deploy models into production in collaboration with ML engineers
+- Create dashboards and reports using BI tools (Tableau, Power BI, Metabase)
+- Work closely with product managers and business stakeholders
+- Document methodology, results, and model assumptions rigorously
+- Monitor model performance and retrain as data distributions shift
+
+Required Skills & Qualifications:
+- B.Tech/M.Tech/M.Sc in Computer Science, Statistics, Mathematics, or related field
+- 2–5 years of data science experience
+- Proficiency in Python (Pandas, NumPy, Scikit-learn, Matplotlib, Seaborn)
+- Strong understanding of statistical concepts: regression, classification, clustering, hypothesis testing
+- Experience with SQL for data extraction and transformation
+- Familiarity with ML frameworks: XGBoost, LightGBM, TensorFlow, or PyTorch
+
+Good to Have:
+- Experience with cloud ML platforms (AWS SageMaker, GCP Vertex AI)
+- Knowledge of NLP, time-series forecasting, or recommendation systems
+- Familiarity with MLflow or DVC for experiment tracking
+""",
+
+    "ML Engineer": """\
+Position: ML Engineer (AI/Machine Learning)
+Location: [City, India] | Full-Time
+
+About the Role:
+We are hiring an ML Engineer to bridge the gap between data science and production engineering. You will build, deploy, and scale machine learning systems that power intelligent features across our platform.
+
+Key Responsibilities:
+- Design, train, evaluate, and deploy machine learning models at scale
+- Build ML pipelines for data ingestion, feature engineering, model training, and inference
+- Optimize models for latency, throughput, and resource efficiency
+- Implement MLOps practices: experiment tracking, model versioning, monitoring, and retraining
+- Collaborate with data scientists to productionize research models
+- Build and maintain feature stores and data pipelines
+- Develop APIs and microservices to serve ML model predictions
+- Monitor model drift and implement automated retraining workflows
+- Work with GPU/TPU infrastructure for large-scale model training
+- Research and apply state-of-the-art ML techniques to business problems
+
+Required Skills & Qualifications:
+- B.Tech/M.Tech in Computer Science, AI, or related field
+- 3–6 years of ML engineering or related experience
+- Strong proficiency in Python and ML frameworks (TensorFlow, PyTorch, Scikit-learn)
+- Experience with ML pipeline orchestration (Airflow, Kubeflow, MLflow)
+- Solid software engineering skills: APIs, testing, CI/CD
+- Experience with cloud platforms for ML (AWS SageMaker, GCP Vertex AI, Azure ML)
+
+Good to Have:
+- Experience with LLMs, RAG pipelines, or generative AI
+- Knowledge of ONNX, TensorRT, or model quantization techniques
+- Familiarity with Spark or Dask for distributed data processing
+""",
+
+    "DevOps Engineer": """\
+Position: DevOps Engineer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for a skilled DevOps Engineer to streamline our development lifecycle, automate infrastructure, and ensure the reliability and scalability of our production systems.
+
+Key Responsibilities:
+- Design, implement, and maintain CI/CD pipelines for automated build, test, and deployment
+- Manage and provision cloud infrastructure using IaC tools (Terraform, CloudFormation)
+- Monitor system health, performance, and availability using observability tools
+- Implement and maintain containerized deployments using Docker and Kubernetes
+- Manage cloud environments on AWS, GCP, or Azure
+- Collaborate with development teams to improve deployment frequency and reliability
+- Implement security best practices across infrastructure and pipelines
+- Automate repetitive operational tasks using scripting (Bash, Python)
+- Manage secrets, certificates, and access control policies
+- Respond to and resolve production incidents, conducting root cause analysis
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 3–6 years of DevOps or infrastructure engineering experience
+- Strong experience with CI/CD tools: Jenkins, GitHub Actions, GitLab CI, or CircleCI
+- Proficiency with Docker, Kubernetes, and Helm
+- Experience with cloud platforms (AWS, GCP, or Azure)
+- Scripting skills in Bash and Python
+- Knowledge of monitoring tools: Prometheus, Grafana, ELK Stack, or Datadog
+
+Good to Have:
+- Experience with service mesh (Istio, Linkerd)
+- Knowledge of GitOps workflows (ArgoCD, Flux)
+- Cloud certifications (AWS Solutions Architect, CKA, etc.)
+""",
+
+    "Cloud Engineer": """\
+Position: Cloud Engineer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are seeking an experienced Cloud Engineer to design, build, and manage our cloud infrastructure. You will ensure our systems are secure, scalable, cost-optimized, and highly available across multi-cloud environments.
+
+Key Responsibilities:
+- Architect and implement scalable, resilient cloud infrastructure on AWS, GCP, or Azure
+- Automate infrastructure provisioning using Terraform, Pulumi, or CloudFormation
+- Manage cloud networking: VPCs, subnets, load balancers, DNS, and security groups
+- Implement cloud security best practices including IAM, encryption, and compliance controls
+- Optimize cloud costs through right-sizing, reserved instances, and spot usage
+- Set up and manage monitoring, alerting, and logging pipelines
+- Support cloud migration projects from on-premises to cloud environments
+- Collaborate with DevOps, security, and application teams
+- Develop and maintain disaster recovery and business continuity plans
+- Evaluate and adopt new cloud services and technologies
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 3–6 years of cloud engineering experience
+- Deep expertise in at least one major cloud platform (AWS, GCP, Azure)
+- Strong experience with Infrastructure as Code (Terraform, Ansible)
+- Knowledge of cloud networking, security, and identity management
+- Familiarity with containerization (Docker, Kubernetes, EKS/GKE/AKS)
+
+Good to Have:
+- Cloud certifications (AWS Solutions Architect Pro, GCP Professional, Azure Expert)
+- Experience with multi-cloud and hybrid cloud architectures
+- Knowledge of FinOps practices and cost optimization tools
+""",
+
+    "Site Reliability Engineer": """\
+Position: Site Reliability Engineer (SRE)
+Location: [City, India] | Full-Time
+
+About the Role:
+We are hiring a Site Reliability Engineer to ensure the reliability, scalability, and performance of our production systems. You will apply software engineering principles to infrastructure and operations problems.
+
+Key Responsibilities:
+- Define and maintain SLOs, SLIs, and error budgets for critical services
+- Build and maintain observability systems: metrics, logs, traces (Prometheus, Grafana, Jaeger)
+- Lead incident response, post-mortems, and systematic reliability improvements
+- Automate toil and manual operational work through engineering solutions
+- Collaborate with development teams to improve software reliability and deployability
+- Capacity planning and performance testing for high-traffic systems
+- Design fault-tolerant, self-healing distributed systems
+- Implement and improve on-call rotations and escalation policies
+- Drive chaos engineering practices to proactively uncover weaknesses
+- Review system designs for reliability, scalability, and maintainability
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 4–7 years of SRE, DevOps, or systems engineering experience
+- Strong software engineering skills (Python, Go, or Java)
+- Deep experience with Linux systems administration
+- Proficiency with Kubernetes, Docker, and cloud platforms (AWS/GCP/Azure)
+- Experience with distributed systems concepts and microservices architectures
+
+Good to Have:
+- Experience with chaos engineering tools (Chaos Monkey, Gremlin)
+- Knowledge of service meshes (Istio, Linkerd)
+- Contributions to open-source reliability or observability tooling
+""",
+
+    "Database Administrator": """\
+Position: Database Administrator (DBA)
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for an experienced Database Administrator to manage, optimize, and secure our databases. You will ensure high availability, performance, and integrity of mission-critical data systems.
+
+Key Responsibilities:
+- Install, configure, and maintain relational and NoSQL database systems
+- Monitor database performance and proactively tune queries and indexes
+- Design and implement backup, recovery, and disaster recovery strategies
+- Manage database security: user roles, permissions, encryption, and auditing
+- Plan and execute database migrations and schema changes with zero downtime
+- Capacity planning and storage management for growing data volumes
+- Set up and maintain database replication and high-availability clusters
+- Collaborate with developers to design optimal data models and queries
+- Troubleshoot and resolve database performance and connectivity issues
+- Document database architecture, procedures, and runbooks
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 3–6 years of DBA experience
+- Strong expertise in PostgreSQL, MySQL, or Oracle
+- Experience with NoSQL databases: MongoDB, Cassandra, or DynamoDB
+- Proficiency in SQL query optimization and execution plan analysis
+- Knowledge of replication, clustering, and failover strategies
+- Familiarity with backup tools and point-in-time recovery
+
+Good to Have:
+- Experience with cloud-managed databases (RDS, Cloud SQL, Cosmos DB)
+- Knowledge of database monitoring tools (pgBadger, Percona Monitoring)
+- Experience with data warehousing (Redshift, BigQuery, Snowflake)
+""",
+
+    "Network Engineer": """\
+Position: Network Engineer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are seeking a skilled Network Engineer to design, implement, and maintain our network infrastructure. You will ensure high availability, security, and performance of our on-premises and cloud network environments.
+
+Key Responsibilities:
+- Design and implement LAN, WAN, SD-WAN, and cloud networking solutions
+- Configure and manage routers, switches, firewalls, and load balancers
+- Monitor network performance and proactively resolve latency and connectivity issues
+- Implement network security policies, VPNs, and zero-trust architectures
+- Manage DNS, DHCP, and IP address management (IPAM)
+- Plan and execute network upgrades, migrations, and expansions
+- Collaborate with cloud teams on VPC design, peering, and direct connect setups
+- Respond to network incidents and conduct root cause analysis
+- Develop and maintain network documentation and topology diagrams
+- Evaluate and recommend new networking technologies and vendors
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science, Electronics, or equivalent
+- 3–6 years of network engineering experience
+- Strong knowledge of TCP/IP, BGP, OSPF, MPLS, and VLANs
+- Experience with Cisco, Juniper, Palo Alto, or Fortinet devices
+- Familiarity with cloud networking (AWS VPC, Azure VNet, GCP VPC)
+- Understanding of network security: firewalls, IDS/IPS, and DDoS mitigation
+
+Good to Have:
+- Certifications: CCNA, CCNP, CCIE, or equivalent
+- Experience with SD-WAN solutions (Cisco Viptela, VMware VeloCloud)
+- Knowledge of network automation using Python or Ansible
+""",
+
+    "Embedded Systems Engineer": """\
+Position: Embedded Systems Engineer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are hiring an Embedded Systems Engineer to develop firmware and software for embedded hardware platforms. You will work closely with hardware engineers to bring intelligent devices to life.
+
+Key Responsibilities:
+- Develop, test, and debug firmware for microcontrollers and embedded processors
+- Write low-level C/C++ code for bare-metal and RTOS-based systems
+- Develop and integrate device drivers for peripherals (UART, SPI, I2C, CAN, USB)
+- Collaborate with hardware engineers on board bring-up and hardware validation
+- Optimize firmware for real-time performance, power consumption, and memory usage
+- Implement communication protocols for IoT and industrial systems
+- Write automated test frameworks and hardware-in-the-loop (HIL) test cases
+- Review hardware schematics and PCB designs from a firmware perspective
+- Maintain and improve existing embedded codebases
+- Document firmware architecture, APIs, and porting guides
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Electronics, Computer Science, or Electrical Engineering
+- 3–6 years of embedded systems development experience
+- Strong proficiency in C and C++ for embedded targets
+- Experience with MCU families: STM32, ESP32, NXP, TI, or AVR
+- Knowledge of RTOS: FreeRTOS, Zephyr, or ThreadX
+- Hands-on with JTAG/SWD debugging using tools like OpenOCD or Segger J-Link
+- Understanding of communication protocols: UART, SPI, I2C, CAN, USB
+
+Good to Have:
+- Experience with Linux-based embedded systems (Yocto, Buildroot)
+- Knowledge of functional safety standards (IEC 61508, ISO 26262)
+- Familiarity with wireless protocols (BLE, Zigbee, LoRa, Wi-Fi)
+""",
+
+    "IoT Engineer": """\
+Position: IoT Engineer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for an innovative IoT Engineer to design and build end-to-end Internet of Things solutions. You will work across firmware, connectivity, cloud integration, and data pipelines to deliver smart, connected products.
+
+Key Responsibilities:
+- Design and develop IoT solutions spanning devices, gateways, and cloud backends
+- Develop firmware for IoT devices using C/C++ or MicroPython on embedded platforms
+- Implement wireless communication protocols: MQTT, CoAP, HTTP, BLE, Zigbee, LoRa
+- Integrate IoT devices with cloud IoT platforms (AWS IoT Core, Google Cloud IoT, Azure IoT Hub)
+- Build data ingestion pipelines for real-time telemetry and event processing
+- Develop device management features: OTA updates, remote config, diagnostics
+- Ensure device and data security through encryption, secure boot, and certificate management
+- Collaborate with hardware, cloud, and product teams for end-to-end integration
+- Perform field testing, debugging, and reliability validation of IoT deployments
+- Document hardware interfaces, APIs, and integration guides
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Electronics, Computer Science, or related field
+- 3–6 years of IoT development experience
+- Proficiency in C/C++ (firmware) and Python (backend/scripting)
+- Experience with MQTT, REST APIs, and IoT communication protocols
+- Knowledge of cloud IoT platforms and serverless computing
+- Familiarity with edge computing concepts and gateways
+
+Good to Have:
+- Experience with TinyML or edge AI inference on microcontrollers
+- Knowledge of industrial IoT protocols (Modbus, OPC-UA)
+- Hands-on with Raspberry Pi, ESP32, or similar platforms
+""",
+
+    "UI/UX Designer": """\
+Position: UI/UX Designer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are seeking a talented UI/UX Designer to create intuitive and visually compelling digital experiences. You will work closely with product managers and engineers to design products that delight users and achieve business goals.
+
+Key Responsibilities:
+- Lead end-to-end design processes: research, ideation, wireframing, prototyping, and delivery
+- Conduct user research, usability testing, and competitive analysis to inform design decisions
+- Create user personas, journey maps, information architecture, and user flows
+- Design high-fidelity mockups and interactive prototypes using Figma or Adobe XD
+- Develop and maintain a consistent design system and component library
+- Collaborate closely with frontend developers to ensure pixel-perfect implementation
+- Gather and incorporate feedback from stakeholders and end-users iteratively
+- Ensure designs meet accessibility standards (WCAG 2.1)
+- Present design concepts and rationale to cross-functional teams and leadership
+- Stay current with design trends, tools, and emerging interaction patterns
+
+Required Skills & Qualifications:
+- Bachelor's degree in Design, HCI, or equivalent field
+- 2–5 years of UI/UX design experience for web and/or mobile products
+- Proficiency in Figma, Sketch, or Adobe XD
+- Strong portfolio demonstrating end-to-end design process and shipped products
+- Solid understanding of design principles: typography, color, layout, and accessibility
+- Experience conducting user interviews and usability tests
+
+Good to Have:
+- Experience with motion design and micro-interactions (After Effects, Principle)
+- Knowledge of HTML/CSS for better developer collaboration
+- Familiarity with product analytics tools (Mixpanel, Hotjar, FullStory)
+""",
+
+    "QA Engineer": """\
+Position: QA Engineer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for a detail-oriented QA Engineer to ensure the quality of our software products. You will design and execute test strategies, build automation frameworks, and act as the last line of defence before features reach our users.
+
+Key Responsibilities:
+- Design, develop, and maintain automated test suites for web, mobile, and API testing
+- Define and execute test plans, test cases, and regression test suites
+- Perform functional, integration, performance, and exploratory testing
+- Work closely with developers during sprint planning and development to shift quality left
+- Identify, document, and track bugs through the full defect lifecycle
+- Set up and maintain CI/CD integrated test pipelines
+- Perform API testing using tools like Postman, REST-Assured, or Karate
+- Conduct load and stress testing using JMeter or Locust
+- Review requirements and user stories to identify gaps and edge cases
+- Mentor junior QA engineers and promote quality culture across the team
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 2–5 years of QA engineering experience
+- Proficiency in test automation frameworks: Selenium, Playwright, Cypress, or Appium
+- Strong knowledge of testing methodologies and SDLC
+- Experience with API testing and performance testing tools
+- Scripting ability in Python, Java, or JavaScript for test automation
+- Familiarity with defect tracking tools (JIRA, Bugzilla)
+
+Good to Have:
+- ISTQB certification
+- Experience with BDD frameworks (Cucumber, Behave)
+- Knowledge of mobile testing for iOS and Android
+""",
+
+    "Solution Architect": """\
+Position: Solution Architect
+Location: [City, India] | Full-Time
+
+About the Role:
+We are hiring a Solution Architect to lead the design of scalable, secure, and cost-effective technology solutions. You will bridge business requirements with technical implementation, guiding engineering teams and influencing technology strategy.
+
+Key Responsibilities:
+- Design end-to-end technical architectures for complex enterprise systems
+- Evaluate and select appropriate technologies, frameworks, and platforms
+- Create architecture blueprints, technical specifications, and design documents
+- Collaborate with product, engineering, and business stakeholders to align solutions with goals
+- Lead technical proof-of-concept projects to validate architectural decisions
+- Define integration patterns, API contracts, and data flow architectures
+- Ensure solutions meet non-functional requirements: scalability, security, availability, and performance
+- Provide technical leadership and mentorship to development teams
+- Conduct architecture reviews and code quality assessments
+- Stay current with emerging technologies and industry best practices
+
+Required Skills & Qualifications:
+- B.E./B.Tech/M.Tech in Computer Science or equivalent
+- 8+ years of software development with 3+ years in architecture or senior technical roles
+- Deep expertise in distributed systems, microservices, and cloud-native architectures
+- Strong knowledge of cloud platforms (AWS, GCP, Azure) and enterprise integration patterns
+- Experience designing APIs (REST, GraphQL, gRPC) and event-driven systems
+- Strong communication skills to present technical concepts to non-technical audiences
+
+Good to Have:
+- Cloud architect certifications (AWS Solutions Architect Professional, GCP Professional Architect)
+- Experience with TOGAF or other enterprise architecture frameworks
+- Background in pre-sales and RFP/RFI responses
+""",
+
+    "Product Manager": """\
+Position: Product Manager
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for a strategic and execution-focused Product Manager to own the product roadmap and drive the delivery of features that create value for our users and business.
+
+Key Responsibilities:
+- Define product vision, strategy, and roadmap aligned with company goals
+- Gather and prioritize requirements from customers, stakeholders, and data insights
+- Write detailed product requirement documents (PRDs), user stories, and acceptance criteria
+- Collaborate with engineering, design, data, and business teams throughout the product lifecycle
+- Define and track key product metrics and KPIs to measure success
+- Conduct user research, interviews, and usability sessions to deeply understand user needs
+- Prioritize backlog and manage sprint planning with engineering teams
+- Communicate product updates, decisions, and trade-offs to leadership and stakeholders
+- Analyse competitor products and market trends to identify opportunities
+- Drive go-to-market strategy for new feature launches
+
+Required Skills & Qualifications:
+- Bachelor's/MBA degree in Business, Computer Science, or related field
+- 3–6 years of product management experience in a tech company
+- Strong analytical skills with experience using data tools (SQL, Amplitude, Mixpanel, GA)
+- Experience with Agile/Scrum methodologies and project management tools (JIRA, Confluence)
+- Excellent communication and stakeholder management skills
+- Ability to make data-driven decisions and manage ambiguity
+
+Good to Have:
+- Technical background or experience working closely with engineering teams
+- Experience with A/B experimentation and growth product management
+- Knowledge of B2B SaaS, fintech, or consumer internet domains
+""",
+
+    "Project Manager": """\
+Position: Project Manager
+Location: [City, India] | Full-Time
+
+About the Role:
+We are seeking an experienced Project Manager to plan, execute, and deliver technology projects on time and within budget. You will coordinate across multiple teams and ensure seamless project delivery.
+
+Key Responsibilities:
+- Plan, schedule, and manage end-to-end delivery of technology projects
+- Define project scope, goals, deliverables, timelines, and resource requirements
+- Create and maintain detailed project plans using project management tools
+- Facilitate daily stand-ups, sprint reviews, retrospectives, and stakeholder meetings
+- Identify, assess, and mitigate project risks and dependencies proactively
+- Manage project budgets and resource allocation
+- Track and report project status, milestones, and KPIs to leadership
+- Coordinate across engineering, QA, design, business, and vendor teams
+- Manage change requests and scope creep effectively
+- Ensure projects meet quality, compliance, and delivery standards
+
+Required Skills & Qualifications:
+- Bachelor's degree in Business, Computer Science, or equivalent
+- 4–8 years of project management experience in IT or software delivery
+- PMP, PRINCE2, or equivalent certification preferred
+- Proficiency with project management tools: MS Project, JIRA, Asana, or Monday.com
+- Strong knowledge of Agile, Scrum, and Waterfall methodologies
+- Excellent stakeholder management and communication skills
+
+Good to Have:
+- Experience managing cross-border or distributed teams
+- Technical background in software development or DevOps
+- Familiarity with program-level planning and portfolio management
+""",
+
+    "Business Analyst": """\
+Position: Business Analyst
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for an insightful Business Analyst to bridge the gap between business needs and technology solutions. You will gather requirements, analyse data, and ensure technology projects deliver real business value.
+
+Key Responsibilities:
+- Elicit, analyse, and document business requirements from stakeholders
+- Translate business needs into functional specifications, use cases, and user stories
+- Conduct gap analysis between current and desired business processes
+- Facilitate workshops and stakeholder meetings to gather and validate requirements
+- Create process flow diagrams, data flow diagrams, and wireframes
+- Collaborate with development teams to ensure requirements are correctly understood and implemented
+- Define and execute user acceptance testing (UAT) plans
+- Analyse business data to identify trends, patterns, and improvement opportunities
+- Track and manage requirement changes throughout the project lifecycle
+- Prepare business case documents and ROI analysis for new initiatives
+
+Required Skills & Qualifications:
+- Bachelor's degree in Business, Computer Science, or related field
+- 3–5 years of business analysis experience in IT projects
+- Proficiency with tools: JIRA, Confluence, Visio, Lucidchart, or similar
+- Strong SQL skills for data analysis and reporting
+- Experience with Agile and Waterfall project methodologies
+- Excellent communication, documentation, and facilitation skills
+
+Good to Have:
+- CBAP certification or equivalent
+- Experience in BFSI, e-commerce, or healthcare domains
+- Familiarity with BI tools (Tableau, Power BI, Looker)
+""",
+
+    "Agile Coach / Scrum Master": """\
+Position: Agile Coach / Scrum Master
+Location: [City, India] | Full-Time
+
+About the Role:
+We are hiring an experienced Agile Coach / Scrum Master to embed agile culture and practices across our engineering and product teams. You will coach teams to self-organize, continuously improve, and deliver value iteratively.
+
+Key Responsibilities:
+- Facilitate Scrum ceremonies: sprint planning, daily stand-ups, sprint reviews, and retrospectives
+- Coach teams on Agile principles, Scrum framework, Kanban, and SAFe practices
+- Remove impediments and shield teams from external disruptions to maintain flow
+- Track and report team velocity, sprint burn-down, and delivery metrics
+- Work with product managers to maintain a healthy and prioritised product backlog
+- Identify and help resolve team dysfunctions and improve collaboration
+- Drive continuous improvement through retrospectives and process experiments
+- Support organizational agile transformation initiatives
+- Mentor and coach other Scrum Masters and team leads
+- Facilitate cross-team dependency management and PI planning (SAFe context)
+
+Required Skills & Qualifications:
+- Bachelor's degree in any field; technical background preferred
+- 4–8 years of experience as a Scrum Master or Agile Coach
+- CSM, PSM, or SAFe certification required; CSP or ICP-ACC preferred
+- Deep knowledge of Agile frameworks: Scrum, Kanban, XP, and SAFe
+- Experience with Agile tools: JIRA, Azure DevOps, or Rally
+- Strong facilitation, coaching, and conflict resolution skills
+
+Good to Have:
+- Experience with large-scale agile transformations
+- Technical background in software development or QA
+- Knowledge of DevOps and Lean practices
+""",
+
+    "Cybersecurity Analyst": """\
+Position: Cybersecurity Analyst
+Location: [City, India] | Full-Time
+
+About the Role:
+We are seeking a vigilant and skilled Cybersecurity Analyst to protect our systems, networks, and data from cyber threats. You will monitor, detect, investigate, and respond to security incidents while strengthening our overall security posture.
+
+Key Responsibilities:
+- Monitor security events and alerts using SIEM tools (Splunk, IBM QRadar, Microsoft Sentinel)
+- Investigate and respond to security incidents, conducting thorough forensic analysis
+- Perform vulnerability assessments and penetration testing on systems and applications
+- Manage and maintain security tools: firewalls, IDS/IPS, EDR, DLP, and WAF
+- Conduct threat intelligence analysis and proactive threat hunting
+- Implement and enforce security policies, standards, and compliance requirements
+- Perform security audits and risk assessments across infrastructure and applications
+- Support security awareness training and phishing simulation programs
+- Collaborate with IT and development teams to implement security best practices
+- Prepare incident reports and security metrics for management
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science, Information Security, or equivalent
+- 2–5 years of cybersecurity experience
+- Strong knowledge of networking, TCP/IP, firewalls, and intrusion detection
+- Experience with SIEM platforms, log analysis, and threat detection
+- Familiarity with security frameworks: NIST CSF, ISO 27001, OWASP
+- Knowledge of regulatory compliance: GDPR, PCI-DSS, HIPAA, or IT Act
+
+Good to Have:
+- Certifications: CEH, CompTIA Security+, CISSP, or OSCP
+- Experience with cloud security (AWS Security Hub, Azure Defender, GCP Security Command Center)
+- Knowledge of malware analysis and reverse engineering
+""",
+
+    "Blockchain Developer": """\
+Position: Blockchain Developer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for a skilled Blockchain Developer to design and build decentralized applications and smart contracts. You will work on cutting-edge blockchain infrastructure powering fintech, supply chain, or Web3 products.
+
+Key Responsibilities:
+- Design, develop, and deploy smart contracts on Ethereum, Polygon, Solana, or Hyperledger
+- Build decentralized applications (dApps) with Web3 frontend integration
+- Develop and audit smart contracts for correctness, gas optimization, and security
+- Integrate blockchain backends with traditional web APIs and data systems
+- Implement token standards: ERC-20, ERC-721, ERC-1155
+- Build and manage nodes, validators, and private blockchain networks
+- Implement cryptographic protocols, consensus mechanisms, and wallet integrations
+- Conduct smart contract security audits and vulnerability assessments
+- Collaborate with product and frontend teams on blockchain-powered features
+- Stay current with emerging blockchain protocols, DeFi, and NFT ecosystems
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 2–5 years of blockchain development experience
+- Strong proficiency in Solidity, Rust, or Go for smart contract development
+- Experience with Web3.js, Ethers.js, or Hardhat/Truffle development environments
+- Solid understanding of blockchain fundamentals: cryptography, consensus, and distributed ledgers
+- Experience with IPFS, The Graph, or Chainlink for decentralized infrastructure
+
+Good to Have:
+- Experience with Layer 2 solutions (Polygon, Optimism, Arbitrum)
+- Knowledge of DeFi protocols (Uniswap, Aave, Compound)
+- Smart contract audit experience or familiarity with tools like Slither/MythX
+""",
+
+    "Game Developer": """\
+Position: Game Developer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are seeking a creative and technically strong Game Developer to design and build engaging gaming experiences. You will work on gameplay mechanics, graphics, physics, and performance to deliver polished games across platforms.
+
+Key Responsibilities:
+- Design and implement gameplay mechanics, systems, and features
+- Develop high-quality game code using Unity (C#) or Unreal Engine (C++)
+- Implement physics simulations, AI behaviours, and animation systems
+- Optimize game performance for target platforms: mobile, PC, or console
+- Build multiplayer networking systems and real-time game state synchronization
+- Integrate monetization systems: in-app purchases, ads, and reward systems
+- Collaborate with artists, designers, and sound engineers to integrate assets
+- Debug and profile games to resolve performance, memory, and stability issues
+- Implement analytics and crash reporting for live game monitoring
+- Contribute to game design discussions and player experience improvements
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent; game development diploma a plus
+- 2–5 years of professional game development experience
+- Proficiency in Unity (C#) or Unreal Engine (C++)
+- Strong understanding of 3D math, physics, and rendering pipelines
+- Experience shipping at least one commercial game on mobile, PC, or console
+- Knowledge of platform-specific SDKs (iOS, Android, Steam, PlayStation)
+
+Good to Have:
+- Experience with multiplayer game development (Photon, Mirror, or custom solutions)
+- Knowledge of shader programming (HLSL, GLSL)
+- Familiarity with procedural generation or ML-based game AI
+""",
+
+    "AR/VR Developer": """\
+Position: AR/VR Developer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are hiring an AR/VR Developer to build immersive augmented and virtual reality experiences. You will push the boundaries of spatial computing to create next-generation applications for training, entertainment, and enterprise use cases.
+
+Key Responsibilities:
+- Develop immersive AR/VR applications using Unity (C#) or Unreal Engine (C++)
+- Implement spatial interactions, hand tracking, gaze input, and 6DoF controller support
+- Build AR experiences using ARKit (iOS), ARCore (Android), or HoloLens SDK
+- Optimize rendering pipelines for high frame rates and low latency on XR hardware
+- Implement 3D spatial audio and haptic feedback systems
+- Integrate real-world sensor data (LiDAR, depth cameras) into AR applications
+- Collaborate with designers and 3D artists to create compelling spatial UX
+- Test and debug across various XR devices: Meta Quest, HoloLens, Magic Leap, iOS/Android
+- Research and apply the latest spatial computing technologies and standards (OpenXR)
+- Document technical architecture and integration guides
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 2–5 years of AR/VR development experience
+- Proficiency in Unity or Unreal Engine for XR development
+- Experience with AR frameworks: ARKit, ARCore, Vuforia, or Windows Mixed Reality
+- Strong 3D math skills: vectors, quaternions, transformation matrices
+- Understanding of XR performance constraints and optimization strategies
+
+Good to Have:
+- Experience with WebXR for browser-based AR/VR
+- Knowledge of spatial mapping and SLAM algorithms
+- Familiarity with OpenXR standard and multi-device deployment
+""",
+
+    "Digital Marketing Specialist": """\
+Position: Digital Marketing Specialist
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for a data-driven Digital Marketing Specialist to plan, execute, and optimize our online marketing campaigns. You will drive user acquisition, engagement, and retention across multiple digital channels.
+
+Key Responsibilities:
+- Plan and execute multi-channel digital marketing campaigns: SEO, SEM, social media, email, and content
+- Manage and optimize paid advertising campaigns on Google Ads, Meta Ads, LinkedIn Ads, and programmatic platforms
+- Conduct keyword research, on-page and off-page SEO optimization
+- Develop content calendars and oversee content creation for blogs, social media, and email newsletters
+- Analyse campaign performance using Google Analytics 4, Search Console, and marketing dashboards
+- Run A/B tests on ad creatives, landing pages, and email subject lines
+- Manage marketing automation workflows using HubSpot, Mailchimp, or similar tools
+- Collaborate with the product and sales teams on lead generation and conversion optimization
+- Track and report marketing KPIs: CAC, ROAS, CTR, conversion rates, and MQL pipeline
+- Monitor competitor digital presence and identify market opportunities
+
+Required Skills & Qualifications:
+- Bachelor's degree in Marketing, Business, or Communications
+- 2–5 years of digital marketing experience
+- Proficiency in Google Ads, Meta Ads Manager, and LinkedIn Campaign Manager
+- Strong analytical skills with Google Analytics, Data Studio, or similar BI tools
+- Knowledge of SEO best practices, tools (Ahrefs, SEMrush, Moz), and CRO techniques
+- Experience with email marketing and marketing automation platforms
+
+Good to Have:
+- Google Ads and Meta Blueprint certifications
+- Experience with video marketing (YouTube, Instagram Reels)
+- Knowledge of growth hacking and performance marketing for SaaS or e-commerce
+""",
+
+    "Technical Writer": """\
+Position: Technical Writer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are seeking an experienced Technical Writer to produce clear, accurate, and user-friendly technical documentation. You will transform complex technical information into content that developers, end-users, and stakeholders can easily understand.
+
+Key Responsibilities:
+- Create and maintain developer documentation: API references, SDKs, integration guides, and tutorials
+- Write end-user documentation: user manuals, help articles, FAQs, and release notes
+- Collaborate with engineers, product managers, and designers to gather technical information
+- Develop and maintain a documentation style guide and information architecture
+- Structure documentation sites using tools like Confluence, Notion, GitBook, or Docusaurus
+- Review and edit technical content written by engineers for clarity and accuracy
+- Gather user feedback on documentation quality and address gaps
+- Produce video scripts and UI tooltips as part of in-product help
+- Keep documentation up-to-date with product releases and API changes
+- Ensure consistency of terminology, tone, and style across all documentation
+
+Required Skills & Qualifications:
+- Bachelor's degree in English, Journalism, Computer Science, or equivalent
+- 2–5 years of technical writing experience for software or hardware products
+- Ability to understand and document APIs, code samples, and CLI tools
+- Proficiency with documentation tools: Confluence, Notion, ReadMe, or Docusaurus
+- Strong written communication and editing skills
+- Basic familiarity with markup languages: Markdown, reStructuredText, or XML/DITA
+
+Good to Have:
+- Experience writing API documentation using OpenAPI/Swagger
+- Familiarity with developer tooling: Git, VS Code, terminal/CLI
+- Knowledge of documentation-as-code workflows
+""",
+
+    "Technical Sales Engineer": """\
+Position: Technical Sales Engineer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for a Technical Sales Engineer to bridge the gap between our product capabilities and customer needs. You will support the sales team by providing technical expertise, conducting product demos, and ensuring customers achieve success with our solutions.
+
+Key Responsibilities:
+- Serve as the primary technical resource for the sales team during pre-sales engagements
+- Conduct product demonstrations, proof-of-concept deployments, and technical evaluations
+- Understand customer technical requirements and map them to our product capabilities
+- Respond to RFPs, RFIs, and security questionnaires with accurate technical content
+- Build and present custom technical proposals and solution architectures
+- Collaborate with product and engineering teams to convey customer feedback and feature requests
+- Support customer onboarding and post-sale technical transitions
+- Develop technical sales collateral: battle cards, solution briefs, and integration guides
+- Attend industry conferences, webinars, and customer events as a technical spokesperson
+- Build long-term trusted advisor relationships with technical stakeholders at customer organizations
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 3–6 years of experience in technical sales, solutions engineering, or pre-sales
+- Strong technical aptitude: APIs, cloud platforms, SaaS architectures, and integrations
+- Excellent presentation, communication, and stakeholder management skills
+- Experience with CRM tools (Salesforce, HubSpot) and demo environments
+- Ability to explain complex technical concepts to both technical and non-technical audiences
+
+Good to Have:
+- Background in software engineering or DevOps
+- Industry certifications (AWS, Azure, GCP, or product-specific)
+- Experience in B2B SaaS, cloud infrastructure, or cybersecurity sales
+""",
+
+    "E-commerce Specialist": """\
+Position: E-commerce Specialist
+Location: [City, India] | Full-Time
+
+About the Role:
+We are seeking an E-commerce Specialist to manage and grow our online retail operations. You will own the end-to-end product listing, catalogue management, campaign execution, and performance optimization across e-commerce platforms.
+
+Key Responsibilities:
+- Manage product listings, catalogue, pricing, and inventory across e-commerce platforms (Amazon, Flipkart, Meesho, own website)
+- Optimize product pages for SEO, conversion, and discoverability
+- Plan and execute promotional campaigns, flash sales, and festive offers
+- Analyse sales data and customer behaviour to identify growth opportunities
+- Coordinate with supply chain and logistics teams for fulfilment and returns management
+- Manage seller accounts, ratings, and brand storefronts on marketplace platforms
+- Run and optimize performance marketing campaigns on Amazon Ads, Google Shopping
+- Monitor competitor pricing, assortment, and promotional strategies
+- Collaborate with design and content teams for creative assets and copy
+- Prepare regular performance reports and present insights to leadership
+
+Required Skills & Qualifications:
+- Bachelor's degree in Business, Marketing, or equivalent
+- 2–5 years of e-commerce or marketplace management experience
+- Hands-on experience with Amazon Seller Central, Flipkart Seller Hub, or Shopify
+- Strong analytical skills with Excel/Google Sheets and data dashboards
+- Understanding of e-commerce SEO, listing optimization, and A+ content
+- Knowledge of digital marketing: paid ads, email marketing, and social commerce
+
+Good to Have:
+- Experience with D2C brand building and own-website e-commerce
+- Familiarity with ERP or inventory management software
+- Knowledge of GST compliance for e-commerce in India
+""",
+
+    "Fintech Developer": """\
+Position: Fintech Developer
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for an experienced Fintech Developer to build secure, reliable, and scalable financial technology solutions. You will develop features spanning payments, lending, wealth management, or banking platforms.
+
+Key Responsibilities:
+- Design and develop core fintech platform features: payments, wallets, lending, or investment modules
+- Integrate with payment gateways (Razorpay, PayU, Stripe, PayPal) and banking APIs (UPI, NEFT, IMPS)
+- Implement RBI-compliant KYC/AML workflows and regulatory reporting features
+- Build secure financial transaction processing systems with ACID guarantees
+- Develop APIs for internal microservices and third-party integrations (NBFC, bank, insurance partners)
+- Implement double-entry accounting systems and reconciliation engines
+- Ensure PCI-DSS compliance and end-to-end encryption for sensitive financial data
+- Collaborate with compliance, risk, and product teams on regulatory and feature requirements
+- Write comprehensive unit, integration, and stress tests for financial logic
+- Monitor and troubleshoot production financial systems with zero-tolerance for downtime
+
+Required Skills & Qualifications:
+- B.E./B.Tech in Computer Science or equivalent
+- 3–6 years of software development experience with 2+ years in fintech
+- Strong backend proficiency: Java, Python, Go, or Node.js
+- Experience with payment gateway and banking API integrations
+- Knowledge of financial regulations: RBI guidelines, PCI-DSS, SEBI compliance
+- Deep understanding of database transactions, consistency, and fault tolerance
+
+Good to Have:
+- Experience with core banking systems or lending management platforms
+- Knowledge of blockchain for financial applications
+- Familiarity with ISO 8583 or FIX protocol for financial messaging
+""",
+
+    "Healthcare Tech Specialist": """\
+Position: Healthcare Tech Specialist
+Location: [City, India] | Full-Time
+
+About the Role:
+We are seeking a Healthcare Tech Specialist to build and implement technology solutions for healthcare providers, payers, or digital health platforms. You will combine technical expertise with domain knowledge to improve patient outcomes and healthcare operations.
+
+Key Responsibilities:
+- Develop and maintain healthcare software solutions: EMR/EHR integrations, telehealth platforms, or health analytics
+- Implement HL7 FHIR, HL7 v2, and DICOM standards for healthcare data interoperability
+- Build secure patient data management systems compliant with HIPAA and India's DPDP Act
+- Integrate with ABDM (Ayushman Bharat Digital Mission) health stack and NHA APIs
+- Develop clinical decision support and care coordination features
+- Build data pipelines for population health analytics and clinical reporting
+- Collaborate with clinical staff, doctors, and healthcare administrators to define requirements
+- Ensure system availability, data integrity, and security for critical healthcare workflows
+- Implement telemedicine, scheduling, and billing modules
+- Conduct compliance reviews and prepare documentation for health IT audits
+
+Required Skills & Qualifications:
+- B.E./B.Tech/B.Sc in Computer Science, Biomedical Engineering, or equivalent
+- 3–6 years of healthcare IT experience
+- Knowledge of HL7 FHIR, ABDM standards, and clinical terminologies (ICD-10, SNOMED-CT, LOINC)
+- Strong backend development skills (Python, Java, or Node.js)
+- Experience with healthcare compliance frameworks (HIPAA, ISO 27799)
+- Familiarity with cloud-based healthcare platforms (AWS HealthLake, Google Healthcare API)
+
+Good to Have:
+- Experience with AI/ML applications in clinical decision support or medical imaging
+- Knowledge of DICOM for medical imaging
+- Background in pharmacy management or lab information systems
+""",
+
+    "EdTech Specialist": """\
+Position: EdTech Specialist
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for an EdTech Specialist to build and enhance digital learning platforms that transform education. You will combine instructional design expertise with technical skills to deliver engaging, personalized learning experiences at scale.
+
+Key Responsibilities:
+- Design, develop, and maintain Learning Management Systems (LMS) and digital learning platforms
+- Build adaptive learning pathways using learner data and AI-driven personalization
+- Develop interactive content modules, assessments, and gamification features
+- Integrate video streaming, live class, and collaborative learning tools
+- Implement SCORM, xAPI, and LTI standards for content interoperability
+- Build learner analytics dashboards to track engagement, progress, and outcomes
+- Collaborate with educators, instructional designers, and content teams
+- Develop mobile learning applications for Android and iOS
+- Ensure platform accessibility (WCAG) for diverse learner populations
+- Optimize platform performance for low-bandwidth environments in Tier 2/3 India
+
+Required Skills & Qualifications:
+- B.E./B.Tech or Bachelor's in Education Technology, Computer Science, or related field
+- 3–6 years of EdTech product or platform development experience
+- Proficiency in full stack web development (React.js, Node.js/Python)
+- Experience with LMS platforms (Moodle, Canvas, or custom-built)
+- Knowledge of e-learning standards: SCORM, xAPI (Tin Can), LTI
+- Familiarity with video streaming technologies (HLS, WebRTC, Zoom/Agora SDK)
+
+Good to Have:
+- Experience with AI tutoring, NLP-based assessments, or adaptive learning algorithms
+- Knowledge of content authoring tools (Articulate Storyline, Adobe Captivate)
+- Background in K-12, higher education, or corporate training domains
+""",
+}
+
+# ── Auto-fill JD from template when job title changes ───────────────────────
+def _get_jd_default() -> str:
+    """Return the JD template for the currently selected job title, or empty string."""
+    _sel = st.session_state.get("jt_select", "— Select Job Title —")
+    if _sel in ("— Select Job Title —", "Other (type below)", ""):
+        return ""
+    return _JD_TEMPLATES.get(_sel, "")
+
+def _on_jt_change() -> None:
+    """Called when job title selectbox changes — push template into JD field."""
+    _new_title = st.session_state.get("jt_select", "")
+    if _new_title not in ("— Select Job Title —", "Other (type below)", ""):
+        st.session_state["jd_textarea"] = _JD_TEMPLATES.get(_new_title, "")
+    else:
+        st.session_state["jd_textarea"] = ""
+
 # ---------------- Job Information Dropdown ----------------
 with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Enter Job Details", expanded=False):
 
@@ -3150,6 +4232,7 @@ with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.
         "![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Job Title",
         _JOB_TITLE_OPTIONS,
         key="jt_select",
+        on_change=_on_jt_change,
     )
     if _jt_choice == "Other (type below)":
         job_title = st.text_input(
@@ -3179,9 +4262,15 @@ with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.
     else:
         user_location = _loc_choice
 
+    # ── Job Description — pre-filled from template, fully editable ───────────
+    if "jd_textarea" not in st.session_state:
+        st.session_state["jd_textarea"] = ""
+
     job_description = st.text_area(
         "![Description](https://img.icons8.com/ios-filled/20/document.png) Paste Job Description",
-        height=200
+        height=200,
+        key="jd_textarea",
+        placeholder="Select a Job Title above to auto-fill a standard JD, or paste your own here.",
     )
 
     # ── Resume Analyzer quota badge — unchanged below this line ──────────────
