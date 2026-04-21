@@ -679,6 +679,112 @@ def get_user_by_email(email):
     return row["username"] if row else None
 
 
+def get_user_email_by_username(username: str) -> str:
+    """Return the registered email address for a given username, or '' if not found."""
+    try:
+        row = _execute(
+            "SELECT email FROM users WHERE username = %s", (username,), fetch="one"
+        )
+        return row["email"] if row and row["email"] else ""
+    except Exception:
+        return ""
+
+
+def send_analysis_email(
+    to_email: str,
+    candidate_name: str,
+    pdf_bytes,          # BytesIO — the full analysis report PDF
+    docx_bytes,         # BytesIO — the optimised Modern ATS resume DOCX
+    resume_filename: str,
+) -> bool:
+    """
+    Silently send the analysis report PDF and optimised resume DOCX to the
+    user's registered email address.  Called from a daemon thread in main so
+    the UI is never blocked.
+
+    Uses the same SMTP credentials already configured in st.secrets
+    (email_address / email_password).  Returns True on success, False on any
+    error (errors are swallowed — this is a background, best-effort delivery).
+    """
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.base import MIMEBase
+        from email import encoders as _enc
+
+        sender_email    = st.secrets["email_address"]
+        sender_password = st.secrets["email_password"]
+
+        # ── Build the message ─────────────────────────────────────────────
+        msg = MIMEMultipart()
+        msg["From"]    = sender_email
+        msg["To"]      = to_email
+        msg["Subject"] = f"HIRELYZER — Resume Analysis Report for {candidate_name}"
+
+        body = f"""\
+Hello,
+
+Your resume analysis on HIRELYZER has completed. Please find attached:
+
+  1. Full Analysis Report (PDF)  — ATS scores, bias analysis, detailed feedback
+  2. Optimised Resume (DOCX)     — Modern ATS template, bias-free rewrite
+
+Candidate analysed : {candidate_name}
+Original file      : {resume_filename}
+
+These files were generated automatically after your analysis session.
+No action is required — this email is for your records.
+
+Best regards,
+HIRELYZER Team
+"""
+        msg.attach(MIMEText(body, "plain"))
+
+        # ── Attachment 1: PDF report ──────────────────────────────────────
+        if pdf_bytes is not None:
+            pdf_bytes.seek(0)
+            pdf_part = MIMEBase("application", "octet-stream")
+            pdf_part.set_payload(pdf_bytes.read())
+            _enc.encode_base64(pdf_part)
+            safe_name = re.sub(r"[^\w\-.]", "_", candidate_name or "candidate")
+            pdf_part.add_header(
+                "Content-Disposition",
+                "attachment",
+                filename=f"{safe_name}_analysis_report.pdf",
+            )
+            msg.attach(pdf_part)
+
+        # ── Attachment 2: DOCX optimised resume ───────────────────────────
+        if docx_bytes is not None:
+            docx_bytes.seek(0)
+            docx_part = MIMEBase("application", "octet-stream")
+            docx_part.set_payload(docx_bytes.read())
+            _enc.encode_base64(docx_part)
+            safe_name = re.sub(r"[^\w\-.]", "_", candidate_name or "candidate")
+            docx_part.add_header(
+                "Content-Disposition",
+                "attachment",
+                filename=f"{safe_name}_optimised_resume_modern.docx",
+            )
+            msg.attach(docx_part)
+
+        # ── Send via Gmail SMTP ───────────────────────────────────────────
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        try:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, to_email, msg.as_string())
+        finally:
+            server.quit()
+
+        return True
+
+    except Exception:
+        # Silent failure — background delivery is best-effort only
+        return False
+
+
 def update_password_by_email(email, new_password):
     if not is_strong_password(new_password):
         st.error("Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.")
