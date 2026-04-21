@@ -12,8 +12,6 @@ import smtplib
 import uuid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
 import dns.resolver
 
 
@@ -774,96 +772,3 @@ def check_and_gate_feature(username: str, feature: str):
         )
         return False, msg
     return True, f"{count}/{limit} uses this hour."
-
-
-# ── Analysis email ────────────────────────────────────────────────────────────
-
-def get_user_email(username: str):
-    """Return the registered email for a username, or None if not found."""
-    try:
-        row = _execute(
-            "SELECT email FROM users WHERE username = %s", (username,), fetch="one"
-        )
-        return row["email"] if row and row["email"] else None
-    except Exception:
-        return None
-
-
-def send_analysis_email(
-    to_email: str,
-    candidate_name: str,
-    pdf_bytes: bytes,
-    docx_bytes: bytes,
-    base_filename: str = "resume",
-) -> bool:
-    """
-    Send the analysis PDF report + Modern ATS DOCX to the user's registered email.
-    Runs synchronously — always call via threading.Thread to avoid blocking the UI.
-    Returns True on success, False on any failure (never raises).
-    """
-    try:
-        sender_email    = st.secrets["email_address"]
-        sender_password = st.secrets["email_password"]
-
-        # ── Build message ────────────────────────────────────────────────────
-        msg             = MIMEMultipart()
-        msg['From']     = sender_email
-        msg['To']       = to_email
-        msg['Subject']  = f"Your Resume Analysis Report — {candidate_name}"
-
-        # ── Plain-text body ──────────────────────────────────────────────────
-        body = f"""Hello {candidate_name},
-
-Your resume analysis is complete. Please find attached:
-
-  1. {base_filename}_report.pdf        — Full ATS analysis report
-  2. {base_filename}_modern_ats.docx   — Optimized resume (Modern ATS template)
-
-You can download the other resume templates (Minimal, Executive) directly from the app.
-
-Best regards,
-Resume Analyzer Team
-"""
-        msg.attach(MIMEText(body, 'plain'))
-
-        # ── Attach PDF report ────────────────────────────────────────────────
-        if pdf_bytes:
-            pdf_part = MIMEBase('application', 'pdf')
-            pdf_part.set_payload(pdf_bytes)
-            encoders.encode_base64(pdf_part)
-            pdf_part.add_header(
-                'Content-Disposition',
-                'attachment',
-                filename=f"{base_filename}_report.pdf"
-            )
-            msg.attach(pdf_part)
-
-        # ── Attach Modern DOCX ───────────────────────────────────────────────
-        if docx_bytes:
-            docx_payload = docx_bytes if isinstance(docx_bytes, bytes) else docx_bytes.read()
-            docx_part = MIMEBase(
-                'application',
-                'vnd.openxmlformats-officedocument.wordprocessingml.document'
-            )
-            docx_part.set_payload(docx_payload)
-            encoders.encode_base64(docx_part)
-            docx_part.add_header(
-                'Content-Disposition',
-                'attachment',
-                filename=f"{base_filename}_modern_ats.docx"
-            )
-            msg.attach(docx_part)
-
-        # ── Send via SMTP ────────────────────────────────────────────────────
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        try:
-            server.starttls()
-            server.login(sender_email, sender_password)
-            server.sendmail(sender_email, to_email, msg.as_string())
-        finally:
-            server.quit()  # always close — prevent SMTP connection leak
-
-        return True
-
-    except Exception:
-        return False  # silent failure — never break the main analysis flow
