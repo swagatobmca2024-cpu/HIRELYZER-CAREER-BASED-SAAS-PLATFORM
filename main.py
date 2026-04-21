@@ -60,6 +60,7 @@ from user_login import (
     domain_has_mx_record, send_login_link, verify_login_token,
     cleanup_expired_login_tokens, check_and_gate_feature,
     record_feature_usage, get_usage_count_last_hour, check_brute_force,
+    get_user_email, send_analysis_email,
 )
 
 from resume_processor import (
@@ -4930,6 +4931,59 @@ with tab1:
                         use_container_width=True,
                         key=f"download_pdf_{resume['Resume Name']}"
                     )
+
+                    # ── Auto-email: send PDF report + Modern DOCX to registered email ──
+                    # Fires once per analysis in a background thread — never blocks UI.
+                    # Silently skipped if user has no email on record or is not logged in.
+                    try:
+                        _email_username = st.session_state.get("username")
+                        if _email_username:
+                            _user_email = get_user_email(_email_username)
+                            if _user_email:
+                                # Generate Modern DOCX bytes for attachment
+                                _email_docx_buf = generate_modern_docx(optimized_data)
+                                _email_docx_bytes = (
+                                    _email_docx_buf.read()
+                                    if hasattr(_email_docx_buf, 'read')
+                                    else bytes(_email_docx_buf.getvalue())
+                                )
+                                _email_pdf_bytes  = bytes(pdf_file)
+                                _email_candidate  = resume.get("Candidate Name", "Candidate")
+                                _email_basename   = base_name
+
+                                # Fire in background thread — UI is never blocked
+                                import threading as _threading
+                                _t = _threading.Thread(
+                                    target=send_analysis_email,
+                                    args=(
+                                        _user_email,
+                                        _email_candidate,
+                                        _email_pdf_bytes,
+                                        _email_docx_bytes,
+                                        _email_basename,
+                                    ),
+                                    daemon=True,
+                                )
+                                _t.start()
+
+                                # Masked email confirmation in UI  e.g.  j***@gmail.com
+                                _at      = _user_email.find('@')
+                                _masked  = (
+                                    _user_email[0] + "***" + _user_email[_at:]
+                                    if _at > 1 else "***" + _user_email[_at:]
+                                )
+                                st.markdown(
+                                    f'<div style="margin-top:10px;display:flex;align-items:center;'
+                                    f'gap:8px;font-size:0.82rem;color:#34d399;font-family:-apple-system,sans-serif;">'
+                                    f'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
+                                    f'stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+                                    f'<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>'
+                                    f'<polyline points="22,6 12,13 2,6"/></svg>'
+                                    f'Analysis report sent to <b>{_masked}</b></div>',
+                                    unsafe_allow_html=True,
+                                )
+                    except Exception:
+                        pass  # never break the main flow
 
     elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
