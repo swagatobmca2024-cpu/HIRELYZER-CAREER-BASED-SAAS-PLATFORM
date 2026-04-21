@@ -6,6 +6,7 @@ import string
 import re
 import asyncio
 import io
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.parse
 import base64
@@ -60,6 +61,7 @@ from user_login import (
     domain_has_mx_record, send_login_link, verify_login_token,
     cleanup_expired_login_tokens, check_and_gate_feature,
     record_feature_usage, get_usage_count_last_hour, check_brute_force,
+    get_user_email_by_username, send_analysis_email,
 )
 
 from resume_processor import (
@@ -4109,6 +4111,39 @@ Return ONLY one domain from this list, nothing else:
         _rec_username = st.session_state.get("username")
         if _rec_username:
             record_feature_usage(_rec_username, "resume_analyzer")
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── Silently email the report + optimised resume to the user ─────────
+        # Runs in a daemon thread so the UI is never blocked.
+        # Generates the PDF and Modern DOCX from data already in memory.
+        try:
+            _email_username  = st.session_state.get("username", "")
+            _email_to        = get_user_email_by_username(_email_username) if _email_username else ""
+            _email_candidate = candidate_name
+            _email_resume_fn = uploaded_file.name
+
+            if _email_to:
+                # Build both attachments now (in the main thread, data is in scope)
+                _email_html_report = generate_resume_report_html(
+                    st.session_state.resume_data[-1],
+                    user_location=user_location,
+                )
+                _email_pdf_bytes  = html_to_pdf_bytes(_email_html_report)
+                _email_docx_bytes = generate_modern_docx(optimized_resume_data)
+
+                threading.Thread(
+                    target=send_analysis_email,
+                    args=(
+                        _email_to,
+                        _email_candidate,
+                        _email_pdf_bytes,
+                        _email_docx_bytes,
+                        _email_resume_fn,
+                    ),
+                    daemon=True,
+                ).start()
+        except Exception:
+            pass  # Silent — never surface email errors to the user
         # ─────────────────────────────────────────────────────────────────────
 
         # ✅ IMPROVED: Smoother success animation with better transitions
