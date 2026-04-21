@@ -6,6 +6,7 @@ import string
 import re
 import asyncio
 import io
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.parse
 import base64
@@ -60,6 +61,7 @@ from user_login import (
     domain_has_mx_record, send_login_link, verify_login_token,
     cleanup_expired_login_tokens, check_and_gate_feature,
     record_feature_usage, get_usage_count_last_hour, check_brute_force,
+    get_user_email_by_username, send_analysis_email,
 )
 
 from resume_processor import (
@@ -3073,44 +3075,44 @@ st.sidebar.markdown(
 _JOB_TITLE_OPTIONS = [
     "— Select Job Title —",
     # ── Core Software ──
-    "Software Engineer",
-    "Backend Developer",
-    "Frontend Developer",
-    "Full Stack Developer",
-    "Mobile Developer",
+    "Software Engineer",           # Software Engineering
+    "Backend Developer",           # Backend Development
+    "Frontend Developer",          # Frontend Development
+    "Full Stack Developer",        # Full Stack Development
+    "Mobile Developer",            # Mobile Development
     # ── Data & AI ──
-    "Data Scientist",
-    "ML Engineer",
+    "Data Scientist",              # Data Science
+    "ML Engineer",                 # AI/Machine Learning
     # ── Infrastructure ──
-    "DevOps Engineer",
-    "Cloud Engineer",
-    "Site Reliability Engineer",
-    "Database Administrator",
-    "Network Engineer",
-    "Embedded Systems Engineer",
-    "IoT Engineer",
+    "DevOps Engineer",             # DevOps/Infrastructure
+    "Cloud Engineer",              # Cloud Engineering
+    "Site Reliability Engineer",   # Site Reliability Engineering
+    "Database Administrator",      # Database Management
+    "Network Engineer",            # Networking
+    "Embedded Systems Engineer",   # Embedded Systems
+    "IoT Engineer",                # IoT Development
     # ── Design & Quality ──
-    "UI/UX Designer",
-    "QA Engineer",
+    "UI/UX Designer",              # UI/UX Design
+    "QA Engineer",                 # Quality Assurance
     # ── Architecture & Management ──
-    "Solution Architect",
-    "Product Manager",
-    "Project Manager",
-    "Business Analyst",
-    "Agile Coach / Scrum Master",
+    "Solution Architect",          # System Architecture
+    "Product Manager",             # Product Management
+    "Project Manager",             # Project Management
+    "Business Analyst",            # Business Analysis
+    "Agile Coach / Scrum Master",  # Agile Coaching
     # ── Specialised Tech ──
-    "Cybersecurity Analyst",
-    "Blockchain Developer",
-    "Game Developer",
-    "AR/VR Developer",
+    "Cybersecurity Analyst",       # Cybersecurity
+    "Blockchain Developer",        # Blockchain Development
+    "Game Developer",              # Game Development
+    "AR/VR Developer",             # AR/VR Development
     # ── Non-Tech Domains ──
-    "Digital Marketing Specialist",
-    "Technical Writer",
-    "Technical Sales Engineer",
-    "E-commerce Specialist",
-    "Fintech Developer",
-    "Healthcare Tech Specialist",
-    "EdTech Specialist",
+    "Digital Marketing Specialist",# Digital Marketing
+    "Technical Writer",            # Technical Writing
+    "Technical Sales Engineer",    # Technical Sales
+    "E-commerce Specialist",       # E-commerce
+    "Fintech Developer",           # Fintech
+    "Healthcare Tech Specialist",  # Healthcare Tech
+    "EdTech Specialist",           # EdTech
     # ── Other ──
     "Other (type below)",
 ]
@@ -3181,6 +3183,8 @@ with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.
         "![Description](https://img.icons8.com/ios-filled/20/document.png) Paste Job Description",
         height=200
     )
+
+    # ── Resume Analyzer quota badge — unchanged below this line ──────────────
 
     # ── Resume Analyzer quota badge ───────────────────────────────────────────
     _ra_username = st.session_state.get("username")
@@ -4207,6 +4211,39 @@ Return ONLY one domain from this list, nothing else:
         _rec_username = st.session_state.get("username")
         if _rec_username:
             record_feature_usage(_rec_username, "resume_analyzer")
+        # ─────────────────────────────────────────────────────────────────────
+
+        # ── Silently email the report + optimised resume to the user ─────────
+        # Runs in a daemon thread so the UI is never blocked.
+        # Generates the PDF and Modern DOCX from data already in memory.
+        try:
+            _email_username  = st.session_state.get("username", "")
+            _email_to        = get_user_email_by_username(_email_username) if _email_username else ""
+            _email_candidate = candidate_name
+            _email_resume_fn = uploaded_file.name
+
+            if _email_to:
+                # Build both attachments now (in the main thread, data is in scope)
+                _email_html_report = generate_resume_report_html(
+                    st.session_state.resume_data[-1],
+                    user_location=user_location,
+                )
+                _email_pdf_bytes  = html_to_pdf_bytes(_email_html_report)
+                _email_docx_bytes = generate_modern_docx(optimized_resume_data)
+
+                threading.Thread(
+                    target=send_analysis_email,
+                    args=(
+                        _email_to,
+                        _email_candidate,
+                        _email_pdf_bytes,
+                        _email_docx_bytes,
+                        _email_resume_fn,
+                    ),
+                    daemon=True,
+                ).start()
+        except Exception:
+            pass  # Silent — never surface email errors to the user
         # ─────────────────────────────────────────────────────────────────────
 
         # ✅ IMPROVED: Smoother success animation with better transitions
