@@ -964,59 +964,17 @@ RESUME TEXT:
                         _after = f0.split(',', 1)[1].strip()
                         if len(_after) >= 2 and re.search(r'[a-zA-Z]', _after):
                             return True
-
-                    # ── City/PIN pattern: "Kolkata – 700034" or "Kolkata - 700034"
-                    # The dash + 6-digit PIN was matching the phone number regex
-                    # and being skipped — causing sidebar location to be injected
-                    # on top of an existing location. Detect this explicitly first.
-                    _CITY_PIN_PAT = re.compile(
-                        r'[a-zA-Z]{3,}[\s–—\-]+\d{6}'  # city – 700034
-                    )
-                    # Indian PIN code standalone: exactly 6 digits optionally preceded by city
-                    _PIN_PAT = re.compile(r'\d{6}')
-
-                    # City keyword pattern — all major Indian cities + generic terms
-                    _CITY_PAT = re.compile(
-                        r'\b(kolkata|calcutta|bangalore|bengaluru|hyderabad|mumbai|'
-                        r'pune|chennai|madras|delhi|new delhi|noida|gurgaon|gurugram|'
-                        r'ahmedabad|coimbatore|indore|jaipur|kochi|cochin|bhubaneswar|'
-                        r'chandigarh|nagpur|thiruvananthapuram|trivandrum|vizag|'
-                        r'visakhapatnam|surat|vadodara|ludhiana|agra|patna|'
-                        r'bhopal|thane|navi mumbai|mysore|mysuru|mangalore|'
-                        r'india|remote|work from home|wfh)\b',
-                        re.IGNORECASE
-                    )
-
-                    # Phone number pattern — must be purely digits/spaces/+/-/()/.
-                    # BUT: exclude if it also contains alpha chars (= city name present)
-                    def _is_phone(field):
-                        # Has alpha → not a phone (could be city–PIN like "Kolkata – 700034")
-                        if re.search(r'[a-zA-Z]', field):
-                            return False
-                        # Pure digit/symbol string of 7+ chars → phone
-                        return bool(re.match(r'^[\d\s\+\-\(\)\.]{7,}$', field))
-
-                    for f in pipe_fields[1:]:
+                    # Check fields from index 2 onward for any non-URL/email/phone text
+                    for f in pipe_fields[2:]:
                         if not f:
                             continue
                         if f.startswith('http'):
                             continue
                         if '@' in f:
                             continue
-                        # City–PIN pattern like "Kolkata – 700034" → location present
-                        if _CITY_PIN_PAT.search(f):
-                            return True
-                        # Standalone 6-digit PIN → Indian address present
-                        if _PIN_PAT.search(f) and not _is_phone(f):
-                            return True
-                        # Skip pure phone numbers
-                        if _is_phone(f):
+                        if re.match(r'^[\d\s\+\-\(\)\.]{7,}$', f):
                             continue
-                        # City keyword match → location present
-                        if _CITY_PAT.search(f):
-                            return True
-                        # Any remaining plain-text field → treat as location present
-                        return True
+                        return True  # found a real text field → location present
                     return False
 
                 if not _has_location_in_header(_header):
@@ -3556,50 +3514,17 @@ Match each listed skill against job description requirements. Reward:
 
 **🔑 Keyword Score ({keyword_weight} points max):**
 
-════════════════════════════════════════════════════════
-STEP 1 — SPLIT JD KEYWORDS INTO TWO TIERS
-════════════════════════════════════════════════════════
+Systematically extract ALL critical terms from the job description:
+technical tools, frameworks, methodologies, role titles, industry terms, certification names.
+Compare against resume. Credit synonyms and equivalent terms.
 
-Scan the job description carefully and split ALL keywords into:
-
-TIER 1 — REQUIRED (must-have): Keywords appearing under sections labelled:
-  "Required", "Must Have", "Mandatory", "Essential", "Minimum Qualifications",
-  "You Must Have", "Requirements", "Basic Qualifications", OR explicitly stated
-  as non-negotiable in the description body (e.g. "must know", "required experience").
-
-TIER 2 — PREFERRED (nice-to-have): Keywords appearing under sections labelled:
-  "Good to Have", "Preferred", "Nice to Have", "Bonus", "Advantageous",
-  "Plus", "Desirable", "Optional", OR implied as supplementary.
-
-If the JD has NO clear section separation → classify all technical tools/frameworks
-as TIER 1 and soft skills/certifications/domain knowledge as TIER 2.
-
-════════════════════════════════════════════════════════
-STEP 2 — SCORE USING WEIGHTED MATCH FORMULA
-════════════════════════════════════════════════════════
-
-TIER 1 keywords carry 70% of the keyword score weight.
-TIER 2 keywords carry 30% of the keyword score weight.
-
-Formula:
-  tier1_match_rate = (TIER 1 keywords found in resume) / (total TIER 1 keywords)
-  tier2_match_rate = (TIER 2 keywords found in resume) / (total TIER 2 keywords)
-  weighted_rate    = (tier1_match_rate × 0.70) + (tier2_match_rate × 0.30)
-
-Then map weighted_rate to score:
-  • {int(keyword_weight * 0.90)}–{keyword_weight}: Excellent — weighted_rate ≥ 0.85 AND tier1_match_rate ≥ 0.80
-  • {int(keyword_weight * 0.80)}: Very Good   — weighted_rate ≥ 0.75 AND tier1_match_rate ≥ 0.70
-  • {int(keyword_weight * 0.60)}–{int(keyword_weight * 0.70)}: Good        — weighted_rate ≥ 0.60 AND tier1_match_rate ≥ 0.55
-  • {int(keyword_weight * 0.40)}–{int(keyword_weight * 0.50)}: Fair        — weighted_rate ≥ 0.45 OR tier1_match_rate ≥ 0.50
-  • {int(keyword_weight * 0.20)}–{int(keyword_weight * 0.30)}: Basic       — weighted_rate ≥ 0.30
-  • {int(keyword_weight * 0.10)}: Limited     — weighted_rate ≥ 0.15
-  • 0: Poor — weighted_rate < 0.15
-
-⚠️ CRITICAL RULE: Missing even 1-2 TIER 1 required keywords is a significant gap.
-   A resume scoring 100% on TIER 2 but only 40% on TIER 1 should score FAIR at best.
-   Never award Excellent/Very Good if TIER 1 match rate is below 0.70.
-
-Credit synonyms and equivalent terms (e.g. "k8s" = "kubernetes", "tf" = "terraform").
+  • {int(keyword_weight * 0.90)}–{keyword_weight}: Excellent — 85%+ critical terms; strong industry vocabulary
+  • {int(keyword_weight * 0.80)}: Very Good — 75%+ critical terms
+  • {int(keyword_weight * 0.60)}–{int(keyword_weight * 0.70)}: Good — 65%+ critical terms
+  • {int(keyword_weight * 0.40)}–{int(keyword_weight * 0.50)}: Fair — 50%+ critical terms
+  • {int(keyword_weight * 0.20)}–{int(keyword_weight * 0.30)}: Basic — 35%+ critical terms
+  • {int(keyword_weight * 0.10)}: Limited — 20%+ critical terms
+  • 0: Poor — fewer than 20% critical terms
 
 ═══════════════════════════════════════════════════
 📋 REQUIRED OUTPUT FORMAT
@@ -3671,33 +3596,23 @@ SCORING SCALE for language ({lang_weight} pts max):
 [SEC:KEYWORD]
 **Score:** <0–{keyword_weight}> / {keyword_weight}
 
-**Tier 1 — Required Keywords:**
-- Total Required: <N keywords identified as TIER 1>
-- Matched in Resume: <X / N matched> (<match %>)
-- Matched Terms: <list each matched TIER 1 keyword>
-- Missing Required: <list each unmatched TIER 1 keyword — these are critical gaps>
+**Keyword Assessment:**
+- Industry Terminology Match: <Percentage and specific matches found>
+- Role-Specific Keywords Present: <List matched keywords>
+- Technical Vocabulary: <Tools, frameworks, platforms found in both>
+- Keyword Density Quality: <Natural integration vs. stuffing>
 
-**Tier 2 — Preferred Keywords:**
-- Total Preferred: <N keywords identified as TIER 2>
-- Matched in Resume: <X / N matched> (<match %>)
-- Matched Terms: <list each matched TIER 2 keyword>
-- Missing Preferred: <list each unmatched TIER 2 keyword>
+**Keyword Enhancement Opportunities:**
+- <Critical keyword 1 from job description — not in resume>
+- <Critical keyword 2>
+- <Critical keyword 3>
+- <Critical keyword 4>
+- <Critical keyword 5>
+- <Critical keyword 6>
+- <Critical keyword 7>
+- <Critical keyword 8>
 
-**Weighted Score Calculation:**
-- Tier 1 Match Rate: <X%> × 0.70 = <weighted contribution>
-- Tier 2 Match Rate: <X%> × 0.30 = <weighted contribution>
-- Combined Weighted Rate: <final weighted %>
-- Keyword Density Quality: <Natural integration vs. keyword stuffing>
-
-**Top Missing Keywords to Add (Priority Order):**
-- <TIER 1 missing keyword 1 — REQUIRED — highest priority>
-- <TIER 1 missing keyword 2 — REQUIRED>
-- <TIER 1 missing keyword 3 — REQUIRED>
-- <TIER 2 missing keyword 4 — PREFERRED>
-- <TIER 2 missing keyword 5 — PREFERRED>
-- <TIER 2 missing keyword 6 — PREFERRED>
-
-**Score Justification:** <Explain score using tier1_match_rate × 0.70 + tier2_match_rate × 0.30 formula>
+**Score Justification:** <Evidence-based explanation>
 
 [SEC:FORMAT]
 **Format Score:** {format_data.get("format_score", "N/A") if format_data else "N/A"} / 100  
@@ -3950,50 +3865,6 @@ SCORING SCALE for language ({lang_weight} pts max):
     exp_score     = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", exp_analysis)
     skills_score  = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", skills_analysis)
     keyword_score = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", keyword_analysis)
-
-    # ── Parse Tier 1 / Tier 2 breakdown from keyword_analysis ────────────────
-    # These are stored in the resume dict so UI can render the visual widget
-    _t1_match = re.search(r"Tier 1 Match Rate[:\s]+(\d+)%", keyword_analysis)
-    _t2_match = re.search(r"Tier 2 Match Rate[:\s]+(\d+)%", keyword_analysis)
-    _t1_matched_line = re.search(r"Matched in Resume.*?(\d+)\s*/\s*(\d+)\s+matched", keyword_analysis)
-    _t2_matched_line = re.search(r"Total Preferred.*?(\d+)", keyword_analysis)
-
-    kw_tier1_rate  = int(_t1_match.group(1)) if _t1_match else 0
-    kw_tier2_rate  = int(_t2_match.group(1)) if _t2_match else 0
-
-    # Parse matched / total counts for Tier 1
-    _t1_counts = re.search(r"Matched in Resume[:\s]+(\d+)\s*/\s*(\d+)\s+matched", keyword_analysis)
-    _t2_counts = re.search(r"Matched in Resume[:\s]+(\d+)\s*/\s*(\d+)\s+matched", keyword_analysis[keyword_analysis.find("Tier 2"):] if "Tier 2" in keyword_analysis else "")
-    kw_tier1_matched = int(_t1_counts.group(1)) if _t1_counts else 0
-    kw_tier1_total   = int(_t1_counts.group(2)) if _t1_counts else 0
-    kw_tier2_matched = int(_t2_counts.group(1)) if _t2_counts else 0
-    kw_tier2_total   = int(_t2_counts.group(2)) if _t2_counts else 0
-
-    # Parse matched keyword terms for display as pills
-    _t1_matched_terms_m = re.search(r"Matched Terms[:\s]+(.+?)(?:\n|Missing)", keyword_analysis)
-    _t2_matched_terms_m = re.search(r"Matched Terms[:\s]+(.+?)(?:\n|Missing)", keyword_analysis[keyword_analysis.find("Tier 2"):] if "Tier 2" in keyword_analysis else "")
-    _t1_missing_m = re.search(r"Missing Required[:\s]+(.+?)(?:\n|\*\*)", keyword_analysis)
-    _t2_missing_m = re.search(r"Missing Preferred[:\s]+(.+?)(?:\n|\*\*)", keyword_analysis)
-
-    def _parse_kw_list(m):
-        if not m: return []
-        raw = m.group(1).strip()
-        if raw.lower() in ("none", "n/a", "none identified", ""): return []
-        return [k.strip().strip("*").strip() for k in re.split(r"[,;]", raw) if k.strip() and k.strip().lower() != "none"]
-
-    kw_tier1_matched_terms = _parse_kw_list(_t1_matched_terms_m)
-    kw_tier2_matched_terms = _parse_kw_list(_t2_matched_terms_m)
-    kw_tier1_missing_terms = _parse_kw_list(_t1_missing_m)
-    kw_tier2_missing_terms = _parse_kw_list(_t2_missing_m)
-
-    # ── Sanity check: if LLM score deviates >2 pts from formula, override ────
-    if kw_tier1_rate > 0 or kw_tier2_rate > 0:
-        _computed_rate  = (kw_tier1_rate / 100 * 0.70) + (kw_tier2_rate / 100 * 0.30)
-        _computed_score = round(_computed_rate * keyword_weight)
-        _computed_score = max(int(keyword_weight * 0.10), min(_computed_score, keyword_weight))
-        if abs(keyword_score - _computed_score) > 2:
-            keyword_score = _computed_score
-
     # ⚡ Parse grammar score + feedback from ATS result (no separate LLM call needed)
     _grammar_score_match    = re.search(r"\*\*Score\s*:\*\*\s*<evaluate.*?(\d+)>|Score.*?(\d+)\s*/\s*" + str(lang_weight), lang_analysis)
     _grammar_score_match2   = re.search(r"\*\*Score\s*:\*\*\s*(\d+)", lang_analysis)
@@ -4177,17 +4048,7 @@ SCORING SCALE for language ({lang_weight} pts max):
         "Resume Domain": resume_domain,
         "Job Domain": job_domain,
         "Domain Penalty": domain_penalty,
-        "Domain Similarity Score": similarity_score,
-        "KW Tier1 Rate": kw_tier1_rate,
-        "KW Tier2 Rate": kw_tier2_rate,
-        "KW Tier1 Matched": kw_tier1_matched,
-        "KW Tier1 Total": kw_tier1_total,
-        "KW Tier2 Matched": kw_tier2_matched,
-        "KW Tier2 Total": kw_tier2_total,
-        "KW Tier1 Matched Terms": kw_tier1_matched_terms,
-        "KW Tier2 Matched Terms": kw_tier2_matched_terms,
-        "KW Tier1 Missing Terms": kw_tier1_missing_terms,
-        "KW Tier2 Missing Terms": kw_tier2_missing_terms
+        "Domain Similarity Score": similarity_score
     }
 
 # Setup Vector DB
