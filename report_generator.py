@@ -1764,7 +1764,111 @@ def generate_resume_report_html(resume, user_location=""):
     exp_score = resume.get('Experience Score', 'N/A')
     skills_score = resume.get('Skills Score', 'N/A')
     lang_score = resume.get('Language Score', 'N/A')
-    keyword_score = resume.get('Keyword Score', 'N/A')
+    keyword_score   = resume.get('Keyword Score', 'N/A')
+    kw_weight       = resume.get('KW Weight', 10)
+    kw_t1r          = resume.get('KW Tier1 Rate', 0) or 0
+    kw_t2r          = resume.get('KW Tier2 Rate', 0) or 0
+    kw_t1m          = resume.get('KW Tier1 Matched', 0) or 0
+    kw_t1t          = resume.get('KW Tier1 Total', 0) or 0
+    kw_t2m          = resume.get('KW Tier2 Matched', 0) or 0
+    kw_t2t          = resume.get('KW Tier2 Total', 0) or 0
+    kw_found1       = resume.get('KW Tier1 Matched Terms', []) or []
+    kw_found2       = resume.get('KW Tier2 Matched Terms', []) or []
+    kw_miss1        = resume.get('KW Tier1 Missing Terms', []) or []
+    kw_miss2        = resume.get('KW Tier2 Missing Terms', []) or []
+    if not kw_miss1 and not kw_miss2:
+        _mk_raw = resume.get("Missing Keywords", "") or ""
+        kw_miss1 = [k.strip() for k in _mk_raw.split(",") if k.strip() and k.strip().lower() != "none identified"]
+
+    def _kw_pill(text, style):
+        _styles = {
+            "found": ("background:#e6f9f0;color:#166534;border:1px solid #86efac;",),
+            "miss1": ("background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;",),
+            "miss2": ("background:#f8fafc;color:#475569;border:1px solid #cbd5e1;",),
+        }
+        css = _styles.get(style, _styles["found"])[0]
+        return (f"<span style='display:inline-block;font-size:10pt;padding:2px 9px;"
+                f"border-radius:99px;margin:2px;{css}'>{text}</span>")
+
+    _kw_pills_found = "".join(_kw_pill(k, "found") for k in (kw_found1 + kw_found2)) or "<i>None matched</i>"
+    _kw_pills_miss1 = "".join(_kw_pill(k, "miss1") for k in kw_miss1) or "<i>None</i>"
+    _kw_pills_miss2 = "".join(_kw_pill(k, "miss2") for k in kw_miss2) or "<i>None</i>"
+
+    _kw_verdict = ("Excellent" if isinstance(keyword_score, int) and keyword_score >= kw_weight * 0.9 else
+                   "Very Good" if isinstance(keyword_score, int) and keyword_score >= kw_weight * 0.8 else
+                   "Good"      if isinstance(keyword_score, int) and keyword_score >= kw_weight * 0.6 else
+                   "Fair"      if isinstance(keyword_score, int) and keyword_score >= kw_weight * 0.4 else "Needs Work")
+
+    _top_miss = (kw_miss1 + kw_miss2)[:2]
+    _kw_tip = (f"Adding <b>{_top_miss[0]}</b>"
+               + (f" and <b>{_top_miss[1]}</b>" if len(_top_miss) > 1 else "")
+               + " could push your keyword score higher."
+               if _top_miss else "Great keyword coverage for this role.")
+
+    _computed_score = round(((kw_t1r / 100 * 0.70) + (kw_t2r / 100 * 0.30)) * kw_weight)
+
+    keyword_widget_html = f"""
+    <div style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:8px;background:#fafafa;">
+      <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:14px;">
+        <!-- Score circle -->
+        <div style="text-align:center;min-width:80px;">
+          <div style="font-size:2.2em;font-weight:800;color:{'#15803d' if isinstance(keyword_score,int) and keyword_score >= kw_weight*0.8 else '#d97706' if isinstance(keyword_score,int) and keyword_score >= kw_weight*0.5 else '#dc2626'};">{keyword_score}</div>
+          <div style="font-size:9pt;color:#64748b;">/ {kw_weight} pts</div>
+          <div style="font-size:8pt;color:#94a3b8;margin-top:2px;">{_kw_verdict}</div>
+        </div>
+        <!-- Bars -->
+        <div style="flex:1;min-width:180px;">
+          <div style="margin-bottom:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:9pt;margin-bottom:3px;">
+              <span style="font-weight:600;">Must-Have <span style="color:#94a3b8;font-weight:400;">(70% weight)</span></span>
+              <span style="color:#d97706;font-weight:700;">{kw_t1r}%</span>
+            </div>
+            <div style="background:#e5e7eb;border-radius:99px;height:8px;overflow:hidden;">
+              <div style="background:#f59e0b;height:100%;border-radius:99px;width:{kw_t1r}%;"></div>
+            </div>
+            <div style="font-size:8pt;color:#94a3b8;margin-top:2px;">{kw_t1m} of {kw_t1t} matched</div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:9pt;margin-bottom:3px;">
+              <span style="font-weight:600;">Nice-to-Have <span style="color:#94a3b8;font-weight:400;">(30% weight)</span></span>
+              <span style="color:#64748b;font-weight:700;">{kw_t2r}%</span>
+            </div>
+            <div style="background:#e5e7eb;border-radius:99px;height:8px;overflow:hidden;">
+              <div style="background:#94a3b8;height:100%;border-radius:99px;width:{kw_t2r}%;"></div>
+            </div>
+            <div style="font-size:8pt;color:#94a3b8;margin-top:2px;">{kw_t2m} of {kw_t2t} matched</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pills -->
+      <div style="margin-bottom:8px;">
+        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#94a3b8;margin-bottom:4px;">✅ Found in resume</div>
+        <div>{_kw_pills_found}</div>
+      </div>
+      <div style="margin-bottom:8px;">
+        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#94a3b8;margin-bottom:4px;">🚨 Missing must-haves</div>
+        <div>{_kw_pills_miss1}</div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <div style="font-size:8pt;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#94a3b8;margin-bottom:4px;">💡 Nice-to-haves missing</div>
+        <div>{_kw_pills_miss2}</div>
+      </div>
+
+      <!-- Tip -->
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px 10px;font-size:9pt;color:#92400e;">
+        ⚡ {_kw_tip}
+      </div>
+
+      <!-- Math breakdown -->
+      <div style="margin-top:10px;background:#f1f5f9;border-radius:8px;padding:8px 10px;font-size:8pt;color:#64748b;">
+        <b>Score Calculation:</b><br/>
+        Must-Have: {kw_t1m}/{kw_t1t} × 70% = {kw_t1r/100*0.70*kw_weight:.1f} pts &nbsp;|&nbsp;
+        Nice-to-Have: {kw_t2m}/{kw_t2t} × 30% = {kw_t2r/100*0.30*kw_weight:.1f} pts &nbsp;|&nbsp;
+        Formula → {_computed_score} pts &nbsp;|&nbsp;
+        <b>Final: {keyword_score} / {kw_weight}</b>
+      </div>
+    </div>"""
     format_score = resume.get('Format Score', 'N/A')
     format_grade = resume.get('Format Grade', 'N/A')
     format_label = resume.get('Format Label', '')
@@ -1831,7 +1935,7 @@ def generate_resume_report_html(resume, user_location=""):
         <tr><td><b>Experience Score</b></td><td>{exp_score}</td></tr>
         <tr><td><b>Skills Score</b></td><td>{skills_score}</td></tr>
         <tr><td><b>Language Score</b></td><td>{lang_score}</td></tr>
-        <tr><td><b>Keyword Score</b></td><td>{keyword_score}</td></tr>
+        <tr><td><b>Keyword Score</b></td><td>{keyword_score} / {kw_weight} &nbsp;<span style="color:#94a3b8;font-size:9pt;">({_kw_verdict})</span></td></tr>
         <tr><td><b>Format Score</b></td><td>{format_score}/100 — {format_grade} ({format_label})</td></tr>
     </table>
 
@@ -1850,8 +1954,8 @@ def generate_resume_report_html(resume, user_location=""):
     <div class="section-title">Language Analysis</div>
     <div class="box">{lang_analysis}</div>
 
-    <div class="section-title">Keyword Analysis</div>
-    <div class="box">{keyword_analysis}</div>
+    <div class="section-title">🔑 Keyword Analysis</div>
+    <div class="box">{keyword_widget_html}</div>
 
     <div class="section-title">Final Thoughts</div>
     <div class="box">{final_thoughts}</div>
