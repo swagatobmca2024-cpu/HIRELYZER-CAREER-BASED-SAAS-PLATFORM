@@ -5639,7 +5639,31 @@ with tab1:
                 with col_c:
                     st.markdown(svg_ats_card("skills", "Skills", f"{resume.get('Skills Score', 'N/A')} / {skills_weight}"), unsafe_allow_html=True)
                 with col_d:
-                    st.markdown(svg_ats_card("keyword", "Keywords", f"{resume.get('Keyword Score', 'N/A')} / {keyword_weight}"), unsafe_allow_html=True)
+                    _kw_score  = resume.get('Keyword Score', 0) or 0
+                    _kw_t1     = resume.get('KW Tier1 Rate', 0) or 0
+                    _kw_t2     = resume.get('KW Tier2 Rate', 0) or 0
+                    _kw_color  = "#22c55e" if _kw_score >= keyword_weight * 0.8 else ("#f59e0b" if _kw_score >= keyword_weight * 0.5 else "#ef4444")
+                    _kw_arc_r  = 28
+                    _kw_arc_len = 3.14159 * _kw_arc_r
+                    _kw_offset  = _kw_arc_len * (1 - _kw_score / max(keyword_weight, 1))
+                    st.markdown(f"""
+                    <div style="background:rgba(15,23,42,0.85);border:1px solid rgba(56,189,248,0.25);border-radius:12px;
+                                padding:10px 14px;margin-bottom:8px;height:86px;display:flex;align-items:center;gap:12px;overflow:hidden;box-sizing:border-box;">
+                      <svg width="60" height="36" viewBox="0 0 60 36" style="flex-shrink:0;">
+                        <path d="M 4 34 A 28 28 0 0 1 56 34" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="6" stroke-linecap="round"/>
+                        <path d="M 4 34 A 28 28 0 0 1 56 34" fill="none" stroke="{_kw_color}" stroke-width="6" stroke-linecap="round"
+                              stroke-dasharray="{_kw_arc_len:.1f}" stroke-dashoffset="{_kw_offset:.1f}"/>
+                        <text x="30" y="30" text-anchor="middle" font-size="11" font-weight="700" fill="{_kw_color}" font-family="-apple-system,sans-serif">{_kw_score}</text>
+                      </svg>
+                      <div style="flex:1;min-width:0;">
+                        <div style="font-size:0.68rem;color:#94a3b8;margin-bottom:4px;">Keywords</div>
+                        <div style="font-size:0.72rem;color:#64748b;">
+                          <span style="color:#f59e0b;">M {_kw_t1}%</span> &nbsp;
+                          <span style="color:#94a3b8;">N {_kw_t2}%</span>
+                        </div>
+                        <div style="font-size:0.68rem;color:#475569;margin-top:2px;">/ {keyword_weight} pts</div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
 
                 # ── Score cards row 3: bias + domain status ────────────────────
                 SVG_BIAS  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
@@ -5830,8 +5854,156 @@ with tab1:
 
                 for section_title, key in _SECTION_ORDER:
                     analysis_content = resume.get(key, "") or ""
-                    # Guard: treat empty / whitespace-only / literal "N/A" the same way
                     _is_empty = not analysis_content.strip() or analysis_content.strip().upper() == "N/A"
+
+                    # ── Keyword Analysis gets its own visual widget ───────────────
+                    if key == "Keyword Analysis":
+                        _ks        = resume.get("Keyword Score", 0) or 0
+                        _kw        = keyword_weight
+                        _t1r       = resume.get("KW Tier1 Rate", 0) or 0
+                        _t2r       = resume.get("KW Tier2 Rate", 0) or 0
+                        _t1m       = resume.get("KW Tier1 Matched", 0) or 0
+                        _t1t       = resume.get("KW Tier1 Total", 0) or 0
+                        _t2m       = resume.get("KW Tier2 Matched", 0) or 0
+                        _t2t       = resume.get("KW Tier2 Total", 0) or 0
+                        _found1    = resume.get("KW Tier1 Matched Terms", []) or []
+                        _found2    = resume.get("KW Tier2 Matched Terms", []) or []
+                        _miss1     = resume.get("KW Tier1 Missing Terms", []) or []
+                        _miss2     = resume.get("KW Tier2 Missing Terms", []) or []
+
+                        # Fallback: use Missing Keywords field if tier lists empty
+                        if not _miss1 and not _miss2:
+                            _mk_raw = resume.get("Missing Keywords", "") or ""
+                            _miss1  = [k.strip() for k in _mk_raw.split(",") if k.strip() and k.strip().lower() != "none identified"]
+
+                        _arc_r   = 70
+                        _arc_len = 3.14159 * _arc_r
+                        _arc_off = _arc_len * (1 - _ks / max(_kw, 1))
+                        _arc_col = "#22c55e" if _ks >= _kw * 0.8 else ("#f59e0b" if _ks >= _kw * 0.5 else "#ef4444")
+
+                        # Verdict label
+                        _verdict = ("Excellent" if _ks >= _kw * 0.9 else
+                                    "Very Good" if _ks >= _kw * 0.8 else
+                                    "Good"      if _ks >= _kw * 0.6 else
+                                    "Fair"      if _ks >= _kw * 0.4 else "Needs Work")
+
+                        # Action tip — pick top 2 missing must-haves
+                        _top_miss = (_miss1 + _miss2)[:2]
+                        _tip = (f"Adding <b style='color:#f59e0b;'>{_top_miss[0]}</b>"
+                                + (f" and <b style='color:#f59e0b;'>{_top_miss[1]}</b>" if len(_top_miss) > 1 else "")
+                                + " could push your score higher — these are the top gaps for this JD."
+                                if _top_miss else "Great keyword coverage for this role.")
+
+                        # Pill builder
+                        def _pill(text, style):
+                            colors = {
+                                "found":  ("rgba(34,197,94,0.12)",  "#22c55e", "rgba(34,197,94,0.3)"),
+                                "miss1":  ("rgba(239,68,68,0.10)",  "#f87171", "rgba(239,68,68,0.25)"),
+                                "miss2":  ("rgba(100,116,139,0.10)","#94a3b8", "rgba(100,116,139,0.25)"),
+                            }
+                            bg, col, border = colors.get(style, colors["found"])
+                            dot_col = col
+                            return (f"<span style='display:inline-flex;align-items:center;gap:4px;font-size:0.75rem;"
+                                    f"font-weight:500;padding:4px 10px;border-radius:99px;margin:2px;"
+                                    f"background:{bg};color:{col};border:1px solid {border};'>"
+                                    f"<span style='width:5px;height:5px;border-radius:50%;background:{dot_col};flex-shrink:0;'></span>"
+                                    f"{text}</span>")
+
+                        _pills_found = "".join(_pill(k, "found") for k in (_found1 + _found2)) or "<span style='color:#64748b;font-size:0.8rem;'>None matched</span>"
+                        _pills_miss1 = "".join(_pill(k, "miss1") for k in _miss1) or "<span style='color:#64748b;font-size:0.8rem;'>None</span>"
+                        _pills_miss2 = "".join(_pill(k, "miss2") for k in _miss2) or "<span style='color:#64748b;font-size:0.8rem;'>None</span>"
+
+                        # Math breakdown (hidden by default, unique id per resume)
+                        _uid = abs(hash(resume.get("Candidate Name","") + "kw")) % 99999
+                        _computed_rate  = (_t1r / 100 * 0.70) + (_t2r / 100 * 0.30)
+                        _computed_score = round(_computed_rate * _kw)
+
+                        st.markdown(f"""
+<div class="ats-section-header">🔑 Keyword Analysis</div>
+<div class="ats-section-body" style="padding:0;">
+  <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;padding:16px 20px 0;">
+
+    <!-- Arc -->
+    <div style="flex-shrink:0;text-align:center;">
+      <svg width="140" height="80" viewBox="0 0 140 80">
+        <path d="M 10 76 A {_arc_r} {_arc_r} 0 0 1 130 76" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10" stroke-linecap="round"/>
+        <path d="M 10 76 A {_arc_r} {_arc_r} 0 0 1 130 76" fill="none" stroke="{_arc_col}" stroke-width="10" stroke-linecap="round"
+              stroke-dasharray="{_arc_len:.1f}" stroke-dashoffset="{_arc_off:.1f}"/>
+        <text x="70" y="62" text-anchor="middle" font-size="22" font-weight="700" fill="{_arc_col}" font-family="-apple-system,sans-serif">{_ks}</text>
+        <text x="70" y="76" text-anchor="middle" font-size="11" fill="#64748b" font-family="-apple-system,sans-serif">/ {_kw}</text>
+      </svg>
+      <div style="font-size:0.7rem;color:#64748b;margin-top:2px;font-family:-apple-system,sans-serif;">{_verdict}</div>
+    </div>
+
+    <!-- Bars -->
+    <div style="flex:1;min-width:180px;padding-top:4px;">
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:4px;">
+          <span style="color:#e2e8f0;font-weight:600;">Must-Have <span style="color:#64748b;font-weight:400;">· 70% weight</span></span>
+          <span style="color:#f59e0b;font-weight:700;">{_t1r}%</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.06);border-radius:99px;height:8px;overflow:hidden;">
+          <div style="background:linear-gradient(90deg,#fbbf24,#f59e0b);height:100%;border-radius:99px;width:{_t1r}%;"></div>
+        </div>
+        <div style="font-size:0.68rem;color:#64748b;margin-top:2px;">{_t1m} of {_t1t} matched</div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:4px;">
+          <span style="color:#e2e8f0;font-weight:600;">Nice-to-Have <span style="color:#64748b;font-weight:400;">· 30% weight</span></span>
+          <span style="color:#94a3b8;font-weight:700;">{_t2r}%</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.06);border-radius:99px;height:8px;overflow:hidden;">
+          <div style="background:linear-gradient(90deg,#cbd5e1,#94a3b8);height:100%;border-radius:99px;width:{_t2r}%;"></div>
+        </div>
+        <div style="font-size:0.68rem;color:#64748b;margin-top:2px;">{_t2m} of {_t2t} matched</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pills -->
+  <div style="padding:14px 20px 0;">
+    <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">✅ Found in resume</div>
+    <div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:12px;">{_pills_found}</div>
+
+    <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">🚨 Missing must-haves</div>
+    <div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:12px;">{_pills_miss1}</div>
+
+    <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">💡 Nice-to-haves missing</div>
+    <div style="display:flex;flex-wrap:wrap;gap:2px;margin-bottom:14px;">{_pills_miss2}</div>
+  </div>
+
+  <!-- Tip -->
+  <div style="margin:0 20px 14px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:10px;padding:10px 12px;font-size:0.8rem;color:#c09040;line-height:1.6;">
+    ⚡ {_tip}
+  </div>
+
+  <!-- Math toggle -->
+  <div style="padding:0 20px 16px;">
+    <details style="cursor:pointer;">
+      <summary style="font-size:0.72rem;color:#64748b;list-style:none;display:flex;align-items:center;gap:6px;">
+        <span style="border:1px solid #334155;border-radius:6px;padding:3px 10px;font-size:0.7rem;">Show score calculation ▾</span>
+      </summary>
+      <div style="margin-top:8px;background:rgba(255,255,255,0.03);border-radius:10px;padding:10px 12px;font-size:0.75rem;color:#64748b;line-height:2;">
+        <div style="display:flex;justify-content:space-between;border-bottom:1px dashed #1e293b;padding:2px 0;">
+          <span>Must-Have: {_t1m}/{_t1t} matched × 70%</span><span style="color:#e2e8f0;">= {(_t1r/100*0.70*_kw):.1f} pts</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;border-bottom:1px dashed #1e293b;padding:2px 0;">
+          <span>Nice-to-Have: {_t2m}/{_t2t} matched × 30%</span><span style="color:#e2e8f0;">= {(_t2r/100*0.30*_kw):.1f} pts</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;border-bottom:1px dashed #1e293b;padding:2px 0;">
+          <span>Formula result (out of {_kw})</span><span style="color:#e2e8f0;">→ {_computed_score} pts</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:2px 0;font-weight:600;color:#e2e8f0;">
+          <span>Final score (LLM + sanity check)</span><span style="color:{_arc_col};">→ {_ks} / {_kw}</span>
+        </div>
+      </div>
+    </details>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+                        continue
+
+                    # ── All other sections ───────────────────────────────────────
 
                     if _is_empty:
                         body_html = (
