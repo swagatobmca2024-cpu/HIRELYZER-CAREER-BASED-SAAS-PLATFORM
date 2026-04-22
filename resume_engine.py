@@ -964,8 +964,17 @@ RESUME TEXT:
                         _after = f0.split(',', 1)[1].strip()
                         if len(_after) >= 2 and re.search(r'[a-zA-Z]', _after):
                             return True
-                    # Check fields from index 2 onward for any non-URL/email/phone text
-                    for f in pipe_fields[2:]:
+                    # ── FIX: scan from index 1 (not 2) — location can appear in field[1]
+                    # Also detect known Indian city/country keywords explicitly to prevent
+                    # double-injection like "Kolkata | Kolkata, India | Bangalore, India"
+                    _CITY_PAT = re.compile(
+                        r'\b(kolkata|bangalore|bengaluru|hyderabad|mumbai|pune|chennai|'
+                        r'delhi|noida|gurgaon|gurugram|ahmedabad|coimbatore|indore|'
+                        r'jaipur|kochi|bhubaneswar|chandigarh|nagpur|thiruvananthapuram|'
+                        r'india|remote)\b',
+                        re.IGNORECASE
+                    )
+                    for f in pipe_fields[1:]:
                         if not f:
                             continue
                         if f.startswith('http'):
@@ -974,7 +983,11 @@ RESUME TEXT:
                             continue
                         if re.match(r'^[\d\s\+\-\(\)\.]{7,}$', f):
                             continue
-                        return True  # found a real text field → location present
+                        # Explicit city/country keyword → location already present
+                        if _CITY_PAT.search(f):
+                            return True
+                        # Any other plain-text field → treat as location present
+                        return True
                     return False
 
                 if not _has_location_in_header(_header):
@@ -3514,17 +3527,50 @@ Match each listed skill against job description requirements. Reward:
 
 **🔑 Keyword Score ({keyword_weight} points max):**
 
-Systematically extract ALL critical terms from the job description:
-technical tools, frameworks, methodologies, role titles, industry terms, certification names.
-Compare against resume. Credit synonyms and equivalent terms.
+════════════════════════════════════════════════════════
+STEP 1 — SPLIT JD KEYWORDS INTO TWO TIERS
+════════════════════════════════════════════════════════
 
-  • {int(keyword_weight * 0.90)}–{keyword_weight}: Excellent — 85%+ critical terms; strong industry vocabulary
-  • {int(keyword_weight * 0.80)}: Very Good — 75%+ critical terms
-  • {int(keyword_weight * 0.60)}–{int(keyword_weight * 0.70)}: Good — 65%+ critical terms
-  • {int(keyword_weight * 0.40)}–{int(keyword_weight * 0.50)}: Fair — 50%+ critical terms
-  • {int(keyword_weight * 0.20)}–{int(keyword_weight * 0.30)}: Basic — 35%+ critical terms
-  • {int(keyword_weight * 0.10)}: Limited — 20%+ critical terms
-  • 0: Poor — fewer than 20% critical terms
+Scan the job description carefully and split ALL keywords into:
+
+TIER 1 — REQUIRED (must-have): Keywords appearing under sections labelled:
+  "Required", "Must Have", "Mandatory", "Essential", "Minimum Qualifications",
+  "You Must Have", "Requirements", "Basic Qualifications", OR explicitly stated
+  as non-negotiable in the description body (e.g. "must know", "required experience").
+
+TIER 2 — PREFERRED (nice-to-have): Keywords appearing under sections labelled:
+  "Good to Have", "Preferred", "Nice to Have", "Bonus", "Advantageous",
+  "Plus", "Desirable", "Optional", OR implied as supplementary.
+
+If the JD has NO clear section separation → classify all technical tools/frameworks
+as TIER 1 and soft skills/certifications/domain knowledge as TIER 2.
+
+════════════════════════════════════════════════════════
+STEP 2 — SCORE USING WEIGHTED MATCH FORMULA
+════════════════════════════════════════════════════════
+
+TIER 1 keywords carry 70% of the keyword score weight.
+TIER 2 keywords carry 30% of the keyword score weight.
+
+Formula:
+  tier1_match_rate = (TIER 1 keywords found in resume) / (total TIER 1 keywords)
+  tier2_match_rate = (TIER 2 keywords found in resume) / (total TIER 2 keywords)
+  weighted_rate    = (tier1_match_rate × 0.70) + (tier2_match_rate × 0.30)
+
+Then map weighted_rate to score:
+  • {int(keyword_weight * 0.90)}–{keyword_weight}: Excellent — weighted_rate ≥ 0.85 AND tier1_match_rate ≥ 0.80
+  • {int(keyword_weight * 0.80)}: Very Good   — weighted_rate ≥ 0.75 AND tier1_match_rate ≥ 0.70
+  • {int(keyword_weight * 0.60)}–{int(keyword_weight * 0.70)}: Good        — weighted_rate ≥ 0.60 AND tier1_match_rate ≥ 0.55
+  • {int(keyword_weight * 0.40)}–{int(keyword_weight * 0.50)}: Fair        — weighted_rate ≥ 0.45 OR tier1_match_rate ≥ 0.50
+  • {int(keyword_weight * 0.20)}–{int(keyword_weight * 0.30)}: Basic       — weighted_rate ≥ 0.30
+  • {int(keyword_weight * 0.10)}: Limited     — weighted_rate ≥ 0.15
+  • 0: Poor — weighted_rate < 0.15
+
+⚠️ CRITICAL RULE: Missing even 1-2 TIER 1 required keywords is a significant gap.
+   A resume scoring 100% on TIER 2 but only 40% on TIER 1 should score FAIR at best.
+   Never award Excellent/Very Good if TIER 1 match rate is below 0.70.
+
+Credit synonyms and equivalent terms (e.g. "k8s" = "kubernetes", "tf" = "terraform").
 
 ═══════════════════════════════════════════════════
 📋 REQUIRED OUTPUT FORMAT
@@ -3596,23 +3642,33 @@ SCORING SCALE for language ({lang_weight} pts max):
 [SEC:KEYWORD]
 **Score:** <0–{keyword_weight}> / {keyword_weight}
 
-**Keyword Assessment:**
-- Industry Terminology Match: <Percentage and specific matches found>
-- Role-Specific Keywords Present: <List matched keywords>
-- Technical Vocabulary: <Tools, frameworks, platforms found in both>
-- Keyword Density Quality: <Natural integration vs. stuffing>
+**Tier 1 — Required Keywords:**
+- Total Required: <N keywords identified as TIER 1>
+- Matched in Resume: <X / N matched> (<match %>)
+- Matched Terms: <list each matched TIER 1 keyword>
+- Missing Required: <list each unmatched TIER 1 keyword — these are critical gaps>
 
-**Keyword Enhancement Opportunities:**
-- <Critical keyword 1 from job description — not in resume>
-- <Critical keyword 2>
-- <Critical keyword 3>
-- <Critical keyword 4>
-- <Critical keyword 5>
-- <Critical keyword 6>
-- <Critical keyword 7>
-- <Critical keyword 8>
+**Tier 2 — Preferred Keywords:**
+- Total Preferred: <N keywords identified as TIER 2>
+- Matched in Resume: <X / N matched> (<match %>)
+- Matched Terms: <list each matched TIER 2 keyword>
+- Missing Preferred: <list each unmatched TIER 2 keyword>
 
-**Score Justification:** <Evidence-based explanation>
+**Weighted Score Calculation:**
+- Tier 1 Match Rate: <X%> × 0.70 = <weighted contribution>
+- Tier 2 Match Rate: <X%> × 0.30 = <weighted contribution>
+- Combined Weighted Rate: <final weighted %>
+- Keyword Density Quality: <Natural integration vs. keyword stuffing>
+
+**Top Missing Keywords to Add (Priority Order):**
+- <TIER 1 missing keyword 1 — REQUIRED — highest priority>
+- <TIER 1 missing keyword 2 — REQUIRED>
+- <TIER 1 missing keyword 3 — REQUIRED>
+- <TIER 2 missing keyword 4 — PREFERRED>
+- <TIER 2 missing keyword 5 — PREFERRED>
+- <TIER 2 missing keyword 6 — PREFERRED>
+
+**Score Justification:** <Explain score using tier1_match_rate × 0.70 + tier2_match_rate × 0.30 formula>
 
 [SEC:FORMAT]
 **Format Score:** {format_data.get("format_score", "N/A") if format_data else "N/A"} / 100  
