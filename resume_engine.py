@@ -3019,7 +3019,7 @@ def ats_percentage_score(
     import datetime
 
     _valid_domains = [
-        "Data Science", "Data Analytics", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
+        "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
         "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
         "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
         "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
@@ -3097,17 +3097,10 @@ RULE B — TRUE EVIDENCE BAR per domain (must satisfy BOTH sub-conditions):
      MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift/Xamarin
      AND: at least 1 described mobile app project or internship
 
-  → Data Analytics:
-     MUST have: Power BI/Tableau/Looker/Google Data Studio/DAX/Excel pivot tables/VLOOKUP/XLOOKUP
-     AND: dashboard building, KPI reporting, business intelligence, or data storytelling described
-     NOT: Python/pandas alone — those point to Data Science, not Data Analytics
-     EXAMPLE signals: "built Power BI dashboard", "created DAX measures", "Excel KPI report", "analyzed e-commerce orders in Power BI"
-
   → Data Science:
-     MUST have: pandas/numpy/matplotlib/seaborn/R/SPSS/scikit-learn/statistical modeling/Jupyter
-     AND: actual data analysis, statistical modeling, or ML/predictive work described
+     MUST have: pandas/numpy/matplotlib/seaborn/Tableau/Power BI/Looker/R/SPSS/Excel analytics
+     AND: actual data analysis, reporting, or visualization project described
      NOT: SQL or Excel listed as a lone skill with no analytical work described
-     NOT: Power BI/Tableau dashboards alone — those are Data Analytics, not Data Science
 
   → AI/Machine Learning:
      MUST have: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/OpenAI/LangChain/NLP/Computer Vision/LLM
@@ -3218,7 +3211,6 @@ RULE C — MIXED SIGNALS → dominant domain wins:
   • Count evidence per domain: (tech keywords in described work) + (project descriptions) + (job/internship titles)
   • Domain with MOST evidence wins
   • Tie between frontend+backend → "Full Stack Development"
-  • Data Analytics vs Data Science tie: count BI tools (Power BI/Tableau/DAX/Excel) vs coding tools (pandas/scikit-learn/Jupyter). Whichever is more → wins.
   • Tie between unrelated domains → "Software Engineering"
   • 1 weak signal (e.g. 1 virtual internship, no described work) vs 3 strong signals → strong side wins
   ⚠ INTERNSHIP TITLE CONFLICT RULE (critical for Level B):
@@ -3245,7 +3237,7 @@ RULE F — JOB TITLE as strong signal (Level C only):
   • ONLY applies to Level C (1+ years full-time work experience)
   • For Level C: explicit job title is the STRONGEST single signal
   • "Backend Developer" title → "Backend Development"
-  • "Data Analyst" / "BI Analyst" / "Analytics Analyst" title → "Data Analytics"
+  • "Data Analyst" title → "Data Science"
   • "QA Engineer" title → "Quality Assurance"
   • Title + matching tech stack → confirm that domain immediately
   ⚠ For Level B (freshers/students): internship title is ONE signal among many.
@@ -3334,8 +3326,7 @@ If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scie
 
 Title override examples:
   "Backend Developer" → "Backend Development"
-  "Data Analyst" / "BI Analyst" / "Analytics Analyst" / "Reporting Analyst" → "Data Analytics"
-  "Data Scientist" / "Data Engineer" → "Data Science"
+  "Data Analyst" → "Data Science"
   "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
   "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
   "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
@@ -3371,9 +3362,8 @@ Classification rules:
   • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
   • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work
   • Full Stack: Both frontend AND backend tech explicitly required
-  • Data Analytics: Power BI/Tableau/Excel/DAX + dashboards, KPI reporting, BI work (no heavy coding)
-  • Data Science: pandas/numpy/scikit-learn/Jupyter + statistical modeling or ML pipeline work
-  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training explicitly required
+  • Data Science: SQL/Python analytics + pandas/numpy/Tableau/Power BI + analysis work
+  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
   • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
   • Cloud: AWS/Azure/GCP services explicitly required (not just "cloud" mentioned)
   • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
