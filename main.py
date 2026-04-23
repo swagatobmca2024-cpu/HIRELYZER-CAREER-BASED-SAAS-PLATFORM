@@ -3081,8 +3081,9 @@ _JOB_TITLE_OPTIONS = [
     "Full Stack Developer",        # Full Stack Development
     "Mobile Developer",            # Mobile Development
     # ── Data & AI ──
-    "Data Scientist",              # Data Science
     "Data Analyst",                # Data Analytics
+    "BI Analyst",                  # Data Analytics
+    "Data Scientist",              # Data Science
     "ML Engineer",                 # AI/Machine Learning
     # ── Infrastructure ──
     "DevOps Engineer",             # DevOps/Infrastructure
@@ -3313,40 +3314,8 @@ Good to Have:
 - Published apps on Play Store or App Store
 """,
 
-    "Data Analyst": """\Position: Data Analyst
-Location: [City, India] | Full-Time
-
-About the Role:
-We are looking for a detail-oriented Data Analyst to transform raw data into actionable insights. You will work with business stakeholders and technical teams to build dashboards, reports, and analyses that drive informed decision-making across the organisation.
-
-Key Responsibilities:
-- Collect, clean, and validate data from multiple structured and unstructured sources
-- Build and maintain interactive dashboards and reports using Power BI, Tableau, or Looker
-- Perform ad hoc analysis to answer business questions on revenue, growth, retention, and operations
-- Define and track KPIs across business units in collaboration with stakeholders
-- Conduct cohort analysis, funnel analysis, churn analysis, and trend analysis
-- Write complex SQL queries to extract and transform data from data warehouses
-- Collaborate with data engineers to improve data pipeline quality and availability
-- Present findings and data stories clearly to both technical and non-technical audiences
-- Automate recurring reports and reduce manual reporting overhead
-- Support A/B testing analysis and experiment design across product and marketing teams
-
-Required Skills & Qualifications:
-- Bachelor's degree in Statistics, Mathematics, Computer Science, Economics, or related field
-- 2–5 years of data analysis experience
-- Strong proficiency in SQL (complex joins, window functions, CTEs)
-- Experience with BI tools: Power BI, Tableau, Looker, or Google Data Studio
-- Proficiency in Excel/Google Sheets: pivot tables, VLOOKUP, SUMIFS, data modelling
-- Strong analytical thinking and ability to translate data into business insights
-- Experience with Python or R for data manipulation (pandas, numpy) is a plus
-
-Good to Have:
-- Experience with cloud data warehouses (BigQuery, Redshift, Snowflake, Azure Synapse)
-- Knowledge of DAX, Power Query, or LookML
-- Familiarity with A/B testing frameworks and statistical significance
-""",
-
-    "Data Scientist": """\Position: Data Scientist
+    "Data Scientist": """\
+Position: Data Scientist
 Location: [City, India] | Full-Time
 
 About the Role:
@@ -4207,6 +4176,67 @@ Good to Have:
 - Background in pharmacy management or lab information systems
 """,
 
+    "Data Analyst": """\Position: Data Analyst
+Location: [City, India] | Full-Time
+
+About the Role:
+We are hiring a Data Analyst to turn raw data into actionable business insights. You will work closely with business stakeholders and product teams to build dashboards, track KPIs, and drive data-informed decisions.
+
+Key Responsibilities:
+- Collect, clean, and analyze large datasets to surface business insights
+- Build and maintain interactive dashboards and reports using Power BI, Tableau, or Looker Studio
+- Define, track, and report on key business KPIs across sales, marketing, and operations
+- Perform exploratory data analysis (EDA) to identify trends, patterns, and anomalies
+- Develop DAX measures, calculated columns, and Power Query transformations in Power BI
+- Conduct A/B testing analysis and cohort analysis to evaluate campaigns and product performance
+- Automate recurring reports and reduce manual data preparation time
+- Present findings clearly to non-technical stakeholders through data storytelling
+
+Required Skills & Qualifications:
+- B.E./B.Tech/BCA/MCA or Bachelor's in Statistics, Mathematics, or Computer Science
+- 1–4 years of experience in a data analyst or business intelligence role
+- Strong proficiency in SQL for querying relational databases
+- Hands-on experience with Power BI or Tableau for dashboard development
+- Proficiency in Microsoft Excel including pivot tables, VLOOKUP/XLOOKUP, and Power Query
+- Strong analytical thinking and attention to detail
+
+Good to Have:
+- Experience with Python (pandas, matplotlib) for data analysis
+- Familiarity with Google Analytics, Mixpanel, or Amplitude
+- Exposure to data warehousing concepts (star schema, fact/dimension tables)
+- Knowledge of DAX for advanced Power BI calculations
+""",
+
+    "BI Analyst": """\Position: Business Intelligence (BI) Analyst
+Location: [City, India] | Full-Time
+
+About the Role:
+We are looking for a skilled BI Analyst to design and deliver enterprise-level business intelligence solutions. You will bridge the gap between raw data and strategic decision-making by building scalable dashboards, data models, and self-service reporting infrastructure.
+
+Key Responsibilities:
+- Design, develop, and maintain BI dashboards and reports for business stakeholders
+- Build robust data models in Power BI or Tableau including star/snowflake schemas
+- Write complex DAX formulas and Power Query M scripts for advanced analytics
+- Develop ETL pipelines to integrate data from multiple source systems into the BI layer
+- Collaborate with data engineering teams to ensure data warehouse accuracy
+- Define and govern KPI definitions, business metrics, and reporting standards
+- Build self-service analytics capabilities to reduce ad-hoc reporting requests
+- Create executive-level dashboards and scorecards for C-suite reporting
+
+Required Skills & Qualifications:
+- B.E./B.Tech/BCA/MCA in Computer Science, Statistics, or related field
+- 2–5 years of experience in BI development or data analytics
+- Advanced proficiency in Power BI (DAX, Power Query, data modeling) or Tableau
+- Strong SQL skills including complex joins, window functions, and CTEs
+- Experience with data warehouse platforms (Snowflake, BigQuery, Redshift, or Azure Synapse)
+- Solid understanding of dimensional modeling and BI architecture patterns
+
+Good to Have:
+- Experience with dbt for transformation layer development
+- Familiarity with Python for data manipulation and automation
+- Knowledge of Looker, Metabase, or Apache Superset
+""",
+
     "EdTech Specialist": """\
 Position: EdTech Specialist
 Location: [City, India] | Full-Time
@@ -5009,7 +5039,7 @@ RULE E — CAREER SWITCHERS:
 RULE F — JOB TITLE as strong signal (Level C only):
   • ONLY applies to Level C (1+ years full-time work experience)
   • For Level C: explicit job title is the STRONGEST single signal
-  • "Backend Developer" → "Backend Development", "Data Analyst" → "Data Science"
+  • "Backend Developer" → "Backend Development", "Data Analyst" → "Data Analytics"
   ⚠ For Level B (freshers/students): internship title is ONE signal among many.
     It can be OVERRIDDEN if skills + projects show 3+ strong signals for a different domain.
     Do NOT blindly use internship title for Level B — apply Rule C conflict check first.
@@ -5070,7 +5100,7 @@ If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scie
 
 Title override examples:
   "Backend Developer" → "Backend Development"
-  "Data Analyst" → "Data Science"
+  "Data Analyst" → "Data Analytics"
   "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
   "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
   "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
