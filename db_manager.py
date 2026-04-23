@@ -331,8 +331,9 @@ Job Title: {job_title}
 
 If the title explicitly names a domain, use it directly:
   "Backend Developer" → "Backend Development"
-  "Data Analyst" / "Data Scientist" → "Data Science"
-  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
+  "Data Analyst" / "BI Analyst" / "Analytics Analyst" / "Reporting Analyst" → "Data Analytics"
+  "Data Scientist" / "Data Engineer" / "Analytics Engineer" → "Data Science"
+  "ML Engineer" / "AI Engineer" / "NLP Engineer" / "Computer Vision Engineer" → "AI/Machine Learning"
   "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
   "Cloud Engineer" / "Cloud Architect" → "Cloud Engineering"
   "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
@@ -367,7 +368,8 @@ Key classification rules:
   • Backend: backend framework (Django/Flask/Spring/Express/FastAPI) + database + API work required
   • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work required
   • Full Stack: BOTH frontend AND backend tech explicitly required
-  • Data Science: pandas/numpy/Tableau/Power BI + analysis or visualization work
+  • Data Analytics: Power BI/Tableau/Excel/DAX + dashboards, KPI reporting, BI work
+  • Data Science: pandas/numpy/scikit-learn/Jupyter + statistical modeling or ML work
   • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
   • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
   • Cloud: specific AWS/Azure/GCP services required (not just the word "cloud")
@@ -376,6 +378,9 @@ Key classification rules:
   • UI/UX: Figma/wireframes/prototyping/user research as primary duty
   • DO NOT classify as Full Stack if only backend framework + "website" — frontend tech must be explicit
   • DO NOT classify as Data Science from SQL alone — analytics work must be described
+  • DO NOT classify as AI/Machine Learning from one ML project alone — if majority of projects/skills are analytics (Power BI, Excel, DAX, dashboards) → "Data Analytics"
+  • FREQUENCY RULE: Count how many sections (skills, projects, experience) belong to each domain. The domain winning the MOST SECTIONS wins — not the domain with the single loudest keyword. One TensorFlow mention does NOT override three Power BI + Excel + dashboard signals.
+  • Data Analytics vs Data Science: if tools are primarily BI/reporting (Power BI, Tableau, Excel, DAX, dashboards) → "Data Analytics". If tools are primarily coding/modeling (Python, pandas, scikit-learn, Jupyter, statistical modeling) → "Data Science".
   • If truly mixed with no dominant domain → "Software Engineering"
 
 ════════════════════════════════════════════════════════
@@ -1070,39 +1075,6 @@ Return ONLY one domain from this list, nothing else:
                     desc_hits = sum(1 for kw in keywords[domain] if _kw_hit(kw, desc))
                     domain_scores[domain] = max(0, domain_scores[domain] - (desc_hits * WEIGHTS[domain] * 0.5))
 
-        # ── Two-Signal Rule for AI/ML ──────────────────────────────────────────
-        # AI/ML domain is only valid if candidate has BOTH:
-        #   Signal 1 (STRONG) — actual model building/training/pipeline work
-        #   Signal 2 (SUPPORTING) — can be API usage, LLM tools, frameworks
-        # If only Signal 2 (just called APIs, used LangChain) → demote to Software Engineering
-        _AIML_STRONG_SIGNALS = {
-            "model training","fine-tuning","scikit-learn","tensorflow","pytorch",
-            "keras","xgboost","lightgbm","deep learning","neural network",
-            "computer vision","reinforcement learning","transfer learning",
-            "hyperparameter tuning","model evaluation","cross validation",
-            "feature engineering","feature store","gradient boosting","random forest",
-            "svm","clustering","pca","object detection","image segmentation",
-            "sentiment analysis","text classification","named entity recognition",
-            "diffusion models","stable diffusion","onnx","triton","model quantization",
-            "distillation","rlhf","llm fine-tuning","custom llm","embedding model",
-            "mlops","kubeflow","mlflow","weights and biases","ml pipeline",
-            "model deployment","model monitoring","data augmentation",
-            "nlp engineer","computer vision engineer","ai researcher","research scientist",
-            "natural language processing","yolo","bert","autoencoder","transformer",
-            "custom embeddings","rag pipeline","retrieval augmented generation",
-            "vector database","pinecone","weaviate","chroma","faiss",
-        }
-        if domain_scores.get("AI/Machine Learning", 0) > 0:
-            _combined = (title + " " + desc)
-            _has_strong = any(_kw_hit(sig, _combined) for sig in _AIML_STRONG_SIGNALS)
-            if not _has_strong:
-                # Only supporting signals (API calls, LangChain, prompt engineering)
-                # → demote AI/ML score, boost Software Engineering instead
-                _aiml_score = domain_scores["AI/Machine Learning"]
-                domain_scores["AI/Machine Learning"] = max(0, round(_aiml_score * 0.25))
-                domain_scores["Software Engineering"] = domain_scores.get("Software Engineering", 0) + round(_aiml_score * 0.60)
-                domain_scores["Backend Development"]  = domain_scores.get("Backend Development", 0)  + round(_aiml_score * 0.30)
-
         # ── Final selection ────────────────────────────────────────────────────
 
         # Hard title overrides — explicit job title is the single strongest signal
@@ -1212,7 +1184,10 @@ Return ONLY one domain from this list, nothing else:
                 second_score = sorted_domains[1][1]
                 if second_score >= top_score * 0.78:
                     import re as _re2
-                    blocks = _re2.split(r"\n(?=[A-Z][^\n]{4,60}\n)", desc)
+                    blocks = _re2.split(r"
+(?=[A-Z][^
+]{4,60}
+)", desc)
                     votes = defaultdict(int)
                     for block in blocks:
                         bl = block.lower()
@@ -1263,300 +1238,109 @@ Return ONLY one domain from this list, nothing else:
         resume_domain = normalization.get(resume_domain, resume_domain)
         job_domain    = normalization.get(job_domain, job_domain)
 
-        # ── Complete symmetric similarity map — all meaningful domain pairs ──
-        # Lookup tries (A,B) then (B,A) so every pair is symmetric by design.
-        # Scores: 0.90-1.00=near-identical | 0.75-0.89=strong overlap |
-        #         0.60-0.74=moderate | 0.45-0.59=weak | 0.25-0.44=different clusters
         similarity_map = {
-            # ── Data Analytics pairs (new domain) ────────────────────────────
-            ("data analytics",          "data science"):                0.82,
-            ("data analytics",          "ai/machine learning"):         0.60,
-            ("data analytics",          "business analysis"):           0.72,
-            ("data analytics",          "database management"):         0.65,
-            ("data analytics",          "software engineering"):        0.50,
-            ("data analytics",          "product management"):          0.60,
-            ("data analytics",          "fintech"):                     0.65,
-            ("data analytics",          "healthcare tech"):             0.60,
-            ("data analytics",          "e-commerce"):                  0.60,
-            ("data analytics",          "digital marketing"):           0.60,
-            ("data analytics",          "edtech"):                      0.55,
-            # ── Core Software cluster ─────────────────────────────────────────
-            ("full stack development",  "frontend development"):        0.85,
-            ("full stack development",  "backend development"):         0.85,
-            ("full stack development",  "mobile development"):          0.65,
-            ("full stack development",  "software engineering"):        0.80,
-            ("full stack development",  "ui/ux design"):                0.70,
-            ("full stack development",  "game development"):            0.60,
-            ("full stack development",  "blockchain development"):      0.65,
-            ("full stack development",  "e-commerce"):                  0.80,
-            ("full stack development",  "fintech"):                     0.70,
-            ("full stack development",  "healthcare tech"):             0.65,
-            ("full stack development",  "edtech"):                      0.65,
-            ("full stack development",  "database management"):         0.70,
-            ("full stack development",  "system architecture"):         0.75,
-            ("full stack development",  "quality assurance"):           0.60,
-            ("frontend development",    "backend development"):         0.60,
-            ("frontend development",    "mobile development"):          0.70,
-            ("frontend development",    "ui/ux design"):                0.90,
-            ("frontend development",    "software engineering"):        0.75,
-            ("frontend development",    "game development"):            0.60,
-            ("frontend development",    "ar/vr development"):           0.65,
-            ("frontend development",    "e-commerce"):                  0.70,
-            ("frontend development",    "edtech"):                      0.60,
-            ("frontend development",    "quality assurance"):           0.60,
-            ("backend development",     "database management"):         0.80,
-            ("backend development",     "cloud engineering"):           0.75,
-            ("backend development",     "devops/infrastructure"):       0.70,
-            ("backend development",     "system architecture"):         0.85,
-            ("backend development",     "software engineering"):        0.80,
-            ("backend development",     "fintech"):                     0.75,
-            ("backend development",     "e-commerce"):                  0.75,
-            ("backend development",     "healthcare tech"):             0.65,
-            ("backend development",     "edtech"):                      0.65,
-            ("backend development",     "blockchain development"):      0.65,
-            ("backend development",     "quality assurance"):           0.60,
-            ("backend development",     "networking"):                  0.55,
-            ("mobile development",      "ui/ux design"):                0.75,
-            ("mobile development",      "software engineering"):        0.70,
-            ("mobile development",      "game development"):            0.60,
-            ("mobile development",      "ar/vr development"):           0.70,
-            ("mobile development",      "e-commerce"):                  0.65,
-            ("mobile development",      "fintech"):                     0.60,
-            ("mobile development",      "healthcare tech"):             0.60,
-            ("mobile development",      "edtech"):                      0.60,
-            ("software engineering",    "game development"):            0.70,
-            ("software engineering",    "blockchain development"):      0.70,
-            ("software engineering",    "quality assurance"):           0.75,
-            ("software engineering",    "embedded systems"):            0.65,
-            ("software engineering",    "iot development"):             0.60,
-            ("software engineering",    "system architecture"):         0.85,
-            ("software engineering",    "fintech"):                     0.65,
-            ("software engineering",    "healthcare tech"):             0.65,
-            ("software engineering",    "edtech"):                      0.65,
-            ("software engineering",    "e-commerce"):                  0.65,
-            ("software engineering",    "technical writing"):           0.50,
-            # ── Data & AI cluster ────────────────────────────────────────────
-            ("data science",            "ai/machine learning"):         0.95,
-            ("data science",            "business analysis"):           0.70,
-            ("data science",            "database management"):         0.75,
-            ("data science",            "software engineering"):        0.60,
-            ("data science",            "fintech"):                     0.70,
-            ("data science",            "healthcare tech"):             0.65,
-            ("data science",            "edtech"):                      0.60,
-            ("data science",            "digital marketing"):           0.55,
-            ("data science",            "product management"):          0.60,
-            ("data science",            "e-commerce"):                  0.60,
-            ("ai/machine learning",     "software engineering"):        0.65,
-            ("ai/machine learning",     "database management"):         0.60,
-            ("ai/machine learning",     "backend development"):         0.60,
-            ("ai/machine learning",     "fintech"):                     0.65,
-            ("ai/machine learning",     "healthcare tech"):             0.65,
-            ("ai/machine learning",     "edtech"):                      0.60,
-            ("ai/machine learning",     "cybersecurity"):               0.55,
-            ("ai/machine learning",     "ar/vr development"):           0.55,
-            # ── Infrastructure cluster ────────────────────────────────────────
-            ("cloud engineering",       "devops/infrastructure"):       0.90,
-            ("cloud engineering",       "site reliability engineering"): 0.85,
-            ("cloud engineering",       "system architecture"):         0.80,
-            ("cloud engineering",       "networking"):                  0.70,
-            ("cloud engineering",       "cybersecurity"):               0.75,
-            ("cloud engineering",       "database management"):         0.65,
-            ("cloud engineering",       "backend development"):         0.70,
-            ("cloud engineering",       "fintech"):                     0.60,
-            ("cloud engineering",       "healthcare tech"):             0.55,
-            ("devops/infrastructure",   "site reliability engineering"): 0.90,
-            ("devops/infrastructure",   "system architecture"):         0.75,
-            ("devops/infrastructure",   "networking"):                  0.75,
-            ("devops/infrastructure",   "cybersecurity"):               0.70,
-            ("devops/infrastructure",   "database management"):         0.60,
-            ("devops/infrastructure",   "quality assurance"):           0.65,
-            ("devops/infrastructure",   "backend development"):         0.65,
-            ("devops/infrastructure",   "embedded systems"):            0.55,
-            ("site reliability engineering", "system architecture"):    0.80,
-            ("site reliability engineering", "networking"):             0.70,
-            ("site reliability engineering", "cybersecurity"):          0.65,
-            ("site reliability engineering", "database management"):    0.60,
-            ("site reliability engineering", "backend development"):    0.65,
-            ("system architecture",     "software engineering"):        0.85,
-            ("system architecture",     "cloud engineering"):           0.80,
-            ("system architecture",     "backend development"):         0.85,
-            ("system architecture",     "database management"):         0.70,
-            ("system architecture",     "networking"):                  0.70,
-            ("system architecture",     "cybersecurity"):               0.65,
-            ("system architecture",     "devops/infrastructure"):       0.75,
-            ("system architecture",     "fintech"):                     0.65,
-            ("database management",     "data science"):                0.75,
-            ("database management",     "data analytics"):              0.65,
-            ("database management",     "backend development"):         0.80,
-            ("database management",     "system architecture"):         0.70,
-            ("database management",     "cloud engineering"):           0.65,
-            ("database management",     "fintech"):                     0.65,
-            ("database management",     "healthcare tech"):             0.60,
-            ("networking",              "cybersecurity"):               0.80,
-            ("networking",              "devops/infrastructure"):       0.75,
-            ("networking",              "system architecture"):         0.70,
-            ("networking",              "cloud engineering"):           0.70,
-            ("networking",              "embedded systems"):            0.60,
-            ("networking",              "iot development"):             0.65,
-            ("cybersecurity",           "devops/infrastructure"):       0.70,
-            ("cybersecurity",           "cloud engineering"):           0.75,
-            ("cybersecurity",           "networking"):                  0.80,
-            ("cybersecurity",           "system architecture"):         0.65,
-            ("cybersecurity",           "blockchain development"):      0.65,
-            ("cybersecurity",           "fintech"):                     0.70,
-            ("cybersecurity",           "healthcare tech"):             0.60,
-            ("cybersecurity",           "software engineering"):        0.60,
-            # ── Specialised Tech cluster ──────────────────────────────────────
-            ("embedded systems",        "iot development"):             0.90,
-            ("embedded systems",        "networking"):                  0.60,
-            ("embedded systems",        "software engineering"):        0.65,
-            ("embedded systems",        "devops/infrastructure"):       0.55,
-            ("embedded systems",        "ar/vr development"):           0.50,
-            ("iot development",         "networking"):                  0.65,
-            ("iot development",         "cloud engineering"):           0.60,
-            ("iot development",         "software engineering"):        0.60,
-            ("iot development",         "data science"):                0.55,
-            ("game development",        "software engineering"):        0.70,
-            ("game development",        "ar/vr development"):           0.80,
-            ("game development",        "mobile development"):          0.60,
-            ("game development",        "ui/ux design"):                0.60,
-            ("game development",        "frontend development"):        0.55,
-            ("ar/vr development",       "mobile development"):          0.70,
-            ("ar/vr development",       "ui/ux design"):                0.70,
-            ("ar/vr development",       "software engineering"):        0.60,
-            ("ar/vr development",       "frontend development"):        0.65,
-            ("blockchain development",  "software engineering"):        0.70,
-            ("blockchain development",  "cybersecurity"):               0.65,
-            ("blockchain development",  "fintech"):                     0.80,
-            ("blockchain development",  "backend development"):         0.65,
-            ("blockchain development",  "database management"):         0.55,
-            # ── Design & QA cluster ───────────────────────────────────────────
-            ("ui/ux design",            "frontend development"):        0.90,
-            ("ui/ux design",            "mobile development"):          0.75,
-            ("ui/ux design",            "product management"):          0.70,
-            ("ui/ux design",            "ar/vr development"):           0.70,
-            ("ui/ux design",            "game development"):            0.60,
-            ("ui/ux design",            "technical writing"):           0.55,
-            ("ui/ux design",            "digital marketing"):           0.50,
-            ("quality assurance",       "software engineering"):        0.75,
-            ("quality assurance",       "devops/infrastructure"):       0.65,
-            ("quality assurance",       "system architecture"):         0.60,
-            ("quality assurance",       "backend development"):         0.60,
-            ("quality assurance",       "frontend development"):        0.60,
-            ("quality assurance",       "mobile development"):          0.60,
-            ("quality assurance",       "healthcare tech"):             0.55,
-            ("quality assurance",       "fintech"):                     0.55,
-            # ── Management & Business cluster ─────────────────────────────────
-            ("product management",      "business analysis"):           0.80,
-            ("product management",      "project management"):          0.75,
-            ("product management",      "agile coaching"):              0.80,
-            ("product management",      "technical sales"):             0.65,
-            ("product management",      "data science"):                0.60,
-            ("product management",      "data analytics"):              0.60,
-            ("product management",      "digital marketing"):           0.60,
-            ("product management",      "ui/ux design"):                0.70,
-            ("project management",      "agile coaching"):              0.85,
-            ("project management",      "business analysis"):           0.75,
-            ("project management",      "technical sales"):             0.55,
-            ("business analysis",       "data science"):                0.65,
-            ("business analysis",       "data analytics"):              0.72,
-            ("business analysis",       "digital marketing"):           0.55,
-            ("business analysis",       "technical writing"):           0.60,
-            ("business analysis",       "agile coaching"):              0.70,
-            ("business analysis",       "fintech"):                     0.60,
-            ("business analysis",       "healthcare tech"):             0.55,
-            ("agile coaching",          "technical writing"):           0.50,
-            # ── Non-Tech / Vertical cluster ───────────────────────────────────
-            ("technical writing",       "product management"):          0.55,
-            ("technical writing",       "ui/ux design"):                0.55,
-            ("technical writing",       "software engineering"):        0.50,
-            ("technical writing",       "digital marketing"):           0.55,
-            ("digital marketing",       "product management"):          0.60,
-            ("digital marketing",       "e-commerce"):                  0.75,
-            ("digital marketing",       "technical sales"):             0.65,
-            ("digital marketing",       "data science"):                0.55,
-            ("digital marketing",       "data analytics"):              0.60,
-            ("digital marketing",       "edtech"):                      0.50,
-            ("technical sales",         "business analysis"):           0.60,
-            ("technical sales",         "project management"):          0.55,
-            ("technical sales",         "digital marketing"):           0.65,
-            ("technical sales",         "fintech"):                     0.60,
-            ("technical sales",         "healthcare tech"):             0.55,
-            ("e-commerce",              "backend development"):         0.75,
-            ("e-commerce",              "frontend development"):        0.70,
-            ("e-commerce",              "digital marketing"):           0.75,
-            ("e-commerce",              "product management"):          0.65,
-            ("e-commerce",              "business analysis"):           0.60,
-            ("e-commerce",              "data science"):                0.60,
-            ("e-commerce",              "data analytics"):              0.60,
-            ("fintech",                 "data science"):                0.70,
-            ("fintech",                 "data analytics"):              0.65,
-            ("fintech",                 "database management"):         0.65,
-            ("fintech",                 "cloud engineering"):           0.60,
-            ("fintech",                 "system architecture"):         0.65,
-            ("fintech",                 "business analysis"):           0.60,
-            ("fintech",                 "ai/machine learning"):         0.65,
-            ("healthcare tech",         "data science"):                0.65,
-            ("healthcare tech",         "data analytics"):              0.60,
-            ("healthcare tech",         "ai/machine learning"):         0.65,
-            ("healthcare tech",         "database management"):         0.60,
-            ("healthcare tech",         "cybersecurity"):               0.60,
-            ("healthcare tech",         "business analysis"):           0.55,
-            ("healthcare tech",         "project management"):          0.55,
-            ("edtech",                  "data science"):                0.60,
-            ("edtech",                  "data analytics"):              0.55,
-            ("edtech",                  "product management"):          0.60,
-            ("edtech",                  "business analysis"):           0.55,
-            ("edtech",                  "digital marketing"):           0.50,
-            ("edtech",                  "ui/ux design"):                0.60,
+            ("full stack development", "frontend development"): 0.85,
+            ("full stack development", "backend development"): 0.85,
+            ("full stack development", "ui/ux design"): 0.70,
+            ("full stack development", "mobile development"): 0.65,
+            ("full stack development", "software engineering"): 0.80,
+            ("frontend development", "ui/ux design"): 0.90,
+            ("frontend development", "mobile development"): 0.70,
+            ("frontend development", "software engineering"): 0.75,
+            ("frontend development", "backend development"): 0.60,
+            ("backend development", "database management"): 0.80,
+            ("backend development", "cloud engineering"): 0.75,
+            ("backend development", "devops/infrastructure"): 0.70,
+            ("backend development", "system architecture"): 0.85,
+            ("backend development", "software engineering"): 0.80,
+            ("data analytics", "data science"): 0.82,
+            ("data analytics", "ai/machine learning"): 0.60,
+            ("data analytics", "business analysis"): 0.72,
+            ("data analytics", "database management"): 0.65,
+            ("data analytics", "software engineering"): 0.50,
+            ("data science", "data analytics"): 0.82,
+            ("data science", "ai/machine learning"): 0.95,
+            ("data science", "business analysis"): 0.70,
+            ("ai/machine learning", "data science"): 0.95,
+            ("ai/machine learning", "software engineering"): 0.65,
+            ("cloud engineering", "devops/infrastructure"): 0.90,
+            ("cloud engineering", "system architecture"): 0.80,
+            ("cloud engineering", "site reliability engineering"): 0.85,
+            ("devops/infrastructure", "site reliability engineering"): 0.90,
+            ("devops/infrastructure", "system architecture"): 0.75,
+            ("cybersecurity", "devops/infrastructure"): 0.70,
+            ("cybersecurity", "cloud engineering"): 0.75,
+            ("cybersecurity", "networking"): 0.80,
+            ("cybersecurity", "system architecture"): 0.65,
+            ("mobile development", "ui/ux design"): 0.75,
+            ("mobile development", "software engineering"): 0.70,
+            ("mobile development", "game development"): 0.60,
+            ("quality assurance", "software engineering"): 0.75,
+            ("quality assurance", "devops/infrastructure"): 0.65,
+            ("quality assurance", "system architecture"): 0.60,
+            ("product management", "business analysis"): 0.80,
+            ("product management", "project management"): 0.75,
+            ("project management", "agile coaching"): 0.85,
+            ("business analysis", "data science"): 0.65,
+            ("game development", "software engineering"): 0.70,
+            ("blockchain development", "software engineering"): 0.70,
+            ("blockchain development", "cybersecurity"): 0.65,
+            ("embedded systems", "iot development"): 0.90,
+            ("ar/vr development", "game development"): 0.80,
+            ("ar/vr development", "mobile development"): 0.70,
+            ("database management", "data science"): 0.75,
+            ("database management", "system architecture"): 0.70,
+            ("database management", "backend development"): 0.80,
+            ("system architecture", "software engineering"): 0.85,
+            ("system architecture", "cloud engineering"): 0.80,
+            ("system architecture", "backend development"): 0.85,
+            ("networking", "cybersecurity"): 0.80,
+            ("networking", "devops/infrastructure"): 0.75,
+            ("networking", "system architecture"): 0.70,
+            ("fintech", "software engineering"): 0.70,
+            ("fintech", "backend development"): 0.75,
+            ("fintech", "cybersecurity"): 0.70,
+            ("healthcare tech", "software engineering"): 0.70,
+            ("edtech", "software engineering"): 0.70,
+            ("e-commerce", "full stack development"): 0.80,
+            ("e-commerce", "backend development"): 0.75,
+            ("technical sales", "product management"): 0.65,
+            ("technical writing", "business analysis"): 0.60,
+            ("digital marketing", "business analysis"): 0.55,
+            ("software engineering", "full stack development"): 0.80,
+            ("software engineering", "frontend development"): 0.75,
+            ("software engineering", "backend development"): 0.80,
+            ("software engineering", "mobile development"): 0.70,
+            ("software engineering", "game development"): 0.70,
+            ("software engineering", "quality assurance"): 0.75,
         }
 
         if resume_domain == job_domain:
             return 1.0
-
-        # ── Symmetric lookup: try (A,B) then (B,A) ───────────────────────────
-        similarity = (
-            similarity_map.get((resume_domain, job_domain)) or
-            similarity_map.get((job_domain, resume_domain))
-        )
+        similarity = (similarity_map.get((resume_domain, job_domain)) or
+                      similarity_map.get((job_domain, resume_domain)))
         if similarity:
             return similarity
 
-        # ── Fine-grained category fallback ───────────────────────────────────
         tech_domains           = {"software engineering","full stack development","frontend development",
                                    "backend development","mobile development","game development",
                                    "blockchain development","embedded systems","iot development"}
-        data_domains           = {"data science","data analytics","ai/machine learning"}
+        data_domains           = {"data science","data analytics","ai/machine learning","business analysis"}
         infrastructure_domains = {"cloud engineering","devops/infrastructure","site reliability engineering",
                                    "system architecture","database management","networking","cybersecurity"}
         management_domains     = {"product management","project management","business analysis","agile coaching"}
         design_domains         = {"ui/ux design","ar/vr development"}
-        vertical_domains       = {"fintech","healthcare tech","edtech","e-commerce","digital marketing",
-                                   "technical sales","technical writing"}
 
-        for category in [tech_domains, data_domains, infrastructure_domains,
-                          management_domains, design_domains, vertical_domains]:
+        categories = [tech_domains, data_domains, infrastructure_domains, management_domains, design_domains]
+        for category in categories:
             if resume_domain in category and job_domain in category:
-                return 0.48
-
-        adjacent_pairs = [
-            (tech_domains,           infrastructure_domains, 0.42),
-            (tech_domains,           data_domains,           0.38),
-            (tech_domains,           design_domains,         0.40),
-            (tech_domains,           vertical_domains,       0.38),
-            (infrastructure_domains, data_domains,           0.40),
-            (infrastructure_domains, vertical_domains,       0.35),
-            (data_domains,           management_domains,     0.42),
-            (data_domains,           vertical_domains,       0.40),
-            (management_domains,     vertical_domains,       0.42),
-            (design_domains,         management_domains,     0.45),
-            (design_domains,         tech_domains,           0.40),
-        ]
-        for cat_a, cat_b, score in adjacent_pairs:
-            if ((resume_domain in cat_a and job_domain in cat_b) or
-                    (resume_domain in cat_b and job_domain in cat_a)):
-                return score
-
+                return 0.50
+        if ((resume_domain in tech_domains and job_domain in infrastructure_domains) or
+                (resume_domain in infrastructure_domains and job_domain in tech_domains)):
+            return 0.45
+        if ((resume_domain in data_domains and job_domain in tech_domains) or
+                (resume_domain in tech_domains and job_domain in data_domains)):
+            return 0.40
         return 0.25
 
     # ── CRUD operations ───────────────────────────────────────────────────────
