@@ -1184,10 +1184,7 @@ Return ONLY one domain from this list, nothing else:
                 second_score = sorted_domains[1][1]
                 if second_score >= top_score * 0.78:
                     import re as _re2
-                    blocks = _re2.split(r"
-(?=[A-Z][^
-]{4,60}
-)", desc)
+                    blocks = _re2.split(r"\n(?=[A-Z][^\n]{4,60}\n)", desc)
                     votes = defaultdict(int)
                     for block in blocks:
                         bl = block.lower()
