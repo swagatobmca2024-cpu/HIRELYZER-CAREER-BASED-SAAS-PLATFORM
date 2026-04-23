@@ -46,11 +46,7 @@ from llm_manager import (
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
     _async_clear_failure,
 )
-from db_manager import (
-    db_manager, insert_candidate, get_top_domains_by_score,
-    get_database_stats, detect_domain_from_title_and_description,
-    get_domain_similarity
-)
+# db_manager imports removed — resume_processor does not call db_manager directly
 from user_login import (
     create_user_table, add_user, complete_registration, verify_user,
     get_logins_today, get_total_registered_users, log_user_action,
