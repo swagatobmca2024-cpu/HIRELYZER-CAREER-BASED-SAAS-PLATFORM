@@ -4176,7 +4176,8 @@ Good to Have:
 - Background in pharmacy management or lab information systems
 """,
 
-    "Data Analyst": """\Position: Data Analyst
+    "Data Analyst": """
+Position: Data Analyst
 Location: [City, India] | Full-Time
 
 About the Role:
@@ -4207,7 +4208,8 @@ Good to Have:
 - Knowledge of DAX for advanced Power BI calculations
 """,
 
-    "BI Analyst": """\Position: Business Intelligence (BI) Analyst
+    "BI Analyst": """
+Position: Business Intelligence (BI) Analyst
 Location: [City, India] | Full-Time
 
 About the Role:
