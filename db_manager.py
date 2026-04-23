@@ -203,7 +203,7 @@ class DatabaseManager:
     # ── Domain detection ──────────────────────────────────────────────────────
 
     VALID_DOMAINS = [
-        "Data Science", "Data Analytics", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
+        "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
         "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
         "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
         "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
@@ -227,9 +227,8 @@ Job Title: {job_title}
 
 If the title explicitly names a domain, use it directly:
   "Backend Developer" → "Backend Development"
-  "Data Analyst" / "BI Analyst" / "Analytics Analyst" / "Reporting Analyst" → "Data Analytics"
-  "Data Scientist" / "Data Engineer" / "Analytics Engineer" → "Data Science"
-  "ML Engineer" / "AI Engineer" / "NLP Engineer" / "Computer Vision Engineer" → "AI/Machine Learning"
+  "Data Analyst" / "Data Scientist" → "Data Science"
+  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
   "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
   "Cloud Engineer" / "Cloud Architect" → "Cloud Engineering"
   "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
@@ -273,9 +272,6 @@ Key classification rules:
   • UI/UX: Figma/wireframes/prototyping/user research as primary duty
   • DO NOT classify as Full Stack if only backend framework + "website" — frontend tech must be explicit
   • DO NOT classify as Data Science from SQL alone — analytics work must be described
-  • DO NOT classify as AI/Machine Learning from one ML project alone — if majority of projects/skills are analytics (Power BI, Excel, DAX, dashboards) → "Data Analytics"
-  • FREQUENCY RULE: Count how many sections (skills, projects, experience) belong to each domain. The domain winning the MOST SECTIONS wins — not the domain with the single loudest keyword. One TensorFlow mention does NOT override three Power BI + Excel + dashboard signals.
-  • Data Analytics vs Data Science: if tools are primarily BI/reporting (Power BI, Tableau, Excel, DAX, dashboards) → "Data Analytics". If tools are primarily coding/modeling (Python, pandas, scikit-learn, Jupyter, statistical modeling) → "Data Science".
   • If truly mixed with no dominant domain → "Software Engineering"
 
 ════════════════════════════════════════════════════════
@@ -331,9 +327,8 @@ Job Title: {job_title}
 
 If the title explicitly names a domain, use it directly:
   "Backend Developer" → "Backend Development"
-  "Data Analyst" / "BI Analyst" / "Analytics Analyst" / "Reporting Analyst" → "Data Analytics"
-  "Data Scientist" / "Data Engineer" / "Analytics Engineer" → "Data Science"
-  "ML Engineer" / "AI Engineer" / "NLP Engineer" / "Computer Vision Engineer" → "AI/Machine Learning"
+  "Data Analyst" / "Data Scientist" → "Data Science"
+  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
   "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
   "Cloud Engineer" / "Cloud Architect" → "Cloud Engineering"
   "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
@@ -368,8 +363,7 @@ Key classification rules:
   • Backend: backend framework (Django/Flask/Spring/Express/FastAPI) + database + API work required
   • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work required
   • Full Stack: BOTH frontend AND backend tech explicitly required
-  • Data Analytics: Power BI/Tableau/Excel/DAX + dashboards, KPI reporting, BI work
-  • Data Science: pandas/numpy/scikit-learn/Jupyter + statistical modeling or ML work
+  • Data Science: pandas/numpy/Tableau/Power BI + analysis or visualization work
   • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
   • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
   • Cloud: specific AWS/Azure/GCP services required (not just the word "cloud")
@@ -378,9 +372,6 @@ Key classification rules:
   • UI/UX: Figma/wireframes/prototyping/user research as primary duty
   • DO NOT classify as Full Stack if only backend framework + "website" — frontend tech must be explicit
   • DO NOT classify as Data Science from SQL alone — analytics work must be described
-  • DO NOT classify as AI/Machine Learning from one ML project alone — if majority of projects/skills are analytics (Power BI, Excel, DAX, dashboards) → "Data Analytics"
-  • FREQUENCY RULE: Count how many sections (skills, projects, experience) belong to each domain. The domain winning the MOST SECTIONS wins — not the domain with the single loudest keyword. One TensorFlow mention does NOT override three Power BI + Excel + dashboard signals.
-  • Data Analytics vs Data Science: if tools are primarily BI/reporting (Power BI, Tableau, Excel, DAX, dashboards) → "Data Analytics". If tools are primarily coding/modeling (Python, pandas, scikit-learn, Jupyter, statistical modeling) → "Data Science".
   • If truly mixed with no dominant domain → "Software Engineering"
 
 ════════════════════════════════════════════════════════
@@ -505,19 +496,18 @@ Return ONLY one domain from this list, nothing else:
             title = title.replace(old, new)
             desc = desc.replace(old, new)
 
-        domain_scores = defaultdict(float)
+        domain_scores = defaultdict(int)
         WEIGHTS = {
-            "Data Science": 4,        "Data Analytics": 4,       "AI/Machine Learning": 4,
-            "UI/UX Design": 3,        "Mobile Development": 3,   "Frontend Development": 3,
-            "Backend Development": 3, "Full Stack Development": 4,"Cybersecurity": 4,
-            "Cloud Engineering": 3,   "DevOps/Infrastructure": 3, "Quality Assurance": 3,
-            "Game Development": 3,    "Blockchain Development": 4,"Embedded Systems": 4,
-            "System Architecture": 4, "Database Management": 3,  "Networking": 4,
-            "Site Reliability Engineering": 3, "Product Management": 3, "Project Management": 3,
-            "Business Analysis": 3,   "Technical Writing": 3,    "Digital Marketing": 4,
-            "E-commerce": 4,          "Fintech": 5,               "Healthcare Tech": 5,
-            "EdTech": 4,              "IoT Development": 4,       "AR/VR Development": 4,
-            "Technical Sales": 3,     "Agile Coaching": 3,        "Software Engineering": 2,
+            "Data Science": 4, "AI/Machine Learning": 4, "UI/UX Design": 3,
+            "Mobile Development": 3, "Frontend Development": 3, "Backend Development": 3,
+            "Full Stack Development": 4, "Cybersecurity": 4, "Cloud Engineering": 3,
+            "DevOps/Infrastructure": 3, "Quality Assurance": 3, "Game Development": 3,
+            "Blockchain Development": 3, "Embedded Systems": 3, "System Architecture": 4,
+            "Database Management": 3, "Networking": 3, "Site Reliability Engineering": 3,
+            "Product Management": 3, "Project Management": 3, "Business Analysis": 3,
+            "Technical Writing": 2, "Digital Marketing": 3, "E-commerce": 3, "Fintech": 3,
+            "Healthcare Tech": 3, "EdTech": 3, "IoT Development": 3, "AR/VR Development": 3,
+            "Technical Sales": 2, "Agile Coaching": 2, "Software Engineering": 2,
         }
 
         keywords = {
@@ -893,59 +883,16 @@ Return ONLY one domain from this list, nothing else:
                 "pull request","merge request","continuous integration","solid principles",
                 "dry principle","kiss principle","software lifecycle","sdlc","api","sdk"
             ],
-            "Data Analytics": [
-                "data analyst","analytics analyst","bi analyst","business intelligence analyst",
-                "power bi","tableau","looker","looker studio","google data studio","metabase",
-                "superset","qlik","dax","power query","pivot table","pivot chart",
-                "excel analysis","google sheets","vlookup","xlookup","index match",
-                "sumifs","countifs","data storytelling","dashboard design","kpi dashboard",
-                "operational dashboard","executive dashboard","kpi tracking","kpi reporting",
-                "data-driven decisions","business reporting","report automation","ad hoc reports",
-                "sales analytics","marketing analytics","product analytics","financial analytics",
-                "revenue analysis","cohort analysis","funnel analysis","customer analytics",
-                "retention analysis","churn analysis","market basket analysis",
-                "a/b testing analysis","descriptive analytics","diagnostic analytics",
-                "prescriptive analytics","data insights","analytics engineer",
-                "analytics manager","data visualization specialist","reporting analyst",
-                "performance metrics","scorecard","data summarization","trend analysis"
-            ],
         }
 
         import re as _re
         def _kw_hit(kw, text):
             return bool(_re.search(r'(?<![a-z])' + _re.escape(kw) + r'(?![a-z])', text))
 
-        # ── Section-frequency scoring ─────────────────────────────────────────
-        # Split resume/JD text into labelled sections so hits in "Skills" carry
-        # more weight than hits buried in a general description blob.
-        def _extract_section(text, headers):
-            pattern = '||'.join(_re.escape(h) for h in headers)
-            m = _re.search(
-                rf'(?:{pattern})[:\s]*(.*?)(?=\n[A-Z][^\n]{{3,}}[:\n]|\Z)',
-                text, _re.IGNORECASE | _re.DOTALL
-            )
-            return m.group(1).lower() if m else ""
-
-        skills_text  = _extract_section(desc, ["skills","technical skills","core skills",
-                                                "core competencies","technologies","tech stack"])
-        projects_text= _extract_section(desc, ["projects","project","personal projects","key projects"])
-        exp_text     = _extract_section(desc, ["experience","work experience","internship",
-                                               "employment","professional experience"])
-        cert_text    = _extract_section(desc, ["certification","certificate","credentials","courses"])
-
-        # Section multipliers — skills is the most reliable signal for a resume
-        SECTION_W = {"title": 5.0, "skills": 3.5, "exp": 2.5, "projects": 2.0,
-                     "cert": 1.2, "full": 1.0}
-
         for domain, kws in keywords.items():
-            w = WEIGHTS.get(domain, 1)
-            score  = sum(1 for kw in kws if _kw_hit(kw, title))        * SECTION_W["title"]
-            score += sum(1 for kw in kws if _kw_hit(kw, skills_text))  * SECTION_W["skills"]
-            score += sum(1 for kw in kws if _kw_hit(kw, exp_text))     * SECTION_W["exp"]
-            score += sum(1 for kw in kws if _kw_hit(kw, projects_text))* SECTION_W["projects"]
-            score += sum(1 for kw in kws if _kw_hit(kw, cert_text))    * SECTION_W["cert"]
-            score += sum(1 for kw in kws if _kw_hit(kw, desc))         * SECTION_W["full"]
-            domain_scores[domain] = score * w
+            title_hits = sum(1 for kw in kws if _kw_hit(kw, title))
+            desc_hits  = sum(1 for kw in kws if _kw_hit(kw, desc))
+            domain_scores[domain] = (4 * title_hits + 1 * desc_hits) * WEIGHTS[domain]
 
         # ── Boost 1: explicit full-stack signals ──────────────────────────────
         frontend_hits = sum(1 for kw in keywords["Frontend Development"] if _kw_hit(kw, title) or _kw_hit(kw, desc))
@@ -982,82 +929,24 @@ Return ONLY one domain from this list, nothing else:
             domain_scores["Backend Development"]    += 6
             domain_scores["Full Stack Development"] = max(0, domain_scores["Full Stack Development"] - 3)
 
-        # ── Boost 3: domain keyword boosts (all 34 domains covered) ───────────
+        # ── Boost 3: domain keyword boosts ────────────────────────────────────
         domain_boosts = {
-            # Data domains
-            "Data Science":           ["data scientist","data science","eda","statistical modeling",
-                                       "feature engineering","data pipeline","data engineer"],
-            "Data Analytics":         ["data analyst","bi analyst","power bi","tableau","dax",
-                                       "kpi dashboard","pivot table","analytics report","looker"],
-            "AI/Machine Learning":    ["ai","ml","machine learning","artificial intelligence",
-                                       "deep learning","llm","nlp","neural network","pytorch",
-                                       "tensorflow","scikit-learn","model training","generative ai"],
-            # Web domains
-            "Frontend Development":   ["frontend developer","front-end","react developer",
-                                       "vue developer","angular developer","next.js","ui developer"],
-            "Backend Development":    ["backend developer","back-end","api developer","django",
-                                       "flask","node.js","spring boot","fastapi","rest api"],
-            "Full Stack Development": ["full stack","fullstack","mern","mean","end-to-end",
-                                       "full stack developer","front and back"],
-            # Infrastructure
-            "Cloud Engineering":      ["cloud","aws","azure","gcp","cloud engineer",
-                                       "cloud architect","terraform","cloud infrastructure"],
-            "DevOps/Infrastructure":  ["devops","cicd","ci/cd","docker","kubernetes","jenkins",
-                                       "infrastructure","platform engineer","release engineer"],
-            "Site Reliability Engineering": ["sre","site reliability","error budget","slo","sli",
-                                             "on-call","incident management","toil","chaos engineering"],
-            "Cybersecurity":          ["security","cyber","infosec","pentesting","ethical hacking",
-                                       "soc","siem","owasp","vulnerability","penetration test"],
-            "Networking":             ["network engineer","network administrator","cisco","routing",
-                                       "switching","bgp","ospf","firewall","network architect"],
-            "Database Management":    ["dba","database administrator","sql optimization","replication",
-                                       "database performance","database engineer","database tuning"],
-            "System Architecture":    ["solution architect","enterprise architect","system design",
-                                       "microservices architect","technical architect","distributed systems"],
-            # Specialized tech
-            "Mobile Development":     ["mobile","android","ios","flutter","react native",
-                                       "kotlin","swift","mobile app","mobile developer"],
-            "Game Development":       ["game","unity","unreal","godot","game developer",
-                                       "game engineer","game designer","shader","game mechanics"],
-            "Blockchain Development": ["blockchain","crypto","web3","defi","solidity",
-                                       "smart contract","nft","ethereum","blockchain developer"],
-            "IoT Development":        ["iot","internet of things","mqtt","sensor","edge computing",
-                                       "arduino","raspberry pi","iot engineer","connected devices"],
-            "AR/VR Development":      ["ar","vr","augmented reality","virtual reality","arkit",
-                                       "arcore","oculus","hololens","metaverse","spatial computing"],
-            "Embedded Systems":       ["embedded","firmware","microcontroller","rtos","embedded c",
-                                       "arduino","arm","pic","embedded engineer","low-level"],
-            # Quality & Design
-            "Quality Assurance":      ["qa","quality assurance","test automation","sdet",
-                                       "selenium","cypress","test engineer","testing","qa engineer"],
-            "UI/UX Design":           ["ux","ui design","figma","user experience","wireframe",
-                                       "prototyping","ux designer","ui designer","user research"],
-            # Business & Management
-            "Product Management":     ["product manager","product management","product roadmap",
-                                       "product owner","product strategy","product lead"],
-            "Project Management":     ["project manager","project management","pmp","program manager",
-                                       "scrum master pm","delivery manager","project lead"],
-            "Business Analysis":      ["business analyst","requirements analysis","process mapping",
-                                       "gap analysis","functional requirements","business process"],
-            "Agile Coaching":         ["agile coach","scrum master","agile transformation",
-                                       "safe framework","retrospective","sprint planning","kanban coach"],
-            "Technical Writing":      ["technical writer","api documentation","developer docs",
-                                       "user manual","knowledge base","documentation specialist"],
-            "Technical Sales":        ["sales engineer","pre-sales","solution selling","technical sales",
-                                       "poc","proof of concept","technical account manager","tam"],
-            # Vertical domains
-            "Digital Marketing":      ["seo","sem","ppc","google ads","social media marketing",
-                                       "content marketing","email marketing","digital marketing"],
-            "E-commerce":             ["e-commerce","shopify","woocommerce","magento","online retail",
-                                       "marketplace","ecommerce","amazon seller","bigcommerce"],
-            "Fintech":                ["fintech","financial technology","payment processing","banking",
-                                       "trading","kyc","aml","fraud detection","robo-advisor"],
-            "Healthcare Tech":        ["healthtech","ehr","emr","hipaa","medical software",
-                                       "clinical","telemedicine","health informatics","fhir","hl7"],
-            "EdTech":                 ["edtech","e-learning","lms","learning management","moodle",
-                                       "canvas","educational technology","online course","mooc"],
-            # General fallback
-            "Software Engineering":   ["software engineer","programmer","developer","software developer"],
+            "AI/Machine Learning":    ["ai", "ml", "machine learning", "artificial intelligence", "deep learning", "llm", "nlp"],
+            "Cybersecurity":          ["security", "cyber", "infosec", "pentesting", "ethical hacking", "soc"],
+            "Cloud Engineering":      ["cloud", "aws", "azure", "gcp", "cloud engineer"],
+            "Mobile Development":     ["mobile", "android", "ios", "flutter", "react native", "kotlin", "swift"],
+            "Game Development":       ["game", "unity", "unreal", "godot"],
+            "Blockchain Development": ["blockchain", "crypto", "web3", "defi", "solidity", "smart contract"],
+            "IoT Development":        ["iot", "sensor", "mqtt", "raspberry pi", "arduino iot"],
+            "AR/VR Development":      ["ar", "vr", "augmented reality", "virtual reality", "arkit", "arcore", "oculus"],
+            "Quality Assurance":      ["qa", "quality assurance", "test automation", "sdet", "selenium", "cypress"],
+            "Site Reliability Engineering": ["sre", "site reliability", "error budget", "slo", "sli", "on-call"],
+            "Data Science":           ["data analyst", "data scientist", "business intelligence", "tableau", "power bi"],
+            "UI/UX Design":           ["ux", "ui design", "figma", "user experience", "user interface design", "wireframe"],
+            "Digital Marketing":      ["seo", "sem", "ppc", "social media marketing", "content marketing", "google ads"],
+            "Fintech":                ["fintech", "payment", "banking", "trading", "kyc", "aml"],
+            "Healthcare Tech":        ["healthtech", "ehr", "emr", "hipaa", "medical software", "clinical"],
+            "EdTech":                 ["edtech", "e-learning", "lms", "learning platform", "educational technology"],
         }
         for domain, boost_terms in domain_boosts.items():
             if any(_kw_hit(t, title) for t in boost_terms):
@@ -1076,131 +965,57 @@ Return ONLY one domain from this list, nothing else:
                     domain_scores[domain] = max(0, domain_scores[domain] - (desc_hits * WEIGHTS[domain] * 0.5))
 
         # ── Final selection ────────────────────────────────────────────────────
-
-        # Hard title overrides — explicit job title is the single strongest signal
-        title_overrides = [
-            # Data
-            ("data analyst",                 "Data Analytics"),
-            ("bi analyst",                   "Data Analytics"),
-            ("analytics analyst",            "Data Analytics"),
-            ("analytics engineer",           "Data Analytics"),
-            ("power bi developer",           "Data Analytics"),
-            ("tableau developer",            "Data Analytics"),
-            ("reporting analyst",            "Data Analytics"),
-            ("data scientist",               "Data Science"),
-            ("data engineer",                "Data Science"),
-            ("ml engineer",                  "AI/Machine Learning"),
-            ("ai engineer",                  "AI/Machine Learning"),
-            ("nlp engineer",                 "AI/Machine Learning"),
-            ("computer vision engineer",     "AI/Machine Learning"),
-            ("machine learning engineer",    "AI/Machine Learning"),
-            ("research scientist",           "AI/Machine Learning"),
-            ("mlops engineer",               "AI/Machine Learning"),
-            # Web
-            ("full stack developer",         "Full Stack Development"),
-            ("full-stack developer",         "Full Stack Development"),
-            ("fullstack developer",          "Full Stack Development"),
-            ("frontend developer",           "Frontend Development"),
-            ("front end developer",          "Frontend Development"),
-            ("backend developer",            "Backend Development"),
-            ("back end developer",           "Backend Development"),
-            # Mobile
-            ("mobile developer",             "Mobile Development"),
-            ("android developer",            "Mobile Development"),
-            ("ios developer",                "Mobile Development"),
-            ("flutter developer",            "Mobile Development"),
-            ("react native developer",       "Mobile Development"),
-            # Infrastructure
-            ("devops engineer",              "DevOps/Infrastructure"),
-            ("platform engineer",            "DevOps/Infrastructure"),
-            ("cloud engineer",               "Cloud Engineering"),
-            ("cloud architect",              "Cloud Engineering"),
-            ("sre",                          "Site Reliability Engineering"),
-            ("site reliability engineer",    "Site Reliability Engineering"),
-            ("network engineer",             "Networking"),
-            ("network administrator",        "Networking"),
-            ("database administrator",       "Database Management"),
-            ("dba",                          "Database Management"),
-            ("solution architect",           "System Architecture"),
-            ("enterprise architect",         "System Architecture"),
-            # Security & QA
-            ("security engineer",            "Cybersecurity"),
-            ("security analyst",             "Cybersecurity"),
-            ("penetration tester",           "Cybersecurity"),
-            ("qa engineer",                  "Quality Assurance"),
-            ("test engineer",                "Quality Assurance"),
-            ("sdet",                         "Quality Assurance"),
-            # Design
-            ("ux designer",                  "UI/UX Design"),
-            ("ui designer",                  "UI/UX Design"),
-            ("product designer",             "UI/UX Design"),
-            # Specialized
-            ("blockchain developer",         "Blockchain Development"),
-            ("web3 developer",               "Blockchain Development"),
-            ("game developer",               "Game Development"),
-            ("game engineer",                "Game Development"),
-            ("embedded engineer",            "Embedded Systems"),
-            ("firmware engineer",            "Embedded Systems"),
-            ("iot engineer",                 "IoT Development"),
-            ("ar developer",                 "AR/VR Development"),
-            ("vr developer",                 "AR/VR Development"),
-            # Management & Business
-            ("product manager",              "Product Management"),
-            ("product owner",                "Product Management"),
-            ("project manager",              "Project Management"),
-            ("program manager",              "Project Management"),
-            ("business analyst",             "Business Analysis"),
-            ("scrum master",                 "Agile Coaching"),
-            ("agile coach",                  "Agile Coaching"),
-            ("technical writer",             "Technical Writing"),
-            ("documentation specialist",     "Technical Writing"),
-            ("sales engineer",               "Technical Sales"),
-            ("pre-sales engineer",           "Technical Sales"),
-            # Verticals
-            ("digital marketing",            "Digital Marketing"),
-            ("seo specialist",               "Digital Marketing"),
-            ("growth marketer",              "Digital Marketing"),
-            ("fintech engineer",             "Fintech"),
-            ("healthcare engineer",          "Healthcare Tech"),
-            ("edtech developer",             "EdTech"),
-        ]
-
-        for kw, domain in title_overrides:
-            if _kw_hit(kw, title):
-                return domain
-
         if domain_scores:
-            sorted_domains = sorted(domain_scores.items(), key=lambda x: x[1], reverse=True)
-            top_domain = sorted_domains[0][0]
-            top_score  = sorted_domains[0][1]
-
-            if top_score < 8:
-                return "Unclassified"
-
-            # ── Project-majority tiebreaker ───────────────────────────────────
-            # When top 2 domains are within 22% of each other, count how many
-            # project/experience blocks each domain wins — frequency beats loudness.
-            if len(sorted_domains) >= 2:
-                second_score = sorted_domains[1][1]
-                if second_score >= top_score * 0.78:
-                    import re as _re2
-                    blocks = _re2.split(r"\n(?=[A-Z][^\n]{4,60}\n)", desc)
-                    votes = defaultdict(int)
-                    for block in blocks:
-                        bl = block.lower()
-                        block_scores = {}
-                        for d, kws in keywords.items():
-                            block_scores[d] = sum(1 for kw in kws if _kw_hit(kw, bl))
-                        if block_scores:
-                            best = max(block_scores, key=block_scores.get)
-                            if block_scores[best] > 0:
-                                votes[best] += 1
-                    if votes:
-                        voted = max(votes, key=votes.get)
-                        if votes[voted] >= 2:
-                            return voted
-
-            return top_domain
+            top_domain = max(domain_scores, key=domain_scores.get)
+            top_score  = domain_scores[top_domain]
+            if top_score >= 8:
+                # Hard title overrides — explicit title is strongest signal
+                title_overrides = [
+                    ("full stack developer",         "Full Stack Development"),
+                    ("full-stack developer",         "Full Stack Development"),
+                    ("fullstack developer",          "Full Stack Development"),
+                    ("frontend developer",           "Frontend Development"),
+                    ("front end developer",          "Frontend Development"),
+                    ("backend developer",            "Backend Development"),
+                    ("back end developer",           "Backend Development"),
+                    ("mobile developer",             "Mobile Development"),
+                    ("android developer",            "Mobile Development"),
+                    ("ios developer",                "Mobile Development"),
+                    ("flutter developer",            "Mobile Development"),
+                    ("react native developer",       "Mobile Development"),
+                    ("data analyst",                 "Data Science"),
+                    ("data scientist",               "Data Science"),
+                    ("ml engineer",                  "AI/Machine Learning"),
+                    ("ai engineer",                  "AI/Machine Learning"),
+                    ("qa engineer",                  "Quality Assurance"),
+                    ("test engineer",                "Quality Assurance"),
+                    ("sdet",                         "Quality Assurance"),
+                    ("devops engineer",              "DevOps/Infrastructure"),
+                    ("cloud engineer",               "Cloud Engineering"),
+                    ("sre",                          "Site Reliability Engineering"),
+                    ("site reliability engineer",    "Site Reliability Engineering"),
+                    ("security engineer",            "Cybersecurity"),
+                    ("security analyst",             "Cybersecurity"),
+                    ("penetration tester",           "Cybersecurity"),
+                    ("ux designer",                  "UI/UX Design"),
+                    ("ui designer",                  "UI/UX Design"),
+                    ("product manager",              "Product Management"),
+                    ("project manager",              "Project Management"),
+                    ("business analyst",             "Business Analysis"),
+                    ("scrum master",                 "Agile Coaching"),
+                    ("technical writer",             "Technical Writing"),
+                    ("blockchain developer",         "Blockchain Development"),
+                    ("game developer",               "Game Development"),
+                    ("embedded engineer",            "Embedded Systems"),
+                    ("firmware engineer",            "Embedded Systems"),
+                    ("iot engineer",                 "IoT Development"),
+                    ("network engineer",             "Networking"),
+                    ("database administrator",       "Database Management"),
+                ]
+                for kw, domain in title_overrides:
+                    if _kw_hit(kw, title):
+                        return domain
+                return top_domain
         return "Unclassified"
 
     def get_domain_similarity(self, resume_domain: str, job_domain: str) -> float:
@@ -1226,11 +1041,6 @@ Return ONLY one domain from this list, nothing else:
             "product manager": "product management", "project manager": "project management",
             "business analyst": "business analysis", "technical writer": "technical writing",
             "game developer": "game development", "blockchain developer": "blockchain development",
-            # Data Analytics aliases
-            "data analyst": "data analytics", "bi analyst": "data analytics",
-            "analytics analyst": "data analytics", "analytics engineer": "data analytics",
-            "reporting analyst": "data analytics", "bi developer": "data analytics",
-            "business intelligence": "data analytics",
         }
         resume_domain = normalization.get(resume_domain, resume_domain)
         job_domain    = normalization.get(job_domain, job_domain)
@@ -1250,12 +1060,6 @@ Return ONLY one domain from this list, nothing else:
             ("backend development", "devops/infrastructure"): 0.70,
             ("backend development", "system architecture"): 0.85,
             ("backend development", "software engineering"): 0.80,
-            ("data analytics", "data science"): 0.82,
-            ("data analytics", "ai/machine learning"): 0.60,
-            ("data analytics", "business analysis"): 0.72,
-            ("data analytics", "database management"): 0.65,
-            ("data analytics", "software engineering"): 0.50,
-            ("data science", "data analytics"): 0.82,
             ("data science", "ai/machine learning"): 0.95,
             ("data science", "business analysis"): 0.70,
             ("ai/machine learning", "data science"): 0.95,
@@ -1322,7 +1126,7 @@ Return ONLY one domain from this list, nothing else:
         tech_domains           = {"software engineering","full stack development","frontend development",
                                    "backend development","mobile development","game development",
                                    "blockchain development","embedded systems","iot development"}
-        data_domains           = {"data science","data analytics","ai/machine learning","business analysis"}
+        data_domains           = {"data science","ai/machine learning","business analysis"}
         infrastructure_domains = {"cloud engineering","devops/infrastructure","site reliability engineering",
                                    "system architecture","database management","networking","cybersecurity"}
         management_domains     = {"product management","project management","business analysis","agile coaching"}
