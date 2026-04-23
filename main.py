@@ -3081,8 +3081,6 @@ _JOB_TITLE_OPTIONS = [
     "Full Stack Developer",        # Full Stack Development
     "Mobile Developer",            # Mobile Development
     # ── Data & AI ──
-    "Data Analyst",                # Data Analytics
-    "BI Analyst",                  # Data Analytics
     "Data Scientist",              # Data Science
     "ML Engineer",                 # AI/Machine Learning
     # ── Infrastructure ──
@@ -4176,69 +4174,6 @@ Good to Have:
 - Background in pharmacy management or lab information systems
 """,
 
-    "Data Analyst": """
-Position: Data Analyst
-Location: [City, India] | Full-Time
-
-About the Role:
-We are hiring a Data Analyst to turn raw data into actionable business insights. You will work closely with business stakeholders and product teams to build dashboards, track KPIs, and drive data-informed decisions.
-
-Key Responsibilities:
-- Collect, clean, and analyze large datasets to surface business insights
-- Build and maintain interactive dashboards and reports using Power BI, Tableau, or Looker Studio
-- Define, track, and report on key business KPIs across sales, marketing, and operations
-- Perform exploratory data analysis (EDA) to identify trends, patterns, and anomalies
-- Develop DAX measures, calculated columns, and Power Query transformations in Power BI
-- Conduct A/B testing analysis and cohort analysis to evaluate campaigns and product performance
-- Automate recurring reports and reduce manual data preparation time
-- Present findings clearly to non-technical stakeholders through data storytelling
-
-Required Skills & Qualifications:
-- B.E./B.Tech/BCA/MCA or Bachelor's in Statistics, Mathematics, or Computer Science
-- 1–4 years of experience in a data analyst or business intelligence role
-- Strong proficiency in SQL for querying relational databases
-- Hands-on experience with Power BI or Tableau for dashboard development
-- Proficiency in Microsoft Excel including pivot tables, VLOOKUP/XLOOKUP, and Power Query
-- Strong analytical thinking and attention to detail
-
-Good to Have:
-- Experience with Python (pandas, matplotlib) for data analysis
-- Familiarity with Google Analytics, Mixpanel, or Amplitude
-- Exposure to data warehousing concepts (star schema, fact/dimension tables)
-- Knowledge of DAX for advanced Power BI calculations
-""",
-
-    "BI Analyst": """
-Position: Business Intelligence (BI) Analyst
-Location: [City, India] | Full-Time
-
-About the Role:
-We are looking for a skilled BI Analyst to design and deliver enterprise-level business intelligence solutions. You will bridge the gap between raw data and strategic decision-making by building scalable dashboards, data models, and self-service reporting infrastructure.
-
-Key Responsibilities:
-- Design, develop, and maintain BI dashboards and reports for business stakeholders
-- Build robust data models in Power BI or Tableau including star/snowflake schemas
-- Write complex DAX formulas and Power Query M scripts for advanced analytics
-- Develop ETL pipelines to integrate data from multiple source systems into the BI layer
-- Collaborate with data engineering teams to ensure data warehouse accuracy
-- Define and govern KPI definitions, business metrics, and reporting standards
-- Build self-service analytics capabilities to reduce ad-hoc reporting requests
-- Create executive-level dashboards and scorecards for C-suite reporting
-
-Required Skills & Qualifications:
-- B.E./B.Tech/BCA/MCA in Computer Science, Statistics, or related field
-- 2–5 years of experience in BI development or data analytics
-- Advanced proficiency in Power BI (DAX, Power Query, data modeling) or Tableau
-- Strong SQL skills including complex joins, window functions, and CTEs
-- Experience with data warehouse platforms (Snowflake, BigQuery, Redshift, or Azure Synapse)
-- Solid understanding of dimensional modeling and BI architecture patterns
-
-Good to Have:
-- Experience with dbt for transformation layer development
-- Familiarity with Python for data manipulation and automation
-- Knowledge of Looker, Metabase, or Apache Superset
-""",
-
     "EdTech Specialist": """\
 Position: EdTech Specialist
 Location: [City, India] | Full-Time
@@ -4407,126 +4342,39 @@ with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.
         st.warning("Please enter a job description to evaluate the resumes.")
 
 # ---------------- Advanced Weights Dropdown ----------------
-# ── Career Level Presets + ATS Scoring Weights ───────────────────────────────
-_CAREER_PRESETS = {
-    "Fresher (0–1 yr)":     dict(edu=30, exp=15, skills=30, lang=5, kw=10),
-    "Mid-level (2–5 yrs)":  dict(edu=20, exp=30, skills=25, lang=5, kw=10),
-    "Experienced (5+ yrs)": dict(edu=10, exp=40, skills=25, lang=5, kw=10),
-}
-_PRESET_RATIONALE = {
-    "Fresher (0–1 yr)":     "Education and skills dominate — no work history to evaluate.",
-    "Mid-level (2–5 yrs)":  "Balanced — experience begins to outweigh education.",
-    "Experienced (5+ yrs)": "Experience is the dominant signal at senior level.",
-}
-
-with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
+with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/settings.png) Customize ATS Scoring Weights", expanded=False):
     st.markdown(
-        "<div style='font-size:0.72rem;color:#64748b;margin-bottom:10px;"
-        "font-family:-apple-system,sans-serif;'>"
+        "<div style='font-size:0.72rem;color:#64748b;margin-bottom:8px;font-family:-apple-system,sans-serif;'>"
         "Format quality is scored automatically (10 pts fixed). "
         "Adjust the remaining <b>90 pts</b> below.</div>",
         unsafe_allow_html=True
     )
+    edu_weight     = st.slider("![Education](https://img.icons8.com/ios-filled/20/graduation-cap.png) Education Weight",     5, 40, 20)
+    exp_weight     = st.slider("![Experience](https://img.icons8.com/ios-filled/20/portfolio.png) Experience Weight",         5, 45, 35)
+    skills_weight  = st.slider("![Skills](https://img.icons8.com/ios-filled/20/gear.png) Skills Match Weight",               5, 40, 20)
+    lang_weight    = st.slider("![Language](https://img.icons8.com/ios-filled/20/language.png) Language Quality Weight",     2, 10,  5)
+    keyword_weight = st.slider("![Keyword](https://img.icons8.com/ios-filled/20/key.png) Keyword Match Weight",              3, 20, 10)
 
-    # ── Career level mode selector ────────────────────────────────────────────
-    st.markdown(
-        "<div style='font-size:0.72rem;font-weight:700;letter-spacing:0.08em;"
-        "text-transform:uppercase;color:#4a5568;margin-bottom:8px;"
-        "font-family:-apple-system,sans-serif;'>Career Level Preset</div>",
-        unsafe_allow_html=True
-    )
-
-    _SVG_ICONS = {
-        "Fresher (0–1 yr)": (
-            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" ' +
-            'stroke="#1D9E75" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
-            '<path d="M22 10v6M2 10l10-5 10 5-10 5z"/>' +
-            '<path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>'
-        ),
-        "Mid-level (2–5 yrs)": (
-            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" ' +
-            'stroke="#378ADD" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
-            '<rect x="2" y="7" width="20" height="14" rx="2"/>' +
-            '<path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>'
-        ),
-        "Experienced (5+ yrs)": (
-            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" ' +
-            'stroke="#7F77DD" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
-            '<circle cx="12" cy="8" r="4"/>' +
-            '<path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>' +
-            '<polyline points="16 3 18 5 22 1"/></svg>'
-        ),
-    }
-
-    selected_mode = st.radio(
-        "Career level",
-        options=list(_CAREER_PRESETS.keys()),
-        index=0,
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-    _preset = _CAREER_PRESETS[selected_mode]
-
-    # Rationale pill
-    _rationale_colors = {
-        "Fresher (0–1 yr)":     ("rgba(29,158,117,0.12)", "rgba(29,158,117,0.35)", "#6ee7b7"),
-        "Mid-level (2–5 yrs)":  ("rgba(55,138,221,0.12)", "rgba(55,138,221,0.35)", "#7dd3fc"),
-        "Experienced (5+ yrs)": ("rgba(127,119,221,0.12)","rgba(127,119,221,0.35)","#c4b5fd"),
-    }
-    _rc = _rationale_colors[selected_mode]
-    st.markdown(
-        f"<div style='font-size:0.72rem;color:{_rc[2]};background:{_rc[0]};"
-        f"border:1px solid {_rc[1]};border-radius:8px;padding:7px 10px;"
-        f"margin-bottom:10px;font-family:-apple-system,sans-serif;line-height:1.5;'>"
-        f"{_SVG_ICONS[selected_mode]}&nbsp; {_PRESET_RATIONALE[selected_mode]}"
-        f"</div>",
-        unsafe_allow_html=True
-    )
-
-    # ── Fine-tune sliders ─────────────────────────────────────────────────────
-    st.markdown(
-        "<div style='font-size:0.72rem;font-weight:700;letter-spacing:0.08em;"
-        "text-transform:uppercase;color:#4a5568;margin-bottom:8px;"
-        "font-family:-apple-system,sans-serif;'>Fine-tune</div>",
-        unsafe_allow_html=True
-    )
-
-    _edu_svg    = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>'
-    _exp_svg    = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>'
-    _skills_svg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></svg>'
-    _lang_svg   = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>'
-    _kw_svg     = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'
-
-    edu_weight     = st.slider(f"Education",     5,  40, _preset["edu"],   key="sl_edu")
-    exp_weight     = st.slider(f"Experience",    5,  45, _preset["exp"],   key="sl_exp")
-    skills_weight  = st.slider(f"Skills",        5,  40, _preset["skills"],key="sl_skills")
-    lang_weight    = st.slider(f"Language",      2,  10, _preset["lang"],  key="sl_lang")
-    keyword_weight = st.slider(f"Keywords",      3,  20, _preset["kw"],    key="sl_kw")
-
-    total_weight  = edu_weight + exp_weight + skills_weight + lang_weight + keyword_weight
+    total_weight = edu_weight + exp_weight + skills_weight + lang_weight + keyword_weight
     weights_valid = (total_weight == 90)
 
-    # ── Validation badge ──────────────────────────────────────────────────────
+    # ---------------- Inline SVG Validation ----------------
     if not weights_valid:
-        _remaining  = 90 - total_weight
-        _direction  = f"remove {abs(_remaining)}" if _remaining < 0 else f"add {_remaining}"
+        _remaining = 90 - total_weight
+        _direction = f"remove {abs(_remaining)}" if _remaining < 0 else f"add {_remaining}"
         st.markdown(
-            f"<div style=\"display:flex;align-items:center;gap:8px;border:1px solid rgba(251,113,133,0.3);"
-            f"background:rgba(251,113,133,0.08);padding:10px 14px;border-radius:10px;\">"
-            f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#fb7185\" style=\"flex-shrink:0;\">"
-            f"<path d=\"M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.83 0-1.5.67-1.5 1.5S11.17 20 12 20s1.5-.67 1.5-1.5S12.83 17 12 17zm1-4V7h-2v6h2z\"/></svg>"
-            f"<span style=\"color:#fca5a5;font-size:0.8rem;font-weight:600;font-family:-apple-system,sans-serif;\">"
-            f"Total = {total_weight}/90 — {_direction} pts. Analysis blocked.</span></div>",
+            f"<div style=\"display:flex;align-items:center;gap:8px;border:1px solid rgba(251,113,133,0.3);background:linear-gradient(135deg,rgba(251,113,133,0.12) 0%,rgba(251,113,133,0.05) 100%);padding:10px 14px;border-radius:10px;backdrop-filter:blur(12px);\">"
+            f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#fb7185\" style=\"flex-shrink:0;vertical-align:middle;\"><path d=\"M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.83 0-1.5.67-1.5 1.5S11.17 20 12 20s1.5-.67 1.5-1.5S12.83 17 12 17zm1-4V7h-2v6h2z\"/></svg>"
+            f"<span style=\"color:#fca5a5;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;\">Total = {total_weight} / 90 — {_direction} pts to balance. Analysis is blocked until weights = 90.</span>"
+            f"</div>",
             unsafe_allow_html=True
         )
     else:
         st.markdown(
-            f"<div style=\"display:flex;align-items:center;gap:8px;border:1px solid rgba(52,211,153,0.28);"
-            f"background:rgba(52,211,153,0.08);padding:10px 14px;border-radius:10px;\">"
-            f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#34d399\" style=\"flex-shrink:0;\">"
-            f"<path d=\"M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.3 7.7l-1.4-1.4z\"/></svg>"
-            f"<span style=\"color:#6ee7b7;font-size:0.8rem;font-weight:600;font-family:-apple-system,sans-serif;\">"
-            f"Weights balanced · 90 pts · Total = 100</span></div>",
+            f"<div style=\"display:flex;align-items:center;gap:8px;border:1px solid rgba(52,211,153,0.28);background:linear-gradient(135deg,rgba(52,211,153,0.12) 0%,rgba(52,211,153,0.05) 100%);padding:10px 14px;border-radius:10px;backdrop-filter:blur(12px);\">"
+            f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#34d399\" style=\"flex-shrink:0;vertical-align:middle;\"><path d=\"M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.3 7.7l-1.4-1.4z\"/></svg>"
+            f"<span style=\"color:#6ee7b7;font-weight:600;font-size:0.8rem;font-family:-apple-system,sans-serif;\">Weights balanced · Content = 90 pts · Format = 10 pts · Total = 100</span>"
+            f"</div>",
             unsafe_allow_html=True
         )
 
@@ -5041,7 +4889,7 @@ RULE E — CAREER SWITCHERS:
 RULE F — JOB TITLE as strong signal (Level C only):
   • ONLY applies to Level C (1+ years full-time work experience)
   • For Level C: explicit job title is the STRONGEST single signal
-  • "Backend Developer" → "Backend Development", "Data Analyst" → "Data Analytics"
+  • "Backend Developer" → "Backend Development", "Data Analyst" → "Data Science"
   ⚠ For Level B (freshers/students): internship title is ONE signal among many.
     It can be OVERRIDDEN if skills + projects show 3+ strong signals for a different domain.
     Do NOT blindly use internship title for Level B — apply Rule C conflict check first.
@@ -5102,7 +4950,7 @@ If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scie
 
 Title override examples:
   "Backend Developer" → "Backend Development"
-  "Data Analyst" → "Data Analytics"
+  "Data Analyst" → "Data Science"
   "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
   "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
   "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
