@@ -49,7 +49,8 @@ from llm_manager import (
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
     get_database_stats, detect_domain_from_title_and_description,
-    get_domain_similarity
+    get_domain_similarity, build_resume_domain_prompt, build_jd_domain_prompt,
+    DOMAIN_VALID_LIST,
 )
 from user_login import (
     create_user_table, add_user, complete_registration, verify_user,
@@ -3018,264 +3019,15 @@ def ats_percentage_score(
 ):
     import datetime
 
-    _valid_domains = [
-        "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
-        "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
-        "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
-        "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
-        "Networking", "Site Reliability Engineering", "Product Management", "Project Management",
-        "Business Analysis", "Technical Writing", "Digital Marketing", "E-commerce", "Fintech",
-        "Healthcare Tech", "EdTech", "IoT Development", "AR/VR Development", "Technical Sales",
-        "Agile Coaching", "Software Engineering"
-    ]
-    _domain_list = ", ".join(_valid_domains)
+    _valid_domains = DOMAIN_VALID_LIST
 
     # FIX: use pre-detected value if passed in, only call LLM if not already set
     # When called from the parallel thread, resume_domain is set by the main thread
     # so no LLM call fires inside the thread (thread-safe).
     _resume_cache_key = f"resume_domain_{hash(resume_text[:500])}"
     if resume_domain is None and _resume_cache_key not in st.session_state:
-        _resume_domain_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across ALL levels and ALL industries — freshers, students, mid-level, senior professionals, non-tech roles, design, management, marketing, finance, healthcare, and more.
-
-Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.
-
-════════════════════════════════════════════════════════
-STEP 1 — DETERMINE CANDIDATE LEVEL
-════════════════════════════════════════════════════════
-
-LEVEL A — Pure Fresher / Student with NO specialization evidence:
-  • Still studying OR just graduated with ONLY basic CS fundamentals listed (Java, C, C++, Python, HTML, SQL in isolation)
-  • No internship OR only 1 internship with zero description of work done
-  • Projects listed as bare names only — no tech stack, no description
-  → DEFAULT to "Software Engineering". Do not over-classify.
-  → EXAMPLE: Only Java + MySQL + DBMS skills, no projects described → "Software Engineering"
-
-LEVEL B — Fresher / Student WITH at least ONE specialization signal:
-  • Has at least one of:
-    - 1 internship with a described role or technology stack
-    - 1 project with a description mentioning domain-specific technologies
-    - Skills showing a clear non-trivial technology stack beyond basic CS
-  → Classify into the MOST EVIDENCED specific domain using STEP 2 rules
-
-LEVEL C — Experienced Professional (1+ years full-time work):
-  → ALWAYS classify into a specific domain. Use job titles + tech stack + years as primary signals.
-  → Only fall back to "Software Engineering" if domain is genuinely mixed with no clear winner.
-
-════════════════════════════════════════════════════════
-STEP 2 — DOMAIN CLASSIFICATION RULES
-════════════════════════════════════════════════════════
-
-RULE A — NEVER over-classify from basic skills alone:
-  ✗ Java + MySQL alone → NOT "Backend Development"
-  ✗ HTML + CSS alone → NOT "Frontend Development"
-  ✗ Python alone → NOT "AI/Machine Learning" or "Data Science"
-  ✗ SQL alone → NOT "Database Management"
-  ✗ C / C++ alone → NOT "Embedded Systems"
-  ✓ Basic CS languages + no described projects/frameworks → "Software Engineering"
-
-RULE B — TRUE EVIDENCE BAR per domain (must satisfy BOTH sub-conditions):
-
-  → Frontend Development:
-     MUST have: HTML+CSS+JS PLUS one of (React/Vue/Angular/Bootstrap/jQuery/Svelte/Next.js)
-     AND: at least 1 described project or internship explicitly about web UI / frontend
-
-  → Backend Development:
-     MUST have: A backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI/NestJS/Rails)
-     AND: database integration described in a project or internship
-     ⚠ "website" or "web application" in project name does NOT imply Full Stack.
-     Django + database + "Travel Management website" with NO frontend tech mentioned = Backend Development.
-     Only classify as Full Stack if HTML/CSS/JS or a frontend framework is EXPLICITLY mentioned.
-
-  → Full Stack Development:
-     MUST have: frontend technologies (HTML+CSS+JS or React/Vue/Angular/Bootstrap/jQuery/Svelte/Next.js)
-     AND: backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI)
-     AND: database — ALL THREE explicitly present in the same project or internship description
-     OR: candidate explicitly self-identifies as "full stack" / "front-end and back-end" in summary/title
-     ⚠ "website" + backend framework alone is NOT Full Stack — frontend tech must be named explicitly.
-
-  → Mobile Development:
-     MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift/Xamarin
-     AND: at least 1 described mobile app project or internship
-
-  → Data Science:
-     MUST have: pandas/numpy/matplotlib/seaborn/Tableau/Power BI/Looker/R/SPSS/Excel analytics
-     AND: actual data analysis, reporting, or visualization project described
-     NOT: SQL or Excel listed as a lone skill with no analytical work described
-
-  → AI/Machine Learning:
-     MUST have: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/OpenAI/LangChain/NLP/Computer Vision/LLM
-     AND: model training, fine-tuning, or ML pipeline described in a project
-
-  → Cybersecurity:
-     MUST have: security tools (Kali Linux/Burp Suite/Wireshark/Metasploit/Nmap) OR concepts (pentesting/OWASP/CTF/ethical hacking/SOC)
-     AND: security internship or project described
-     NOTE: "Cybersecurity virtual internship" with no tools/work described = weak signal only
-
-  → DevOps/Infrastructure:
-     MUST have: Docker/Kubernetes/CI-CD/Jenkins/Terraform/Ansible/Helm/ArgoCD
-     AND: deployment, pipeline, or infrastructure project described
-
-  → Cloud Engineering:
-     MUST have: specific AWS/Azure/GCP service names (not just the word "cloud")
-     AND: cloud deployment or architecture described in a project or role
-
-  → UI/UX Design:
-     MUST have: Figma/Adobe XD/Sketch/InVision/Framer/Zeplin
-     AND: wireframes, prototypes, or user research described
-
-  → Database Management:
-     MUST have: DBA title OR database optimization/administration/replication/tuning as PRIMARY focus
-     NOT: SQL listed as one skill among many
-
-  → Quality Assurance:
-     MUST have: testing frameworks (Selenium/Cypress/JUnit/pytest/Postman/JMeter/Appium) OR QA role title
-     AND: test planning, test cases, or automation described
-
-  → Game Development:
-     MUST have: Unity/Unreal Engine/Godot/game mechanics/shader programming
-     AND: at least 1 described game project
-
-  → Blockchain Development:
-     MUST have: Solidity/Web3/Smart Contracts/Ethereum/DeFi/NFT/Hardhat/Truffle
-     AND: blockchain project described
-
-  → Embedded Systems:
-     MUST have: microcontroller/RTOS/firmware/Arduino/STM32/ESP32/ARM/assembly/hardware programming
-     AND: hardware or embedded project described
-
-  → IoT Development:
-     MUST have: IoT devices/sensors/MQTT/CoAP/Raspberry Pi in IoT context/hardware integration
-     AND: IoT project or deployment described
-
-  → AR/VR Development:
-     MUST have: ARKit/ARCore/Unity3D VR/Unreal VR/Oculus/HoloLens/WebXR
-     AND: AR/VR project described
-
-  → System Architecture:
-     MUST have: architect-level title (Solution Architect/Enterprise Architect/System Architect) OR
-     explicit work on distributed systems design, microservices architecture, system design
-
-  → Networking:
-     MUST have: network engineer/admin title OR Cisco/routing/switching/BGP/OSPF/VPN/network protocols
-     AND: network configuration or administration work described
-
-  → Site Reliability Engineering:
-     MUST have: SRE title OR SLI/SLO/error budgets/on-call/toil reduction
-     AND: reliability engineering work described
-
-  → Product Management:
-     MUST have: product ownership, roadmaps, PRDs, stakeholder management, feature prioritization
-     NOT: just Agile/Scrum keywords
-
-  → Project Management:
-     MUST have: managing teams/timelines/deliverables, PMP/Prince2/program manager experience
-     NOT: just "worked in agile team"
-
-  → Business Analysis:
-     MUST have: requirements gathering, process mapping, BRD/FRD writing, stakeholder analysis
-     AND: BA role or described BA work
-
-  → Digital Marketing:
-     MUST have: SEO/SEM/PPC/social media campaigns/content marketing/Google Ads/Meta Ads
-     AND: actual marketing work or results described
-
-  → Technical Writing:
-     MUST have: documentation, API docs, user manuals, technical communication as PRIMARY work
-     AND: writing samples, tools (Confluence/GitBook/Sphinx) or writing role described
-
-  → E-commerce:
-     MUST have: Shopify/Magento/WooCommerce/marketplace/order management/product catalog
-     AND: e-commerce work described
-
-  → Fintech:
-     MUST have: payment processing/banking software/trading systems/KYC/AML/financial technology
-     AND: fintech role or project described
-
-  → Healthcare Tech:
-     MUST have: EHR/EMR/HIPAA/telemedicine/medical software/healthcare data/clinical systems
-     AND: healthcare context described
-
-  → EdTech:
-     MUST have: e-learning/LMS/educational platform/curriculum technology/learning analytics
-     AND: education tech context described
-
-  → Technical Sales:
-     MUST have: sales engineer/pre-sales/solution selling/demo/RFP/customer technical support
-     AND: sales engineering role described
-
-  → Agile Coaching:
-     MUST have: Scrum Master/Agile Coach/SAFe/team facilitation/sprint ceremonies as PRIMARY role
-     NOT: just "worked in agile" or "familiar with scrum"
-
-RULE C — MIXED SIGNALS → dominant domain wins:
-  • Count evidence per domain: (tech keywords in described work) + (project descriptions) + (job/internship titles)
-  • Domain with MOST evidence wins
-  • Tie between frontend+backend → "Full Stack Development"
-  • Tie between unrelated domains → "Software Engineering"
-  • 1 weak signal (e.g. 1 virtual internship, no described work) vs 3 strong signals → strong side wins
-  ⚠ INTERNSHIP TITLE CONFLICT RULE (critical for Level B):
-    If internship title suggests Domain A BUT skills + projects have 3+ strong signals for Domain B
-    AND Domain B is more specific than Domain A → Domain B wins over the internship title.
-    EXAMPLE: "Full Stack Developer Intern" + LangChain/LLaMA/RAG/FAISS/LLMs in skills+projects
-             → "AI/Machine Learning" wins, NOT "Full Stack Development"
-    EXAMPLE: "Full Stack Developer Intern" + only HTML/CSS/React/Node projects, no AI tools
-             → "Full Stack Development" wins correctly
-    EXAMPLE: "Android Developer Intern" + Flutter/Kotlin projects → "Mobile Development" wins correctly
-
-RULE D — NON-TECH / HYBRID profiles:
-  • Pure non-tech background (marketing, finance, HR, design) + no tech projects → classify by their actual domain
-  • Career switcher: old domain + new tech projects/certs → classify by NEW tech domain if evidence is substantial
-
-RULE E — RESEARCH / ACADEMIC profiles:
-  • Research at university/NIT/IIT/ISRO/DRDO/labs → classify by RESEARCH TOPIC
-  • AI/NLP/CV research → "AI/Machine Learning"
-  • Security research → "Cybersecurity"
-  • Hardware/systems research → "Embedded Systems"
-  • Generic CS research → "Software Engineering"
-
-RULE F — JOB TITLE as strong signal (Level C only):
-  • ONLY applies to Level C (1+ years full-time work experience)
-  • For Level C: explicit job title is the STRONGEST single signal
-  • "Backend Developer" title → "Backend Development"
-  • "Data Analyst" title → "Data Science"
-  • "QA Engineer" title → "Quality Assurance"
-  • Title + matching tech stack → confirm that domain immediately
-  ⚠ For Level B (freshers/students): internship title is ONE signal among many.
-    It can be OVERRIDDEN if skills + projects show 3+ strong signals for a different domain.
-    Do NOT blindly use internship title for Level B — apply Rule C conflict check first.
-
-════════════════════════════════════════════════════════
-STEP 3 — TIEBREAKERS (apply in order)
-════════════════════════════════════════════════════════
-
-T1. If self-identified domain in summary/objective → use that domain (if it exists in the valid list)
-T2. If internship title names a domain AND no conflict with Rule C → use that domain
-    ⚠ If conflict exists (skills+projects strongly point elsewhere) → skip T2, go to T3
-T3. If tech stack strongly maps to exactly 1 domain → use that domain
-T4. If still tied → "Software Engineering" as safe fallback
-
-════════════════════════════════════════════════════════
-STEP 4 — FINAL SANITY CHECK
-════════════════════════════════════════════════════════
-
-Before answering, verify:
-1. Did I correctly determine the level (A/B/C)?
-2. If Level A → am I returning "Software Engineering"? (If not, reconsider)
-3. Does my chosen domain meet the TRUE EVIDENCE BAR from Rule B?
-4. For Full Stack: are frontend tech + backend framework + database ALL explicitly mentioned? If any is missing → not Full Stack.
-5. If Level B: did I check Rule C conflict? Is the internship title conflicting with skills+projects?
-   If yes → did I correctly let skills+projects override the internship title?
-6. If Level C: is there a job title that confirms my domain (Rule F)?
-7. Is this the domain with the MOST evidence overall?
-
-════════════════════════════════════════════════════════
-Resume Text:
-{resume_text[:2500]}
-════════════════════════════════════════════════════════
-
-Return ONLY one domain from this list, nothing else:
-{_domain_list}
-"""
+        # ── Use shared prompt builder — single source of truth in db_manager ──
+        _resume_domain_prompt = build_resume_domain_prompt(resume_text)
         try:
             _r = call_llm(_resume_domain_prompt, session=st.session_state).strip()
             if _r in _valid_domains:
@@ -3312,85 +3064,9 @@ Return ONLY one domain from this list, nothing else:
         except Exception:
             st.session_state[_jd_cache_key] = "Software Engineering"
     if job_domain is None and _jd_cache_key not in st.session_state:
-        _jd_domain_prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions across all industries and levels.
-
-Your ONLY job: identify the PRIMARY professional domain this job description is hiring for.
-
-════════════════════════════════════════════════════════
-STEP 1 — READ THE JOB TITLE FIRST (strongest signal)
-════════════════════════════════════════════════════════
-
-Job Title: {job_title}
-
-If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scientist", "DevOps Engineer", "UX Designer"), use that domain directly — do not over-analyse the description.
-
-Title override examples:
-  "Backend Developer" → "Backend Development"
-  "Data Analyst" → "Data Science"
-  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
-  "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
-  "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
-  "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
-  "Mobile Developer" / "Android" / "iOS" / "Flutter" → "Mobile Development"
-  "Full Stack Developer" → "Full Stack Development"
-  "Frontend Developer" / "Front End" → "Frontend Development"
-  "UX Designer" / "UI Designer" / "Product Designer" → "UI/UX Design"
-  "Security Engineer" / "Security Analyst" / "Penetration Tester" → "Cybersecurity"
-  "SRE" / "Site Reliability Engineer" → "Site Reliability Engineering"
-  "Blockchain Developer" / "Web3 Developer" → "Blockchain Development"
-  "Game Developer" / "Game Engineer" → "Game Development"
-  "Embedded Engineer" / "Firmware Engineer" → "Embedded Systems"
-  "IoT Engineer" → "IoT Development"
-  "Network Engineer" / "Network Admin" → "Networking"
-  "Database Administrator" / "DBA" → "Database Management"
-  "Product Manager" → "Product Management"
-  "Project Manager" / "Program Manager" → "Project Management"
-  "Business Analyst" → "Business Analysis"
-  "Scrum Master" / "Agile Coach" → "Agile Coaching"
-  "Technical Writer" → "Technical Writing"
-  "Sales Engineer" / "Pre-Sales" → "Technical Sales"
-  "Solution Architect" / "Enterprise Architect" → "System Architecture"
-
-════════════════════════════════════════════════════════
-STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE JD BELOW
-════════════════════════════════════════════════════════
-
-Job Description:
-{job_description[:2000]}
-
-Classification rules:
-  • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
-  • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work
-  • Full Stack: Both frontend AND backend tech explicitly required
-  • Data Science: SQL/Python analytics + pandas/numpy/Tableau/Power BI + analysis work
-  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
-  • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
-  • Cloud: AWS/Azure/GCP services explicitly required (not just "cloud" mentioned)
-  • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
-  • Mobile: Android/iOS/Flutter/React Native explicitly required
-  • UI/UX: Figma/wireframes/prototyping/user research required
-  • Product Management: roadmap/PRD/stakeholder management (not just Agile)
-  • Project Management: team delivery/PMP/programme management
-  • Business Analysis: requirements/BRD/process mapping as primary duty
-  • Quality Assurance: test automation/test planning as primary duty
-  • Fintech: payment/banking/trading/KYC/AML systems
-  • Healthcare Tech: EHR/EMR/HIPAA/clinical systems
-  • EdTech: LMS/e-learning/educational platform
-  • Game Development: Unity/Unreal/game mechanics explicitly required
-  • Blockchain: Solidity/Web3/smart contracts explicitly required
-  • Embedded: firmware/RTOS/microcontroller/hardware explicitly required
-
-════════════════════════════════════════════════════════
-STEP 3 — FINAL CHECK
-════════════════════════════════════════════════════════
-
-1. Did the job title directly name a domain? → Use that.
-2. If not, which domain has the MOST required skills/responsibilities in the JD?
-3. If truly unclear → "Software Engineering"
-
-Return ONLY one domain from this list, nothing else:
-{_domain_list}
-"""
+        # ── Use shared prompt builder — single source of truth in db_manager ──
+        # Item 4 fix: job_description now sent at 3000 chars (was 2000) via builder
+        _jd_domain_prompt = build_jd_domain_prompt(job_title, job_description)
         try:
             _j = call_llm(_jd_domain_prompt, session=st.session_state).strip()
             if _j in _valid_domains:
@@ -3418,9 +3094,12 @@ Return ONLY one domain from this list, nothing else:
     grammar_feedback    = "Language quality appears adequate for professional communication."
     grammar_suggestions = []
 
-    # ✅ Balanced domain penalty
+    # ✅ Balanced domain penalty — zero penalty for near-identical domains (>= 0.90)
     MAX_DOMAIN_PENALTY = 15
-    domain_penalty = round((1 - similarity_score) * MAX_DOMAIN_PENALTY)
+    if similarity_score >= 0.90:
+        domain_penalty = 0
+    else:
+        domain_penalty = round((1 - similarity_score) * MAX_DOMAIN_PENALTY)
 
     # ✅ Optional profile score note
     logic_score_note = (
