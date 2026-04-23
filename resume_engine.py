@@ -964,59 +964,17 @@ RESUME TEXT:
                         _after = f0.split(',', 1)[1].strip()
                         if len(_after) >= 2 and re.search(r'[a-zA-Z]', _after):
                             return True
-
-                    # ── City/PIN pattern: "Kolkata – 700034" or "Kolkata - 700034"
-                    # The dash + 6-digit PIN was matching the phone number regex
-                    # and being skipped — causing sidebar location to be injected
-                    # on top of an existing location. Detect this explicitly first.
-                    _CITY_PIN_PAT = re.compile(
-                        r'[a-zA-Z]{3,}[\s–—\-]+\d{6}'  # city – 700034
-                    )
-                    # Indian PIN code standalone: exactly 6 digits optionally preceded by city
-                    _PIN_PAT = re.compile(r'\d{6}')
-
-                    # City keyword pattern — all major Indian cities + generic terms
-                    _CITY_PAT = re.compile(
-                        r'\b(kolkata|calcutta|bangalore|bengaluru|hyderabad|mumbai|'
-                        r'pune|chennai|madras|delhi|new delhi|noida|gurgaon|gurugram|'
-                        r'ahmedabad|coimbatore|indore|jaipur|kochi|cochin|bhubaneswar|'
-                        r'chandigarh|nagpur|thiruvananthapuram|trivandrum|vizag|'
-                        r'visakhapatnam|surat|vadodara|ludhiana|agra|patna|'
-                        r'bhopal|thane|navi mumbai|mysore|mysuru|mangalore|'
-                        r'india|remote|work from home|wfh)\b',
-                        re.IGNORECASE
-                    )
-
-                    # Phone number pattern — must be purely digits/spaces/+/-/()/.
-                    # BUT: exclude if it also contains alpha chars (= city name present)
-                    def _is_phone(field):
-                        # Has alpha → not a phone (could be city–PIN like "Kolkata – 700034")
-                        if re.search(r'[a-zA-Z]', field):
-                            return False
-                        # Pure digit/symbol string of 7+ chars → phone
-                        return bool(re.match(r'^[\d\s\+\-\(\)\.]{7,}$', field))
-
-                    for f in pipe_fields[1:]:
+                    # Check fields from index 2 onward for any non-URL/email/phone text
+                    for f in pipe_fields[2:]:
                         if not f:
                             continue
                         if f.startswith('http'):
                             continue
                         if '@' in f:
                             continue
-                        # City–PIN pattern like "Kolkata – 700034" → location present
-                        if _CITY_PIN_PAT.search(f):
-                            return True
-                        # Standalone 6-digit PIN → Indian address present
-                        if _PIN_PAT.search(f) and not _is_phone(f):
-                            return True
-                        # Skip pure phone numbers
-                        if _is_phone(f):
+                        if re.match(r'^[\d\s\+\-\(\)\.]{7,}$', f):
                             continue
-                        # City keyword match → location present
-                        if _CITY_PAT.search(f):
-                            return True
-                        # Any remaining plain-text field → treat as location present
-                        return True
+                        return True  # found a real text field → location present
                     return False
 
                 if not _has_location_in_header(_header):
@@ -3061,7 +3019,7 @@ def ats_percentage_score(
     import datetime
 
     _valid_domains = [
-        "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
+        "Data Science", "Data Analytics", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
         "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
         "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
         "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
@@ -3115,296 +3073,152 @@ RULE A — NEVER over-classify from basic skills alone:
   ✗ C / C++ alone → NOT "Embedded Systems"
   ✓ Basic CS languages + no described projects/frameworks → "Software Engineering"
 
-RULE B — TRUE EVIDENCE BAR per domain using 3-LEVEL EVIDENCE SYSTEM:
+RULE B — TRUE EVIDENCE BAR per domain (must satisfy BOTH sub-conditions):
 
-════════════════════════════════════════════════════════
-EVIDENCE LEVELS — apply to every domain check:
-════════════════════════════════════════════════════════
-LEVEL A — BUILT/DESIGNED (strong proof):
-  Candidate designed, architected, trained, or built the core system from scratch.
-  Examples: "trained a CNN model", "built REST API from scratch", "designed CI/CD pipeline"
-  Weight: 1.0 per signal
+  → Frontend Development:
+     MUST have: HTML+CSS+JS PLUS one of (React/Vue/Angular/Bootstrap/jQuery/Svelte/Next.js)
+     AND: at least 1 described project or internship explicitly about web UI / frontend
 
-LEVEL B — INTEGRATED/USED (moderate proof):
-  Candidate used a tool/framework/service as part of a larger system.
-  Examples: "used AWS S3 for storage", "called OpenAI API", "integrated Stripe payments"
-  ⚠ Using ANY pre-built API (OpenAI/Groq/Anthropic/Firebase/Stripe/Razorpay) = Level B MAX.
-     API usage is NEVER Level A for that API's domain.
-  Weight: 0.4 per signal
+  → Backend Development:
+     MUST have: A backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI/NestJS/Rails)
+     AND: database integration described in a project or internship
+     ⚠ "website" or "web application" in project name does NOT imply Full Stack.
+     Django + database + "Travel Management website" with NO frontend tech mentioned = Backend Development.
+     Only classify as Full Stack if HTML/CSS/JS or a frontend framework is EXPLICITLY mentioned.
 
-LEVEL C — MENTIONED/FAMILIAR (weak proof):
-  Listed in skills section or mentioned once with no context.
-  Examples: "Python", "familiar with Docker", "basic knowledge of AWS"
-  Weight: 0.1 per signal
+  → Full Stack Development:
+     MUST have: frontend technologies (HTML+CSS+JS or React/Vue/Angular/Bootstrap/jQuery/Svelte/Next.js)
+     AND: backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI)
+     AND: database — ALL THREE explicitly present in the same project or internship description
+     OR: candidate explicitly self-identifies as "full stack" / "front-end and back-end" in summary/title
+     ⚠ "website" + backend framework alone is NOT Full Stack — frontend tech must be named explicitly.
 
-DOMAIN SCORE formula:
-  domain_score = (Level_A_count × 1.0) + (Level_B_count × 0.4) + (Level_C_count × 0.1)
+  → Mobile Development:
+     MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift/Xamarin
+     AND: at least 1 described mobile app project or internship
 
-MINIMUM THRESHOLD to claim a domain:
-  MUST have at least 1 Level A evidence AND domain_score ≥ 2.0
-  Exception: only 1 project total → Level B evidence counts as Level A for that project's PRIMARY technology
+  → Data Analytics:
+     MUST have: Power BI/Tableau/Looker/Google Data Studio/DAX/Excel pivot tables/VLOOKUP/XLOOKUP
+     AND: dashboard building, KPI reporting, business intelligence, or data storytelling described
+     NOT: Python/pandas alone — those point to Data Science, not Data Analytics
+     EXAMPLE signals: "built Power BI dashboard", "created DAX measures", "Excel KPI report", "analyzed e-commerce orders in Power BI"
 
-════════════════════════════════════════════════════════
-DOMAIN-SPECIFIC EVIDENCE BARS (what counts as Level A/B/C per domain):
-════════════════════════════════════════════════════════
+  → Data Science:
+     MUST have: pandas/numpy/matplotlib/seaborn/R/SPSS/scikit-learn/statistical modeling/Jupyter
+     AND: actual data analysis, statistical modeling, or ML/predictive work described
+     NOT: SQL or Excel listed as a lone skill with no analytical work described
+     NOT: Power BI/Tableau dashboards alone — those are Data Analytics, not Data Science
 
-  ── SOFTWARE ENGINEERING ──────────────────────────────
-  Level A: Built a complete software system end-to-end; general programming project with clear scope
-  Level B: Contributed to a software project; fixed bugs; added features to existing codebase
-  Level C: Listed programming languages (Java/C/C++/Python) with no project context
-  Special: DEFAULT domain — if no other domain clears threshold, use this
+  → AI/Machine Learning:
+     MUST have: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/OpenAI/LangChain/NLP/Computer Vision/LLM
+     AND: model training, fine-tuning, or ML pipeline described in a project
 
-  ── FRONTEND DEVELOPMENT ─────────────────────────────
-  Level A: Built complete UI from scratch using React/Vue/Angular/Svelte/Next.js/Nuxt.js
-           OR built responsive website with HTML+CSS+JS where UI IS the primary deliverable
-  Level B: Used React/Vue/Angular as part of a full stack project; styled existing components
-           Used Bootstrap/Tailwind/jQuery to enhance pages
-  Level C: Listed HTML, CSS, JavaScript in skills; "basic frontend knowledge"
-  Threshold check: MUST have HTML+CSS+JS AND at least one framework at Level A or B
+  → Cybersecurity:
+     MUST have: security tools (Kali Linux/Burp Suite/Wireshark/Metasploit/Nmap) OR concepts (pentesting/OWASP/CTF/ethical hacking/SOC)
+     AND: security internship or project described
+     NOTE: "Cybersecurity virtual internship" with no tools/work described = weak signal only
 
-  ── BACKEND DEVELOPMENT ───────────────────────────────
-  Level A: Built REST/GraphQL APIs from scratch using Django/Flask/FastAPI/Spring Boot/
-           Express/Node.js/Laravel/NestJS/Rails with database integration
-  Level B: Used a backend framework for one module; added endpoints to existing API
-  Level C: Listed Django/Flask/Node.js in skills; "basic backend knowledge"
-  ⚠ CRITICAL: "website" in project name does NOT imply Full Stack.
-     Django + database + "Travel Management website" with NO frontend tech = Backend Development.
+  → DevOps/Infrastructure:
+     MUST have: Docker/Kubernetes/CI-CD/Jenkins/Terraform/Ansible/Helm/ArgoCD
+     AND: deployment, pipeline, or infrastructure project described
 
-  ── FULL STACK DEVELOPMENT ────────────────────────────
-  Level A: Built complete application with BOTH frontend (React/Vue/Angular/HTML+CSS+JS)
-           AND backend (Django/Flask/Node.js/Spring Boot etc.) AND database — ALL explicitly described
-  Level B: Worked on both frontend and backend but one side is underdescribed
-  Level C: Self-identifies as "full stack" but only shows one side in projects
-  ⚠ ALL THREE must be explicitly named: frontend tech + backend framework + database
-     Missing any one → NOT Full Stack (classify by strongest side)
+  → Cloud Engineering:
+     MUST have: specific AWS/Azure/GCP service names (not just the word "cloud")
+     AND: cloud deployment or architecture described in a project or role
 
-  ── MOBILE DEVELOPMENT ────────────────────────────────
-  Level A: Built complete Android/iOS/Flutter/React Native app described with features
-  Level B: Added features to existing mobile app; used mobile SDK/library
-  Level C: Listed Kotlin/Swift/Flutter in skills; "learning mobile development"
-  Threshold: MUST have at least 1 described mobile app project
+  → UI/UX Design:
+     MUST have: Figma/Adobe XD/Sketch/InVision/Framer/Zeplin
+     AND: wireframes, prototypes, or user research described
 
-  ── DATA SCIENCE ──────────────────────────────────────
-  Level A: Performed EDA, built dashboards, ran statistical analysis, created visualizations
-           using pandas/numpy/matplotlib/seaborn/Tableau/Power BI/R on real datasets
-  Level B: Used pandas/numpy for data manipulation inside an ML or backend project
-           Created basic charts as part of a larger application
-  Level C: Listed pandas/numpy/matplotlib in skills; "basic data analysis"
-  ⚠ SQL alone = NOT Data Science. Excel alone = NOT Data Science.
-  ⚠ NumPy/Pandas used INSIDE an ML project = Level B for Data Science, Level A for AI/ML
+  → Database Management:
+     MUST have: DBA title OR database optimization/administration/replication/tuning as PRIMARY focus
+     NOT: SQL listed as one skill among many
 
-  ── AI/MACHINE LEARNING ───────────────────────────────
-  Level A: Trained/fine-tuned ML models (scikit-learn/TensorFlow/PyTorch/Keras)
-           Built NLP pipeline, Computer Vision model, or ML pipeline from scratch
-           Implemented recommendation system, classification, regression, or clustering
-           Fine-tuned HuggingFace models; implemented RAG from scratch with embeddings
-  Level B: Used pre-trained models without training; used LLM APIs (OpenAI/Groq/Anthropic/
-           HuggingFace inference API) to build applications; integrated LangChain for chatbot
-           Used scikit-learn for 1 simple model in a data project
-  Level C: Listed TensorFlow/PyTorch/ML in skills; "familiar with machine learning"
-  ⚠ CRITICAL API RULE: Calling OpenAI/Groq/Anthropic/Gemini API = Level B MAX.
-     This is software integration, NOT ML engineering.
-     "Built AI-powered app using Groq API" = Level B AI/ML + Level A Backend/Software
-  ⚠ LangChain usage alone = Level B. Only Level A if custom chains + embeddings + vector DB described.
-  Threshold: MUST have Level A evidence (actual model training or custom ML pipeline)
-             If only Level B (API usage): classify as Software Engineering or Backend Development instead
+  → Quality Assurance:
+     MUST have: testing frameworks (Selenium/Cypress/JUnit/pytest/Postman/JMeter/Appium) OR QA role title
+     AND: test planning, test cases, or automation described
 
-  ── DEVOPS/INFRASTRUCTURE ─────────────────────────────
-  Level A: Built CI/CD pipelines from scratch; containerized applications with Docker+Kubernetes;
-           wrote Terraform/Ansible IaC; set up Jenkins/GitHub Actions/GitLab CI workflows
-  Level B: Deployed application using Docker; used GitHub Actions for basic deployment;
-           followed existing CI/CD process; configured Nginx/Apache
-  Level C: Listed Docker/Kubernetes/Jenkins in skills; "familiar with DevOps"
-  Threshold: MUST have at least 1 described pipeline/deployment project
+  → Game Development:
+     MUST have: Unity/Unreal Engine/Godot/game mechanics/shader programming
+     AND: at least 1 described game project
 
-  ── CLOUD ENGINEERING ─────────────────────────────────
-  Level A: Designed cloud architecture; provisioned multi-service AWS/Azure/GCP infrastructure;
-           wrote IaC (Terraform/CloudFormation/Pulumi); managed VPCs/subnets/IAM/security groups
-  Level B: Deployed app on AWS EC2/Heroku/Vercel/Netlify/GCP/Azure as part of a project;
-           used S3 for storage; used Firebase/Supabase as backend service
-  Level C: Listed AWS/Azure/GCP in skills; "basic cloud knowledge"; "deployed on cloud"
-  ⚠ "Deployed on Heroku/Vercel/Netlify" = Level B Cloud at best — NOT Cloud Engineering
-  ⚠ "Used Firebase" = Level B Cloud — NOT Cloud Engineering
-  Threshold: MUST have Level A evidence (actual cloud architecture/IaC work)
+  → Blockchain Development:
+     MUST have: Solidity/Web3/Smart Contracts/Ethereum/DeFi/NFT/Hardhat/Truffle
+     AND: blockchain project described
 
-  ── CYBERSECURITY ─────────────────────────────────────
-  Level A: Performed penetration testing, vulnerability assessment, CTF challenges solved;
-           implemented security controls, SIEM monitoring, threat analysis
-           Built security tools; conducted ethical hacking with documented methodology
-  Level B: Used security tools (Burp Suite/Nmap/Wireshark) in a guided lab/course;
-           completed virtual security internship with described tasks;
-           implemented basic auth/encryption in a software project
-  Level C: Listed "cybersecurity" in skills; completed a cybersecurity course/certification
-           "Cybersecurity virtual internship" with zero described tools or work
-  Threshold: MUST have Level A evidence (hands-on security work, not just coursework)
+  → Embedded Systems:
+     MUST have: microcontroller/RTOS/firmware/Arduino/STM32/ESP32/ARM/assembly/hardware programming
+     AND: hardware or embedded project described
 
-  ── CLOUD ENGINEERING / SITE RELIABILITY ENGINEERING ──
-  Level A SRE: Defined SLOs/SLIs; led incident response; implemented observability stack
-              (Prometheus/Grafana/Jaeger); automated toil; conducted chaos engineering
-  Level B SRE: Monitored systems; responded to alerts; wrote runbooks
-  Level C SRE: Listed "SRE" or "reliability" in skills
-  Threshold SRE: MUST have SRE title OR explicit SLO/error budget work described
+  → IoT Development:
+     MUST have: IoT devices/sensors/MQTT/CoAP/Raspberry Pi in IoT context/hardware integration
+     AND: IoT project or deployment described
 
-  ── UI/UX DESIGN ──────────────────────────────────────
-  Level A: Created wireframes, prototypes, or full design systems in Figma/Adobe XD/Sketch;
-           conducted user research, usability testing, or A/B testing on designs
-  Level B: Created basic mockups; redesigned existing UI; used Figma for one screen
-  Level C: Listed Figma/Adobe XD in skills; "interested in UI/UX design"
-  Threshold: MUST have Figma/Adobe XD/Sketch AND described design work (not just coding)
+  → AR/VR Development:
+     MUST have: ARKit/ARCore/Unity3D VR/Unreal VR/Oculus/HoloLens/WebXR
+     AND: AR/VR project described
 
-  ── DATABASE MANAGEMENT ───────────────────────────────
-  Level A: DBA role title; performed database optimization, indexing, query tuning;
-           set up replication, backup strategies, or clustering
-  Level B: Designed database schema for a project; wrote complex queries/stored procedures
-  Level C: Listed SQL/MySQL/MongoDB/PostgreSQL in skills — this is THE MOST COMMON false signal
-  ⚠ CRITICAL: SQL/MySQL/PostgreSQL/MongoDB as a tool in a web project = NOT Database Management
-     Database Management requires DBA-level administration as PRIMARY focus, not just usage
+  → System Architecture:
+     MUST have: architect-level title (Solution Architect/Enterprise Architect/System Architect) OR
+     explicit work on distributed systems design, microservices architecture, system design
 
-  ── QUALITY ASSURANCE ─────────────────────────────────
-  Level A: Built test automation frameworks (Selenium/Cypress/Playwright/Appium);
-           wrote comprehensive test suites; led QA process; performed load testing with JMeter
-  Level B: Wrote unit tests with JUnit/pytest; used Postman for API testing;
-           performed manual testing and bug reporting
-  Level C: Listed "testing" in skills; "familiar with QA"; wrote test cases for own code
-  Threshold: MUST have QA role title OR dedicated testing project described
+  → Networking:
+     MUST have: network engineer/admin title OR Cisco/routing/switching/BGP/OSPF/VPN/network protocols
+     AND: network configuration or administration work described
 
-  ── EMBEDDED SYSTEMS ──────────────────────────────────
-  Level A: Wrote firmware for microcontrollers (STM32/ESP32/Arduino/AVR/ARM);
-           implemented RTOS tasks; developed device drivers; worked with hardware registers
-  Level B: Used Arduino/Raspberry Pi for a hobby project; followed tutorials
-  Level C: Listed C/C++ in skills; "familiar with embedded systems"
-  Threshold: MUST have described firmware/hardware project with specific MCU
+  → Site Reliability Engineering:
+     MUST have: SRE title OR SLI/SLO/error budgets/on-call/toil reduction
+     AND: reliability engineering work described
 
-  ── IOT DEVELOPMENT ───────────────────────────────────
-  Level A: Built end-to-end IoT system: sensors + gateway + cloud + dashboard;
-           implemented MQTT/CoAP protocols; managed device fleets
-  Level B: Connected sensors to Raspberry Pi/Arduino; sent data to cloud platform
-  Level C: Listed "IoT" in skills; completed IoT course
-  Threshold: MUST have described IoT system with sensor + connectivity + data flow
+  → Product Management:
+     MUST have: product ownership, roadmaps, PRDs, stakeholder management, feature prioritization
+     NOT: just Agile/Scrum keywords
 
-  ── GAME DEVELOPMENT ──────────────────────────────────
-  Level A: Built complete game using Unity/Unreal Engine/Godot with described gameplay mechanics
-  Level B: Created a game prototype; modified existing game; participated in game jam
-  Level C: Listed Unity/Unreal in skills; "interested in game development"
-  Threshold: MUST have at least 1 complete described game project
+  → Project Management:
+     MUST have: managing teams/timelines/deliverables, PMP/Prince2/program manager experience
+     NOT: just "worked in agile team"
 
-  ── AR/VR DEVELOPMENT ─────────────────────────────────
-  Level A: Built complete AR/VR application using ARKit/ARCore/Unity VR/Unreal VR/WebXR
-  Level B: Created basic AR marker tracking; followed AR tutorial project
-  Level C: Listed ARKit/ARCore in skills
-  Threshold: MUST have described AR/VR project with interaction design
+  → Business Analysis:
+     MUST have: requirements gathering, process mapping, BRD/FRD writing, stakeholder analysis
+     AND: BA role or described BA work
 
-  ── BLOCKCHAIN DEVELOPMENT ────────────────────────────
-  Level A: Wrote and deployed smart contracts (Solidity); built dApps with Web3.js/Ethers.js;
-           implemented DeFi/NFT projects; worked with Hardhat/Truffle/Foundry
-  Level B: Used existing blockchain SDK; followed blockchain tutorial project
-  Level C: Listed "blockchain" or "Web3" in skills; completed blockchain course
-  Threshold: MUST have described smart contract or dApp project
+  → Digital Marketing:
+     MUST have: SEO/SEM/PPC/social media campaigns/content marketing/Google Ads/Meta Ads
+     AND: actual marketing work or results described
 
-  ── SYSTEM ARCHITECTURE ───────────────────────────────
-  Level A: Holds architect title (Solution/Enterprise/System Architect);
-           designed distributed systems, microservices architecture at system-level;
-           created architecture diagrams, ADRs, or technical design documents
-  Level B: Made architectural decisions within a team; proposed system design changes
-  Level C: Listed "system design" in skills; "familiar with microservices"
-  Threshold: REQUIRES architect title OR 5+ years designing systems at architectural level
+  → Technical Writing:
+     MUST have: documentation, API docs, user manuals, technical communication as PRIMARY work
+     AND: writing samples, tools (Confluence/GitBook/Sphinx) or writing role described
 
-  ── NETWORKING ────────────────────────────────────────
-  Level A: Configured routers/switches/firewalls (Cisco/Juniper/Palo Alto);
-           implemented BGP/OSPF routing; managed VLANs/VPNs/SD-WAN
-  Level B: Set up home/lab network; configured basic firewall rules
-  Level C: Listed "networking" in skills; passed CCNA exam
-  Threshold: MUST have network engineer/admin title OR hands-on network configuration described
+  → E-commerce:
+     MUST have: Shopify/Magento/WooCommerce/marketplace/order management/product catalog
+     AND: e-commerce work described
 
-  ── PRODUCT MANAGEMENT ────────────────────────────────
-  Level A: Owned product roadmap; wrote PRDs/user stories; managed backlog and sprints;
-           conducted user research; defined product metrics and KPIs
-  Level B: Contributed to product decisions; gathered requirements for features
-  Level C: Listed "product management" in skills; "familiar with Agile"
-  ⚠ NOT just: "worked in agile team", "participated in sprint planning"
-  Threshold: MUST have PM/PO title OR explicit roadmap/PRD ownership described
+  → Fintech:
+     MUST have: payment processing/banking software/trading systems/KYC/AML/financial technology
+     AND: fintech role or project described
 
-  ── PROJECT MANAGEMENT ────────────────────────────────
-  Level A: Managed project timelines/budgets/teams; holds PMP/Prince2 certification;
-           delivered projects end-to-end; managed stakeholders and risks
-  Level B: Led a small team for a project; coordinated between teams
-  Level C: Listed "project management" in skills; "team lead experience"
-  ⚠ NOT: "worked in agile team" or "scrum participant"
-  Threshold: MUST have PM title OR managed teams/budget explicitly described
+  → Healthcare Tech:
+     MUST have: EHR/EMR/HIPAA/telemedicine/medical software/healthcare data/clinical systems
+     AND: healthcare context described
 
-  ── BUSINESS ANALYSIS ─────────────────────────────────
-  Level A: Gathered business requirements; wrote BRD/FRD/SRS documents;
-           performed gap analysis, process mapping, or stakeholder interviews
-  Level B: Documented requirements for a project; created user stories
-  Level C: Listed "business analysis" in skills; "analytical skills"
-  Threshold: MUST have BA title OR explicit requirements documentation work described
+  → EdTech:
+     MUST have: e-learning/LMS/educational platform/curriculum technology/learning analytics
+     AND: education tech context described
 
-  ── AGILE COACHING ────────────────────────────────────
-  Level A: Holds Scrum Master/Agile Coach title; facilitated sprint ceremonies;
-           coached teams on Agile practices; holds CSM/PSM/SAFe certification with usage
-  Level B: Helped facilitate standups; assisted Scrum Master
-  Level C: Listed "Scrum" or "Agile" in skills; "worked in agile team"
-  ⚠ CRITICAL: "familiar with Agile" or "worked in scrum team" = Level C ONLY
-  Threshold: MUST have SM/Coach title OR active facilitation role described
+  → Technical Sales:
+     MUST have: sales engineer/pre-sales/solution selling/demo/RFP/customer technical support
+     AND: sales engineering role described
 
-  ── DIGITAL MARKETING ─────────────────────────────────
-  Level A: Ran SEO/SEM/PPC campaigns; managed Google Ads/Meta Ads with budget;
-           grew organic traffic; content strategy with measurable results
-  Level B: Assisted with social media posts; wrote blog articles; used Google Analytics
-  Level C: Listed "digital marketing" in skills; "familiar with SEO"
-  Threshold: MUST have marketing role OR described campaign with results
-
-  ── TECHNICAL WRITING ─────────────────────────────────
-  Level A: Wrote API documentation, user manuals, technical guides as PRIMARY work;
-           used Confluence/GitBook/Sphinx/ReadMe; maintained documentation system
-  Level B: Wrote README files; documented own code; wrote project reports
-  Level C: Listed "technical writing" in skills; "good communication"
-  ⚠ Writing a README or project report ≠ Technical Writing domain
-  Threshold: MUST have technical writing as PRIMARY role or explicit documentation deliverables
-
-  ── E-COMMERCE ────────────────────────────────────────
-  Level A: Built/managed e-commerce platform (Shopify/Magento/WooCommerce);
-           managed product catalog, order management, or marketplace seller operations
-  Level B: Added e-commerce features to a website; integrated payment gateway
-  Level C: Listed "e-commerce" in skills; "familiar with online retail"
-  ⚠ "Integrated Razorpay/Stripe" = Level B Backend, NOT E-commerce domain
-  Threshold: MUST have e-commerce platform work OR marketplace operations described
-
-  ── FINTECH ───────────────────────────────────────────
-  Level A: Built payment processing systems, trading platforms, banking software;
-           implemented KYC/AML workflows; worked with financial data and regulations (RBI/SEBI/PCI-DSS)
-  Level B: Integrated payment gateway (Razorpay/Stripe/PayU) into an app;
-           built a finance-tracking personal project
-  Level C: Listed "fintech" in skills; built a budget tracker app
-  ⚠ "Integrated Razorpay" = Level B Backend, NOT Fintech domain
-  ⚠ Personal finance tracker app = Level B Fintech at best
-  Threshold: MUST have fintech company context OR financial regulation/compliance work described
-
-  ── HEALTHCARE TECH ───────────────────────────────────
-  Level A: Built EHR/EMR systems; implemented HL7/FHIR/ABDM integration;
-           worked on telemedicine platform or clinical decision support
-  Level B: Built healthcare-adjacent app (appointment booking, symptom checker);
-           worked with medical datasets
-  Level C: Listed "healthcare" in skills; "interested in health tech"
-  Threshold: MUST have healthcare domain context AND health-specific technology described
-
-  ── EDTECH ────────────────────────────────────────────
-  Level A: Built LMS/e-learning platform; implemented SCORM/xAPI; created adaptive learning system
-  Level B: Built quiz app, educational content platform, or study tool
-  Level C: Listed "edtech" in skills; "interested in education technology"
-  Threshold: MUST have education-specific platform OR learning technology described
-
-  ── TECHNICAL SALES ───────────────────────────────────
-  Level A: Holds Sales Engineer/Pre-sales/Solutions Engineer title;
-           conducted product demos; responded to RFPs; closed technical deals
-  Level B: Supported sales team technically; explained product to customers
-  Level C: Listed "sales" in skills; "customer-facing experience"
-  Threshold: MUST have sales engineer title OR described pre-sales/demo work
+  → Agile Coaching:
+     MUST have: Scrum Master/Agile Coach/SAFe/team facilitation/sprint ceremonies as PRIMARY role
+     NOT: just "worked in agile" or "familiar with scrum"
 
 RULE C — MIXED SIGNALS → dominant domain wins:
   • Count evidence per domain: (tech keywords in described work) + (project descriptions) + (job/internship titles)
   • Domain with MOST evidence wins
   • Tie between frontend+backend → "Full Stack Development"
+  • Data Analytics vs Data Science tie: count BI tools (Power BI/Tableau/DAX/Excel) vs coding tools (pandas/scikit-learn/Jupyter). Whichever is more → wins.
   • Tie between unrelated domains → "Software Engineering"
   • 1 weak signal (e.g. 1 virtual internship, no described work) vs 3 strong signals → strong side wins
   ⚠ INTERNSHIP TITLE CONFLICT RULE (critical for Level B):
@@ -3431,7 +3245,7 @@ RULE F — JOB TITLE as strong signal (Level C only):
   • ONLY applies to Level C (1+ years full-time work experience)
   • For Level C: explicit job title is the STRONGEST single signal
   • "Backend Developer" title → "Backend Development"
-  • "Data Analyst" title → "Data Science"
+  • "Data Analyst" / "BI Analyst" / "Analytics Analyst" title → "Data Analytics"
   • "QA Engineer" title → "Quality Assurance"
   • Title + matching tech stack → confirm that domain immediately
   ⚠ For Level B (freshers/students): internship title is ONE signal among many.
@@ -3520,7 +3334,8 @@ If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scie
 
 Title override examples:
   "Backend Developer" → "Backend Development"
-  "Data Analyst" → "Data Science"
+  "Data Analyst" / "BI Analyst" / "Analytics Analyst" / "Reporting Analyst" → "Data Analytics"
+  "Data Scientist" / "Data Engineer" → "Data Science"
   "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
   "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
   "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
@@ -3556,8 +3371,9 @@ Classification rules:
   • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
   • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work
   • Full Stack: Both frontend AND backend tech explicitly required
-  • Data Science: SQL/Python analytics + pandas/numpy/Tableau/Power BI + analysis work
-  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
+  • Data Analytics: Power BI/Tableau/Excel/DAX + dashboards, KPI reporting, BI work (no heavy coding)
+  • Data Science: pandas/numpy/scikit-learn/Jupyter + statistical modeling or ML pipeline work
+  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training explicitly required
   • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
   • Cloud: AWS/Azure/GCP services explicitly required (not just "cloud" mentioned)
   • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
@@ -3706,41 +3522,19 @@ Match each listed skill against job description requirements. Reward:
   • {int(skills_weight * 0.13)}–{int(skills_weight * 0.23)}: Limited — 30%+ skills; self-learning evident
   • 0–{int(skills_weight * 0.10)}: Insufficient — fewer than 30% required skills
 
-**🔑 Keyword Analysis ({keyword_weight} points max — score computed by system):**
+**🔑 Keyword Score ({keyword_weight} points max):**
 
-════════════════════════════════════════════════════════
-YOUR ONLY JOB: IDENTIFY AND CLASSIFY KEYWORDS
-DO NOT output a score — the system calculates it from your data.
-════════════════════════════════════════════════════════
+Systematically extract ALL critical terms from the job description:
+technical tools, frameworks, methodologies, role titles, industry terms, certification names.
+Compare against resume. Credit synonyms and equivalent terms.
 
-STEP 1 — SPLIT JD KEYWORDS INTO TWO TIERS:
-
-TIER 1 — REQUIRED: Keywords under "Required", "Must Have", "Mandatory", "Essential",
-  "Minimum Qualifications", "Requirements", "Basic Qualifications", or explicitly
-  stated as non-negotiable (e.g. "must know", "required experience in").
-
-TIER 2 — PREFERRED: Keywords under "Good to Have", "Preferred", "Nice to Have",
-  "Bonus", "Advantageous", "Plus", "Desirable", "Optional", or implied supplementary.
-
-If NO clear section separation → technical tools/frameworks = TIER 1,
-soft skills/certifications/domain knowledge = TIER 2.
-
-STEP 2 — CHECK EACH KEYWORD AGAINST THE RESUME:
-For every keyword in both tiers, determine if it is FOUND or MISSING in the resume.
-Credit synonyms (e.g. "k8s"="kubernetes", "tf"="terraform", "JS"="javascript").
-
-STEP 3 — OUTPUT EXACTLY THESE MACHINE-READABLE LINES (no extra text around them):
-TIER1_TOTAL: <integer>
-TIER1_MATCHED: <integer>
-TIER1_FOUND: <comma-separated list of found TIER 1 keywords>
-TIER1_MISSING: <comma-separated list of missing TIER 1 keywords>
-TIER2_TOTAL: <integer>
-TIER2_MATCHED: <integer>
-TIER2_FOUND: <comma-separated list of found TIER 2 keywords>
-TIER2_MISSING: <comma-separated list of missing TIER 2 keywords>
-
-These lines are parsed by the system. Accuracy is critical.
-A keyword must appear in exactly ONE tier — never duplicate across tiers.
+  • {int(keyword_weight * 0.90)}–{keyword_weight}: Excellent — 85%+ critical terms; strong industry vocabulary
+  • {int(keyword_weight * 0.80)}: Very Good — 75%+ critical terms
+  • {int(keyword_weight * 0.60)}–{int(keyword_weight * 0.70)}: Good — 65%+ critical terms
+  • {int(keyword_weight * 0.40)}–{int(keyword_weight * 0.50)}: Fair — 50%+ critical terms
+  • {int(keyword_weight * 0.20)}–{int(keyword_weight * 0.30)}: Basic — 35%+ critical terms
+  • {int(keyword_weight * 0.10)}: Limited — 20%+ critical terms
+  • 0: Poor — fewer than 20% critical terms
 
 ═══════════════════════════════════════════════════
 📋 REQUIRED OUTPUT FORMAT
@@ -3810,20 +3604,25 @@ SCORING SCALE for language ({lang_weight} pts max):
 - 0-1: Poor — Significant language issues
 
 [SEC:KEYWORD]
-**Score:** __KEYWORD_SCORE_PLACEHOLDER__ / {keyword_weight}
+**Score:** <0–{keyword_weight}> / {keyword_weight}
 
 **Keyword Assessment:**
-
-- Industry Terminology Match: <Overall match quality in one sentence>
-- Role-Specific Keywords Present: <list all found keywords — both tiers combined, comma separated>
-- Technical Vocabulary: <brief comment on quality of technical terms used>
-- Keyword Density Quality: <Natural integration vs. keyword stuffing — one sentence>
+- Industry Terminology Match: <Percentage and specific matches found>
+- Role-Specific Keywords Present: <List matched keywords>
+- Technical Vocabulary: <Tools, frameworks, platforms found in both>
+- Keyword Density Quality: <Natural integration vs. stuffing>
 
 **Keyword Enhancement Opportunities:**
+- <Critical keyword 1 from job description — not in resume>
+- <Critical keyword 2>
+- <Critical keyword 3>
+- <Critical keyword 4>
+- <Critical keyword 5>
+- <Critical keyword 6>
+- <Critical keyword 7>
+- <Critical keyword 8>
 
-<list each missing keyword as a bullet — TIER 1 missing first, then TIER 2 missing>
-
-**Score Justification:** <One sentence max — e.g. "Strong match on core required skills but missing key frameworks.">
+**Score Justification:** <Evidence-based explanation>
 
 [SEC:FORMAT]
 **Format Score:** {format_data.get("format_score", "N/A") if format_data else "N/A"} / 100  
@@ -4075,52 +3874,7 @@ SCORING SCALE for language ({lang_weight} pts max):
     edu_score     = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", edu_analysis)
     exp_score     = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", exp_analysis)
     skills_score  = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", skills_analysis)
-    # ── Python-computed keyword score — LLM only identifies keywords, we do the math ──
-    def _compute_keyword_score_from_analysis(analysis_text, max_score):
-        """Parse TIER1/TIER2 counts from LLM output and compute weighted score in Python."""
-        import re as _re
-        try:
-            t1_total   = int((_re.search(r'TIER1_TOTAL:\s*(\d+)',   analysis_text) or _re.search(r'$^', '')).group(1))
-            t1_matched = int((_re.search(r'TIER1_MATCHED:\s*(\d+)', analysis_text) or _re.search(r'$^', '')).group(1))
-            t2_total   = int((_re.search(r'TIER2_TOTAL:\s*(\d+)',   analysis_text) or _re.search(r'$^', '')).group(1))
-            t2_matched = int((_re.search(r'TIER2_MATCHED:\s*(\d+)', analysis_text) or _re.search(r'$^', '')).group(1))
-        except (AttributeError, ValueError):
-            # Fallback: LLM didn't output machine-readable lines → use old regex extract
-            return None
-
-        t1_rate = t1_matched / t1_total if t1_total > 0 else 0.0
-        t2_rate = t2_matched / t2_total if t2_total > 0 else 0.0
-        weighted = (t1_rate * 0.70) + (t2_rate * 0.30)
-
-        # Map weighted rate to score — hard caps enforced by tier1 rate
-        if   weighted >= 0.85 and t1_rate >= 0.80: raw = max_score
-        elif weighted >= 0.75 and t1_rate >= 0.70: raw = round(max_score * 0.80)
-        elif weighted >= 0.60 and t1_rate >= 0.55: raw = round(max_score * 0.65)
-        elif weighted >= 0.45 or  t1_rate >= 0.50: raw = round(max_score * 0.45)
-        elif weighted >= 0.30:                      raw = round(max_score * 0.25)
-        elif weighted >= 0.15:                      raw = round(max_score * 0.10)
-        else:                                       raw = 0
-
-        # Hard cap: tier1 rate governs ceiling
-        if   t1_rate < 0.50: raw = min(raw, round(max_score * 0.40))
-        elif t1_rate < 0.70: raw = min(raw, round(max_score * 0.60))
-        elif t1_rate < 0.80: raw = min(raw, round(max_score * 0.80))
-
-        return max(round(max_score * 0.10), min(raw, max_score))
-
-    _py_keyword_score = _compute_keyword_score_from_analysis(keyword_analysis, keyword_weight)
-    if _py_keyword_score is not None:
-        keyword_score = _py_keyword_score
-        # Replace placeholder in display output with actual computed score
-        keyword_analysis = keyword_analysis.replace(
-            "__KEYWORD_SCORE_PLACEHOLDER__", str(keyword_score)
-        )
-    else:
-        # Fallback to LLM-extracted score if machine-readable lines missing
-        keyword_score = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", keyword_analysis)
-        keyword_analysis = keyword_analysis.replace(
-            "__KEYWORD_SCORE_PLACEHOLDER__", str(keyword_score)
-        )
+    keyword_score = extract_score(r"\*\*Score\s*:\*\*\s*(\d+)", keyword_analysis)
     # ⚡ Parse grammar score + feedback from ATS result (no separate LLM call needed)
     _grammar_score_match    = re.search(r"\*\*Score\s*:\*\*\s*<evaluate.*?(\d+)>|Score.*?(\d+)\s*/\s*" + str(lang_weight), lang_analysis)
     _grammar_score_match2   = re.search(r"\*\*Score\s*:\*\*\s*(\d+)", lang_analysis)
