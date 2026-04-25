@@ -3024,22 +3024,55 @@ def ats_percentage_score(
     # FIX: use pre-detected value if passed in, only call LLM if not already set
     # When called from the parallel thread, resume_domain is set by the main thread
     # so no LLM call fires inside the thread (thread-safe).
+    # ── BUG 3 FIX: Extract candidate title from resume for keyword title_overrides ──
+    # The title_overrides block in detect_domain_from_title_and_description weights
+    # title matches at 5× — but passing "" skips all of them. We extract the
+    # most likely job title from the resume header/summary to use as the title arg.
+    def _extract_resume_title(text: str) -> str:
+        """Extract the most likely job title from resume text (first 800 chars)."""
+        import re as _re_t
+        header = text[:800].lower()
+        # Common patterns: "Software Engineer | Python" or "Senior Data Analyst"
+        # Check for known role keywords in the header
+        _role_patterns = [
+            r"(?:^|\n)([a-z][a-z/ |-]{4,40}(?:engineer|developer|analyst|scientist|"
+            r"architect|manager|designer|specialist|consultant|lead|intern|fresher))",
+        ]
+        for pat in _role_patterns:
+            m = _re_t.search(pat, header)
+            if m:
+                return m.group(1).strip()
+        # Fallback: return first non-blank line after name (usually title/role line)
+        lines = [l.strip() for l in text[:400].split("\n") if l.strip()]
+        if len(lines) >= 2:
+            candidate = lines[1]
+            if len(candidate) < 60 and any(w in candidate.lower() for w in
+               ["engineer","developer","analyst","designer","manager","scientist",
+                "architect","intern","fresher","specialist","consultant"]):
+                return candidate
+        return ""
+
+    _resume_title_hint = _extract_resume_title(resume_text)
     _resume_cache_key = f"resume_domain_{hash(resume_text[:500])}"
     if resume_domain is None and _resume_cache_key not in st.session_state:
         # ── Use shared prompt builder — single source of truth in db_manager ──
-        _resume_domain_prompt = build_resume_domain_prompt(resume_text)
+        # Pass extracted title hint into the prompt so LLM has the role context
+        _resume_domain_prompt = build_resume_domain_prompt(
+            resume_text,
+            title_hint=_resume_title_hint
+        )
         try:
             _r = call_llm(_resume_domain_prompt, session=st.session_state).strip()
             if _r in _valid_domains:
                 st.session_state[_resume_cache_key] = _r
             else:
                 # LLM returned invalid domain — fall back to keyword detection
-                _kw_fallback = db_manager.detect_domain_from_title_and_description("", resume_text[:3000])
+                _kw_fallback = (db_manager.detect_domain_with_confidence(_resume_title_hint, resume_text[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(_resume_title_hint, resume_text[:3000]))
                 st.session_state[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
         except Exception:
             # LLM failed entirely — fall back to keyword detection
             try:
-                _kw_fallback = db_manager.detect_domain_from_title_and_description("", resume_text[:3000])
+                _kw_fallback = (db_manager.detect_domain_with_confidence(_resume_title_hint, resume_text[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(_resume_title_hint, resume_text[:3000]))
                 st.session_state[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
             except Exception:
                 st.session_state[_resume_cache_key] = "Software Engineering"
@@ -3059,7 +3092,7 @@ def ats_percentage_score(
             _jd_non_english = _jd_ascii_ratio < 0.70
     if _jd_non_english and job_domain is None:
         try:
-            _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+            _jd_kw = (db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000]))
             st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
         except Exception:
             st.session_state[_jd_cache_key] = "Software Engineering"
@@ -3073,12 +3106,12 @@ def ats_percentage_score(
                 st.session_state[_jd_cache_key] = _j
             else:
                 # LLM returned invalid — fall back to keyword detection
-                _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+                _jd_kw = (db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000]))
                 st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
         except Exception:
             # LLM failed — fall back to keyword detection
             try:
-                _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+                _jd_kw = (db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000]))
                 st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
             except Exception:
                 st.session_state[_jd_cache_key] = "Software Engineering"
