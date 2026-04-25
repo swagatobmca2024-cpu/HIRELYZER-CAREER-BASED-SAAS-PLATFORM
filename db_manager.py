@@ -286,24 +286,7 @@ Resume Text:
 {resume_text[:3000]}
 ════════════════════════════════════════════════════════
 
-CRITICAL: Calling OpenAI/Groq/Anthropic/Gemini/any LLM API is NOT AI/ML work.
-Using LangChain/LlamaIndex to query a model is NOT AI/ML work.
-AI/ML requires actual model training, fine-tuning, or building ML pipelines.
-API consumers → classify by their other tech stack, mark depth=shallow.
-
-Return EXACTLY two lines, nothing else:
-Domain: <one domain from the list below>
-Depth: <shallow|moderate|deep>
-
-Depth guide:
-  shallow = called an API (OpenAI/Groq/Stripe/Firebase etc.), tutorial project,
-            named a tool without using it, single beginner project with no described output,
-            no internship, no work experience
-  moderate = used a framework/tool with described working output,
-             internship with some detail, multiple small projects with tech stack described
-  deep = model training / real system built / quantified impact /
-         internship with measurable results / multiple roles in domain / full-time work experience
-
+Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
 
@@ -372,10 +355,7 @@ Classification rules:
   • DO NOT classify as AI/ML from one ML project alone — if majority is analytics → "Data Analytics"
   • If truly unclear → "Software Engineering"
 
-Return EXACTLY two lines, nothing else:
-Domain: <one domain from the list below>
-Depth: deep
-
+Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
 
