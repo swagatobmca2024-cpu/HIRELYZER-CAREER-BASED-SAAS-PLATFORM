@@ -5405,15 +5405,13 @@ with tab1:
                    "loc_other_input", "uploaded_file_names"]:
             if _k in st.session_state:
                 del st.session_state[_k]
-        # Reset weight sliders back to Fresher defaults
-        st.session_state["sl_edu"]    = 30
-        st.session_state["sl_exp"]    = 15
-        st.session_state["sl_skills"] = 30
-        st.session_state["sl_lang"]   = 5
-        st.session_state["sl_kw"]     = 10
-        # Reset career mode radio
-        if "career_mode_radio" in st.session_state:
-            del st.session_state["career_mode_radio"]
+        # Reset weight sliders + career mode by deleting keys —
+        # Streamlit re-renders widgets at their default values on next rerun.
+        # Direct assignment to active widget keys throws StreamlitAPIException.
+        for _k in ["sl_edu", "sl_exp", "sl_skills", "sl_lang", "sl_kw",
+                   "career_mode_radio"]:
+            if _k in st.session_state:
+                del st.session_state[_k]
 
         # Temporary placeholder for sliding success message
         msg_placeholder = st.empty()
