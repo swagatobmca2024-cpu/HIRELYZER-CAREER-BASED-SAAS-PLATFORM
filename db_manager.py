@@ -112,12 +112,13 @@ DOMAIN_VALID_LIST = [
     "Technical Sales", "Agile Coaching", "Software Engineering",
 ]
 
-def build_resume_domain_prompt(resume_text: str) -> str:
+def build_resume_domain_prompt(resume_text: str, title_hint: str = "") -> str:
     """Return the canonical LLM prompt for classifying a resume into a domain."""
     _domain_list = ", ".join(DOMAIN_VALID_LIST)
+    _title_section = f"\nCandidate's current/target role (extracted from resume header): {title_hint}" if title_hint else ""
     return f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across ALL levels and ALL industries.
 
-Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.
+Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.{_title_section}
 
 ════════════════════════════════════════════════════════
 STEP 1 — DETERMINE CANDIDATE LEVEL
@@ -805,7 +806,7 @@ Return ONLY one domain from this list, nothing else:
                 "huggingface","xgboost","lightgbm","classification","regression",
                 "reinforcement learning","transfer learning","model training","bert","gpt",
                 "yolo","transformer","autoencoder","fine-tuning","zero-shot",
-                "one-shot","mistral","llama","openai","langchain","vector embeddings",
+                "one-shot","mistral","llama","llamaindex","llama-index","openai","anthropic","claude api","gemini","langchain","vector embeddings",
                 "prompt engineering","mlops","model deployment","feature store",
                 "model monitoring","hyperparameter tuning","ensemble methods",
                 "gradient boosting","random forest","svm","clustering","pca",
@@ -843,7 +844,7 @@ Return ONLY one domain from this list, nothing else:
             ],
             "Frontend Development": [
                 "frontend","html","css","javascript","react","angular","vue","typescript",
-                "next.js","webpack","bootstrap","tailwind","sass","es6","responsive design",
+                "next.js","nextjs","shadcn","shadcn/ui","remix","vercel","webpack","bootstrap","tailwind","sass","es6","responsive design",
                 "web accessibility","dom","jquery","redux","vite","zustand","framer motion",
                 "storybook","eslint","pwa","single page application","csr","ssr",
                 "hydration","component-based ui","web components","micro frontends","bundler",
@@ -854,7 +855,7 @@ Return ONLY one domain from this list, nothing else:
                 "design tokens implementation","component library","front end"
             ],
             "Backend Development": [
-                "backend","node.js","django","flask","express","api development","nosql",
+                "backend","node.js","django","flask","express","hono","supabase","prisma","drizzle","api development","nosql",
                 "server-side","mysql","postgresql","mongodb","rest api","graphql","java",
                 "spring boot","authentication","authorization","mvc","business logic","orm",
                 "database schema","asp.net","laravel","go","fastapi","nest.js","microservices",
@@ -1438,9 +1439,6 @@ Return ONLY one domain from this list, nothing else:
             top_domain = sorted_domains[0][0]
             top_score  = sorted_domains[0][1]
 
-            if top_score < 8:
-                return "Unclassified"
-
             # ── Project-majority tiebreaker ───────────────────────────────────
             # When top 2 domains are within 22% of each other, count how many
             # project/experience blocks each domain wins — frequency beats loudness.
@@ -1462,7 +1460,28 @@ Return ONLY one domain from this list, nothing else:
                     if votes:
                         voted = max(votes, key=votes.get)
                         if votes[voted] >= 2:
-                            return voted
+                            top_domain = voted
+
+            # ── BUG 1 FIX: LLM fallback when keyword score is weak OR ambiguous ──
+            # Conditions that trigger LLM:
+            #   1. top_score < 8  → keyword scorer found nothing reliable
+            #   2. top_score < 20 → weak confidence, LLM can do better
+            #   3. top 2 within 15% → genuinely ambiguous, LLM resolves it
+            _needs_llm = (
+                top_score < 8 or
+                top_score < 20 or
+                (len(sorted_domains) >= 2 and sorted_domains[1][1] >= top_score * 0.85)
+            )
+            if _needs_llm:
+                try:
+                    llm_result = self.detect_domain_llm(job_title, job_description, session=session)
+                    if llm_result and llm_result != "Unclassified" and llm_result in self.VALID_DOMAINS:
+                        return llm_result
+                except Exception:
+                    pass  # LLM failed — fall through to keyword result
+
+            if top_score < 8:
+                return "Unclassified"
 
             return top_domain
         return "Unclassified"
@@ -1515,7 +1534,7 @@ Return ONLY one domain from this list, nothing else:
             ("backend development", "system architecture"): 0.85,
             ("backend development", "software engineering"): 0.80,
             ("data analytics", "data science"): 1.0,
-            ("data analytics", "ai/machine learning"): 0.85,
+            ("data analytics", "ai/machine learning"): 0.70,
             ("data analytics", "business analysis"): 0.85,
             ("data analytics", "database management"): 0.65,
             ("data analytics", "software engineering"): 0.50,
@@ -1567,6 +1586,56 @@ Return ONLY one domain from this list, nothing else:
             ("e-commerce", "backend development"): 0.75,
             ("technical sales", "product management"): 0.65,
             ("technical writing", "business analysis"): 0.60,
+            # ── Auto-generated reverse pairs — ensures bidirectional lookup ──────
+            ("agile coaching", "project management"): 0.85,
+            ("ai/machine learning", "data analytics"): 0.70,
+            ("backend development", "e-commerce"): 0.75,
+            ("backend development", "fintech"): 0.75,
+            ("backend development", "frontend development"): 0.6,
+            ("backend development", "full stack development"): 0.85,
+            ("business analysis", "data analytics"): 0.85,
+            ("business analysis", "digital marketing"): 0.55,
+            ("business analysis", "product management"): 0.8,
+            ("business analysis", "technical writing"): 0.6,
+            ("cloud engineering", "backend development"): 0.75,
+            ("cloud engineering", "cybersecurity"): 0.75,
+            ("cybersecurity", "blockchain development"): 0.65,
+            ("cybersecurity", "fintech"): 0.7,
+            ("data science", "database management"): 0.75,
+            ("database management", "data analytics"): 0.65,
+            ("devops/infrastructure", "backend development"): 0.7,
+            ("devops/infrastructure", "cloud engineering"): 1.0,
+            ("devops/infrastructure", "cybersecurity"): 0.7,
+            ("devops/infrastructure", "networking"): 0.75,
+            ("devops/infrastructure", "quality assurance"): 0.65,
+            ("frontend development", "full stack development"): 0.85,
+            ("full stack development", "e-commerce"): 0.8,
+            ("game development", "ar/vr development"): 0.8,
+            ("game development", "mobile development"): 0.6,
+            ("iot development", "embedded systems"): 1.0,
+            ("mobile development", "ar/vr development"): 0.7,
+            ("mobile development", "frontend development"): 0.7,
+            ("mobile development", "full stack development"): 0.65,
+            ("product management", "technical sales"): 0.65,
+            ("project management", "product management"): 0.75,
+            ("site reliability engineering", "cloud engineering"): 1.0,
+            ("site reliability engineering", "devops/infrastructure"): 1.0,
+            ("software engineering", "ai/machine learning"): 0.65,
+            ("software engineering", "blockchain development"): 0.7,
+            ("software engineering", "data analytics"): 0.5,
+            ("software engineering", "edtech"): 0.7,
+            ("software engineering", "fintech"): 0.7,
+            ("software engineering", "healthcare tech"): 0.7,
+            ("software engineering", "system architecture"): 0.85,
+            ("system architecture", "cybersecurity"): 0.65,
+            ("system architecture", "database management"): 0.7,
+            ("system architecture", "devops/infrastructure"): 0.75,
+            ("system architecture", "networking"): 0.7,
+            ("system architecture", "quality assurance"): 0.6,
+            ("ui/ux design", "frontend development"): 1.0,
+            ("ui/ux design", "full stack development"): 0.7,
+            ("ui/ux design", "mobile development"): 0.75,
+
             ("digital marketing", "business analysis"): 0.55,
             ("software engineering", "full stack development"): 0.80,
             ("software engineering", "frontend development"): 0.75,
