@@ -4283,23 +4283,26 @@ def _get_jd_default() -> str:
     return _JD_TEMPLATES.get(_sel, "")
 
 def _on_jt_change() -> None:
-    """Called when job title selectbox changes — push template into JD field."""
+    """Called when job title selectbox changes — push template into JD field only.
+    
+    IMPORTANT: This callback must NOT touch slider keys (sl_edu, sl_exp, etc.)
+    or the career_mode_radio. Streamlit re-runs the entire script on any
+    session_state write, but as long as slider keys are untouched the sliders
+    keep their current values and the page feels stable.
+    """
     _new_title = st.session_state.get("jt_select", "")
     if _new_title not in ("— Select Job Title —", "Other (type below)", ""):
         st.session_state["jd_textarea"] = _JD_TEMPLATES.get(_new_title, "")
     else:
         st.session_state["jd_textarea"] = ""
-    # Keep job details expander open after a selection
-    st.session_state["_jd_expander_open"] = True
-
-# Initialise expander-open flags so they survive reruns triggered by widgets inside them
-if "_jd_expander_open" not in st.session_state:
-    st.session_state["_jd_expander_open"] = False
-if "_weights_expander_open" not in st.session_state:
-    st.session_state["_weights_expander_open"] = False
+    # Explicitly preserve slider state — read current values and write them
+    # back so they survive the rerun without any visual change.
+    for _sk in ["sl_edu", "sl_exp", "sl_skills", "sl_lang", "sl_kw"]:
+        if _sk in st.session_state:
+            st.session_state[_sk] = st.session_state[_sk]
 
 # ---------------- Job Information Dropdown ----------------
-with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Enter Job Details", expanded=st.session_state["_jd_expander_open"]):
+with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Enter Job Details", expanded=False):
 
     # ── Job Title ────────────────────────────────────────────────────────────
     _jt_choice = st.selectbox(
@@ -4447,7 +4450,7 @@ def _apply_career_preset():
 if "sl_edu" not in st.session_state:
     _apply_career_preset()
 
-with st.sidebar.expander("Customize ATS Scoring Weights", expanded=st.session_state["_weights_expander_open"]):
+with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
     st.markdown(
         "<div style='font-size:0.72rem;color:#64748b;margin-bottom:10px;"
         "font-family:-apple-system,sans-serif;'>"
@@ -4910,314 +4913,75 @@ if uploaded_files and job_description and weights_valid:
         # FIX: detect domains on the main thread BEFORE spawning parallel threads.
         # This prevents both threads from simultaneously reading/writing st.session_state
         # and firing duplicate LLM calls for domain detection.
-        _pre_valid_domains = [
-            "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
-            "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
-            "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
-            "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
-            "Networking", "Site Reliability Engineering", "Product Management", "Project Management",
-            "Business Analysis", "Technical Writing", "Digital Marketing", "E-commerce", "Fintech",
-            "Healthcare Tech", "EdTech", "IoT Development", "AR/VR Development", "Technical Sales",
-            "Agile Coaching", "Software Engineering"
-        ]
-        _pre_domain_list = ", ".join(_pre_valid_domains)
+        # ── Domain detection using shared builders — single source of truth ────
+        # Replaces inline _pre_valid_domains + inline prompts with
+        # build_resume_domain_prompt() / build_jd_domain_prompt() from db_manager.
+        # Also fixes: 2500→3000 char truncation, stale Data Science rule,
+        # missing Data Analytics domain, and fallback now uses
+        # detect_domain_with_confidence() for dual LLM+keyword validation.
 
+        _pre_valid_domains = DOMAIN_VALID_LIST
+        _pre_domain_list   = ", ".join(_pre_valid_domains)
+
+        # ── Resume domain pre-detection ───────────────────────────────────────
         _pre_resume_cache_key = f"resume_domain_{hash(full_text[:500])}"
         if _pre_resume_cache_key not in st.session_state:
-            _pre_resume_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across all levels — freshers, students, mid-level, and senior professionals.
+            # Extract title hint from resume header for better title_overrides accuracy
+            def _extract_title_hint(text):
+                import re as _re_th
+                header = text[:800].lower()
+                m = _re_th.search(
+                    r"(?:^|\n)([a-z][a-z/ |-]{4,40}(?:engineer|developer|analyst|scientist|"
+                    r"architect|manager|designer|specialist|consultant|lead|intern|fresher))",
+                    header
+                )
+                if m:
+                    return m.group(1).strip()
+                lines = [l.strip() for l in text[:400].split("\n") if l.strip()]
+                if len(lines) >= 2:
+                    c = lines[1]
+                    if len(c) < 60 and any(w in c.lower() for w in
+                       ["engineer","developer","analyst","designer","manager",
+                        "scientist","architect","intern","fresher","specialist"]):
+                        return c
+                return ""
 
-Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.
-
-════════════════════════════════════════════════════════
-STEP 1 — DETERMINE CANDIDATE LEVEL FIRST
-════════════════════════════════════════════════════════
-
-Classify the candidate into one of these levels before picking a domain:
-
-LEVEL A — Pure Fresher / Student with NO specialization evidence:
-  • Still studying OR just graduated
-  • No internship OR only 1 internship with no described work
-  • Projects listed as names only (no descriptions, no tech stack mentioned)
-  • Skills are only basic CS fundamentals (Java, C, C++, Python, HTML, SQL alone)
-  → DEFAULT to "Software Engineering" immediately. Do not over-classify.
-  → EXAMPLES: Only Java+MySQL+DBMS listed, no projects described → "Software Engineering"
-
-LEVEL B — Fresher / Student WITH specialization evidence:
-  • Still studying OR recently graduated BUT has AT LEAST ONE of:
-    - 1 internship where the domain is clearly described (e.g. "frontend web development internship")
-    - 1 project with a description mentioning domain-specific technologies
-    - Skills showing a clear technology stack (not just basics)
-  → DO classify into a specific domain based on the strongest evidence
-  → EXAMPLES:
-    - HTML+CSS+JS+React + frontend internship described → "Frontend Development"
-    - Django/Laravel + MySQL + web project described, NO frontend tech mentioned → "Backend Development"
-    - Django/Laravel + MySQL + HTML+CSS+JS + web project described → "Full Stack Development"
-    - Android/Flutter + built a mobile app described → "Mobile Development"
-    - TensorFlow/PyTorch + ML project described → "AI/Machine Learning"
-
-LEVEL C — Experienced Professional (1+ years full-time work):
-  → ALWAYS classify into a specific domain — never default to "Software Engineering" unless truly mixed
-  → Use job titles + tech stack + years of experience as primary signals
-
-════════════════════════════════════════════════════════
-STEP 2 — DOMAIN CLASSIFICATION RULES (for Level B and C)
-════════════════════════════════════════════════════════
-
-RULE A — DO NOT over-classify from basic skills alone (applies to ALL levels):
-  ✗ Java + MySQL + DBMS alone → NOT "Backend Development"
-  ✗ HTML + CSS alone → NOT "Frontend Development"
-  ✗ Python alone → NOT "AI/Machine Learning" or "Data Science"
-  ✗ SQL alone → NOT "Database Management" or "Data Science"
-  ✗ C / C++ alone → NOT "Embedded Systems" or "Software Engineering" specialist
-  ✓ Basic CS languages without frameworks + no described projects → "Software Engineering"
-
-RULE B — WHAT COUNTS AS TRUE DOMAIN EVIDENCE:
-  → Frontend Development:
-     MUST have: HTML+CSS+JS PLUS at least one of (React/Vue/Angular/Bootstrap/jQuery)
-     AND: at least 1 described project OR internship explicitly about frontend/web UI
-     
-  → Backend Development:
-     MUST have: A backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI)
-     AND: database integration (MySQL/PostgreSQL/MongoDB) in a described project
-     NOT just: Java + SQL listed in skills with no project context
-     ⚠ "website" in project name does NOT mean Full Stack. Django + database + no frontend = Backend.
-     
-  → Full Stack Development:
-     MUST have: frontend technologies (HTML+CSS+JS or React/Vue/Angular/Bootstrap/jQuery)
-     AND: backend framework + database — ALL THREE explicitly present
-     AND: at least 1 project or internship that uses both frontend and backend
-     SELF-IDENTIFICATION counts: if summary says "full stack" or "front-end and back-end" → Full Stack
-     ⚠ "website" + backend framework alone is NOT Full Stack — frontend tech must be explicitly named.
-     
-  → Mobile Development:
-     MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift
-     AND: at least 1 described mobile app project
-     
-  → Data Science:
-     MUST have: pandas/numpy/matplotlib/seaborn/tableau/power bi
-     AND: actual data analysis or visualization project described
-     NOT just: SQL or Excel listed in skills
-     
-  → AI/Machine Learning:
-     MUST have: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/LLM/NLP/Computer Vision
-     AND: model training or ML pipeline described in a project
-     
-  → Cybersecurity:
-     MUST have: security tools (Kali/Burp Suite/Wireshark/Metasploit) OR security concepts (pentesting/OWASP/CTF)
-     AND: security internship or project described
-     NOTE: A cybersecurity VIRTUAL internship with no tools described = weak signal, check other evidence too
-     
-  → DevOps/Infrastructure:
-     MUST have: Docker/Kubernetes/CI-CD/Jenkins/Terraform/Ansible
-     AND: deployment or infrastructure project described
-     
-  → Cloud Engineering:
-     MUST have: AWS/Azure/GCP services (not just "cloud" mentioned)
-     AND: cloud deployment or architecture in a project
-     
-  → UI/UX Design:
-     MUST have: Figma/Adobe XD/Sketch/InVision
-     AND: wireframes/prototypes/user research described
-     
-  → Database Management:
-     MUST have: DBA role OR database optimization/administration as PRIMARY focus
-     NOT just: SQL listed as one of many skills
-     
-  → Product Management:
-     MUST have: product ownership, roadmaps, PRDs, stakeholder management
-     NOT just: Agile/Scrum keywords
-     
-  → Project Management:
-     MUST have: managing teams, project delivery, PMP/Prince2 or equivalent experience
-     
-  → Business Analysis:
-     MUST have: requirements gathering, process mapping, business case writing
-     
-  → Digital Marketing:
-     MUST have: SEO/SEM/campaigns/social media marketing with actual results
-     
-  → Blockchain Development:
-     MUST have: Solidity/Web3/Smart Contracts/Ethereum/DeFi in described projects
-     
-  → Game Development:
-     MUST have: Unity/Unreal Engine/game mechanics in described projects
-     
-  → Embedded Systems:
-     MUST have: microcontroller/RTOS/firmware/hardware programming described
-     
-  → IoT Development:
-     MUST have: IoT devices/sensors/protocols (MQTT/CoAP) + hardware integration
-     
-  → AR/VR Development:
-     MUST have: ARKit/ARCore/Unity3D/Unreal/Oculus in described projects
-
-RULE C — MIXED SIGNALS → pick the DOMINANT domain:
-  • Count: technologies + described projects + internship titles per domain
-  • The domain with the most evidence wins
-  • If frontend has 3 signals and cybersecurity has 1 virtual internship → Frontend wins
-  • If truly equal across 2 domains → "Full Stack Development" if they're frontend+backend, else "Software Engineering"
-  ⚠ INTERNSHIP TITLE CONFLICT RULE (critical for Level B):
-    If internship title suggests Domain A BUT skills + projects have 3+ strong signals for Domain B
-    AND Domain B is more specific than Domain A → Domain B wins over the internship title.
-    EXAMPLE: "Full Stack Developer Intern" + LangChain/LLaMA/RAG/FAISS/LLMs in skills+projects
-             → "AI/Machine Learning" wins, NOT "Full Stack Development"
-    EXAMPLE: "Full Stack Developer Intern" + only HTML/CSS/React/Node projects, no AI tools
-             → "Full Stack Development" wins correctly
-    EXAMPLE: "Android Developer Intern" + Flutter/Kotlin projects → "Mobile Development" wins correctly
-
-RULE D — RESEARCH / ACADEMIC profiles:
-  • Research intern at university/NIT/IIT/ISRO/DRDO etc. → classify by research TOPIC
-  • AI/accessibility/NLP research → "AI/Machine Learning"
-  • Security research → "Cybersecurity"  
-  • Hardware/systems research → "Embedded Systems" or "Software Engineering"
-  • Generic CS research → "Software Engineering"
-
-RULE E — CAREER SWITCHERS:
-  • If candidate has old domain (e.g. mechanical engineer) but new projects/courses in tech → classify by new tech domain
-  • Recent certifications + projects in new domain outweigh old job titles
-
-RULE F — JOB TITLE as strong signal (Level C only):
-  • ONLY applies to Level C (1+ years full-time work experience)
-  • For Level C: explicit job title is the STRONGEST single signal
-  • "Backend Developer" → "Backend Development", "Data Analyst" → "Data Analytics"
-  ⚠ For Level B (freshers/students): internship title is ONE signal among many.
-    It can be OVERRIDDEN if skills + projects show 3+ strong signals for a different domain.
-    Do NOT blindly use internship title for Level B — apply Rule C conflict check first.
-
-════════════════════════════════════════════════════════
-STEP 3 — FINAL CHECK BEFORE ANSWERING
-════════════════════════════════════════════════════════
-
-Ask yourself:
-1. What is the candidate's LEVEL? (A / B / C)
-2. If Level A → return "Software Engineering"
-3. If Level B or C → what domain has the MOST evidence (technologies + described projects + internship/job titles)?
-4. Does that domain meet the TRUE EVIDENCE bar from Rule B?
-5. If Full Stack → are frontend tech + backend framework + database ALL explicitly mentioned? If frontend is missing → Backend, not Full Stack.
-6. If Level B → did I check Rule C conflict? Does the internship title conflict with skills+projects?
-   If yes → let skills+projects override the internship title.
-7. If Level C → is there a job title confirming the domain (Rule F)?
-8. If yes → return that domain. If no → return "Software Engineering"
-
-════════════════════════════════════════════════════════
-Resume Text:
-{full_text[:2500]}
-════════════════════════════════════════════════════════
-
-Return ONLY one domain from this list, nothing else:
-{_pre_domain_list}
-"""
+            _pre_title_hint = _extract_title_hint(full_text)
+            # Use shared prompt builder (3000 chars, Data Analytics rule, FREQUENCY RULE)
+            _pre_resume_prompt = build_resume_domain_prompt(full_text, title_hint=_pre_title_hint)
             try:
                 _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
                 if _r in _pre_valid_domains:
                     st.session_state[_pre_resume_cache_key] = _r
                 else:
-                    # LLM returned invalid domain — fall back to keyword detection
-                    _kw = db_manager.detect_domain_from_title_and_description("", full_text[:3000])
-                    st.session_state[_pre_resume_cache_key] = _kw if _kw != "Unclassified" else "Software Engineering"
+                    # LLM returned invalid — use detect_domain_with_confidence (dual validation)
+                    _kw = db_manager.detect_domain_with_confidence(_pre_title_hint, full_text[:3000]).get("domain")
+                    st.session_state[_pre_resume_cache_key] = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
             except Exception:
-                # LLM failed entirely — fall back to keyword detection
                 try:
-                    _kw = db_manager.detect_domain_from_title_and_description("", full_text[:3000])
-                    st.session_state[_pre_resume_cache_key] = _kw if _kw != "Unclassified" else "Software Engineering"
+                    _kw = db_manager.detect_domain_with_confidence(_pre_title_hint, full_text[:3000]).get("domain")
+                    st.session_state[_pre_resume_cache_key] = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
                 except Exception:
                     st.session_state[_pre_resume_cache_key] = "Software Engineering"
         _pre_resume_domain = st.session_state[_pre_resume_cache_key]
 
+        # ── JD domain pre-detection ───────────────────────────────────────────
         _pre_jd_cache_key = f"jd_domain_{hash(job_description[:500])}"
         if _pre_jd_cache_key not in st.session_state:
-            _pre_jd_prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions across all industries and levels.
-
-Your ONLY job: identify the PRIMARY professional domain this job description is hiring for.
-
-════════════════════════════════════════════════════════
-STEP 1 — READ THE JOB TITLE FIRST (strongest signal)
-════════════════════════════════════════════════════════
-
-Job Title: {job_title}
-
-If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scientist", "DevOps Engineer", "UX Designer"), use that domain directly — do not over-analyse the description.
-
-Title override examples:
-  "Backend Developer" → "Backend Development"
-  "Data Analyst" → "Data Analytics"
-  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
-  "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
-  "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
-  "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
-  "Mobile Developer" / "Android" / "iOS" / "Flutter" → "Mobile Development"
-  "Full Stack Developer" → "Full Stack Development"
-  "Frontend Developer" / "Front End" → "Frontend Development"
-  "UX Designer" / "UI Designer" / "Product Designer" → "UI/UX Design"
-  "Security Engineer" / "Security Analyst" / "Penetration Tester" → "Cybersecurity"
-  "SRE" / "Site Reliability Engineer" → "Site Reliability Engineering"
-  "Blockchain Developer" / "Web3 Developer" → "Blockchain Development"
-  "Game Developer" / "Game Engineer" → "Game Development"
-  "Embedded Engineer" / "Firmware Engineer" → "Embedded Systems"
-  "IoT Engineer" → "IoT Development"
-  "Network Engineer" / "Network Admin" → "Networking"
-  "Database Administrator" / "DBA" → "Database Management"
-  "Product Manager" → "Product Management"
-  "Project Manager" / "Program Manager" → "Project Management"
-  "Business Analyst" → "Business Analysis"
-  "Scrum Master" / "Agile Coach" → "Agile Coaching"
-  "Technical Writer" → "Technical Writing"
-  "Sales Engineer" / "Pre-Sales" → "Technical Sales"
-  "Solution Architect" / "Enterprise Architect" → "System Architecture"
-
-════════════════════════════════════════════════════════
-STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE JD BELOW
-════════════════════════════════════════════════════════
-
-Job Description:
-{job_description[:3000]}
-
-Classification rules:
-  • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
-  • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work
-  • Full Stack: Both frontend AND backend tech explicitly required
-  • Data Science: SQL/Python analytics + pandas/numpy/Tableau/Power BI + analysis work
-  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
-  • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
-  • Cloud: AWS/Azure/GCP services explicitly required (not just "cloud" mentioned)
-  • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
-  • Mobile: Android/iOS/Flutter/React Native explicitly required
-  • UI/UX: Figma/wireframes/prototyping/user research required
-  • Product Management: roadmap/PRD/stakeholder management (not just Agile)
-  • Project Management: team delivery/PMP/programme management
-  • Business Analysis: requirements/BRD/process mapping as primary duty
-  • Quality Assurance: test automation/test planning as primary duty
-  • Fintech: payment/banking/trading/KYC/AML systems
-  • Healthcare Tech: EHR/EMR/HIPAA/clinical systems
-  • EdTech: LMS/e-learning/educational platform
-  • Game Development: Unity/Unreal/game mechanics explicitly required
-  • Blockchain: Solidity/Web3/smart contracts explicitly required
-  • Embedded: firmware/RTOS/microcontroller/hardware explicitly required
-
-════════════════════════════════════════════════════════
-STEP 3 — FINAL CHECK
-════════════════════════════════════════════════════════
-
-1. Did the job title directly name a domain? → Use that.
-2. If not, which domain has the MOST required skills/responsibilities in the JD?
-3. If truly unclear → "Software Engineering"
-
-Return ONLY one domain from this list, nothing else:
-{_pre_domain_list}
-"""
+            # Use shared prompt builder (3000 chars, full rules, Data Analytics)
+            _pre_jd_prompt = build_jd_domain_prompt(job_title, job_description)
             try:
                 _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
                 if _j in _pre_valid_domains:
                     st.session_state[_pre_jd_cache_key] = _j
                 else:
-                    # LLM returned invalid — fall back to keyword detection
-                    _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
-                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
+                    # LLM invalid — use detect_domain_with_confidence (dual validation)
+                    _jd_kw = db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain")
+                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw and _jd_kw != "Unclassified" else "Software Engineering"
             except Exception:
-                # LLM failed — fall back to keyword detection
                 try:
-                    _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
-                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
+                    _jd_kw = db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain")
+                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw and _jd_kw != "Unclassified" else "Software Engineering"
                 except Exception:
                     st.session_state[_pre_jd_cache_key] = "Software Engineering"
         _pre_job_domain = st.session_state[_pre_jd_cache_key]
@@ -5635,13 +5399,21 @@ with tab1:
         st.session_state.processed_files.clear()
         st.session_state.resume_data.clear()
 
-        # ── Also reset sidebar Job Details + expander state ──────────────────
-        for _skey in (
-            "jt_select", "jt_other_input", "loc_select", "loc_other_input", "jd_textarea",
-            "_jd_expander_open", "_weights_expander_open",
-        ):
-            if _skey in st.session_state:
-                del st.session_state[_skey]
+        # ── Also clear sidebar Tab 1 state ────────────────────────────────────
+        # Reset job title, location, JD textarea, and uploaded file reference
+        for _k in ["jt_select", "loc_select", "jd_textarea", "jt_other_input",
+                   "loc_other_input", "uploaded_file_names"]:
+            if _k in st.session_state:
+                del st.session_state[_k]
+        # Reset weight sliders back to Fresher defaults
+        st.session_state["sl_edu"]    = 30
+        st.session_state["sl_exp"]    = 15
+        st.session_state["sl_skills"] = 30
+        st.session_state["sl_lang"]   = 5
+        st.session_state["sl_kw"]     = 10
+        # Reset career mode radio
+        if "career_mode_radio" in st.session_state:
+            del st.session_state["career_mode_radio"]
 
         # Temporary placeholder for sliding success message
         msg_placeholder = st.empty()
@@ -5652,9 +5424,10 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
 
-        # Wait 3 seconds then clear message
+        # Wait 3 seconds then clear message then rerun cleanly
         time.sleep(3)
         msg_placeholder.empty()
+        st.rerun()
 
 # === TAB 1: Dashboard ===
 with tab1:
