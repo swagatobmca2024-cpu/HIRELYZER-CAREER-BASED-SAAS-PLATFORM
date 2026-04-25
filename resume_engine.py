@@ -3055,13 +3055,14 @@ def ats_percentage_score(
     _resume_title_hint = _extract_resume_title(resume_text)
     _resume_cache_key = f"resume_domain_{hash(resume_text[:500])}"
     if resume_domain is None and _resume_cache_key not in st.session_state:
+        # ── Use shared prompt builder — single source of truth in db_manager ──
+        # Pass extracted title hint into the prompt so LLM has the role context
         _resume_domain_prompt = build_resume_domain_prompt(
             resume_text,
             title_hint=_resume_title_hint
         )
         try:
             _raw = call_llm(_resume_domain_prompt, session=st.session_state).strip()
-            # Parse two-line response: Domain: X / Depth: Y
             _domain_line = ""
             _depth_val   = "moderate"
             for _line in _raw.splitlines():
@@ -3091,7 +3092,6 @@ def ats_percentage_score(
     if resume_domain is None:
         resume_domain = st.session_state.get(_resume_cache_key, "Software Engineering")
 
-    # Depth score drives effective similarity calculation
     _depth_str   = st.session_state.get(_resume_cache_key + "_depth", "moderate")
     _depth_score = {"shallow": 0.4, "moderate": 0.7, "deep": 1.0}.get(_depth_str, 0.7)
 
@@ -3141,16 +3141,15 @@ def ats_percentage_score(
     grammar_feedback    = "Language quality appears adequate for professional communication."
     grammar_suggestions = []
 
-    # ✅ Depth-weighted domain penalty
-    # effective_similarity = raw domain similarity × how deeply candidate works in that domain
-    # shallow (API caller, no real work) → multiplier 0.4 → higher penalty
-    # moderate (described projects, internship) → multiplier 0.7
-    # deep (real experience, quantified results) → multiplier 1.0 → no change vs before
+    # ✅ Domain penalty: depth multiplier only fires when domains actually differ.
+    # Same domain → always zero penalty regardless of experience level.
     MAX_DOMAIN_PENALTY = 15
-    effective_similarity = similarity_score * _depth_score
-    if effective_similarity >= 0.90:
-        domain_penalty = 0
+    if similarity_score >= 0.90:
+        domain_penalty    = 0
+        effective_similarity = similarity_score
     else:
+        # Domains differ → depth matters: shallow candidates penalized more
+        effective_similarity = similarity_score * _depth_score
         domain_penalty = round((1 - effective_similarity) * MAX_DOMAIN_PENALTY)
 
     # ✅ Optional profile score note
@@ -3725,18 +3724,15 @@ SCORING SCALE for language ({lang_weight} pts max):
     # Enhanced final thoughts with domain analysis and industry benchmarks
     final_thoughts += f"""
 
-**Technical Evaluation Details:**
-- Content Score (LLM components, 90-pt scale): {content_score}/90
-- Format Component (10-pt scale): {format_component}/10 (Format Score: {fmt_score_raw}/100)
-- Pre-Penalty Score: {pre_penalty_score}/100
-- Resume Depth: {_depth_str} (score multiplier: {_depth_score})
-- Effective Domain Similarity (similarity × depth): {effective_similarity:.2f}
-- Domain Penalty Applied: -{domain_penalty} pts (out of max -{MAX_DOMAIN_PENALTY} pts)
+**Score Breakdown:**
+- Content Score: {content_score}/90
+- Format Score: {format_component}/10 (raw: {fmt_score_raw}/100)
+- Score before domain adjustment: {pre_penalty_score}/100
+- Domain adjustment: {("-" + str(domain_penalty) + " pts (your field doesn't fully match the job)") if domain_penalty > 0 else "None — your field matches the job"}
 - Final ATS Score: {total_score}/100
-- Domain Similarity: {similarity_score:.2f}/1.0 ({int(similarity_score * 100)}% alignment)
-- Resume Domain Detected: {resume_domain}
-- Target Job Domain: {job_domain}
-- Language Pre-Score: {grammar_score}/{lang_weight}
+- Your field: {resume_domain}
+- Job field: {job_domain}
+- Experience level in your field: {_depth_str.capitalize()} {"(API/tool usage only)" if _depth_str == "shallow" else "(projects/internships)" if _depth_str == "moderate" else "(work experience/quantified results)"}
 
 **Score Interpretation (Industry Benchmarks):**
 - 85–100: Top 10% candidates — Strong interview recommendation
