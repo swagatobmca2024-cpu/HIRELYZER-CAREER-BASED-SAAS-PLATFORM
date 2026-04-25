@@ -289,7 +289,7 @@ Resume Text:
 CRITICAL: Calling OpenAI/Groq/Anthropic/Gemini/any LLM API is NOT AI/ML work.
 Using LangChain/LlamaIndex to query a model is NOT AI/ML work.
 AI/ML requires actual model training, fine-tuning, or building ML pipelines.
-API consumers → classify by their other tech stack, mark depth=shallow.
+API consumers → classify by their other tech stack and mark depth=shallow.
 
 Return EXACTLY two lines, nothing else:
 Domain: <one domain from the list below>
