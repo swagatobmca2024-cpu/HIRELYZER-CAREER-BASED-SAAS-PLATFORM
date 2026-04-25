@@ -1769,7 +1769,6 @@ def generate_resume_report_html(resume, user_location=""):
     bias_score = resume.get('Bias Score (0 = Fair, 1 = Biased)', 'N/A')
     resume_domain     = resume.get('Resume Domain', 'N/A')
     job_domain        = resume.get('Job Domain', 'N/A')
-    resume_depth      = resume.get('Resume Depth', 'moderate').capitalize()
     domain_similarity = resume.get('Domain Similarity Score', 0)
     domain_penalty    = resume.get('Domain Penalty', 0)
     domain_match_pct  = round(domain_similarity * 100) if isinstance(domain_similarity, float) else 'N/A'
@@ -1832,7 +1831,6 @@ def generate_resume_report_html(resume, user_location=""):
         <tr><td><b>Overall ATS Match</b></td><td>{ats_match}%</td></tr>
         <tr><td><b>Resume Domain</b></td><td>{resume_domain}</td></tr>
         <tr><td><b>Job Domain</b></td><td>{job_domain}</td></tr>
-        <tr><td><b>Domain Strength</b></td><td>{resume_depth}</td></tr>
         <tr><td><b>Domain Match</b></td><td>{domain_match_pct}%</td></tr>
         <tr><td><b>Domain Penalty</b></td><td>{domain_penalty_str}</td></tr>
         <tr><td><b>Education Score</b></td><td>{edu_score}</td></tr>
