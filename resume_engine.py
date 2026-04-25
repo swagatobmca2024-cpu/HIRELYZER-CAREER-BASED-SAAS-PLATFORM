@@ -3055,45 +3055,31 @@ def ats_percentage_score(
     _resume_title_hint = _extract_resume_title(resume_text)
     _resume_cache_key = f"resume_domain_{hash(resume_text[:500])}"
     if resume_domain is None and _resume_cache_key not in st.session_state:
+        # ── Use shared prompt builder — single source of truth in db_manager ──
+        # Pass extracted title hint into the prompt so LLM has the role context
         _resume_domain_prompt = build_resume_domain_prompt(
             resume_text,
             title_hint=_resume_title_hint
         )
         try:
-            _raw = call_llm(_resume_domain_prompt, session=st.session_state).strip()
-            # Parse two-line response: Domain: X / Depth: Y
-            _domain_line = ""
-            _depth_val   = "moderate"
-            for _line in _raw.splitlines():
-                _line = _line.strip()
-                if _line.lower().startswith("domain:"):
-                    _domain_line = _line.split(":", 1)[1].strip()
-                elif _line.lower().startswith("depth:"):
-                    _depth_val = _line.split(":", 1)[1].strip().lower()
-            if _depth_val not in ("shallow", "moderate", "deep"):
-                _depth_val = "moderate"
-            if _domain_line in _valid_domains:
-                st.session_state[_resume_cache_key]            = _domain_line
-                st.session_state[_resume_cache_key + "_depth"] = _depth_val
+            _r = call_llm(_resume_domain_prompt, session=st.session_state).strip()
+            if _r in _valid_domains:
+                st.session_state[_resume_cache_key] = _r
             else:
+                # LLM returned invalid domain — fall back to keyword detection
                 _kw_fallback = (db_manager.detect_domain_with_confidence(_resume_title_hint, resume_text[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(_resume_title_hint, resume_text[:3000]))
-                st.session_state[_resume_cache_key]            = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
-                st.session_state[_resume_cache_key + "_depth"] = "moderate"
+                st.session_state[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
         except Exception:
+            # LLM failed entirely — fall back to keyword detection
             try:
                 _kw_fallback = (db_manager.detect_domain_with_confidence(_resume_title_hint, resume_text[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(_resume_title_hint, resume_text[:3000]))
-                st.session_state[_resume_cache_key]            = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
-                st.session_state[_resume_cache_key + "_depth"] = "moderate"
+                st.session_state[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
             except Exception:
-                st.session_state[_resume_cache_key]            = "Software Engineering"
-                st.session_state[_resume_cache_key + "_depth"] = "moderate"
+                st.session_state[_resume_cache_key] = "Software Engineering"
 
+    # Use passed-in value if provided, otherwise use session state value
     if resume_domain is None:
         resume_domain = st.session_state.get(_resume_cache_key, "Software Engineering")
-
-    # Depth score drives effective similarity calculation
-    _depth_str   = st.session_state.get(_resume_cache_key + "_depth", "moderate")
-    _depth_score = {"shallow": 0.4, "moderate": 0.7, "deep": 1.0}.get(_depth_str, 0.7)
 
     # ── JOB DOMAIN: use pre-detected value if passed in, else detect here ──
     # If JD is non-English → skip LLM domain detection, use keyword fallback directly
@@ -3141,17 +3127,12 @@ def ats_percentage_score(
     grammar_feedback    = "Language quality appears adequate for professional communication."
     grammar_suggestions = []
 
-    # ✅ Depth-weighted domain penalty
-    # effective_similarity = raw domain similarity × how deeply candidate works in that domain
-    # shallow (API caller, no real work) → multiplier 0.4 → higher penalty
-    # moderate (described projects, internship) → multiplier 0.7
-    # deep (real experience, quantified results) → multiplier 1.0 → no change vs before
+    # ✅ Balanced domain penalty — zero penalty for near-identical domains (>= 0.90)
     MAX_DOMAIN_PENALTY = 15
-    effective_similarity = similarity_score * _depth_score
-    if effective_similarity >= 0.90:
+    if similarity_score >= 0.90:
         domain_penalty = 0
     else:
-        domain_penalty = round((1 - effective_similarity) * MAX_DOMAIN_PENALTY)
+        domain_penalty = round((1 - similarity_score) * MAX_DOMAIN_PENALTY)
 
     # ✅ Optional profile score note
     logic_score_note = (
@@ -3729,8 +3710,6 @@ SCORING SCALE for language ({lang_weight} pts max):
 - Content Score (LLM components, 90-pt scale): {content_score}/90
 - Format Component (10-pt scale): {format_component}/10 (Format Score: {fmt_score_raw}/100)
 - Pre-Penalty Score: {pre_penalty_score}/100
-- Resume Depth: {_depth_str} (score multiplier: {_depth_score})
-- Effective Domain Similarity (similarity × depth): {effective_similarity:.2f}
 - Domain Penalty Applied: -{domain_penalty} pts (out of max -{MAX_DOMAIN_PENALTY} pts)
 - Final ATS Score: {total_score}/100
 - Domain Similarity: {similarity_score:.2f}/1.0 ({int(similarity_score * 100)}% alignment)
@@ -3780,7 +3759,6 @@ SCORING SCALE for language ({lang_weight} pts max):
         "Missing Skills": missing_skills,
         "Resume Domain": resume_domain,
         "Job Domain": job_domain,
-        "Resume Depth": _depth_str,
         "Domain Penalty": domain_penalty,
         "Domain Similarity Score": similarity_score
     }
