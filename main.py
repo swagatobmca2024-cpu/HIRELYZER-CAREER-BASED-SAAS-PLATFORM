@@ -4950,19 +4950,32 @@ if uploaded_files and job_description and weights_valid:
             # Use shared prompt builder (3000 chars, Data Analytics rule, FREQUENCY RULE)
             _pre_resume_prompt = build_resume_domain_prompt(full_text, title_hint=_pre_title_hint)
             try:
-                _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
-                if _r in _pre_valid_domains:
-                    st.session_state[_pre_resume_cache_key] = _r
+                _raw_pre = call_llm(_pre_resume_prompt, session=st.session_state).strip()
+                _pre_domain_line = ""
+                _pre_depth_val   = "moderate"
+                for _ln in _raw_pre.splitlines():
+                    _ln = _ln.strip()
+                    if _ln.lower().startswith("domain:"):
+                        _pre_domain_line = _ln.split(":", 1)[1].strip()
+                    elif _ln.lower().startswith("depth:"):
+                        _pre_depth_val = _ln.split(":", 1)[1].strip().lower()
+                if _pre_depth_val not in ("shallow", "moderate", "deep"):
+                    _pre_depth_val = "moderate"
+                if _pre_domain_line in _pre_valid_domains:
+                    st.session_state[_pre_resume_cache_key]            = _pre_domain_line
+                    st.session_state[_pre_resume_cache_key + "_depth"] = _pre_depth_val
                 else:
-                    # LLM returned invalid — use detect_domain_with_confidence (dual validation)
                     _kw = db_manager.detect_domain_with_confidence(_pre_title_hint, full_text[:3000]).get("domain")
-                    st.session_state[_pre_resume_cache_key] = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
+                    st.session_state[_pre_resume_cache_key]            = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
+                    st.session_state[_pre_resume_cache_key + "_depth"] = "moderate"
             except Exception:
                 try:
                     _kw = db_manager.detect_domain_with_confidence(_pre_title_hint, full_text[:3000]).get("domain")
-                    st.session_state[_pre_resume_cache_key] = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
+                    st.session_state[_pre_resume_cache_key]            = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
+                    st.session_state[_pre_resume_cache_key + "_depth"] = "moderate"
                 except Exception:
-                    st.session_state[_pre_resume_cache_key] = "Software Engineering"
+                    st.session_state[_pre_resume_cache_key]            = "Software Engineering"
+                    st.session_state[_pre_resume_cache_key + "_depth"] = "moderate"
         _pre_resume_domain = st.session_state[_pre_resume_cache_key]
 
         # ── JD domain pre-detection ───────────────────────────────────────────
@@ -5228,6 +5241,7 @@ if uploaded_files and job_description and weights_valid:
             "Domain Similarity Score": ats_scores.get("Domain Similarity Score", 1.0),
             "Resume Domain": ats_scores.get("Resume Domain", domain),
             "Job Domain": ats_scores.get("Job Domain", "Unknown"),
+            "Resume Depth": ats_scores.get("Resume Depth", "moderate"),
         })
 
         insert_candidate(
@@ -5643,16 +5657,25 @@ with tab1:
                         </div>
                     </div>""", unsafe_allow_html=True)
                 with r3c2:
+                    _resume_dom_display = resume.get("Resume Domain", "Unknown")
+                    _job_dom_display    = resume.get("Job Domain", "Unknown")
+                    _depth_display      = resume.get("Resume Depth", "moderate").capitalize()
+                    _depth_color        = {"Shallow": "#f59e0b", "Moderate": "#38bdf8", "Deep": "#34d399"}.get(_depth_display, "#94a3b8")
+                    _penalty_text       = "✓ No penalty" if dom_penalty == 0 else f"−{dom_penalty} pts deducted"
+                    _penalty_color      = "#34d399" if dom_penalty == 0 else "#f87171"
                     st.markdown(f"""
                     <div style="background:rgba(15,23,42,0.85);border:1px solid rgba(56,189,248,0.25);
-                                border-radius:12px;padding:14px 16px;margin-bottom:8px;height:86px;
+                                border-radius:12px;padding:14px 16px;margin-bottom:8px;min-height:86px;
                                 display:flex;flex-direction:column;justify-content:center;overflow:hidden;">
                         <div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:#94a3b8;">
                             <span style="color:#38bdf8;flex-shrink:0;">{SVG_DOM}</span>
                             <span>Domain Match</span>
                         </div>
-                        <div style="font-size:1.1rem;font-weight:700;color:#f0f4f8;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                            {dom_pct}% <span style="font-size:0.75rem;color:{'#34d399' if dom_penalty == 0 else '#64748b'};">({'✓ No penalty' if dom_penalty == 0 else f'-{dom_penalty} pts'})</span>
+                        <div style="font-size:0.78rem;color:#cbd5e1;margin-top:6px;line-height:1.7;">
+                            <span style="color:#94a3b8;">Your field:</span> <b style="color:#f0f4f8;">{_resume_dom_display}</b><br>
+                            <span style="color:#94a3b8;">Job needs:</span> <b style="color:#f0f4f8;">{_job_dom_display}</b><br>
+                            <span style="color:#94a3b8;">Strength:</span> <b style="color:{_depth_color};">{_depth_display}</b>
+                            <span style="float:right;font-size:0.72rem;color:{_penalty_color};font-weight:700;">{_penalty_text}</span>
                         </div>
                     </div>""", unsafe_allow_html=True)
                 with r3c3:
