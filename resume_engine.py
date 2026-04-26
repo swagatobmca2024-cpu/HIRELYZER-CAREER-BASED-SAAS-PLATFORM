@@ -3111,19 +3111,21 @@ def ats_percentage_score(
         except Exception:
             st.session_state[_jd_cache_key] = "Software Engineering"
     if job_domain is None and _jd_cache_key not in st.session_state:
-        # ── Use shared prompt builder — single source of truth in db_manager ──
-        # Item 4 fix: job_description now sent at 3000 chars (was 2000) via builder
         _jd_domain_prompt = build_jd_domain_prompt(job_title, job_description)
         try:
-            _j = call_llm(_jd_domain_prompt, session=st.session_state).strip()
-            if _j in _valid_domains:
-                st.session_state[_jd_cache_key] = _j
+            _raw_jd = call_llm(_jd_domain_prompt, session=st.session_state).strip()
+            _jd_domain_line = ""
+            for _line in _raw_jd.splitlines():
+                _line = _line.strip()
+                if _line.lower().startswith("domain:"):
+                    _jd_domain_line = _line.split(":", 1)[1].strip()
+                    break
+            if _jd_domain_line in _valid_domains:
+                st.session_state[_jd_cache_key] = _jd_domain_line
             else:
-                # LLM returned invalid — fall back to keyword detection
                 _jd_kw = (db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000]))
                 st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
         except Exception:
-            # LLM failed — fall back to keyword detection
             try:
                 _jd_kw = (db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000]))
                 st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
@@ -3141,14 +3143,14 @@ def ats_percentage_score(
     grammar_feedback    = "Language quality appears adequate for professional communication."
     grammar_suggestions = []
 
-    # ✅ Domain penalty: depth multiplier only fires when domains actually differ.
-    # Same domain → always zero penalty regardless of experience level.
+    # ✅ Depth-weighted domain penalty
+    # Same domain (similarity >= 0.90) → always zero penalty regardless of depth
+    # Different domain → depth multiplier fires: shallow=0.4, moderate=0.7, deep=1.0
     MAX_DOMAIN_PENALTY = 15
     if similarity_score >= 0.90:
-        domain_penalty    = 0
+        domain_penalty       = 0
         effective_similarity = similarity_score
     else:
-        # Domains differ → depth matters: shallow candidates penalized more
         effective_similarity = similarity_score * _depth_score
         domain_penalty = round((1 - effective_similarity) * MAX_DOMAIN_PENALTY)
 
@@ -3728,7 +3730,7 @@ SCORING SCALE for language ({lang_weight} pts max):
 - Content Score: {content_score}/90
 - Format Score: {format_component}/10 (raw: {fmt_score_raw}/100)
 - Score before domain adjustment: {pre_penalty_score}/100
-- Domain adjustment: {("-" + str(domain_penalty) + " pts (your field doesn't fully match the job)") if domain_penalty > 0 else "None — your field matches the job"}
+- Domain adjustment: {("-" + str(domain_penalty) + " pts (your field doesn\'t fully match the job)") if domain_penalty > 0 else "None — your field matches the job"}
 - Final ATS Score: {total_score}/100
 - Your field: {resume_domain}
 - Job field: {job_domain}
