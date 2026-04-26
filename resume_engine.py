@@ -3063,32 +3063,130 @@ def ats_percentage_score(
         )
         try:
             _raw = call_llm(_resume_domain_prompt, session=st.session_state).strip()
+
+            # ── Parse domain + depth from LLM response ─────────────────────
+            # LLMs sometimes add preamble, punctuation, or capitalization.
+            # We strip all of those before validating.
             _domain_line = ""
-            _depth_val   = "moderate"
+            _depth_raw   = ""
             for _line in _raw.splitlines():
                 _line = _line.strip()
                 if _line.lower().startswith("domain:"):
-                    _domain_line = _line.split(":", 1)[1].strip()
+                    _domain_line = _line.split(":", 1)[1].strip().rstrip(".")
                 elif _line.lower().startswith("depth:"):
-                    _depth_val = _line.split(":", 1)[1].strip().lower()
-            if _depth_val not in ("shallow", "moderate", "deep"):
-                _depth_val = "moderate"
+                    _depth_raw = _line.split(":", 1)[1].strip().lower().rstrip(".")
+
+            # Normalise depth — strip whitespace, ignore case, strip trailing punct
+            _depth_val = _depth_raw if _depth_raw in ("shallow", "moderate", "deep") else ""
+
+            # ── Retry if depth is missing or unparseable ────────────────────
+            if not _depth_val:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "Depth line missing or unrecognised in LLM response. "
+                    f"Raw depth token: {repr(_depth_raw)!r}. "
+                    f"Full response (first 300 chars): {_raw[:300]!r}. "
+                    "Retrying with stricter prompt."
+                )
+                _retry_prompt = (
+                    f"{_resume_domain_prompt}\n\n"
+                    "REMINDER: Your previous response was missing or had an invalid Depth line.\n"
+                    "You MUST output exactly two lines and nothing else:\n"
+                    "Domain: <domain>\n"
+                    "Depth: shallow   (or moderate, or deep)\n"
+                    "Do not write anything before or after these two lines."
+                )
+                try:
+                    _raw2 = call_llm(_retry_prompt, session=st.session_state).strip()
+                    for _line in _raw2.splitlines():
+                        _line = _line.strip()
+                        if _line.lower().startswith("domain:") and not _domain_line:
+                            _domain_line = _line.split(":", 1)[1].strip().rstrip(".")
+                        elif _line.lower().startswith("depth:"):
+                            _depth_raw2 = _line.split(":", 1)[1].strip().lower().rstrip(".")
+                            if _depth_raw2 in ("shallow", "moderate", "deep"):
+                                _depth_val = _depth_raw2
+                                break
+                except Exception:
+                    pass  # retry failed — fall through to keyword fallback below
+
+            # ── Final safety net: keyword-based depth inference ─────────────
+            # Only fires if BOTH the primary call and the retry failed to produce
+            # a valid depth token. Uses simple resume-text signals so at least
+            # shallow/deep extremes are caught correctly.
+            if not _depth_val:
+                _rt_lower = resume_text.lower()
+                _has_fulltime = any(kw in _rt_lower for kw in [
+                    "years of experience", "yrs of experience", "full-time", "full time",
+                    "employed", "employment", "promoted", "production system",
+                ])
+                _has_quantified = bool(re.search(
+                    r'\b(\d+[%x]|\d+\s*(users?|customers?|ms|seconds?|requests?|'
+                    r'rpm|latency|revenue|million|billion|k\b))', _rt_lower
+                ))
+                _has_projects = len(re.findall(
+                    r'\b(project|built|developed|implemented|designed)\b', _rt_lower
+                )) >= 3
+                _has_internship = bool(re.search(
+                    r'\b(internship|intern\b|trainee)\b', _rt_lower
+                ))
+                _virtual_only = bool(re.search(
+                    r'\b(aicte virtual|oasis infobyte|internshala|certificate program)\b', _rt_lower
+                ))
+
+                if _has_fulltime or _has_quantified:
+                    _depth_val = "deep"
+                elif (_has_internship and not _virtual_only) or _has_projects:
+                    _depth_val = "moderate"
+                else:
+                    _depth_val = "shallow"
+
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    f"Depth inferred via keyword fallback as '{_depth_val}' "
+                    f"(fulltime={_has_fulltime}, quantified={_has_quantified}, "
+                    f"projects={_has_projects}, internship={_has_internship})."
+                )
+
             if _domain_line in _valid_domains:
                 st.session_state[_resume_cache_key]            = _domain_line
                 st.session_state[_resume_cache_key + "_depth"] = _depth_val
             else:
-                # Domain failed validation — keyword fallback for domain, preserve LLM depth
                 _kw_fallback = (db_manager.detect_domain_with_confidence(_resume_title_hint, resume_text[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(_resume_title_hint, resume_text[:3000]))
                 st.session_state[_resume_cache_key]            = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
                 st.session_state[_resume_cache_key + "_depth"] = _depth_val
         except Exception:
+            # ── LLM call itself failed — infer depth from resume text ───────
+            _rt_lower  = resume_text.lower()
+            _has_ft    = any(kw in _rt_lower for kw in [
+                "years of experience", "yrs of experience", "full-time", "full time",
+                "employed", "employment", "promoted", "production system",
+            ])
+            _has_qt    = bool(re.search(
+                r'\b(\d+[%x]|\d+\s*(users?|customers?|ms|seconds?|requests?|'
+                r'rpm|latency|revenue|million|billion|k\b))', _rt_lower
+            ))
+            _has_pj    = len(re.findall(
+                r'\b(project|built|developed|implemented|designed)\b', _rt_lower
+            )) >= 3
+            _has_int   = bool(re.search(r'\b(internship|intern\b|trainee)\b', _rt_lower))
+            _virt_only = bool(re.search(
+                r'\b(aicte virtual|oasis infobyte|internshala|certificate program)\b', _rt_lower
+            ))
+            if _has_ft or _has_qt:
+                _inferred_depth = "deep"
+            elif (_has_int and not _virt_only) or _has_pj:
+                _inferred_depth = "moderate"
+            else:
+                _inferred_depth = "shallow"
+
             try:
                 _kw_fallback = (db_manager.detect_domain_with_confidence(_resume_title_hint, resume_text[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(_resume_title_hint, resume_text[:3000]))
                 st.session_state[_resume_cache_key]            = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
-                st.session_state[_resume_cache_key + "_depth"] = _depth_val
+                st.session_state[_resume_cache_key + "_depth"] = _inferred_depth
             except Exception:
                 st.session_state[_resume_cache_key]            = "Software Engineering"
-                st.session_state[_resume_cache_key + "_depth"] = _depth_val
+                st.session_state[_resume_cache_key + "_depth"] = _inferred_depth
 
     if resume_domain is None:
         resume_domain = st.session_state.get(_resume_cache_key, "Software Engineering")
