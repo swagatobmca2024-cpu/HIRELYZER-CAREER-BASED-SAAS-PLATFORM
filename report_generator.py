@@ -46,7 +46,11 @@ from llm_manager import (
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
     _async_clear_failure,
 )
-# db_manager imports removed — report_generator does not call db_manager directly
+from db_manager import (
+    db_manager, insert_candidate, get_top_domains_by_score,
+    get_database_stats, detect_domain_from_title_and_description,
+    get_domain_similarity
+)
 from user_login import (
     create_user_table, add_user, complete_registration, verify_user,
     get_logins_today, get_total_registered_users, log_user_action,
@@ -92,7 +96,6 @@ def _normalize_cgpa(raw: str) -> str:
     # Already clean: CGPA/GPA/SGPA prefixes — strip only trailing duplicate labels
     for prefix in ("CGPA:", "GPA:", "SGPA:"):
         if s.upper().startswith(prefix.upper()):
-            # Use split to avoid off-by-one: "CGPA: 8.5" -> val = "8.5"
             val = s[len(prefix):].strip()
             val = re.sub(r'\s+(cgpa|gpa|sgpa)\s*$', '', val, flags=re.IGNORECASE).strip()
             return f"{prefix} {val}"
@@ -151,33 +154,13 @@ def _normalize_cgpa(raw: str) -> str:
 
 
 def html_to_pdf_bytes(html_string):
-    # ── Sanitise: strip non-BMP Unicode characters (codepoints > U+FFFF) ─────
-    # xhtml2pdf / ReportLab crash on emoji and other 4-byte Unicode characters
-    # that appear outside the Basic Multilingual Plane. Replace them with a
-    # safe ASCII approximation so the PDF always renders without an exception.
-    html_string = re.sub(
-        r'[\U00010000-\U0010FFFF]',  # matches any codepoint > 0xFFFF
-        lambda m: m.group(0).encode('ascii', 'namereplace').decode('ascii'),
-        html_string,
-    )
-    # Also replace common smart-quotes / em-dashes that confuse pisa's Latin-1 codec
-    _char_map = {
-        '\u2018': "'", '\u2019': "'",   # left/right single quotes
-        '\u201c': '"', '\u201d': '"',   # left/right double quotes
-        '\u2013': '-', '\u2014': '--',  # en-dash, em-dash
-        '\u2026': '...',                # ellipsis
-        '\u00b7': '-',                  # middle dot
-    }
-    for orig, repl in _char_map.items():
-        html_string = html_string.replace(orig, repl)
-
     styled_html = f"""
     <html>
     <head>
         <meta charset="UTF-8">
         <style>
             @page {{
-                size: 400mm 297mm;
+                size: 400mm 297mm;  /* Original custom large page size */
                 margin-top: 10mm;
                 margin-bottom: 10mm;
                 margin-left: 10mm;
@@ -185,7 +168,7 @@ def html_to_pdf_bytes(html_string):
             }}
             body {{
                 font-size: 14pt;
-                font-family: "Helvetica", sans-serif;
+                font-family: "Segoe UI", "Helvetica", sans-serif;
                 line-height: 1.5;
                 color: #000;
             }}
@@ -212,7 +195,7 @@ def html_to_pdf_bytes(html_string):
                 padding: 8px;
                 margin-top: 6px;
                 background-color: #f9f9f9;
-                border-left: 4px solid #999;
+                border-left: 4px solid #999;  /* More elegant than full border */
             }}
             ul {{
                 margin: 0.5em 0;
@@ -230,16 +213,7 @@ def html_to_pdf_bytes(html_string):
     """
 
     pdf_io = BytesIO()
-    result = pisa.CreatePDF(styled_html, dest=pdf_io)
-
-    # ── Guard: pisa returns err=True on failure but doesn't raise — check it ──
-    if result.err:
-        import logging as _log_pdf
-        _log_pdf.getLogger(__name__).error(
-            f"xhtml2pdf/pisa error generating PDF (err={result.err}). "
-            "Returning whatever partial output was written."
-        )
-
+    pisa.CreatePDF(styled_html, dest=pdf_io)
     pdf_io.seek(0)
     return pdf_io
 
@@ -1797,16 +1771,6 @@ def generate_resume_report_html(resume, user_location=""):
     masculine_count = len(masculine_words_list)
     feminine_count = len(feminine_words_list)
     bias_score = resume.get('Bias Score (0 = Fair, 1 = Biased)', 'N/A')
-    resume_domain     = resume.get('Resume Domain', 'N/A')
-    job_domain        = resume.get('Job Domain', 'N/A')
-    resume_depth      = resume.get('Resume Depth', 'moderate').capitalize()
-    domain_similarity = resume.get('Domain Similarity Score', 0)
-    domain_penalty    = resume.get('Domain Penalty', 0)
-    try:
-        domain_match_pct = round(float(domain_similarity) * 100) if domain_similarity not in (None, 'N/A', '') else 'N/A'
-    except (TypeError, ValueError):
-        domain_match_pct = 'N/A'
-    domain_penalty_str = "No penalty" if domain_penalty == 0 else f"-{domain_penalty} pts"
 
     return f"""
     <html>
@@ -1863,11 +1827,6 @@ def generate_resume_report_html(resume, user_location=""):
     <h2>ATS Evaluation</h2>
     <table>
         <tr><td><b>Overall ATS Match</b></td><td>{ats_match}%</td></tr>
-        <tr><td><b>Resume Domain</b></td><td>{resume_domain}</td></tr>
-        <tr><td><b>Job Domain</b></td><td>{job_domain}</td></tr>
-        <tr><td><b>Domain Strength</b></td><td>{resume_depth}</td></tr>
-        <tr><td><b>Domain Match</b></td><td>{domain_match_pct}%</td></tr>
-        <tr><td><b>Domain Penalty</b></td><td>{domain_penalty_str}</td></tr>
         <tr><td><b>Education Score</b></td><td>{edu_score}</td></tr>
         <tr><td><b>Experience Score</b></td><td>{exp_score}</td></tr>
         <tr><td><b>Skills Score</b></td><td>{skills_score}</td></tr>
