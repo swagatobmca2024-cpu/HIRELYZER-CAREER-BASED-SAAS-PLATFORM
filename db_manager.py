@@ -113,198 +113,148 @@ DOMAIN_VALID_LIST = [
 ]
 
 def build_resume_domain_prompt(resume_text: str, title_hint: str = "") -> str:
-    """Return the canonical LLM prompt for classifying a resume into a domain."""
+    """Return the canonical LLM prompt for classifying a resume into a domain + depth."""
     _domain_list = ", ".join(DOMAIN_VALID_LIST)
-    _title_section = f"\nCandidate's current/target role (extracted from resume header): {title_hint}" if title_hint else ""
-    return f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across ALL levels and ALL industries.
-
-Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.{_title_section}
+    _title_section = f"\nCandidate role hint (from resume header): {title_hint}" if title_hint else ""
+    return f"""You are a senior technical recruiter with 15+ years experience. Your job: read this resume and return exactly two things — the candidate's PRIMARY domain and their DEPTH in that domain.{_title_section}
 
 ════════════════════════════════════════════════════════
-STEP 1 — DETERMINE CANDIDATE LEVEL
+PART 1 — DOMAIN CLASSIFICATION
 ════════════════════════════════════════════════════════
 
-LEVEL A — Pure Fresher / Student with NO specialization evidence:
-  • Still studying OR just graduated with ONLY basic CS fundamentals (Java, C, C++, Python, HTML, SQL in isolation)
-  • No internship OR only 1 internship with zero description of work done
-  • Projects listed as bare names only — no tech stack, no description
-  → DEFAULT to "Software Engineering". Do not over-classify.
+STEP 1: CHECK CANDIDATE LEVEL FIRST
 
-LEVEL B — Fresher / Student WITH at least ONE specialization signal:
-  • Has at least one described internship, project with tech stack, or clear non-trivial skill set
-  → Classify into the MOST EVIDENCED specific domain using STEP 2 rules
+  LEVEL A → default to "Software Engineering":
+    • Student/fresher with ONLY bare CS fundamentals listed (Java/C/C++/Python/HTML/SQL) but no frameworks
+    • No internship, OR internship listed with zero description of actual work
+    • Projects are bare names with no tech stack or output described
+    → Do NOT over-classify. Output: Software Engineering
 
-LEVEL C — Experienced Professional (1+ years full-time work):
-  → ALWAYS classify into a specific domain. Use job titles + tech stack + years as primary signals.
+  LEVEL B → classify by evidence:
+    • Has at least 1 project with described tech stack AND output, OR
+    • Has at least 1 internship with described work done
+    → Apply STEP 2 domain evidence bars below
+
+  LEVEL C → always classify specifically:
+    • 1+ years full-time work experience
+    → Use job title + tech stack + years as primary signals
+
+STEP 2: DOMAIN EVIDENCE BARS
+
+  Frontend Development:
+    REQUIRES: HTML + CSS + JavaScript + at least one of React/Vue/Angular/Next.js/Bootstrap/jQuery
+    AND: at least 1 described frontend project with UI output
+    ✗ HTML+CSS static page alone → Software Engineering
+    ✗ Only listed in skills, not used in any described project → does not count
+
+  Backend Development:
+    REQUIRES: Django/Flask/FastAPI/Spring Boot/Express/Node.js/Laravel/NestJS
+    AND: database (SQL/MongoDB/PostgreSQL/MySQL) described in same project
+    ✗ Framework only in skills list, not demonstrated in project → does not count
+    ✗ Node.js used in a group project where candidate's own contribution is unclear → does not count
+
+  Full Stack Development:
+    REQUIRES: frontend tech + backend framework + database ALL THREE present
+    AND: candidate personally built both frontend AND backend (not split across group members)
+    ✗ Group project with backend + personal projects that are frontend-only → Frontend Development
+    ✗ Backend only OR frontend only even if both frameworks listed → do NOT call Full Stack
+
+  AI/Machine Learning:
+    REQUIRES: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/NLTK + model training or fine-tuning described
+    ✗ HARD RULE: Calling OpenAI/Groq/Gemini/Anthropic/Claude API = NOT AI/ML work
+    ✗ LangChain/LlamaIndex wrapping an LLM = NOT AI/ML work
+    ✗ Chatbot using GPT-4 API = NOT AI/ML → classify by other tech stack instead
+
+  Data Science:
+    REQUIRES: pandas/numpy/matplotlib/seaborn/scikit-learn/R/Jupyter
+    AND: data analysis, EDA, or statistical modeling described in a project
+    ✗ Python alone without data work → NOT Data Science
+
+  Data Analytics:
+    REQUIRES: Power BI/Tableau/Looker/DAX/Excel pivot tables/VLOOKUP/Google Data Studio
+    AND: dashboard, KPI reporting, or BI work described
+    ✗ Python/pandas alone → Data Science not Data Analytics
+
+  Cybersecurity:
+    REQUIRES: security tools (Kali/Burp Suite/Wireshark/Metasploit/OWASP/Nmap) OR concepts (pentesting/CTF/SOC/VAPT)
+    AND: hands-on security work described with named tools or techniques
+    ✗ Virtual/online cybersecurity certificate with no described hands-on work → NOT Cybersecurity
+    ✗ "Cybersecurity internship" with only generic descriptions and no tools named → Software Engineering
+
+  Mobile Development:
+    REQUIRES: Android/iOS/Flutter/React Native/Kotlin/Swift
+    AND: at least 1 described mobile app project
+
+  DevOps/Infrastructure:
+    REQUIRES: Docker/Kubernetes/CI-CD/Jenkins/Terraform/Ansible/GitHub Actions
+    AND: deployment or pipeline work described in a project
+
+  Cloud Engineering:
+    REQUIRES: specific AWS/Azure/GCP service names (EC2/S3/Lambda/Azure Functions/GKE etc.)
+    AND: cloud deployment or architecture described (not just "cloud" mentioned)
+
+  UI/UX Design:
+    REQUIRES: Figma/Adobe XD/Sketch/InVision/Framer
+    AND: wireframes, prototypes, or user research described
+
+  Quality Assurance:
+    REQUIRES: Selenium/Cypress/JUnit/pytest/Postman/JMeter OR explicit QA role
+    AND: test planning, test cases, or automation described
+
+  All other domains (Game Dev, Blockchain, Embedded, IoT, AR/VR, Networking, SRE,
+  Product Mgmt, Project Mgmt, Business Analysis, Digital Marketing, Technical Writing,
+  Fintech, Healthcare Tech, EdTech, Technical Sales, Agile Coaching, E-commerce, System Architecture):
+    REQUIRES: domain-specific tools/concepts named AND described work in that domain
+    ✗ Vague mention of domain keyword without described work → does not qualify
+
+STEP 3: MIXED SIGNALS — when multiple domains show evidence
+
+  • Count concrete evidence per domain: named framework used in project + described output + internship/job title
+  • Domain with MOST concrete evidence wins
+  • Frontend + backend both strong → Full Stack ONLY if candidate personally built both sides
+  • Frontend + backend where backend comes only from a group project → Frontend Development
+  • Data Analytics vs Data Science tie → count BI tools vs coding tools, whichever is more wins
+  • Genuinely tied or unclear → Software Engineering
 
 ════════════════════════════════════════════════════════
-STEP 2 — DOMAIN CLASSIFICATION RULES
+PART 2 — DEPTH ASSESSMENT
 ════════════════════════════════════════════════════════
 
-RULE A — NEVER over-classify from basic skills alone:
-  ✗ Java + MySQL alone → NOT "Backend Development"
-  ✗ HTML + CSS alone → NOT "Frontend Development"
-  ✗ Python alone → NOT "AI/Machine Learning" or "Data Science"
-  ✗ SQL alone → NOT "Database Management"
-  ✓ Basic CS languages + no described projects/frameworks → "Software Engineering"
+  shallow — ANY of:
+    • Called external APIs (OpenAI/Groq/Stripe/Firebase/Google Maps) without building underlying logic
+    • Projects are tutorials, to-do apps, calculators, portfolio sites, or weather apps
+    • Projects listed but tech stack OR described output is missing
+    • Virtual/online internship with no described hands-on work (AICTE virtual, Oasis Infobyte, Internshala online, etc.)
+    • Group project where candidate's individual contribution is not described
+    • Fewer than 2 personally built projects with described output
+    • Skills listed but not demonstrated in any described project
 
-RULE B — TRUE EVIDENCE BAR per domain:
+  moderate — ALL of:
+    • At least 2 solo projects with described tech stack AND described output, OR
+    • At least 1 real in-person internship with described work done, OR
+    • 1 strong solo project with clear technical decisions and measurable output
+    AND: no full-time work experience yet
 
-  → Data Analytics:
-     MUST have: Power BI/Tableau/Looker/Google Data Studio/DAX/Excel pivot tables/VLOOKUP/XLOOKUP
-     AND: dashboard building, KPI reporting, business intelligence, or data storytelling described
-     NOT: Python/pandas alone — those point to Data Science
-
-  → Data Science:
-     MUST have: pandas/numpy/matplotlib/seaborn/R/SPSS/scikit-learn/statistical modeling/Jupyter
-     AND: actual data analysis, statistical modeling, or predictive work described
-     NOT: Power BI/Tableau dashboards alone — those are Data Analytics
-
-  → AI/Machine Learning:
-     MUST have: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/OpenAI/LangChain/NLP/Computer Vision/LLM
-     AND: model training, fine-tuning, or ML pipeline described in a project
-
-  → Frontend Development:
-     MUST have: HTML+CSS+JS PLUS one of React/Vue/Angular/Bootstrap/jQuery/Next.js
-     AND: at least 1 described web UI / frontend project
-
-  → Backend Development:
-     MUST have: Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI/NestJS
-     AND: database integration described in a project or internship
-
-  → Full Stack Development:
-     MUST have: frontend tech + backend framework + database — ALL THREE explicitly present
-     OR: candidate explicitly self-identifies as "full stack"
-
-  → Mobile Development:
-     MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift
-     AND: at least 1 described mobile app project
-
-  → Cybersecurity:
-     MUST have: security tools (Kali/Burp Suite/Wireshark/Metasploit/OWASP) OR concepts (pentesting/CTF/SOC)
-     AND: security internship or project described
-
-  → DevOps/Infrastructure:
-     MUST have: Docker/Kubernetes/CI-CD/Jenkins/Terraform/Ansible
-     AND: deployment, pipeline, or infrastructure project described
-
-  → Cloud Engineering:
-     MUST have: specific AWS/Azure/GCP service names (not just "cloud")
-     AND: cloud deployment or architecture described
-
-  → UI/UX Design:
-     MUST have: Figma/Adobe XD/Sketch/InVision/Framer
-     AND: wireframes, prototypes, or user research described
-
-  → Quality Assurance:
-     MUST have: Selenium/Cypress/JUnit/pytest/Postman/JMeter OR QA role title
-     AND: test planning, test cases, or automation described
-
-  → Game Development:
-     MUST have: Unity/Unreal Engine/Godot/game mechanics
-     AND: at least 1 described game project
-
-  → Blockchain Development:
-     MUST have: Solidity/Web3/Smart Contracts/Ethereum/DeFi/NFT
-     AND: blockchain project described
-
-  → Embedded Systems:
-     MUST have: microcontroller/RTOS/firmware/Arduino/STM32/ESP32/ARM
-     AND: hardware or embedded project described
-
-  → IoT Development:
-     MUST have: IoT devices/sensors/MQTT/Raspberry Pi in IoT context
-     AND: IoT project described
-
-  → AR/VR Development:
-     MUST have: ARKit/ARCore/Unity3D VR/Oculus/HoloLens/WebXR
-     AND: AR/VR project described
-
-  → System Architecture:
-     MUST have: architect-level title OR explicit distributed systems design work
-
-  → Networking:
-     MUST have: Cisco/routing/switching/BGP/OSPF/VPN OR network engineer title
-     AND: network configuration or administration work described
-
-  → Site Reliability Engineering:
-     MUST have: SRE title OR SLI/SLO/error budgets/on-call/toil reduction
-
-  → Product Management:
-     MUST have: product ownership, roadmaps, PRDs, feature prioritization
-
-  → Project Management:
-     MUST have: managing teams/timelines/deliverables, PMP/Prince2
-
-  → Business Analysis:
-     MUST have: requirements gathering, process mapping, BRD/FRD writing
-
-  → Digital Marketing:
-     MUST have: SEO/SEM/PPC/social media campaigns/Google Ads
-     AND: actual marketing work described
-
-  → Technical Writing:
-     MUST have: documentation, API docs, user manuals as PRIMARY work
-
-  → Fintech:
-     MUST have: payment processing/banking software/trading/KYC/AML
-     AND: fintech role or project described
-
-  → Healthcare Tech:
-     MUST have: EHR/EMR/HIPAA/telemedicine/medical software/clinical systems
-     AND: healthcare context described
-
-  → EdTech:
-     MUST have: e-learning/LMS/educational platform/learning analytics
-     AND: education tech context described
-
-  → Technical Sales:
-     MUST have: sales engineer/pre-sales/solution selling/demo/RFP
-
-  → Agile Coaching:
-     MUST have: Scrum Master/Agile Coach/SAFe/team facilitation as PRIMARY role
-
-  → E-commerce:
-     MUST have: Shopify/Magento/WooCommerce/marketplace/order management
-     AND: e-commerce work described
-
-RULE C — MIXED SIGNALS → dominant domain wins:
-  • Count evidence per domain: tech keywords + project descriptions + job/internship titles
-  • Domain with MOST evidence wins
-  • Tie between frontend+backend → "Full Stack Development"
-  • Data Analytics vs Data Science tie: count BI tools (Power BI/Tableau/DAX/Excel) vs coding tools (pandas/scikit-learn/Jupyter). Whichever is more → wins.
-  • Tie between unrelated domains → "Software Engineering"
-
-RULE F — JOB TITLE as strong signal (Level C only):
-  • "Data Analyst" / "BI Analyst" / "Analytics Analyst" title → "Data Analytics"
-  • "Data Scientist" / "Data Engineer" title → "Data Science"
-  • "Backend Developer" title → "Backend Development"
-  • "ML Engineer" / "AI Engineer" title → "AI/Machine Learning"
+  deep — ANY of:
+    • 1+ years full-time work experience with described responsibilities
+    • Quantified results (%, user counts, latency improvements, revenue) from real work
+    • Published research paper or open source project with community traction (stars/users)
+    • Multiple internships at recognized organizations with described work
 
 ════════════════════════════════════════════════════════
 Resume Text:
-{resume_text[:3000]}
+{{resume_text[:3000]}}
 ════════════════════════════════════════════════════════
 
-CRITICAL: Calling OpenAI/Groq/Anthropic/Gemini/any LLM API is NOT AI/ML work.
-Using LangChain/LlamaIndex to query a model is NOT AI/ML work.
-AI/ML requires actual model training, fine-tuning, or building ML pipelines.
-API consumers → classify by their other tech stack and mark depth=shallow.
+CRITICAL API RULE: Calling OpenAI/Groq/Anthropic/Gemini API is NOT AI/ML work.
+CRITICAL GROUP PROJECT RULE: A group project alone does not qualify a candidate for a domain — look for personal contribution evidence.
+CRITICAL VIRTUAL INTERNSHIP RULE: Virtual/online certificate internships (AICTE virtual, Oasis Infobyte, Internshala online programs) are NOT equivalent to real internships for depth assessment.
 
 Return EXACTLY two lines, nothing else:
 Domain: <one domain from the list below>
 Depth: <shallow|moderate|deep>
 
-Depth guide:
-  shallow = called an API (OpenAI/Groq/Stripe/Firebase etc.), tutorial project,
-            named a tool without using it, single beginner project with no described output,
-            no internship, no work experience
-  moderate = used a framework/tool with described working output,
-             internship with some detail, multiple small projects with tech stack described
-  deep = model training / real system built / quantified impact /
-         internship with measurable results / multiple roles in domain / full-time work experience
-
-{_domain_list}
+{{_domain_list}}
 """
 
 
@@ -372,12 +322,78 @@ Classification rules:
   • DO NOT classify as AI/ML from one ML project alone — if majority is analytics → "Data Analytics"
   • If truly unclear → "Software Engineering"
 
+Return ONLY one domain from this list, nothing else:
+{_domain_list}
+"""
+
+def build_jd_domain_prompt(job_title: str, job_description: str) -> str:
+    """Return the canonical LLM prompt for classifying a JD into a domain."""
+    _domain_list = ", ".join(DOMAIN_VALID_LIST)
+    return f"""You are an expert technical recruiter. Your job: identify the PRIMARY domain this job is hiring for.
+
+════════════════════════════════════════════════════════
+STEP 1 — JOB TITLE (strongest signal — use this first)
+════════════════════════════════════════════════════════
+
+Job Title: {job_title}
+
+Title → Domain mapping:
+  Data Analyst / BI Analyst / Analytics Analyst / Reporting Analyst → Data Analytics
+  Data Scientist / Data Engineer / Analytics Engineer             → Data Science
+  ML Engineer / AI Engineer / NLP Engineer / CV Engineer          → AI/Machine Learning
+  Backend Developer / Backend Engineer                            → Backend Development
+  Frontend Developer / Frontend Engineer                          → Frontend Development
+  Full Stack Developer / Full Stack Engineer                      → Full Stack Development
+  DevOps Engineer / Platform Engineer / Infrastructure Engineer   → DevOps/Infrastructure
+  Cloud Engineer / Cloud Architect                                → Cloud Engineering
+  QA Engineer / SDET / Test Engineer / Test Analyst               → Quality Assurance
+  Mobile Developer / Android Developer / iOS Developer / Flutter  → Mobile Development
+  UX Designer / UI Designer / Product Designer                    → UI/UX Design
+  Security Engineer / Security Analyst / Penetration Tester       → Cybersecurity
+  SRE / Site Reliability Engineer                                 → Site Reliability Engineering
+  Blockchain Developer / Web3 Developer / Solidity Engineer       → Blockchain Development
+  Game Developer / Unity Developer                                → Game Development
+  Embedded Engineer / Firmware Engineer                           → Embedded Systems
+  IoT Engineer                                                    → IoT Development
+  Network Engineer / Network Administrator                        → Networking
+  DBA / Database Administrator                                    → Database Management
+  Product Manager / Product Owner                                 → Product Management
+  Project Manager / Program Manager                               → Project Management
+  Business Analyst / BA                                           → Business Analysis
+  Scrum Master / Agile Coach                                      → Agile Coaching
+  Technical Writer / Documentation Engineer                       → Technical Writing
+  Sales Engineer / Pre-Sales / Solution Engineer                  → Technical Sales
+  Solution Architect / Enterprise Architect / System Architect    → System Architecture
+
+════════════════════════════════════════════════════════
+STEP 2 — IF TITLE IS AMBIGUOUS, READ THE JD
+════════════════════════════════════════════════════════
+
+Job Description:
+{job_description[:3000]}
+
+Rules:
+  • Data Analytics: Power BI/Tableau/Excel/DAX + dashboards/KPI/BI (no heavy ML coding required)
+  • Data Science: pandas/numpy/scikit-learn/Jupyter + statistical modeling or ML pipeline work
+  • AI/ML: TensorFlow/PyTorch/LLM/NLP/model training explicitly required
+  • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work required
+  • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work required
+  • Full Stack: Both frontend AND backend tech explicitly required
+  • DevOps: Docker/Kubernetes/CI-CD/Terraform explicitly required
+  • Cloud: Specific AWS/Azure/GCP service names required (not just "cloud")
+  • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
+  • Mobile: Android/iOS/Flutter/React Native explicitly required
+  • UI/UX: Figma/wireframes/user research explicitly required
+  • Frequency rule: domain with most signals across the full JD wins
+  • Truly unclear → Software Engineering
+
 Return EXACTLY two lines, nothing else:
 Domain: <one domain from the list below>
 Depth: deep
 
 {_domain_list}
 """
+
 
 class DatabaseManager:
     """
