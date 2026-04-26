@@ -5090,6 +5090,7 @@ if uploaded_files and job_description and weights_valid:
                 format_data=format_data,
                 resume_domain=_pre_resume_domain,   # FIX: pre-detected, no thread LLM call
                 job_domain=_pre_job_domain,         # FIX: pre-detected, no thread LLM call
+                resume_depth=st.session_state.get(_pre_resume_cache_key + "_depth"),  # FIX: pass depth explicitly so ats_percentage_score never reads stale "moderate" from session state
             )
 
         with st.spinner("✍️ Rewriting resume & running ATS evaluation in parallel..."):
