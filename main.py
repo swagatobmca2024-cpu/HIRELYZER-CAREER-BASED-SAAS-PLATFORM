@@ -3147,7 +3147,7 @@ _LOCATION_OPTIONS = [
 
 # ── Standard JD templates — one per job title (auto-fill on selection) ──────
 _JD_TEMPLATES = {
-    "Software Engineer": """\
+    "Software Engineer": """
 Position: Software Engineer
 Location: [City, India] | Full-Time
 
@@ -3181,7 +3181,7 @@ Good to Have:
 - Open-source contributions
 """,
 
-    "Backend Developer": """\
+    "Backend Developer": """
 Position: Backend Developer
 Location: [City, India] | Full-Time
 
@@ -3215,7 +3215,7 @@ Good to Have:
 - Familiarity with containerization (Docker, Kubernetes)
 """,
 
-    "Frontend Developer": """\
+    "Frontend Developer": """
 Position: Frontend Developer
 Location: [City, India] | Full-Time
 
@@ -3249,7 +3249,7 @@ Good to Have:
 - Familiarity with testing frameworks (Jest, Cypress, Playwright)
 """,
 
-    "Full Stack Developer": """\
+    "Full Stack Developer": """
 Position: Full Stack Developer
 Location: [City, India] | Full-Time
 
@@ -3282,7 +3282,7 @@ Good to Have:
 - Mobile development experience (React Native / Flutter)
 """,
 
-    "Mobile Developer": """\
+    "Mobile Developer": """
 Position: Mobile Developer
 Location: [City, India] | Full-Time
 
@@ -3315,7 +3315,7 @@ Good to Have:
 - Published apps on Play Store or App Store
 """,
 
-    "Data Scientist": """\
+    "Data Scientist": """
 Position: Data Scientist
 Location: [City, India] | Full-Time
 
@@ -3348,7 +3348,7 @@ Good to Have:
 - Familiarity with MLflow or DVC for experiment tracking
 """,
 
-    "ML Engineer": """\
+    "ML Engineer": """
 Position: ML Engineer (AI/Machine Learning)
 Location: [City, India] | Full-Time
 
@@ -3381,7 +3381,7 @@ Good to Have:
 - Familiarity with Spark or Dask for distributed data processing
 """,
 
-    "DevOps Engineer": """\
+    "DevOps Engineer": """
 Position: DevOps Engineer
 Location: [City, India] | Full-Time
 
@@ -3415,7 +3415,7 @@ Good to Have:
 - Cloud certifications (AWS Solutions Architect, CKA, etc.)
 """,
 
-    "Cloud Engineer": """\
+    "Cloud Engineer": """
 Position: Cloud Engineer
 Location: [City, India] | Full-Time
 
@@ -3448,7 +3448,7 @@ Good to Have:
 - Knowledge of FinOps practices and cost optimization tools
 """,
 
-    "Site Reliability Engineer": """\
+    "Site Reliability Engineer": """
 Position: Site Reliability Engineer (SRE)
 Location: [City, India] | Full-Time
 
@@ -3481,7 +3481,7 @@ Good to Have:
 - Contributions to open-source reliability or observability tooling
 """,
 
-    "Database Administrator": """\
+    "Database Administrator": """
 Position: Database Administrator (DBA)
 Location: [City, India] | Full-Time
 
@@ -3515,7 +3515,7 @@ Good to Have:
 - Experience with data warehousing (Redshift, BigQuery, Snowflake)
 """,
 
-    "Network Engineer": """\
+    "Network Engineer": """
 Position: Network Engineer
 Location: [City, India] | Full-Time
 
@@ -3548,7 +3548,7 @@ Good to Have:
 - Knowledge of network automation using Python or Ansible
 """,
 
-    "Embedded Systems Engineer": """\
+    "Embedded Systems Engineer": """
 Position: Embedded Systems Engineer
 Location: [City, India] | Full-Time
 
@@ -3582,7 +3582,7 @@ Good to Have:
 - Familiarity with wireless protocols (BLE, Zigbee, LoRa, Wi-Fi)
 """,
 
-    "IoT Engineer": """\
+    "IoT Engineer": """
 Position: IoT Engineer
 Location: [City, India] | Full-Time
 
@@ -3615,7 +3615,7 @@ Good to Have:
 - Hands-on with Raspberry Pi, ESP32, or similar platforms
 """,
 
-    "UI/UX Designer": """\
+    "UI/UX Designer": """
 Position: UI/UX Designer
 Location: [City, India] | Full-Time
 
@@ -3648,7 +3648,7 @@ Good to Have:
 - Familiarity with product analytics tools (Mixpanel, Hotjar, FullStory)
 """,
 
-    "QA Engineer": """\
+    "QA Engineer": """
 Position: QA Engineer
 Location: [City, India] | Full-Time
 
@@ -3682,7 +3682,7 @@ Good to Have:
 - Knowledge of mobile testing for iOS and Android
 """,
 
-    "Solution Architect": """\
+    "Solution Architect": """
 Position: Solution Architect
 Location: [City, India] | Full-Time
 
@@ -3715,7 +3715,7 @@ Good to Have:
 - Background in pre-sales and RFP/RFI responses
 """,
 
-    "Product Manager": """\
+    "Product Manager": """
 Position: Product Manager
 Location: [City, India] | Full-Time
 
@@ -3748,7 +3748,7 @@ Good to Have:
 - Knowledge of B2B SaaS, fintech, or consumer internet domains
 """,
 
-    "Project Manager": """\
+    "Project Manager": """
 Position: Project Manager
 Location: [City, India] | Full-Time
 
@@ -3781,7 +3781,7 @@ Good to Have:
 - Familiarity with program-level planning and portfolio management
 """,
 
-    "Business Analyst": """\
+    "Business Analyst": """
 Position: Business Analyst
 Location: [City, India] | Full-Time
 
@@ -3814,7 +3814,7 @@ Good to Have:
 - Familiarity with BI tools (Tableau, Power BI, Looker)
 """,
 
-    "Agile Coach / Scrum Master": """\
+    "Agile Coach / Scrum Master": """
 Position: Agile Coach / Scrum Master
 Location: [City, India] | Full-Time
 
@@ -3847,7 +3847,7 @@ Good to Have:
 - Knowledge of DevOps and Lean practices
 """,
 
-    "Cybersecurity Analyst": """\
+    "Cybersecurity Analyst": """
 Position: Cybersecurity Analyst
 Location: [City, India] | Full-Time
 
@@ -3880,7 +3880,7 @@ Good to Have:
 - Knowledge of malware analysis and reverse engineering
 """,
 
-    "Blockchain Developer": """\
+    "Blockchain Developer": """
 Position: Blockchain Developer
 Location: [City, India] | Full-Time
 
@@ -3913,7 +3913,7 @@ Good to Have:
 - Smart contract audit experience or familiarity with tools like Slither/MythX
 """,
 
-    "Game Developer": """\
+    "Game Developer": """
 Position: Game Developer
 Location: [City, India] | Full-Time
 
@@ -3946,7 +3946,7 @@ Good to Have:
 - Familiarity with procedural generation or ML-based game AI
 """,
 
-    "AR/VR Developer": """\
+    "AR/VR Developer": """
 Position: AR/VR Developer
 Location: [City, India] | Full-Time
 
@@ -3979,7 +3979,7 @@ Good to Have:
 - Familiarity with OpenXR standard and multi-device deployment
 """,
 
-    "Digital Marketing Specialist": """\
+    "Digital Marketing Specialist": """
 Position: Digital Marketing Specialist
 Location: [City, India] | Full-Time
 
@@ -4012,7 +4012,7 @@ Good to Have:
 - Knowledge of growth hacking and performance marketing for SaaS or e-commerce
 """,
 
-    "Technical Writer": """\
+    "Technical Writer": """
 Position: Technical Writer
 Location: [City, India] | Full-Time
 
@@ -4045,7 +4045,7 @@ Good to Have:
 - Knowledge of documentation-as-code workflows
 """,
 
-    "Technical Sales Engineer": """\
+    "Technical Sales Engineer": """
 Position: Technical Sales Engineer
 Location: [City, India] | Full-Time
 
@@ -4078,7 +4078,7 @@ Good to Have:
 - Experience in B2B SaaS, cloud infrastructure, or cybersecurity sales
 """,
 
-    "E-commerce Specialist": """\
+    "E-commerce Specialist": """
 Position: E-commerce Specialist
 Location: [City, India] | Full-Time
 
@@ -4111,7 +4111,7 @@ Good to Have:
 - Knowledge of GST compliance for e-commerce in India
 """,
 
-    "Fintech Developer": """\
+    "Fintech Developer": """
 Position: Fintech Developer
 Location: [City, India] | Full-Time
 
@@ -4144,7 +4144,7 @@ Good to Have:
 - Familiarity with ISO 8583 or FIX protocol for financial messaging
 """,
 
-    "Healthcare Tech Specialist": """\
+    "Healthcare Tech Specialist": """
 Position: Healthcare Tech Specialist
 Location: [City, India] | Full-Time
 
@@ -4240,7 +4240,7 @@ Good to Have:
 - Knowledge of Looker, Metabase, or Apache Superset
 """,
 
-    "EdTech Specialist": """\
+    "EdTech Specialist": """
 Position: EdTech Specialist
 Location: [City, India] | Full-Time
 
