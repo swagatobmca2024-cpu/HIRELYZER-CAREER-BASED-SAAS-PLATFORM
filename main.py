@@ -4965,17 +4965,19 @@ if uploaded_files and job_description and weights_valid:
                     st.session_state[_pre_resume_cache_key]            = _pre_domain_line
                     st.session_state[_pre_resume_cache_key + "_depth"] = _pre_depth_val
                 else:
+                    # Domain failed validation — use keyword fallback for domain
+                    # but KEEP the depth the LLM already assessed (don't hardcode moderate)
                     _kw = db_manager.detect_domain_with_confidence(_pre_title_hint, full_text[:3000]).get("domain")
                     st.session_state[_pre_resume_cache_key]            = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
-                    st.session_state[_pre_resume_cache_key + "_depth"] = "moderate"
+                    st.session_state[_pre_resume_cache_key + "_depth"] = _pre_depth_val
             except Exception:
                 try:
                     _kw = db_manager.detect_domain_with_confidence(_pre_title_hint, full_text[:3000]).get("domain")
                     st.session_state[_pre_resume_cache_key]            = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
-                    st.session_state[_pre_resume_cache_key + "_depth"] = "moderate"
+                    st.session_state[_pre_resume_cache_key + "_depth"] = _pre_depth_val
                 except Exception:
                     st.session_state[_pre_resume_cache_key]            = "Software Engineering"
-                    st.session_state[_pre_resume_cache_key + "_depth"] = "moderate"
+                    st.session_state[_pre_resume_cache_key + "_depth"] = _pre_depth_val
         _pre_resume_domain = st.session_state[_pre_resume_cache_key]
 
         # ── JD domain pre-detection ───────────────────────────────────────────
