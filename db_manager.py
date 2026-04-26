@@ -381,9 +381,26 @@ HARD RULES — apply these before outputting:
 5. PLOTLY/MATPLOTLIB RULE: Using Plotly or Matplotlib for charts inside an app =
    NOT Data Analytics. Data Analytics requires BI tools (Power BI/Tableau/DAX/Excel pivot).
 
-Return EXACTLY two lines, nothing else:
-Domain: <one domain from the list below>
-Depth: <shallow|moderate|deep>
+════════════════════════════════════════════════════════
+OUTPUT FORMAT — CRITICAL
+════════════════════════════════════════════════════════
+You MUST output EXACTLY two lines. No preamble, no explanation, no punctuation after the value.
+
+Line 1 must start with:  Domain:
+Line 2 must start with:  Depth:
+
+Allowed Depth values (lowercase only): shallow  moderate  deep
+
+CORRECT example:
+Domain: Backend Development
+Depth: moderate
+
+WRONG examples (never do these):
+  "The domain is Backend Development" — missing label
+  "Domain: Backend Development." — trailing period
+  "Depth: Moderate" — capital letter not allowed
+  "Based on the resume, Domain: ..." — preamble not allowed
+  Outputting only one line — both lines are required
 
 {_domain_list}
 """
@@ -1726,29 +1743,162 @@ Return ONLY one domain from this list, nothing else:
         job_domain    = job_domain.strip().lower()
 
         normalization = {
-            "frontend": "frontend development", "backend": "backend development",
-            "fullstack": "full stack development", "full-stack": "full stack development",
-            "ui/ux": "ui/ux design", "ux/ui": "ui/ux design",
+            # ── Frontend ──────────────────────────────────────────────────────
+            "frontend": "frontend development",
+            "front end": "frontend development",
+            "front-end": "frontend development",
+            "frontend dev": "frontend development",
+            "frontend developer": "frontend development",
+            "front end developer": "frontend development",
+            "front-end developer": "frontend development",
+            "frontend engineer": "frontend development",
+            "front end engineer": "frontend development",
+
+            # ── Backend ───────────────────────────────────────────────────────
+            "backend": "backend development",
+            "back end": "backend development",
+            "back-end": "backend development",
+            "backend dev": "backend development",
+            "backend developer": "backend development",
+            "back end developer": "backend development",
+            "back-end developer": "backend development",
+            "backend engineer": "backend development",
+            "back end engineer": "backend development",
+            "server-side developer": "backend development",
+
+            # ── Full Stack ────────────────────────────────────────────────────
+            "fullstack": "full stack development",
+            "full-stack": "full stack development",
+            "full stack": "full stack development",
+            "fullstack developer": "full stack development",
+            "full stack developer": "full stack development",
+            "full-stack developer": "full stack development",
+            "fullstack engineer": "full stack development",
+            "full stack engineer": "full stack development",
+
+            # ── UI/UX ─────────────────────────────────────────────────────────
+            "ui/ux": "ui/ux design",
+            "ux/ui": "ui/ux design",
+            "ux design": "ui/ux design",
+            "ui design": "ui/ux design",
+            "ux designer": "ui/ux design",
+            "ui designer": "ui/ux design",
+            "ui/ux designer": "ui/ux design",
+            "product designer": "ui/ux design",
+
+            # ── Software Engineering ──────────────────────────────────────────
             "software developer": "software engineering",
+            "software engineer": "software engineering",
+            "swe": "software engineering",
+            "software dev": "software engineering",
+
+            # ── Mobile ────────────────────────────────────────────────────────
             "mobile developer": "mobile development",
+            "mobile dev": "mobile development",
+            "mobile engineer": "mobile development",
             "android developer": "mobile development",
+            "android engineer": "mobile development",
+            "android dev": "mobile development",
             "ios developer": "mobile development",
-            "ai": "ai/machine learning", "machine learning": "ai/machine learning",
-            "ml": "ai/machine learning", "artificial intelligence": "ai/machine learning",
-            "cloud": "cloud engineering", "cloud engineer": "cloud engineering",
-            "devops": "devops/infrastructure", "devops engineer": "devops/infrastructure",
-            "cyber security": "cybersecurity", "cybersecurity engineer": "cybersecurity",
-            "security analyst": "cybersecurity", "qa": "quality assurance",
-            "test engineer": "quality assurance", "sre": "site reliability engineering",
-            "dba": "database management", "database administrator": "database management",
-            "product manager": "product management", "project manager": "project management",
-            "business analyst": "business analysis", "technical writer": "technical writing",
-            "game developer": "game development", "blockchain developer": "blockchain development",
-            # Data Analytics aliases
-            "data analyst": "data analytics", "bi analyst": "data analytics",
-            "analytics analyst": "data analytics", "analytics engineer": "data analytics",
-            "reporting analyst": "data analytics", "bi developer": "data analytics",
+            "ios engineer": "mobile development",
+            "ios dev": "mobile development",
+            "flutter developer": "mobile development",
+            "react native developer": "mobile development",
+
+            # ── AI / ML ───────────────────────────────────────────────────────
+            "ai": "ai/machine learning",
+            "ml": "ai/machine learning",
+            "machine learning": "ai/machine learning",
+            "artificial intelligence": "ai/machine learning",
+            "ai/ml": "ai/machine learning",
+            "ml/ai": "ai/machine learning",
+            "machine learning engineer": "ai/machine learning",
+            "ml engineer": "ai/machine learning",
+            "ai engineer": "ai/machine learning",
+            "deep learning": "ai/machine learning",
+            "nlp engineer": "ai/machine learning",
+            "computer vision engineer": "ai/machine learning",
+
+            # ── Data ──────────────────────────────────────────────────────────
+            "data analyst": "data analytics",
+            "data analysis": "data analytics",
+            "bi analyst": "data analytics",
+            "analytics analyst": "data analytics",
+            "analytics engineer": "data analytics",
+            "reporting analyst": "data analytics",
+            "bi developer": "data analytics",
             "business intelligence": "data analytics",
+            "business intelligence analyst": "data analytics",
+            "data scientist": "data science",
+            "data science engineer": "data science",
+
+            # ── Cloud / DevOps / Infra ────────────────────────────────────────
+            "cloud": "cloud engineering",
+            "cloud engineer": "cloud engineering",
+            "cloud developer": "cloud engineering",
+            "cloud architect": "cloud engineering",
+            "aws engineer": "cloud engineering",
+            "azure engineer": "cloud engineering",
+            "gcp engineer": "cloud engineering",
+            "devops": "devops/infrastructure",
+            "devops engineer": "devops/infrastructure",
+            "devops developer": "devops/infrastructure",
+            "infrastructure engineer": "devops/infrastructure",
+            "platform engineer": "devops/infrastructure",
+            "sre": "site reliability engineering",
+            "site reliability engineer": "site reliability engineering",
+
+            # ── Security ──────────────────────────────────────────────────────
+            "cyber security": "cybersecurity",
+            "cybersecurity engineer": "cybersecurity",
+            "security engineer": "cybersecurity",
+            "security analyst": "cybersecurity",
+            "information security": "cybersecurity",
+            "infosec": "cybersecurity",
+            "penetration tester": "cybersecurity",
+            "pentest": "cybersecurity",
+
+            # ── QA / Testing ──────────────────────────────────────────────────
+            "qa": "quality assurance",
+            "test engineer": "quality assurance",
+            "qa engineer": "quality assurance",
+            "qa analyst": "quality assurance",
+            "software tester": "quality assurance",
+            "automation tester": "quality assurance",
+            "sdet": "quality assurance",
+
+            # ── Database ──────────────────────────────────────────────────────
+            "dba": "database management",
+            "database administrator": "database management",
+            "database developer": "database management",
+            "database engineer": "database management",
+
+            # ── Management / Business ─────────────────────────────────────────
+            "product manager": "product management",
+            "project manager": "project management",
+            "business analyst": "business analysis",
+            "technical writer": "technical writing",
+            "tech writer": "technical writing",
+            "scrum master": "agile coaching",
+            "agile coach": "agile coaching",
+
+            # ── Game / Blockchain / Embedded / Other ──────────────────────────
+            "game developer": "game development",
+            "game dev": "game development",
+            "game engineer": "game development",
+            "blockchain developer": "blockchain development",
+            "blockchain dev": "blockchain development",
+            "web3 developer": "blockchain development",
+            "smart contract developer": "blockchain development",
+            "embedded developer": "embedded systems",
+            "embedded engineer": "embedded systems",
+            "firmware engineer": "embedded systems",
+            "iot engineer": "iot development",
+            "iot developer": "iot development",
+            "ar developer": "ar/vr development",
+            "vr developer": "ar/vr development",
+            "ar/vr developer": "ar/vr development",
+            "xr developer": "ar/vr development",
         }
         resume_domain = normalization.get(resume_domain, resume_domain)
         job_domain    = normalization.get(job_domain, job_domain)
