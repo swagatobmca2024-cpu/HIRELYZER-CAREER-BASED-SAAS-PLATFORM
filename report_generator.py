@@ -46,11 +46,7 @@ from llm_manager import (
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
     _async_clear_failure,
 )
-from db_manager import (
-    db_manager, insert_candidate, get_top_domains_by_score,
-    get_database_stats, detect_domain_from_title_and_description,
-    get_domain_similarity
-)
+# db_manager imports removed — report_generator does not call db_manager directly
 from user_login import (
     create_user_table, add_user, complete_registration, verify_user,
     get_logins_today, get_total_registered_users, log_user_action,
@@ -1771,6 +1767,13 @@ def generate_resume_report_html(resume, user_location=""):
     masculine_count = len(masculine_words_list)
     feminine_count = len(feminine_words_list)
     bias_score = resume.get('Bias Score (0 = Fair, 1 = Biased)', 'N/A')
+    resume_domain     = resume.get('Resume Domain', 'N/A')
+    job_domain        = resume.get('Job Domain', 'N/A')
+    resume_depth      = resume.get('Resume Depth', 'moderate').capitalize()
+    domain_similarity = resume.get('Domain Similarity Score', 0)
+    domain_penalty    = resume.get('Domain Penalty', 0)
+    domain_match_pct  = round(domain_similarity * 100) if isinstance(domain_similarity, float) else 'N/A'
+    domain_penalty_str = "No penalty" if domain_penalty == 0 else f"-{domain_penalty} pts"
 
     return f"""
     <html>
@@ -1827,6 +1830,11 @@ def generate_resume_report_html(resume, user_location=""):
     <h2>ATS Evaluation</h2>
     <table>
         <tr><td><b>Overall ATS Match</b></td><td>{ats_match}%</td></tr>
+        <tr><td><b>Resume Domain</b></td><td>{resume_domain}</td></tr>
+        <tr><td><b>Job Domain</b></td><td>{job_domain}</td></tr>
+        <tr><td><b>Domain Strength</b></td><td>{resume_depth}</td></tr>
+        <tr><td><b>Domain Match</b></td><td>{domain_match_pct}%</td></tr>
+        <tr><td><b>Domain Penalty</b></td><td>{domain_penalty_str}</td></tr>
         <tr><td><b>Education Score</b></td><td>{edu_score}</td></tr>
         <tr><td><b>Experience Score</b></td><td>{exp_score}</td></tr>
         <tr><td><b>Skills Score</b></td><td>{skills_score}</td></tr>
