@@ -3077,17 +3077,18 @@ def ats_percentage_score(
                 st.session_state[_resume_cache_key]            = _domain_line
                 st.session_state[_resume_cache_key + "_depth"] = _depth_val
             else:
+                # Domain failed validation — keyword fallback for domain, preserve LLM depth
                 _kw_fallback = (db_manager.detect_domain_with_confidence(_resume_title_hint, resume_text[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(_resume_title_hint, resume_text[:3000]))
                 st.session_state[_resume_cache_key]            = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
-                st.session_state[_resume_cache_key + "_depth"] = "moderate"
+                st.session_state[_resume_cache_key + "_depth"] = _depth_val
         except Exception:
             try:
                 _kw_fallback = (db_manager.detect_domain_with_confidence(_resume_title_hint, resume_text[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(_resume_title_hint, resume_text[:3000]))
                 st.session_state[_resume_cache_key]            = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
-                st.session_state[_resume_cache_key + "_depth"] = "moderate"
+                st.session_state[_resume_cache_key + "_depth"] = _depth_val
             except Exception:
                 st.session_state[_resume_cache_key]            = "Software Engineering"
-                st.session_state[_resume_cache_key + "_depth"] = "moderate"
+                st.session_state[_resume_cache_key + "_depth"] = _depth_val
 
     if resume_domain is None:
         resume_domain = st.session_state.get(_resume_cache_key, "Software Engineering")
