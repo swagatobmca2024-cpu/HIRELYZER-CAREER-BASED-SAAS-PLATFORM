@@ -4981,14 +4981,18 @@ if uploaded_files and job_description and weights_valid:
         # ── JD domain pre-detection ───────────────────────────────────────────
         _pre_jd_cache_key = f"jd_domain_{hash(job_description[:500])}"
         if _pre_jd_cache_key not in st.session_state:
-            # Use shared prompt builder (3000 chars, full rules, Data Analytics)
             _pre_jd_prompt = build_jd_domain_prompt(job_title, job_description)
             try:
-                _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
-                if _j in _pre_valid_domains:
-                    st.session_state[_pre_jd_cache_key] = _j
+                _raw_jd_pre = call_llm(_pre_jd_prompt, session=st.session_state).strip()
+                _pre_jd_domain_line = ""
+                for _ln in _raw_jd_pre.splitlines():
+                    _ln = _ln.strip()
+                    if _ln.lower().startswith("domain:"):
+                        _pre_jd_domain_line = _ln.split(":", 1)[1].strip()
+                        break
+                if _pre_jd_domain_line in _pre_valid_domains:
+                    st.session_state[_pre_jd_cache_key] = _pre_jd_domain_line
                 else:
-                    # LLM invalid — use detect_domain_with_confidence (dual validation)
                     _jd_kw = db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain")
                     st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw and _jd_kw != "Unclassified" else "Software Engineering"
             except Exception:
@@ -5419,8 +5423,8 @@ with tab1:
                    "loc_other_input", "uploaded_file_names"]:
             if _k in st.session_state:
                 del st.session_state[_k]
-        # Delete slider + radio keys — Streamlit resets widgets to their
-        # default values on next rerun. Direct assignment throws StreamlitAPIException.
+        # Delete slider + radio keys — Streamlit resets to default values on next rerun
+        # Direct assignment to active widget keys throws StreamlitAPIException
         for _k in ["sl_edu", "sl_exp", "sl_skills", "sl_lang", "sl_kw", "career_mode_radio"]:
             if _k in st.session_state:
                 del st.session_state[_k]
