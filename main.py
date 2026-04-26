@@ -4949,35 +4949,100 @@ if uploaded_files and job_description and weights_valid:
             _pre_title_hint = _extract_title_hint(full_text)
             # Use shared prompt builder (3000 chars, Data Analytics rule, FREQUENCY RULE)
             _pre_resume_prompt = build_resume_domain_prompt(full_text, title_hint=_pre_title_hint)
+
+            def _infer_depth_from_text(text):
+                """Keyword-based depth inference — last-resort fallback when LLM parse fails."""
+                _rt = text.lower()
+                _ft = any(kw in _rt for kw in [
+                    "years of experience", "yrs of experience", "full-time", "full time",
+                    "employed", "employment", "promoted", "production system",
+                ])
+                _qt = bool(re.search(
+                    r'\b(\d+[%x]|\d+\s*(users?|customers?|ms|seconds?|requests?|'
+                    r'rpm|latency|revenue|million|billion|k\b))', _rt
+                ))
+                _pj = len(re.findall(
+                    r'\b(project|built|developed|implemented|designed)\b', _rt
+                )) >= 3
+                _it = bool(re.search(r'\b(internship|intern\b|trainee)\b', _rt))
+                _vt = bool(re.search(
+                    r'\b(aicte virtual|oasis infobyte|internshala|certificate program)\b', _rt
+                ))
+                if _ft or _qt:
+                    return "deep"
+                if (_it and not _vt) or _pj:
+                    return "moderate"
+                return "shallow"
+
             try:
                 _raw_pre = call_llm(_pre_resume_prompt, session=st.session_state).strip()
+
+                # ── Parse domain + depth — strip preamble/punctuation/case ──
                 _pre_domain_line = ""
-                _pre_depth_val   = "moderate"
+                _pre_depth_raw   = ""
                 for _ln in _raw_pre.splitlines():
                     _ln = _ln.strip()
                     if _ln.lower().startswith("domain:"):
-                        _pre_domain_line = _ln.split(":", 1)[1].strip()
+                        _pre_domain_line = _ln.split(":", 1)[1].strip().rstrip(".")
                     elif _ln.lower().startswith("depth:"):
-                        _pre_depth_val = _ln.split(":", 1)[1].strip().lower()
-                if _pre_depth_val not in ("shallow", "moderate", "deep"):
-                    _pre_depth_val = "moderate"
+                        _pre_depth_raw = _ln.split(":", 1)[1].strip().lower().rstrip(".")
+                _pre_depth_val = _pre_depth_raw if _pre_depth_raw in ("shallow", "moderate", "deep") else ""
+
+                # ── Retry if depth token is missing or unrecognised ───────────
+                if not _pre_depth_val:
+                    import logging as _log_pre
+                    _log_pre.getLogger(__name__).warning(
+                        "mainn_tabb1 pre-detection: Depth line missing/invalid. "
+                        f"Raw token: {repr(_pre_depth_raw)!r}. Retrying."
+                    )
+                    _retry_pre = (
+                        f"{_pre_resume_prompt}\n\n"
+                        "REMINDER: Your previous response was missing or had an invalid Depth line.\n"
+                        "You MUST output exactly two lines and nothing else:\n"
+                        "Domain: <domain>\n"
+                        "Depth: shallow   (or moderate, or deep)\n"
+                        "Do not write anything before or after these two lines."
+                    )
+                    try:
+                        _raw_pre2 = call_llm(_retry_pre, session=st.session_state).strip()
+                        for _ln in _raw_pre2.splitlines():
+                            _ln = _ln.strip()
+                            if _ln.lower().startswith("domain:") and not _pre_domain_line:
+                                _pre_domain_line = _ln.split(":", 1)[1].strip().rstrip(".")
+                            elif _ln.lower().startswith("depth:"):
+                                _d2 = _ln.split(":", 1)[1].strip().lower().rstrip(".")
+                                if _d2 in ("shallow", "moderate", "deep"):
+                                    _pre_depth_val = _d2
+                                    break
+                    except Exception:
+                        pass
+
+                # ── Keyword fallback if both LLM calls failed ─────────────────
+                if not _pre_depth_val:
+                    _pre_depth_val = _infer_depth_from_text(full_text)
+                    import logging as _log_pre
+                    _log_pre.getLogger(__name__).warning(
+                        f"mainn_tabb1: Depth inferred via keyword fallback as '{_pre_depth_val}'."
+                    )
+
                 if _pre_domain_line in _pre_valid_domains:
                     st.session_state[_pre_resume_cache_key]            = _pre_domain_line
                     st.session_state[_pre_resume_cache_key + "_depth"] = _pre_depth_val
                 else:
-                    # Domain failed validation — use keyword fallback for domain
-                    # but KEEP the depth the LLM already assessed (don't hardcode moderate)
                     _kw = db_manager.detect_domain_with_confidence(_pre_title_hint, full_text[:3000]).get("domain")
                     st.session_state[_pre_resume_cache_key]            = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
                     st.session_state[_pre_resume_cache_key + "_depth"] = _pre_depth_val
+
             except Exception:
+                # LLM call itself failed — infer depth from text, fall back on keyword domain
+                _inferred = _infer_depth_from_text(full_text)
                 try:
                     _kw = db_manager.detect_domain_with_confidence(_pre_title_hint, full_text[:3000]).get("domain")
                     st.session_state[_pre_resume_cache_key]            = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
-                    st.session_state[_pre_resume_cache_key + "_depth"] = _pre_depth_val
+                    st.session_state[_pre_resume_cache_key + "_depth"] = _inferred
                 except Exception:
                     st.session_state[_pre_resume_cache_key]            = "Software Engineering"
-                    st.session_state[_pre_resume_cache_key + "_depth"] = _pre_depth_val
+                    st.session_state[_pre_resume_cache_key + "_depth"] = _inferred
         _pre_resume_domain = st.session_state[_pre_resume_cache_key]
 
         # ── JD domain pre-detection ───────────────────────────────────────────
