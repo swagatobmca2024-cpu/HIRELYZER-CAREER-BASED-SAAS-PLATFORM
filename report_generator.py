@@ -92,6 +92,7 @@ def _normalize_cgpa(raw: str) -> str:
     # Already clean: CGPA/GPA/SGPA prefixes — strip only trailing duplicate labels
     for prefix in ("CGPA:", "GPA:", "SGPA:"):
         if s.upper().startswith(prefix.upper()):
+            # Use split to avoid off-by-one: "CGPA: 8.5" -> val = "8.5"
             val = s[len(prefix):].strip()
             val = re.sub(r'\s+(cgpa|gpa|sgpa)\s*$', '', val, flags=re.IGNORECASE).strip()
             return f"{prefix} {val}"
@@ -150,13 +151,33 @@ def _normalize_cgpa(raw: str) -> str:
 
 
 def html_to_pdf_bytes(html_string):
+    # ── Sanitise: strip non-BMP Unicode characters (codepoints > U+FFFF) ─────
+    # xhtml2pdf / ReportLab crash on emoji and other 4-byte Unicode characters
+    # that appear outside the Basic Multilingual Plane. Replace them with a
+    # safe ASCII approximation so the PDF always renders without an exception.
+    html_string = re.sub(
+        r'[\U00010000-\U0010FFFF]',  # matches any codepoint > 0xFFFF
+        lambda m: m.group(0).encode('ascii', 'namereplace').decode('ascii'),
+        html_string,
+    )
+    # Also replace common smart-quotes / em-dashes that confuse pisa's Latin-1 codec
+    _char_map = {
+        '\u2018': "'", '\u2019': "'",   # left/right single quotes
+        '\u201c': '"', '\u201d': '"',   # left/right double quotes
+        '\u2013': '-', '\u2014': '--',  # en-dash, em-dash
+        '\u2026': '...',                # ellipsis
+        '\u00b7': '-',                  # middle dot
+    }
+    for orig, repl in _char_map.items():
+        html_string = html_string.replace(orig, repl)
+
     styled_html = f"""
     <html>
     <head>
         <meta charset="UTF-8">
         <style>
             @page {{
-                size: 400mm 297mm;  /* Original custom large page size */
+                size: 400mm 297mm;
                 margin-top: 10mm;
                 margin-bottom: 10mm;
                 margin-left: 10mm;
@@ -164,7 +185,7 @@ def html_to_pdf_bytes(html_string):
             }}
             body {{
                 font-size: 14pt;
-                font-family: "Segoe UI", "Helvetica", sans-serif;
+                font-family: "Helvetica", sans-serif;
                 line-height: 1.5;
                 color: #000;
             }}
@@ -191,7 +212,7 @@ def html_to_pdf_bytes(html_string):
                 padding: 8px;
                 margin-top: 6px;
                 background-color: #f9f9f9;
-                border-left: 4px solid #999;  /* More elegant than full border */
+                border-left: 4px solid #999;
             }}
             ul {{
                 margin: 0.5em 0;
@@ -209,7 +230,16 @@ def html_to_pdf_bytes(html_string):
     """
 
     pdf_io = BytesIO()
-    pisa.CreatePDF(styled_html, dest=pdf_io)
+    result = pisa.CreatePDF(styled_html, dest=pdf_io)
+
+    # ── Guard: pisa returns err=True on failure but doesn't raise — check it ──
+    if result.err:
+        import logging as _log_pdf
+        _log_pdf.getLogger(__name__).error(
+            f"xhtml2pdf/pisa error generating PDF (err={result.err}). "
+            "Returning whatever partial output was written."
+        )
+
     pdf_io.seek(0)
     return pdf_io
 
@@ -1772,7 +1802,10 @@ def generate_resume_report_html(resume, user_location=""):
     resume_depth      = resume.get('Resume Depth', 'moderate').capitalize()
     domain_similarity = resume.get('Domain Similarity Score', 0)
     domain_penalty    = resume.get('Domain Penalty', 0)
-    domain_match_pct  = round(domain_similarity * 100) if isinstance(domain_similarity, float) else 'N/A'
+    try:
+        domain_match_pct = round(float(domain_similarity) * 100) if domain_similarity not in (None, 'N/A', '') else 'N/A'
+    except (TypeError, ValueError):
+        domain_match_pct = 'N/A'
     domain_penalty_str = "No penalty" if domain_penalty == 0 else f"-{domain_penalty} pts"
 
     return f"""
