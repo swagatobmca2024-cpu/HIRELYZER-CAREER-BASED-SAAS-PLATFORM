@@ -3016,6 +3016,7 @@ def ats_percentage_score(
     format_data=None,       # pass pre-computed format check result
     resume_domain=None,     # FIX: accept pre-detected domain from main thread
     job_domain=None,        # FIX: accept pre-detected domain from main thread
+    resume_depth=None,      # FIX: accept pre-detected depth — avoids reading stale "moderate" from session state
 ):
     import datetime
 
@@ -3191,7 +3192,35 @@ def ats_percentage_score(
     if resume_domain is None:
         resume_domain = st.session_state.get(_resume_cache_key, "Software Engineering")
 
-    _depth_str   = st.session_state.get(_resume_cache_key + "_depth", "moderate")
+    # ── Depth: use explicitly passed value first, then session state, never hardcode ──
+    if resume_depth and resume_depth in ("shallow", "moderate", "deep"):
+        _depth_str = resume_depth
+    else:
+        _depth_str = st.session_state.get(_resume_cache_key + "_depth")
+        if _depth_str not in ("shallow", "moderate", "deep"):
+            # Session state has nothing valid — infer from resume text directly
+            _rt = resume_text.lower()
+            _has_ft = any(kw in _rt for kw in [
+                "years of experience", "yrs of experience", "full-time", "full time",
+                "employed", "employment", "promoted", "production system",
+            ])
+            _has_qt = bool(re.search(
+                r'\b(\d+[%x]|\d+\s*(users?|customers?|ms|seconds?|requests?|'
+                r'rpm|latency|revenue|million|billion|k\b))', _rt
+            ))
+            _has_pj = len(re.findall(
+                r'\b(project|built|developed|implemented|designed)\b', _rt
+            )) >= 3
+            _has_int = bool(re.search(r'\b(internship|intern\b|trainee)\b', _rt))
+            _virt    = bool(re.search(
+                r'\b(aicte virtual|oasis infobyte|internshala|certificate program)\b', _rt
+            ))
+            if _has_ft or _has_qt:
+                _depth_str = "deep"
+            elif (_has_int and not _virt) or _has_pj:
+                _depth_str = "moderate"
+            else:
+                _depth_str = "shallow"
     _depth_score = {"shallow": 0.4, "moderate": 0.7, "deep": 1.0}.get(_depth_str, 0.7)
 
     # ── JOB DOMAIN: use pre-detected value if passed in, else detect here ──
