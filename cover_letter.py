@@ -585,7 +585,6 @@ Each paragraph should be 2-4 sentences.
 
         # ✅ Call LLM
         with st.spinner("✉️ Crafting your cover letter... please wait"):
-            time.sleep(2)
             cover_letter_raw = call_llm(prompt, session=st.session_state).strip()
 
         # ✅ Strip any header/salutation/closing lines the LLM may have added despite instructions
