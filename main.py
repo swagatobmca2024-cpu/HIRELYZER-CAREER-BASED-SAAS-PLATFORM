@@ -8086,6 +8086,7 @@ with tab2:
 
         if submitted:
             st.session_state["_resume_generated_msg"] = True
+            st.session_state["_resume_generating"] = True
 
         if clear_clicked:
             st.session_state["_confirm_clear"] = True
@@ -8137,6 +8138,57 @@ with tab2:
         .tab-section {
             margin-top: 20px;
         }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Loading button pulse animation CSS ────────────────────────────────────
+    st.markdown("""
+    <style>
+    /* Pulse animation for buttons during processing */
+    @keyframes btn-pulse {
+        0%   { box-shadow: 0 0 0 0 rgba(0,200,255,0.55); }
+        70%  { box-shadow: 0 0 0 10px rgba(0,200,255,0); }
+        100% { box-shadow: 0 0 0 0 rgba(0,200,255,0); }
+    }
+    /* Spinner overlay for the stSpinner */
+    [data-testid="stSpinner"] > div {
+        background: rgba(10, 20, 40, 0.75) !important;
+        border: 1px solid rgba(0,200,255,0.4) !important;
+        border-radius: 12px !important;
+        padding: 14px 20px !important;
+        backdrop-filter: blur(10px) !important;
+        color: #93c5fd !important;
+        font-size: 14px !important;
+        font-weight: 500 !important;
+    }
+    [data-testid="stSpinner"] svg {
+        color: #4da6ff !important;
+        stroke: #4da6ff !important;
+    }
+    /* Download button loading feel */
+    [data-testid="stDownloadButton"] > button {
+        position: relative;
+        overflow: hidden;
+    }
+    [data-testid="stDownloadButton"] > button:active::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(0,200,255,0.18);
+        animation: btn-pulse 0.6s ease-out;
+    }
+    /* Form submit button active state — pulse */
+    button[kind="formSubmit"]:active,
+    button[data-testid="baseButton-primary"]:active {
+        animation: btn-pulse 0.5s ease-out !important;
+    }
+    /* Disabled state for buttons during loading */
+    .stButton > button:disabled,
+    button[disabled] {
+        opacity: 0.55 !important;
+        cursor: not-allowed !important;
+        animation: none !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -8261,7 +8313,8 @@ with tab2:
 
     with col1:
         if st.button("🔁 Clear Preview"):
-            st.session_state.pop("ai_output", None)
+            with st.spinner("Clearing preview..."):
+                st.session_state.pop("ai_output", None)
 
     with col2:
         if st.button("🚀 Generate AI Resume Preview"):
@@ -8673,15 +8726,17 @@ with tab2:
 
     # Generate HTML content based on selected template — only on submit, stored in session_state
     if submitted:
-        # Render selected resume template via the registry dispatcher (resume_builder.py)
-        html_content = render_resume(selected_template, st.session_state, profile_img_html)
+        with st.spinner("⚙️ Generating your resume... please wait"):
+            # Render selected resume template via the registry dispatcher (resume_builder.py)
+            html_content = render_resume(selected_template, st.session_state, profile_img_html)
 
-        # Store the generated content and invalidate cached PDF so it's recomputed fresh
-        # NOTE: Use direct assignment instead of .pop() — .pop() on an existing key
-        # triggers an extra Streamlit rerun which causes visible page blinking.
-        st.session_state["generated_html"] = html_content
-        st.session_state["pdf_resume_bytes"] = None   # invalidate cache without extra rerun
-        st.session_state["show_template_preview"] = False
+            # Store the generated content and invalidate cached PDF so it's recomputed fresh
+            # NOTE: Use direct assignment instead of .pop() — .pop() on an existing key
+            # triggers an extra Streamlit rerun which causes visible page blinking.
+            st.session_state["generated_html"] = html_content
+            st.session_state["pdf_resume_bytes"] = None   # invalidate cache without extra rerun
+            st.session_state["show_template_preview"] = False
+        st.session_state.pop("_resume_generating", None)
 
 with tab2:
     # ==========================
@@ -8704,9 +8759,10 @@ with tab2:
 
         # Cache PDF bytes in session_state to avoid expensive recomputation on every rerun
         if not st.session_state.get("pdf_resume_bytes"):
-            st.session_state["pdf_resume_bytes"] = html_to_pdf_bytes(
-                st.session_state["generated_html"]
-            ).read()
+            with st.spinner("📄 Preparing your resume for download..."):
+                st.session_state["pdf_resume_bytes"] = html_to_pdf_bytes(
+                    st.session_state["generated_html"]
+                ).read()
 
         col1, spacer, col2 = st.columns([1, 0.15, 0.85])
 
@@ -8727,7 +8783,8 @@ with tab2:
         with col2:
             is_previewing = st.session_state.get("show_template_preview", False)
             if st.button("👁️ Preview Template", key="preview_template_btn"):
-                st.session_state["show_template_preview"] = not is_previewing
+                with st.spinner("Loading template preview..."):
+                    st.session_state["show_template_preview"] = not is_previewing
 
         # Show/hide the template preview iframe
         if st.session_state.get("show_template_preview", False):
