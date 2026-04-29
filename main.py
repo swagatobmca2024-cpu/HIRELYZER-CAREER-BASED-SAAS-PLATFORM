@@ -6940,6 +6940,7 @@ score_skills_section.__module__     = __name__
 
 # Import necessary modules first
 import streamlit as st
+import time
 
 # Tab setup (assuming this is within a tab2 context)
 with tab2:
@@ -8316,6 +8317,7 @@ with tab2:
     with col1:
         if st.button("🔁 Clear Preview"):
             with st.spinner("Clearing preview..."):
+                time.sleep(2)
                 st.session_state.pop("ai_output", None)
 
     with col2:
@@ -8729,6 +8731,7 @@ with tab2:
     # Generate HTML content based on selected template — only on submit, stored in session_state
     if submitted:
         with st.spinner("⚙️ Generating your resume... please wait"):
+            time.sleep(2)
             # Render selected resume template via the registry dispatcher (resume_builder.py)
             html_content = render_resume(selected_template, st.session_state, profile_img_html)
 
@@ -8738,6 +8741,7 @@ with tab2:
             st.session_state["generated_html"] = html_content
             st.session_state["pdf_resume_bytes"] = None   # invalidate cache without extra rerun
             st.session_state["show_template_preview"] = False
+            time.sleep(1)
         st.session_state.pop("_resume_generating", None)
 
 with tab2:
@@ -8762,6 +8766,7 @@ with tab2:
         # Cache PDF bytes in session_state to avoid expensive recomputation on every rerun
         if not st.session_state.get("pdf_resume_bytes"):
             with st.spinner("📄 Preparing your resume for download..."):
+                time.sleep(2)
                 st.session_state["pdf_resume_bytes"] = html_to_pdf_bytes(
                     st.session_state["generated_html"]
                 ).read()
@@ -8786,6 +8791,7 @@ with tab2:
             is_previewing = st.session_state.get("show_template_preview", False)
             if st.button("👁️ Preview Template", key="preview_template_btn"):
                 with st.spinner("Loading template preview..."):
+                    time.sleep(2)
                     st.session_state["show_template_preview"] = not is_previewing
 
         # Show/hide the template preview iframe
