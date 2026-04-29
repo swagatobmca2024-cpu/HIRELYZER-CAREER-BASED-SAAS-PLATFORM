@@ -716,9 +716,7 @@ def safe_extract_text(uploaded_file, container=None):
       None  — file is unreadable for an unknown reason
     """
     try:
-        import uuid as _uuid
-        _safe_stem = re.sub(r'[^\w.\-]', '_', uploaded_file.name)
-        temp_path = f"/tmp/{_uuid.uuid4().hex}_{_safe_stem}"
+        temp_path = f"/tmp/{uploaded_file.name}"
         with open(temp_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
 
@@ -783,13 +781,6 @@ def safe_extract_text(uploaded_file, container=None):
     except Exception as e:
         st.error(f"⚠️ Could not process this file: {e}")
         return None
-    finally:
-        # ── Always clean up the temp file — prevents disk leak over time ──
-        try:
-            if 'temp_path' in dir() and os.path.exists(temp_path):
-                os.remove(temp_path)
-        except Exception:
-            pass
 
 
 # ============================================================
