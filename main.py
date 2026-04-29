@@ -4388,8 +4388,8 @@ _CAREER_PRESETS = {
         "glow":   "rgba(56,189,248,0.18)",
         "svg_tpl": _SVG_MIDLEVEL,
     },
-    "experienced": {
-        "label": "Experienced", "sublabel": "5+ yrs",
+    "expert": {
+        "label": "Expert", "sublabel": "5+ yrs",
         "edu": 10, "exp": 40, "skills": 25, "lang": 5, "kw": 10,
         "hint": "Experience is the dominant signal at senior level.",
         "color":  "#818cf8",
@@ -4497,12 +4497,14 @@ with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/setti
                     <div style="display:flex;justify-content:center;margin-bottom:6px;">
                         {_icon_svg}
                     </div>
-                    <div style="font-size:0.72rem;font-weight:700;
-                                color:{_label_color};letter-spacing:0.02em;line-height:1.2;">
+                    <div style="font-size:0.65rem;font-weight:700;
+                                color:{_label_color};letter-spacing:0.01em;line-height:1.2;
+                                white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                                width:100%;">
                         {_pd['label']}
                     </div>
                     <div style="font-size:0.60rem;color:{_sub_color};
-                                margin-top:3px;font-weight:500;">
+                                margin-top:3px;font-weight:500;white-space:nowrap;">
                         {_pd['sublabel']}
                     </div>
                 </div>""",
