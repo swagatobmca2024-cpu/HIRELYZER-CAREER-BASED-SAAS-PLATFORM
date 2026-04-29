@@ -107,11 +107,13 @@ def _infer_depth_from_text(resume_text: str) -> str:
     """
     Keyword-based depth inference. Returns 'shallow', 'moderate',
     'moderate_strong', or 'deep'.
+    Domain-aware — non-dev domains (UI/UX, Marketing, PM etc.) use
+    domain-specific signals instead of generic code project signals.
     Called only when the LLM depth classification is unavailable.
     """
     rt = resume_text.lower()
 
-    # ── Full-time employment signal ──────────────────────────────────────────
+    # ── Full-time employment signal (universal) ──────────────────────────────
     _ft_raw   = any(kw in rt for kw in [
         "years of experience", "yrs of experience", "full-time", "full time",
         "employed", "employment", "promoted", "production system",
@@ -120,28 +122,20 @@ def _infer_depth_from_text(resume_text: str) -> str:
     _no_ft    = bool(re.search(r'\bno\s+(prior\s+)?(full[\s-]time|fulltime)\b', rt))
     has_fulltime = _ft_raw and not _self_emp and not _no_ft
 
-    # ── Quantified impact — strip education score lines first ────────────────
+    # ── Quantified impact — strip education score lines first (universal) ────
     rt_no_edu = re.sub(
         r'(cgpa|gpa|sgpa|ssc|hsc|isc|icse|cbse|percentage|marks|score|grade)'
         r'[^\n]{0,30}\d+[\d.]*\s*[%/]?[^\n]*', '', rt
     )
     has_quantified = bool(re.search(
         r'\b\d+\s*(users?|customers?|requests?|rpm|ms\b|seconds?|latency|revenue'
-        r'|million|billion|[%]\s*(improvement|reduction|increase|decrease|faster|accuracy))',
+        r'|million|billion|[%]\s*(improvement|reduction|increase|decrease|faster'
+        r'|accuracy|conversion|retention|engagement|ctr|roas|roi|nps|followers'
+        r'|subscribers|downloads|transactions|deals|clicks|impressions))',
         rt_no_edu
     ))
 
-    # ── Project signal — scoped to project/experience context ───────────────
-    _sec = re.search(
-        r'(projects?|work experience|experience|portfolio)[^\n]{0,60}\n(.{0,3000})',
-        rt, re.DOTALL
-    )
-    _ctx = _sec.group(2) if _sec else rt
-    hits = len(re.findall(
-        r'\b(built|developed|implemented|designed|created|deployed|architected)\b', _ctx
-    ))
-
-    # ── Internship signal ────────────────────────────────────────────────────
+    # ── Internship signal (universal) ────────────────────────────────────────
     _it_raw  = bool(re.search(r'\b(internship|intern\b|trainee)\b', rt))
     _seeking = bool(re.search(
         r'\b(seek|seeking|looking for|want|apply|applied|need|needed|'
@@ -161,16 +155,138 @@ def _infer_depth_from_text(resume_text: str) -> str:
     ))
     if _virt and _real:
         _virt = False
-    has_intern      = _it_raw and not _seeking and not _no_int and not _virt
-    multi_intern    = len(re.findall(r'\b(internship|intern\b)\b', rt)) >= 2 and has_intern
+    has_intern   = _it_raw and not _seeking and not _no_int and not _virt
+    multi_intern = len(re.findall(r'\b(internship|intern\b)\b', rt)) >= 2 and has_intern
 
-    # ── Classification ───────────────────────────────────────────────────────
-    if has_fulltime or has_quantified:
-        return "deep"
+    # ── Detect domain type from resume text ──────────────────────────────────
+    _is_uiux    = bool(re.search(r'\b(figma|adobe xd|sketch|wireframe|prototype|ux|ui design'
+                                 r'|user experience|case stud|zeplin|invision|framer)\b', rt))
+    _is_mkt     = bool(re.search(r'\b(seo|sem|ppc|google ads|meta ads|facebook ads|hubspot'
+                                 r'|mailchimp|campaign|content marketing|digital marketing'
+                                 r'|semrush|ahrefs|ctr|roas|email marketing)\b', rt))
+    _is_pm      = bool(re.search(r'\b(product manager|product management|product owner'
+                                 r'|roadmap|prd|product strategy|product lead)\b', rt))
+    _is_projmgr = bool(re.search(r'\b(project manager|project management|pmp|program manager'
+                                 r'|delivery manager|waterfall|ms project|gantt)\b', rt))
+    _is_ba      = bool(re.search(r'\b(business analyst|requirements analysis|brd|process map'
+                                 r'|gap analysis|functional requirements|business process'
+                                 r'|use cases|uml|stakeholder analysis)\b', rt))
+    _is_tw      = bool(re.search(r'\b(technical writer|api documentation|user manual'
+                                 r'|knowledge base|gitbook|sphinx|docusaurus|swagger docs'
+                                 r'|developer documentation|readme|release notes)\b', rt))
+    _is_sales   = bool(re.search(r'\b(sales engineer|pre-sales|solution selling|technical sales'
+                                 r'|proof of concept|poc|demo|deal|quota|pipeline|crm sales)\b', rt))
+    _is_agile   = bool(re.search(r'\b(agile coach|scrum master|agile transformation'
+                                 r'|retrospective|sprint planning|safe framework|kanban coach'
+                                 r'|velocity|burndown|story points)\b', rt))
+    _is_analytics = bool(re.search(r'\b(power bi|tableau|looker|dax|pivot table|kpi dashboard'
+                                   r'|data analyst|bi analyst|google data studio|qlik)\b', rt))
+
+    # ── NON-DEV DOMAIN PATHS ─────────────────────────────────────────────────
+    if _is_uiux:
+        _case_studies = len(re.findall(
+            r'\b(case stud|wireframe|prototype|user flow|usability test'
+            r'|redesign|design process|figma|adobe xd|sketch)\b', rt))
+        if has_fulltime or has_quantified:            return "deep"
+        if multi_intern or _case_studies >= 6 or (has_intern and _case_studies >= 3):
+                                                      return "moderate_strong"
+        if has_intern or _case_studies >= 3:          return "moderate"
+        return "shallow"
+
+    if _is_mkt:
+        _campaign_hits = len(re.findall(
+            r'\b(campaign|seo|sem|ppc|google ads|meta ads|email marketing'
+            r'|content marketing|social media|ctr|roas|roi|lead generation)\b', rt))
+        if has_fulltime or has_quantified:            return "deep"
+        if multi_intern or _campaign_hits >= 6 or (has_intern and _campaign_hits >= 3):
+                                                      return "moderate_strong"
+        if has_intern or _campaign_hits >= 3:         return "moderate"
+        return "shallow"
+
+    if _is_analytics:
+        _dashboard_hits = len(re.findall(
+            r'\b(dashboard|report|power bi|tableau|dax|pivot|kpi|looker'
+            r'|data studio|visualization|insight|analysis|sql|excel)\b', rt))
+        if has_fulltime or has_quantified:            return "deep"
+        if multi_intern or _dashboard_hits >= 6 or (has_intern and _dashboard_hits >= 3):
+                                                      return "moderate_strong"
+        if has_intern or _dashboard_hits >= 3:        return "moderate"
+        return "shallow"
+
+    if _is_pm:
+        _pm_hits = len(re.findall(
+            r'\b(roadmap|prd|feature|product|user stor|backlog|sprint'
+            r'|stakeholder|launch|mvp|okr|metric|a/b test|customer interview)\b', rt))
+        if has_fulltime or has_quantified:            return "deep"
+        if multi_intern or _pm_hits >= 6 or (has_intern and _pm_hits >= 3):
+                                                      return "moderate_strong"
+        if has_intern or _pm_hits >= 3:               return "moderate"
+        return "shallow"
+
+    if _is_projmgr:
+        _pjm_hits = len(re.findall(
+            r'\b(project|timeline|milestone|budget|resource|deliverable'
+            r'|risk|stakeholder|gantt|scope|pmp|agile|waterfall)\b', rt))
+        if has_fulltime or has_quantified:            return "deep"
+        if multi_intern or _pjm_hits >= 6 or (has_intern and _pjm_hits >= 3):
+                                                      return "moderate_strong"
+        if has_intern or _pjm_hits >= 3:              return "moderate"
+        return "shallow"
+
+    if _is_ba:
+        _ba_hits = len(re.findall(
+            r'\b(requirement|brd|process map|gap analysis|use case|uml'
+            r'|stakeholder|functional|acceptance|bpmn|as-is|to-be|feasibility)\b', rt))
+        if has_fulltime or has_quantified:            return "deep"
+        if multi_intern or _ba_hits >= 5 or (has_intern and _ba_hits >= 3):
+                                                      return "moderate_strong"
+        if has_intern or _ba_hits >= 3:               return "moderate"
+        return "shallow"
+
+    if _is_tw:
+        _tw_hits = len(re.findall(
+            r'\b(documentation|api docs|user manual|knowledge base|readme'
+            r'|release notes|style guide|confluence|gitbook|swagger|openapi)\b', rt))
+        if has_fulltime or has_quantified:            return "deep"
+        if multi_intern or _tw_hits >= 4 or (has_intern and _tw_hits >= 2):
+                                                      return "moderate_strong"
+        if has_intern or _tw_hits >= 2:               return "moderate"
+        return "shallow"
+
+    if _is_sales:
+        _sales_hits = len(re.findall(
+            r'\b(demo|poc|proof of concept|proposal|deal|quota|pipeline'
+            r'|client|customer|revenue|sales|pre-sales|account|crm)\b', rt))
+        if has_fulltime or has_quantified:            return "deep"
+        if multi_intern or _sales_hits >= 5 or (has_intern and _sales_hits >= 3):
+                                                      return "moderate_strong"
+        if has_intern or _sales_hits >= 3:            return "moderate"
+        return "shallow"
+
+    if _is_agile:
+        _agile_hits = len(re.findall(
+            r'\b(retrospective|sprint|scrum|kanban|agile|ceremony|standup'
+            r'|velocity|backlog|refinement|planning|coaching|facilitat)\b', rt))
+        if has_fulltime or has_quantified:            return "deep"
+        if multi_intern or _agile_hits >= 5 or (has_intern and _agile_hits >= 3):
+                                                      return "moderate_strong"
+        if has_intern or _agile_hits >= 3:            return "moderate"
+        return "shallow"
+
+    # ── DEV/TECH DOMAIN PATH (default) ───────────────────────────────────────
+    _sec = re.search(
+        r'(projects?|work experience|experience|portfolio)[^\n]{0,60}\n(.{0,3000})',
+        rt, re.DOTALL
+    )
+    _ctx = _sec.group(2) if _sec else rt
+    hits = len(re.findall(
+        r'\b(built|developed|implemented|designed|created|deployed|architected)\b', _ctx
+    ))
+
+    if has_fulltime or has_quantified:                return "deep"
     if multi_intern or hits >= 5 or (has_intern and hits >= 2):
-        return "moderate_strong"
-    if has_intern or hits >= 2:
-        return "moderate"
+                                                      return "moderate_strong"
+    if has_intern or hits >= 2:                       return "moderate"
     return "shallow"
 
 
@@ -3879,6 +3995,14 @@ SCORING SCALE for language ({lang_weight} pts max):
         f"<br><b>Improvement Suggestions:</b> {suggestions_html}"
     )
 
+    # Pre-compute depth display values for score breakdown
+    _depth_display_label = {"shallow": "Shallow", "moderate": "Moderate",
+                            "moderate_strong": "Moderate+", "deep": "Deep"}.get(_depth_str, _depth_str.capitalize())
+    _depth_display_desc  = {"shallow": "(tools listed only — no described work or deliverables)",
+                            "moderate": "(2+ described deliverables or projects, or 1 real internship)",
+                            "moderate_strong": "(strong portfolio, internship + work, or production deployment)",
+                            "deep": "(full-time employment or quantified real-world impact)"}.get(_depth_str, "")
+
     # Enhanced final thoughts with domain analysis and industry benchmarks
     final_thoughts += f"""
 
@@ -3890,7 +4014,7 @@ SCORING SCALE for language ({lang_weight} pts max):
 - Final ATS Score: {total_score}/100
 - Your field: {resume_domain}
 - Job field: {job_domain}
-- Experience level in your field: {_depth_str.capitalize()} {"(API/tool usage only)" if _depth_str == "shallow" else "(projects/internships)" if _depth_str == "moderate" else "(work experience/quantified results)"}
+- Experience level in your field: {_depth_display_label} {_depth_display_desc}
 
 **Score Interpretation (Industry Benchmarks):**
 - 85–100: Top 10% candidates — Strong interview recommendation
