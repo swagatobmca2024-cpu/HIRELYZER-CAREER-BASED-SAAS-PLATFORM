@@ -8316,9 +8316,8 @@ with tab2:
 
     with col1:
         if st.button("🔁 Clear Preview"):
-            with st.spinner("Clearing preview..."):
-                time.sleep(2)
-                st.session_state.pop("ai_output", None)
+            st.session_state.pop("ai_output", None)
+            st.toast("🗑️ Preview cleared!")
 
     with col2:
         if st.button("🚀 Generate AI Resume Preview"):
@@ -8731,7 +8730,6 @@ with tab2:
     # Generate HTML content based on selected template — only on submit, stored in session_state
     if submitted:
         with st.spinner("⚙️ Generating your resume... please wait"):
-            time.sleep(2)
             # Render selected resume template via the registry dispatcher (resume_builder.py)
             html_content = render_resume(selected_template, st.session_state, profile_img_html)
 
@@ -8741,7 +8739,6 @@ with tab2:
             st.session_state["generated_html"] = html_content
             st.session_state["pdf_resume_bytes"] = None   # invalidate cache without extra rerun
             st.session_state["show_template_preview"] = False
-            time.sleep(1)
         st.session_state.pop("_resume_generating", None)
 
 with tab2:
@@ -8786,13 +8783,18 @@ with tab2:
                 key="download_resume_html"
             )
 
-        # Preview Template Button — eye open when previewing, closed when hidden
+        # Preview Template Button — smart toggle: spinner only when opening, instant when closing
         with col2:
             is_previewing = st.session_state.get("show_template_preview", False)
             if st.button("👁️ Preview Template", key="preview_template_btn"):
-                with st.spinner("Loading template preview..."):
-                    time.sleep(2)
-                    st.session_state["show_template_preview"] = not is_previewing
+                if not is_previewing:
+                    # Opening — show spinner since we're loading the iframe
+                    with st.spinner("Loading template preview..."):
+                        time.sleep(2)
+                        st.session_state["show_template_preview"] = True
+                else:
+                    # Closing — instant, no spinner
+                    st.session_state["show_template_preview"] = False
 
         # Show/hide the template preview iframe
         if st.session_state.get("show_template_preview", False):
