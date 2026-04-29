@@ -802,6 +802,28 @@ section[data-testid="stSidebar"] .stTextArea > div > div > textarea {
 .stSlider [data-baseweb="slider"] [data-testid="stTickBar"] > div {
     background: rgba(56,189,248,0.6) !important;
 }
+/* ATS weight sliders — red filled track to match the design */
+div[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] div[data-testid="stSliderTrackFill"] {
+    background: linear-gradient(90deg, #ef4444, #f87171) !important;
+}
+div[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] [role="slider"] {
+    background: #38bdf8 !important;
+    width: 18px !important;
+    height: 18px !important;
+    box-shadow: 0 0 0 3px rgba(56,189,248,0.35), 0 2px 6px rgba(0,0,0,0.4) !important;
+}
+/* Slider value tooltip — accent red, matches screenshots */
+div[data-testid="stSidebar"] .stSlider [data-baseweb="tooltip"] {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+div[data-testid="stSidebar"] .stSlider [data-baseweb="tooltip"] div {
+    color: #f87171 !important;
+    font-weight: 700 !important;
+    font-size: 0.8rem !important;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+    background: transparent !important;
+}
 
 /* ══════════════════════════════════════
    FILE UPLOADER
@@ -4341,159 +4363,319 @@ with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.
     if job_description.strip() == "":
         st.warning("Please enter a job description to evaluate the resumes.")
 
-# ── ATS Scoring Weights — Career Presets + Fine-tune Sliders ─────────────────
-# Preset weight tables per career level
-_CAREER_PRESETS = {
-    "Fresher (0–1 yr)":     dict(edu=30, exp=15, skills=30, lang=5, kw=10),
-    "Mid-level (2–5 yrs)":  dict(edu=20, exp=30, skills=25, lang=5, kw=10),
-    "Experienced (5+ yrs)": dict(edu=10, exp=40, skills=25, lang=5, kw=10),
-}
-_PRESET_RATIONALE = {
-    "Fresher (0–1 yr)":     "Education and skills dominate — no work history to evaluate.",
-    "Mid-level (2–5 yrs)":  "Balanced — experience begins to outweigh education.",
-    "Experienced (5+ yrs)": "Experience is the dominant signal at senior level.",
-}
-
-# ── on_change callback — writes preset values into slider session-state keys.
-# This is the ONLY correct Streamlit pattern: sliders read from session_state,
-# callback writes to session_state → sliders re-render with new values on next
-# run WITHOUT triggering a full page re-execution that flickers everything else.
-def _apply_career_preset():
-    mode = st.session_state.get("career_mode_radio", "Fresher (0–1 yr)")
-    p = _CAREER_PRESETS.get(mode, _CAREER_PRESETS["Fresher (0–1 yr)"])
-    st.session_state["sl_edu"]    = p["edu"]
-    st.session_state["sl_exp"]    = p["exp"]
-    st.session_state["sl_skills"] = p["skills"]
-    st.session_state["sl_lang"]   = p["lang"]
-    st.session_state["sl_kw"]     = p["kw"]
-
-# Initialise slider session state on very first load → Fresher defaults
-if "sl_edu" not in st.session_state:
-    _apply_career_preset()
-
 # ---------------- Advanced Weights Dropdown ----------------
-with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/settings.png) Customize ATS Scoring Weights", expanded=False):
+
+# ── SVG icons — exactly matching the screenshot style ────────────────────────
+# Fresher: graduation cap  |  Mid-level: briefcase  |  Experienced: person/silhouette
+_SVG_FRESHER = (
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" '
+    'stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M22 10v6M2 10l10-5 10 5-10 5z"/>'
+    '<path d="M6 12v5c3 3 9 3 12 0v-5"/>'
+    '</svg>'
+)
+_SVG_MIDLEVEL = (
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" '
+    'stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    '<rect x="2" y="7" width="20" height="14" rx="2"/>'
+    '<path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>'
+    '</svg>'
+)
+_SVG_EXPERIENCED = (
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" '
+    'stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>'
+    '<circle cx="12" cy="7" r="4"/>'
+    '</svg>'
+)
+
+# ── Career-level preset definitions ──────────────────────────────────────────
+_CAREER_PRESETS = {
+    "fresher": {
+        "label": "Fresher",
+        "sublabel": "0–1 yr",
+        "edu": 30, "exp": 15, "skills": 30, "lang": 5, "keyword": 10,
+        "hint": "Education and skills dominate — no work history to evaluate.",
+        "color":  "#34d399",
+        "bg":     "rgba(52,211,153,0.11)",
+        "border": "rgba(52,211,153,0.30)",
+        "glow":   "rgba(52,211,153,0.18)",
+        "svg_tpl": _SVG_FRESHER,
+    },
+    "midlevel": {
+        "label": "Mid-level",
+        "sublabel": "2–5 yrs",
+        "edu": 20, "exp": 30, "skills": 25, "lang": 5, "keyword": 10,
+        "hint": "Balanced — experience begins to outweigh education.",
+        "color":  "#38bdf8",
+        "bg":     "rgba(56,189,248,0.11)",
+        "border": "rgba(56,189,248,0.30)",
+        "glow":   "rgba(56,189,248,0.18)",
+        "svg_tpl": _SVG_MIDLEVEL,
+    },
+    "experienced": {
+        "label": "Experienced",
+        "sublabel": "5+ yrs",
+        "edu": 10, "exp": 40, "skills": 25, "lang": 5, "keyword": 10,
+        "hint": "Experience is the dominant signal at senior level.",
+        "color":  "#818cf8",
+        "bg":     "rgba(129,140,248,0.11)",
+        "border": "rgba(129,140,248,0.30)",
+        "glow":   "rgba(129,140,248,0.18)",
+        "svg_tpl": _SVG_EXPERIENCED,
+    },
+}
+
+# ── Session-state init — OUTSIDE expander so values survive collapse ──────────
+if "ats_career_level" not in st.session_state:
+    st.session_state["ats_career_level"] = "midlevel"
+
+_active_preset_key = st.session_state["ats_career_level"]
+_active_preset     = _CAREER_PRESETS[_active_preset_key]
+for _sk, _sv in [
+    ("ats_edu_w",     _active_preset["edu"]),
+    ("ats_exp_w",     _active_preset["exp"]),
+    ("ats_skills_w",  _active_preset["skills"]),
+    ("ats_lang_w",    _active_preset["lang"]),
+    ("ats_keyword_w", _active_preset["keyword"]),
+]:
+    if _sk not in st.session_state:
+        st.session_state[_sk] = _sv
+
+# ── Expander title uses an SVG settings icon — no emoji ──────────────────────
+_EXPANDER_ICON = (
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
+    'stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+    'style="display:inline-block;vertical-align:middle;margin-right:5px;">'
+    '<circle cx="12" cy="12" r="3"/>'
+    '<path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/>'
+    '<path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>'
+    '</svg>'
+)
+
+with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
+
+    # ── Description ──────────────────────────────────────────────────────────
     st.markdown(
-        "<div style='font-size:0.72rem;color:#64748b;margin-bottom:10px;"
-        "font-family:-apple-system,sans-serif;line-height:1.5;'>"
+        "<div style='font-size:0.72rem;color:#64748b;margin-bottom:14px;"
+        "font-family:-apple-system,sans-serif;line-height:1.55;'>"
         "Format quality is scored automatically (10 pts fixed). "
-        "Adjust the remaining <b>90 pts</b> below.</div>",
-        unsafe_allow_html=True
+        "Adjust the remaining <b style='color:#94a3b8;'>90 pts</b> below."
+        "</div>",
+        unsafe_allow_html=True,
     )
 
-    # ── Career level selector — 3 styled visual cards (hidden radio drives state)
-    _MODE_KEYS = list(_CAREER_PRESETS.keys())
-    _MODE_COLORS = {
-        "Fresher (0–1 yr)":     {"active_border": "#1D9E75", "active_bg": "rgba(29,158,117,0.15)",
-                                  "active_text": "#6ee7b7",  "svg_stroke": "#1D9E75"},
-        "Mid-level (2–5 yrs)":  {"active_border": "#378ADD", "active_bg": "rgba(55,138,221,0.15)",
-                                  "active_text": "#7dd3fc",  "svg_stroke": "#378ADD"},
-        "Experienced (5+ yrs)": {"active_border": "#7F77DD", "active_bg": "rgba(127,119,221,0.15)",
-                                  "active_text": "#c4b5fd",  "svg_stroke": "#7F77DD"},
-    }
-    _MODE_SVGS = {
-        "Fresher (0–1 yr)":
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
-        "Mid-level (2–5 yrs)":
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>',
-        "Experienced (5+ yrs)":
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><polyline points="16 3 18 5 22 1"/></svg>',
-    }
-    _MODE_LABELS = {
-        "Fresher (0–1 yr)":     ("Fresher",     "0–1 yr"),
-        "Mid-level (2–5 yrs)":  ("Mid-level",   "2–5 yrs"),
-        "Experienced (5+ yrs)": ("Experienced", "5+ yrs"),
-    }
+    # ── 3 preset cards ───────────────────────────────────────────────────────
+    # Pattern: render HTML card → invisible st.button below captures the click.
+    # The button is hidden via CSS keyed on its data-testid; the card IS the visual.
+    _cur_level = st.session_state["ats_career_level"]
 
-    # Hidden radio — actual state driver; label hidden, buttons below are the UI
-    selected_mode = st.radio(
-        "Career level",
-        options=_MODE_KEYS,
-        index=0,
-        key="career_mode_radio",
-        on_change=_apply_career_preset,
-        label_visibility="collapsed",
-        horizontal=True,
-    )
-
-    # Styled 3-button card row
-    _btn_cols = st.columns(3)
-    for _ci, _mk in enumerate(_MODE_KEYS):
-        _mc       = _MODE_COLORS[_mk]
-        _is_active = (selected_mode == _mk)
-        _svg      = _MODE_SVGS[_mk].replace("{c}", _mc["svg_stroke"] if _is_active else "#64748b")
-        _lbl      = _MODE_LABELS[_mk]
-        _border   = f"2px solid {_mc['active_border']}" if _is_active else "1px solid rgba(255,255,255,0.1)"
-        _bg       = _mc["active_bg"] if _is_active else "rgba(255,255,255,0.03)"
-        _tc       = _mc["active_text"] if _is_active else "#64748b"
-        _btn_cols[_ci].markdown(
-            f'<div style="border:{_border};background:{_bg};border-radius:10px;'
-            f'padding:8px 6px;text-align:center;cursor:default;">'
-            f'<div style="margin-bottom:3px;">{_svg}</div>'
-            f'<div style="font-size:0.72rem;font-weight:600;color:{_tc};line-height:1.2;">{_lbl[0]}</div>'
-            f'<div style="font-size:0.65rem;color:{_tc};opacity:0.75;">{_lbl[1]}</div>'
-            f'</div>',
-            unsafe_allow_html=True
-        )
-
-    # Rationale pill — color-matched to selected career tier
-    _rationale_colors = {
-        "Fresher (0–1 yr)":     ("rgba(29,158,117,0.12)", "rgba(29,158,117,0.35)", "#6ee7b7"),
-        "Mid-level (2–5 yrs)":  ("rgba(55,138,221,0.12)", "rgba(55,138,221,0.35)", "#7dd3fc"),
-        "Experienced (5+ yrs)": ("rgba(127,119,221,0.12)","rgba(127,119,221,0.35)","#c4b5fd"),
+    # Inject CSS once — hides button text/chrome, keeps click area
+    st.markdown("""
+    <style>
+    /* Make the preset buttons invisible — cards above them are the visuals */
+    div[data-testid="stSidebar"] button[data-testid="ats_btn_fresher"],
+    div[data-testid="stSidebar"] button[data-testid="ats_btn_midlevel"],
+    div[data-testid="stSidebar"] button[data-testid="ats_btn_experienced"] {
+        position: relative;
+        margin-top: -2px;
+        height: 6px !important;
+        min-height: 6px !important;
+        padding: 0 !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        color: transparent !important;
+        font-size: 0 !important;
+        opacity: 0 !important;
+        cursor: pointer !important;
     }
-    _rc = _rationale_colors[selected_mode]
+    /* Slider label uppercase, muted */
+    div[data-testid="stSidebar"] .stSlider > label {
+        font-size: 0.68rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.10em !important;
+        text-transform: uppercase !important;
+        color: #64748b !important;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+        margin-bottom: 2px !important;
+    }
+    /* Red filled track */
+    div[data-testid="stSidebar"] .stSlider [data-testid="stSliderTrackFill"] {
+        background: linear-gradient(90deg, #dc2626, #ef4444) !important;
+    }
+    /* Cyan thumb */
+    div[data-testid="stSidebar"] .stSlider [role="slider"] {
+        background: #38bdf8 !important;
+        width: 17px !important;
+        height: 17px !important;
+        border: 2px solid #0f172a !important;
+        box-shadow: 0 0 0 3px rgba(56,189,248,0.35), 0 2px 6px rgba(0,0,0,0.5) !important;
+    }
+    /* Value label — red, bold, above thumb */
+    div[data-testid="stSidebar"] .stSlider [data-baseweb="tooltip"] div {
+        color: #f87171 !important;
+        font-weight: 700 !important;
+        font-size: 0.78rem !important;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    _pcols = st.columns(3)
+    for _col, (_pkey, _pd) in zip(_pcols, _CAREER_PRESETS.items()):
+        _is_active   = (_cur_level == _pkey)
+        _icon_color  = _pd["color"] if _is_active else "#4a5568"
+        _label_color = _pd["color"] if _is_active else "#4a5568"
+        _sub_color   = _pd["color"] if _is_active else "#2d3748"
+        _border      = f"2px solid {_pd['border']}" if _is_active else "1px solid rgba(255,255,255,0.07)"
+        _bg          = _pd["bg"] if _is_active else "rgba(255,255,255,0.025)"
+        _shadow      = f"0 0 12px {_pd['glow']}" if _is_active else "none"
+        _icon_svg    = _pd["svg_tpl"].replace("{color}", _icon_color)
+
+        with _col:
+            # HTML card — full visual
+            st.markdown(
+                f"""<div style="
+                    border:{_border};
+                    background:{_bg};
+                    box-shadow:{_shadow};
+                    border-radius:10px;
+                    padding:12px 4px 10px;
+                    text-align:center;
+                    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+                    transition:all 0.15s ease;
+                    user-select:none;">
+                    <div style="display:flex;justify-content:center;margin-bottom:6px;">
+                        {_icon_svg}
+                    </div>
+                    <div style="font-size:0.72rem;font-weight:700;
+                                color:{_label_color};letter-spacing:0.02em;
+                                line-height:1.2;">
+                        {_pd['label']}
+                    </div>
+                    <div style="font-size:0.60rem;color:{_sub_color};
+                                margin-top:3px;font-weight:500;">
+                        {_pd['sublabel']}
+                    </div>
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            # Click target — invisible, sits flush below the card
+            if st.button(
+                " ",
+                key=f"ats_btn_{_pkey}",
+                use_container_width=True,
+                help=f"{_pd['label']} ({_pd['sublabel']})",
+            ):
+                st.session_state["ats_career_level"] = _pkey
+                st.session_state["ats_edu_w"]     = _pd["edu"]
+                st.session_state["ats_exp_w"]     = _pd["exp"]
+                st.session_state["ats_skills_w"]  = _pd["skills"]
+                st.session_state["ats_lang_w"]    = _pd["lang"]
+                st.session_state["ats_keyword_w"] = _pd["keyword"]
+                st.rerun()
+
+    # ── Hint card — SVG icon matches active level, NO emojis ─────────────────
+    _ap   = _CAREER_PRESETS[_cur_level]
+    _hint_icon_svg = _ap["svg_tpl"].replace("{color}", _ap["color"])
     st.markdown(
-        f"<div style='font-size:0.72rem;color:{_rc[2]};background:{_rc[0]};"
-        f"border:1px solid {_rc[1]};border-radius:8px;padding:7px 10px;"
-        f"margin-top:8px;margin-bottom:10px;font-family:-apple-system,sans-serif;line-height:1.5;'>"
-        f"{_MODE_SVGS[selected_mode].replace('{c}', _rc[2])}&nbsp; {_PRESET_RATIONALE[selected_mode]}"
-        f"</div>",
-        unsafe_allow_html=True
+        f"""<div style="
+            margin-top:14px;padding:10px 12px;
+            background:{_ap['bg']};
+            border:1px solid {_ap['border']};
+            border-radius:9px;
+            box-shadow:0 0 14px {_ap['glow']};
+            font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+            font-size:0.75rem;color:{_ap['color']};
+            line-height:1.5;
+            display:flex;align-items:flex-start;gap:9px;">
+            <div style="flex-shrink:0;margin-top:1px;">{_hint_icon_svg}</div>
+            <span style="font-weight:500;">{_ap['hint']}</span>
+        </div>""",
+        unsafe_allow_html=True,
     )
 
     # ── FINE-TUNE label ───────────────────────────────────────────────────────
     st.markdown(
-        "<div style='font-size:0.72rem;font-weight:700;letter-spacing:0.08em;"
-        "text-transform:uppercase;color:#64748b;margin-bottom:6px;"
+        "<div style='margin:16px 0 4px;font-size:0.63rem;font-weight:700;"
+        "letter-spacing:0.13em;text-transform:uppercase;color:#334155;"
         "font-family:-apple-system,sans-serif;'>Fine-Tune</div>",
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
-    # Sliders read from session_state keys — preset callback writes to same keys.
-    # This means slider changes only re-run the sidebar widget tree, NOT the full
-    # main page, eliminating the flicker / full-page reload on every drag.
-    edu_weight     = st.slider("Education",  5,  40, key="sl_edu")
-    exp_weight     = st.slider("Experience", 5,  45, key="sl_exp")
-    skills_weight  = st.slider("Skills",     5,  40, key="sl_skills")
-    lang_weight    = st.slider("Language",   2,  10, key="sl_lang")
-    keyword_weight = st.slider("Keywords",   3,  20, key="sl_kw")
+    # ── Sliders — keyed to session_state so preset clicks update them ─────────
+    edu_weight = st.slider(
+        "Education", 5, 40,
+        key="ats_edu_w",
+        help="Weight given to academic qualifications and degrees.",
+    )
+    exp_weight = st.slider(
+        "Experience", 5, 45,
+        key="ats_exp_w",
+        help="Weight given to work history, roles, and tenure.",
+    )
+    skills_weight = st.slider(
+        "Skills", 5, 40,
+        key="ats_skills_w",
+        help="Weight given to technical and domain skill matches.",
+    )
+    lang_weight = st.slider(
+        "Language", 2, 10,
+        key="ats_lang_w",
+        help="Weight given to grammar quality and language clarity.",
+    )
+    keyword_weight = st.slider(
+        "Keywords", 3, 20,
+        key="ats_keyword_w",
+        help="Weight given to job-description keyword alignment.",
+    )
 
     total_weight  = edu_weight + exp_weight + skills_weight + lang_weight + keyword_weight
     weights_valid = (total_weight == 90)
 
     # ── Validation badge ──────────────────────────────────────────────────────
     if not weights_valid:
-        _remaining  = 90 - total_weight
-        _direction  = f"remove {abs(_remaining)}" if _remaining < 0 else f"add {_remaining}"
+        _remaining = 90 - total_weight
+        _direction = f"remove {abs(_remaining)}" if _remaining < 0 else f"add {_remaining}"
         st.markdown(
-            f"<div style=\"display:flex;align-items:center;gap:8px;border:1px solid rgba(251,113,133,0.3);"
-            f"background:rgba(251,113,133,0.08);padding:10px 14px;border-radius:10px;\">"
-            f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#fb7185\" style=\"flex-shrink:0;\">"
-            f"<path d=\"M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.83 0-1.5.67-1.5 1.5S11.17 20 12 20s1.5-.67 1.5-1.5S12.83 17 12 17zm1-4V7h-2v6h2z\"/></svg>"
-            f"<span style=\"color:#fca5a5;font-size:0.8rem;font-weight:600;font-family:-apple-system,sans-serif;\">"
-            f"Total = {total_weight}/90 — {_direction} pts. Analysis blocked.</span></div>",
-            unsafe_allow_html=True
+            f"""<div style="margin-top:12px;display:flex;align-items:center;gap:8px;
+                border:1px solid rgba(251,113,133,0.3);
+                background:linear-gradient(135deg,rgba(251,113,133,0.12) 0%,rgba(251,113,133,0.05) 100%);
+                padding:10px 13px;border-radius:10px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                     fill="none" stroke="#fb7185" stroke-width="2" stroke-linecap="round"
+                     stroke-linejoin="round" style="flex-shrink:0;">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span style="color:#fca5a5;font-weight:600;font-size:0.76rem;
+                             font-family:-apple-system,sans-serif;">
+                    Total = {total_weight} / 90 &mdash; {_direction} pts to balance.
+                </span>
+            </div>""",
+            unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            f"<div style=\"display:flex;align-items:center;gap:8px;border:1px solid rgba(52,211,153,0.28);"
-            f"background:rgba(52,211,153,0.08);padding:10px 14px;border-radius:10px;\">"
-            f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#34d399\" style=\"flex-shrink:0;\">"
-            f"<path d=\"M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.3 7.7l-1.4-1.4z\"/></svg>"
-            f"<span style=\"color:#6ee7b7;font-size:0.8rem;font-weight:600;font-family:-apple-system,sans-serif;\">"
-            f"Weights balanced · Content = 90 pts · Format = 10 pts · Total = 100</span></div>",
-            unsafe_allow_html=True
+            """<div style="margin-top:12px;display:flex;align-items:center;gap:8px;
+                border:1px solid rgba(52,211,153,0.28);
+                background:linear-gradient(135deg,rgba(52,211,153,0.12) 0%,rgba(52,211,153,0.05) 100%);
+                padding:10px 13px;border-radius:10px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                     fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"
+                     stroke-linejoin="round" style="flex-shrink:0;">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span style="color:#6ee7b7;font-weight:600;font-size:0.76rem;
+                             font-family:-apple-system,sans-serif;">
+                    Weights balanced &middot; Content = 90 pts &middot; Format = 10 pts &middot; Total = 100
+                </span>
+            </div>""",
+            unsafe_allow_html=True,
         )
 
 with tab1:
