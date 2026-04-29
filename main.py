@@ -4372,7 +4372,7 @@ if "sl_edu" not in st.session_state:
     _apply_career_preset()
 
 # ---------------- Advanced Weights Dropdown ----------------
-with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
+with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/settings.png) Customize ATS Scoring Weights", expanded=False):
     st.markdown(
         "<div style='font-size:0.72rem;color:#64748b;margin-bottom:10px;"
         "font-family:-apple-system,sans-serif;line-height:1.5;'>"
