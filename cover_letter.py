@@ -583,7 +583,8 @@ Each paragraph should be 2-4 sentences.
 """
 
         # ✅ Call LLM
-        cover_letter_raw = call_llm(prompt, session=st.session_state).strip()
+        with st.spinner("✉️ Crafting your cover letter... please wait"):
+            cover_letter_raw = call_llm(prompt, session=st.session_state).strip()
 
         # ✅ Strip any header/salutation/closing lines the LLM may have added despite instructions
         import re as _cl_re
