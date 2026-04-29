@@ -802,28 +802,6 @@ section[data-testid="stSidebar"] .stTextArea > div > div > textarea {
 .stSlider [data-baseweb="slider"] [data-testid="stTickBar"] > div {
     background: rgba(56,189,248,0.6) !important;
 }
-/* ATS weight sliders — red filled track to match the design */
-div[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] div[data-testid="stSliderTrackFill"] {
-    background: linear-gradient(90deg, #ef4444, #f87171) !important;
-}
-div[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] [role="slider"] {
-    background: #38bdf8 !important;
-    width: 18px !important;
-    height: 18px !important;
-    box-shadow: 0 0 0 3px rgba(56,189,248,0.35), 0 2px 6px rgba(0,0,0,0.4) !important;
-}
-/* Slider value tooltip — accent red, matches screenshots */
-div[data-testid="stSidebar"] .stSlider [data-baseweb="tooltip"] {
-    background: transparent !important;
-    box-shadow: none !important;
-}
-div[data-testid="stSidebar"] .stSlider [data-baseweb="tooltip"] div {
-    color: #f87171 !important;
-    font-weight: 700 !important;
-    font-size: 0.8rem !important;
-    font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
-    background: transparent !important;
-}
 
 /* ══════════════════════════════════════
    FILE UPLOADER
@@ -4363,10 +4341,9 @@ with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.
     if job_description.strip() == "":
         st.warning("Please enter a job description to evaluate the resumes.")
 
-# ---------------- Advanced Weights Dropdown ----------------
+# ── ATS Scoring Weights — Career Presets + Fine-tune Sliders ─────────────────
 
-# ── SVG icons — exactly matching the screenshot style ────────────────────────
-# Fresher: graduation cap  |  Mid-level: briefcase  |  Experienced: person/silhouette
+# SVG icon templates — {color} replaced at render time
 _SVG_FRESHER = (
     '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" '
     'stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
@@ -4389,12 +4366,11 @@ _SVG_EXPERIENCED = (
     '</svg>'
 )
 
-# ── Career-level preset definitions ──────────────────────────────────────────
+# Rich preset definitions — color, glow, hint, svg all bundled per tier
 _CAREER_PRESETS = {
     "fresher": {
-        "label": "Fresher",
-        "sublabel": "0–1 yr",
-        "edu": 30, "exp": 15, "skills": 30, "lang": 5, "keyword": 10,
+        "label": "Fresher", "sublabel": "0–1 yr",
+        "edu": 30, "exp": 15, "skills": 30, "lang": 5, "kw": 10,
         "hint": "Education and skills dominate — no work history to evaluate.",
         "color":  "#34d399",
         "bg":     "rgba(52,211,153,0.11)",
@@ -4403,9 +4379,8 @@ _CAREER_PRESETS = {
         "svg_tpl": _SVG_FRESHER,
     },
     "midlevel": {
-        "label": "Mid-level",
-        "sublabel": "2–5 yrs",
-        "edu": 20, "exp": 30, "skills": 25, "lang": 5, "keyword": 10,
+        "label": "Mid-level", "sublabel": "2–5 yrs",
+        "edu": 20, "exp": 30, "skills": 25, "lang": 5, "kw": 10,
         "hint": "Balanced — experience begins to outweigh education.",
         "color":  "#38bdf8",
         "bg":     "rgba(56,189,248,0.11)",
@@ -4414,9 +4389,8 @@ _CAREER_PRESETS = {
         "svg_tpl": _SVG_MIDLEVEL,
     },
     "experienced": {
-        "label": "Experienced",
-        "sublabel": "5+ yrs",
-        "edu": 10, "exp": 40, "skills": 25, "lang": 5, "keyword": 10,
+        "label": "Experienced", "sublabel": "5+ yrs",
+        "edu": 10, "exp": 40, "skills": 25, "lang": 5, "kw": 10,
         "hint": "Experience is the dominant signal at senior level.",
         "color":  "#818cf8",
         "bg":     "rgba(129,140,248,0.11)",
@@ -4426,34 +4400,26 @@ _CAREER_PRESETS = {
     },
 }
 
-# ── Session-state init — OUTSIDE expander so values survive collapse ──────────
-if "ats_career_level" not in st.session_state:
-    st.session_state["ats_career_level"] = "midlevel"
+# ── on_change callback — writes preset values into slider session-state keys.
+# Sliders read from session_state → callback writes to session_state →
+# only sidebar widgets re-render, NO full page rerun, NO flicker.
+def _apply_career_preset():
+    mode = st.session_state.get("career_mode_radio", "fresher")
+    p = _CAREER_PRESETS.get(mode, _CAREER_PRESETS["fresher"])
+    st.session_state["sl_edu"]    = p["edu"]
+    st.session_state["sl_exp"]    = p["exp"]
+    st.session_state["sl_skills"] = p["skills"]
+    st.session_state["sl_lang"]   = p["lang"]
+    st.session_state["sl_kw"]     = p["kw"]
 
-_active_preset_key = st.session_state["ats_career_level"]
-_active_preset     = _CAREER_PRESETS[_active_preset_key]
-for _sk, _sv in [
-    ("ats_edu_w",     _active_preset["edu"]),
-    ("ats_exp_w",     _active_preset["exp"]),
-    ("ats_skills_w",  _active_preset["skills"]),
-    ("ats_lang_w",    _active_preset["lang"]),
-    ("ats_keyword_w", _active_preset["keyword"]),
-]:
-    if _sk not in st.session_state:
-        st.session_state[_sk] = _sv
+# Session-state init — OUTSIDE expander so values survive collapse
+if "career_mode_radio" not in st.session_state:
+    st.session_state["career_mode_radio"] = "fresher"
+if "sl_edu" not in st.session_state:
+    _apply_career_preset()
 
-# ── Expander title uses an SVG settings icon — no emoji ──────────────────────
-_EXPANDER_ICON = (
-    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
-    'stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
-    'style="display:inline-block;vertical-align:middle;margin-right:5px;">'
-    '<circle cx="12" cy="12" r="3"/>'
-    '<path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/>'
-    '<path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>'
-    '</svg>'
-)
-
-with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
+# ---------------- Advanced Weights Dropdown ----------------
+with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/settings.png) Customize ATS Scoring Weights", expanded=False):
 
     # ── Description ──────────────────────────────────────────────────────────
     st.markdown(
@@ -4465,32 +4431,9 @@ with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
         unsafe_allow_html=True,
     )
 
-    # ── 3 preset cards ───────────────────────────────────────────────────────
-    # Pattern: render HTML card → invisible st.button below captures the click.
-    # The button is hidden via CSS keyed on its data-testid; the card IS the visual.
-    _cur_level = st.session_state["ats_career_level"]
-
-    # Inject CSS once — hides button text/chrome, keeps click area
+    # ── Slider CSS — red track, cyan thumb, bold red value label, uppercase labels
     st.markdown("""
     <style>
-    /* Make the preset buttons invisible — cards above them are the visuals */
-    div[data-testid="stSidebar"] button[data-testid="ats_btn_fresher"],
-    div[data-testid="stSidebar"] button[data-testid="ats_btn_midlevel"],
-    div[data-testid="stSidebar"] button[data-testid="ats_btn_experienced"] {
-        position: relative;
-        margin-top: -2px;
-        height: 6px !important;
-        min-height: 6px !important;
-        padding: 0 !important;
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        color: transparent !important;
-        font-size: 0 !important;
-        opacity: 0 !important;
-        cursor: pointer !important;
-    }
-    /* Slider label uppercase, muted */
     div[data-testid="stSidebar"] .stSlider > label {
         font-size: 0.68rem !important;
         font-weight: 700 !important;
@@ -4500,11 +4443,9 @@ with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
         font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
         margin-bottom: 2px !important;
     }
-    /* Red filled track */
     div[data-testid="stSidebar"] .stSlider [data-testid="stSliderTrackFill"] {
         background: linear-gradient(90deg, #dc2626, #ef4444) !important;
     }
-    /* Cyan thumb */
     div[data-testid="stSidebar"] .stSlider [role="slider"] {
         background: #38bdf8 !important;
         width: 17px !important;
@@ -4512,7 +4453,6 @@ with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
         border: 2px solid #0f172a !important;
         box-shadow: 0 0 0 3px rgba(56,189,248,0.35), 0 2px 6px rgba(0,0,0,0.5) !important;
     }
-    /* Value label — red, bold, above thumb */
     div[data-testid="stSidebar"] .stSlider [data-baseweb="tooltip"] div {
         color: #f87171 !important;
         font-weight: 700 !important;
@@ -4524,9 +4464,22 @@ with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
     </style>
     """, unsafe_allow_html=True)
 
+    # ── Hidden radio — actual state driver; styled cards below are the visual UI
+    _cur_level = st.session_state.get("career_mode_radio", "fresher")
+    selected_mode = st.radio(
+        "Career level",
+        options=list(_CAREER_PRESETS.keys()),
+        index=list(_CAREER_PRESETS.keys()).index(_cur_level),
+        key="career_mode_radio",
+        on_change=_apply_career_preset,
+        label_visibility="collapsed",
+        horizontal=True,
+    )
+
+    # ── 3 styled preset cards ─────────────────────────────────────────────────
     _pcols = st.columns(3)
     for _col, (_pkey, _pd) in zip(_pcols, _CAREER_PRESETS.items()):
-        _is_active   = (_cur_level == _pkey)
+        _is_active   = (selected_mode == _pkey)
         _icon_color  = _pd["color"] if _is_active else "#4a5568"
         _label_color = _pd["color"] if _is_active else "#4a5568"
         _sub_color   = _pd["color"] if _is_active else "#2d3748"
@@ -4534,26 +4487,18 @@ with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
         _bg          = _pd["bg"] if _is_active else "rgba(255,255,255,0.025)"
         _shadow      = f"0 0 12px {_pd['glow']}" if _is_active else "none"
         _icon_svg    = _pd["svg_tpl"].replace("{color}", _icon_color)
-
         with _col:
-            # HTML card — full visual
             st.markdown(
                 f"""<div style="
-                    border:{_border};
-                    background:{_bg};
-                    box-shadow:{_shadow};
-                    border-radius:10px;
-                    padding:12px 4px 10px;
-                    text-align:center;
+                    border:{_border};background:{_bg};box-shadow:{_shadow};
+                    border-radius:10px;padding:12px 4px 10px;text-align:center;
                     font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-                    transition:all 0.15s ease;
                     user-select:none;">
                     <div style="display:flex;justify-content:center;margin-bottom:6px;">
                         {_icon_svg}
                     </div>
                     <div style="font-size:0.72rem;font-weight:700;
-                                color:{_label_color};letter-spacing:0.02em;
-                                line-height:1.2;">
+                                color:{_label_color};letter-spacing:0.02em;line-height:1.2;">
                         {_pd['label']}
                     </div>
                     <div style="font-size:0.60rem;color:{_sub_color};
@@ -4563,36 +4508,19 @@ with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
                 </div>""",
                 unsafe_allow_html=True,
             )
-            # Click target — invisible, sits flush below the card
-            if st.button(
-                " ",
-                key=f"ats_btn_{_pkey}",
-                use_container_width=True,
-                help=f"{_pd['label']} ({_pd['sublabel']})",
-            ):
-                st.session_state["ats_career_level"] = _pkey
-                st.session_state["ats_edu_w"]     = _pd["edu"]
-                st.session_state["ats_exp_w"]     = _pd["exp"]
-                st.session_state["ats_skills_w"]  = _pd["skills"]
-                st.session_state["ats_lang_w"]    = _pd["lang"]
-                st.session_state["ats_keyword_w"] = _pd["keyword"]
-                st.rerun()
 
-    # ── Hint card — SVG icon matches active level, NO emojis ─────────────────
-    _ap   = _CAREER_PRESETS[_cur_level]
-    _hint_icon_svg = _ap["svg_tpl"].replace("{color}", _ap["color"])
+    # ── Hint card — icon + color matches active tier ──────────────────────────
+    _ap = _CAREER_PRESETS[selected_mode]
+    _hint_icon = _ap["svg_tpl"].replace("{color}", _ap["color"])
     st.markdown(
         f"""<div style="
             margin-top:14px;padding:10px 12px;
-            background:{_ap['bg']};
-            border:1px solid {_ap['border']};
-            border-radius:9px;
-            box-shadow:0 0 14px {_ap['glow']};
+            background:{_ap['bg']};border:1px solid {_ap['border']};
+            border-radius:9px;box-shadow:0 0 14px {_ap['glow']};
             font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-            font-size:0.75rem;color:{_ap['color']};
-            line-height:1.5;
+            font-size:0.75rem;color:{_ap['color']};line-height:1.5;
             display:flex;align-items:flex-start;gap:9px;">
-            <div style="flex-shrink:0;margin-top:1px;">{_hint_icon_svg}</div>
+            <div style="flex-shrink:0;margin-top:1px;">{_hint_icon}</div>
             <span style="font-weight:500;">{_ap['hint']}</span>
         </div>""",
         unsafe_allow_html=True,
@@ -4606,30 +4534,25 @@ with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
         unsafe_allow_html=True,
     )
 
-    # ── Sliders — keyed to session_state so preset clicks update them ─────────
+    # ── Sliders — keyed to session_state; callback writes here, no full rerun ─
     edu_weight = st.slider(
-        "Education", 5, 40,
-        key="ats_edu_w",
+        "Education", 5, 40, key="sl_edu",
         help="Weight given to academic qualifications and degrees.",
     )
     exp_weight = st.slider(
-        "Experience", 5, 45,
-        key="ats_exp_w",
+        "Experience", 5, 45, key="sl_exp",
         help="Weight given to work history, roles, and tenure.",
     )
     skills_weight = st.slider(
-        "Skills", 5, 40,
-        key="ats_skills_w",
+        "Skills", 5, 40, key="sl_skills",
         help="Weight given to technical and domain skill matches.",
     )
     lang_weight = st.slider(
-        "Language", 2, 10,
-        key="ats_lang_w",
+        "Language", 2, 10, key="sl_lang",
         help="Weight given to grammar quality and language clarity.",
     )
     keyword_weight = st.slider(
-        "Keywords", 3, 20,
-        key="ats_keyword_w",
+        "Keywords", 3, 20, key="sl_kw",
         help="Weight given to job-description keyword alignment.",
     )
 
