@@ -8762,11 +8762,9 @@ with tab2:
 
         # Cache PDF bytes in session_state to avoid expensive recomputation on every rerun
         if not st.session_state.get("pdf_resume_bytes"):
-            with st.spinner("📄 Preparing your resume for download..."):
-                time.sleep(2)
-                st.session_state["pdf_resume_bytes"] = html_to_pdf_bytes(
-                    st.session_state["generated_html"]
-                ).read()
+            st.session_state["pdf_resume_bytes"] = html_to_pdf_bytes(
+                st.session_state["generated_html"]
+            ).read()
 
         col1, spacer, col2 = st.columns([1, 0.15, 0.85])
 
