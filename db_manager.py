@@ -442,6 +442,117 @@ HARD RULES — apply these before outputting:
    NOT Data Analytics. Data Analytics requires BI tools (Power BI/Tableau/DAX/Excel pivot).
 
 ════════════════════════════════════════════════════════
+DOMAIN-SPECIFIC DEPTH RULES
+Override generic rules when the detected domain matches.
+For all other domains not listed here, use the generic criteria above.
+════════════════════════════════════════════════════════
+
+UI/UX Design:
+  "tech stack" = Figma, Adobe XD, Sketch, InVision, Zeplin, Maze, Hotjar, Framer
+  "project output" = wireframes, prototypes, case studies, user flows, usability test results
+  "deployed" = Figma prototype link, Behance/Dribbble portfolio, live app where they led the design
+  shallow        → mood boards or colour palettes only, tools listed with no described design process
+  moderate       → 2+ case studies with described design process AND tools used AND outcome
+  moderate_strong→ 4+ case studies OR 1 real internship + 2 case studies OR redesign with user research + A/B results
+  deep           → 6+ months full-time UX/UI role OR measurable impact (conversion %, drop-off %, NPS improvement)
+
+Digital Marketing:
+  "tech stack" = Google Analytics, Meta Ads, SEMrush, HubSpot, Mailchimp, Google Ads, Canva, LinkedIn Ads
+  "project output" = campaign described with CTR/ROAS/reach results, SEO ranking improvement, follower growth, content calendar managed
+  shallow        → only listed marketing tools in skills, no campaigns or results described
+  moderate       → 2+ campaigns described with tools used AND at least one measurable outcome
+  moderate_strong→ 1 real marketing internship + described campaigns OR 4+ campaigns with metrics
+  deep           → 6+ months full-time marketing role OR quantified ROI/ROAS/revenue impact
+
+Data Analytics:
+  "tech stack" = Power BI, Tableau, Excel, DAX, SQL, Looker, Google Data Studio, QlikView
+  "project output" = dashboard built with described business purpose, KPI report with findings, data cleaning pipeline with business outcome
+  shallow        → SQL or Excel listed in skills only, no dashboards or analysis described
+  moderate       → 2+ dashboards or reports described with tool used AND business outcome stated
+  moderate_strong→ 1 real internship + dashboards OR 4+ analytics projects with described findings
+  deep           → 6+ months analyst role OR quantified business impact from analysis (cost saved, revenue found, decisions influenced)
+
+Product Management:
+  "tech stack" = Jira, Confluence, Notion, Figma, Mixpanel, Amplitude, ProductBoard, Miro
+  "project output" = PRD written, roadmap owned, feature shipped with described outcome, user research conducted
+  shallow        → only listed PM tools or buzzwords (agile, scrum) with no described work
+  moderate       → 2+ described PM responsibilities with tools AND at least one feature or outcome mentioned
+  moderate_strong→ 1 real PM internship + described product decisions OR owned roadmap for a live product
+  deep           → 6+ months full-time PM role OR measurable product impact (DAU growth, revenue, retention)
+
+Project Management:
+  "tech stack" = MS Project, Jira, Asana, Monday.com, Smartsheet, Confluence, Trello
+  "project output" = project delivered on time with described scope/budget/team, risk managed, milestone tracked
+  shallow        → only listed PM tools or methodologies (waterfall, agile) with no described project
+  moderate       → 2+ projects managed with described scope, timeline, and outcome
+  moderate_strong→ 1 real PM internship + 2 described projects OR managed cross-functional team with budget
+  deep           → 6+ months full-time PM role OR PMP certified + described project portfolio with outcomes
+
+Business Analysis:
+  "tech stack" = Visio, Lucidchart, Confluence, JIRA, Excel, Balsamiq, BPMN tools
+  "project output" = BRD written, process map created, requirements gathered with described outcome, UAT facilitated
+  shallow        → only listed BA buzzwords (requirements, stakeholders) with no described work
+  moderate       → 2+ described BA deliverables (BRD, process map, use cases) with context
+  moderate_strong→ 1 real BA internship + described deliverables OR gap analysis + process improvement described
+  deep           → 6+ months full-time BA role OR measurable process improvement (time saved, cost reduced, errors eliminated)
+
+Technical Writing:
+  "tech stack" = Confluence, GitBook, Sphinx, Markdown, Swagger/OpenAPI, Docusaurus, ReadTheDocs
+  "project output" = documentation written for a specific product/API, style guide created, knowledge base built
+  shallow        → only listed writing tools or "documentation" in skills with no described work
+  moderate       → 2+ described documentation projects with tool used AND audience/purpose stated
+  moderate_strong→ 1 real technical writing internship + described docs OR API documentation for a live product
+  deep           → 6+ months full-time technical writer role OR documentation for a shipped public product/SDK
+
+Technical Sales:
+  "tech stack" = Salesforce, HubSpot, Zoom, Gong, Outreach, demo environments, POC tools
+  "project output" = POC delivered, demo conducted with described outcome, proposal written, deal closed
+  shallow        → only listed sales buzzwords (B2B, SaaS, pipeline) with no described outcomes
+  moderate       → 2+ described sales activities with tools AND at least one outcome (demo given, POC built)
+  moderate_strong→ 1 real sales/pre-sales internship + described deals OR quota described with achievement
+  deep           → 6+ months full-time sales/pre-sales role OR quantified revenue (deals closed, quota %, ARR)
+
+Agile Coaching:
+  "tech stack" = Jira, Confluence, Miro, Mural, Azure DevOps, SAFe tools
+  "project output" = team facilitated through retrospectives/sprints, agile transformation described, metrics improved
+  shallow        → only Scrum/Agile terminology listed with no described facilitation work
+  moderate       → 2+ described agile ceremonies facilitated OR coaching sessions with outcomes
+  moderate_strong→ 1 real scrum master internship + described ceremonies OR agile transformation described with team size
+  deep           → 6+ months full-time Scrum Master/Agile Coach role OR measurable team improvement (velocity, cycle time, NPS)
+
+Fintech:
+  "tech stack" = payment APIs (Stripe/Razorpay/PayPal), KYC tools, trading APIs, banking SDKs, plus any dev stack
+  "project output" = payment integration described, financial feature built, compliance requirement handled
+  shallow        → only mentioned "fintech" or "payments" with no described implementation
+  moderate       → 2+ projects with payment/financial features described (gateway integration, fraud logic, KYC flow)
+  moderate_strong→ 1 fintech internship + projects OR 4+ financial features built with described outcomes
+  deep           → 6+ months full-time fintech role OR quantified financial system impact (transactions processed, fraud reduced)
+
+Healthcare Tech:
+  "tech stack" = EHR APIs, HL7/FHIR, HIPAA-compliant architecture, medical imaging libraries, telemedicine SDKs
+  "project output" = patient management feature built, HIPAA compliance described, medical API integrated
+  shallow        → only mentioned "healthcare" or "health app" with no described implementation
+  moderate       → 2+ healthcare features described with tools AND compliance awareness mentioned
+  moderate_strong→ 1 healthtech internship + projects OR FHIR/HL7 integration described with real use case
+  deep           → 6+ months full-time healthtech role OR clinical system deployed with described impact
+
+EdTech:
+  "tech stack" = LMS platforms (Moodle/Canvas), SCORM/xAPI, video APIs, quiz engines, adaptive learning tools
+  "project output" = course platform feature built, assessment tool created, LMS integration described
+  shallow        → only mentioned "e-learning" or "education app" with no described implementation
+  moderate       → 2+ edtech features described (quiz engine, video player, progress tracking) with tools
+  moderate_strong→ 1 edtech internship + projects OR LMS integration with described student outcomes
+  deep           → 6+ months full-time edtech role OR learning platform serving real users with described impact
+
+E-commerce:
+  "tech stack" = Shopify/WooCommerce/Magento, payment gateways, inventory APIs, order management systems
+  "project output" = store built with described features, checkout integration, product catalog implemented
+  shallow        → only mentioned "e-commerce" or "online store" with no described implementation
+  moderate       → 2+ e-commerce features described (cart, checkout, product listing) with platform used
+  moderate_strong→ 1 e-commerce internship + projects OR full store built with payment gateway + inventory described
+  deep           → 6+ months full-time e-commerce role OR store with described real traffic/revenue/orders
+
+════════════════════════════════════════════════════════
 OUTPUT FORMAT — CRITICAL
 ════════════════════════════════════════════════════════
 You MUST output EXACTLY two lines. No preamble, no explanation, no punctuation after the value.
