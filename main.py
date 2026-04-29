@@ -50,8 +50,7 @@ from llm_manager import (
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
     get_database_stats, detect_domain_from_title_and_description,
-    get_domain_similarity, build_resume_domain_prompt, build_jd_domain_prompt,
-    DOMAIN_VALID_LIST,
+    get_domain_similarity
 )
 from user_login import (
     create_user_table, add_user, complete_registration, verify_user,
@@ -802,6 +801,28 @@ section[data-testid="stSidebar"] .stTextArea > div > div > textarea {
 }
 .stSlider [data-baseweb="slider"] [data-testid="stTickBar"] > div {
     background: rgba(56,189,248,0.6) !important;
+}
+/* ATS weight sliders — red filled track to match the design */
+div[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] div[data-testid="stSliderTrackFill"] {
+    background: linear-gradient(90deg, #ef4444, #f87171) !important;
+}
+div[data-testid="stSidebar"] .stSlider [data-baseweb="slider"] [role="slider"] {
+    background: #38bdf8 !important;
+    width: 18px !important;
+    height: 18px !important;
+    box-shadow: 0 0 0 3px rgba(56,189,248,0.35), 0 2px 6px rgba(0,0,0,0.4) !important;
+}
+/* Slider value tooltip — accent red, matches screenshots */
+div[data-testid="stSidebar"] .stSlider [data-baseweb="tooltip"] {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+div[data-testid="stSidebar"] .stSlider [data-baseweb="tooltip"] div {
+    color: #f87171 !important;
+    font-weight: 700 !important;
+    font-size: 0.8rem !important;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+    background: transparent !important;
 }
 
 /* ══════════════════════════════════════
@@ -3082,8 +3103,6 @@ _JOB_TITLE_OPTIONS = [
     "Full Stack Developer",        # Full Stack Development
     "Mobile Developer",            # Mobile Development
     # ── Data & AI ──
-    "Data Analyst",                # Data Analytics
-    "BI Analyst",                  # Data Analytics
     "Data Scientist",              # Data Science
     "ML Engineer",                 # AI/Machine Learning
     # ── Infrastructure ──
@@ -4177,69 +4196,6 @@ Good to Have:
 - Background in pharmacy management or lab information systems
 """,
 
-    "Data Analyst": """
-Position: Data Analyst
-Location: [City, India] | Full-Time
-
-About the Role:
-We are hiring a Data Analyst to turn raw data into actionable business insights. You will work closely with business stakeholders and product teams to build dashboards, track KPIs, and drive data-informed decisions.
-
-Key Responsibilities:
-- Collect, clean, and analyze large datasets to surface business insights
-- Build and maintain interactive dashboards and reports using Power BI, Tableau, or Looker Studio
-- Define, track, and report on key business KPIs across sales, marketing, and operations
-- Perform exploratory data analysis (EDA) to identify trends, patterns, and anomalies
-- Develop DAX measures, calculated columns, and Power Query transformations in Power BI
-- Conduct A/B testing analysis and cohort analysis to evaluate campaigns and product performance
-- Automate recurring reports and reduce manual data preparation time
-- Present findings clearly to non-technical stakeholders through data storytelling
-
-Required Skills & Qualifications:
-- B.E./B.Tech/BCA/MCA or Bachelor's in Statistics, Mathematics, or Computer Science
-- 1–4 years of experience in a data analyst or business intelligence role
-- Strong proficiency in SQL for querying relational databases
-- Hands-on experience with Power BI or Tableau for dashboard development
-- Proficiency in Microsoft Excel including pivot tables, VLOOKUP/XLOOKUP, and Power Query
-- Strong analytical thinking and attention to detail
-
-Good to Have:
-- Experience with Python (pandas, matplotlib) for data analysis
-- Familiarity with Google Analytics, Mixpanel, or Amplitude
-- Exposure to data warehousing concepts (star schema, fact/dimension tables)
-- Knowledge of DAX for advanced Power BI calculations
-""",
-
-    "BI Analyst": """
-Position: Business Intelligence (BI) Analyst
-Location: [City, India] | Full-Time
-
-About the Role:
-We are looking for a skilled BI Analyst to design and deliver enterprise-level business intelligence solutions. You will bridge the gap between raw data and strategic decision-making by building scalable dashboards, data models, and self-service reporting infrastructure.
-
-Key Responsibilities:
-- Design, develop, and maintain BI dashboards and reports for business stakeholders
-- Build robust data models in Power BI or Tableau including star/snowflake schemas
-- Write complex DAX formulas and Power Query M scripts for advanced analytics
-- Develop ETL pipelines to integrate data from multiple source systems into the BI layer
-- Collaborate with data engineering teams to ensure data warehouse accuracy
-- Define and govern KPI definitions, business metrics, and reporting standards
-- Build self-service analytics capabilities to reduce ad-hoc reporting requests
-- Create executive-level dashboards and scorecards for C-suite reporting
-
-Required Skills & Qualifications:
-- B.E./B.Tech/BCA/MCA in Computer Science, Statistics, or related field
-- 2–5 years of experience in BI development or data analytics
-- Advanced proficiency in Power BI (DAX, Power Query, data modeling) or Tableau
-- Strong SQL skills including complex joins, window functions, and CTEs
-- Experience with data warehouse platforms (Snowflake, BigQuery, Redshift, or Azure Synapse)
-- Solid understanding of dimensional modeling and BI architecture patterns
-
-Good to Have:
-- Experience with dbt for transformation layer development
-- Familiarity with Python for data manipulation and automation
-- Knowledge of Looker, Metabase, or Apache Superset
-""",
-
     "EdTech Specialist": """\
 Position: EdTech Specialist
 Location: [City, India] | Full-Time
@@ -4283,23 +4239,12 @@ def _get_jd_default() -> str:
     return _JD_TEMPLATES.get(_sel, "")
 
 def _on_jt_change() -> None:
-    """Called when job title selectbox changes — push template into JD field only.
-    
-    IMPORTANT: This callback must NOT touch slider keys (sl_edu, sl_exp, etc.)
-    or the career_mode_radio. Streamlit re-runs the entire script on any
-    session_state write, but as long as slider keys are untouched the sliders
-    keep their current values and the page feels stable.
-    """
+    """Called when job title selectbox changes — push template into JD field."""
     _new_title = st.session_state.get("jt_select", "")
     if _new_title not in ("— Select Job Title —", "Other (type below)", ""):
         st.session_state["jd_textarea"] = _JD_TEMPLATES.get(_new_title, "")
     else:
         st.session_state["jd_textarea"] = ""
-    # Explicitly preserve slider state — read current values and write them
-    # back so they survive the rerun without any visual change.
-    for _sk in ["sl_edu", "sl_exp", "sl_skills", "sl_lang", "sl_kw"]:
-        if _sk in st.session_state:
-            st.session_state[_sk] = st.session_state[_sk]
 
 # ---------------- Job Information Dropdown ----------------
 with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Enter Job Details", expanded=False):
@@ -4419,130 +4364,236 @@ with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.
         st.warning("Please enter a job description to evaluate the resumes.")
 
 # ---------------- Advanced Weights Dropdown ----------------
-# ── Career Level Presets + ATS Scoring Weights ───────────────────────────────
+
+# ── Career-level preset definitions ──────────────────────────────────────────
 _CAREER_PRESETS = {
-    "Fresher (0–1 yr)":     dict(edu=30, exp=15, skills=30, lang=5, kw=10),
-    "Mid-level (2–5 yrs)":  dict(edu=20, exp=30, skills=25, lang=5, kw=10),
-    "Experienced (5+ yrs)": dict(edu=10, exp=40, skills=25, lang=5, kw=10),
+    "fresher": {
+        "label": "Fresher",
+        "sublabel": "0–1 yr",
+        "edu": 30, "exp": 15, "skills": 30, "lang": 5, "keyword": 10,
+        "hint_icon": "🎓",
+        "hint": "Education and skills dominate — no work history to evaluate.",
+        "hint_color": "#34d399",
+        "hint_bg": "rgba(52,211,153,0.10)",
+        "hint_border": "rgba(52,211,153,0.28)",
+        "icon_svg": '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
+    },
+    "midlevel": {
+        "label": "Mid-level",
+        "sublabel": "2–5 yrs",
+        "edu": 20, "exp": 30, "skills": 25, "lang": 5, "keyword": 10,
+        "hint_icon": "💼",
+        "hint": "Balanced — experience begins to outweigh education.",
+        "hint_color": "#38bdf8",
+        "hint_bg": "rgba(56,189,248,0.10)",
+        "hint_border": "rgba(56,189,248,0.28)",
+        "icon_svg": '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>',
+    },
+    "experienced": {
+        "label": "Experienced",
+        "sublabel": "5+ yrs",
+        "edu": 10, "exp": 40, "skills": 25, "lang": 5, "keyword": 10,
+        "hint_icon": "🏆",
+        "hint": "Experience is the dominant signal at senior level.",
+        "hint_color": "#818cf8",
+        "hint_bg": "rgba(129,140,248,0.10)",
+        "hint_border": "rgba(129,140,248,0.28)",
+        "icon_svg": '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>',
+    },
 }
-_PRESET_RATIONALE = {
-    "Fresher (0–1 yr)":     "Education and skills dominate — no work history to evaluate.",
-    "Mid-level (2–5 yrs)":  "Balanced — experience begins to outweigh education.",
-    "Experienced (5+ yrs)": "Experience is the dominant signal at senior level.",
-}
 
-# ── on_change callback: push preset values into slider session state keys ─────
-# This is the ONLY correct way to make a radio update sliders in Streamlit.
-# Passing value= to st.slider only works on first render; after that Streamlit
-# uses session state. The callback writes to session state directly so the
-# sliders re-render with the new preset values on the next run.
-def _apply_career_preset():
-    mode = st.session_state.get("career_mode_radio", "Fresher (0–1 yr)")
-    p = _CAREER_PRESETS.get(mode, _CAREER_PRESETS["Fresher (0–1 yr)"])
-    st.session_state["sl_edu"]    = p["edu"]
-    st.session_state["sl_exp"]    = p["exp"]
-    st.session_state["sl_skills"] = p["skills"]
-    st.session_state["sl_lang"]   = p["lang"]
-    st.session_state["sl_kw"]     = p["kw"]
+# ── Session-state initialisation for career level + slider values ─────────────
+# Must live OUTSIDE the expander so values persist across reruns.
+if "ats_career_level" not in st.session_state:
+    st.session_state["ats_career_level"] = "midlevel"   # sane default
 
-# Initialise slider session state on first load so sliders render with
-# Fresher preset values rather than their hard-coded min defaults.
-if "sl_edu" not in st.session_state:
-    _apply_career_preset()
+# Seed slider defaults from whichever preset is active (only on first run)
+_active_preset_key = st.session_state["ats_career_level"]
+_active_preset     = _CAREER_PRESETS[_active_preset_key]
 
-with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
+for _sk, _sv in [
+    ("ats_edu_w",     _active_preset["edu"]),
+    ("ats_exp_w",     _active_preset["exp"]),
+    ("ats_skills_w",  _active_preset["skills"]),
+    ("ats_lang_w",    _active_preset["lang"]),
+    ("ats_keyword_w", _active_preset["keyword"]),
+]:
+    if _sk not in st.session_state:
+        st.session_state[_sk] = _sv
+
+with st.sidebar.expander("⚙️ Customize ATS Scoring Weights", expanded=False):
+
+    # ── Description text ─────────────────────────────────────────────────────
     st.markdown(
-        "<div style='font-size:0.72rem;color:#64748b;margin-bottom:10px;"
-        "font-family:-apple-system,sans-serif;'>"
+        "<div style='font-size:0.72rem;color:#64748b;margin-bottom:12px;"
+        "font-family:-apple-system,sans-serif;line-height:1.5;'>"
         "Format quality is scored automatically (10 pts fixed). "
-        "Adjust the remaining <b>90 pts</b> below.</div>",
-        unsafe_allow_html=True
+        "Adjust the remaining <b style='color:#94a3b8;'>90 pts</b> below."
+        "</div>",
+        unsafe_allow_html=True,
     )
 
-    # ── Career level selector — 3 styled buttons ─────────────────────────────
-    _MODE_KEYS  = list(_CAREER_PRESETS.keys())
-    _MODE_COLORS = {
-        "Fresher (0–1 yr)":     {"active_border": "#1D9E75", "active_bg": "rgba(29,158,117,0.15)",
-                                  "active_text": "#6ee7b7",  "svg_stroke": "#1D9E75"},
-        "Mid-level (2–5 yrs)":  {"active_border": "#378ADD", "active_bg": "rgba(55,138,221,0.15)",
-                                  "active_text": "#7dd3fc",  "svg_stroke": "#378ADD"},
-        "Experienced (5+ yrs)": {"active_border": "#7F77DD", "active_bg": "rgba(127,119,221,0.15)",
-                                  "active_text": "#c4b5fd",  "svg_stroke": "#7F77DD"},
-    }
-    _MODE_SVGS = {
-        "Fresher (0–1 yr)":
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
-        "Mid-level (2–5 yrs)":
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>',
-        "Experienced (5+ yrs)":
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="{c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/><polyline points="16 3 18 5 22 1"/></svg>',
-    }
-    _MODE_LABELS = {
-        "Fresher (0–1 yr)":     ("Fresher",     "0–1 yr"),
-        "Mid-level (2–5 yrs)":  ("Mid-level",   "2–5 yrs"),
-        "Experienced (5+ yrs)": ("Experienced", "5+ yrs"),
-    }
+    # ── Career-level selector — native st.radio, styled as pill cards ───────────
+    # Using st.radio (not buttons + st.rerun) so selection is handled by
+    # Streamlit's own diffing — no full-page reruns, no overlay hacks.
+    _active_level = st.session_state["ats_career_level"]
+    _radio_active_color = (
+        "#34d399" if _active_level == "fresher"    else
+        "#38bdf8" if _active_level == "midlevel"   else
+        "#818cf8"
+    )
+    _radio_active_bg = (
+        "rgba(52,211,153,0.13)"  if _active_level == "fresher"    else
+        "rgba(56,189,248,0.13)"  if _active_level == "midlevel"   else
+        "rgba(129,140,248,0.13)"
+    )
+    _radio_active_glow = (
+        "rgba(52,211,153,0.20)"  if _active_level == "fresher"    else
+        "rgba(56,189,248,0.20)"  if _active_level == "midlevel"   else
+        "rgba(129,140,248,0.20)"
+    )
+    st.markdown(f"""
+    <style>
+    /* Hide the default "Career Level" radio label */
+    div[data-testid="stSidebar"] div[data-testid="stRadio"] > label {{
+        display: none !important;
+    }}
+    /* Horizontal layout */
+    div[data-testid="stSidebar"] div[data-testid="stRadio"] > div[role="radiogroup"] {{
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 6px !important;
+        width: 100% !important;
+    }}
+    /* Each option card */
+    div[data-testid="stSidebar"] div[data-testid="stRadio"] > div[role="radiogroup"] > label {{
+        flex: 1 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 10px 4px 8px !important;
+        border-radius: 10px !important;
+        border: 1px solid rgba(255,255,255,0.08) !important;
+        background: rgba(255,255,255,0.03) !important;
+        cursor: pointer !important;
+        transition: border 0.15s ease, background 0.15s ease, box-shadow 0.15s ease !important;
+        min-height: 64px !important;
+        text-align: center !important;
+    }}
+    div[data-testid="stSidebar"] div[data-testid="stRadio"] > div[role="radiogroup"] > label:hover {{
+        background: rgba(255,255,255,0.07) !important;
+        border-color: rgba(255,255,255,0.2) !important;
+    }}
+    /* Hide the actual radio input circle */
+    div[data-testid="stSidebar"] div[data-testid="stRadio"] > div[role="radiogroup"] > label > div:first-child {{
+        display: none !important;
+    }}
+    /* Label text */
+    div[data-testid="stSidebar"] div[data-testid="stRadio"] > div[role="radiogroup"] > label > div:last-child {{
+        margin-left: 0 !important;
+        text-align: center !important;
+        font-size: 0.71rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.03em !important;
+        color: #64748b !important;
+        line-height: 1.35 !important;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+        white-space: pre-line !important;
+    }}
+    /* Selected card — dynamically colored per active level */
+    div[data-testid="stSidebar"] div[data-testid="stRadio"] > div[role="radiogroup"] > label[aria-checked="true"] {{
+        border: 2px solid {_radio_active_color} !important;
+        background: {_radio_active_bg} !important;
+        box-shadow: 0 0 14px {_radio_active_glow} !important;
+    }}
+    div[data-testid="stSidebar"] div[data-testid="stRadio"] > div[role="radiogroup"] > label[aria-checked="true"] > div:last-child {{
+        color: {_radio_active_color} !important;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
 
-    # Hidden radio drives the actual state — rendered invisible, buttons below are the UI
-    selected_mode = st.radio(
-        "Career level",
-        options=_MODE_KEYS,
-        index=0,
-        key="career_mode_radio",
-        on_change=_apply_career_preset,
-        label_visibility="collapsed",
+    _radio_selected = st.radio(
+        "Career Level",
+        options=list(_CAREER_PRESETS.keys()),
+        format_func=lambda k: f"{_CAREER_PRESETS[k]['hint_icon']}  {_CAREER_PRESETS[k]['label']}\n{_CAREER_PRESETS[k]['sublabel']}",
+        index=list(_CAREER_PRESETS.keys()).index(st.session_state["ats_career_level"]),
         horizontal=True,
+        key="ats_career_radio",
+        label_visibility="collapsed",
     )
 
-    # Styled button row — clicking a button sets the radio key then triggers rerun
-    _btn_cols = st.columns(3)
-    for _ci, _mk in enumerate(_MODE_KEYS):
-        _mc   = _MODE_COLORS[_mk]
-        _is_active = (selected_mode == _mk)
-        _svg  = _MODE_SVGS[_mk].replace("{c}", _mc["svg_stroke"] if _is_active else "#64748b")
-        _lbl  = _MODE_LABELS[_mk]
-        _border = f"2px solid {_mc['active_border']}" if _is_active else "1px solid rgba(255,255,255,0.1)"
-        _bg     = _mc["active_bg"] if _is_active else "rgba(255,255,255,0.03)"
-        _tc     = _mc["active_text"] if _is_active else "#64748b"
-        _btn_cols[_ci].markdown(
-            f'<div style="border:{_border};background:{_bg};border-radius:10px;' +
-            f'padding:8px 6px;text-align:center;cursor:default;">' +
-            f'<div style="margin-bottom:3px;">{_svg}</div>' +
-            f'<div style="font-size:0.72rem;font-weight:600;color:{_tc};line-height:1.2;">{_lbl[0]}</div>' +
-            f'<div style="font-size:0.65rem;color:{_tc};opacity:0.75;">{_lbl[1]}</div>' +
-            f'</div>',
-            unsafe_allow_html=True
-        )
+    # When radio changes → update career level + push new preset values into
+    # slider session-state keys. Streamlit re-renders sliders automatically
+    # (no st.rerun() needed — the radio widget change itself triggers a rerun).
+    if _radio_selected != st.session_state["ats_career_level"]:
+        _new_p = _CAREER_PRESETS[_radio_selected]
+        st.session_state["ats_career_level"] = _radio_selected
+        st.session_state["ats_edu_w"]     = _new_p["edu"]
+        st.session_state["ats_exp_w"]     = _new_p["exp"]
+        st.session_state["ats_skills_w"]  = _new_p["skills"]
+        st.session_state["ats_lang_w"]    = _new_p["lang"]
+        st.session_state["ats_keyword_w"] = _new_p["keyword"]
+        # st.rerun() NOT needed — radio widget change already triggers rerun
 
-    # Rationale pill
-    _rationale_colors = {
-        "Fresher (0–1 yr)":     ("rgba(29,158,117,0.12)", "rgba(29,158,117,0.35)", "#6ee7b7"),
-        "Mid-level (2–5 yrs)":  ("rgba(55,138,221,0.12)", "rgba(55,138,221,0.35)", "#7dd3fc"),
-        "Experienced (5+ yrs)": ("rgba(127,119,221,0.12)","rgba(127,119,221,0.35)","#c4b5fd"),
-    }
-    _rc = _rationale_colors[selected_mode]
+    # ── Active-preset hint card — color matches selected level ───────────────
+    _cur_preset  = _CAREER_PRESETS[st.session_state["ats_career_level"]]
+    # Per-level glow intensity on the hint card border
+    _hint_shadow = (
+        "0 0 16px rgba(52,211,153,0.12)"   if st.session_state["ats_career_level"] == "fresher"    else
+        "0 0 16px rgba(56,189,248,0.12)"   if st.session_state["ats_career_level"] == "midlevel"   else
+        "0 0 16px rgba(129,140,248,0.12)"
+    )
     st.markdown(
-        f"<div style='font-size:0.72rem;color:{_rc[2]};background:{_rc[0]};"
-        f"border:1px solid {_rc[1]};border-radius:8px;padding:7px 10px;"
-        f"margin-top:8px;margin-bottom:10px;font-family:-apple-system,sans-serif;line-height:1.5;'>"
-        f"{_MODE_SVGS[selected_mode].replace('{c}', _rc[2])}&nbsp; {_PRESET_RATIONALE[selected_mode]}"
-        f"</div>",
-        unsafe_allow_html=True
+        f"""<div style="
+            margin-top:12px;padding:10px 13px;
+            background:{_cur_preset['hint_bg']};
+            border:1px solid {_cur_preset['hint_border']};
+            border-radius:9px;
+            box-shadow:{_hint_shadow};
+            font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+            font-size:0.76rem;color:{_cur_preset['hint_color']};
+            line-height:1.5;display:flex;align-items:flex-start;gap:8px;">
+            <span style="flex-shrink:0;font-size:1rem;line-height:1.4;">{_cur_preset['hint_icon']}</span>
+            <span style="font-weight:500;">{_cur_preset['hint']}</span>
+        </div>""",
+        unsafe_allow_html=True,
     )
 
-    # ── Fine-tune sliders ─────────────────────────────────────────────────────
+    # ── Fine-tune section label ───────────────────────────────────────────────
     st.markdown(
-        "<div style='font-size:0.72rem;font-weight:700;letter-spacing:0.08em;"
-        "text-transform:uppercase;color:#4a5568;margin-bottom:8px;"
-        "font-family:-apple-system,sans-serif;'>Fine-tune</div>",
-        unsafe_allow_html=True
+        "<div style='margin:14px 0 6px;font-size:0.65rem;font-weight:700;"
+        "letter-spacing:0.12em;text-transform:uppercase;color:#4a5568;"
+        "font-family:-apple-system,sans-serif;'>Fine-Tune</div>",
+        unsafe_allow_html=True,
     )
 
-    edu_weight     = st.slider("Education",  5,  40, key="sl_edu")
-    exp_weight     = st.slider("Experience", 5,  45, key="sl_exp")
-    skills_weight  = st.slider("Skills",     5,  40, key="sl_skills")
-    lang_weight    = st.slider("Language",   2,  10, key="sl_lang")
-    keyword_weight = st.slider("Keywords",   3,  20, key="sl_kw")
+    # ── Sliders — read initial value from session_state (set by preset buttons) ─
+    edu_weight = st.slider(
+        "EDUCATION", 5, 40,
+        key="ats_edu_w",
+        help="Weight given to academic qualifications and degrees.",
+    )
+    exp_weight = st.slider(
+        "EXPERIENCE", 5, 45,
+        key="ats_exp_w",
+        help="Weight given to work history, roles, and tenure.",
+    )
+    skills_weight = st.slider(
+        "SKILLS", 5, 40,
+        key="ats_skills_w",
+        help="Weight given to technical and domain skill matches.",
+    )
+    lang_weight = st.slider(
+        "LANGUAGE", 2, 10,
+        key="ats_lang_w",
+        help="Weight given to grammar quality and language clarity.",
+    )
+    keyword_weight = st.slider(
+        "KEYWORDS", 3, 20,
+        key="ats_keyword_w",
+        help="Weight given to job-description keyword alignment.",
+    )
 
     total_weight  = edu_weight + exp_weight + skills_weight + lang_weight + keyword_weight
     weights_valid = (total_weight == 90)
@@ -4552,23 +4603,29 @@ with st.sidebar.expander("Customize ATS Scoring Weights", expanded=False):
         _remaining  = 90 - total_weight
         _direction  = f"remove {abs(_remaining)}" if _remaining < 0 else f"add {_remaining}"
         st.markdown(
-            f"<div style=\"display:flex;align-items:center;gap:8px;border:1px solid rgba(251,113,133,0.3);"
-            f"background:rgba(251,113,133,0.08);padding:10px 14px;border-radius:10px;\">"
-            f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#fb7185\" style=\"flex-shrink:0;\">"
-            f"<path d=\"M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.83 0-1.5.67-1.5 1.5S11.17 20 12 20s1.5-.67 1.5-1.5S12.83 17 12 17zm1-4V7h-2v6h2z\"/></svg>"
-            f"<span style=\"color:#fca5a5;font-size:0.8rem;font-weight:600;font-family:-apple-system,sans-serif;\">"
-            f"Total = {total_weight}/90 — {_direction} pts. Analysis blocked.</span></div>",
-            unsafe_allow_html=True
+            f"<div style=\"margin-top:10px;display:flex;align-items:center;gap:8px;"
+            f"border:1px solid rgba(251,113,133,0.3);"
+            f"background:linear-gradient(135deg,rgba(251,113,133,0.12) 0%,rgba(251,113,133,0.05) 100%);"
+            f"padding:10px 14px;border-radius:10px;backdrop-filter:blur(12px);\">"
+            f"<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='#fb7185' style='flex-shrink:0;'>"
+            f"<path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 15c-.83 0-1.5.67-1.5 1.5S11.17 20 12 20s1.5-.67 1.5-1.5S12.83 17 12 17zm1-4V7h-2v6h2z'/></svg>"
+            f"<span style=\"color:#fca5a5;font-weight:600;font-size:0.78rem;font-family:-apple-system,sans-serif;\">"
+            f"Total = {total_weight} / 90 — {_direction} pts to balance."
+            f"</span></div>",
+            unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            f"<div style=\"display:flex;align-items:center;gap:8px;border:1px solid rgba(52,211,153,0.28);"
-            f"background:rgba(52,211,153,0.08);padding:10px 14px;border-radius:10px;\">"
-            f"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"#34d399\" style=\"flex-shrink:0;\">"
-            f"<path d=\"M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.3 7.7l-1.4-1.4z\"/></svg>"
-            f"<span style=\"color:#6ee7b7;font-size:0.8rem;font-weight:600;font-family:-apple-system,sans-serif;\">"
-            f"Weights balanced · Content = 90 pts · Format = 10 pts · Total = 100</span></div>",
-            unsafe_allow_html=True
+            f"<div style=\"margin-top:10px;display:flex;align-items:center;gap:8px;"
+            f"border:1px solid rgba(52,211,153,0.28);"
+            f"background:linear-gradient(135deg,rgba(52,211,153,0.12) 0%,rgba(52,211,153,0.05) 100%);"
+            f"padding:10px 14px;border-radius:10px;backdrop-filter:blur(12px);\">"
+            f"<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='#34d399' style='flex-shrink:0;'>"
+            f"<path d='M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.3 7.7l-1.4-1.4z'/></svg>"
+            f"<span style=\"color:#6ee7b7;font-weight:600;font-size:0.78rem;font-family:-apple-system,sans-serif;\">"
+            f"Weights balanced · Content = 90 pts · Format = 10 pts · Total = 100"
+            f"</span></div>",
+            unsafe_allow_html=True,
         )
 
 with tab1:
@@ -4913,188 +4970,314 @@ if uploaded_files and job_description and weights_valid:
         # FIX: detect domains on the main thread BEFORE spawning parallel threads.
         # This prevents both threads from simultaneously reading/writing st.session_state
         # and firing duplicate LLM calls for domain detection.
-        # ── Domain detection using shared builders — single source of truth ────
-        # Replaces inline _pre_valid_domains + inline prompts with
-        # build_resume_domain_prompt() / build_jd_domain_prompt() from db_manager.
-        # Also fixes: 2500→3000 char truncation, stale Data Science rule,
-        # missing Data Analytics domain, and fallback now uses
-        # detect_domain_with_confidence() for dual LLM+keyword validation.
+        _pre_valid_domains = [
+            "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
+            "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
+            "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
+            "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
+            "Networking", "Site Reliability Engineering", "Product Management", "Project Management",
+            "Business Analysis", "Technical Writing", "Digital Marketing", "E-commerce", "Fintech",
+            "Healthcare Tech", "EdTech", "IoT Development", "AR/VR Development", "Technical Sales",
+            "Agile Coaching", "Software Engineering"
+        ]
+        _pre_domain_list = ", ".join(_pre_valid_domains)
 
-        _pre_valid_domains = DOMAIN_VALID_LIST
-        _pre_domain_list   = ", ".join(_pre_valid_domains)
-
-        # ── Resume domain pre-detection ───────────────────────────────────────
         _pre_resume_cache_key = f"resume_domain_{hash(full_text[:500])}"
         if _pre_resume_cache_key not in st.session_state:
-            # Extract title hint from resume header for better title_overrides accuracy
-            def _extract_title_hint(text):
-                import re as _re_th
-                header = text[:800].lower()
-                m = _re_th.search(
-                    r"(?:^|\n)([a-z][a-z/ |-]{4,40}(?:engineer|developer|analyst|scientist|"
-                    r"architect|manager|designer|specialist|consultant|lead|intern|fresher))",
-                    header
-                )
-                if m:
-                    return m.group(1).strip()
-                lines = [l.strip() for l in text[:400].split("\n") if l.strip()]
-                if len(lines) >= 2:
-                    c = lines[1]
-                    if len(c) < 60 and any(w in c.lower() for w in
-                       ["engineer","developer","analyst","designer","manager",
-                        "scientist","architect","intern","fresher","specialist"]):
-                        return c
-                return ""
+            _pre_resume_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across all levels — freshers, students, mid-level, and senior professionals.
 
-            _pre_title_hint = _extract_title_hint(full_text)
-            # Use shared prompt builder (3000 chars, Data Analytics rule, FREQUENCY RULE)
-            _pre_resume_prompt = build_resume_domain_prompt(full_text, title_hint=_pre_title_hint)
+Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.
 
-            def _infer_depth_from_text(text):
-                """Keyword-based depth inference — last-resort fallback when LLM parse fails."""
-                _rt = text.lower()
-                # FIX: veto "self-employed" and "no prior full time" from triggering deep
-                _ft_raw   = any(kw in _rt for kw in [
-                    "years of experience", "yrs of experience", "full-time", "full time",
-                    "employed", "employment", "promoted", "production system",
-                ])
-                _self_emp = bool(re.search(r'\bself[\s-]employed\b', _rt))
-                _no_ft    = bool(re.search(r'\bno\s+(prior\s+)?(full[\s-]time|fulltime)\b', _rt))
-                _ft       = _ft_raw and not _self_emp and not _no_ft
-                # Strip education score lines so "ISC 82%", "CGPA 8.77" don't fire quantified
-                _rt_no_edu = re.sub(
-                    r'(cgpa|gpa|sgpa|ssc|hsc|isc|icse|cbse|percentage|marks|score|grade)'
-                    r'[^\n]{0,30}\d+[\d.]*\s*[%/]?[^\n]*', '', _rt
-                )
-                _qt = bool(re.search(
-                    r'\b\d+\s*(users?|customers?|requests?|rpm|ms\b|seconds?|'
-                    r'latency|revenue|million|billion|[%]\s*(improvement|reduction|increase|decrease|faster|accuracy))',
-                    _rt_no_edu
-                ))
-                _pj = len(re.findall(
-                    r'\b(project|built|developed|implemented|designed)\b', _rt
-                )) >= 3
-                # FIX: veto aspirational "seeking internship" and "no internship"
-                _it_raw  = bool(re.search(r'\b(internship|intern\b|trainee)\b', _rt))
-                _seeking = bool(re.search(
-                    r'\b(seek|seeking|looking for|want|apply|applied|need|needed|'
-                    r'searching for|interested in)\s+(an?\s+)?(internship|intern\b)', _rt
-                ))
-                _no_int  = bool(re.search(r'\bno\s+(prior\s+)?internship\b', _rt))
-                _it      = _it_raw and not _seeking and not _no_int
-                # Virtual / certificate-only signals
-                _vt = bool(re.search(
-                    r'\b(aicte virtual|oasis infobyte|internshala|certificate program|'
-                    r'online mode|edunet|virtual internship|forage|inplant training)\b', _rt
-                ))
-                # FIX: if both virtual cert AND real named-company internship exist, real wins
-                _real_co = bool(re.search(
-                    r'\b(intern|internship)\b.{0,60}\b(at|with|@)\b.{0,40}'
-                    r'\b(pvt|ltd|llp|inc|corp|technologies|solutions|systems|'
-                    r'infosys|tcs|wipro|accenture|cognizant|capgemini|ibm|amazon|'
-                    r'google|microsoft|flipkart|swiggy|zomato|razorpay|paytm|'
-                    r'byju|meesho|ola|myntra|zepto|cred|freshworks|zoho|hcl)\b', _rt
-                ))
-                if _vt and _real_co:
-                    _vt = False
-                if _ft or _qt:
-                    return "deep"
-                if (_it and not _vt) or _pj:
-                    return "moderate"
-                return "shallow"
+════════════════════════════════════════════════════════
+STEP 1 — DETERMINE CANDIDATE LEVEL FIRST
+════════════════════════════════════════════════════════
 
+Classify the candidate into one of these levels before picking a domain:
+
+LEVEL A — Pure Fresher / Student with NO specialization evidence:
+  • Still studying OR just graduated
+  • No internship OR only 1 internship with no described work
+  • Projects listed as names only (no descriptions, no tech stack mentioned)
+  • Skills are only basic CS fundamentals (Java, C, C++, Python, HTML, SQL alone)
+  → DEFAULT to "Software Engineering" immediately. Do not over-classify.
+  → EXAMPLES: Only Java+MySQL+DBMS listed, no projects described → "Software Engineering"
+
+LEVEL B — Fresher / Student WITH specialization evidence:
+  • Still studying OR recently graduated BUT has AT LEAST ONE of:
+    - 1 internship where the domain is clearly described (e.g. "frontend web development internship")
+    - 1 project with a description mentioning domain-specific technologies
+    - Skills showing a clear technology stack (not just basics)
+  → DO classify into a specific domain based on the strongest evidence
+  → EXAMPLES:
+    - HTML+CSS+JS+React + frontend internship described → "Frontend Development"
+    - Django/Laravel + MySQL + web project described, NO frontend tech mentioned → "Backend Development"
+    - Django/Laravel + MySQL + HTML+CSS+JS + web project described → "Full Stack Development"
+    - Android/Flutter + built a mobile app described → "Mobile Development"
+    - TensorFlow/PyTorch + ML project described → "AI/Machine Learning"
+
+LEVEL C — Experienced Professional (1+ years full-time work):
+  → ALWAYS classify into a specific domain — never default to "Software Engineering" unless truly mixed
+  → Use job titles + tech stack + years of experience as primary signals
+
+════════════════════════════════════════════════════════
+STEP 2 — DOMAIN CLASSIFICATION RULES (for Level B and C)
+════════════════════════════════════════════════════════
+
+RULE A — DO NOT over-classify from basic skills alone (applies to ALL levels):
+  ✗ Java + MySQL + DBMS alone → NOT "Backend Development"
+  ✗ HTML + CSS alone → NOT "Frontend Development"
+  ✗ Python alone → NOT "AI/Machine Learning" or "Data Science"
+  ✗ SQL alone → NOT "Database Management" or "Data Science"
+  ✗ C / C++ alone → NOT "Embedded Systems" or "Software Engineering" specialist
+  ✓ Basic CS languages without frameworks + no described projects → "Software Engineering"
+
+RULE B — WHAT COUNTS AS TRUE DOMAIN EVIDENCE:
+  → Frontend Development:
+     MUST have: HTML+CSS+JS PLUS at least one of (React/Vue/Angular/Bootstrap/jQuery)
+     AND: at least 1 described project OR internship explicitly about frontend/web UI
+     
+  → Backend Development:
+     MUST have: A backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI)
+     AND: database integration (MySQL/PostgreSQL/MongoDB) in a described project
+     NOT just: Java + SQL listed in skills with no project context
+     ⚠ "website" in project name does NOT mean Full Stack. Django + database + no frontend = Backend.
+     
+  → Full Stack Development:
+     MUST have: frontend technologies (HTML+CSS+JS or React/Vue/Angular/Bootstrap/jQuery)
+     AND: backend framework + database — ALL THREE explicitly present
+     AND: at least 1 project or internship that uses both frontend and backend
+     SELF-IDENTIFICATION counts: if summary says "full stack" or "front-end and back-end" → Full Stack
+     ⚠ "website" + backend framework alone is NOT Full Stack — frontend tech must be explicitly named.
+     
+  → Mobile Development:
+     MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift
+     AND: at least 1 described mobile app project
+     
+  → Data Science:
+     MUST have: pandas/numpy/matplotlib/seaborn/tableau/power bi
+     AND: actual data analysis or visualization project described
+     NOT just: SQL or Excel listed in skills
+     
+  → AI/Machine Learning:
+     MUST have: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/LLM/NLP/Computer Vision
+     AND: model training or ML pipeline described in a project
+     
+  → Cybersecurity:
+     MUST have: security tools (Kali/Burp Suite/Wireshark/Metasploit) OR security concepts (pentesting/OWASP/CTF)
+     AND: security internship or project described
+     NOTE: A cybersecurity VIRTUAL internship with no tools described = weak signal, check other evidence too
+     
+  → DevOps/Infrastructure:
+     MUST have: Docker/Kubernetes/CI-CD/Jenkins/Terraform/Ansible
+     AND: deployment or infrastructure project described
+     
+  → Cloud Engineering:
+     MUST have: AWS/Azure/GCP services (not just "cloud" mentioned)
+     AND: cloud deployment or architecture in a project
+     
+  → UI/UX Design:
+     MUST have: Figma/Adobe XD/Sketch/InVision
+     AND: wireframes/prototypes/user research described
+     
+  → Database Management:
+     MUST have: DBA role OR database optimization/administration as PRIMARY focus
+     NOT just: SQL listed as one of many skills
+     
+  → Product Management:
+     MUST have: product ownership, roadmaps, PRDs, stakeholder management
+     NOT just: Agile/Scrum keywords
+     
+  → Project Management:
+     MUST have: managing teams, project delivery, PMP/Prince2 or equivalent experience
+     
+  → Business Analysis:
+     MUST have: requirements gathering, process mapping, business case writing
+     
+  → Digital Marketing:
+     MUST have: SEO/SEM/campaigns/social media marketing with actual results
+     
+  → Blockchain Development:
+     MUST have: Solidity/Web3/Smart Contracts/Ethereum/DeFi in described projects
+     
+  → Game Development:
+     MUST have: Unity/Unreal Engine/game mechanics in described projects
+     
+  → Embedded Systems:
+     MUST have: microcontroller/RTOS/firmware/hardware programming described
+     
+  → IoT Development:
+     MUST have: IoT devices/sensors/protocols (MQTT/CoAP) + hardware integration
+     
+  → AR/VR Development:
+     MUST have: ARKit/ARCore/Unity3D/Unreal/Oculus in described projects
+
+RULE C — MIXED SIGNALS → pick the DOMINANT domain:
+  • Count: technologies + described projects + internship titles per domain
+  • The domain with the most evidence wins
+  • If frontend has 3 signals and cybersecurity has 1 virtual internship → Frontend wins
+  • If truly equal across 2 domains → "Full Stack Development" if they're frontend+backend, else "Software Engineering"
+  ⚠ INTERNSHIP TITLE CONFLICT RULE (critical for Level B):
+    If internship title suggests Domain A BUT skills + projects have 3+ strong signals for Domain B
+    AND Domain B is more specific than Domain A → Domain B wins over the internship title.
+    EXAMPLE: "Full Stack Developer Intern" + LangChain/LLaMA/RAG/FAISS/LLMs in skills+projects
+             → "AI/Machine Learning" wins, NOT "Full Stack Development"
+    EXAMPLE: "Full Stack Developer Intern" + only HTML/CSS/React/Node projects, no AI tools
+             → "Full Stack Development" wins correctly
+    EXAMPLE: "Android Developer Intern" + Flutter/Kotlin projects → "Mobile Development" wins correctly
+
+RULE D — RESEARCH / ACADEMIC profiles:
+  • Research intern at university/NIT/IIT/ISRO/DRDO etc. → classify by research TOPIC
+  • AI/accessibility/NLP research → "AI/Machine Learning"
+  • Security research → "Cybersecurity"  
+  • Hardware/systems research → "Embedded Systems" or "Software Engineering"
+  • Generic CS research → "Software Engineering"
+
+RULE E — CAREER SWITCHERS:
+  • If candidate has old domain (e.g. mechanical engineer) but new projects/courses in tech → classify by new tech domain
+  • Recent certifications + projects in new domain outweigh old job titles
+
+RULE F — JOB TITLE as strong signal (Level C only):
+  • ONLY applies to Level C (1+ years full-time work experience)
+  • For Level C: explicit job title is the STRONGEST single signal
+  • "Backend Developer" → "Backend Development", "Data Analyst" → "Data Science"
+  ⚠ For Level B (freshers/students): internship title is ONE signal among many.
+    It can be OVERRIDDEN if skills + projects show 3+ strong signals for a different domain.
+    Do NOT blindly use internship title for Level B — apply Rule C conflict check first.
+
+════════════════════════════════════════════════════════
+STEP 3 — FINAL CHECK BEFORE ANSWERING
+════════════════════════════════════════════════════════
+
+Ask yourself:
+1. What is the candidate's LEVEL? (A / B / C)
+2. If Level A → return "Software Engineering"
+3. If Level B or C → what domain has the MOST evidence (technologies + described projects + internship/job titles)?
+4. Does that domain meet the TRUE EVIDENCE bar from Rule B?
+5. If Full Stack → are frontend tech + backend framework + database ALL explicitly mentioned? If frontend is missing → Backend, not Full Stack.
+6. If Level B → did I check Rule C conflict? Does the internship title conflict with skills+projects?
+   If yes → let skills+projects override the internship title.
+7. If Level C → is there a job title confirming the domain (Rule F)?
+8. If yes → return that domain. If no → return "Software Engineering"
+
+════════════════════════════════════════════════════════
+Resume Text:
+{full_text[:2500]}
+════════════════════════════════════════════════════════
+
+Return ONLY one domain from this list, nothing else:
+{_pre_domain_list}
+"""
             try:
-                _raw_pre = call_llm(_pre_resume_prompt, session=st.session_state).strip()
-
-                # ── Parse domain + depth — strip preamble/punctuation/case ──
-                _pre_domain_line = ""
-                _pre_depth_raw   = ""
-                for _ln in _raw_pre.splitlines():
-                    _ln = _ln.strip()
-                    if _ln.lower().startswith("domain:"):
-                        _pre_domain_line = _ln.split(":", 1)[1].strip().rstrip(".")
-                    elif _ln.lower().startswith("depth:"):
-                        _pre_depth_raw = _ln.split(":", 1)[1].strip().lower().rstrip(".")
-                _pre_depth_val = _pre_depth_raw if _pre_depth_raw in ("shallow", "moderate", "moderate_strong", "deep") else ""
-
-                # ── Retry if depth token is missing or unrecognised ───────────
-                if not _pre_depth_val:
-                    import logging as _log_pre
-                    _log_pre.getLogger(__name__).warning(
-                        "mainn_tabb1 pre-detection: Depth line missing/invalid. "
-                        f"Raw token: {repr(_pre_depth_raw)!r}. Retrying."
-                    )
-                    _retry_pre = (
-                        f"{_pre_resume_prompt}\n\n"
-                        "REMINDER: Your previous response was missing or had an invalid Depth line.\n"
-                        "You MUST output exactly two lines and nothing else:\n"
-                        "Domain: <domain>\n"
-                        "Depth: shallow   (or moderate, or moderate_strong, or deep)\n"
-                        "Do not write anything before or after these two lines."
-                    )
-                    try:
-                        _raw_pre2 = call_llm(_retry_pre, session=st.session_state).strip()
-                        for _ln in _raw_pre2.splitlines():
-                            _ln = _ln.strip()
-                            if _ln.lower().startswith("domain:") and not _pre_domain_line:
-                                _pre_domain_line = _ln.split(":", 1)[1].strip().rstrip(".")
-                            elif _ln.lower().startswith("depth:"):
-                                _d2 = _ln.split(":", 1)[1].strip().lower().rstrip(".")
-                                if _d2 in ("shallow", "moderate", "moderate_strong", "deep"):
-                                    _pre_depth_val = _d2
-                                    break
-                    except Exception:
-                        pass
-
-                # ── Keyword fallback if both LLM calls failed ─────────────────
-                if not _pre_depth_val:
-                    _pre_depth_val = _infer_depth_from_text(full_text)
-                    import logging as _log_pre
-                    _log_pre.getLogger(__name__).warning(
-                        f"mainn_tabb1: Depth inferred via keyword fallback as '{_pre_depth_val}'."
-                    )
-
-                if _pre_domain_line in _pre_valid_domains:
-                    st.session_state[_pre_resume_cache_key]            = _pre_domain_line
-                    st.session_state[_pre_resume_cache_key + "_depth"] = _pre_depth_val
+                _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
+                if _r in _pre_valid_domains:
+                    st.session_state[_pre_resume_cache_key] = _r
                 else:
-                    _kw = db_manager.detect_domain_with_confidence(_pre_title_hint, full_text[:3000]).get("domain")
-                    st.session_state[_pre_resume_cache_key]            = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
-                    st.session_state[_pre_resume_cache_key + "_depth"] = _pre_depth_val
-
+                    # LLM returned invalid domain — fall back to keyword detection
+                    _kw = db_manager.detect_domain_from_title_and_description("", full_text[:3000])
+                    st.session_state[_pre_resume_cache_key] = _kw if _kw != "Unclassified" else "Software Engineering"
             except Exception:
-                # LLM call itself failed — infer depth from text, fall back on keyword domain
-                _inferred = _infer_depth_from_text(full_text)
+                # LLM failed entirely — fall back to keyword detection
                 try:
-                    _kw = db_manager.detect_domain_with_confidence(_pre_title_hint, full_text[:3000]).get("domain")
-                    st.session_state[_pre_resume_cache_key]            = _kw if _kw and _kw != "Unclassified" else "Software Engineering"
-                    st.session_state[_pre_resume_cache_key + "_depth"] = _inferred
+                    _kw = db_manager.detect_domain_from_title_and_description("", full_text[:3000])
+                    st.session_state[_pre_resume_cache_key] = _kw if _kw != "Unclassified" else "Software Engineering"
                 except Exception:
-                    st.session_state[_pre_resume_cache_key]            = "Software Engineering"
-                    st.session_state[_pre_resume_cache_key + "_depth"] = _inferred
+                    st.session_state[_pre_resume_cache_key] = "Software Engineering"
         _pre_resume_domain = st.session_state[_pre_resume_cache_key]
 
-        # ── JD domain pre-detection ───────────────────────────────────────────
         _pre_jd_cache_key = f"jd_domain_{hash(job_description[:500])}"
         if _pre_jd_cache_key not in st.session_state:
-            _pre_jd_prompt = build_jd_domain_prompt(job_title, job_description)
+            _pre_jd_prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions across all industries and levels.
+
+Your ONLY job: identify the PRIMARY professional domain this job description is hiring for.
+
+════════════════════════════════════════════════════════
+STEP 1 — READ THE JOB TITLE FIRST (strongest signal)
+════════════════════════════════════════════════════════
+
+Job Title: {job_title}
+
+If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scientist", "DevOps Engineer", "UX Designer"), use that domain directly — do not over-analyse the description.
+
+Title override examples:
+  "Backend Developer" → "Backend Development"
+  "Data Analyst" → "Data Science"
+  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
+  "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
+  "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
+  "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
+  "Mobile Developer" / "Android" / "iOS" / "Flutter" → "Mobile Development"
+  "Full Stack Developer" → "Full Stack Development"
+  "Frontend Developer" / "Front End" → "Frontend Development"
+  "UX Designer" / "UI Designer" / "Product Designer" → "UI/UX Design"
+  "Security Engineer" / "Security Analyst" / "Penetration Tester" → "Cybersecurity"
+  "SRE" / "Site Reliability Engineer" → "Site Reliability Engineering"
+  "Blockchain Developer" / "Web3 Developer" → "Blockchain Development"
+  "Game Developer" / "Game Engineer" → "Game Development"
+  "Embedded Engineer" / "Firmware Engineer" → "Embedded Systems"
+  "IoT Engineer" → "IoT Development"
+  "Network Engineer" / "Network Admin" → "Networking"
+  "Database Administrator" / "DBA" → "Database Management"
+  "Product Manager" → "Product Management"
+  "Project Manager" / "Program Manager" → "Project Management"
+  "Business Analyst" → "Business Analysis"
+  "Scrum Master" / "Agile Coach" → "Agile Coaching"
+  "Technical Writer" → "Technical Writing"
+  "Sales Engineer" / "Pre-Sales" → "Technical Sales"
+  "Solution Architect" / "Enterprise Architect" → "System Architecture"
+
+════════════════════════════════════════════════════════
+STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE JD BELOW
+════════════════════════════════════════════════════════
+
+Job Description:
+{job_description[:2000]}
+
+Classification rules:
+  • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
+  • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work
+  • Full Stack: Both frontend AND backend tech explicitly required
+  • Data Science: SQL/Python analytics + pandas/numpy/Tableau/Power BI + analysis work
+  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
+  • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
+  • Cloud: AWS/Azure/GCP services explicitly required (not just "cloud" mentioned)
+  • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
+  • Mobile: Android/iOS/Flutter/React Native explicitly required
+  • UI/UX: Figma/wireframes/prototyping/user research required
+  • Product Management: roadmap/PRD/stakeholder management (not just Agile)
+  • Project Management: team delivery/PMP/programme management
+  • Business Analysis: requirements/BRD/process mapping as primary duty
+  • Quality Assurance: test automation/test planning as primary duty
+  • Fintech: payment/banking/trading/KYC/AML systems
+  • Healthcare Tech: EHR/EMR/HIPAA/clinical systems
+  • EdTech: LMS/e-learning/educational platform
+  • Game Development: Unity/Unreal/game mechanics explicitly required
+  • Blockchain: Solidity/Web3/smart contracts explicitly required
+  • Embedded: firmware/RTOS/microcontroller/hardware explicitly required
+
+════════════════════════════════════════════════════════
+STEP 3 — FINAL CHECK
+════════════════════════════════════════════════════════
+
+1. Did the job title directly name a domain? → Use that.
+2. If not, which domain has the MOST required skills/responsibilities in the JD?
+3. If truly unclear → "Software Engineering"
+
+Return ONLY one domain from this list, nothing else:
+{_pre_domain_list}
+"""
             try:
-                _raw_jd_pre = call_llm(_pre_jd_prompt, session=st.session_state).strip()
-                _pre_jd_domain_line = ""
-                for _ln in _raw_jd_pre.splitlines():
-                    _ln = _ln.strip()
-                    if _ln.lower().startswith("domain:"):
-                        _pre_jd_domain_line = _ln.split(":", 1)[1].strip()
-                        break
-                if _pre_jd_domain_line in _pre_valid_domains:
-                    st.session_state[_pre_jd_cache_key] = _pre_jd_domain_line
+                _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
+                if _j in _pre_valid_domains:
+                    st.session_state[_pre_jd_cache_key] = _j
                 else:
-                    _jd_kw = db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain")
-                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw and _jd_kw != "Unclassified" else "Software Engineering"
+                    # LLM returned invalid — fall back to keyword detection
+                    _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
             except Exception:
+                # LLM failed — fall back to keyword detection
                 try:
-                    _jd_kw = db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain")
-                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw and _jd_kw != "Unclassified" else "Software Engineering"
+                    _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
                 except Exception:
                     st.session_state[_pre_jd_cache_key] = "Software Engineering"
         _pre_job_domain = st.session_state[_pre_jd_cache_key]
@@ -5119,7 +5302,6 @@ if uploaded_files and job_description and weights_valid:
                 format_data=format_data,
                 resume_domain=_pre_resume_domain,   # FIX: pre-detected, no thread LLM call
                 job_domain=_pre_job_domain,         # FIX: pre-detected, no thread LLM call
-                resume_depth=st.session_state.get(_pre_resume_cache_key + "_depth"),  # FIX: pass depth explicitly so ats_percentage_score never reads stale "moderate" from session state
             )
 
         with st.spinner("✍️ Rewriting resume & running ATS evaluation in parallel..."):
@@ -5342,7 +5524,6 @@ if uploaded_files and job_description and weights_valid:
             "Domain Similarity Score": ats_scores.get("Domain Similarity Score", 1.0),
             "Resume Domain": ats_scores.get("Resume Domain", domain),
             "Job Domain": ats_scores.get("Job Domain", "Unknown"),
-            "Resume Depth": ats_scores.get("Resume Depth", "moderate"),
         })
 
         insert_candidate(
@@ -5514,18 +5695,6 @@ with tab1:
         st.session_state.processed_files.clear()
         st.session_state.resume_data.clear()
 
-        # ── Also clear sidebar Tab 1 state ────────────────────────────────────
-        # Reset job title, location, JD textarea, and uploaded file reference
-        for _k in ["jt_select", "loc_select", "jd_textarea", "jt_other_input",
-                   "loc_other_input", "uploaded_file_names"]:
-            if _k in st.session_state:
-                del st.session_state[_k]
-        # Delete slider + radio keys — Streamlit resets to default values on next rerun
-        # Direct assignment to active widget keys throws StreamlitAPIException
-        for _k in ["sl_edu", "sl_exp", "sl_skills", "sl_lang", "sl_kw", "career_mode_radio"]:
-            if _k in st.session_state:
-                del st.session_state[_k]
-
         # Temporary placeholder for sliding success message
         msg_placeholder = st.empty()
         msg_placeholder.markdown("""
@@ -5535,10 +5704,9 @@ with tab1:
         </div>
         """, unsafe_allow_html=True)
 
-        # Wait 3 seconds then clear message then rerun cleanly
+        # Wait 3 seconds then clear message
         time.sleep(3)
         msg_placeholder.empty()
-        st.rerun()
 
 # === TAB 1: Dashboard ===
 with tab1:
@@ -5754,28 +5922,16 @@ with tab1:
                         </div>
                     </div>""", unsafe_allow_html=True)
                 with r3c2:
-                    _resume_dom_display = resume.get("Resume Domain", "Unknown")
-                    _job_dom_display    = resume.get("Job Domain", "Unknown")
-                    _depth_display      = {"shallow": "Shallow", "moderate": "Moderate",
-                                           "moderate_strong": "Moderate+", "deep": "Deep"}.get(
-                                           resume.get("Resume Depth", "moderate"), "Moderate")
-                    _depth_color        = {"Shallow": "#f59e0b", "Moderate": "#38bdf8",
-                                           "Moderate+": "#818cf8", "Deep": "#34d399"}.get(_depth_display, "#94a3b8")
-                    _penalty_text       = "✓ No penalty" if dom_penalty == 0 else f"−{dom_penalty} pts"
-                    _penalty_color      = "#34d399" if dom_penalty == 0 else "#f87171"
                     st.markdown(f"""
                     <div style="background:rgba(15,23,42,0.85);border:1px solid rgba(56,189,248,0.25);
-                                border-radius:12px;padding:14px 16px;margin-bottom:8px;min-height:86px;
+                                border-radius:12px;padding:14px 16px;margin-bottom:8px;height:86px;
                                 display:flex;flex-direction:column;justify-content:center;overflow:hidden;">
                         <div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;color:#94a3b8;">
                             <span style="color:#38bdf8;flex-shrink:0;">{SVG_DOM}</span>
                             <span>Domain Match</span>
                         </div>
-                        <div style="font-size:0.78rem;color:#cbd5e1;margin-top:6px;line-height:1.7;">
-                            <span style="color:#94a3b8;">Your field:</span> <b style="color:#f0f4f8;">{_resume_dom_display}</b><br>
-                            <span style="color:#94a3b8;">Job needs:</span> <b style="color:#f0f4f8;">{_job_dom_display}</b><br>
-                            <span style="color:#94a3b8;">Strength:</span> <b style="color:{_depth_color};">{_depth_display}</b>
-                            <span style="float:right;font-size:0.72rem;color:{_penalty_color};font-weight:700;">{_penalty_text}</span>
+                        <div style="font-size:1.1rem;font-weight:700;color:#f0f4f8;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                            {dom_pct}% <span style="font-size:0.75rem;color:#64748b;">(-{dom_penalty} pts)</span>
                         </div>
                     </div>""", unsafe_allow_html=True)
                 with r3c3:
