@@ -49,8 +49,7 @@ from llm_manager import (
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
     get_database_stats, detect_domain_from_title_and_description,
-    get_domain_similarity, build_resume_domain_prompt, build_jd_domain_prompt,
-    DOMAIN_VALID_LIST,
+    get_domain_similarity
 )
 from user_login import (
     create_user_table, add_user, complete_registration, verify_user,
@@ -102,193 +101,6 @@ gender_words = {
         "thrive", "togetherness", "transparent", "uplift", "vulnerable"
     ]
 }
-
-def _infer_depth_from_text(resume_text: str) -> str:
-    """
-    Keyword-based depth inference. Returns 'shallow', 'moderate',
-    'moderate_strong', or 'deep'.
-    Domain-aware — non-dev domains (UI/UX, Marketing, PM etc.) use
-    domain-specific signals instead of generic code project signals.
-    Called only when the LLM depth classification is unavailable.
-    """
-    rt = resume_text.lower()
-
-    # ── Full-time employment signal (universal) ──────────────────────────────
-    _ft_raw   = any(kw in rt for kw in [
-        "years of experience", "yrs of experience", "full-time", "full time",
-        "employed", "employment", "promoted", "production system",
-    ])
-    _self_emp = bool(re.search(r'\bself[\s-]employed\b', rt))
-    _no_ft    = bool(re.search(r'\bno\s+(prior\s+)?(full[\s-]time|fulltime)\b', rt))
-    has_fulltime = _ft_raw and not _self_emp and not _no_ft
-
-    # ── Quantified impact — strip education score lines first (universal) ────
-    rt_no_edu = re.sub(
-        r'(cgpa|gpa|sgpa|ssc|hsc|isc|icse|cbse|percentage|marks|score|grade)'
-        r'[^\n]{0,30}\d+[\d.]*\s*[%/]?[^\n]*', '', rt
-    )
-    has_quantified = bool(re.search(
-        r'\b\d+\s*(users?|customers?|requests?|rpm|ms\b|seconds?|latency|revenue'
-        r'|million|billion|[%]\s*(improvement|reduction|increase|decrease|faster'
-        r'|accuracy|conversion|retention|engagement|ctr|roas|roi|nps|followers'
-        r'|subscribers|downloads|transactions|deals|clicks|impressions))',
-        rt_no_edu
-    ))
-
-    # ── Internship signal (universal) ────────────────────────────────────────
-    _it_raw  = bool(re.search(r'\b(internship|intern\b|trainee)\b', rt))
-    _seeking = bool(re.search(
-        r'\b(seek|seeking|looking for|want|apply|applied|need|needed|'
-        r'searching for|interested in)\s+(an?\s+)?(internship|intern\b)', rt
-    ))
-    _no_int  = bool(re.search(r'\bno\s+(prior\s+)?internship\b', rt))
-    _virt    = bool(re.search(
-        r'\b(aicte virtual|oasis infobyte|internshala|certificate program|'
-        r'online mode|edunet|virtual internship|forage|inplant training)\b', rt
-    ))
-    _real    = bool(re.search(
-        r'\b(intern|internship)\b.{0,60}\b(at|with|@)\b.{0,40}'
-        r'\b(pvt|ltd|llp|inc|corp|technologies|solutions|systems|'
-        r'infosys|tcs|wipro|accenture|cognizant|capgemini|ibm|amazon|'
-        r'google|microsoft|flipkart|swiggy|zomato|razorpay|paytm|'
-        r'byju|meesho|ola|myntra|zepto|cred|freshworks|zoho|hcl)\b', rt
-    ))
-    if _virt and _real:
-        _virt = False
-    has_intern   = _it_raw and not _seeking and not _no_int and not _virt
-    multi_intern = len(re.findall(r'\b(internship|intern\b)\b', rt)) >= 2 and has_intern
-
-    # ── Detect domain type from resume text ──────────────────────────────────
-    _is_uiux    = bool(re.search(r'\b(figma|adobe xd|sketch|wireframe|prototype|ux|ui design'
-                                 r'|user experience|case stud|zeplin|invision|framer)\b', rt))
-    _is_mkt     = bool(re.search(r'\b(seo|sem|ppc|google ads|meta ads|facebook ads|hubspot'
-                                 r'|mailchimp|campaign|content marketing|digital marketing'
-                                 r'|semrush|ahrefs|ctr|roas|email marketing)\b', rt))
-    _is_pm      = bool(re.search(r'\b(product manager|product management|product owner'
-                                 r'|roadmap|prd|product strategy|product lead)\b', rt))
-    _is_projmgr = bool(re.search(r'\b(project manager|project management|pmp|program manager'
-                                 r'|delivery manager|waterfall|ms project|gantt)\b', rt))
-    _is_ba      = bool(re.search(r'\b(business analyst|requirements analysis|brd|process map'
-                                 r'|gap analysis|functional requirements|business process'
-                                 r'|use cases|uml|stakeholder analysis)\b', rt))
-    _is_tw      = bool(re.search(r'\b(technical writer|api documentation|user manual'
-                                 r'|knowledge base|gitbook|sphinx|docusaurus|swagger docs'
-                                 r'|developer documentation|readme|release notes)\b', rt))
-    _is_sales   = bool(re.search(r'\b(sales engineer|pre-sales|solution selling|technical sales'
-                                 r'|proof of concept|poc|demo|deal|quota|pipeline|crm sales)\b', rt))
-    _is_agile   = bool(re.search(r'\b(agile coach|scrum master|agile transformation'
-                                 r'|retrospective|sprint planning|safe framework|kanban coach'
-                                 r'|velocity|burndown|story points)\b', rt))
-    _is_analytics = bool(re.search(r'\b(power bi|tableau|looker|dax|pivot table|kpi dashboard'
-                                   r'|data analyst|bi analyst|google data studio|qlik)\b', rt))
-
-    # ── NON-DEV DOMAIN PATHS ─────────────────────────────────────────────────
-    if _is_uiux:
-        _case_studies = len(re.findall(
-            r'\b(case stud|wireframe|prototype|user flow|usability test'
-            r'|redesign|design process|figma|adobe xd|sketch)\b', rt))
-        if has_fulltime or has_quantified:            return "deep"
-        if multi_intern or _case_studies >= 6 or (has_intern and _case_studies >= 3):
-                                                      return "moderate_strong"
-        if has_intern or _case_studies >= 3:          return "moderate"
-        return "shallow"
-
-    if _is_mkt:
-        _campaign_hits = len(re.findall(
-            r'\b(campaign|seo|sem|ppc|google ads|meta ads|email marketing'
-            r'|content marketing|social media|ctr|roas|roi|lead generation)\b', rt))
-        if has_fulltime or has_quantified:            return "deep"
-        if multi_intern or _campaign_hits >= 6 or (has_intern and _campaign_hits >= 3):
-                                                      return "moderate_strong"
-        if has_intern or _campaign_hits >= 3:         return "moderate"
-        return "shallow"
-
-    if _is_analytics:
-        _dashboard_hits = len(re.findall(
-            r'\b(dashboard|report|power bi|tableau|dax|pivot|kpi|looker'
-            r'|data studio|visualization|insight|analysis|sql|excel)\b', rt))
-        if has_fulltime or has_quantified:            return "deep"
-        if multi_intern or _dashboard_hits >= 6 or (has_intern and _dashboard_hits >= 3):
-                                                      return "moderate_strong"
-        if has_intern or _dashboard_hits >= 3:        return "moderate"
-        return "shallow"
-
-    if _is_pm:
-        _pm_hits = len(re.findall(
-            r'\b(roadmap|prd|feature|product|user stor|backlog|sprint'
-            r'|stakeholder|launch|mvp|okr|metric|a/b test|customer interview)\b', rt))
-        if has_fulltime or has_quantified:            return "deep"
-        if multi_intern or _pm_hits >= 6 or (has_intern and _pm_hits >= 3):
-                                                      return "moderate_strong"
-        if has_intern or _pm_hits >= 3:               return "moderate"
-        return "shallow"
-
-    if _is_projmgr:
-        _pjm_hits = len(re.findall(
-            r'\b(project|timeline|milestone|budget|resource|deliverable'
-            r'|risk|stakeholder|gantt|scope|pmp|agile|waterfall)\b', rt))
-        if has_fulltime or has_quantified:            return "deep"
-        if multi_intern or _pjm_hits >= 6 or (has_intern and _pjm_hits >= 3):
-                                                      return "moderate_strong"
-        if has_intern or _pjm_hits >= 3:              return "moderate"
-        return "shallow"
-
-    if _is_ba:
-        _ba_hits = len(re.findall(
-            r'\b(requirement|brd|process map|gap analysis|use case|uml'
-            r'|stakeholder|functional|acceptance|bpmn|as-is|to-be|feasibility)\b', rt))
-        if has_fulltime or has_quantified:            return "deep"
-        if multi_intern or _ba_hits >= 5 or (has_intern and _ba_hits >= 3):
-                                                      return "moderate_strong"
-        if has_intern or _ba_hits >= 3:               return "moderate"
-        return "shallow"
-
-    if _is_tw:
-        _tw_hits = len(re.findall(
-            r'\b(documentation|api docs|user manual|knowledge base|readme'
-            r'|release notes|style guide|confluence|gitbook|swagger|openapi)\b', rt))
-        if has_fulltime or has_quantified:            return "deep"
-        if multi_intern or _tw_hits >= 4 or (has_intern and _tw_hits >= 2):
-                                                      return "moderate_strong"
-        if has_intern or _tw_hits >= 2:               return "moderate"
-        return "shallow"
-
-    if _is_sales:
-        _sales_hits = len(re.findall(
-            r'\b(demo|poc|proof of concept|proposal|deal|quota|pipeline'
-            r'|client|customer|revenue|sales|pre-sales|account|crm)\b', rt))
-        if has_fulltime or has_quantified:            return "deep"
-        if multi_intern or _sales_hits >= 5 or (has_intern and _sales_hits >= 3):
-                                                      return "moderate_strong"
-        if has_intern or _sales_hits >= 3:            return "moderate"
-        return "shallow"
-
-    if _is_agile:
-        _agile_hits = len(re.findall(
-            r'\b(retrospective|sprint|scrum|kanban|agile|ceremony|standup'
-            r'|velocity|backlog|refinement|planning|coaching|facilitat)\b', rt))
-        if has_fulltime or has_quantified:            return "deep"
-        if multi_intern or _agile_hits >= 5 or (has_intern and _agile_hits >= 3):
-                                                      return "moderate_strong"
-        if has_intern or _agile_hits >= 3:            return "moderate"
-        return "shallow"
-
-    # ── DEV/TECH DOMAIN PATH (default) ───────────────────────────────────────
-    _sec = re.search(
-        r'(projects?|work experience|experience|portfolio)[^\n]{0,60}\n(.{0,3000})',
-        rt, re.DOTALL
-    )
-    _ctx = _sec.group(2) if _sec else rt
-    hits = len(re.findall(
-        r'\b(built|developed|implemented|designed|created|deployed|architected)\b', _ctx
-    ))
-
-    if has_fulltime or has_quantified:                return "deep"
-    if multi_intern or hits >= 5 or (has_intern and hits >= 2):
-                                                      return "moderate_strong"
-    if has_intern or hits >= 2:                       return "moderate"
-    return "shallow"
-
 
 def detect_bias(text):
     # Split into sentences using simple delimiters
@@ -3203,161 +3015,286 @@ def ats_percentage_score(
     format_data=None,       # pass pre-computed format check result
     resume_domain=None,     # FIX: accept pre-detected domain from main thread
     job_domain=None,        # FIX: accept pre-detected domain from main thread
-    resume_depth=None,      # FIX: accept pre-detected depth — avoids reading stale "moderate" from session state
 ):
     import datetime
 
-    _valid_domains = DOMAIN_VALID_LIST
+    _valid_domains = [
+        "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
+        "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
+        "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
+        "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
+        "Networking", "Site Reliability Engineering", "Product Management", "Project Management",
+        "Business Analysis", "Technical Writing", "Digital Marketing", "E-commerce", "Fintech",
+        "Healthcare Tech", "EdTech", "IoT Development", "AR/VR Development", "Technical Sales",
+        "Agile Coaching", "Software Engineering"
+    ]
+    _domain_list = ", ".join(_valid_domains)
 
     # FIX: use pre-detected value if passed in, only call LLM if not already set
     # When called from the parallel thread, resume_domain is set by the main thread
     # so no LLM call fires inside the thread (thread-safe).
-    # ── BUG 3 FIX: Extract candidate title from resume for keyword title_overrides ──
-    # The title_overrides block in detect_domain_from_title_and_description weights
-    # title matches at 5× — but passing "" skips all of them. We extract the
-    # most likely job title from the resume header/summary to use as the title arg.
-    def _extract_resume_title(text: str) -> str:
-        """Extract the most likely job title from resume text (first 800 chars)."""
-        import re as _re_t
-        header = text[:800].lower()
-        # Common patterns: "Software Engineer | Python" or "Senior Data Analyst"
-        # Check for known role keywords in the header
-        _role_patterns = [
-            r"(?:^|\n)([a-z][a-z/ |-]{4,40}(?:engineer|developer|analyst|scientist|"
-            r"architect|manager|designer|specialist|consultant|lead|intern|fresher))",
-        ]
-        for pat in _role_patterns:
-            m = _re_t.search(pat, header)
-            if m:
-                return m.group(1).strip()
-        # Fallback: return first non-blank line after name (usually title/role line)
-        lines = [l.strip() for l in text[:400].split("\n") if l.strip()]
-        if len(lines) >= 2:
-            candidate = lines[1]
-            if len(candidate) < 60 and any(w in candidate.lower() for w in
-               ["engineer","developer","analyst","designer","manager","scientist",
-                "architect","intern","fresher","specialist","consultant"]):
-                return candidate
-        return ""
-
-    _resume_title_hint = _extract_resume_title(resume_text)
     _resume_cache_key = f"resume_domain_{hash(resume_text[:500])}"
     if resume_domain is None and _resume_cache_key not in st.session_state:
-        # ── Use shared prompt builder — single source of truth in db_manager ──
-        # Pass extracted title hint into the prompt so LLM has the role context
-        _resume_domain_prompt = build_resume_domain_prompt(
-            resume_text,
-            title_hint=_resume_title_hint
-        )
+        _resume_domain_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across ALL levels and ALL industries — freshers, students, mid-level, senior professionals, non-tech roles, design, management, marketing, finance, healthcare, and more.
+
+Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.
+
+════════════════════════════════════════════════════════
+STEP 1 — DETERMINE CANDIDATE LEVEL
+════════════════════════════════════════════════════════
+
+LEVEL A — Pure Fresher / Student with NO specialization evidence:
+  • Still studying OR just graduated with ONLY basic CS fundamentals listed (Java, C, C++, Python, HTML, SQL in isolation)
+  • No internship OR only 1 internship with zero description of work done
+  • Projects listed as bare names only — no tech stack, no description
+  → DEFAULT to "Software Engineering". Do not over-classify.
+  → EXAMPLE: Only Java + MySQL + DBMS skills, no projects described → "Software Engineering"
+
+LEVEL B — Fresher / Student WITH at least ONE specialization signal:
+  • Has at least one of:
+    - 1 internship with a described role or technology stack
+    - 1 project with a description mentioning domain-specific technologies
+    - Skills showing a clear non-trivial technology stack beyond basic CS
+  → Classify into the MOST EVIDENCED specific domain using STEP 2 rules
+
+LEVEL C — Experienced Professional (1+ years full-time work):
+  → ALWAYS classify into a specific domain. Use job titles + tech stack + years as primary signals.
+  → Only fall back to "Software Engineering" if domain is genuinely mixed with no clear winner.
+
+════════════════════════════════════════════════════════
+STEP 2 — DOMAIN CLASSIFICATION RULES
+════════════════════════════════════════════════════════
+
+RULE A — NEVER over-classify from basic skills alone:
+  ✗ Java + MySQL alone → NOT "Backend Development"
+  ✗ HTML + CSS alone → NOT "Frontend Development"
+  ✗ Python alone → NOT "AI/Machine Learning" or "Data Science"
+  ✗ SQL alone → NOT "Database Management"
+  ✗ C / C++ alone → NOT "Embedded Systems"
+  ✓ Basic CS languages + no described projects/frameworks → "Software Engineering"
+
+RULE B — TRUE EVIDENCE BAR per domain (must satisfy BOTH sub-conditions):
+
+  → Frontend Development:
+     MUST have: HTML+CSS+JS PLUS one of (React/Vue/Angular/Bootstrap/jQuery/Svelte/Next.js)
+     AND: at least 1 described project or internship explicitly about web UI / frontend
+
+  → Backend Development:
+     MUST have: A backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI/NestJS/Rails)
+     AND: database integration described in a project or internship
+     ⚠ "website" or "web application" in project name does NOT imply Full Stack.
+     Django + database + "Travel Management website" with NO frontend tech mentioned = Backend Development.
+     Only classify as Full Stack if HTML/CSS/JS or a frontend framework is EXPLICITLY mentioned.
+
+  → Full Stack Development:
+     MUST have: frontend technologies (HTML+CSS+JS or React/Vue/Angular/Bootstrap/jQuery/Svelte/Next.js)
+     AND: backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI)
+     AND: database — ALL THREE explicitly present in the same project or internship description
+     OR: candidate explicitly self-identifies as "full stack" / "front-end and back-end" in summary/title
+     ⚠ "website" + backend framework alone is NOT Full Stack — frontend tech must be named explicitly.
+
+  → Mobile Development:
+     MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift/Xamarin
+     AND: at least 1 described mobile app project or internship
+
+  → Data Science:
+     MUST have: pandas/numpy/matplotlib/seaborn/Tableau/Power BI/Looker/R/SPSS/Excel analytics
+     AND: actual data analysis, reporting, or visualization project described
+     NOT: SQL or Excel listed as a lone skill with no analytical work described
+
+  → AI/Machine Learning:
+     MUST have: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/OpenAI/LangChain/NLP/Computer Vision/LLM
+     AND: model training, fine-tuning, or ML pipeline described in a project
+
+  → Cybersecurity:
+     MUST have: security tools (Kali Linux/Burp Suite/Wireshark/Metasploit/Nmap) OR concepts (pentesting/OWASP/CTF/ethical hacking/SOC)
+     AND: security internship or project described
+     NOTE: "Cybersecurity virtual internship" with no tools/work described = weak signal only
+
+  → DevOps/Infrastructure:
+     MUST have: Docker/Kubernetes/CI-CD/Jenkins/Terraform/Ansible/Helm/ArgoCD
+     AND: deployment, pipeline, or infrastructure project described
+
+  → Cloud Engineering:
+     MUST have: specific AWS/Azure/GCP service names (not just the word "cloud")
+     AND: cloud deployment or architecture described in a project or role
+
+  → UI/UX Design:
+     MUST have: Figma/Adobe XD/Sketch/InVision/Framer/Zeplin
+     AND: wireframes, prototypes, or user research described
+
+  → Database Management:
+     MUST have: DBA title OR database optimization/administration/replication/tuning as PRIMARY focus
+     NOT: SQL listed as one skill among many
+
+  → Quality Assurance:
+     MUST have: testing frameworks (Selenium/Cypress/JUnit/pytest/Postman/JMeter/Appium) OR QA role title
+     AND: test planning, test cases, or automation described
+
+  → Game Development:
+     MUST have: Unity/Unreal Engine/Godot/game mechanics/shader programming
+     AND: at least 1 described game project
+
+  → Blockchain Development:
+     MUST have: Solidity/Web3/Smart Contracts/Ethereum/DeFi/NFT/Hardhat/Truffle
+     AND: blockchain project described
+
+  → Embedded Systems:
+     MUST have: microcontroller/RTOS/firmware/Arduino/STM32/ESP32/ARM/assembly/hardware programming
+     AND: hardware or embedded project described
+
+  → IoT Development:
+     MUST have: IoT devices/sensors/MQTT/CoAP/Raspberry Pi in IoT context/hardware integration
+     AND: IoT project or deployment described
+
+  → AR/VR Development:
+     MUST have: ARKit/ARCore/Unity3D VR/Unreal VR/Oculus/HoloLens/WebXR
+     AND: AR/VR project described
+
+  → System Architecture:
+     MUST have: architect-level title (Solution Architect/Enterprise Architect/System Architect) OR
+     explicit work on distributed systems design, microservices architecture, system design
+
+  → Networking:
+     MUST have: network engineer/admin title OR Cisco/routing/switching/BGP/OSPF/VPN/network protocols
+     AND: network configuration or administration work described
+
+  → Site Reliability Engineering:
+     MUST have: SRE title OR SLI/SLO/error budgets/on-call/toil reduction
+     AND: reliability engineering work described
+
+  → Product Management:
+     MUST have: product ownership, roadmaps, PRDs, stakeholder management, feature prioritization
+     NOT: just Agile/Scrum keywords
+
+  → Project Management:
+     MUST have: managing teams/timelines/deliverables, PMP/Prince2/program manager experience
+     NOT: just "worked in agile team"
+
+  → Business Analysis:
+     MUST have: requirements gathering, process mapping, BRD/FRD writing, stakeholder analysis
+     AND: BA role or described BA work
+
+  → Digital Marketing:
+     MUST have: SEO/SEM/PPC/social media campaigns/content marketing/Google Ads/Meta Ads
+     AND: actual marketing work or results described
+
+  → Technical Writing:
+     MUST have: documentation, API docs, user manuals, technical communication as PRIMARY work
+     AND: writing samples, tools (Confluence/GitBook/Sphinx) or writing role described
+
+  → E-commerce:
+     MUST have: Shopify/Magento/WooCommerce/marketplace/order management/product catalog
+     AND: e-commerce work described
+
+  → Fintech:
+     MUST have: payment processing/banking software/trading systems/KYC/AML/financial technology
+     AND: fintech role or project described
+
+  → Healthcare Tech:
+     MUST have: EHR/EMR/HIPAA/telemedicine/medical software/healthcare data/clinical systems
+     AND: healthcare context described
+
+  → EdTech:
+     MUST have: e-learning/LMS/educational platform/curriculum technology/learning analytics
+     AND: education tech context described
+
+  → Technical Sales:
+     MUST have: sales engineer/pre-sales/solution selling/demo/RFP/customer technical support
+     AND: sales engineering role described
+
+  → Agile Coaching:
+     MUST have: Scrum Master/Agile Coach/SAFe/team facilitation/sprint ceremonies as PRIMARY role
+     NOT: just "worked in agile" or "familiar with scrum"
+
+RULE C — MIXED SIGNALS → dominant domain wins:
+  • Count evidence per domain: (tech keywords in described work) + (project descriptions) + (job/internship titles)
+  • Domain with MOST evidence wins
+  • Tie between frontend+backend → "Full Stack Development"
+  • Tie between unrelated domains → "Software Engineering"
+  • 1 weak signal (e.g. 1 virtual internship, no described work) vs 3 strong signals → strong side wins
+  ⚠ INTERNSHIP TITLE CONFLICT RULE (critical for Level B):
+    If internship title suggests Domain A BUT skills + projects have 3+ strong signals for Domain B
+    AND Domain B is more specific than Domain A → Domain B wins over the internship title.
+    EXAMPLE: "Full Stack Developer Intern" + LangChain/LLaMA/RAG/FAISS/LLMs in skills+projects
+             → "AI/Machine Learning" wins, NOT "Full Stack Development"
+    EXAMPLE: "Full Stack Developer Intern" + only HTML/CSS/React/Node projects, no AI tools
+             → "Full Stack Development" wins correctly
+    EXAMPLE: "Android Developer Intern" + Flutter/Kotlin projects → "Mobile Development" wins correctly
+
+RULE D — NON-TECH / HYBRID profiles:
+  • Pure non-tech background (marketing, finance, HR, design) + no tech projects → classify by their actual domain
+  • Career switcher: old domain + new tech projects/certs → classify by NEW tech domain if evidence is substantial
+
+RULE E — RESEARCH / ACADEMIC profiles:
+  • Research at university/NIT/IIT/ISRO/DRDO/labs → classify by RESEARCH TOPIC
+  • AI/NLP/CV research → "AI/Machine Learning"
+  • Security research → "Cybersecurity"
+  • Hardware/systems research → "Embedded Systems"
+  • Generic CS research → "Software Engineering"
+
+RULE F — JOB TITLE as strong signal (Level C only):
+  • ONLY applies to Level C (1+ years full-time work experience)
+  • For Level C: explicit job title is the STRONGEST single signal
+  • "Backend Developer" title → "Backend Development"
+  • "Data Analyst" title → "Data Science"
+  • "QA Engineer" title → "Quality Assurance"
+  • Title + matching tech stack → confirm that domain immediately
+  ⚠ For Level B (freshers/students): internship title is ONE signal among many.
+    It can be OVERRIDDEN if skills + projects show 3+ strong signals for a different domain.
+    Do NOT blindly use internship title for Level B — apply Rule C conflict check first.
+
+════════════════════════════════════════════════════════
+STEP 3 — TIEBREAKERS (apply in order)
+════════════════════════════════════════════════════════
+
+T1. If self-identified domain in summary/objective → use that domain (if it exists in the valid list)
+T2. If internship title names a domain AND no conflict with Rule C → use that domain
+    ⚠ If conflict exists (skills+projects strongly point elsewhere) → skip T2, go to T3
+T3. If tech stack strongly maps to exactly 1 domain → use that domain
+T4. If still tied → "Software Engineering" as safe fallback
+
+════════════════════════════════════════════════════════
+STEP 4 — FINAL SANITY CHECK
+════════════════════════════════════════════════════════
+
+Before answering, verify:
+1. Did I correctly determine the level (A/B/C)?
+2. If Level A → am I returning "Software Engineering"? (If not, reconsider)
+3. Does my chosen domain meet the TRUE EVIDENCE BAR from Rule B?
+4. For Full Stack: are frontend tech + backend framework + database ALL explicitly mentioned? If any is missing → not Full Stack.
+5. If Level B: did I check Rule C conflict? Is the internship title conflicting with skills+projects?
+   If yes → did I correctly let skills+projects override the internship title?
+6. If Level C: is there a job title that confirms my domain (Rule F)?
+7. Is this the domain with the MOST evidence overall?
+
+════════════════════════════════════════════════════════
+Resume Text:
+{resume_text[:2500]}
+════════════════════════════════════════════════════════
+
+Return ONLY one domain from this list, nothing else:
+{_domain_list}
+"""
         try:
-            _raw = call_llm(_resume_domain_prompt, session=st.session_state).strip()
-
-            # ── Parse domain + depth from LLM response ─────────────────────
-            # LLMs sometimes add preamble, punctuation, or capitalization.
-            # We strip all of those before validating.
-            _domain_line = ""
-            _depth_raw   = ""
-            for _line in _raw.splitlines():
-                _line = _line.strip()
-                if _line.lower().startswith("domain:"):
-                    _domain_line = _line.split(":", 1)[1].strip().rstrip(".")
-                elif _line.lower().startswith("depth:"):
-                    _depth_raw = _line.split(":", 1)[1].strip().lower().rstrip(".")
-
-            # Normalise depth — strip whitespace, ignore case, strip trailing punct
-            _depth_val = _depth_raw if _depth_raw in ("shallow", "moderate", "moderate_strong", "deep") else ""
-
-            # ── Retry if depth is missing or unparseable ────────────────────
-            if not _depth_val:
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
-                    "Depth line missing or unrecognised in LLM response. "
-                    f"Raw depth token: {repr(_depth_raw)!r}. "
-                    f"Full response (first 300 chars): {_raw[:300]!r}. "
-                    "Retrying with stricter prompt."
-                )
-                _retry_prompt = (
-                    f"{_resume_domain_prompt}\n\n"
-                    "STRICT RETRY — your previous response had an invalid or missing Depth line.\n\n"
-                    "You MUST output EXACTLY two lines. Nothing before. Nothing after.\n"
-                    "Domain: <one of the valid domain names>\n"
-                    "Depth: <shallow|moderate|moderate_strong|deep>\n\n"
-                    "CLASSIFICATION GUIDE — read this before deciding:\n"
-                    "  shallow          → no real internship, fewer than 2 projects with described stack+output\n"
-                    "  moderate         → 2 solo projects with stack+output described, OR 1 real internship\n"
-                    "  moderate_strong  → 4+ described projects, OR internship + 2 projects, OR deployed prod app\n"
-                    "  deep             → 6+ months full-time employment, OR quantified impact, OR published research\n\n"
-                    "ANTI-BIAS RULE: Do NOT default to 'moderate'. If the resume shows only skills listed\n"
-                    "without project evidence → shallow. If it shows work experience with described\n"
-                    "responsibilities → deep or moderate_strong.\n\n"
-                    "Example outputs:\n"
-                    "  Domain: Backend Development\n"
-                    "  Depth: shallow\n\n"
-                    "  Domain: Data Science\n"
-                    "  Depth: moderate_strong"
-                )
-                try:
-                    _raw2 = call_llm(_retry_prompt, session=st.session_state).strip()
-                    for _line in _raw2.splitlines():
-                        _line = _line.strip()
-                        if _line.lower().startswith("domain:") and not _domain_line:
-                            _domain_line = _line.split(":", 1)[1].strip().rstrip(".")
-                        elif _line.lower().startswith("depth:"):
-                            _depth_raw2 = _line.split(":", 1)[1].strip().lower().rstrip(".")
-                            if _depth_raw2 in ("shallow", "moderate", "moderate_strong", "deep"):
-                                _depth_val = _depth_raw2
-                                break
-                except Exception:
-                    pass  # retry failed — fall through to keyword fallback below
-
-            # ── Final safety net: keyword-based depth inference ─────────────
-            # Only fires if BOTH the primary call and the retry failed to produce
-            # a valid depth token.
-            if not _depth_val:
-                _depth_val = _infer_depth_from_text(resume_text)
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
-                    f"Depth inferred via keyword fallback as '{_depth_val}'."
-                )
-
-            if _domain_line in _valid_domains:
-                st.session_state[_resume_cache_key]            = _domain_line
-                st.session_state[_resume_cache_key + "_depth"] = _depth_val
+            _r = call_llm(_resume_domain_prompt, session=st.session_state).strip()
+            if _r in _valid_domains:
+                st.session_state[_resume_cache_key] = _r
             else:
-                _kw_fallback = (db_manager.detect_domain_with_confidence(_resume_title_hint, resume_text[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(_resume_title_hint, resume_text[:3000]))
-                st.session_state[_resume_cache_key]            = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
-                st.session_state[_resume_cache_key + "_depth"] = _depth_val
+                # LLM returned invalid domain — fall back to keyword detection
+                _kw_fallback = db_manager.detect_domain_from_title_and_description("", resume_text[:3000])
+                st.session_state[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
         except Exception:
-            # ── LLM call itself failed — infer depth from resume text ───────
-            _inferred_depth = _infer_depth_from_text(resume_text)
-
+            # LLM failed entirely — fall back to keyword detection
             try:
-                _kw_fallback = (db_manager.detect_domain_with_confidence(_resume_title_hint, resume_text[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(_resume_title_hint, resume_text[:3000]))
-                st.session_state[_resume_cache_key]            = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
-                st.session_state[_resume_cache_key + "_depth"] = _inferred_depth
+                _kw_fallback = db_manager.detect_domain_from_title_and_description("", resume_text[:3000])
+                st.session_state[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
             except Exception:
-                st.session_state[_resume_cache_key]            = "Software Engineering"
-                st.session_state[_resume_cache_key + "_depth"] = _inferred_depth
+                st.session_state[_resume_cache_key] = "Software Engineering"
 
+    # Use passed-in value if provided, otherwise use session state value
     if resume_domain is None:
         resume_domain = st.session_state.get(_resume_cache_key, "Software Engineering")
-
-    # ── Depth: use explicitly passed value first, then session state, never hardcode ──
-    if resume_depth and resume_depth in ("shallow", "moderate", "moderate_strong", "deep"):
-        _depth_str = resume_depth
-    else:
-        _depth_str = st.session_state.get(_resume_cache_key + "_depth")
-        if _depth_str not in ("shallow", "moderate", "moderate_strong", "deep"):
-            # Session state has nothing valid — infer from resume text directly
-            _depth_str = _infer_depth_from_text(resume_text)
-    _DEPTH_SCORES = {"shallow": 0.40, "moderate": 0.65, "moderate_strong": 0.80, "deep": 1.00}
-    if _depth_str not in _DEPTH_SCORES:
-        import logging as _logging
-        _logging.getLogger(__name__).warning(
-            f"Unknown depth value '{_depth_str}' after all fallbacks — defaulting to 'moderate'."
-        )
-        _depth_str = "moderate"
-    _depth_score = _DEPTH_SCORES[_depth_str]
 
     # ── JOB DOMAIN: use pre-detected value if passed in, else detect here ──
     # If JD is non-English → skip LLM domain detection, use keyword fallback directly
@@ -3370,28 +3307,102 @@ def ats_percentage_score(
             _jd_non_english = _jd_ascii_ratio < 0.70
     if _jd_non_english and job_domain is None:
         try:
-            _jd_kw = (db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000]))
+            _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
             st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
         except Exception:
             st.session_state[_jd_cache_key] = "Software Engineering"
     if job_domain is None and _jd_cache_key not in st.session_state:
-        _jd_domain_prompt = build_jd_domain_prompt(job_title, job_description)
+        _jd_domain_prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions across all industries and levels.
+
+Your ONLY job: identify the PRIMARY professional domain this job description is hiring for.
+
+════════════════════════════════════════════════════════
+STEP 1 — READ THE JOB TITLE FIRST (strongest signal)
+════════════════════════════════════════════════════════
+
+Job Title: {job_title}
+
+If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scientist", "DevOps Engineer", "UX Designer"), use that domain directly — do not over-analyse the description.
+
+Title override examples:
+  "Backend Developer" → "Backend Development"
+  "Data Analyst" → "Data Science"
+  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
+  "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
+  "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
+  "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
+  "Mobile Developer" / "Android" / "iOS" / "Flutter" → "Mobile Development"
+  "Full Stack Developer" → "Full Stack Development"
+  "Frontend Developer" / "Front End" → "Frontend Development"
+  "UX Designer" / "UI Designer" / "Product Designer" → "UI/UX Design"
+  "Security Engineer" / "Security Analyst" / "Penetration Tester" → "Cybersecurity"
+  "SRE" / "Site Reliability Engineer" → "Site Reliability Engineering"
+  "Blockchain Developer" / "Web3 Developer" → "Blockchain Development"
+  "Game Developer" / "Game Engineer" → "Game Development"
+  "Embedded Engineer" / "Firmware Engineer" → "Embedded Systems"
+  "IoT Engineer" → "IoT Development"
+  "Network Engineer" / "Network Admin" → "Networking"
+  "Database Administrator" / "DBA" → "Database Management"
+  "Product Manager" → "Product Management"
+  "Project Manager" / "Program Manager" → "Project Management"
+  "Business Analyst" → "Business Analysis"
+  "Scrum Master" / "Agile Coach" → "Agile Coaching"
+  "Technical Writer" → "Technical Writing"
+  "Sales Engineer" / "Pre-Sales" → "Technical Sales"
+  "Solution Architect" / "Enterprise Architect" → "System Architecture"
+
+════════════════════════════════════════════════════════
+STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE JD BELOW
+════════════════════════════════════════════════════════
+
+Job Description:
+{job_description[:2000]}
+
+Classification rules:
+  • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
+  • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work
+  • Full Stack: Both frontend AND backend tech explicitly required
+  • Data Science: SQL/Python analytics + pandas/numpy/Tableau/Power BI + analysis work
+  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
+  • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
+  • Cloud: AWS/Azure/GCP services explicitly required (not just "cloud" mentioned)
+  • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
+  • Mobile: Android/iOS/Flutter/React Native explicitly required
+  • UI/UX: Figma/wireframes/prototyping/user research required
+  • Product Management: roadmap/PRD/stakeholder management (not just Agile)
+  • Project Management: team delivery/PMP/programme management
+  • Business Analysis: requirements/BRD/process mapping as primary duty
+  • Quality Assurance: test automation/test planning as primary duty
+  • Fintech: payment/banking/trading/KYC/AML systems
+  • Healthcare Tech: EHR/EMR/HIPAA/clinical systems
+  • EdTech: LMS/e-learning/educational platform
+  • Game Development: Unity/Unreal/game mechanics explicitly required
+  • Blockchain: Solidity/Web3/smart contracts explicitly required
+  • Embedded: firmware/RTOS/microcontroller/hardware explicitly required
+
+════════════════════════════════════════════════════════
+STEP 3 — FINAL CHECK
+════════════════════════════════════════════════════════
+
+1. Did the job title directly name a domain? → Use that.
+2. If not, which domain has the MOST required skills/responsibilities in the JD?
+3. If truly unclear → "Software Engineering"
+
+Return ONLY one domain from this list, nothing else:
+{_domain_list}
+"""
         try:
-            _raw_jd = call_llm(_jd_domain_prompt, session=st.session_state).strip()
-            _jd_domain_line = ""
-            for _line in _raw_jd.splitlines():
-                _line = _line.strip()
-                if _line.lower().startswith("domain:"):
-                    _jd_domain_line = _line.split(":", 1)[1].strip()
-                    break
-            if _jd_domain_line in _valid_domains:
-                st.session_state[_jd_cache_key] = _jd_domain_line
+            _j = call_llm(_jd_domain_prompt, session=st.session_state).strip()
+            if _j in _valid_domains:
+                st.session_state[_jd_cache_key] = _j
             else:
-                _jd_kw = (db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000]))
+                # LLM returned invalid — fall back to keyword detection
+                _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
                 st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
         except Exception:
+            # LLM failed — fall back to keyword detection
             try:
-                _jd_kw = (db_manager.detect_domain_with_confidence(job_title, job_description[:3000]).get("domain") or db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000]))
+                _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
                 st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
             except Exception:
                 st.session_state[_jd_cache_key] = "Software Engineering"
@@ -3407,24 +3418,9 @@ def ats_percentage_score(
     grammar_feedback    = "Language quality appears adequate for professional communication."
     grammar_suggestions = []
 
-    # ✅ Depth-weighted domain penalty
-    # Same domain (similarity >= 0.85) → always zero penalty regardless of depth
-    # Different domain → base penalty from similarity gap, then depth modifier:
-    #   shallow candidates pivot more easily → smaller penalty multiplier (0.60)
-    #   deep specialists are more domain-locked → larger penalty multiplier (1.05)
-    MAX_DOMAIN_PENALTY = 12
-    if similarity_score >= 0.85:
-        domain_penalty       = 0
-        effective_similarity = similarity_score
-    else:
-        _depth_pen_mod = {
-            "shallow":         0.60,
-            "moderate":        0.75,
-            "moderate_strong": 0.88,
-            "deep":            1.05,
-        }.get(_depth_str, 0.75)
-        domain_penalty       = round((1 - similarity_score) * MAX_DOMAIN_PENALTY * _depth_pen_mod)
-        effective_similarity = similarity_score
+    # ✅ Balanced domain penalty
+    MAX_DOMAIN_PENALTY = 15
+    domain_penalty = round((1 - similarity_score) * MAX_DOMAIN_PENALTY)
 
     # ✅ Optional profile score note
     logic_score_note = (
@@ -3995,26 +3991,19 @@ SCORING SCALE for language ({lang_weight} pts max):
         f"<br><b>Improvement Suggestions:</b> {suggestions_html}"
     )
 
-    # Pre-compute depth display values for score breakdown
-    _depth_display_label = {"shallow": "Shallow", "moderate": "Moderate",
-                            "moderate_strong": "Moderate+", "deep": "Deep"}.get(_depth_str, _depth_str.capitalize())
-    _depth_display_desc  = {"shallow": "(tools listed only — no described work or deliverables)",
-                            "moderate": "(2+ described deliverables or projects, or 1 real internship)",
-                            "moderate_strong": "(strong portfolio, internship + work, or production deployment)",
-                            "deep": "(full-time employment or quantified real-world impact)"}.get(_depth_str, "")
-
     # Enhanced final thoughts with domain analysis and industry benchmarks
     final_thoughts += f"""
 
-**Score Breakdown:**
-- Content Score: {content_score}/90
-- Format Score: {format_component}/10 (raw: {fmt_score_raw}/100)
-- Score before domain adjustment: {pre_penalty_score}/100
-- Domain adjustment: {("-" + str(domain_penalty) + " pts (your field doesn\'t fully match the job)") if domain_penalty > 0 else "None — your field matches the job"}
+**Technical Evaluation Details:**
+- Content Score (LLM components, 90-pt scale): {content_score}/90
+- Format Component (10-pt scale): {format_component}/10 (Format Score: {fmt_score_raw}/100)
+- Pre-Penalty Score: {pre_penalty_score}/100
+- Domain Penalty Applied: -{domain_penalty} pts (out of max -{MAX_DOMAIN_PENALTY} pts)
 - Final ATS Score: {total_score}/100
-- Your field: {resume_domain}
-- Job field: {job_domain}
-- Experience level in your field: {_depth_display_label} {_depth_display_desc}
+- Domain Similarity: {similarity_score:.2f}/1.0 ({int(similarity_score * 100)}% alignment)
+- Resume Domain Detected: {resume_domain}
+- Target Job Domain: {job_domain}
+- Language Pre-Score: {grammar_score}/{lang_weight}
 
 **Score Interpretation (Industry Benchmarks):**
 - 85–100: Top 10% candidates — Strong interview recommendation
@@ -4058,7 +4047,6 @@ SCORING SCALE for language ({lang_weight} pts max):
         "Missing Skills": missing_skills,
         "Resume Domain": resume_domain,
         "Job Domain": job_domain,
-        "Resume Depth": _depth_str,
         "Domain Penalty": domain_penalty,
         "Domain Similarity Score": similarity_score
     }
