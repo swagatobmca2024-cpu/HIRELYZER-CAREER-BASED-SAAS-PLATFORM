@@ -1821,8 +1821,7 @@ if not st.session_state.get("authenticated", False):
                                     notify("login", "error", _lock_msg)
                                     st.rerun()
                                 else:
-                                    with st.spinner("Signing you in..."):
-                                        success, saved_key = verify_user(_input, pwd.strip())
+                                    success, saved_key = verify_user(_input, pwd.strip())
                                     if success:
                                         st.session_state.authenticated = True
                                         if saved_key:
@@ -2263,8 +2262,7 @@ if not st.session_state.get("authenticated", False):
                             notify("register", "error", "🚫 Username already exists.")
                             st.rerun()
                         else:
-                            with st.spinner("Validating details and sending OTP to your email..."):
-                                success, message = add_user(new_user.strip(), new_pass.strip(), new_email.strip())
+                            success, message = add_user(new_user.strip(), new_pass.strip(), new_email.strip())
                             if success:
                                 notify("register", "success", message)
                                 time.sleep(0.5)
