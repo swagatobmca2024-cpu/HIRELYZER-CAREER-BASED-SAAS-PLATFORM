@@ -15919,71 +15919,28 @@ Generate {num_questions} questions now:
                     st.plotly_chart(_fig_rb, use_container_width=True)
 
                 with col_rb2:
-                    # ── Pie chart wrapped in expander so user can minimise it ──
-                    with st.expander("🥧 Interview Distribution by Role", expanded=True):
-                        _total_attempts = role_perf['Times Practised'].sum()
-
-                        # Only show a label on slices ≥ 5% — tiny slices get nothing
-                        # on the slice itself; the legend always shows every role.
-                        _pie_labels = role_perf['Role'].tolist()
-                        _pie_values = role_perf['Times Practised'].tolist()
-                        _pie_pcts   = [v / _total_attempts * 100 for v in _pie_values]
-                        _customdata = [f"{p:.1f}%" for p in _pie_pcts]
-
-                        # Per-slice text: show "RoleName\nXX%" only if slice ≥ 5%,
-                        # otherwise show nothing so small slices stay clean.
-                        _slice_text = [
-                            f"{lbl}<br>{p:.1f}%" if p >= 5 else ""
-                            for lbl, p in zip(_pie_labels, _pie_pcts)
-                        ]
-
-                        _fig_pie = go.Figure(go.Pie(
-                            labels=_pie_labels,
-                            values=_pie_values,
-                            hole=0.44,
-                            marker=dict(
-                                colors=px.colors.sequential.Blues_r[:len(role_perf)],
-                                line=dict(color='rgba(0,0,0,0.5)', width=1.5)
-                            ),
-                            # Use custom text so we control exactly what appears per slice
-                            text=_slice_text,
-                            textinfo='text',
-                            textposition='inside',
-                            insidetextorientation='horizontal',
-                            textfont=dict(color='white', size=11, family='Inter, sans-serif'),
-                            # Hover always shows full info regardless of slice size
-                            customdata=_customdata,
-                            hovertemplate='<b>%{label}</b><br>Interviews: %{value}<br>Share: %{customdata}<extra></extra>',
-                            # Push tiny slices' hover labels outside so they don't overlap
-                            sort=False,
-                        ))
-                        _fig_pie.update_layout(
-                            title=dict(
-                                text='Interview Distribution by Role',
-                                font=dict(color='#00c3ff', size=14)
-                            ),
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            font=dict(color='white', family='Inter, sans-serif'),
-                            # Legend on the right — always shows ALL roles clearly
-                            showlegend=True,
-                            legend=dict(
-                                font=dict(color='rgba(220,230,240,0.9)', size=11),
-                                bgcolor='rgba(15,20,35,0.0)',
-                                bordercolor='rgba(0,0,0,0)',
-                                orientation='v',
-                                x=1.01, xanchor='left',
-                                y=0.5,  yanchor='middle',
-                            ),
-                            margin=dict(l=0, r=160, t=40, b=10),
-                            height=360,
-                            annotations=[dict(
-                                text='Roles', x=0.38, y=0.5,
-                                font_size=13, showarrow=False,
-                                font_color='rgba(170,180,190,0.8)'
-                            )]
-                        )
-                        st.plotly_chart(_fig_pie, use_container_width=True)
-                        st.caption("💡 Hover any slice to see the exact role and count. Labels only appear on slices ≥ 5% to keep the chart clean.")
+                    # Interactive pie chart — Interview distribution by role
+                    _fig_pie = go.Figure(go.Pie(
+                        labels=role_perf['Role'],
+                        values=role_perf['Times Practised'],
+                        hole=0.42,
+                        marker=dict(
+                            colors=px.colors.sequential.Blues_r[:len(role_perf)],
+                            line=dict(color='rgba(0,0,0,0.5)', width=1.5)
+                        ),
+                        textinfo='label+percent',
+                        textfont=dict(color='white', size=11),
+                        hovertemplate='<b>%{label}</b><br>Interviews: %{value}<br>Share: %{percent}<extra></extra>'
+                    ))
+                    _fig_pie.update_layout(
+                        title=dict(text='Interview Distribution by Role', font=dict(color='#00c3ff', size=14)),
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='white'),
+                        legend=dict(font=dict(color='white', size=10), bgcolor='rgba(0,0,0,0)'),
+                        margin=dict(l=5,r=5,t=40,b=5), height=280,
+                        annotations=[dict(text='Roles', x=0.5, y=0.5, font_size=13, showarrow=False, font_color='#aaa')]
+                    )
+                    st.plotly_chart(_fig_pie, use_container_width=True)
 
                 # Styled role table
                 st.markdown("**Your Scores by Job Role**")
