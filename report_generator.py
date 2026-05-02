@@ -54,8 +54,8 @@ from db_manager import (
 from user_login import (
     create_user_table, add_user, complete_registration, verify_user,
     get_logins_today, get_total_registered_users, log_user_action,
-    username_exists, email_exists, is_valid_email, save_user_api_key,
-    get_user_api_key, get_all_user_logs, generate_otp, send_email_otp,
+    username_exists, email_exists, is_valid_email, get_all_user_logs,
+    generate_otp, send_email_otp,
     get_user_by_email, update_password_by_email, is_strong_password,
     domain_has_mx_record, send_login_link, verify_login_token,
     cleanup_expired_login_tokens, check_and_gate_feature,
