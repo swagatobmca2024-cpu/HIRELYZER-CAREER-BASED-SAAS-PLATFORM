@@ -15785,13 +15785,12 @@ Generate {num_questions} questions now:
                 xaxis=dict(
                     title='Interview #',
                     gridcolor='rgba(255,255,255,0.07)',
-                    tickmode='linear',
+                    tickmode='auto',
+                    nticks=15,
                     tick0=1,
-                    dtick=1,
                     tickangle=-45,
                     tickfont=dict(size=10),
                     showline=True, linecolor='rgba(0,195,255,0.3)',
-                    ticklabelstep=max(1, len(_x_vals) // 15),
                 ),
                 yaxis=dict(
                     title='Score (/10)',
