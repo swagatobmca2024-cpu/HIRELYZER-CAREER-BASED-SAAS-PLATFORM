@@ -15785,11 +15785,7 @@ Generate {num_questions} questions now:
                 xaxis=dict(
                     title='Interview #',
                     gridcolor='rgba(255,255,255,0.07)',
-                    # Auto-space ticks — show every N interviews depending on count
-                    # so labels never overlap regardless of how many interviews exist
-                    tickmode='linear',
-                    dtick=max(1, len(_x_vals) // 20),
-                    tickangle=-45 if len(_x_vals) > 20 else 0,
+                    tickmode='linear', dtick=1,
                     showline=True, linecolor='rgba(0,195,255,0.3)'
                 ),
                 yaxis=dict(
@@ -15799,7 +15795,7 @@ Generate {num_questions} questions now:
                     showline=True, linecolor='rgba(0,195,255,0.3)'
                 ),
                 hovermode='x unified',
-                margin=dict(l=10, r=10, t=30, b=40),
+                margin=dict(l=10, r=10, t=30, b=10),
                 height=380,
                 transition_duration=500
             )
@@ -15923,53 +15919,28 @@ Generate {num_questions} questions now:
                     st.plotly_chart(_fig_rb, use_container_width=True)
 
                 with col_rb2:
-                    # Minimize/expand toggle for pie chart
-                    _pie_key = "_pie_chart_expanded"
-                    if _pie_key not in st.session_state:
-                        st.session_state[_pie_key] = True
-                    _pie_label = "🗕 Minimize" if st.session_state[_pie_key] else "🗖 Expand"
-                    if st.button(_pie_label, key="_pie_toggle_btn"):
-                        st.session_state[_pie_key] = not st.session_state[_pie_key]
-
-                    if st.session_state[_pie_key]:
-                        # Interactive pie chart — Interview distribution by role
-                        # Use textinfo='none' + legend only when many roles to avoid label overlap
-                        _many_roles = len(role_perf) > 6
-                        _fig_pie = go.Figure(go.Pie(
-                            labels=role_perf['Role'],
-                            values=role_perf['Times Practised'],
-                            hole=0.42,
-                            marker=dict(
-                                colors=px.colors.sequential.Blues_r[:len(role_perf)],
-                                line=dict(color='rgba(0,0,0,0.5)', width=1.5)
-                            ),
-                            # When many roles: show percent only on slice, full label in legend
-                            # When few roles: show label+percent directly
-                            textinfo='percent' if _many_roles else 'label+percent',
-                            textposition='inside' if _many_roles else 'auto',
-                            textfont=dict(color='white', size=10 if _many_roles else 11),
-                            insidetextorientation='radial',
-                            hovertemplate='<b>%{label}</b><br>Interviews: %{value}<br>Share: %{percent}<extra></extra>'
-                        ))
-                        _fig_pie.update_layout(
-                            title=dict(text='Interview Distribution by Role', font=dict(color='#00c3ff', size=14)),
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            font=dict(color='white'),
-                            # Legend always shown — acts as label when slices are too small
-                            legend=dict(
-                                font=dict(color='white', size=9),
-                                bgcolor='rgba(15,20,35,0.7)',
-                                bordercolor='rgba(0,195,255,0.2)',
-                                borderwidth=1,
-                                orientation='v',
-                                x=1.02, xanchor='left',
-                                y=0.5, yanchor='middle',
-                            ),
-                            margin=dict(l=5, r=120, t=40, b=5),
-                            height=300,
-                            annotations=[dict(text='Roles', x=0.5, y=0.5, font_size=13, showarrow=False, font_color='#aaa')]
-                        )
-                        st.plotly_chart(_fig_pie, use_container_width=True)
+                    # Interactive pie chart — Interview distribution by role
+                    _fig_pie = go.Figure(go.Pie(
+                        labels=role_perf['Role'],
+                        values=role_perf['Times Practised'],
+                        hole=0.42,
+                        marker=dict(
+                            colors=px.colors.sequential.Blues_r[:len(role_perf)],
+                            line=dict(color='rgba(0,0,0,0.5)', width=1.5)
+                        ),
+                        textinfo='label+percent',
+                        textfont=dict(color='white', size=11),
+                        hovertemplate='<b>%{label}</b><br>Interviews: %{value}<br>Share: %{percent}<extra></extra>'
+                    ))
+                    _fig_pie.update_layout(
+                        title=dict(text='Interview Distribution by Role', font=dict(color='#00c3ff', size=14)),
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(color='white'),
+                        legend=dict(font=dict(color='white', size=10), bgcolor='rgba(0,0,0,0)'),
+                        margin=dict(l=5,r=5,t=40,b=5), height=280,
+                        annotations=[dict(text='Roles', x=0.5, y=0.5, font_size=13, showarrow=False, font_color='#aaa')]
+                    )
+                    st.plotly_chart(_fig_pie, use_container_width=True)
 
                 # Styled role table
                 st.markdown("**Your Scores by Job Role**")
@@ -16487,137 +16458,15 @@ Generate {num_questions} questions now:
                 _th_style = "padding:9px 12px;color:#38bdf8;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid rgba(0,195,255,0.3);white-space:nowrap;"
                 _td_style = "padding:8px 12px;color:#e0e0e0;font-size:13px;white-space:nowrap;"
 
-                # ── Pagination controls ───────────────────────────────────────
-                _total_records = len(display_df)
-
-                # Per-page selector
-                _pc1, _pc2 = st.columns([1, 3])
-                with _pc1:
-                    _per_page = st.selectbox(
-                        "Rows per page",
-                        options=[5, 10, 20, 50],
-                        index=1,
-                        key="_records_per_page",
-                    )
-                _total_pages = max(1, -(-_total_records // _per_page))
-
-                # ── Single source of truth: _records_page only ────────────────
-                # NEVER write to slider key directly — causes StreamlitAPIException
-                # Buttons use on_click callbacks to update page BEFORE render
-                if "_records_page" not in st.session_state:
-                    st.session_state["_records_page"] = 1
-                # Clamp on per-page change
-                if st.session_state["_records_page"] > _total_pages:
-                    st.session_state["_records_page"] = _total_pages
-
-                _cur_page = st.session_state["_records_page"]
-
-                with _pc2:
-                    _p_start_disp = (_cur_page - 1) * _per_page + 1
-                    _p_end_disp   = min(_cur_page * _per_page, _total_records)
-                    st.markdown(
-                        f"<div style='padding-top:32px;font-size:0.76rem;color:#64748b;'>"
-                        f"Showing <b style='color:#e2e8f0;'>{_p_start_disp}–{_p_end_disp}</b>"
-                        f" of <b style='color:#e2e8f0;'>{_total_records}</b> records"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
-
-                if _total_pages > 1:
-                    # ── Nav callbacks — run BEFORE widgets render ─────────────
-                    def _go_first():  st.session_state["_records_page"] = 1
-                    def _go_prev():   st.session_state["_records_page"] = max(1, st.session_state["_records_page"] - 1)
-                    def _go_next():   st.session_state["_records_page"] = min(_total_pages, st.session_state["_records_page"] + 1)
-                    def _go_last():   st.session_state["_records_page"] = _total_pages
-
-                    _nb1, _nb2, _ns, _nb3, _nb4 = st.columns([1.2, 1.2, 5, 1.2, 1.2])
-                    with _nb1:
-                        st.button("⏮", key="_rec_first", help="First page",
-                                  disabled=_cur_page <= 1,
-                                  on_click=_go_first, use_container_width=True)
-                    with _nb2:
-                        st.button("◀", key="_rec_prev", help="Previous page",
-                                  disabled=_cur_page <= 1,
-                                  on_click=_go_prev, use_container_width=True)
-                    with _ns:
-                        # Slider reads from _records_page — its own key is separate
-                        _new_page = st.slider(
-                            "Page",
-                            min_value=1, max_value=_total_pages,
-                            value=_cur_page,
-                            key="_rec_slider",
-                            label_visibility="collapsed",
-                            format="Page %d",
-                        )
-                        # Slider changed — update source of truth
-                        if _new_page != _cur_page:
-                            st.session_state["_records_page"] = _new_page
-                            _cur_page = _new_page
-                    with _nb3:
-                        st.button("▶", key="_rec_next", help="Next page",
-                                  disabled=_cur_page >= _total_pages,
-                                  on_click=_go_next, use_container_width=True)
-                    with _nb4:
-                        st.button("⏭", key="_rec_last", help="Last page",
-                                  disabled=_cur_page >= _total_pages,
-                                  on_click=_go_last, use_container_width=True)
-
-                    # Dots — use final _cur_page after slider check
-                    _max_dots  = min(_total_pages, 10)
-                    _dot_step  = max(1, _total_pages // _max_dots)
-                    _dot_pages = sorted(set(
-                        list(range(1, _total_pages + 1, _dot_step)) + [_total_pages]
-                    ))[:_max_dots + 1]
-                    _dots_html = "<div style='text-align:center;margin:4px 0 8px;'>"
-                    for _dp in _dot_pages:
-                        _active    = (_dp == _cur_page)
-                        _dc        = "#38bdf8" if _active else "rgba(255,255,255,0.18)"
-                        _ds        = "10px" if _active else "7px"
-                        _dots_html += (
-                            f"<span style='display:inline-block;width:{_ds};height:{_ds};"
-                            f"border-radius:50%;background:{_dc};"
-                            f"margin:0 3px;vertical-align:middle;'></span>"
-                        )
-                    _dots_html += "</div>"
-                    st.markdown(_dots_html, unsafe_allow_html=True)
-
-                    # Page indicator dots — max 10 dots shown, active one highlighted
-                    _max_dots = min(_total_pages, 10)
-                    _dot_step = max(1, _total_pages // _max_dots)
-                    _dot_pages = list(range(1, _total_pages + 1, _dot_step))[:_max_dots]
-                    if _total_pages not in _dot_pages:
-                        _dot_pages.append(_total_pages)
-                    _dots_html = "<div style='text-align:center;margin:4px 0 8px;'>"
-                    for _dp in _dot_pages:
-                        _is_cur = (_dp == _cur_page)
-                        _dot_color  = "#38bdf8" if _is_cur else "rgba(255,255,255,0.18)"
-                        _dot_size   = "10px" if _is_cur else "7px"
-                        _dots_html += (
-                            f"<span style='display:inline-block;width:{_dot_size};height:{_dot_size};"
-                            f"border-radius:50%;background:{_dot_color};"
-                            f"margin:0 3px;vertical-align:middle;transition:all 0.2s;'></span>"
-                        )
-                    _dots_html += "</div>"
-                    st.markdown(_dots_html, unsafe_allow_html=True)
-
-                # Slice the dataframe for current page
-                _page_start = (_per_page * (_cur_page - 1))
-                _page_end   = _page_start + _per_page
-                _page_df    = display_df.iloc[_page_start:_page_end]
-
-                # Trend arrows need previous score — use global list but slice correctly
-                _all_scores = display_df[_score_col].tolist() if _score_col in display_df.columns else []
-
-                _headers = list(_page_df.columns)
+                _headers = list(display_df.columns)
                 _header_row = "".join([f'<th style="{_th_style}">{h}</th>' for h in _headers]) + f'<th style="{_th_style}">Trend</th>'
 
                 _body_rows = ""
-                for _pi, (_gi, row) in enumerate(zip(range(_page_start, _page_end), _page_df.itertuples(index=False))):
-                    row = dict(zip(_page_df.columns, row))
+                _prev_score = None
+                for i, row in display_df.iterrows():
                     _cur_score = row.get('Score', None)
-                    _prev_score_val = _all_scores[_gi - 1] if _gi > 0 else None
                     _is_best = (not pd.isna(_cur_score) and not pd.isna(_best_score_val) and float(_cur_score) == float(_best_score_val))
-                    _row_bg = 'background:rgba(0,230,118,0.10);' if _is_best else ('background:rgba(255,255,255,0.02);' if _pi % 2 == 0 else '')
+                    _row_bg = 'background:rgba(0,230,118,0.10);' if _is_best else ('background:rgba(255,255,255,0.02);' if i % 2 == 0 else '')
                     _cells = ""
                     for col_name in _headers:
                         val = row[col_name]
@@ -16630,11 +16479,13 @@ Generate {num_questions} questions now:
                             _crown = ' 🏆' if _is_best else ''
                             _cells += f'<td style="{_td_style}font-weight:600;">{val}{_crown}</td>'
                         else:
-                            _disp_val = str(val) if not (isinstance(val, float) and pd.isna(val)) else '—'
+                            _disp_val = str(val) if not pd.isna(val) else '—'
                             _cells += f'<td style="{_td_style}">{_disp_val}</td>'
-                    _arrow = _trend_arrow(_cur_score, _prev_score_val) if _cur_score is not None and not (isinstance(_cur_score, float) and pd.isna(_cur_score)) else ''
+                    _arrow = _trend_arrow(_cur_score, _prev_score) if not pd.isna(_cur_score) else ''
                     _cells += f'<td style="{_td_style}text-align:center;">{_arrow}</td>'
                     _body_rows += f'<tr style="{_row_bg}">{_cells}</tr>'
+                    if not pd.isna(_cur_score):
+                        _prev_score = _cur_score
 
                 st.markdown(f"""
                 <div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(0,195,255,0.2);margin-top:8px;">
@@ -16644,7 +16495,6 @@ Generate {num_questions} questions now:
                 </table></div>
                 <p style="color:rgba(255,255,255,0.4);font-size:11px;margin-top:6px;">
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
-                  &nbsp;|&nbsp; Showing {_p_start_disp}–{_p_end_disp} of {_total_records}
                 </p>
                 """, unsafe_allow_html=True)
 if tab5:
