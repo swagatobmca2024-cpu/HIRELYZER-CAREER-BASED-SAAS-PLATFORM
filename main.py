@@ -15919,28 +15919,71 @@ Generate {num_questions} questions now:
                     st.plotly_chart(_fig_rb, use_container_width=True)
 
                 with col_rb2:
-                    # Interactive pie chart — Interview distribution by role
-                    _fig_pie = go.Figure(go.Pie(
-                        labels=role_perf['Role'],
-                        values=role_perf['Times Practised'],
-                        hole=0.42,
-                        marker=dict(
-                            colors=px.colors.sequential.Blues_r[:len(role_perf)],
-                            line=dict(color='rgba(0,0,0,0.5)', width=1.5)
-                        ),
-                        textinfo='label+percent',
-                        textfont=dict(color='white', size=11),
-                        hovertemplate='<b>%{label}</b><br>Interviews: %{value}<br>Share: %{percent}<extra></extra>'
-                    ))
-                    _fig_pie.update_layout(
-                        title=dict(text='Interview Distribution by Role', font=dict(color='#00c3ff', size=14)),
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        font=dict(color='white'),
-                        legend=dict(font=dict(color='white', size=10), bgcolor='rgba(0,0,0,0)'),
-                        margin=dict(l=5,r=5,t=40,b=5), height=280,
-                        annotations=[dict(text='Roles', x=0.5, y=0.5, font_size=13, showarrow=False, font_color='#aaa')]
-                    )
-                    st.plotly_chart(_fig_pie, use_container_width=True)
+                    # ── Pie chart wrapped in expander so user can minimise it ──
+                    with st.expander("🥧 Interview Distribution by Role", expanded=True):
+                        _total_attempts = role_perf['Times Practised'].sum()
+
+                        # Only show a label on slices ≥ 5% — tiny slices get nothing
+                        # on the slice itself; the legend always shows every role.
+                        _pie_labels = role_perf['Role'].tolist()
+                        _pie_values = role_perf['Times Practised'].tolist()
+                        _pie_pcts   = [v / _total_attempts * 100 for v in _pie_values]
+                        _customdata = [f"{p:.1f}%" for p in _pie_pcts]
+
+                        # Per-slice text: show "RoleName\nXX%" only if slice ≥ 5%,
+                        # otherwise show nothing so small slices stay clean.
+                        _slice_text = [
+                            f"{lbl}<br>{p:.1f}%" if p >= 5 else ""
+                            for lbl, p in zip(_pie_labels, _pie_pcts)
+                        ]
+
+                        _fig_pie = go.Figure(go.Pie(
+                            labels=_pie_labels,
+                            values=_pie_values,
+                            hole=0.44,
+                            marker=dict(
+                                colors=px.colors.sequential.Blues_r[:len(role_perf)],
+                                line=dict(color='rgba(0,0,0,0.5)', width=1.5)
+                            ),
+                            # Use custom text so we control exactly what appears per slice
+                            text=_slice_text,
+                            textinfo='text',
+                            textposition='inside',
+                            insidetextorientation='horizontal',
+                            textfont=dict(color='white', size=11, family='Inter, sans-serif'),
+                            # Hover always shows full info regardless of slice size
+                            customdata=_customdata,
+                            hovertemplate='<b>%{label}</b><br>Interviews: %{value}<br>Share: %{customdata}<extra></extra>',
+                            # Push tiny slices' hover labels outside so they don't overlap
+                            sort=False,
+                        ))
+                        _fig_pie.update_layout(
+                            title=dict(
+                                text='Interview Distribution by Role',
+                                font=dict(color='#00c3ff', size=14)
+                            ),
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            font=dict(color='white', family='Inter, sans-serif'),
+                            # Legend on the right — always shows ALL roles clearly
+                            showlegend=True,
+                            legend=dict(
+                                font=dict(color='rgba(220,230,240,0.9)', size=11),
+                                bgcolor='rgba(15,20,35,0.0)',
+                                bordercolor='rgba(0,0,0,0)',
+                                orientation='v',
+                                x=1.01, xanchor='left',
+                                y=0.5,  yanchor='middle',
+                            ),
+                            margin=dict(l=0, r=160, t=40, b=10),
+                            height=360,
+                            annotations=[dict(
+                                text='Roles', x=0.38, y=0.5,
+                                font_size=13, showarrow=False,
+                                font_color='rgba(170,180,190,0.8)'
+                            )]
+                        )
+                        st.plotly_chart(_fig_pie, use_container_width=True)
+                        st.caption("💡 Hover any slice to see the exact role and count. Labels only appear on slices ≥ 5% to keep the chart clean.")
 
                 # Styled role table
                 st.markdown("**Your Scores by Job Role**")
@@ -16434,71 +16477,6 @@ Generate {num_questions} questions now:
                 # Per-user sequential numbering: always starts at 1 regardless of DB id
                 display_df.insert(0, '#', range(1, len(display_df) + 1))
 
-                # ── Pagination controls ──────────────────────────────────────────
-                _total_records = len(display_df)
-                _page_size_key  = "_rec_table_page_size"
-                _page_idx_key   = "_rec_table_page_idx"
-
-                # Page-size selector + reset page when size changes
-                _ctrl_col1, _ctrl_col2 = st.columns([2, 5])
-                with _ctrl_col1:
-                    _page_size = st.selectbox(
-                        "Rows per page",
-                        options=[5, 10, 25, 50],
-                        index=1,          # default = 10
-                        key=_page_size_key,
-                        label_visibility="collapsed",
-                    )
-                    # Reset to page 0 whenever page size is changed
-                    if st.session_state.get("_rec_last_page_size") != _page_size:
-                        st.session_state[_page_idx_key] = 0
-                        st.session_state["_rec_last_page_size"] = _page_size
-
-                _total_pages = max(1, -(-_total_records // _page_size))  # ceiling div
-                _cur_page    = int(st.session_state.get(_page_idx_key, 0))
-                _cur_page    = max(0, min(_cur_page, _total_pages - 1))  # clamp
-
-                with _ctrl_col2:
-                    _nav_c1, _nav_c2, _nav_c3, _nav_c4, _nav_c5 = st.columns([1, 1, 2, 1, 1])
-                    with _nav_c1:
-                        if st.button("⏮", key="_rec_first", help="First page", disabled=(_cur_page == 0)):
-                            st.session_state[_page_idx_key] = 0
-                            st.rerun()
-                    with _nav_c2:
-                        if st.button("◀", key="_rec_prev", help="Previous page", disabled=(_cur_page == 0)):
-                            st.session_state[_page_idx_key] = _cur_page - 1
-                            st.rerun()
-                    with _nav_c3:
-                        _start_rec = _cur_page * _page_size + 1
-                        _end_rec   = min(_start_rec + _page_size - 1, _total_records)
-                        st.markdown(
-                            f'<p style="text-align:center;color:#94a3b8;font-size:13px;margin:6px 0 0 0;">'
-                            f'Page <b style="color:#38bdf8">{_cur_page + 1}</b> of <b style="color:#38bdf8">{_total_pages}</b>'
-                            f' &nbsp;·&nbsp; Records {_start_rec}–{_end_rec} of {_total_records}</p>',
-                            unsafe_allow_html=True
-                        )
-                    with _nav_c4:
-                        if st.button("▶", key="_rec_next", help="Next page", disabled=(_cur_page >= _total_pages - 1)):
-                            st.session_state[_page_idx_key] = _cur_page + 1
-                            st.rerun()
-                    with _nav_c5:
-                        if st.button("⏭", key="_rec_last", help="Last page", disabled=(_cur_page >= _total_pages - 1)):
-                            st.session_state[_page_idx_key] = _total_pages - 1
-                            st.rerun()
-
-                # Slice the dataframe to the current page
-                _page_start = _cur_page * _page_size
-                _page_end   = _page_start + _page_size
-                page_df     = display_df.iloc[_page_start:_page_end]
-
-                # Trend arrow needs the score of the row *just before* this page
-                _prev_score_seed = None
-                if _page_start > 0:
-                    _prev_scores = display_df['Score'].iloc[:_page_start].dropna()
-                    if not _prev_scores.empty:
-                        _prev_score_seed = float(_prev_scores.iloc[-1])
-
-                # ── Badge + arrow helpers ────────────────────────────────────────
                 # Build enhanced HTML table with score badges, trend arrows, best-row highlight
                 _score_col = 'Score'
                 _scores_list_disp = display_df[_score_col].tolist() if _score_col in display_df.columns else []
@@ -16523,12 +16501,12 @@ Generate {num_questions} questions now:
                 _th_style = "padding:9px 12px;color:#38bdf8;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid rgba(0,195,255,0.3);white-space:nowrap;"
                 _td_style = "padding:8px 12px;color:#e0e0e0;font-size:13px;white-space:nowrap;"
 
-                _headers = list(page_df.columns)
+                _headers = list(display_df.columns)
                 _header_row = "".join([f'<th style="{_th_style}">{h}</th>' for h in _headers]) + f'<th style="{_th_style}">Trend</th>'
 
                 _body_rows = ""
-                _prev_score = _prev_score_seed
-                for i, row in page_df.iterrows():
+                _prev_score = None
+                for i, row in display_df.iterrows():
                     _cur_score = row.get('Score', None)
                     _is_best = (not pd.isna(_cur_score) and not pd.isna(_best_score_val) and float(_cur_score) == float(_best_score_val))
                     _row_bg = 'background:rgba(0,230,118,0.10);' if _is_best else ('background:rgba(255,255,255,0.02);' if i % 2 == 0 else '')
@@ -16560,7 +16538,6 @@ Generate {num_questions} questions now:
                 </table></div>
                 <p style="color:rgba(255,255,255,0.4);font-size:11px;margin-top:6px;">
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
-                  &nbsp;·&nbsp; Rows per page: <b style="color:#38bdf8">{_page_size}</b>
                 </p>
                 """, unsafe_allow_html=True)
 if tab5:
