@@ -98,6 +98,16 @@ KEY_CACHE_TTL = 3600.0   # reload from secrets at most once per hour
 
 
 # ── Timezone helper ───────────────────────────────────────────────────────────
+def _key_id(api_key: str) -> str:
+    """
+    Returns a safe DB identifier for an API key.
+    Stores first 8 chars (for human identification) + SHA256 suffix.
+    The raw key is NEVER written to the database — only this masked form.
+    Example: gsk_1R3Y...a3f9c2d8e1b4c5d6
+    """
+    return api_key[:8] + "..." + hashlib.sha256(api_key.encode()).hexdigest()[:16]
+
+
 def get_utc_now() -> datetime:
     return datetime.now(pytz.utc)
 
@@ -424,7 +434,7 @@ def increment_key_usage(api_key: str):
                     END,
                     last_reset = CURRENT_DATE
             """,
-            (api_key,),
+            (_key_id(api_key),),  # ← masked — raw key never stored in DB
         )
     except Exception:
         pass
@@ -440,7 +450,7 @@ def mark_key_failure(api_key: str, reason: str = "error"):
                 SET fail_time = EXCLUDED.fail_time,
                     reason    = EXCLUDED.reason
             """,
-            (api_key, reason),
+            (_key_id(api_key), reason),  # ← masked — raw key never stored in DB
         )
     except Exception:
         pass
@@ -448,7 +458,7 @@ def mark_key_failure(api_key: str, reason: str = "error"):
 
 def clear_key_failure(api_key: str):
     try:
-        _execute("DELETE FROM key_failures WHERE api_key = %s", (api_key,))
+        _execute("DELETE FROM key_failures WHERE api_key = %s", (_key_id(api_key),))
     except Exception:
         pass
 
@@ -525,16 +535,22 @@ def _seed_mem_from_db(api_keys: list, today: str):
     """
     One-shot DB read to seed in-memory failure + usage tables.
     Runs at startup or after a full key cycle.
+    DB stores masked key IDs (_key_id) — we build a reverse map to
+    match DB rows back to raw in-memory keys.
     """
+    # Build reverse map: masked_id → raw_key
+    id_to_key = {_key_id(k): k for k in api_keys}
+    masked_ids = list(id_to_key.keys())
+
     try:
         failures_rows = _execute(
             "SELECT api_key, fail_time, reason FROM key_failures WHERE api_key = ANY(%s)",
-            (api_keys,),
+            (masked_ids,),
             fetch="all",
         ) or []
         usage_rows = _execute(
             "SELECT api_key, usage_count, last_reset FROM key_usage WHERE api_key = ANY(%s)",
-            (api_keys,),
+            (masked_ids,),
             fetch="all",
         ) or []
     except Exception:
@@ -544,6 +560,9 @@ def _seed_mem_from_db(api_keys: list, today: str):
 
     with _mem_failures_lock:
         for row in failures_rows:
+            raw_key = id_to_key.get(row["api_key"])
+            if not raw_key:
+                continue
             fail_dt = row["fail_time"]
             if isinstance(fail_dt, str):
                 fail_dt = datetime.strptime(fail_dt, "%Y-%m-%d %H:%M:%S")
@@ -555,20 +574,23 @@ def _seed_mem_from_db(api_keys: list, today: str):
                         else FAILURE_COOLDOWN_MINUTES) * 60
             # Only seed if the cooldown is still active
             if (now_ts - fail_ts) < cooldown:
-                _mem_failures[row["api_key"]] = {
+                _mem_failures[raw_key] = {
                     "time":   fail_ts,
                     "reason": reason,
                 }
 
     with _mem_usage_lock:
         for row in usage_rows:
+            raw_key = id_to_key.get(row["api_key"])
+            if not raw_key:
+                continue
             last_reset = row["last_reset"]
             if hasattr(last_reset, "isoformat"):
                 last_reset = last_reset.isoformat()[:10]
             elif isinstance(last_reset, datetime):
                 last_reset = last_reset.strftime("%Y-%m-%d")
             usage_count = row["usage_count"] if last_reset == today else 0
-            _mem_usage[row["api_key"]] = {
+            _mem_usage[raw_key] = {
                 "count": usage_count,
                 "date":  today,
             }
