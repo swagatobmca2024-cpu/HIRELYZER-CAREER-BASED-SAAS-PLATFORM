@@ -15785,7 +15785,10 @@ Generate {num_questions} questions now:
                 xaxis=dict(
                     title='Interview #',
                     gridcolor='rgba(255,255,255,0.07)',
-                    tickmode='linear', dtick=1,
+                    tickmode='linear',
+                    dtick=max(1, len(_x_vals) // 20),   # max ~20 ticks visible at once
+                    tickangle=-45 if len(_x_vals) > 20 else 0,
+                    automargin=True,
                     showline=True, linecolor='rgba(0,195,255,0.3)'
                 ),
                 yaxis=dict(
@@ -15795,9 +15798,8 @@ Generate {num_questions} questions now:
                     showline=True, linecolor='rgba(0,195,255,0.3)'
                 ),
                 hovermode='x unified',
-                margin=dict(l=10, r=10, t=30, b=10),
-                height=380,
-                transition_duration=500
+                margin=dict(l=10, r=10, t=30, b=60),
+                height=380
             )
             st.plotly_chart(fig_trend, use_container_width=True)
             st.caption("💡 **Adjusted Score** gives a little extra credit for completing harder interviews. **Smoothed Trend** is the average of your last 3 interviews — it shows your real direction without single-interview spikes.")
@@ -15912,35 +15914,52 @@ Generate {num_questions} questions now:
                         title=dict(text='Avg Score by Role', font=dict(color='#00c3ff', size=14)),
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
                         font=dict(color='white'),
-                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)'),
+                        xaxis=dict(
+                            gridcolor='rgba(255,255,255,0.06)',
+                            tickangle=-40,
+                            automargin=True
+                        ),
                         yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
-                        margin=dict(l=5,r=5,t=40,b=5), height=280
+                        margin=dict(l=5,r=5,t=40,b=80), height=380
                     )
                     st.plotly_chart(_fig_rb, use_container_width=True)
 
                 with col_rb2:
-                    # Interactive pie chart — Interview distribution by role
-                    _fig_pie = go.Figure(go.Pie(
-                        labels=role_perf['Role'],
-                        values=role_perf['Times Practised'],
-                        hole=0.42,
-                        marker=dict(
-                            colors=px.colors.sequential.Blues_r[:len(role_perf)],
-                            line=dict(color='rgba(0,0,0,0.5)', width=1.5)
-                        ),
-                        textinfo='label+percent',
+                    # Horizontal bar chart — Interview distribution by role (all roles visible, no cutoff)
+                    _total_pie = role_perf['Times Practised'].sum()
+                    _rd = role_perf.copy()
+                    _rd['Pct'] = (_rd['Times Practised'] / _total_pie * 100).round(1)
+                    _rd = _rd.sort_values('Times Practised', ascending=True)  # largest at top
+                    _bar_colors = ['#00e676' if v == _rd['Times Practised'].max() else '#00c3ff' for v in _rd['Times Practised']]
+                    _fig_rdist = go.Figure(go.Bar(
+                        x=_rd['Times Practised'],
+                        y=_rd['Role'],
+                        orientation='h',
+                        marker=dict(color=_bar_colors, line=dict(color='rgba(0,0,0,0.3)', width=1)),
+                        text=[f"{int(v)}  ({p}%)" for v, p in zip(_rd['Times Practised'], _rd['Pct'])],
+                        textposition='outside',
                         textfont=dict(color='white', size=11),
-                        hovertemplate='<b>%{label}</b><br>Interviews: %{value}<br>Share: %{percent}<extra></extra>'
+                        hovertemplate='<b>%{y}</b><br>Interviews: %{x}<extra></extra>',
+                        cliponaxis=False
                     ))
-                    _fig_pie.update_layout(
+                    _dyn_height = max(320, len(_rd) * 36 + 80)
+                    _fig_rdist.update_layout(
                         title=dict(text='Interview Distribution by Role', font=dict(color='#00c3ff', size=14)),
                         paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(15,20,25,0.8)',
                         font=dict(color='white'),
-                        legend=dict(font=dict(color='white', size=10), bgcolor='rgba(0,0,0,0)'),
-                        margin=dict(l=5,r=5,t=40,b=5), height=280,
-                        annotations=[dict(text='Roles', x=0.5, y=0.5, font_size=13, showarrow=False, font_color='#aaa')]
+                        xaxis=dict(
+                            title='Interviews',
+                            gridcolor='rgba(255,255,255,0.07)',
+                            showline=True, linecolor='rgba(0,195,255,0.3)',
+                            range=[0, _rd['Times Practised'].max() * 1.35]
+                        ),
+                        yaxis=dict(gridcolor='rgba(255,255,255,0.04)', automargin=True),
+                        margin=dict(l=10, r=20, t=45, b=40),
+                        height=_dyn_height,
+                        showlegend=False
                     )
-                    st.plotly_chart(_fig_pie, use_container_width=True)
+                    st.plotly_chart(_fig_rdist, use_container_width=True)
 
                 # Styled role table
                 st.markdown("**Your Scores by Job Role**")
@@ -16487,16 +16506,55 @@ Generate {num_questions} questions now:
                     if not pd.isna(_cur_score):
                         _prev_score = _cur_score
 
-                st.markdown(f"""
-                <div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(0,195,255,0.2);margin-top:8px;">
-                <table style="width:100%;border-collapse:collapse;background:rgba(15,20,25,0.85);">
-                  <thead><tr>{_header_row}</tr></thead>
-                  <tbody>{_body_rows}</tbody>
-                </table></div>
-                <p style="color:rgba(255,255,255,0.4);font-size:11px;margin-top:6px;">
-                  🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
-                </p>
-                """, unsafe_allow_html=True)
+                _total_records = len(display_df)
+                _html_table = (
+                    """<!DOCTYPE html><html><head><meta charset="utf-8"><style>"""
+                    """body{margin:0;background:transparent;font-family:Inter,sans-serif;}"""
+                    """.sw{display:flex;align-items:center;gap:10px;padding:10px 12px 8px;"""
+                    """background:rgba(15,20,25,0.95);border:1px solid rgba(0,195,255,0.2);"""
+                    """border-bottom:none;border-radius:10px 10px 0 0;position:sticky;top:0;z-index:10;}"""
+                    """#si{flex:1;padding:7px 12px;border-radius:7px;border:1px solid rgba(0,195,255,0.3);"""
+                    """background:rgba(255,255,255,0.06);color:#e0e0e0;font-size:13px;outline:none;}"""
+                    """#si::placeholder{color:rgba(255,255,255,0.3);}"""
+                    """#si:focus{border-color:rgba(0,195,255,0.7);}"""
+                    """#cl{font-size:12px;color:rgba(255,255,255,0.4);white-space:nowrap;min-width:100px;text-align:right;}"""
+                    """.sc{overflow-y:auto;overflow-x:auto;max-height:480px;border:1px solid rgba(0,195,255,0.2);border-radius:0 0 10px 10px;}"""
+                    """table{width:100%;border-collapse:collapse;background:rgba(15,20,25,0.85);}"""
+                    """thead tr{position:sticky;top:0;z-index:5;background:rgba(10,15,22,0.98);}"""
+                    """tr.hidden{display:none;}"""
+                    """.lg{color:rgba(255,255,255,0.35);font-size:11px;padding:6px 2px 0;}"""
+                    """.badge-excellent{display:inline-block;padding:2px 8px;border-radius:12px;background:rgba(0,230,118,0.15);color:#00e676;font-weight:600;font-size:12px;}"""
+                    """.badge-good{display:inline-block;padding:2px 8px;border-radius:12px;background:rgba(0,195,255,0.12);color:#00c3ff;font-weight:600;font-size:12px;}"""
+                    """.badge-average{display:inline-block;padding:2px 8px;border-radius:12px;background:rgba(255,204,2,0.12);color:#ffcc02;font-weight:600;font-size:12px;}"""
+                    """.badge-weak{display:inline-block;padding:2px 8px;border-radius:12px;background:rgba(255,152,0,0.12);color:#ff9800;font-weight:600;font-size:12px;}"""
+                    """.badge-poor{display:inline-block;padding:2px 8px;border-radius:12px;background:rgba(244,67,54,0.12);color:#f44336;font-weight:600;font-size:12px;}"""
+                    """</style></head><body>"""
+                    f"""<div class="sw">"""
+                    """<input id="si" type="text" placeholder="&#128269; Filter by role, career area, level, format..." />"""
+                    f"""<span id="cl">All {_total_records} records</span>"""
+                    """</div>"""
+                    f"""<div class="sc"><table><thead><tr>{_header_row}</tr></thead>"""
+                    f"""<tbody id="tb">{_body_rows}</tbody></table></div>"""
+                    """<div class="lg">&#127942; Gold = personal best &nbsp;|&nbsp; &#9650; improved &nbsp;&#9660; dipped &nbsp;&#9679; steady vs previous</div>"""
+                    f"""<script>"""
+                    """(function(){{"""
+                    """var inp=document.getElementById('si');"""
+                    """var lbl=document.getElementById('cl');"""
+                    """var rows=document.querySelectorAll('#tb tr');"""
+                    f"""var total={_total_records};"""
+                    """inp.addEventListener('input',function(){{"""
+                    """var q=this.value.toLowerCase().trim();"""
+                    """var vis=0;"""
+                    """rows.forEach(function(r){{"""
+                    """if(!q||r.textContent.toLowerCase().includes(q)){{r.classList.remove('hidden');vis++;}}"""
+                    """else{{r.classList.add('hidden');}}"""
+                    """}});"""
+                    """lbl.textContent=q?(vis+' of '+total+' records'):('All '+total+' records');"""
+                    """}});"""
+                    """}})();"""
+                    """</script></body></html>"""
+                )
+                st.components.v1.html(_html_table, height=600, scrolling=False)
 if tab5:
 	with tab5:
 		# sqlite3 removed — using Supabase PostgreSQL via db_manager
