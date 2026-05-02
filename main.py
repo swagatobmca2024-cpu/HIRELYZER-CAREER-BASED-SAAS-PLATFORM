@@ -15785,12 +15785,8 @@ Generate {num_questions} questions now:
                 xaxis=dict(
                     title='Interview #',
                     gridcolor='rgba(255,255,255,0.07)',
-                    tickmode='linear',
-                    tick0=1,
-                    dtick=7,
-                    tickangle=-45,
-                    tickfont=dict(size=10),
-                    showline=True, linecolor='rgba(0,195,255,0.3)',
+                    tickmode='linear', dtick=1,
+                    showline=True, linecolor='rgba(0,195,255,0.3)'
                 ),
                 yaxis=dict(
                     title='Score (/10)',
@@ -15923,33 +15919,28 @@ Generate {num_questions} questions now:
                     st.plotly_chart(_fig_rb, use_container_width=True)
 
                 with col_rb2:
-                    # Horizontal bar chart — Interview distribution by role (replaces donut)
-                    _role_sorted = role_perf.sort_values('Times Practised', ascending=True)
-                    _total_interviews_role = _role_sorted['Times Practised'].sum()
-                    _pct_labels = [f"{v} ({v/_total_interviews_role*100:.1f}%)" for v in _role_sorted['Times Practised']]
-                    _bar_colors = ['#00e676' if v == _role_sorted['Times Practised'].max() else '#00c3ff'
-                                   for v in _role_sorted['Times Practised']]
-                    _fig_dist = go.Figure(go.Bar(
-                        x=_role_sorted['Times Practised'],
-                        y=_role_sorted['Role'],
-                        orientation='h',
-                        marker_color=_bar_colors,
-                        text=_pct_labels,
-                        textposition='outside',
-                        textfont=dict(size=10, color='white'),
-                        hovertemplate='<b>%{y}</b><br>Interviews: %{x}<br>Share: %{text}<extra></extra>'
+                    # Interactive pie chart — Interview distribution by role
+                    _fig_pie = go.Figure(go.Pie(
+                        labels=role_perf['Role'],
+                        values=role_perf['Times Practised'],
+                        hole=0.42,
+                        marker=dict(
+                            colors=px.colors.sequential.Blues_r[:len(role_perf)],
+                            line=dict(color='rgba(0,0,0,0.5)', width=1.5)
+                        ),
+                        textinfo='label+percent',
+                        textfont=dict(color='white', size=11),
+                        hovertemplate='<b>%{label}</b><br>Interviews: %{value}<br>Share: %{percent}<extra></extra>'
                     ))
-                    _dist_height = max(280, len(_role_sorted) * 32 + 60)
-                    _fig_dist.update_layout(
+                    _fig_pie.update_layout(
                         title=dict(text='Interview Distribution by Role', font=dict(color='#00c3ff', size=14)),
-                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(15,20,25,0.8)',
+                        paper_bgcolor='rgba(0,0,0,0)',
                         font=dict(color='white'),
-                        xaxis=dict(gridcolor='rgba(255,255,255,0.06)', title='Interviews'),
-                        yaxis=dict(gridcolor='rgba(255,255,255,0.06)', automargin=True),
-                        margin=dict(l=5, r=120, t=40, b=5),
-                        height=_dist_height
+                        legend=dict(font=dict(color='white', size=10), bgcolor='rgba(0,0,0,0)'),
+                        margin=dict(l=5,r=5,t=40,b=5), height=280,
+                        annotations=[dict(text='Roles', x=0.5, y=0.5, font_size=13, showarrow=False, font_color='#aaa')]
                     )
-                    st.plotly_chart(_fig_dist, use_container_width=True)
+                    st.plotly_chart(_fig_pie, use_container_width=True)
 
                 # Styled role table
                 st.markdown("**Your Scores by Job Role**")
@@ -16425,35 +16416,29 @@ Generate {num_questions} questions now:
                         )
                         st.plotly_chart(_fig_ma, use_container_width=True)
 
-            with st.expander("See All Your Interview Records"):
-
-                # ── Build display dataframe ──────────────────────────────────
-                display_cols = [c for c in ['role', 'domain', 'avg_score', 'weighted_score', 'knowledge_avg',
-                                             'communication_avg', 'relevance_avg', 'difficulty', 'interview_mode',
-                                             'total_questions', 'duration_seconds', 'follow_up_count',
-                                             'depth_score', 'behavior_class', 'completed_on']
+            with st.expander("📋 See All Your Interview Records"):
+                # Exclude raw DB 'id' — inject a clean per-user sequential # instead
+                display_cols = [c for c in ['role', 'domain', 'avg_score', 'weighted_score', 'knowledge_avg', 'communication_avg',
+                                             'relevance_avg', 'difficulty', 'interview_mode', 'total_questions', 'duration_seconds',
+                                             'follow_up_count', 'depth_score', 'behavior_class', 'completed_on']
                                 if c in df.columns]
                 rename_map = {
                     'avg_score': 'Score', 'weighted_score': 'Adjusted Score', 'knowledge_avg': 'Knowledge',
                     'communication_avg': 'Communication', 'relevance_avg': 'Relevance',
-                    'difficulty': 'Level', 'interview_mode': 'Format', 'total_questions': 'Questions',
-                    'duration_seconds': 'Duration (s)', 'completed_on': 'Date', 'role': 'Role',
-                    'domain': 'Career Area', 'follow_up_count': 'Follow-ups',
-                    'depth_score': 'Depth', 'behavior_class': 'Style'
+                    'difficulty': 'Level', 'interview_mode': 'Format',
+                    'total_questions': 'Questions', 'duration_seconds': 'Duration (s)',
+                    'completed_on': 'Date', 'role': 'Role', 'domain': 'Career Area',
+                    'follow_up_count': 'Follow-ups', 'depth_score': 'Depth', 'behavior_class': 'Style'
                 }
-                _full_display_df = df[display_cols].rename(columns=rename_map).reset_index(drop=True)
-                _full_display_df.insert(0, '#', range(1, len(_full_display_df) + 1))
-                _best_score_global = _full_display_df['Score'].max() if 'Score' in _full_display_df.columns else None
+                display_df = df[display_cols].rename(columns=rename_map)
+                # Per-user sequential numbering: always starts at 1 regardless of DB id
+                display_df.insert(0, '#', range(1, len(display_df) + 1))
 
-                # ── SVG icons ───────────────────────────────────────────────
-                _svg_trophy = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="#ffd700" style="vertical-align:middle;margin-left:4px;"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/></svg>'
-                _svg_up   = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="#00e676" style="vertical-align:middle;"><path d="M7 14l5-5 5 5z"/></svg>'
-                _svg_down = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="#f44336" style="vertical-align:middle;"><path d="M7 10l5 5 5-5z"/></svg>'
-                _svg_flat = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="#ffcc02" style="vertical-align:middle;"><path d="M20 12H4v-2h16v2z"/></svg>'
-                _svg_prev = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg>'
-                _svg_next = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>'
+                # Build enhanced HTML table with score badges, trend arrows, best-row highlight
+                _score_col = 'Score'
+                _scores_list_disp = display_df[_score_col].tolist() if _score_col in display_df.columns else []
+                _best_score_val = max(_scores_list_disp) if _scores_list_disp else None
 
-                # ── Helper: score badge ──────────────────────────────────────
                 def _badge(v):
                     if pd.isna(v): return '<span style="color:#666">N/A</span>'
                     v = float(v)
@@ -16463,137 +16448,55 @@ Generate {num_questions} questions now:
                     elif v >= 4.0: return f'<span class="badge-weak">{v:.2f}</span>'
                     else: return f'<span class="badge-poor">{v:.2f}</span>'
 
-                # ── Session state init ───────────────────────────────────────
-                if 'tbl_page' not in st.session_state:       st.session_state.tbl_page = 1
-                if 'tbl_per_page' not in st.session_state:   st.session_state.tbl_per_page = 10
-                if 'tbl_role' not in st.session_state:       st.session_state.tbl_role = 'All'
-                if 'tbl_diff' not in st.session_state:       st.session_state.tbl_diff = 'All'
+                def _trend_arrow(current, prev):
+                    if prev is None or pd.isna(prev): return ''
+                    delta = float(current) - float(prev)
+                    if delta > 0.3: return f'<span style="color:#00e676;font-size:14px;" title="+{delta:.2f}">▲</span>'
+                    elif delta < -0.3: return f'<span style="color:#f44336;font-size:14px;" title="{delta:.2f}">▼</span>'
+                    else: return f'<span style="color:#ffcc02;font-size:14px;" title="~{delta:.2f}">●</span>'
 
-                # ── Fragment: isolated rerun scope ───────────────────────────
-                @st.fragment
-                def _render_table(full_df, best_score_global):
-                    # ── Filter bar ───────────────────────────────────────────
-                    fc1, fc2, fc3, fc4 = st.columns([2, 2, 1, 1])
-                    with fc1:
-                        _roles = ['All'] + sorted(full_df['Role'].dropna().unique().tolist()) if 'Role' in full_df.columns else ['All']
-                        _sel_role = st.selectbox('Filter by Role', _roles, key='tbl_role')
-                    with fc2:
-                        _diffs = ['All'] + sorted(full_df['Level'].dropna().unique().tolist()) if 'Level' in full_df.columns else ['All']
-                        _sel_diff = st.selectbox('Filter by Difficulty', _diffs, key='tbl_diff')
-                    with fc3:
-                        _per_page = st.selectbox('Rows per page', [5, 10, 15], index=[5,10,15].index(st.session_state.tbl_per_page) if st.session_state.tbl_per_page in [5,10,15] else 1, key='tbl_per_page')
-                    with fc4:
-                        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-                        if st.button('Reset Filters', use_container_width=True):
-                            st.session_state.tbl_role = 'All'
-                            st.session_state.tbl_diff = 'All'
-                            st.session_state.tbl_page = 1
-                            st.rerun(scope="fragment")
+                _th_style = "padding:9px 12px;color:#38bdf8;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid rgba(0,195,255,0.3);white-space:nowrap;"
+                _td_style = "padding:8px 12px;color:#e0e0e0;font-size:13px;white-space:nowrap;"
 
-                    # ── Apply filters ────────────────────────────────────────
-                    _fdf = full_df.copy()
-                    if _sel_role != 'All' and 'Role' in _fdf.columns:
-                        _fdf = _fdf[_fdf['Role'] == _sel_role]
-                    if _sel_diff != 'All' and 'Level' in _fdf.columns:
-                        _fdf = _fdf[_fdf['Level'] == _sel_diff]
-                    _fdf = _fdf.reset_index(drop=True)
+                _headers = list(display_df.columns)
+                _header_row = "".join([f'<th style="{_th_style}">{h}</th>' for h in _headers]) + f'<th style="{_th_style}">Trend</th>'
 
-                    _total_rows  = len(_fdf)
-                    _total_pages = max(1, -(-_total_rows // _per_page))  # ceiling div
-                    _cur_page    = min(st.session_state.tbl_page, _total_pages)
-                    st.session_state.tbl_page = _cur_page
-
-                    _start = (_cur_page - 1) * _per_page
-                    _end   = min(_start + _per_page, _total_rows)
-                    _page_df = _fdf.iloc[_start:_end]
-
-                    # ── Build HTML table ─────────────────────────────────────
-                    _th = "padding:9px 12px;color:#38bdf8;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid rgba(0,195,255,0.3);white-space:nowrap;"
-                    _td = "padding:8px 12px;color:#e0e0e0;font-size:13px;white-space:nowrap;"
-                    _headers = list(_page_df.columns)
-                    _header_row = "".join([f'<th style="{_th}">{h}</th>' for h in _headers]) + f'<th style="{_th}">Trend</th>'
-
-                    _body_rows = ""
-                    _prev_score = None
-                    for i, row in _page_df.iterrows():
-                        _cur  = row.get('Score', None)
-                        _is_best = (not pd.isna(_cur) and best_score_global is not None and float(_cur) == float(best_score_global))
-                        _row_bg  = 'background:rgba(0,230,118,0.10);' if _is_best else ('background:rgba(255,255,255,0.02);' if i % 2 == 0 else '')
-                        _cells = ""
-                        for col_name in _headers:
-                            val = row[col_name]
-                            if col_name in ('Score', 'Adjusted Score', 'Knowledge', 'Communication', 'Relevance', 'Depth'):
-                                _cells += f'<td style="{_td}text-align:center;">{_badge(val)}</td>'
-                            elif col_name == 'Level':
-                                _lc = {'Easy':'#69f0ae','Medium':'#ffcc02','Hard':'#f44336'}.get(str(val), '#aaa')
-                                _cells += f'<td style="{_td}"><span style="color:{_lc};font-weight:600;">{val}</span></td>'
-                            elif col_name == '#':
-                                _crown = _svg_trophy if _is_best else ''
-                                _cells += f'<td style="{_td}font-weight:600;">{val}{_crown}</td>'
-                            else:
-                                _disp_val = str(val) if not pd.isna(val) else '—'
-                                _cells += f'<td style="{_td}">{_disp_val}</td>'
-                        # trend icon
-                        if not pd.isna(_cur) and _prev_score is not None:
-                            _delta = float(_cur) - float(_prev_score)
-                            _trend_icon = _svg_up if _delta > 0.3 else (_svg_down if _delta < -0.3 else _svg_flat)
-                            _trend_title = f'+{_delta:.2f}' if _delta > 0 else f'{_delta:.2f}'
-                            _trend_cell = f'<span title="{_trend_title}">{_trend_icon}</span>'
+                _body_rows = ""
+                _prev_score = None
+                for i, row in display_df.iterrows():
+                    _cur_score = row.get('Score', None)
+                    _is_best = (not pd.isna(_cur_score) and not pd.isna(_best_score_val) and float(_cur_score) == float(_best_score_val))
+                    _row_bg = 'background:rgba(0,230,118,0.10);' if _is_best else ('background:rgba(255,255,255,0.02);' if i % 2 == 0 else '')
+                    _cells = ""
+                    for col_name in _headers:
+                        val = row[col_name]
+                        if col_name in ('Score', 'Adjusted Score', 'Knowledge', 'Communication', 'Relevance'):
+                            _cells += f'<td style="{_td_style}text-align:center;">{_badge(val)}</td>'
+                        elif col_name == 'Level':
+                            _lc = {'Easy':'#69f0ae','Medium':'#ffcc02','Hard':'#f44336'}.get(str(val), '#aaa')
+                            _cells += f'<td style="{_td_style}"><span style="color:{_lc};font-weight:600;">{val}</span></td>'
+                        elif col_name == '#':
+                            _crown = ' 🏆' if _is_best else ''
+                            _cells += f'<td style="{_td_style}font-weight:600;">{val}{_crown}</td>'
                         else:
-                            _trend_cell = '<span style="color:#444">—</span>'
-                        _cells += f'<td style="{_td}text-align:center;">{_trend_cell}</td>'
-                        _body_rows += f'<tr style="{_row_bg}">{_cells}</tr>'
-                        if not pd.isna(_cur): _prev_score = _cur
+                            _disp_val = str(val) if not pd.isna(val) else '—'
+                            _cells += f'<td style="{_td_style}">{_disp_val}</td>'
+                    _arrow = _trend_arrow(_cur_score, _prev_score) if not pd.isna(_cur_score) else ''
+                    _cells += f'<td style="{_td_style}text-align:center;">{_arrow}</td>'
+                    _body_rows += f'<tr style="{_row_bg}">{_cells}</tr>'
+                    if not pd.isna(_cur_score):
+                        _prev_score = _cur_score
 
-                    st.markdown(f"""
-                    <div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(0,195,255,0.2);margin-top:8px;">
-                    <table style="width:100%;border-collapse:collapse;background:rgba(15,20,25,0.85);">
-                      <thead><tr>{_header_row}</tr></thead>
-                      <tbody>{_body_rows}</tbody>
-                    </table></div>
-                    """, unsafe_allow_html=True)
-
-                    # ── Pagination controls ──────────────────────────────────
-                    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-                    pc1, pc2, pc3 = st.columns([1, 3, 1])
-                    with pc1:
-                        if st.button(f"{_svg_prev} Prev", key='tbl_prev', disabled=(_cur_page <= 1), use_container_width=True):
-                            st.session_state.tbl_page -= 1
-                            st.rerun(scope="fragment")
-                    with pc2:
-                        # Page number buttons
-                        _win = 2
-                        _page_btns = sorted(set(
-                            [1] +
-                            list(range(max(2, _cur_page - _win), min(_total_pages, _cur_page + _win) + 1)) +
-                            ([_total_pages] if _total_pages > 1 else [])
-                        ))
-                        _btn_cols = st.columns(len(_page_btns))
-                        for _bi, _pg in enumerate(_page_btns):
-                            _is_active = (_pg == _cur_page)
-                            _btn_style = "font-weight:700;color:#00c3ff;" if _is_active else ""
-                            with _btn_cols[_bi]:
-                                if st.button(str(_pg), key=f'tbl_pg_{_pg}',
-                                             use_container_width=True,
-                                             type='primary' if _is_active else 'secondary'):
-                                    st.session_state.tbl_page = _pg
-                                    st.rerun(scope="fragment")
-                    with pc3:
-                        if st.button(f"Next {_svg_next}", key='tbl_next', disabled=(_cur_page >= _total_pages), use_container_width=True):
-                            st.session_state.tbl_page += 1
-                            st.rerun(scope="fragment")
-
-                    # ── Footer info ──────────────────────────────────────────
-                    st.markdown(
-                        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">'
-                        f'<span style="color:rgba(255,255,255,0.4);font-size:11px;">Showing {_start+1}–{_end} of {_total_rows} records</span>'
-                        f'<span style="color:rgba(255,255,255,0.4);font-size:11px;">'
-                        f'{_svg_trophy} Gold row = personal best &nbsp;|&nbsp; {_svg_up} improved &nbsp;{_svg_down} dipped &nbsp;{_svg_flat} steady'
-                        f'</span></div>',
-                        unsafe_allow_html=True
-                    )
-
-                _render_table(_full_display_df, _best_score_global)
+                st.markdown(f"""
+                <div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(0,195,255,0.2);margin-top:8px;">
+                <table style="width:100%;border-collapse:collapse;background:rgba(15,20,25,0.85);">
+                  <thead><tr>{_header_row}</tr></thead>
+                  <tbody>{_body_rows}</tbody>
+                </table></div>
+                <p style="color:rgba(255,255,255,0.4);font-size:11px;margin-top:6px;">
+                  🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
+                </p>
+                """, unsafe_allow_html=True)
 if tab5:
 	with tab5:
 		# sqlite3 removed — using Supabase PostgreSQL via db_manager
