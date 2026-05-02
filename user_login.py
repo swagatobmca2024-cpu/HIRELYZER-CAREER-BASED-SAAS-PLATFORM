@@ -158,8 +158,7 @@ def create_user_table():
         id           SERIAL PRIMARY KEY,
         username     TEXT UNIQUE NOT NULL,
         password     TEXT NOT NULL,
-        email        TEXT UNIQUE,
-        groq_api_key TEXT
+        email        TEXT UNIQUE
     );
     CREATE TABLE IF NOT EXISTS user_logs (
         id        SERIAL PRIMARY KEY,
@@ -397,9 +396,9 @@ def send_login_link(username_or_email: str, password: str):
     """
     # Resolve username + password + email
     if '@' in username_or_email:
-        sql = "SELECT username, password, email, groq_api_key FROM users WHERE email = %s"
+        sql = "SELECT username, password, email FROM users WHERE email = %s"
     else:
-        sql = "SELECT username, password, email, groq_api_key FROM users WHERE username = %s"
+        sql = "SELECT username, password, email FROM users WHERE username = %s"
 
     row = _execute(sql, (username_or_email,), fetch="one")
     if not row:
@@ -413,7 +412,6 @@ def send_login_link(username_or_email: str, password: str):
 
     actual_username = row["username"]
     email = row["email"]
-    groq_key = row["groq_api_key"]
 
     if not email:
         return "no_email", "⚠️ No email linked to this account. Contact support.", None
@@ -432,8 +430,6 @@ def send_login_link(username_or_email: str, password: str):
     if not _send_login_link_email(email, actual_username, token):
         return "email_fail", "❌ Failed to send login email. Please try again.", None
 
-    # Stash groq_key in session so verify_login_token can restore it
-    st.session_state["_pending_login_groq_key"] = groq_key or ""
     return "link_sent", "📧 Login link sent! Check your inbox and click the link to sign in.", actual_username
 
 
@@ -478,17 +474,9 @@ def verify_login_token(token: str):
     except Exception:
         pass  # non-fatal — proceed with login
 
-    # Fetch groq key for session
-    key_row = _execute(
-        "SELECT groq_api_key FROM users WHERE username = %s", (username,), fetch="one"
-    )
-    groq_key = key_row["groq_api_key"] if key_row and key_row["groq_api_key"] else ""
-
     # Set session state
     st.session_state.username = username
     st.session_state.authenticated = True
-    st.session_state.user_groq_key = groq_key
-
 
     return True, username
 
@@ -595,41 +583,22 @@ def check_brute_force(identifier: str):
 
 def verify_user(username_or_email, password):
     if '@' in username_or_email:
-        sql = "SELECT username, password, groq_api_key FROM users WHERE email = %s"
+        sql = "SELECT username, password FROM users WHERE email = %s"
     else:
-        sql = "SELECT username, password, groq_api_key FROM users WHERE username = %s"
+        sql = "SELECT username, password FROM users WHERE username = %s"
 
     row = _execute(sql, (username_or_email,), fetch="one")
     if row:
         actual_username = row["username"]
         stored_hashed   = row["password"]
-        stored_key      = row["groq_api_key"]
 
         if bcrypt.checkpw(password.encode('utf-8'), stored_hashed.encode('utf-8')):
             _clear_failed_logins(actual_username)
-            st.session_state.username      = actual_username
-            st.session_state.user_groq_key = stored_key or ""
-            return True, stored_key
+            st.session_state.username = actual_username
+            return True, None
 
     _record_failed_login(username_or_email)
     return False, None
-
-
-# ── API key management ────────────────────────────────────────────────────────
-
-def save_user_api_key(username, api_key):
-    _execute(
-        "UPDATE users SET groq_api_key = %s WHERE username = %s",
-        (api_key, username),
-    )
-    st.session_state.user_groq_key = api_key
-
-
-def get_user_api_key(username):
-    row = _execute(
-        "SELECT groq_api_key FROM users WHERE username = %s", (username,), fetch="one"
-    )
-    return row["groq_api_key"] if row and row["groq_api_key"] else None
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
