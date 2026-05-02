@@ -55,8 +55,8 @@ from db_manager import (
 from user_login import (
     create_user_table, add_user, complete_registration, verify_user,
     get_logins_today, get_total_registered_users, log_user_action,
-    username_exists, email_exists, is_valid_email, save_user_api_key,
-    get_user_api_key, get_all_user_logs, generate_otp, send_email_otp,
+    username_exists, email_exists, is_valid_email, get_all_user_logs,
+    generate_otp, send_email_otp,
     get_user_by_email, update_password_by_email, is_strong_password,
     domain_has_mx_record, send_login_link, verify_login_token,
     cleanup_expired_login_tokens, check_and_gate_feature,
@@ -103,11 +103,6 @@ def _cached_admin_metrics():
         get_logins_today(),
         get_all_user_logs(),
     )
-
-@st.cache_data(ttl=300)  # API key rarely changes — 5-min cache per user
-def _cached_user_api_key(username: str):
-    return get_user_api_key(username)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def generate_cover_letter_from_resume_builder():
     name = st.session_state.get("name", "")
@@ -1861,8 +1856,6 @@ if not st.session_state.get("authenticated", False):
                                         success, saved_key = verify_user(_input, pwd.strip())
                                         if success:
                                             st.session_state.authenticated = True
-                                            if saved_key:
-                                                st.session_state["user_groq_key"] = saved_key
                                             log_user_action(st.session_state.username, "login")
                                             notify("login", "success", "Login successful!")
                                             time.sleep(1.5)
@@ -2000,7 +1993,18 @@ if not st.session_state.get("authenticated", False):
                         if st.button("Verify OTP", key="verify_otp_btn", use_container_width=True):
                             current_elapsed = time.time() - st.session_state.reset_otp_time
                             if current_elapsed >= 180:
-                                notify("login", "error", "OTP has expired. Please request a new one.")
+                                st.markdown("""
+                                <div class="hly-spinner-wrap">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/>
+                                        <line x1="12" y1="8" x2="12" y2="12" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
+                                        <circle cx="12" cy="16" r="1" fill="#fca5a5"/>
+                                    </svg>
+                                    Checking OTP...
+                                </div>""", unsafe_allow_html=True)
+                                with st.spinner(""):
+                                    notify("login", "error", "OTP has expired. Please request a new one.")
+                                    time.sleep(0.6)
                                 st.rerun()
                             elif otp_input.strip() == st.session_state.reset_otp:
                                 st.markdown("""
@@ -2017,7 +2021,18 @@ if not st.session_state.get("authenticated", False):
                                     time.sleep(0.8)
                                 st.rerun()
                             else:
-                                notify("login", "error", "Invalid OTP. Please try again.")
+                                st.markdown("""
+                                <div class="hly-spinner-wrap">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/>
+                                        <line x1="15" y1="9" x2="9" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
+                                        <line x1="9" y1="9" x2="15" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
+                                    </svg>
+                                    Checking OTP...
+                                </div>""", unsafe_allow_html=True)
+                                with st.spinner(""):
+                                    notify("login", "error", "Invalid OTP. Please try again.")
+                                    time.sleep(0.6)
                                 st.rerun()
 
                     with col2:
@@ -2144,7 +2159,18 @@ if not st.session_state.get("authenticated", False):
                             cached_username = st.session_state.pending_registration['username']
                             current_elapsed = (datetime.now(st.session_state.pending_registration['timestamp'].tzinfo) - st.session_state.pending_registration['timestamp']).total_seconds()
                             if current_elapsed >= 180:
-                                notify("register", "error", "OTP has expired. Please request a new one.")
+                                st.markdown("""
+                                <div class="hly-spinner-wrap">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/>
+                                        <line x1="12" y1="8" x2="12" y2="12" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
+                                        <circle cx="12" cy="16" r="1" fill="#fca5a5"/>
+                                    </svg>
+                                    Checking OTP...
+                                </div>""", unsafe_allow_html=True)
+                                with st.spinner(""):
+                                    notify("register", "error", "OTP has expired. Please request a new one.")
+                                    time.sleep(0.6)
                                 st.rerun()
                             else:
                                 st.markdown("""
@@ -2161,11 +2187,10 @@ if not st.session_state.get("authenticated", False):
                                         log_user_action(cached_username, "register")
                                         notify("register", "success", message)
                                         time.sleep(0.5)
-                                if success:
-                                    st.rerun()
-                                else:
-                                    notify("register", "error", message)
-                                    st.rerun()
+                                    else:
+                                        notify("register", "error", message)
+                                        time.sleep(0.6)
+                                st.rerun()
 
                     with col2:
                         if st.button("Resend", key="resend_reg_otp_btn", use_container_width=True):
@@ -2446,44 +2471,6 @@ if st.session_state.get("authenticated"):
         st.success("✅ Logged out successfully.")
         st.rerun()  # Force rerun to prevent stale UI
 
-    # 🔑 GROQ API KEY SECTION (SIDEBAR)
-    st.sidebar.markdown(
-        "<p style='font-size:0.72rem;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;color:#4a5568;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:8px;margin-bottom:12px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;'>Groq API Key</p>",
-        unsafe_allow_html=True
-    )
-
-    # ✅ Load saved key from DB (cached — won't re-query on every rerun)
-    saved_key = _cached_user_api_key(st.session_state.username)
-    masked_preview = f"****{saved_key[-6:]}" if saved_key else ""
-
-    user_api_key_input = st.sidebar.text_input(
-        "Your Groq API Key (Optional)",
-        placeholder=masked_preview,
-        type="password"
-    )
-
-    # ✅ Save or reuse key — guarded so save_user_api_key only fires once per
-    #    new value, not on every rerun while the field holds a value.
-    if user_api_key_input:
-        if user_api_key_input != st.session_state.get("_last_saved_api_key"):
-            save_user_api_key(st.session_state.username, user_api_key_input)
-            st.session_state["_last_saved_api_key"] = user_api_key_input
-            _cached_user_api_key.clear()  # bust cache so next read gets new value
-            st.sidebar.success("✅ New key saved and in use.")
-        st.session_state["user_groq_key"] = user_api_key_input
-    elif saved_key:
-        st.session_state["user_groq_key"] = saved_key
-        st.sidebar.info(f"ℹ️ Using your previously saved API key ({masked_preview})")
-    else:
-        st.sidebar.warning("⚠ Using shared admin key with possible usage limits")
-
-    # 🧹 Clear saved key
-    if st.sidebar.button("🗑️ Clear My API Key"):
-        st.session_state["user_groq_key"] = None
-        st.session_state.pop("_last_saved_api_key", None)
-        save_user_api_key(st.session_state.username, None)
-        _cached_user_api_key.clear()
-        st.sidebar.success("✅ Cleared saved Groq API key. Now using shared admin key.")
 
 if st.session_state.username == "admin":
     _adm_hdr_col, _adm_btn_col = st.columns([6, 1])
