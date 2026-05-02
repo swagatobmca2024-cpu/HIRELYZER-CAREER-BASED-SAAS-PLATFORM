@@ -9071,6 +9071,7 @@ with tab3:
 
     # ---------- Salary Insights ----------
     render_salary_insights()
+
 def evaluate_interview_answer(answer: str, question: str = None):
     """
     Uses an LLM to strictly evaluate an interview answer.
@@ -16489,7 +16490,7 @@ Generate {num_questions} questions now:
                 # ── Pagination controls ───────────────────────────────────────
                 _total_records = len(display_df)
 
-                # Row 1: per-page selector + record count info
+                # Per-page selector
                 _pc1, _pc2 = st.columns([1, 3])
                 with _pc1:
                     _per_page = st.selectbox(
@@ -16498,62 +16499,87 @@ Generate {num_questions} questions now:
                         index=1,
                         key="_records_per_page",
                     )
-
                 _total_pages = max(1, -(-_total_records // _per_page))
 
-                # Init + clamp page
+                # ── Single source of truth: _records_page only ────────────────
+                # NEVER write to slider key directly — causes StreamlitAPIException
+                # Buttons use on_click callbacks to update page BEFORE render
                 if "_records_page" not in st.session_state:
                     st.session_state["_records_page"] = 1
-                st.session_state["_records_page"] = min(
-                    max(1, st.session_state["_records_page"]), _total_pages
-                )
+                # Clamp on per-page change
+                if st.session_state["_records_page"] > _total_pages:
+                    st.session_state["_records_page"] = _total_pages
+
                 _cur_page = st.session_state["_records_page"]
 
                 with _pc2:
+                    _p_start_disp = (_cur_page - 1) * _per_page + 1
+                    _p_end_disp   = min(_cur_page * _per_page, _total_records)
                     st.markdown(
                         f"<div style='padding-top:32px;font-size:0.76rem;color:#64748b;'>"
-                        f"Showing <b style='color:#e2e8f0;'>"
-                        f"{(_cur_page - 1) * _per_page + 1}–{min(_cur_page * _per_page, _total_records)}"
-                        f"</b> of <b style='color:#e2e8f0;'>{_total_records}</b> records"
+                        f"Showing <b style='color:#e2e8f0;'>{_p_start_disp}–{_p_end_disp}</b>"
+                        f" of <b style='color:#e2e8f0;'>{_total_records}</b> records"
                         f"</div>",
                         unsafe_allow_html=True,
                     )
 
-                # Row 2: page slider (only if >1 page) + prev/next buttons
                 if _total_pages > 1:
-                    _nav1, _nav2, _nav3, _nav4, _nav5 = st.columns([1.2, 1.2, 5, 1.2, 1.2])
+                    # ── Nav callbacks — run BEFORE widgets render ─────────────
+                    def _go_first():  st.session_state["_records_page"] = 1
+                    def _go_prev():   st.session_state["_records_page"] = max(1, st.session_state["_records_page"] - 1)
+                    def _go_next():   st.session_state["_records_page"] = min(_total_pages, st.session_state["_records_page"] + 1)
+                    def _go_last():   st.session_state["_records_page"] = _total_pages
 
-                    with _nav1:
-                        if st.button("⏮", key="_rec_first", help="First page",
-                                     disabled=_cur_page <= 1, use_container_width=True):
-                            st.session_state["_records_page"] = 1
-                            st.session_state["_records_page_slider"] = 1
-                    with _nav2:
-                        if st.button("◀", key="_rec_prev", help="Previous page",
-                                     disabled=_cur_page <= 1, use_container_width=True):
-                            st.session_state["_records_page"] = max(1, _cur_page - 1)
-                            st.session_state["_records_page_slider"] = st.session_state["_records_page"]
-                    with _nav3:
-                        _slider_val = st.slider(
+                    _nb1, _nb2, _ns, _nb3, _nb4 = st.columns([1.2, 1.2, 5, 1.2, 1.2])
+                    with _nb1:
+                        st.button("⏮", key="_rec_first", help="First page",
+                                  disabled=_cur_page <= 1,
+                                  on_click=_go_first, use_container_width=True)
+                    with _nb2:
+                        st.button("◀", key="_rec_prev", help="Previous page",
+                                  disabled=_cur_page <= 1,
+                                  on_click=_go_prev, use_container_width=True)
+                    with _ns:
+                        # Slider reads from _records_page — its own key is separate
+                        _new_page = st.slider(
                             "Page",
-                            min_value=1,
-                            max_value=_total_pages,
+                            min_value=1, max_value=_total_pages,
                             value=_cur_page,
-                            key="_records_page_slider",
+                            key="_rec_slider",
                             label_visibility="collapsed",
                             format="Page %d",
                         )
-                        st.session_state["_records_page"] = _slider_val
-                    with _nav4:
-                        if st.button("▶", key="_rec_next", help="Next page",
-                                     disabled=_cur_page >= _total_pages, use_container_width=True):
-                            st.session_state["_records_page"] = min(_total_pages, _cur_page + 1)
-                            st.session_state["_records_page_slider"] = st.session_state["_records_page"]
-                    with _nav5:
-                        if st.button("⏭", key="_rec_last", help="Last page",
-                                     disabled=_cur_page >= _total_pages, use_container_width=True):
-                            st.session_state["_records_page"] = _total_pages
-                            st.session_state["_records_page_slider"] = _total_pages
+                        # Slider changed — update source of truth
+                        if _new_page != _cur_page:
+                            st.session_state["_records_page"] = _new_page
+                            _cur_page = _new_page
+                    with _nb3:
+                        st.button("▶", key="_rec_next", help="Next page",
+                                  disabled=_cur_page >= _total_pages,
+                                  on_click=_go_next, use_container_width=True)
+                    with _nb4:
+                        st.button("⏭", key="_rec_last", help="Last page",
+                                  disabled=_cur_page >= _total_pages,
+                                  on_click=_go_last, use_container_width=True)
+
+                    # Dots — use final _cur_page after slider check
+                    _max_dots  = min(_total_pages, 10)
+                    _dot_step  = max(1, _total_pages // _max_dots)
+                    _dot_pages = sorted(set(
+                        list(range(1, _total_pages + 1, _dot_step)) + [_total_pages]
+                    ))[:_max_dots + 1]
+                    _dots_html = "<div style='text-align:center;margin:4px 0 8px;'>"
+                    for _dp in _dot_pages:
+                        _active    = (_dp == _cur_page)
+                        _dc        = "#38bdf8" if _active else "rgba(255,255,255,0.18)"
+                        _ds        = "10px" if _active else "7px"
+                        _dots_html += (
+                            f"<span style='display:inline-block;width:{_ds};height:{_ds};"
+                            f"border-radius:50%;background:{_dc};"
+                            f"margin:0 3px;vertical-align:middle;'></span>"
+                        )
+                    _dots_html += "</div>"
+                    st.markdown(_dots_html, unsafe_allow_html=True)
 
                     # Page indicator dots — max 10 dots shown, active one highlighted
                     _max_dots = min(_total_pages, 10)
@@ -16575,7 +16601,7 @@ Generate {num_questions} questions now:
                     st.markdown(_dots_html, unsafe_allow_html=True)
 
                 # Slice the dataframe for current page
-                _page_start = (_per_page * (st.session_state["_records_page"] - 1))
+                _page_start = (_per_page * (_cur_page - 1))
                 _page_end   = _page_start + _per_page
                 _page_df    = display_df.iloc[_page_start:_page_end]
 
@@ -16618,7 +16644,7 @@ Generate {num_questions} questions now:
                 </table></div>
                 <p style="color:rgba(255,255,255,0.4);font-size:11px;margin-top:6px;">
                   🏆 Gold rows = personal best &nbsp;|&nbsp; ▲ improved &nbsp;▼ dipped &nbsp;● steady vs previous interview
-                  &nbsp;|&nbsp; Showing {_page_start + 1}–{min(_page_end, _total_records)} of {_total_records}
+                  &nbsp;|&nbsp; Showing {_p_start_disp}–{_p_end_disp} of {_total_records}
                 </p>
                 """, unsafe_allow_html=True)
 if tab5:
