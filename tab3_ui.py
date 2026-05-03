@@ -1084,18 +1084,25 @@ def _job_search_interactive():
 
             # Save search results if user is logged in
             if hasattr(st.session_state, 'username') and st.session_state.username:
-                formatted_results = []
                 for job in results:
-                    formatted_results.append({
-                        "platform": "RapidAPI (Live)",
-                        "apply_link": job.get("job_apply_link", "#")
-                    })
-                save_job_search(
-                    st.session_state.username,
-                    rapid_job_role,
-                    rapid_location,
-                    formatted_results
-                )
+                    # Build a descriptive role label: "CompanyName · JobRole"
+                    # Company name is truncated at 30 chars to keep cards readable.
+                    _raw_company = clean_html(job.get("employer_name", "")).strip()
+                    _raw_title   = clean_html(job.get("job_title", rapid_job_role)).strip()
+                    if _raw_company:
+                        _company_label = (_raw_company[:30] + "...") if len(_raw_company) > 30 else _raw_company
+                        _role_label = f"{_company_label} · {_raw_title}"
+                    else:
+                        _role_label = _raw_title
+                    # Truncate the full label to 55 chars so the card never overflows
+                    if len(_role_label) > 55:
+                        _role_label = _role_label[:55].rsplit(" ", 1)[0] + "..."
+                    save_job_search(
+                        st.session_state.username,
+                        _role_label,
+                        rapid_location,
+                        [{"platform": "RapidAPI (Live)", "apply_link": job.get("job_apply_link", "#")}]
+                    )
                 # Signal pagination to reset to page 1 so stale offset never
                 # causes a row to be skipped or duplicated in Saved Searches.
                 st.session_state["_search_just_saved"] = True
