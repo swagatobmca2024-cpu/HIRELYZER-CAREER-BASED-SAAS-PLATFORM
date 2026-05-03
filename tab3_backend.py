@@ -83,8 +83,14 @@ def init_job_search_db():
                 location  TEXT        NOT NULL,
                 platform  TEXT        NOT NULL,
                 url       TEXT        NOT NULL,
+                company   TEXT        NOT NULL DEFAULT '',
                 timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
+        """)
+        # Add company column to existing tables that were created before this change
+        # ADD COLUMN IF NOT EXISTS is idempotent — safe to run every startup
+        cur.execute("""
+            ALTER TABLE user_jobs ADD COLUMN IF NOT EXISTS company TEXT NOT NULL DEFAULT ''
         """)
         # Index for fast per-user lookups (ignored if already exists)
         cur.execute("""
@@ -107,13 +113,14 @@ def save_job_search(username, role, location, results):
             psycopg2.extras.execute_batch(
                 cur,
                 """
-                INSERT INTO user_jobs (username, role, location, platform, url, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO user_jobs (username, role, location, platform, url, company, timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 [
                     (username, role, location,
                      r.get("platform", "Unknown"),
                      r.get("apply_link", "#"),
+                     r.get("company", ""),   # ← company name (only set for RapidAPI results)
                      now)
                     for r in results
                 ],
@@ -184,7 +191,7 @@ def get_saved_job_searches(username, limit=10, offset=0, platform_filter=None):
 
         if platform_filter and platform_filter != "All":
             cur.execute("""
-                SELECT id, role, location, platform, url, timestamp
+                SELECT id, role, location, platform, url, company, timestamp
                 FROM user_jobs
                 WHERE username = %s AND platform = %s
                 ORDER BY timestamp DESC, id DESC
@@ -192,7 +199,7 @@ def get_saved_job_searches(username, limit=10, offset=0, platform_filter=None):
             """, (username, platform_filter, limit, offset))
         else:
             cur.execute("""
-                SELECT id, role, location, platform, url, timestamp
+                SELECT id, role, location, platform, url, company, timestamp
                 FROM user_jobs
                 WHERE username = %s
                 ORDER BY timestamp DESC, id DESC
@@ -207,6 +214,7 @@ def get_saved_job_searches(username, limit=10, offset=0, platform_filter=None):
                 "location":  row["location"],
                 "platform":  row["platform"],
                 "url":       row["url"],
+                "company":   row["company"] or "",
                 # Normalise to a plain UTC-aware datetime for downstream formatting
                 "timestamp": row["timestamp"].astimezone(ZoneInfo('UTC')) if row["timestamp"] else None,
             }
@@ -370,16 +378,18 @@ def unified_search(job_role, location, experience_level=None, job_type=None, fou
     # 2️⃣ Add LinkedIn, Naukri, FoundIt links (existing function)
     external_links = search_jobs(job_role, location, experience_level, job_type, foundit_experience)
     for job in external_links:
+        # Use maxsplit=1 to safely handle job titles that contain colons
+        parts = job["title"].split(":", 1)
         results.append({
-            "platform": job["title"].split(":")[0],
-            "title": job["title"].split(":")[1].strip(),
-            "company": "N/A",
+            "platform": parts[0].strip(),
+            "title": parts[1].strip() if len(parts) > 1 else job["title"],
+            "company": "",   # no company data for external redirect links
             "location": location,
             "salary": "Check site",
             "date": "N/A",
             "type": "N/A",
             "remote": "N/A",
-            "publisher": job["title"].split(":")[0],
+            "publisher": parts[0].strip(),
             "description": "Open this platform to view full details.",
             "apply_link": job["link"]
         })
