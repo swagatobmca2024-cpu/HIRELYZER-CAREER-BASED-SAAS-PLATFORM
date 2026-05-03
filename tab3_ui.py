@@ -1352,10 +1352,14 @@ def _job_search_interactive():
                         _is_rapid = "rapidapi" in search["platform"].lower() or "live" in search["platform"].lower()
                         _company_raw = search.get("company", "").strip()
                         _company = (_company_raw[:30] + "...") if len(_company_raw) > 30 else _company_raw
-                        _company_html = (
-                            f'<div style="color:#64748b;font-size:0.75rem;font-weight:400;margin-top:2px;margin-bottom:2px;"> · {_company}</div>'
-                            if _is_rapid and _company else ""
-                        )
+                        # Build company line OUTSIDE f-string to avoid curly brace conflicts
+                        if _is_rapid and _company:
+                            _company_html = (
+                                "<div style='color:#64748b;font-size:0.75rem;font-weight:400;"
+                                "margin-top:2px;margin-bottom:2px;'> · " + _company + "</div>"
+                            )
+                        else:
+                            _company_html = ""
                         st.markdown(f"""
 <div class="saved-search-card" style="border-left: 3px solid {platform_color};">
     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
