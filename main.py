@@ -15835,20 +15835,33 @@ Generate {num_questions} questions now:
                 domain_counts = df.groupby('domain').size().rename('Interviews')
                 domain_avg = df.groupby('domain')['avg_score'].mean().rename('Avg Score')
 
+                # ── Dynamic identity color map ──────────────────────────────
+                # sorted() ensures stable assignment — same area = same color
+                # always, regardless of data order or how many areas exist.
+                # % len(_CA_PALETTE) cycles gracefully for any number of areas.
+                _CA_PALETTE = [
+                    '#00c3ff', '#00e676', '#ff6b6b', '#ffd93d',
+                    '#c77dff', '#ff9a3c', '#06d6a0', '#ff4d6d',
+                    '#4cc9f0', '#f72585', '#3a86ff', '#a8dadc'
+                ]
+                _ca_list = sorted(df['domain'].dropna().unique().tolist())
+                _ca_color_map = {
+                    ca: _CA_PALETTE[i % len(_CA_PALETTE)]
+                    for i, ca in enumerate(_ca_list)
+                }
+
                 with col_l:
                     st.markdown("**Interviews Done per Career Area**")
-                    # Navy -> cyan gradient, green for highest — consistent with role charts
-                    _dc_vals = domain_counts.values.tolist()
-                    _dc_min, _dc_max = min(_dc_vals), max(_dc_vals)
-                    def _dc_color(v):
-                        if v == _dc_max: return '#00e676'
-                        t = (v - _dc_min) / (_dc_max - _dc_min + 1e-9)
-                        return f'rgb({0},{int(60 + t*135)},{int(120 + t*135)})'
-                    _dc_colors = [_dc_color(v) for v in _dc_vals]
+                    _dc_labels = domain_counts.index.tolist()
+                    _dc_vals   = domain_counts.values.tolist()
+                    _dc_colors = [_ca_color_map.get(ca, '#00c3ff') for ca in _dc_labels]
                     _fig_dc = go.Figure(go.Bar(
-                        x=domain_counts.index.tolist(),
+                        x=_dc_labels,
                         y=_dc_vals,
-                        marker=dict(color=_dc_colors, line=dict(color='rgba(0,0,0,0.3)', width=1)),
+                        marker=dict(
+                            color=_dc_colors,
+                            line=dict(color='rgba(0,0,0,0.35)', width=1)
+                        ),
                         text=_dc_vals,
                         textposition='outside',
                         textfont=dict(color='white', size=12),
@@ -15866,57 +15879,24 @@ Generate {num_questions} questions now:
                             gridcolor='rgba(255,255,255,0.06)',
                             range=[0, max(_dc_vals) * 1.2]
                         ),
-                        margin=dict(l=10,r=10,t=30,b=80), height=340
+                        margin=dict(l=10, r=10, t=30, b=80), height=340
                     )
                     st.plotly_chart(_fig_dc, use_container_width=True)
 
                 with col_r:
                     st.markdown("**Average Score per Career Area**")
-                    # Performance color scale: red (low) -> amber (mid) -> green (high)
-                    # Anchored to fixed score thresholds, not relative — so color means the same thing always
-                    _da_vals = domain_avg.values.tolist()
-                    def _da_color(v):
-                        """
-                        Threshold-based color with intra-band brightness variation.
-                        Each tier has a base and bright RGB. t = position within the band (0→1).
-                        Higher score within the same band = brighter shade.
-                        """
-                        if v >= 9.0:
-                            # Elite: fixed bright green
-                            return '#00e676'
-                        elif v >= 7.5:
-                            # Strong: deep cyan → bright cyan  (7.5→9.0)
-                            t = (v - 7.5) / 1.5
-                            r = 0
-                            g = int(150 + t * 45)   # 150 → 195
-                            b = int(180 + t * 75)   # 180 → 255
-                            return f'rgb({r},{g},{b})'
-                        elif v >= 6.0:
-                            # Average: dark amber → bright amber  (6.0→7.5)
-                            t = (v - 6.0) / 1.5
-                            r = int(180 + t * 55)   # 180 → 235
-                            g = int(140 + t * 62)   # 140 → 202
-                            b = int(0   + t * 2)    # stays near 0
-                            return f'rgb({r},{g},{b})'
-                        elif v >= 4.0:
-                            # Weak: dark orange → bright orange  (4.0→6.0)
-                            t = (v - 4.0) / 2.0
-                            r = int(180 + t * 55)   # 180 → 235
-                            g = int(80  + t * 72)   # 80  → 152
-                            b = 0
-                            return f'rgb({r},{g},{b})'
-                        else:
-                            # Poor: dark red → bright red  (0→4.0)
-                            t = v / 4.0
-                            r = int(160 + t * 84)   # 160 → 244
-                            g = int(20  + t * 47)   # 20  → 67
-                            b = int(20  + t * 34)   # 20  → 54
-                            return f'rgb({r},{g},{b})'
-                    _da_colors = [_da_color(v) for v in _da_vals]
+                    # Same identity colors as left chart — same area = same color
+                    # so both charts are instantly cross-referenceable visually
+                    _da_labels = domain_avg.index.tolist()
+                    _da_vals   = domain_avg.values.tolist()
+                    _da_colors = [_ca_color_map.get(ca, '#00c3ff') for ca in _da_labels]
                     _fig_da = go.Figure(go.Bar(
-                        x=domain_avg.index.tolist(),
+                        x=_da_labels,
                         y=_da_vals,
-                        marker=dict(color=_da_colors, line=dict(color='rgba(0,0,0,0.3)', width=1)),
+                        marker=dict(
+                            color=_da_colors,
+                            line=dict(color='rgba(0,0,0,0.35)', width=1)
+                        ),
                         text=[f"{v:.2f}" for v in _da_vals],
                         textposition='outside',
                         textfont=dict(color='white', size=12),
@@ -15933,7 +15913,7 @@ Generate {num_questions} questions now:
                             title='Avg Score', range=[0, 10.5],
                             gridcolor='rgba(255,255,255,0.06)'
                         ),
-                        margin=dict(l=10,r=10,t=30,b=80), height=340
+                        margin=dict(l=10, r=10, t=30, b=80), height=340
                     )
                     st.plotly_chart(_fig_da, use_container_width=True)
 
@@ -15958,31 +15938,53 @@ Generate {num_questions} questions now:
                 st.markdown("**Role Performance Analytics**")
                 col_rb1, col_rb2 = st.columns(2)
 
+                # ── Dynamic role identity color map ─────────────────────────────────────
+                # Each career area has its own color family (start RGB → end RGB).
+                # Roles within a family are evenly interpolated across that gradient.
+                # Works for ANY number of roles — no hardcoding, no cycling, no cutoff.
+                # Add a role to DOMAIN_ROLES → it gets a shade automatically.
+                # Fallback grey family handles any future domain not listed here.
+                _ROLE_COLOR_FAMILIES = {
+                    "Software Development and Engineering": ((30,  80,  220), (130, 180, 255)),
+                    "Data Science and Analytics":           ((140, 40,  220), (210, 130, 255)),
+                    "Cloud Computing and DevOps":           ((0,   160, 160), (100, 230, 210)),
+                    "Cybersecurity":                        ((220, 40,  60),  (255, 130, 100)),
+                    "UI/UX Design":                         ((220, 60,  160), (255, 160, 210)),
+                    "Project Management":                   ((180, 180, 0),   (240, 230, 80)),
+                }
+                _role_color_map = {}
+                for _dom, _roles in DOMAIN_ROLES.items():
+                    _sorted_roles = sorted(_roles)
+                    _n = len(_sorted_roles)
+                    if _dom in _ROLE_COLOR_FAMILIES:
+                        (_r0,_g0,_b0), (_r1,_g1,_b1) = _ROLE_COLOR_FAMILIES[_dom]
+                    else:
+                        # Fallback: grey gradient for any future unknown domain
+                        (_r0,_g0,_b0), (_r1,_g1,_b1) = (100,100,100), (200,200,200)
+                    for _i, _role in enumerate(_sorted_roles):
+                        _t = _i / max(_n - 1, 1)
+                        _role_color_map[_role] = (
+                            f'rgb({int(_r0+_t*(_r1-_r0))},'
+                            f'{int(_g0+_t*(_g1-_g0))},'
+                            f'{int(_b0+_t*(_b1-_b0))})'
+                        )
+
                 with col_rb1:
-                    # Interactive bar chart — Avg Score by Role
-                    _score_vals = role_perf['Avg Score'].tolist()
-                    def _score_to_color(v):
-                        """Same intra-band brightness logic as career area chart for consistency."""
-                        if v >= 9.0:
-                            return '#00e676'
-                        elif v >= 7.5:
-                            t = (v - 7.5) / 1.5
-                            return f'rgb(0,{int(150+t*45)},{int(180+t*75)})'
-                        elif v >= 6.0:
-                            t = (v - 6.0) / 1.5
-                            return f'rgb({int(180+t*55)},{int(140+t*62)},0)'
-                        elif v >= 4.0:
-                            t = (v - 4.0) / 2.0
-                            return f'rgb({int(180+t*55)},{int(80+t*72)},0)'
-                        else:
-                            t = v / 4.0
-                            return f'rgb({int(160+t*84)},{int(20+t*47)},{int(20+t*34)})'
-                    _colors_bar = [_score_to_color(v) for v in _score_vals]
+                    # Avg Score by Role — identity color per role
+                    _colors_bar = [
+                        _role_color_map.get(r, 'rgb(120,120,120)')
+                        for r in role_perf['Role']
+                    ]
                     _fig_rb = go.Figure(go.Bar(
-                        x=role_perf['Role'], y=role_perf['Avg Score'],
-                        marker_color=_colors_bar,
+                        x=role_perf['Role'],
+                        y=role_perf['Avg Score'],
+                        marker=dict(
+                            color=_colors_bar,
+                            line=dict(color='rgba(0,0,0,0.35)', width=1)
+                        ),
                         text=[f"{v:.2f}" for v in role_perf['Avg Score']],
                         textposition='outside',
+                        textfont=dict(color='white', size=11),
                         hovertemplate='<b>%{x}</b><br>Avg Score: %{y:.2f}/10<extra></extra>'
                     ))
                     _fig_rb.update_layout(
@@ -15995,38 +15997,37 @@ Generate {num_questions} questions now:
                             automargin=True
                         ),
                         yaxis=dict(range=[0,10.5], gridcolor='rgba(255,255,255,0.06)'),
-                        margin=dict(l=5,r=5,t=40,b=80), height=380
+                        margin=dict(l=5, r=5, t=40, b=80),
+                        height=max(380, len(role_perf) * 28 + 120)
                     )
                     st.plotly_chart(_fig_rb, use_container_width=True)
 
                 with col_rb2:
-                    # Horizontal bar chart — Interview distribution by role (all roles visible, no cutoff)
+                    # Interview Distribution by Role — same identity colors, sorted largest at top
                     _total_pie = role_perf['Times Practised'].sum()
                     _rd = role_perf.copy()
                     _rd['Pct'] = (_rd['Times Practised'] / _total_pie * 100).round(1)
-                    _rd = _rd.sort_values('Times Practised', ascending=True)  # largest at top
-                    _cnt_vals = _rd['Times Practised'].tolist()
-                    _c_min, _c_max = min(_cnt_vals), max(_cnt_vals)
-                    def _cnt_to_color(v):
-                        if v == _c_max: return '#00e676'
-                        t = (v - _c_min) / (_c_max - _c_min + 1e-9)
-                        r = int(0   + t * 0)
-                        g = int(60  + t * 135)
-                        b = int(120 + t * 135)
-                        return f'rgb({r},{g},{b})'
-                    _bar_colors = [_cnt_to_color(v) for v in _cnt_vals]
+                    _rd = _rd.sort_values('Times Practised', ascending=True)
+                    _bar_colors = [
+                        _role_color_map.get(r, 'rgb(120,120,120)')
+                        for r in _rd['Role']
+                    ]
                     _fig_rdist = go.Figure(go.Bar(
                         x=_rd['Times Practised'],
                         y=_rd['Role'],
                         orientation='h',
-                        marker=dict(color=_bar_colors, line=dict(color='rgba(0,0,0,0.3)', width=1)),
+                        marker=dict(
+                            color=_bar_colors,
+                            line=dict(color='rgba(0,0,0,0.35)', width=1)
+                        ),
                         text=[f"{int(v)}  ({p}%)" for v, p in zip(_rd['Times Practised'], _rd['Pct'])],
                         textposition='outside',
                         textfont=dict(color='white', size=11),
                         hovertemplate='<b>%{y}</b><br>Interviews: %{x}<extra></extra>',
                         cliponaxis=False
                     ))
-                    _dyn_height = max(320, len(_rd) * 36 + 80)
+                    # Dynamic height: grows with number of roles, never cuts off
+                    _dyn_height = max(380, len(_rd) * 40 + 100)
                     _fig_rdist.update_layout(
                         title=dict(text='Interview Distribution by Role', font=dict(color='#00c3ff', size=14)),
                         paper_bgcolor='rgba(0,0,0,0)',
