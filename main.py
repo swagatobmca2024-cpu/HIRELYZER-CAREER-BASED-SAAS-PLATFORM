@@ -15876,11 +15876,42 @@ Generate {num_questions} questions now:
                     # Anchored to fixed score thresholds, not relative — so color means the same thing always
                     _da_vals = domain_avg.values.tolist()
                     def _da_color(v):
-                        if v >= 8.0:   return '#00e676'   # excellent — bright green
-                        elif v >= 7.0: return '#00c3ff'   # good — cyan
-                        elif v >= 5.5: return '#ffcc02'   # average — amber
-                        elif v >= 4.0: return '#ff9800'   # weak — orange
-                        else:          return '#f44336'   # poor — red
+                        """
+                        Threshold-based color with intra-band brightness variation.
+                        Each tier has a base and bright RGB. t = position within the band (0→1).
+                        Higher score within the same band = brighter shade.
+                        """
+                        if v >= 9.0:
+                            # Elite: fixed bright green
+                            return '#00e676'
+                        elif v >= 7.5:
+                            # Strong: deep cyan → bright cyan  (7.5→9.0)
+                            t = (v - 7.5) / 1.5
+                            r = 0
+                            g = int(150 + t * 45)   # 150 → 195
+                            b = int(180 + t * 75)   # 180 → 255
+                            return f'rgb({r},{g},{b})'
+                        elif v >= 6.0:
+                            # Average: dark amber → bright amber  (6.0→7.5)
+                            t = (v - 6.0) / 1.5
+                            r = int(180 + t * 55)   # 180 → 235
+                            g = int(140 + t * 62)   # 140 → 202
+                            b = int(0   + t * 2)    # stays near 0
+                            return f'rgb({r},{g},{b})'
+                        elif v >= 4.0:
+                            # Weak: dark orange → bright orange  (4.0→6.0)
+                            t = (v - 4.0) / 2.0
+                            r = int(180 + t * 55)   # 180 → 235
+                            g = int(80  + t * 72)   # 80  → 152
+                            b = 0
+                            return f'rgb({r},{g},{b})'
+                        else:
+                            # Poor: dark red → bright red  (0→4.0)
+                            t = v / 4.0
+                            r = int(160 + t * 84)   # 160 → 244
+                            g = int(20  + t * 47)   # 20  → 67
+                            b = int(20  + t * 34)   # 20  → 54
+                            return f'rgb({r},{g},{b})'
                     _da_colors = [_da_color(v) for v in _da_vals]
                     _fig_da = go.Figure(go.Bar(
                         x=domain_avg.index.tolist(),
@@ -15930,15 +15961,22 @@ Generate {num_questions} questions now:
                 with col_rb1:
                     # Interactive bar chart — Avg Score by Role
                     _score_vals = role_perf['Avg Score'].tolist()
-                    _s_min, _s_max = min(_score_vals), max(_score_vals)
                     def _score_to_color(v):
-                        if v == _s_max: return '#00e676'  # green for best
-                        t = (v - _s_min) / (_s_max - _s_min + 1e-9)
-                        # dark navy -> slate blue -> cyan gradient matching dark theme
-                        r = int(0   + t * 0)
-                        g = int(60  + t * 135)
-                        b = int(120 + t * 135)
-                        return f'rgb({r},{g},{b})'
+                        """Same intra-band brightness logic as career area chart for consistency."""
+                        if v >= 9.0:
+                            return '#00e676'
+                        elif v >= 7.5:
+                            t = (v - 7.5) / 1.5
+                            return f'rgb(0,{int(150+t*45)},{int(180+t*75)})'
+                        elif v >= 6.0:
+                            t = (v - 6.0) / 1.5
+                            return f'rgb({int(180+t*55)},{int(140+t*62)},0)'
+                        elif v >= 4.0:
+                            t = (v - 4.0) / 2.0
+                            return f'rgb({int(180+t*55)},{int(80+t*72)},0)'
+                        else:
+                            t = v / 4.0
+                            return f'rgb({int(160+t*84)},{int(20+t*47)},{int(20+t*34)})'
                     _colors_bar = [_score_to_color(v) for v in _score_vals]
                     _fig_rb = go.Figure(go.Bar(
                         x=role_perf['Role'], y=role_perf['Avg Score'],
