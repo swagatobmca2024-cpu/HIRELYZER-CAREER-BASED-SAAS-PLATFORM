@@ -20,7 +20,6 @@ from tab3_backend import (
     fetch_live_jobs,
     search_jobs,
     save_job_search,
-    prune_old_searches,
     delete_saved_job_search,
     get_saved_job_searches,
     get_total_saved_searches_count,
@@ -942,7 +941,6 @@ def _job_search_interactive():
                             "apply_link": result["link"]
                         })
                     save_job_search(st.session_state.username, job_role, location, formatted_results)
-                    prune_old_searches(st.session_state.username)
                     # Signal pagination to reset to page 1 so stale offset never
                     # causes a row to be skipped or duplicated in Saved Searches.
                     st.session_state["_search_just_saved"] = True
@@ -1090,8 +1088,7 @@ def _job_search_interactive():
                 for job in results:
                     formatted_results.append({
                         "platform": "RapidAPI (Live)",
-                        "apply_link": job.get("job_apply_link", "#"),
-                        "company":    clean_html(job.get("employer_name", "")),
+                        "apply_link": job.get("job_apply_link", "#")
                     })
                 save_job_search(
                     st.session_state.username,
@@ -1099,7 +1096,6 @@ def _job_search_interactive():
                     rapid_location,
                     formatted_results
                 )
-                prune_old_searches(st.session_state.username)
                 # Signal pagination to reset to page 1 so stale offset never
                 # causes a row to be skipped or duplicated in Saved Searches.
                 st.session_state["_search_just_saved"] = True
@@ -1344,13 +1340,6 @@ def _job_search_interactive():
                     card_col, delete_col = st.columns([10, 1])
 
                     with card_col:
-                        # Show company name only for RapidAPI results (others have no real company data)
-                        _is_rapid = "rapidapi" in search["platform"].lower() or "live" in search["platform"].lower()
-                        _company  = search.get("company", "").strip()
-                        _company_html = (
-                            f'<span style="color:#64748b;font-size:0.78rem;font-weight:400;"> · {_company}</span>'
-                            if _is_rapid and _company else ""
-                        )
                         st.markdown(f"""
 <div class="saved-search-card" style="border-left: 3px solid {platform_color};">
     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
@@ -1363,7 +1352,7 @@ def _job_search_interactive():
                 font-family: var(--t3-font);
                 letter-spacing: -0.01em;
             ">
-                {platform_icon} {search['role']} in {search['location']}{_company_html}
+                {platform_icon} {search['role']} in {search['location']}
             </div>
             <div style="
                 color: {platform_color};
