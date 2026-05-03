@@ -1360,67 +1360,36 @@ def _job_search_interactive():
                             )
                         else:
                             _company_html = ""
-                        st.markdown(f"""
-<div class="saved-search-card" style="border-left: 3px solid {platform_color};">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-        <div>
-            <div style="
-                color: #f0f4f8;
-                font-size: 0.9rem;
-                font-weight: 600;
-                margin-bottom: 2px;
-                font-family: var(--t3-font);
-                letter-spacing: -0.01em;
-            ">
-                {platform_icon} {search['role']} in {search['location']}
-            </div>
-            {_company_html}
-            <div style="
-                color: {platform_color};
-                font-size: 0.75rem;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                font-family: var(--t3-font);
-            ">
-                {search['platform']}
-            </div>
-        </div>
-        <div style="
-            color: #334155;
-            font-size: 0.72rem;
-            text-align: right;
-            font-family: var(--t3-font);
-            letter-spacing: 0.02em;
-            white-space: nowrap;
-            flex-shrink: 0;
-            margin-left: 12px;
-        ">
-            {formatted_time}
-        </div>
-    </div>
-    <a href="{search['url']}" target="_blank" style="text-decoration: none;">
-        <div style="
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            background: linear-gradient(135deg, {platform_color}22 0%, {platform_color}11 100%);
-            color: {platform_color};
-            padding: 7px 16px;
-            border: 1px solid {platform_color}44;
-            border-radius: 99px;
-            font-size: 0.78rem;
-            font-weight: 600;
-            font-family: var(--t3-font);
-            letter-spacing: 0.03em;
-            transition: all 0.2s ease;
-            cursor: pointer;
-        ">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> View Jobs
-        </div>
-    </a>
-</div>
-""", unsafe_allow_html=True)
+                        # Build card HTML using string concatenation to avoid ALL f-string curly brace conflicts
+                        _card_html = (
+                            "<div class='saved-search-card' style='border-left:3px solid " + platform_color + ";'>"
+                            "<div style='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;'>"
+                            "<div>"
+                            "<div style='color:#f0f4f8;font-size:0.9rem;font-weight:600;margin-bottom:2px;font-family:var(--t3-font);letter-spacing:-0.01em;'>"
+                            + platform_icon + " " + search["role"] + " in " + search["location"] +
+                            "</div>"
+                            + _company_html +
+                            "<div style='color:" + platform_color + ";font-size:0.75rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;font-family:var(--t3-font);'>"
+                            + search["platform"] +
+                            "</div>"
+                            "</div>"
+                            "<div style='color:#334155;font-size:0.72rem;text-align:right;font-family:var(--t3-font);letter-spacing:0.02em;white-space:nowrap;flex-shrink:0;margin-left:12px;'>"
+                            + formatted_time +
+                            "</div>"
+                            "</div>"
+                            "<a href='" + search["url"] + "' target='_blank' style='text-decoration:none;'>"
+                            "<div style='display:inline-flex;align-items:center;gap:6px;"
+                            "background:linear-gradient(135deg," + platform_color + "22 0%," + platform_color + "11 100%);"
+                            "color:" + platform_color + ";"
+                            "padding:7px 16px;border:1px solid " + platform_color + "44;"
+                            "border-radius:99px;font-size:0.78rem;font-weight:600;font-family:var(--t3-font);"
+                            "letter-spacing:0.03em;transition:all 0.2s ease;cursor:pointer;'>"
+                            "<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'>"
+                            "<path d='M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6'/>"
+                            "<polyline points='15 3 21 3 21 9'/><line x1='10' y1='14' x2='21' y2='3'/></svg> View Jobs"
+                            "</div></a></div>"
+                        )
+                        st.markdown(_card_html, unsafe_allow_html=True)
 
                     with delete_col:
                         # Delete button
