@@ -9026,14 +9026,6 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
-# =============================================================
-# tab3.py  ← MAIN ORCHESTRATOR
-# Thin entry point for Tab 3 — Job Search Hub.
-# All logic lives in the three sub-modules:
-#   tab3_data.py    — static data & helper functions
-#   tab3_backend.py — DB, API, utilities
-#   tab3_ui.py      — all Streamlit rendering & fragments
-# =============================================================
 
 import streamlit as st
 
@@ -9071,7 +9063,6 @@ with tab3:
 
     # ---------- Salary Insights ----------
     render_salary_insights()
-
 def evaluate_interview_answer(answer: str, question: str = None):
     """
     Uses an LLM to strictly evaluate an interview answer.
