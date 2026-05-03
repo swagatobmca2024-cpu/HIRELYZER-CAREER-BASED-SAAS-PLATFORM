@@ -1351,9 +1351,9 @@ def _job_search_interactive():
                         # Show company name only for RapidAPI results (others have no real company data)
                         _is_rapid = "rapidapi" in search["platform"].lower() or "live" in search["platform"].lower()
                         _company_raw = search.get("company", "").strip()
-                        _company = (_company_raw[:25] + "...") if len(_company_raw) > 25 else _company_raw
+                        _company = (_company_raw[:30] + "...") if len(_company_raw) > 30 else _company_raw
                         _company_html = (
-                            f'<span style="color:#64748b;font-size:0.78rem;font-weight:400;white-space:nowrap;"> · {_company}</span>'
+                            f'<div style="color:#64748b;font-size:0.75rem;font-weight:400;margin-top:2px;margin-bottom:2px;"> · {_company}</div>'
                             if _is_rapid and _company else ""
                         )
                         st.markdown(f"""
@@ -1364,12 +1364,13 @@ def _job_search_interactive():
                 color: #f0f4f8;
                 font-size: 0.9rem;
                 font-weight: 600;
-                margin-bottom: 3px;
+                margin-bottom: 2px;
                 font-family: var(--t3-font);
                 letter-spacing: -0.01em;
             ">
-                {platform_icon} {search['role']} in {search['location']}{_company_html}
+                {platform_icon} {search['role']} in {search['location']}
             </div>
+            {_company_html}
             <div style="
                 color: {platform_color};
                 font-size: 0.75rem;
@@ -1387,6 +1388,9 @@ def _job_search_interactive():
             text-align: right;
             font-family: var(--t3-font);
             letter-spacing: 0.02em;
+            white-space: nowrap;
+            flex-shrink: 0;
+            margin-left: 12px;
         ">
             {formatted_time}
         </div>
