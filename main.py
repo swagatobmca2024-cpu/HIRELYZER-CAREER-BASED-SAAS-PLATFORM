@@ -6518,17 +6518,19 @@ def html_to_pdf_bytes(html_string):
         <meta charset="UTF-8">
         <style>
             @page {{
-                size: 400mm 297mm;  /* Original custom large page size */
-                margin-top: 10mm;
-                margin-bottom: 10mm;
-                margin-left: 10mm;
-                margin-right: 10mm;
+                size: 210mm 297mm;  /* A4 portrait */
+                margin-top: 12mm;
+                margin-bottom: 12mm;
+                margin-left: 15mm;
+                margin-right: 15mm;
             }}
             body {{
-                font-size: 14pt;
+                font-size: 11pt;
                 font-family: "Segoe UI", "Helvetica", sans-serif;
                 line-height: 1.5;
                 color: #000;
+                margin: 0;
+                padding: 0;
             }}
             h1, h2, h3 {{
                 color: #2f4f6f;
@@ -9024,9 +9026,7 @@ with tab2:
             st.markdown("""
             ✅ If the HTML cover letter doesn't display properly, you can 
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
-            convert it to PDF using Sejda's free online tool</a>.
-            """, unsafe_allow_html=True)
-
+            convert it to PDF using Sejda's
 import streamlit as st
 
 # ── Sub-module imports ────────────────────────────────────────
