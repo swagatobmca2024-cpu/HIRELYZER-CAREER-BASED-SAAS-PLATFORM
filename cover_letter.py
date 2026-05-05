@@ -52,10 +52,10 @@ def render_cover_letter_professional(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Georgia',serif; background:#fff; color:#1a1a1a; padding:20px 36px; line-height:1.6; }}
+  body {{ font-family:'Georgia',serif; background:#fff; color:#1a1a1a; padding:50px 70px; line-height:1.6; }}
 </style>
 </head>
 <body>
@@ -126,10 +126,10 @@ def render_cover_letter_modern(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:20px 36px; line-height:1.6; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:48px 64px; line-height:1.6; }}
 </style>
 </head>
 <body>
@@ -207,7 +207,7 @@ def render_cover_letter_creative(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:0; line-height:1.6; }}
@@ -280,7 +280,7 @@ def render_cover_letter_executive(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Georgia',serif; background:#fff; color:#1a1a1a; padding:0; line-height:1.6; }}
@@ -354,10 +354,10 @@ def render_cover_letter_entry_level(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:20px 36px; line-height:1.6; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:48px 64px; line-height:1.6; }}
 </style>
 </head>
 <body>
@@ -431,10 +431,10 @@ def render_cover_letter_ats(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:Arial,Helvetica,sans-serif; background:#fff; color:#111827; padding:20px 36px; line-height:1.6; font-size:14px; }}
+  body {{ font-family:Arial,Helvetica,sans-serif; background:#fff; color:#111827; padding:48px 64px; line-height:1.6; font-size:14px; }}
   hr {{ border:none; border-top:1px solid #d1d5db; margin:18px 0; }}
 </style>
 </head>
