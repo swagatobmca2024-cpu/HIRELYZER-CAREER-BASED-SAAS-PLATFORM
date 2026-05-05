@@ -9027,6 +9027,7 @@ with tab2:
             ✅ If the HTML cover letter doesn't display properly, you can 
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's
+
 import streamlit as st
 
 # ── Sub-module imports ────────────────────────────────────────
@@ -17491,3 +17492,4 @@ if tab5:
 			<p>Last updated: {}</p>
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
+
