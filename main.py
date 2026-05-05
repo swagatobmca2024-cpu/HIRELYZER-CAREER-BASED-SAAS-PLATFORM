@@ -9024,8 +9024,7 @@ with tab2:
             st.markdown("""
             ✅ If the HTML cover letter doesn't display properly, you can 
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
-            convert it to PDF using Sejda's free online tool</a>.
-            """, unsafe_allow_html=True)
+            convert it to PDF using Sejda's 
 
 import streamlit as st
 
