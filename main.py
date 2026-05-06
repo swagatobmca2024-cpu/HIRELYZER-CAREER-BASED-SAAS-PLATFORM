@@ -8,6 +8,7 @@ import asyncio
 import io
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from job_scam_detector import render_job_scam_detector_tab
 import urllib.parse
 import base64
 from io import BytesIO
@@ -2910,7 +2911,8 @@ tab_labels = [
     "📊 Dashboard",
     "🧾 Resume Builder",
     "💼 Job Search",
-    "📚 Course Recommendation"
+    "📚 Course Recommendation",
+	"🛡️ Scam Detector"
 ]
 
 # Add Admin tab only for admin user
@@ -2920,11 +2922,11 @@ if st.session_state.username == "admin":
 # Create tabs dynamically
 tabs = st.tabs(tab_labels)
 
-# Unpack first four (always exist)
-tab1, tab2, tab3, tab4 = tabs[:4]
+# Unpack first five (always exist)
+tab1, tab2, tab3, tab4, tab_scam = tabs[:5]
 
-# Handle optional admin tab
-tab5 = tabs[4] if len(tabs) > 4 else None
+# Handle optional admin tab (index shifts to 5 now)
+tab5 = tabs[5] if len(tabs) > 5 else None
 with tab1:
     st.markdown("""
     <style>
@@ -17491,3 +17493,8 @@ if tab5:
 			<p>Last updated: {}</p>
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
+with tab_scam:
+    render_job_scam_detector_tab(call_llm)
+
+
+
