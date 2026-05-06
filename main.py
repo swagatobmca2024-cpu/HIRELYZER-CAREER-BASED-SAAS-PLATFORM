@@ -8451,30 +8451,48 @@ with tab2:
     with col2:
         if st.button("🚀 Generate AI Resume Preview"):
             # Normalize and ensure at least 2 experience entries
+            # BUG FIX: include company, location, duration — previously only title+desc were sent
             experience_entries = st.session_state.get('experience_entries', [])
             normalized_experience_entries = []
             for entry in experience_entries:
                 if isinstance(entry, dict):
-                    title = entry.get("title", "")
-                    desc = entry.get("description", "")
-                    formatted = f"{title}\n{desc}".strip()
+                    title    = entry.get("title", "").strip()
+                    company  = entry.get("company", "").strip()
+                    duration = entry.get("duration", "").strip()
+                    desc     = entry.get("description", "").strip()
+                    parts = []
+                    if title:    parts.append(f"Role: {title}")
+                    if company:  parts.append(f"Company: {company}")
+                    if duration: parts.append(f"Duration: {duration}")
+                    if desc:     parts.append(f"Description: {desc}")
+                    formatted = "\n".join(parts)
                 else:
                     formatted = entry.strip()
-                normalized_experience_entries.append(formatted)
+                if formatted:
+                    normalized_experience_entries.append(formatted)
             while len(normalized_experience_entries) < 2:
                 normalized_experience_entries.append("Placeholder Experience")
 
             # Normalize and ensure at least 2 project entries
+            # BUG FIX: include tech stack and duration — previously only title+desc were sent
             project_entries = st.session_state.get('project_entries', [])
             normalized_project_entries = []
             for entry in project_entries:
                 if isinstance(entry, dict):
-                    title = entry.get("title", "")
-                    desc = entry.get("description", "")
-                    formatted = f"{title}\n{desc}".strip()
+                    title    = entry.get("title", "").strip()
+                    tech     = entry.get("tech", "").strip()
+                    duration = entry.get("duration", "").strip()
+                    desc     = entry.get("description", "").strip()
+                    parts = []
+                    if title:    parts.append(f"Title: {title}")
+                    if tech:     parts.append(f"Tech Stack: {tech}")
+                    if duration: parts.append(f"Duration: {duration}")
+                    if desc:     parts.append(f"Description: {desc}")
+                    formatted = "\n".join(parts)
                 else:
                     formatted = entry.strip()
-                normalized_project_entries.append(formatted)
+                if formatted:
+                    normalized_project_entries.append(formatted)
             while len(normalized_project_entries) < 2:
                 normalized_project_entries.append("Placeholder Project")
 
@@ -8734,8 +8752,12 @@ with tab2:
     if "ai_output" in st.session_state:
         ai_output = st.session_state["ai_output"]
 
+        # BUG FIX: original regex "\n\w+:" failed to match multiword section labels
+        # like "SoftSkills:" or "Certificates:" because \w+ doesn't match spaces.
+        # New pattern uses a multiline lookahead anchored at line start.
         def extract_section(label, output, default=""):
-            match = re.search(rf"{label}:\s*(.*?)(?=\n\w+:|\Z)", output, re.DOTALL)
+            pattern = rf"(?i)^{re.escape(label)}:\s*(.*?)(?=\n[A-Za-z][A-Za-z\s]*:|\Z)"
+            match = re.search(pattern, output, re.DOTALL | re.MULTILINE)
             return match.group(1).strip() if match else default
 
         summary_enhanced = extract_section("Summary", ai_output, st.session_state['summary'])
@@ -8783,7 +8805,8 @@ with tab2:
             # Experience
             if experience_blocks:
                 st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                experience_titles = [entry.get("title", "").strip().upper() for entry in st.session_state.experience_entries]
+                # BUG FIX: role title now parsed from the AI block itself (bullet "• Role Title")
+                # instead of pulling from raw session_state by index (which broke when AI reordered)
                 for idx, exp_block in enumerate(experience_blocks):
                     lines = exp_block.strip().split("\n")
                     if not lines:
@@ -8792,8 +8815,16 @@ with tab2:
                     description_lines = lines[1:]
                     match = re.match(r"[A-Z]\.\s*(.+?)\s*\((.*?)\)", heading)
                     company, duration = (match.group(1).strip(), match.group(2).strip()) if match else (heading, "")
-                    role = experience_titles[idx] if idx < len(experience_titles) else ""
-                    formatted_exp = "<br>".join(description_lines)
+                    # Extract role from the first bullet line if it looks like a title (no metrics)
+                    role = ""
+                    remaining_lines = []
+                    for line in description_lines:
+                        stripped = line.strip().lstrip("•").strip()
+                        if not role and stripped and not any(c.isdigit() for c in stripped) and len(stripped.split()) <= 8:
+                            role = stripped
+                        else:
+                            remaining_lines.append(line)
+                    formatted_exp = "<br>".join(remaining_lines if remaining_lines else description_lines)
 
                     st.markdown(f"""
                     <div style='margin-bottom:15px; padding:10px; border-radius:8px;'>
@@ -8806,32 +8837,46 @@ with tab2:
                     """, unsafe_allow_html=True)
 
             # Education
-            st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-            for edu in st.session_state.education_entries:
-                st.markdown(f"""
-                <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px;'>
-                    <div style='display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;'>
-                        <span>🏫 {edu['institution']}</span>
-                        <span style='color: gray;'>📅 {edu['year']}</span>
+            # BUG FIX: added guard to skip blank/placeholder education entries
+            non_empty_edu = [e for e in st.session_state.education_entries if e.get('institution') or e.get('degree')]
+            if non_empty_edu:
+                st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+                for edu in non_empty_edu:
+                    degree_val = edu['degree']
+                    if isinstance(degree_val, list):
+                        degree_val = ", ".join(degree_val)
+                    st.markdown(f"""
+                    <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px;'>
+                        <div style='display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;'>
+                            <span>🏫 {edu['institution']}</span>
+                            <span style='color: gray;'>📅 {edu['year']}</span>
+                        </div>
+                        <div style='font-size: 14px;'>🎓 <i>{degree_val}</i></div>
+                        <div style='font-size: 14px;'>📄 {edu['details']}</div>
                     </div>
-                    <div style='font-size: 14px;'>🎓 <i>{edu['degree']}</i></div>
-                    <div style='font-size: 14px;'>📄 {edu['details']}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
 
             # Projects
             if projects_blocks:
                 st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
+                # BUG FIX: title/tech/duration now parsed from AI block instead of
+                # session_state index lookup, which showed stale data when AI rewrote them.
                 for idx, proj_block in enumerate(projects_blocks):
-                    proj = st.session_state.project_entries[idx] if idx < len(st.session_state.project_entries) else {}
-                    title = proj.get("title", "")
-                    tech = proj.get("tech", "")
-                    duration = proj.get("duration", "")
-                    description = proj_block
-                    for keyword in [title, f"Tech Stack: {tech}", f"Duration: {duration}"]:
-                        if keyword and keyword in description:
-                            description = description.replace(keyword, "")
-                    formatted_proj = description.strip().replace('\n• ', '<br>• ').replace('\n', '<br>')
+                    block_text = proj_block.strip()
+                    # Parse title from first line (e.g. "A. My Project Title")
+                    first_line = block_text.split("\n")[0]
+                    title_match = re.match(r"[A-Z]\.\s*(.*)", first_line)
+                    title = title_match.group(1).strip() if title_match else first_line.strip()
+                    # Parse Tech Stack and Duration from bullet lines
+                    tech_match = re.search(r"Tech Stack:\s*(.+)", block_text, re.IGNORECASE)
+                    dur_match  = re.search(r"Duration:\s*(.+)", block_text, re.IGNORECASE)
+                    tech     = tech_match.group(1).strip() if tech_match else (st.session_state.project_entries[idx].get("tech", "") if idx < len(st.session_state.project_entries) else "")
+                    duration = dur_match.group(1).strip()  if dur_match  else (st.session_state.project_entries[idx].get("duration", "") if idx < len(st.session_state.project_entries) else "")
+                    # Strip header/meta lines; keep only description content
+                    description = block_text
+                    for keyword in [first_line, f"Tech Stack: {tech}", f"Duration: {duration}", "Tech Stack:", "Duration:"]:
+                        description = description.replace(keyword, "")
+                    formatted_proj = description.strip().replace('\n• ', '<br>• ').replace('\n- ', '<br>• ').replace('\n', '<br>')
                     label = chr(65 + idx)
 
                     st.markdown(f"""
