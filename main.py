@@ -8,7 +8,6 @@ import asyncio
 import io
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from job_scam_detector import render_job_scam_detector_tab
 import urllib.parse
 import base64
 from io import BytesIO
@@ -2911,8 +2910,7 @@ tab_labels = [
     "📊 Dashboard",
     "🧾 Resume Builder",
     "💼 Job Search",
-    "📚 Course Recommendation",
-	"🛡️ Scam Detector"
+    "📚 Course Recommendation"
 ]
 
 # Add Admin tab only for admin user
@@ -2922,11 +2920,11 @@ if st.session_state.username == "admin":
 # Create tabs dynamically
 tabs = st.tabs(tab_labels)
 
-# Unpack first five (always exist)
-tab1, tab2, tab3, tab4, tab_scam = tabs[:5]
+# Unpack first four (always exist)
+tab1, tab2, tab3, tab4 = tabs[:4]
 
-# Handle optional admin tab (index shifts to 5 now)
-tab5 = tabs[5] if len(tabs) > 5 else None
+# Handle optional admin tab
+tab5 = tabs[4] if len(tabs) > 4 else None
 with tab1:
     st.markdown("""
     <style>
@@ -6520,11 +6518,11 @@ def html_to_pdf_bytes(html_string):
         <meta charset="UTF-8">
         <style>
             @page {{
-                size: A4 portrait;  /* Standard A4: 210mm x 297mm */
-                margin-top: 15mm;
-                margin-bottom: 15mm;
-                margin-left: 15mm;
-                margin-right: 15mm;
+                size: 400mm 297mm;  /* Original custom large page size */
+                margin-top: 10mm;
+                margin-bottom: 10mm;
+                margin-left: 10mm;
+                margin-right: 10mm;
             }}
             body {{
                 font-size: 14pt;
@@ -17493,8 +17491,3 @@ if tab5:
 			<p>Last updated: {}</p>
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
-with tab_scam:
-    render_job_scam_detector_tab(call_llm)
-
-
-
