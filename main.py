@@ -2911,7 +2911,7 @@ tab_labels = [
     "📊 Dashboard",
     "🧾 Resume Builder",
     "💼 Job Search",
-    "📚 Course Recommendation"
+    "📚 Course Recommendation",
 	"🛡️ Scam Detector"
 ]
 
