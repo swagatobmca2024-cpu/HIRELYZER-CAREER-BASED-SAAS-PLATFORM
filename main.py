@@ -6520,11 +6520,11 @@ def html_to_pdf_bytes(html_string):
         <meta charset="UTF-8">
         <style>
             @page {{
-                size: 400mm 297mm;  /* Original custom large page size */
-                margin-top: 10mm;
-                margin-bottom: 10mm;
-                margin-left: 10mm;
-                margin-right: 10mm;
+                size: A4 portrait;  /* Standard A4: 210mm x 297mm */
+                margin-top: 15mm;
+                margin-bottom: 15mm;
+                margin-left: 15mm;
+                margin-right: 15mm;
             }}
             body {{
                 font-size: 14pt;
@@ -9028,7 +9028,6 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
-
 import streamlit as st
 
 # ── Sub-module imports ────────────────────────────────────────
