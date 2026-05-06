@@ -6518,18 +6518,42 @@ def html_to_pdf_bytes(html_string):
         <meta charset="UTF-8">
         <style>
             @page {{
-                size: 210mm 297mm;  /* A4 */
-                margin: 12mm 10mm;
+                size: A4 portrait;  /* Standard A4: 210mm x 297mm */
+                margin-top: 15mm;
+                margin-bottom: 15mm;
+                margin-left: 15mm;
+                margin-right: 15mm;
             }}
             body {{
+                font-size: 14pt;
                 font-family: "Segoe UI", "Helvetica", sans-serif;
                 line-height: 1.5;
                 color: #000;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
+            }}
+            h1, h2, h3 {{
+                color: #2f4f6f;
             }}
             table {{
+                width: 100%;
                 border-collapse: collapse;
+                margin-bottom: 15px;
+            }}
+            td {{
+                padding: 4px;
+                vertical-align: top;
+                border: 1px solid #ccc;
+            }}
+            .section-title {{
+                background-color: #e0e0e0;
+                font-weight: bold;
+                padding: 6px;
+                margin-top: 10px;
+            }}
+            .box {{
+                padding: 8px;
+                margin-top: 6px;
+                background-color: #f9f9f9;
+                border-left: 4px solid #999;  /* More elegant than full border */
             }}
             ul {{
                 margin: 0.5em 0;
