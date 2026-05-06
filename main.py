@@ -8981,15 +8981,18 @@ with tab2:
                     )
                     label_letter = chr(65 + idx)
 
-                    st.markdown(f"""
-                    <div style='margin-bottom:18px;padding:12px 14px;border-radius:10px;
-                                background:rgba(0,0,0,0.02);border:1px solid #e5e7eb;'>
-                        <strong style='font-size:15px;'>📌 {label_letter}. {title}</strong><br>
-                        {'<span style="font-size:13px;">🛠️ <strong>Tech Stack:</strong> ' + tech + '</span><br>' if tech else ''}
-                        {'<span style="font-size:13px;">⏳ <strong>Duration:</strong> ' + duration + '</span><br>' if duration else ''}
-                        <div style='margin-top:6px;font-size:15px;line-height:1.7;'>{formatted_proj}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    _tech_html     = f"<span style='font-size:13px;'>🛠️ <strong>Tech Stack:</strong> {tech}</span><br>" if tech else ""
+                    _duration_html = f"<span style='font-size:13px;'>⏳ <strong>Duration:</strong> {duration}</span><br>" if duration else ""
+                    st.markdown(
+                        f"<div style='margin-bottom:18px;padding:12px 14px;border-radius:10px;"
+                        f"background:rgba(0,0,0,0.02);border:1px solid #e5e7eb;'>"
+                        f"<strong style='font-size:15px;'>📌 {label_letter}. {title}</strong><br>"
+                        f"{_tech_html}"
+                        f"{_duration_html}"
+                        f"<div style='margin-top:6px;font-size:15px;line-height:1.7;'>{formatted_proj}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
 
             # ── Certificates ──────────────────────────────────────────────────
             if certificates_list:
@@ -9174,7 +9177,6 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
-
 import streamlit as st
 
 # ── Sub-module imports ────────────────────────────────────────
