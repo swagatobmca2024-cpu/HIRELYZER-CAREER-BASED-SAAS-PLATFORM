@@ -185,7 +185,7 @@ def render_template_default(session_state, profile_img_html=""):
 
     # ── certificates sidebar ──────────────────────────────────────────────────
     cert_html = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_html += (
                 f"<div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);"
@@ -196,11 +196,11 @@ def render_template_default(session_state, profile_img_html=""):
 
     # ── project links sidebar ─────────────────────────────────────────────────
     proj_links_html = ""
-    if getattr(session_state, 'project_links', None):
+    if session_state.project_links:
         proj_links_html = "".join(
             f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
             f"style='color:#ffffff;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
-            for i, lnk in enumerate(getattr(session_state, 'project_links', []) or [])
+            for i, lnk in enumerate(session_state.project_links)
         )
 
     # ── experience ────────────────────────────────────────────────────────────
@@ -409,7 +409,7 @@ def render_template_modern(session_state, profile_img_html=""):
 
     # Certifications
     cert_html = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_desc = _fmt_desc(cert.get('description', ''), font_size='13px', color='#1f2937', line_height='1.7')
             cert_html += (
@@ -481,10 +481,10 @@ def render_template_sidebar(session_state, profile_img_html=""):
     """Enhanced elegant sidebar template with improved styling, pill tags, and better visual hierarchy"""
     
     # Process lists for pill-style tags
-    skills_list     = [s.strip() for s in session_state.get('skills',     '').split(',') if s.strip()]
-    languages_list  = [l.strip() for l in session_state.get('languages',  '').split(',') if l.strip()]
-    interests_list  = [i.strip() for i in session_state.get('interests',  '').split(',') if i.strip()]
-    softskills_list = [s.strip() for s in session_state.get('Softskills', '').split(',') if s.strip()]
+    skills_list = [s.strip() for s in session_state['skills'].split(',') if s.strip()]
+    languages_list = [l.strip() for l in session_state['languages'].split(',') if l.strip()]
+    interests_list = [i.strip() for i in session_state['interests'].split(',') if i.strip()]
+    softskills_list = [s.strip() for s in session_state['Softskills'].split(',') if s.strip()]
     
     # Create pill-style tags for sidebar sections
     skills_pills = "".join([
@@ -604,7 +604,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
                 f"{body}</div>")
 
     cert_sb_html = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_sb_html += (
                 f"<div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);border-radius:6px;border:1px solid rgba(56,189,248,0.3);'>"
@@ -613,10 +613,10 @@ def render_template_sidebar(session_state, profile_img_html=""):
             )
 
     proj_links_sb = ""
-    if getattr(session_state, 'project_links', None):
+    if session_state.project_links:
         proj_links_sb = "".join(
             f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#ffffff;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
-            for i, lnk in enumerate(getattr(session_state, 'project_links', []) or [])
+            for i, lnk in enumerate(session_state.project_links)
         )
 
     exp_sb = ""
@@ -791,7 +791,7 @@ def render_template_classic(session_state, profile_img_html=""):
         all_links_html = links_items
 
     cert_html = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get("name"):
             desc = _fmt_desc(cert.get('description',''), font_size='13px', color='#444', line_height='1.7')
             cert_html += f"""
@@ -952,7 +952,7 @@ def render_template_executive(session_state, profile_img_html=""):
         proj_links_section = items
 
     cert_html = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get("name"):
             cert_html += f"""
             <div style='margin-bottom:10px;'>
@@ -1124,7 +1124,7 @@ def render_template_timeline(session_state, profile_img_html=""):
         f"<span style='width:8px;height:8px;background:#0d9488;border-radius:50%;flex-shrink:0;'></span>"
         f"{_cert_name_html(c, 'font-weight:600;color:#0d9488;font-size:14px;text-decoration:none;')}"
         f"<span style='font-size:12px;color:#64748b;'>· {c.get('duration','')}</span></div>"
-        for c in (getattr(session_state, 'certificate_links', None) or []) if c.get('name')
+        for c in session_state.certificate_links if c.get('name')
     )
 
     def sec(title, body, accent="#0d9488"):
@@ -1257,7 +1257,7 @@ def render_template_corporate(session_state, profile_img_html=""):
             </div>"""
 
     cert_sidebar = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_sidebar += f"""
             <div style='margin-bottom:10px;padding:8px;background:rgba(255,255,255,0.1);border-radius:6px;'>
@@ -1432,7 +1432,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
             contact_html += f"<div style='display:flex;align-items:center;margin-bottom:8px;font-size:13px;color:#374151;gap:6px;'><span style='flex-shrink:0;color:#059669;'>{SVG_ICONS[key]}</span>{val_html}</div>"
 
     cert_html = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_html += (f"<div style='margin-bottom:8px;'>"
                           f"{_cert_name_html(cert, 'color:#059669;font-size:13px;font-weight:600;text-decoration:none;')}"
@@ -1584,7 +1584,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
             contact_html += f"<div style='margin-bottom:9px;font-size:12px;color:#e7e5e4;display:flex;align-items:center;gap:5px;'><span style='flex-shrink:0;'>{SVG_ICONS[key]}</span>{val_html}</div>"
 
     cert_html = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_html += f"<div style='margin-bottom:9px;padding:8px;background:rgba(255,255,255,0.1);border-radius:5px;'>{_cert_name_html(cert, 'color:#fde68a;font-size:12px;font-weight:600;text-decoration:none;')}<div style='font-size:11px;color:#d4b896;'>{cert.get('duration','')}</div></div>"
 
@@ -1703,7 +1703,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
                             f"<span style='opacity:0.85;flex-shrink:0;'>{SVG_NP.get(_key,'')}</span>{v}</div>")
 
     cert_html_np = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_html_np += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(184,151,42,0.12);"
                              f"border-radius:5px;border:1px solid rgba(184,151,42,0.3);'>"
@@ -1711,10 +1711,10 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
                              f"<div style='font-size:11px;color:rgba(245,230,178,0.75);'>{cert.get('duration','')}</div></div>")
 
     proj_links_html_np = ""
-    if getattr(session_state, 'project_links', None):
+    if session_state.project_links:
         proj_links_html_np = "".join(
             f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#f5e6b2;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
-            for i, lnk in enumerate(getattr(session_state, 'project_links', []) or []))
+            for i, lnk in enumerate(session_state.project_links))
 
     exp_html_np = ""
     for exp in session_state.experience_entries:
@@ -1939,7 +1939,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
 
     # ── certifications ────────────────────────────────────────────────────────
     cert_html = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             desc = _fmt_desc(cert.get('description', ''), font_size='13px', color=C_MUTED, line_height='1.7')
             cert_html += f"""
@@ -2054,7 +2054,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
                             f"<span style='opacity:0.85;flex-shrink:0;'>{SVG_TI.get(_key,'')}</span>{v}</div>")
 
     cert_html_ti = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_html_ti += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(255,255,255,0.1);"
                              f"border-radius:5px;border:1px solid rgba(255,255,255,0.2);'>"
@@ -2062,10 +2062,10 @@ def render_template_teal_impact(session_state, profile_img_html=""):
                              f"<div style='font-size:11px;color:rgba(204,251,241,0.75);'>{cert.get('duration','')}</div></div>")
 
     proj_links_html_ti = ""
-    if getattr(session_state, 'project_links', None):
+    if session_state.project_links:
         proj_links_html_ti = "".join(
             f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#ccfbf1;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
-            for i, lnk in enumerate(getattr(session_state, 'project_links', []) or []))
+            for i, lnk in enumerate(session_state.project_links))
 
     exp_html_ti = ""
     for exp in session_state.experience_entries:
@@ -2272,7 +2272,7 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
 
     # ── certifications ────────────────────────────────────────────────────────
     cert_html = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             desc = _fmt_desc(cert.get('description', ''), font_size='13px', color='#6b7280', line_height='1.7')
             cert_html += f"""
@@ -2384,7 +2384,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
                             f"<span style='opacity:0.85;flex-shrink:0;'>{SVG_IT.get(_key,'')}</span>{v}</div>")
 
     cert_html_it = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_html_it += (f"<div style='margin-bottom:9px;padding:7px 9px;background:rgba(34,211,238,0.1);"
                              f"border-radius:5px;border:1px solid rgba(34,211,238,0.3);'>"
@@ -2392,10 +2392,10 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
                              f"<div style='font-size:11px;color:rgba(165,243,252,0.75);'>{cert.get('duration','')}</div></div>")
 
     proj_links_html_it = ""
-    if getattr(session_state, 'project_links', None):
+    if session_state.project_links:
         proj_links_html_it = "".join(
             f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#a5f3fc;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
-            for i, lnk in enumerate(getattr(session_state, 'project_links', []) or []))
+            for i, lnk in enumerate(session_state.project_links))
 
     exp_html_it = ""
     for exp in session_state.experience_entries:
@@ -2576,7 +2576,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
             )
 
     cert_html_fg = ""
-    for cert in (getattr(session_state, 'certificate_links', None) or []):
+    for cert in session_state.certificate_links:
         if cert.get('name'):
             cert_html_fg += (
                 f"<div style='margin-bottom:10px;padding-left:10px;border-left:2px solid #86efac;'>"
@@ -2585,10 +2585,10 @@ def render_template_forest_green(session_state, profile_img_html=""):
             )
 
     proj_links_sec_fg = ""
-    if getattr(session_state, 'project_links', None):
+    if session_state.project_links:
         proj_links_sec_fg = "".join(
             f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#16a34a;font-size:13px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
-            for i, lnk in enumerate(getattr(session_state, 'project_links', []) or []) if lnk)
+            for i, lnk in enumerate(session_state.project_links) if lnk)
 
     summary_html_fg = _fmt_desc(session_state.get('summary',''), font_size='13px', color='#1c1c1c', line_height='1.8')
 
