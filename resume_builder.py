@@ -261,7 +261,7 @@ def render_template_default(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Professional Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Professional Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -447,10 +447,10 @@ def render_template_modern(session_state, profile_img_html=""):
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="UTF-8"><meta name="viewport" content="width=1200px">
 <title>{session_state.get('name', '')} - Resume</title>
 </head>
-<body style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;line-height:1.6;color:#1f2937;background:#ffffff;max-width:794px;margin:0 auto;padding:36px 32px;">
+<body style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;line-height:1.6;color:#1f2937;background:#ffffff;max-width:860px;margin:0 auto;padding:36px 32px;">
 
   <!-- HEADER -->
   <div style="text-align:center;margin-bottom:30px;padding-bottom:20px;border-bottom:3px solid #2563eb;">
@@ -672,7 +672,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -834,7 +834,7 @@ def render_template_classic(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Georgia',serif; color:#1a1a1a; background:#fff; padding:40px 60px; line-height:1.6; }}
@@ -1003,7 +1003,7 @@ def render_template_executive(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Executive Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Executive Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',Arial,sans-serif; color:#1a1a1a; background:#fff; line-height:1.6; }}</style>
 </head>
 <body>
@@ -1154,7 +1154,7 @@ def render_template_timeline(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Timeline Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Timeline Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
 </head>
 <body>
@@ -1311,7 +1311,7 @@ def render_template_corporate(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Corporate Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Corporate Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -1463,7 +1463,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Creative Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Creative Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#f0fdf4; }}</style>
 </head>
 <body>
@@ -1612,7 +1612,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Terracotta Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Terracotta Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fafaf9; }}</style>
 </head>
 <body>
@@ -1769,7 +1769,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -1960,7 +1960,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Segoe UI',Arial,sans-serif; color:{C_PRIMARY}; background:#ffffff; padding:40px 60px; line-height:1.6; }}
@@ -2120,7 +2120,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -2291,7 +2291,7 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; }}
@@ -2450,7 +2450,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -2594,8 +2594,8 @@ def render_template_forest_green(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title></head>
-<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;max-width:794px;margin:0 auto;padding:36px 40px;">
+<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title></head>
+<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;max-width:860px;margin:0 auto;padding:36px 40px;">
   {fixed_img if fixed_img else ''}
   <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #166534;">
     <h1 style="font-size:28px;font-weight:800;color:#14532d;margin-bottom:4px;">{session_state.get('name','')}</h1>
