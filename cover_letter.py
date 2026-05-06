@@ -52,10 +52,10 @@ def render_cover_letter_professional(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Georgia',serif; background:#fff; color:#1a1a1a; padding:50px 70px; line-height:1.6; }}
+  body {{ font-family:'Georgia',serif; background:#fff; color:#1a1a1a; padding:36px 48px; line-height:1.6; max-width:794px; margin:0 auto; min-height:297mm; }}
 </style>
 </head>
 <body>
@@ -67,16 +67,16 @@ def render_cover_letter_professional(data):
   </div>
 
   <!-- DATE -->
-  {f"<p style='font-size:14px;color:#374151;margin-bottom:20px;'>{date_str}</p>" if date_str else ''}
+  {f"<p style='font-size:14px;color:#374151;margin-bottom:20px;page-break-inside:avoid;'>{date_str}</p>" if date_str else ''}
 
   <!-- RECIPIENT -->
-  <div style='margin-bottom:24px;'>
+  <div style='margin-bottom:24px;page-break-inside:avoid;'>
     <p style='font-size:14px;font-weight:600;color:#1a1a1a;'>{hiring_manager}</p>
     <p style='font-size:14px;color:#374151;'>{company}</p>
   </div>
 
   <!-- GREETING -->
-  <p style='font-size:14px;color:#1a1a1a;margin-bottom:20px;'>Dear {hiring_manager},</p>
+  <p style='font-size:14px;color:#1a1a1a;margin-bottom:20px;page-break-inside:avoid;'>Dear {hiring_manager},</p>
 
   <!-- BODY -->
   {paras_html}
@@ -126,10 +126,10 @@ def render_cover_letter_modern(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:48px 64px; line-height:1.6; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:36px 48px; line-height:1.6; max-width:794px; margin:0 auto; min-height:297mm; }}
 </style>
 </head>
 <body>
@@ -144,7 +144,7 @@ def render_cover_letter_modern(data):
 
   <!-- DATE + RECIPIENT -->
   {f"<p style='font-size:13px;color:#6b7280;margin-bottom:16px;'>{date_str}</p>" if date_str else ''}
-  <div style='margin-bottom:20px;'>
+  <div style='margin-bottom:20px;page-break-inside:avoid;'>
     <p style='font-size:14px;font-weight:600;color:#1f2937;'>{hiring_manager}</p>
     <p style='font-size:14px;color:#6b7280;'>{company}</p>
   </div>
@@ -207,10 +207,10 @@ def render_cover_letter_creative(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:0; line-height:1.6; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:0; line-height:1.6; max-width:794px; margin:0 auto; min-height:297mm; }}
 </style>
 </head>
 <body>
@@ -280,10 +280,10 @@ def render_cover_letter_executive(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Georgia',serif; background:#fff; color:#1a1a1a; padding:0; line-height:1.6; }}
+  body {{ font-family:'Georgia',serif; background:#fff; color:#1a1a1a; padding:0; line-height:1.6; max-width:794px; margin:0 auto; min-height:297mm; }}
 </style>
 </head>
 <body>
@@ -299,12 +299,12 @@ def render_cover_letter_executive(data):
   <div style='padding:42px 64px;'>
     {f"<p style='font-size:13px;color:#6b7280;margin-bottom:22px;'>{date_str}</p>" if date_str else ''}
 
-    <div style='margin-bottom:24px;'>
+    <div style='margin-bottom:24px;page-break-inside:avoid;'>
       <p style='font-size:14px;font-weight:700;color:#0d1b2a;'>{hiring_manager}</p>
       <p style='font-size:14px;color:#374151;'>{company}</p>
     </div>
 
-    <p style='font-size:14px;margin-bottom:20px;'>Dear {hiring_manager},</p>
+    <p style='font-size:14px;margin-bottom:20px;page-break-inside:avoid;'>Dear {hiring_manager},</p>
 
     {paras_html}
 
@@ -354,10 +354,10 @@ def render_cover_letter_entry_level(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:48px 64px; line-height:1.6; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:36px 48px; line-height:1.6; max-width:794px; margin:0 auto; min-height:297mm; }}
 </style>
 </head>
 <body>
@@ -431,10 +431,10 @@ def render_cover_letter_ats(data):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:Arial,Helvetica,sans-serif; background:#fff; color:#111827; padding:48px 64px; line-height:1.6; font-size:14px; }}
+  body {{ font-family:Arial,Helvetica,sans-serif; background:#fff; color:#111827; padding:36px 48px; line-height:1.6; font-size:14px; max-width:794px; margin:0 auto; min-height:297mm; }}
   hr {{ border:none; border-top:1px solid #d1d5db; margin:18px 0; }}
 </style>
 </head>
@@ -450,7 +450,7 @@ def render_cover_letter_ats(data):
   {f"<p style='margin-bottom:16px;color:#374151;'>{date_str}</p>" if date_str else ''}
 
   <!-- RECIPIENT -->
-  <div style='margin-bottom:20px;'>
+  <div style='margin-bottom:20px;page-break-inside:avoid;'>
     <p style='font-weight:600;color:#111827;'>{hiring_manager}</p>
     <p style='color:#374151;'>{company}</p>
   </div>
