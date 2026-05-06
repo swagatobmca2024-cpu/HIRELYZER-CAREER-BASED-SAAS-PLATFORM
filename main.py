@@ -6512,22 +6512,63 @@ with tab1:
     elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
 def html_to_pdf_bytes(html_string):
-    # html_string is already a full <!DOCTYPE html> document from render_template_*.
-    # Wrapping it in another <html> breaks xhtml2pdf (nested documents = TypeError).
-    # Instead, inject the A4 @page rule directly into the existing <head>.
-    _page_css = """<style>
-        @page {
-            size: 210mm 297mm;
-            margin: 12mm 15mm;
-        }
-        body { font-size: 11pt; line-height: 1.5; }
-    </style>"""
-
-    # Inject before </head> if present, otherwise prepend
-    if "</head>" in html_string:
-        styled_html = html_string.replace("</head>", _page_css + "</head>", 1)
-    else:
-        styled_html = _page_css + html_string
+    styled_html = f"""
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{
+                size: A4 portrait;  /* Fixed: was 400mm x 297mm (too wide). A4 = 210mm x 297mm */
+                margin-top: 12mm;
+                margin-bottom: 12mm;
+                margin-left: 0mm;
+                margin-right: 0mm;
+            }}
+            body {{
+                /* Removed conflicting font-size:14pt override — templates manage their own font sizes */
+                font-family: "Segoe UI", "Helvetica", sans-serif;
+                line-height: 1.5;
+                color: #000;
+            }}
+            h1, h2, h3 {{
+                color: #2f4f6f;
+            }}
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 15px;
+            }}
+            td {{
+                padding: 4px;
+                vertical-align: top;
+                border: 1px solid #ccc;
+            }}
+            .section-title {{
+                background-color: #e0e0e0;
+                font-weight: bold;
+                padding: 6px;
+                margin-top: 10px;
+            }}
+            .box {{
+                padding: 8px;
+                margin-top: 6px;
+                background-color: #f9f9f9;
+                border-left: 4px solid #999;  /* More elegant than full border */
+            }}
+            ul {{
+                margin: 0.5em 0;
+                padding-left: 1.5em;
+            }}
+            li {{
+                margin-bottom: 5px;
+            }}
+        </style>
+    </head>
+    <body>
+        {html_string}
+    </body>
+    </html>
+    """
 
     pdf_io = BytesIO()
     pisa.CreatePDF(styled_html, dest=pdf_io)
@@ -8890,47 +8931,11 @@ with tab2:
                 "📄 Template Preview (scroll to explore):</p>",
                 unsafe_allow_html=True,
             )
-            # Wrap resume HTML in a 900px iframe-within-iframe so the full
-            # resume document (with its own <head>/<style>) renders at its
-            # intended width and is then scaled down to fit the preview pane.
-            _inner_html = st.session_state["generated_html"]
-            # Encode the resume HTML as a data URI so it loads as a proper
-            # sub-document — avoids nested <!DOCTYPE> breaking inner styles.
-            import base64 as _b64
-            _encoded = _b64.b64encode(_inner_html.encode("utf-8")).decode("utf-8")
-            _preview = f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8">
-<style>
-  html,body{{margin:0;padding:0;width:100%;height:100%;background:#f0f2f6;overflow:hidden;}}
-  #frame{{
-    width:900px; height:1200px;
-    border:none;
-    transform-origin:top left;
-    box-shadow:0 2px 16px rgba(0,0,0,0.18);
-    background:#fff;
-    display:block;
-  }}
-</style></head>
-<body>
-<iframe id="frame"
-  src="data:text/html;base64,{_encoded}"
-  scrolling="no">
-</iframe>
-<script>
-function fit(){{
-  var w=window.innerWidth||document.documentElement.clientWidth;
-  var s=Math.min((w-8)/900,1);
-  var f=document.getElementById('frame');
-  f.style.transform='scale('+s+')';
-  document.body.style.height=Math.ceil(1200*s+20)+'px';
-}}
-fit();
-window.addEventListener('resize',fit);
-</script>
-</body></html>"""
+            # Dynamic height: scales with content length, min 800px, max 2200px
+            _preview_height = min(max(800, len(st.session_state["generated_html"]) // 12), 2200)
             components.html(
-                _preview,
-                height=740,
+                st.session_state["generated_html"],
+                height=_preview_height,
                 scrolling=True,
             )
 
@@ -8998,24 +9003,34 @@ window.addEventListener('resize',fit);
             </div>
             """, unsafe_allow_html=True)
 
-            col1,col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 st.download_button(
-                    label="📥 Download Cover Letter (.docx)",
+                    label="📥 Download (.docx)",
                     data=create_docx_from_text(st.session_state["cover_letter"]),
                     file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     key="download_coverletter_docx"
                 )
-            
+
             with col2:
                 st.download_button(
-                    label="📥 Download Cover Letter (Template)",
+                    label="📥 Download (.html)",
                     data=styled_cover_letter.encode("utf-8"),
                     file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.html",
                     mime="text/html",
                     key="download_coverletter_html"
                 )
+
+            with col3:
+                st.download_button(
+                    label="📥 Download (.pdf)",
+                    data=pdf_file,
+                    file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.pdf",
+                    mime="application/pdf",
+                    key="download_coverletter_pdf"
+                )
+
 
             # ✅ Helper note
             st.markdown("""
