@@ -46,7 +46,7 @@ def render_cover_letter_professional(data):
     contact_line = " &nbsp;|&nbsp; ".join(contact_parts)
 
     paras_html = "".join(
-        f"<p style='margin-bottom:16px;font-size:14px;color:#1a1a1a;line-height:1.8;text-align:justify;'>{p}</p>"
+        f"<p style='margin-bottom:16px;font-size:18px;color:#1a1a1a;line-height:1.8;text-align:justify;'>{p}</p>"
         for p in paragraphs
     )
 
@@ -62,30 +62,30 @@ def render_cover_letter_professional(data):
   <!-- HEADER -->
   <div style='border-bottom:3px solid #1e3a5f;padding-bottom:18px;margin-bottom:28px;'>
     <h1 style='font-size:30px;font-weight:700;color:#1e3a5f;letter-spacing:1px;margin-bottom:4px;'>{name}</h1>
-    {f"<div style='font-size:15px;color:#374151;font-weight:600;margin-bottom:8px;'>{job_title}</div>" if job_title else ''}
-    <div style='font-size:13px;color:#555;'>{contact_line}</div>
+    {f"<div style='font-size:17px;color:#374151;font-weight:600;margin-bottom:8px;'>{job_title}</div>" if job_title else ''}
+    <div style='font-size:17px;color:#555;'>{contact_line}</div>
   </div>
 
   <!-- DATE -->
-  {f"<p style='font-size:14px;color:#374151;margin-bottom:20px;'>{date_str}</p>" if date_str else ''}
+  {f"<p style='font-size:18px;color:#374151;margin-bottom:20px;'>{date_str}</p>" if date_str else ''}
 
   <!-- RECIPIENT -->
   <div style='margin-bottom:24px;'>
-    <p style='font-size:14px;font-weight:600;color:#1a1a1a;'>{hiring_manager}</p>
-    <p style='font-size:14px;color:#374151;'>{company}</p>
+    <p style='font-size:18px;font-weight:600;color:#1a1a1a;'>{hiring_manager}</p>
+    <p style='font-size:18px;color:#374151;'>{company}</p>
   </div>
 
   <!-- GREETING -->
-  <p style='font-size:14px;color:#1a1a1a;margin-bottom:20px;'>Dear {hiring_manager},</p>
+  <p style='font-size:18px;color:#1a1a1a;margin-bottom:20px;'>Dear {hiring_manager},</p>
 
   <!-- BODY -->
   {paras_html}
 
   <!-- CLOSING -->
-  <p style='font-size:14px;color:#1a1a1a;margin-bottom:6px;'>I would welcome the opportunity to discuss how my experience aligns with the needs of {company}. Thank you for your time and consideration.</p>
-  <p style='font-size:14px;color:#1a1a1a;margin-top:28px;'>Sincerely,</p>
-  <p style='font-size:15px;font-weight:700;color:#1e3a5f;margin-top:8px;'>{name}</p>
-  {f"<p style='font-size:13px;color:#555;margin-top:4px;'>{job_title}</p>" if job_title else ''}
+  <p style='font-size:18px;color:#1a1a1a;margin-bottom:6px;'>I would welcome the opportunity to discuss how my experience aligns with the needs of {company}. Thank you for your time and consideration.</p>
+  <p style='font-size:18px;color:#1a1a1a;margin-top:28px;'>Sincerely,</p>
+  <p style='font-size:17px;font-weight:700;color:#1e3a5f;margin-top:8px;'>{name}</p>
+  {f"<p style='font-size:17px;color:#555;margin-top:4px;'>{job_title}</p>" if job_title else ''}
 </body></html>"""
 
 
@@ -120,7 +120,7 @@ def render_cover_letter_modern(data):
     contact_line = " &nbsp;&middot;&nbsp; ".join(contact_items)
 
     paras_html = "".join(
-        f"<p style='margin-bottom:14px;font-size:14px;color:#374151;line-height:1.8;'>{p}</p>"
+        f"<p style='margin-bottom:14px;font-size:18px;color:#374151;line-height:1.8;'>{p}</p>"
         for p in paragraphs
     )
 
@@ -136,31 +136,31 @@ def render_cover_letter_modern(data):
   <!-- HEADER BAND -->
   <div style='display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #0d9488;padding-bottom:16px;margin-bottom:32px;'>
     <div>
-      <h1 style='font-size:28px;font-weight:800;color:#0f172a;letter-spacing:0.5px;margin-bottom:2px;'>{name}</h1>
-      {f"<div style='font-size:14px;color:#0d9488;font-weight:600;'>{job_title}</div>" if job_title else ''}
+      <h1 style='font-size:30px;font-weight:800;color:#0f172a;letter-spacing:0.5px;margin-bottom:2px;'>{name}</h1>
+      {f"<div style='font-size:18px;color:#0d9488;font-weight:600;'>{job_title}</div>" if job_title else ''}
     </div>
-    <div style='text-align:right;font-size:12px;color:#6b7280;line-height:1.9;'>{contact_line}</div>
+    <div style='text-align:right;font-size:18px;color:#6b7280;line-height:1.9;'>{contact_line}</div>
   </div>
 
   <!-- DATE + RECIPIENT -->
-  {f"<p style='font-size:13px;color:#6b7280;margin-bottom:16px;'>{date_str}</p>" if date_str else ''}
+  {f"<p style='font-size:17px;color:#6b7280;margin-bottom:16px;'>{date_str}</p>" if date_str else ''}
   <div style='margin-bottom:20px;'>
-    <p style='font-size:14px;font-weight:600;color:#1f2937;'>{hiring_manager}</p>
-    <p style='font-size:14px;color:#6b7280;'>{company}</p>
+    <p style='font-size:18px;font-weight:600;color:#1f2937;'>{hiring_manager}</p>
+    <p style='font-size:18px;color:#6b7280;'>{company}</p>
   </div>
 
   <!-- GREETING -->
-  <p style='font-size:14px;margin-bottom:18px;'>Dear {hiring_manager},</p>
+  <p style='font-size:18px;margin-bottom:18px;'>Dear {hiring_manager},</p>
 
   <!-- BODY -->
   {paras_html}
 
   <!-- CLOSING -->
-  <p style='font-size:14px;color:#374151;margin-bottom:30px;'>I'd love the chance to chat about how I can contribute to {company}. Thank you for considering my application.</p>
-  <p style='font-size:14px;'>Best regards,</p>
+  <p style='font-size:18px;color:#374151;margin-bottom:30px;'>I'd love the chance to chat about how I can contribute to {company}. Thank you for considering my application.</p>
+  <p style='font-size:18px;'>Best regards,</p>
   <div style='margin-top:10px;padding-top:10px;border-top:2px solid #0d9488;display:inline-block;'>
-    <p style='font-size:16px;font-weight:700;color:#0f172a;'>{name}</p>
-    {f"<p style='font-size:13px;color:#0d9488;'>{job_title}</p>" if job_title else ''}
+    <p style='font-size:18px;font-weight:700;color:#0f172a;'>{name}</p>
+    {f"<p style='font-size:17px;color:#0d9488;'>{job_title}</p>" if job_title else ''}
   </div>
 </body></html>"""
 
@@ -201,7 +201,7 @@ def render_cover_letter_creative(data):
     contact_line = " &nbsp;&bull;&nbsp; ".join(contact_items)
 
     paras_html = "".join(
-        f"<p style='margin-bottom:16px;font-size:14px;color:#1f2937;line-height:1.85;'>{p}</p>"
+        f"<p style='margin-bottom:16px;font-size:18px;color:#1f2937;line-height:1.85;'>{p}</p>"
         for p in paragraphs
     )
 
@@ -216,29 +216,29 @@ def render_cover_letter_creative(data):
 <body>
   <!-- CREATIVE HEADER BAND -->
   <div style='background:{accent};padding:36px 56px 28px;'>
-    <h1 style='font-size:32px;font-weight:800;color:#ffffff;letter-spacing:1px;margin-bottom:4px;'>{name}</h1>
-    {f"<div style='font-size:15px;color:rgba(255,255,255,0.85);font-weight:600;margin-bottom:12px;'>{job_title}</div>" if job_title else ''}
-    <div style='font-size:12px;'>{contact_line}</div>
+    <h1 style='font-size:34px;font-weight:800;color:#ffffff;letter-spacing:1px;margin-bottom:4px;'>{name}</h1>
+    {f"<div style='font-size:17px;color:rgba(255,255,255,0.85);font-weight:600;margin-bottom:12px;'>{job_title}</div>" if job_title else ''}
+    <div style='font-size:18px;'>{contact_line}</div>
   </div>
 
   <!-- BODY AREA -->
   <div style='padding:40px 56px;'>
-    {f"<p style='font-size:13px;color:#9ca3af;margin-bottom:18px;'>{date_str}</p>" if date_str else ''}
+    {f"<p style='font-size:17px;color:#9ca3af;margin-bottom:18px;'>{date_str}</p>" if date_str else ''}
 
     <div style='margin-bottom:22px;'>
-      <p style='font-size:14px;font-weight:700;color:#1f2937;'>{hiring_manager}</p>
-      <p style='font-size:14px;color:#6b7280;'>{company}</p>
+      <p style='font-size:18px;font-weight:700;color:#1f2937;'>{hiring_manager}</p>
+      <p style='font-size:18px;color:#6b7280;'>{company}</p>
     </div>
 
-    <p style='font-size:14px;margin-bottom:18px;'>Dear {hiring_manager},</p>
+    <p style='font-size:18px;margin-bottom:18px;'>Dear {hiring_manager},</p>
 
     {paras_html}
 
-    <p style='font-size:14px;color:#374151;margin-bottom:32px;'>I would be thrilled to discuss this further. Thank you for your time — I look forward to hearing from you.</p>
+    <p style='font-size:18px;color:#374151;margin-bottom:32px;'>I would be thrilled to discuss this further. Thank you for your time — I look forward to hearing from you.</p>
 
-    <p style='font-size:14px;'>Warmly,</p>
+    <p style='font-size:18px;'>Warmly,</p>
     <p style='font-size:17px;font-weight:800;color:{accent};margin-top:10px;'>{name}</p>
-    {f"<p style='font-size:13px;color:#6b7280;'>{job_title}</p>" if job_title else ''}
+    {f"<p style='font-size:17px;color:#6b7280;'>{job_title}</p>" if job_title else ''}
   </div>
 </body></html>"""
 
@@ -274,7 +274,7 @@ def render_cover_letter_executive(data):
     contact_line = " &nbsp;|&nbsp; ".join(contact_items)
 
     paras_html = "".join(
-        f"<p style='margin-bottom:16px;font-size:14px;color:#1a1a1a;line-height:1.85;text-align:justify;'>{p}</p>"
+        f"<p style='margin-bottom:16px;font-size:18px;color:#1a1a1a;line-height:1.85;text-align:justify;'>{p}</p>"
         for p in paragraphs
     )
 
@@ -290,29 +290,29 @@ def render_cover_letter_executive(data):
   <!-- EXECUTIVE DARK HEADER -->
   <div style='background:linear-gradient(135deg,#0d1b2a,#1a2f4c);padding:40px 64px 32px;'>
     <h1 style='font-size:30px;font-weight:700;color:#ffffff;letter-spacing:2px;margin-bottom:4px;font-family:"Georgia",serif;'>{name}</h1>
-    {f"<div style='font-size:14px;color:#d4af37;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;'>{job_title}</div>" if job_title else ''}
-    <div style='font-size:12px;color:#adb5bd;'>{contact_line}</div>
+    {f"<div style='font-size:18px;color:#d4af37;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;'>{job_title}</div>" if job_title else ''}
+    <div style='font-size:18px;color:#adb5bd;'>{contact_line}</div>
   </div>
   <div style='height:4px;background:linear-gradient(90deg,#d4af37,#b8860b);'></div>
 
   <!-- BODY -->
   <div style='padding:42px 64px;'>
-    {f"<p style='font-size:13px;color:#6b7280;margin-bottom:22px;'>{date_str}</p>" if date_str else ''}
+    {f"<p style='font-size:17px;color:#6b7280;margin-bottom:22px;'>{date_str}</p>" if date_str else ''}
 
     <div style='margin-bottom:24px;'>
-      <p style='font-size:14px;font-weight:700;color:#0d1b2a;'>{hiring_manager}</p>
-      <p style='font-size:14px;color:#374151;'>{company}</p>
+      <p style='font-size:18px;font-weight:700;color:#0d1b2a;'>{hiring_manager}</p>
+      <p style='font-size:18px;color:#374151;'>{company}</p>
     </div>
 
-    <p style='font-size:14px;margin-bottom:20px;'>Dear {hiring_manager},</p>
+    <p style='font-size:18px;margin-bottom:20px;'>Dear {hiring_manager},</p>
 
     {paras_html}
 
-    <p style='font-size:14px;color:#374151;margin-bottom:34px;'>I welcome the opportunity to explore this further at your convenience. Please find my resume enclosed for your review.</p>
+    <p style='font-size:18px;color:#374151;margin-bottom:34px;'>I welcome the opportunity to explore this further at your convenience. Please find my resume enclosed for your review.</p>
 
-    <p style='font-size:14px;'>Respectfully yours,</p>
+    <p style='font-size:18px;'>Respectfully yours,</p>
     <p style='font-size:18px;font-weight:700;color:#0d1b2a;margin-top:12px;font-family:"Georgia",serif;'>{name}</p>
-    {f"<p style='font-size:13px;color:#d4af37;font-weight:600;margin-top:4px;'>{job_title}</p>" if job_title else ''}
+    {f"<p style='font-size:17px;color:#d4af37;font-weight:600;margin-top:4px;'>{job_title}</p>" if job_title else ''}
   </div>
 </body></html>"""
 
@@ -348,7 +348,7 @@ def render_cover_letter_entry_level(data):
     contact_line = " &nbsp;|&nbsp; ".join(contact_items)
 
     paras_html = "".join(
-        f"<p style='margin-bottom:16px;font-size:14px;color:#374151;line-height:1.8;'>{p}</p>"
+        f"<p style='margin-bottom:16px;font-size:18px;color:#374151;line-height:1.8;'>{p}</p>"
         for p in paragraphs
     )
 
@@ -364,28 +364,28 @@ def render_cover_letter_entry_level(data):
   <!-- HEADER -->
   <div style='background:#eff6ff;border-left:5px solid #1d4ed8;padding:22px 28px;margin-bottom:30px;border-radius:0 8px 8px 0;'>
     <h1 style='font-size:26px;font-weight:800;color:#1e3a8a;margin-bottom:2px;'>{name}</h1>
-    {f"<div style='font-size:14px;color:#3b82f6;font-weight:600;margin-bottom:8px;'>{job_title}</div>" if job_title else ''}
-    <div style='font-size:12px;color:#6b7280;'>{contact_line}</div>
+    {f"<div style='font-size:18px;color:#3b82f6;font-weight:600;margin-bottom:8px;'>{job_title}</div>" if job_title else ''}
+    <div style='font-size:18px;color:#6b7280;'>{contact_line}</div>
   </div>
 
   <!-- DATE + RECIPIENT -->
-  {f"<p style='font-size:13px;color:#9ca3af;margin-bottom:18px;'>{date_str}</p>" if date_str else ''}
+  {f"<p style='font-size:17px;color:#9ca3af;margin-bottom:18px;'>{date_str}</p>" if date_str else ''}
   <div style='margin-bottom:22px;'>
-    <p style='font-size:14px;font-weight:600;color:#1f2937;'>{hiring_manager}</p>
-    <p style='font-size:14px;color:#6b7280;'>{company}</p>
+    <p style='font-size:18px;font-weight:600;color:#1f2937;'>{hiring_manager}</p>
+    <p style='font-size:18px;color:#6b7280;'>{company}</p>
   </div>
 
   <!-- GREETING -->
-  <p style='font-size:14px;margin-bottom:18px;'>Dear {hiring_manager},</p>
+  <p style='font-size:18px;margin-bottom:18px;'>Dear {hiring_manager},</p>
 
   <!-- BODY -->
   {paras_html}
 
   <!-- CLOSING -->
-  <p style='font-size:14px;color:#374151;margin-bottom:28px;'>I would be grateful for the opportunity to interview and learn more about this role. Thank you for your time and consideration.</p>
-  <p style='font-size:14px;'>Sincerely,</p>
-  <p style='font-size:16px;font-weight:700;color:#1e3a8a;margin-top:10px;'>{name}</p>
-  {f"<p style='font-size:13px;color:#6b7280;'>{job_title}</p>" if job_title else ''}
+  <p style='font-size:18px;color:#374151;margin-bottom:28px;'>I would be grateful for the opportunity to interview and learn more about this role. Thank you for your time and consideration.</p>
+  <p style='font-size:18px;'>Sincerely,</p>
+  <p style='font-size:18px;font-weight:700;color:#1e3a8a;margin-top:10px;'>{name}</p>
+  {f"<p style='font-size:17px;color:#6b7280;'>{job_title}</p>" if job_title else ''}
 </body></html>"""
 
 
@@ -425,7 +425,7 @@ def render_cover_letter_ats(data):
     details_line = " | ".join(details)
 
     paras_html = "".join(
-        f"<p style='margin-bottom:14px;font-size:14px;color:#111827;line-height:1.8;'>{p}</p>"
+        f"<p style='margin-bottom:14px;font-size:18px;color:#111827;line-height:1.8;'>{p}</p>"
         for p in paragraphs
     )
 
@@ -434,7 +434,7 @@ def render_cover_letter_ats(data):
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:Arial,Helvetica,sans-serif; background:#fff; color:#111827; padding:48px 64px; line-height:1.6; font-size:14px; }}
+  body {{ font-family:Arial,Helvetica,sans-serif; background:#fff; color:#111827; padding:48px 64px; line-height:1.6; font-size:18px; }}
   hr {{ border:none; border-top:1px solid #d1d5db; margin:18px 0; }}
 </style>
 </head>
@@ -442,7 +442,7 @@ def render_cover_letter_ats(data):
   <!-- ATS HEADER — plain text, no images -->
   <div style='margin-bottom:6px;'>
     <p style='font-size:22px;font-weight:700;color:#111827;'>{contact_parts_line}</p>
-    <p style='font-size:13px;color:#374151;margin-top:4px;'>{details_line}</p>
+    <p style='font-size:17px;color:#374151;margin-top:4px;'>{details_line}</p>
   </div>
   <hr>
 
@@ -465,14 +465,14 @@ def render_cover_letter_ats(data):
   {paras_html}
 
   <!-- KEY SKILLS MENTION (ATS keyword boost) -->
-  <p style='margin-bottom:14px;font-size:14px;color:#111827;line-height:1.8;'>
+  <p style='margin-bottom:14px;font-size:18px;color:#111827;line-height:1.8;'>
     <strong>Core Technical Skills:</strong> {key_skills}
   </p>
 
   <!-- CLOSING -->
   <p style='margin-bottom:28px;color:#374151;'>I have attached my resume for your review. I am available for an interview at your earliest convenience and can be reached at {email or phone or "the contact details above"}.</p>
   <p>Sincerely,</p>
-  <p style='font-weight:700;font-size:15px;margin-top:10px;'>{name}</p>
+  <p style='font-weight:700;font-size:17px;margin-top:10px;'>{name}</p>
   {f"<p style='color:#374151;margin-top:2px;'>{job_title}</p>" if job_title else ''}
 </body></html>"""
 
@@ -659,7 +659,7 @@ Each paragraph should be 2-4 sentences.
         import streamlit.components.v1 as _cl_components
         st.success("✅ Cover letter generated successfully!")
         st.markdown(
-            "<p style='color:#555; font-size:13px; margin-top:8px;'>"
+            "<p style='color:#555; font-size:17px; margin-top:8px;'>"
             "📄 Cover Letter Preview (scroll to explore):</p>",
             unsafe_allow_html=True,
         )
