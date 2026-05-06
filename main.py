@@ -6512,65 +6512,22 @@ with tab1:
     elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
 def html_to_pdf_bytes(html_string):
-    styled_html = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{
-                size: 210mm 297mm;  /* A4 portrait */
-                margin-top: 12mm;
-                margin-bottom: 12mm;
-                margin-left: 15mm;
-                margin-right: 15mm;
-            }}
-            body {{
-                font-size: 11pt;
-                font-family: "Segoe UI", "Helvetica", sans-serif;
-                line-height: 1.5;
-                color: #000;
-                margin: 0;
-                padding: 0;
-            }}
-            h1, h2, h3 {{
-                color: #2f4f6f;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 15px;
-            }}
-            td {{
-                padding: 4px;
-                vertical-align: top;
-                border: 1px solid #ccc;
-            }}
-            .section-title {{
-                background-color: #e0e0e0;
-                font-weight: bold;
-                padding: 6px;
-                margin-top: 10px;
-            }}
-            .box {{
-                padding: 8px;
-                margin-top: 6px;
-                background-color: #f9f9f9;
-                border-left: 4px solid #999;  /* More elegant than full border */
-            }}
-            ul {{
-                margin: 0.5em 0;
-                padding-left: 1.5em;
-            }}
-            li {{
-                margin-bottom: 5px;
-            }}
-        </style>
-    </head>
-    <body>
-        {html_string}
-    </body>
-    </html>
-    """
+    # html_string is already a full <!DOCTYPE html> document from render_template_*.
+    # Wrapping it in another <html> breaks xhtml2pdf (nested documents = TypeError).
+    # Instead, inject the A4 @page rule directly into the existing <head>.
+    _page_css = """<style>
+        @page {
+            size: 210mm 297mm;
+            margin: 12mm 15mm;
+        }
+        body { font-size: 11pt; line-height: 1.5; }
+    </style>"""
+
+    # Inject before </head> if present, otherwise prepend
+    if "</head>" in html_string:
+        styled_html = html_string.replace("</head>", _page_css + "</head>", 1)
+    else:
+        styled_html = _page_css + html_string
 
     pdf_io = BytesIO()
     pisa.CreatePDF(styled_html, dest=pdf_io)
