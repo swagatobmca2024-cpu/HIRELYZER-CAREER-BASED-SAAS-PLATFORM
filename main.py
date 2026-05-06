@@ -6518,14 +6518,14 @@ def html_to_pdf_bytes(html_string):
         <meta charset="UTF-8">
         <style>
             @page {{
-                size: A4 portrait;  /* Fixed: was 400mm x 297mm (too wide). A4 = 210mm x 297mm */
-                margin-top: 12mm;
-                margin-bottom: 12mm;
-                margin-left: 0mm;
-                margin-right: 0mm;
+                size: 400mm 297mm;  /* Original custom large page size */
+                margin-top: 10mm;
+                margin-bottom: 10mm;
+                margin-left: 10mm;
+                margin-right: 10mm;
             }}
             body {{
-                /* Removed conflicting font-size:14pt override — templates manage their own font sizes */
+                font-size: 14pt;
                 font-family: "Segoe UI", "Helvetica", sans-serif;
                 line-height: 1.5;
                 color: #000;
@@ -8931,11 +8931,9 @@ with tab2:
                 "📄 Template Preview (scroll to explore):</p>",
                 unsafe_allow_html=True,
             )
-            # Dynamic height: scales with content length, min 800px, max 2200px
-            _preview_height = min(max(800, len(st.session_state["generated_html"]) // 12), 2200)
             components.html(
                 st.session_state["generated_html"],
-                height=_preview_height,
+                height=600,
                 scrolling=True,
             )
 
@@ -9003,34 +9001,24 @@ with tab2:
             </div>
             """, unsafe_allow_html=True)
 
-            col1, col2, col3 = st.columns(3)
+            col1,col2 = st.columns(2)
             with col1:
                 st.download_button(
-                    label="📥 Download (.docx)",
+                    label="📥 Download Cover Letter (.docx)",
                     data=create_docx_from_text(st.session_state["cover_letter"]),
                     file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     key="download_coverletter_docx"
                 )
-
+            
             with col2:
                 st.download_button(
-                    label="📥 Download (.html)",
+                    label="📥 Download Cover Letter (Template)",
                     data=styled_cover_letter.encode("utf-8"),
                     file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.html",
                     mime="text/html",
                     key="download_coverletter_html"
                 )
-
-            with col3:
-                st.download_button(
-                    label="📥 Download (.pdf)",
-                    data=pdf_file,
-                    file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.pdf",
-                    mime="application/pdf",
-                    key="download_coverletter_pdf"
-                )
-
 
             # ✅ Helper note
             st.markdown("""
