@@ -209,7 +209,7 @@ def render_template_default(session_state, profile_img_html=""):
         if exp.get('company') or exp.get('title'):
             desc = _fmt_desc(exp.get('description', ''), font_size='13px', color='#374151', line_height='1.75')
             exp_html += (
-                f"<div style='margin-bottom:20px;border-left:3px solid #9ca3af;padding-left:14px;'>"
+                f"<div style='margin-bottom:20px;page-break-inside:avoid;border-left:3px solid #9ca3af;padding-left:14px;'>"
                 f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;'>"
                 f"<strong style='font-size:15px;color:#1f2937;'>{exp.get('company','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:8px;'>{exp.get('duration','')}</span>"
@@ -227,7 +227,7 @@ def render_template_default(session_state, profile_img_html=""):
             if isinstance(degree_val, list):
                 degree_val = ", ".join(degree_val)
             edu_html += (
-                f"<div style='margin-bottom:14px;border-left:3px solid #9ca3af;padding-left:12px;'>"
+                f"<div style='margin-bottom:14px;page-break-inside:avoid;border-left:3px solid #9ca3af;padding-left:12px;'>"
                 f"<strong style='font-size:14px;color:#1f2937;'>{edu.get('institution','')}</strong>"
                 f"<span style='float:right;font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>"
                 f"<div style='clear:both;font-size:13px;color:#4b5563;font-style:italic;font-weight:600;'>{degree_val}</div>"
@@ -261,13 +261,13 @@ def render_template_default(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Professional Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Professional Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} html, body {{ height:100%; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<table role='presentation' style='width:100%;border-collapse:collapse;table-layout:fixed;min-height:297mm;'>
 <tr>
-  <td style='width:300px;background:linear-gradient(180deg,#374151,#4b5563);color:#ffffff;padding:36px 24px;vertical-align:top;'>
+  <td style='width:220px;background:linear-gradient(180deg,#374151,#4b5563);color:#ffffff;padding:28px 18px;vertical-align:top;'>
     {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
     <h1 style='font-size:21px;font-weight:800;color:#ffffff;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
     <div style='font-size:13px;color:#e5e7eb;text-align:center;margin-bottom:24px;font-weight:600;letter-spacing:1px;text-transform:uppercase;'>{session_state.get('job_title','')}</div>
@@ -279,7 +279,7 @@ def render_template_default(session_state, profile_img_html=""):
     {_side_sec("Certifications", cert_html) if cert_html else ''}
     {_side_sec("Project Links", proj_links_html) if proj_links_html else ''}
   </td>
-  <td style='padding:40px 44px;background:#fff;vertical-align:top;'>
+  <td style='padding:28px 32px;background:#fff;vertical-align:top;'>
     {_main_sec("Professional Summary", summary_html) if summary_html else ''}
     {_main_sec("Work Experience", exp_html) if exp_html else ''}
     {_main_sec("Education", edu_html) if edu_html else ''}
@@ -447,10 +447,10 @@ def render_template_modern(session_state, profile_img_html=""):
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=1200px">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{session_state.get('name', '')} - Resume</title>
 </head>
-<body style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;line-height:1.6;color:#1f2937;background:#ffffff;max-width:860px;margin:0 auto;padding:36px 32px;">
+<body style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;line-height:1.6;color:#1f2937;background:#ffffff;max-width:794px;margin:0 auto;padding:36px 32px;min-height:297mm;">
 
   <!-- HEADER -->
   <div style="text-align:center;margin-bottom:30px;padding-bottom:20px;border-bottom:3px solid #2563eb;">
@@ -624,7 +624,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
         if exp.get('company') or exp.get('title'):
             desc = _fmt_desc(exp.get('description', ''), font_size='13px', color='#374151', line_height='1.75')
             exp_sb += (
-                f"<div style='margin-bottom:20px;border-left:3px solid #38bdf8;padding-left:14px;'>"
+                f"<div style='margin-bottom:20px;page-break-inside:avoid;border-left:3px solid #38bdf8;padding-left:14px;'>"
                 f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;'>"
                 f"<strong style='font-size:15px;color:#0c4a6e;'>{exp.get('company','')}</strong>"
                 f"<span style='font-size:12px;color:#64748b;background:#f0f9ff;padding:2px 8px;border-radius:8px;'>{exp.get('duration','')}</span>"
@@ -641,7 +641,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
             if isinstance(degree_val, list):
                 degree_val = ", ".join(degree_val)
             edu_sb += (
-                f"<div style='margin-bottom:14px;border-left:3px solid #38bdf8;padding-left:12px;'>"
+                f"<div style='margin-bottom:14px;page-break-inside:avoid;border-left:3px solid #38bdf8;padding-left:12px;'>"
                 f"<strong style='font-size:14px;color:#0c4a6e;'>{edu.get('institution','')}</strong>"
                 f"<span style='float:right;font-size:12px;color:#64748b;'>{edu.get('year','')}</span>"
                 f"<div style='clear:both;font-size:13px;color:#0284c7;font-style:italic;font-weight:600;'>{degree_val}</div>"
@@ -672,13 +672,13 @@ def render_template_sidebar(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} html, body {{ height:100%; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<table role='presentation' style='width:100%;border-collapse:collapse;table-layout:fixed;min-height:297mm;'>
 <tr>
-  <td style='width:300px;background:linear-gradient(180deg,#1e293b,#334155);color:white;padding:36px 24px;vertical-align:top;'>
+  <td style='width:220px;background:linear-gradient(180deg,#1e293b,#334155);color:white;padding:28px 18px;vertical-align:top;'>
     {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img_sb + '</div>' if fixed_img_sb else ''}
     <h1 style='font-size:21px;font-weight:800;color:#ffffff;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
     <div style='font-size:13px;color:#38bdf8;text-align:center;margin-bottom:24px;font-weight:600;letter-spacing:1px;text-transform:uppercase;'>{job_title_sb}</div>
@@ -690,7 +690,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
     {_side_sec_sb("Certifications", cert_sb_html) if cert_sb_html else ''}
     {_side_sec_sb("Project Links", proj_links_sb) if proj_links_sb else ''}
   </td>
-  <td style='padding:40px 44px;background:#fff;vertical-align:top;'>
+  <td style='padding:28px 32px;background:#fff;vertical-align:top;'>
     {_main_sec_sb("Professional Summary", summary_sb) if summary_sb else ''}
     {_main_sec_sb("Work Experience", exp_sb) if exp_sb else ''}
     {_main_sec_sb("Education", edu_sb) if edu_sb else ''}
@@ -735,7 +735,7 @@ def render_template_classic(session_state, profile_img_html=""):
         if exp.get("company") or exp.get("title"):
             desc = _fmt_desc(exp.get('description',''), font_size='14px', color='#374151', line_height='1.75')
             experience_html += f"""
-            <div style='margin-bottom:18px;'>
+            <div style='margin-bottom:18px;page-break-inside:avoid;'>
                 <div style='display:flex;justify-content:space-between;align-items:baseline;'>
                     <strong style='font-size:16px;color:#1a1a1a;'>{exp.get('company','')}</strong>
                     <span style='font-size:13px;color:#555;'>{exp.get('duration','')}</span>
@@ -834,10 +834,10 @@ def render_template_classic(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Georgia',serif; color:#1a1a1a; background:#fff; padding:40px 60px; line-height:1.6; }}
+  body {{ font-family:'Georgia',serif; color:#1a1a1a; background:#fff; padding:40px 60px; line-height:1.6; max-width:794px; margin:0 auto; min-height:297mm; }}
   a {{ color:#1e3a5f; }}
 </style>
 </head>
@@ -1003,8 +1003,8 @@ def render_template_executive(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Executive Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',Arial,sans-serif; color:#1a1a1a; background:#fff; line-height:1.6; }}</style>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Executive Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',Arial,sans-serif; color:#1a1a1a; background:#fff; line-height:1.6; max-width:794px; margin:0 auto; min-height:297mm; }}</style>
 </head>
 <body>
   <!-- Header Band -->
@@ -1154,8 +1154,8 @@ def render_template_timeline(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Timeline Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Timeline Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; max-width:794px; margin:0 auto; min-height:297mm; }}</style>
 </head>
 <body>
   <div style='background:#0d9488;height:6px;'></div>
@@ -1214,7 +1214,7 @@ def render_template_corporate(session_state, profile_img_html=""):
         if exp.get('company') or exp.get('title'):
             desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#374151', line_height='1.75')
             exp_html += f"""
-            <div style='margin-bottom:20px;border-left:3px solid #1d4ed8;padding-left:14px;'>
+            <div style='margin-bottom:20px;page-break-inside:avoid;border-left:3px solid #1d4ed8;padding-left:14px;'>
                 <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;'>
                     <strong style='font-size:15px;color:#1e3a8a;'>{exp.get('company','')}</strong>
                     <span style='font-size:12px;color:#64748b;background:#eff6ff;padding:2px 8px;border-radius:8px;'>{exp.get('duration','')}</span>
@@ -1230,7 +1230,7 @@ def render_template_corporate(session_state, profile_img_html=""):
             degree_val = edu.get('degree','')
             if isinstance(degree_val, list): degree_val = ", ".join(degree_val)
             edu_html += f"""
-            <div style='margin-bottom:14px;border-left:3px solid #1d4ed8;padding-left:12px;'>
+            <div style='margin-bottom:14px;page-break-inside:avoid;border-left:3px solid #1d4ed8;padding-left:12px;'>
                 <strong style='font-size:14px;color:#1e3a8a;'>{edu.get('institution','')}</strong>
                 <span style='float:right;font-size:12px;color:#64748b;'>{edu.get('year','')}</span>
                 <div style='clear:both;font-size:13px;color:#3b82f6;font-style:italic;font-weight:600;'>{degree_val}</div>
@@ -1246,7 +1246,7 @@ def render_template_corporate(session_state, profile_img_html=""):
             if idx < len(proj_links_all) and proj_links_all[idx]:
                 proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links_all[idx]}' target='_blank' style='color:#1d4ed8;font-size:12px;font-weight:600;'>&#128279; View Project / GitHub</a></div>"
             proj_html += f"""
-            <div style='margin-bottom:14px;padding:12px 14px;background:#eff6ff;border-radius:6px;border-left:3px solid #1d4ed8;'>
+            <div style='margin-bottom:14px;page-break-inside:avoid;padding:12px 14px;background:#eff6ff;border-radius:6px;border-left:3px solid #1d4ed8;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>
                     <strong style='font-size:14px;color:#1e3a8a;'>{proj.get('title','')}</strong>
                     <span style='font-size:12px;color:#64748b;'>{proj.get('duration','')}</span>
@@ -1311,13 +1311,13 @@ def render_template_corporate(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Corporate Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Corporate Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} html, body {{ height:100%; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<table role='presentation' style='width:100%;border-collapse:collapse;table-layout:fixed;min-height:297mm;'>
 <tr>
-  <td style='width:300px;background:linear-gradient(180deg,#1e3a8a,#1d4ed8);color:white;padding:36px 24px;vertical-align:top;'>
+  <td style='width:220px;background:linear-gradient(180deg,#1e3a8a,#1d4ed8);color:white;padding:28px 18px;vertical-align:top;'>
     {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
     <h1 style='font-size:21px;font-weight:800;color:#fff;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
     <div style='font-size:13px;color:#93c5fd;text-align:center;margin-bottom:24px;font-weight:600;'>{job_title_val}</div>
@@ -1329,7 +1329,7 @@ def render_template_corporate(session_state, profile_img_html=""):
     {side_sec("Certifications", cert_sidebar) if cert_sidebar else ''}
     {side_sec("Project Links", all_links_html) if all_links_html else ''}
   </td>
-  <td style='padding:40px 44px;background:#fff;vertical-align:top;'>
+  <td style='padding:28px 32px;background:#fff;vertical-align:top;'>
     {main_sec("Professional Summary", summary_html) if summary_html else ''}
     {main_sec("Work Experience", exp_html) if exp_html else ''}
     {main_sec("Education", edu_html) if edu_html else ''}
@@ -1463,13 +1463,13 @@ def render_template_creative_green(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Creative Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#f0fdf4; }}</style>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Creative Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} html, body {{ height:100%; }} body {{ font-family:'Segoe UI',sans-serif; background:#f0fdf4; }}</style>
 </head>
 <body>
-<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<table role='presentation' style='width:100%;border-collapse:collapse;table-layout:fixed;min-height:297mm;'>
 <tr>
-  <td style='width:280px;background:#fff;border-right:2px solid #a7f3d0;padding:32px 22px;vertical-align:top;'>
+  <td style='width:220px;background:#fff;border-right:2px solid #a7f3d0;padding:24px 16px;vertical-align:top;'>
     {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
     <h1 style='font-size:20px;font-weight:800;color:#064e3b;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
     <div style='font-size:13px;color:#059669;text-align:center;font-weight:700;margin-bottom:22px;'>{job_title_val}</div>
@@ -1481,7 +1481,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
     {side_sec("Certifications", cert_html) if cert_html else ''}
     {side_sec("Project Links", all_links_html) if all_links_html else ''}
   </td>
-  <td style='padding:36px 40px;background:#f0fdf4;vertical-align:top;'>
+  <td style='padding:26px 30px;background:#f0fdf4;vertical-align:top;'>
     {main_sec("About Me", summary_html) if summary_html else ''}
     {main_sec("Experience", exp_html) if exp_html else ''}
     {main_sec("Education", edu_html) if edu_html else ''}
@@ -1519,7 +1519,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
         if exp.get('company') or exp.get('title'):
             desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#374151', line_height='1.75')
             exp_html += f"""
-            <div style='margin-bottom:18px;border-left:3px solid #d97706;padding-left:14px;'>
+            <div style='margin-bottom:18px;page-break-inside:avoid;border-left:3px solid #d97706;padding-left:14px;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:5px;'>
                     <strong style='font-size:15px;color:#292524;'>{exp.get('company','')}</strong>
                     <span style='font-size:12px;color:#a8a29e;background:#fafaf9;padding:2px 8px;border-radius:4px;'>{exp.get('duration','')}</span>
@@ -1612,13 +1612,13 @@ def render_template_terracotta(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Terracotta Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fafaf9; }}</style>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Terracotta Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} html, body {{ height:100%; }} body {{ font-family:'Segoe UI',sans-serif; background:#fafaf9; }}</style>
 </head>
 <body>
-<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<table role='presentation' style='width:100%;border-collapse:collapse;table-layout:fixed;min-height:297mm;'>
 <tr>
-  <td style='width:290px;background:linear-gradient(180deg,#7c2d12,#b45309);color:white;padding:34px 22px;vertical-align:top;'>
+  <td style='width:220px;background:linear-gradient(180deg,#7c2d12,#b45309);color:white;padding:26px 18px;vertical-align:top;'>
     {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
     <h1 style='font-size:20px;font-weight:800;color:#fff;text-align:center;margin-bottom:4px;letter-spacing:-0.3px;'>{session_state.get('name','')}</h1>
     <div style='font-size:13px;color:#fde68a;text-align:center;font-weight:700;margin-bottom:24px;'>{job_title_val}</div>
@@ -1630,7 +1630,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
     {side_sec("Certifications", cert_html) if cert_html else ''}
     {side_sec("Project Links", all_links_html) if all_links_html else ''}
   </td>
-  <td style='padding:38px 42px;background:#fafaf9;vertical-align:top;'>
+  <td style='padding:28px 32px;background:#fafaf9;vertical-align:top;'>
     {main_sec("Professional Summary", summary_html) if summary_html else ''}
     {main_sec("Work Experience", exp_html) if exp_html else ''}
     {main_sec("Education", edu_html) if edu_html else ''}
@@ -1721,7 +1721,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
         if exp.get('company') or exp.get('title'):
             desc = _fmt_desc(exp.get('description', ''), font_size='13px', color='#1f2937', line_height='1.75')
             exp_html_np += (
-                f"<div style='margin-bottom:18px;padding-left:12px;border-left:3px solid #b8972a;'>"
+                f"<div style='margin-bottom:18px;page-break-inside:avoid;padding-left:12px;border-left:3px solid #b8972a;'>"
                 f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
                 f"<strong style='font-size:14px;color:#0d1b3e;'>{exp.get('company','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;background:#fef9ec;padding:2px 8px;border-radius:6px;border:1px solid #e8d58a;'>{exp.get('duration','')}</span>"
@@ -1738,7 +1738,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
             if isinstance(dv, list):
                 dv = ", ".join(dv)
             edu_html_np += (
-                f"<div style='margin-bottom:12px;padding-left:12px;border-left:3px solid #b8972a;'>"
+                f"<div style='margin-bottom:12px;page-break-inside:avoid;padding-left:12px;border-left:3px solid #b8972a;'>"
                 f"<strong style='font-size:13px;color:#0d1b3e;'>{edu.get('institution','')}</strong>"
                 f"<span style='float:right;font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>"
                 f"<div style='clear:both;font-size:13px;color:#374151;font-style:italic;font-weight:600;'>{dv}</div>"
@@ -1769,13 +1769,13 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} html, body {{ height:100%; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<table role='presentation' style='width:100%;border-collapse:collapse;table-layout:fixed;min-height:297mm;'>
 <tr>
-  <td style='width:290px;background:linear-gradient(180deg,#0d1b3e,#1a2f6b);color:#f5e6b2;padding:34px 22px;vertical-align:top;'>
+  <td style='width:220px;background:linear-gradient(180deg,#0d1b3e,#1a2f6b);color:#f5e6b2;padding:26px 18px;vertical-align:top;'>
     {'<div style="margin:0 auto 12px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
     <h1 style='font-size:20px;font-weight:800;color:#f5e6b2;text-align:center;margin-bottom:3px;'>{session_state.get('name','')}</h1>
     <div style='font-size:12px;color:#b8972a;text-align:center;margin-bottom:22px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;'>{session_state.get('job_title','')}</div>
@@ -1787,7 +1787,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
     {_side_np("Certifications", cert_html_np) if cert_html_np else ''}
     {_side_np("Project Links", proj_links_html_np) if proj_links_html_np else ''}
   </td>
-  <td style='padding:38px 42px;background:#ffffff;vertical-align:top;'>
+  <td style='padding:28px 32px;background:#ffffff;vertical-align:top;'>
     {_main_np("Professional Summary", summary_html_np) if summary_html_np else ''}
     {_main_np("Work Experience", exp_html_np) if exp_html_np else ''}
     {_main_np("Education", edu_html_np) if edu_html_np else ''}
@@ -1874,7 +1874,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
         if exp.get('company') or exp.get('title'):
             desc = _fmt_desc(exp.get('description', ''), font_size='14px', color=C_BODY, line_height='1.75')
             experience_html += f"""
-            <div style='margin-bottom:18px;'>
+            <div style='margin-bottom:18px;page-break-inside:avoid;'>
                 <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;'>
                     <strong style='font-size:16px;color:{C_PRIMARY};'>{exp.get('company','')}</strong>
                     <span style='font-size:13px;color:{C_MUTED};font-weight:600;background:#f1f5f9;
@@ -1960,10 +1960,10 @@ def render_template_slate_gray(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; color:{C_PRIMARY}; background:#ffffff; padding:40px 60px; line-height:1.6; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; color:{C_PRIMARY}; background:#ffffff; padding:40px 60px; line-height:1.6; max-width:794px; margin:0 auto; min-height:297mm; }}
   a {{ color:{C_PRIMARY}; }}
 </style>
 </head>
@@ -2072,7 +2072,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
         if exp.get('company') or exp.get('title'):
             desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#1f2937', line_height='1.75')
             exp_html_ti += (
-                f"<div style='margin-bottom:18px;padding-left:12px;border-left:3px solid #0d9488;'>"
+                f"<div style='margin-bottom:18px;page-break-inside:avoid;padding-left:12px;border-left:3px solid #0d9488;'>"
                 f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
                 f"<strong style='font-size:14px;color:#0f4c4c;'>{exp.get('company','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;background:#f0fdfa;padding:2px 8px;border-radius:6px;border:1px solid #99f6e4;'>{exp.get('duration','')}</span>"
@@ -2089,7 +2089,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
             if isinstance(dv, list):
                 dv = ", ".join(dv)
             edu_html_ti += (
-                f"<div style='margin-bottom:12px;padding-left:12px;border-left:3px solid #0d9488;'>"
+                f"<div style='margin-bottom:12px;page-break-inside:avoid;padding-left:12px;border-left:3px solid #0d9488;'>"
                 f"<strong style='font-size:13px;color:#0f4c4c;'>{edu.get('institution','')}</strong>"
                 f"<span style='float:right;font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>"
                 f"<div style='clear:both;font-size:13px;color:#374151;font-style:italic;font-weight:600;'>{dv}</div>"
@@ -2120,13 +2120,13 @@ def render_template_teal_impact(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} html, body {{ height:100%; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<table role='presentation' style='width:100%;border-collapse:collapse;table-layout:fixed;min-height:297mm;'>
 <tr>
-  <td style='width:290px;background:linear-gradient(180deg,#0f766e,#0d9488);color:#ccfbf1;padding:34px 22px;vertical-align:top;'>
+  <td style='width:220px;background:linear-gradient(180deg,#0f766e,#0d9488);color:#ccfbf1;padding:26px 18px;vertical-align:top;'>
     {'<div style="margin:0 auto 12px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
     <h1 style='font-size:20px;font-weight:800;color:#ffffff;text-align:center;margin-bottom:3px;'>{session_state.get('name','')}</h1>
     <div style='font-size:12px;color:#ccfbf1;text-align:center;margin-bottom:22px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;'>{session_state.get('job_title','')}</div>
@@ -2138,7 +2138,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
     {_side_ti("Certifications", cert_html_ti) if cert_html_ti else ''}
     {_side_ti("Project Links", proj_links_html_ti) if proj_links_html_ti else ''}
   </td>
-  <td style='padding:38px 42px;background:#ffffff;vertical-align:top;'>
+  <td style='padding:28px 32px;background:#ffffff;vertical-align:top;'>
     {_main_ti("Professional Summary", summary_html_ti) if summary_html_ti else ''}
     {_main_ti("Work Experience", exp_html_ti) if exp_html_ti else ''}
     {_main_ti("Education", edu_html_ti) if edu_html_ti else ''}
@@ -2214,7 +2214,7 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
         if exp.get('company') or exp.get('title'):
             desc = _fmt_desc(exp.get('description', ''), font_size='14px', color='#1c1c1c', line_height='1.75')
             experience_html += f"""
-            <div style='margin-bottom:18px;'>
+            <div style='margin-bottom:18px;page-break-inside:avoid;'>
                 <div style='display:flex;justify-content:space-between;align-items:baseline;'>
                     <strong style='font-size:16px;color:#1c1c1c;'>{exp.get('company','')}</strong>
                     <span style='font-size:13px;color:#6b7280;'>{exp.get('duration','')}</span>
@@ -2291,10 +2291,10 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; }}
+  body {{ font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; max-width:794px; margin:0 auto; min-height:297mm; }}
   a {{ color:#7f1d1d; }}
 </style>
 </head>
@@ -2402,7 +2402,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
         if exp.get('company') or exp.get('title'):
             desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#1f2937', line_height='1.75')
             exp_html_it += (
-                f"<div style='margin-bottom:18px;padding-left:12px;border-left:3px solid #4f46e5;'>"
+                f"<div style='margin-bottom:18px;page-break-inside:avoid;padding-left:12px;border-left:3px solid #4f46e5;'>"
                 f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
                 f"<strong style='font-size:14px;color:#1e1b4b;'>{exp.get('company','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;background:#eef2ff;padding:2px 8px;border-radius:6px;border:1px solid #c7d2fe;'>{exp.get('duration','')}</span>"
@@ -2419,7 +2419,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
             if isinstance(dv, list):
                 dv = ", ".join(dv)
             edu_html_it += (
-                f"<div style='margin-bottom:12px;padding-left:12px;border-left:3px solid #4f46e5;'>"
+                f"<div style='margin-bottom:12px;page-break-inside:avoid;padding-left:12px;border-left:3px solid #4f46e5;'>"
                 f"<strong style='font-size:13px;color:#1e1b4b;'>{edu.get('institution','')}</strong>"
                 f"<span style='float:right;font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>"
                 f"<div style='clear:both;font-size:13px;color:#374151;font-style:italic;font-weight:600;'>{dv}</div>"
@@ -2450,13 +2450,13 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Resume</title>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} html, body {{ height:100%; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
+<table role='presentation' style='width:100%;border-collapse:collapse;table-layout:fixed;min-height:297mm;'>
 <tr>
-  <td style='width:290px;background:linear-gradient(180deg,#1e1b4b,#312e81);color:#a5f3fc;padding:34px 22px;vertical-align:top;'>
+  <td style='width:220px;background:linear-gradient(180deg,#1e1b4b,#312e81);color:#a5f3fc;padding:26px 18px;vertical-align:top;'>
     {'<div style="margin:0 auto 12px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
     <h1 style='font-size:20px;font-weight:800;color:#ffffff;text-align:center;margin-bottom:3px;'>{session_state.get('name','')}</h1>
     <div style='font-size:12px;color:#22d3ee;text-align:center;margin-bottom:22px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;'>{session_state.get('job_title','')}</div>
@@ -2468,7 +2468,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
     {_side_it("Certifications", cert_html_it) if cert_html_it else ''}
     {_side_it("Project Links", proj_links_html_it) if proj_links_html_it else ''}
   </td>
-  <td style='padding:38px 42px;background:#ffffff;vertical-align:top;'>
+  <td style='padding:28px 32px;background:#ffffff;vertical-align:top;'>
     {_main_it("Professional Summary", summary_html_it) if summary_html_it else ''}
     {_main_it("Work Experience", exp_html_it) if exp_html_it else ''}
     {_main_it("Education", edu_html_it) if edu_html_it else ''}
@@ -2529,7 +2529,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
         if exp.get('company') or exp.get('title'):
             desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#1c1c1c', line_height='1.75')
             exp_html_fg += (
-                f"<div style='margin-bottom:18px;padding-left:12px;border-left:3px solid #16a34a;'>"
+                f"<div style='margin-bottom:18px;page-break-inside:avoid;padding-left:12px;border-left:3px solid #16a34a;'>"
                 f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
                 f"<strong style='font-size:14px;color:#14532d;'>{exp.get('title','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;background:#f0fdf4;padding:2px 8px;border-radius:5px;border:1px solid #bbf7d0;'>{exp.get('duration','')}</span>"
@@ -2546,7 +2546,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
             if isinstance(dv, list):
                 dv = ", ".join(dv)
             edu_html_fg += (
-                f"<div style='margin-bottom:12px;padding-left:12px;border-left:3px solid #16a34a;'>"
+                f"<div style='margin-bottom:12px;page-break-inside:avoid;padding-left:12px;border-left:3px solid #16a34a;'>"
                 f"<div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;'>"
                 f"<strong style='font-size:13px;color:#14532d;'>{edu.get('institution','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>"
@@ -2594,8 +2594,8 @@ def render_template_forest_green(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=1200px'><title>{session_state.get('name','')} - Resume</title></head>
-<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;max-width:860px;margin:0 auto;padding:36px 40px;">
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'><title>{session_state.get('name','')} - Resume</title></head>
+<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;max-width:794px;margin:0 auto;padding:36px 40px;min-height:297mm;">
   {fixed_img if fixed_img else ''}
   <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #166534;">
     <h1 style="font-size:28px;font-weight:800;color:#14532d;margin-bottom:4px;">{session_state.get('name','')}</h1>
