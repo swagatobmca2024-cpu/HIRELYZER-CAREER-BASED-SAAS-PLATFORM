@@ -8933,9 +8933,47 @@ with tab2:
                 "📄 Template Preview (scroll to explore):</p>",
                 unsafe_allow_html=True,
             )
+            # Wrap resume HTML in a 900px iframe-within-iframe so the full
+            # resume document (with its own <head>/<style>) renders at its
+            # intended width and is then scaled down to fit the preview pane.
+            _inner_html = st.session_state["generated_html"]
+            # Encode the resume HTML as a data URI so it loads as a proper
+            # sub-document — avoids nested <!DOCTYPE> breaking inner styles.
+            import base64 as _b64
+            _encoded = _b64.b64encode(_inner_html.encode("utf-8")).decode("utf-8")
+            _preview = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+  html,body{{margin:0;padding:0;width:100%;height:100%;background:#f0f2f6;overflow:hidden;}}
+  #frame{{
+    width:900px; height:1200px;
+    border:none;
+    transform-origin:top left;
+    box-shadow:0 2px 16px rgba(0,0,0,0.18);
+    background:#fff;
+    display:block;
+  }}
+</style></head>
+<body>
+<iframe id="frame"
+  src="data:text/html;base64,{_encoded}"
+  scrolling="no">
+</iframe>
+<script>
+function fit(){{
+  var w=window.innerWidth||document.documentElement.clientWidth;
+  var s=Math.min((w-8)/900,1);
+  var f=document.getElementById('frame');
+  f.style.transform='scale('+s+')';
+  document.body.style.height=Math.ceil(1200*s+20)+'px';
+}}
+fit();
+window.addEventListener('resize',fit);
+</script>
+</body></html>"""
             components.html(
-                st.session_state["generated_html"],
-                height=600,
+                _preview,
+                height=740,
                 scrolling=True,
             )
 
