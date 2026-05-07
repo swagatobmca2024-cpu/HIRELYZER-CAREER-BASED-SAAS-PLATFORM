@@ -20,8 +20,8 @@ Fixes in v4:
     first run (set env PRINT_PROD_GUIDE=1).
 
 Detection layers (unchanged):
-  A. 5 live network probes  (parallel threads)
-     domain age · site reachability · typosquatting · free-email · MCA registry
+  A. 6 live network probes  (parallel threads)
+     domain age · site reachability · typosquatting · free-email · MX mail server · MCA registry
   B. 15-signal rule engine  (weighted, 0-100)
   C. LLM deep analysis      (llama-3.3-70b-versatile via Groq)
   D. Blended score          (55% AI + 30% rules + 15% probe penalty)
@@ -49,6 +49,10 @@ _IST = pytz.timezone("Asia/Kolkata")
 def _now_ist() -> str:
     """Return current time as IST string — never UTC."""
     return datetime.now(_IST).strftime("%Y-%m-%d %H:%M")
+
+import ssl
+import ipaddress
+import contextlib
 
 import streamlit as st
 
@@ -299,50 +303,293 @@ _WFH_PHRASES = [
 # AUTO-EXTRACT — runs on every paste keystroke, no button needed
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Known Indian cities + common metro abbreviations for location heuristic
+_KNOWN_CITIES = re.compile(
+    r"\b(Mumbai|Delhi|Bangalore|Bengaluru|Hyderabad|Chennai|Kolkata|Pune|Ahmedabad|"
+    r"Noida|Gurgaon|Gurugram|Jaipur|Lucknow|Chandigarh|Indore|Bhopal|Kochi|"
+    r"Coimbatore|Surat|Vadodara|Nagpur|Patna|Bhubaneswar|Trivandrum|Visakhapatnam|"
+    r"Mysore|Mysuru|Mangalore|Hubli|Dehradun|Agra|Varanasi|Ranchi|Guwahati|"
+    r"Remote|Work\s+from\s+Home|WFH|Pan\s+India|PAN\s+India|Hybrid)\b",
+    re.IGNORECASE,
+)
+
+# Common job-title role words — used to score candidate title lines
+_ROLE_WORDS = re.compile(
+    r"\b(engineer|developer|analyst|manager|intern|associate|consultant|"
+    r"designer|architect|scientist|lead|head|officer|executive|specialist|"
+    r"coordinator|administrator|trainee|fresher|hiring|role|position|"
+    r"generative\s+ai|ai[\s/]ml|machine\s+learning|data\s+science|"
+    r"software|frontend|backend|fullstack|full[\s-]stack|devops|"
+    r"product|sales|marketing|finance|hr|operations)\b",
+    re.IGNORECASE,
+)
+
+# Noise lines that are never a job title
+_TITLE_NOISE = re.compile(
+    r"^(\*|#|–|-)|(eligibility|criteria|requirement|qualification|"
+    r"responsibility|about\s+(us|the|company)|we\s+are|we\s+offer|"
+    r"job\s+description|note\s*:|dear\s+candidate|greetings|"
+    r"kindly|please|apply\s+now|how\s+to\s+apply)",
+    re.IGNORECASE,
+)
+
+# Company name suffixes used for heuristic company detection
+_CO_SUFFIXES = re.compile(
+    r"\b(pvt\.?\s*ltd\.?|private\s+limited|limited|llp|llc|inc\.?|"
+    r"corp\.?|technologies|tech|solutions|services|systems|consultancy|"
+    r"consulting|infotech|softwares?|enterprises?|ventures?|group|"
+    r"global|india|innovations?)\b",
+    re.IGNORECASE,
+)
+
+
+def _clean(val: str) -> str:
+    """Strip markdown, asterisks, leading bullets, extra whitespace."""
+    val = re.sub(r"[\*\_\#\~`]", "", val)
+    val = re.sub(r"^[\-•–—]\s*", "", val.strip())
+    return val.strip().rstrip(".,;:")
+
+
 def _xf(text: str, kws: list) -> str:
+    """Extract value after a keyword label (e.g. 'Company: Acme Corp')."""
     for kw in kws:
-        m = re.search(rf"(?i)(?:^|\n|\s){kw}\s*[:\-]\s*([^\n]{{2,80}})", text or "")
+        # Allow keyword at line-start or after newline/whitespace
+        m = re.search(
+            rf"(?im)(?:^|(?<=\n))\s*{re.escape(kw)}\s*[:\-–]\s*([^\n]{{2,100}})",
+            text or "",
+        )
         if m:
-            val = m.group(1).strip().rstrip(".,;")
+            val = _clean(m.group(1))
             if len(val) > 2:
                 return val
     return ""
 
+
 def _xu(text: str) -> str:
-    m = re.search(r"https?://[^\s)\"',]{6,}", text or "")
-    return m.group(0).rstrip(".,;)") if m else ""
+    """Extract first URL from text."""
+    m = re.search(r"https?://[^\s)\"',<>{}\[\]]{6,}", text or "")
+    return m.group(0).rstrip(".,;)/") if m else ""
+
 
 def _xs(text: str) -> str:
-    m = re.search(r"(?i)(salary|ctc|pay|package|compensation|remuneration)\s*[:\-]\s*([^\n]{3,60})", text or "")
+    """Extract salary / CTC information."""
+    # Explicit label
+    m = re.search(
+        r"(?i)(salary|ctc|pay|package|compensation|remuneration|stipend|fixed)\s*[:\-–]\s*([^\n]{3,80})",
+        text or "",
+    )
     if m:
-        return m.group(2).strip()
-    m2 = re.search(r"(?:Rs\.?|INR|\$|USD)\s*[\d,\s\-\.LPAlpa]+(?:lpa|per\s+annum|per\s+month|pa|pm)?",
-                   text or "", re.IGNORECASE)
-    return m2.group(0).strip() if m2 else ""
+        return _clean(m.group(2))
+    # Currency pattern: Rs/INR/$ followed by numbers + optional units
+    m2 = re.search(
+        r"(?:Rs\.?\s*|INR\s*|₹\s*)[\d,\.\s]+(?:\s*-\s*[\d,\.]+)?\s*(?:LPA|lpa|L|lakhs?|per\s+annum|PA|CTC)?",
+        text or "", re.IGNORECASE,
+    )
+    if m2:
+        return _clean(m2.group(0))
+    m3 = re.search(
+        r"\$[\d,\.]+(?:\s*-\s*\$?[\d,\.]+)?\s*(?:per\s+(?:month|year|annum|hour))?",
+        text or "", re.IGNORECASE,
+    )
+    return _clean(m3.group(0)) if m3 else ""
+
 
 def _xc(text: str) -> str:
+    """Extract email + phone from text."""
     emails = re.findall(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", text or "")
     phones = re.findall(r"(?<!\d)[+]?[\d][\d\s\-()]{8,13}[\d](?!\d)", text or "")
     return " | ".join(emails[:1] + [p.strip() for p in phones[:1]])
 
+
 def _xt(text: str) -> str:
-    val = _xf(text, ["position", "role", "job title", "title", "designation",
-                     "opening for", "hiring for", "vacancy"])
-    if val:
-        return val
-    for line in (text or "").split("\n"):
-        line = line.strip()
-        if 4 < len(line) < 80 and not line.startswith("http"):
-            return line
-    return ""
+    """
+    Extract job title with multi-strategy fallback:
+    1. Explicit keyword label  (e.g. "Role: Software Engineer")
+    2. "hiring for X" / "opening for X" / "position: X" patterns
+    3. Inline mention  (e.g. "roles at IntimeTec" → scan for role words nearby)
+    4. Best scored non-noise line from the first 10 lines
+    """
+    t = text or ""
+
+    # Strategy 1: explicit label
+    val = _xf(t, [
+        "job title", "role", "position", "designation", "opening",
+        "vacancy", "hiring for", "opening for", "we are hiring",
+        "currently hiring", "job profile",
+    ])
+    if val and not _TITLE_NOISE.search(val):
+        return _clean(val)
+
+    # Strategy 2: "hiring … for … [role words]" sentence pattern
+    m = re.search(
+        r"(?i)hir(?:ing|ed)\s+(?:freshers?|candidates?|professionals?|engineers?)?\s*"
+        r"(?:for|as)?\s*([A-Za-z][^\n,\.]{4,60}?)(?:\s+role|\s+position|\s+at|\.|,|\n|$)",
+        t,
+    )
+    if m:
+        candidate = _clean(m.group(1))
+        if _ROLE_WORDS.search(candidate) and not _TITLE_NOISE.search(candidate):
+            return candidate
+
+    # Strategy 3: "roles at <Company>" → look at nearby text for role words
+    m2 = re.search(r"(?i)([\w\s/,&]+?)\s+roles?\s+at\s+\w", t)
+    if m2:
+        candidate = _clean(m2.group(1).split()[-4:] and " ".join(m2.group(1).split()[-4:]))
+        if _ROLE_WORDS.search(candidate) and not _TITLE_NOISE.search(candidate):
+            return candidate
+
+    # Strategy 4: score every line in the first 15 lines
+    best_line, best_score = "", 0
+    for line in t.split("\n")[:15]:
+        line = _clean(line)
+        if not (4 < len(line) < 100):
+            continue
+        if _TITLE_NOISE.search(line):
+            continue
+        if line.startswith("http"):
+            continue
+        # Skip lines that look like "Label: value" field definitions
+        colon_pos = line.find(":")
+        if 0 < colon_pos < 20 and len(line[:colon_pos].split()) <= 3:
+            continue
+        score = 0
+        role_hits = len(_ROLE_WORDS.findall(line))
+        score += role_hits * 3
+        # Prefer shorter, capitalised lines (typical title format)
+        if len(line) < 50:
+            score += 2
+        if line[0].isupper():
+            score += 1
+        # Penalise lines that look like body paragraphs
+        if len(line.split()) > 12:
+            score -= 2
+        if score > best_score:
+            best_score, best_line = score, line
+
+    # Strategy 5: paragraph-style posting — extract role from "looking for a X" / "seeking a X"
+    m3 = re.search(
+        r"(?i)(?:looking\s+for\s+a?n?\s+|seeking\s+a?n?\s+|need\s+a?n?\s+)"
+        r"([A-Za-z][^\n,\.]{4,60}?)(?:\s+to\s+join|\s+who\s+|\.|,|\n|$)",
+        t,
+    )
+    if m3:
+        candidate = _clean(m3.group(1))
+        if _ROLE_WORDS.search(candidate) and not _TITLE_NOISE.search(candidate):
+            return candidate
+
+    return best_line
+
 
 def _xco(text: str) -> str:
-    return _xf(text, ["company", "organization", "organisation", "employer",
-                      "firm", "about us", "about the company", "about company"])
+    """
+    Extract company name with multi-strategy fallback:
+    1. Explicit label
+    2. "at <Company>" / "with <Company>" patterns near role words
+    3. Company suffix heuristic (Pvt Ltd, Technologies, etc.)
+    4. Capitalised proper-noun phrase after "joining" / "apply at"
+    """
+    t = text or ""
+
+    # Strategy 1: explicit label
+    val = _xf(t, [
+        "company", "organization", "organisation", "employer", "firm",
+        "about us", "about the company", "about company",
+        "about the organization", "hiring company", "client",
+    ])
+    if val:
+        return _clean(val)
+
+    # Strategy 2: "at <ProperNoun>" pattern near hiring / role context
+    # e.g. "for AI/ML … roles at IntimeTec"
+    for m in re.finditer(
+        r"(?i)(?:roles?\s+at|positions?\s+at|joining\s+us\s+at|working\s+at|"
+        r"careers?\s+at|apply\s+at|opportunities?\s+at|hiring\s+at)\s+"
+        r"([A-Z][A-Za-z0-9&\.\s\-]{2,50}?)(?:\.|,|\n|$|\s+(?:is|are|was|for|and))",
+        t,
+    ):
+        candidate = _clean(m.group(1))
+        if 2 < len(candidate) < 60:
+            return candidate
+
+    # Strategy 3: company suffix heuristic — single line only
+    for m in re.finditer(
+        r"([A-Z][A-Za-z0-9&\.\s\-]{1,40}?)\s+" + _CO_SUFFIXES.pattern,
+        t, re.IGNORECASE,
+    ):
+        candidate = _clean(m.group(0))
+        # Reject if it spans a newline (grabbed too much context)
+        if "\n" in candidate or len(candidate) > 70:
+            continue
+        if 3 < len(candidate) < 70:
+            return candidate
+
+    # Strategy 4: capitalised word(s) right after "at" in the first 3 sentences
+    first_chunk = " ".join(t.split("\n")[:5])
+    m2 = re.search(r"\bat\s+([A-Z][A-Za-z0-9]{2,}(?:\s+[A-Z][A-Za-z0-9]{2,}){0,3})", first_chunk)
+    if m2:
+        candidate = _clean(m2.group(1))
+        if 2 < len(candidate) < 50:
+            return candidate
+
+    # Strategy 5: second non-empty line if it looks like a standalone company name
+    # (short, capitalised, no punctuation that belongs in a job title)
+    lines = [_clean(l) for l in t.split("\n") if _clean(l)]
+    for line in lines[1:4]:   # skip first line (likely title), check next 3
+        if 2 < len(line) < 55 and line[0].isupper():
+            # Reject if it contains role words (probably a second title line)
+            if _ROLE_WORDS.search(line):
+                continue
+            # Reject if it looks like a label
+            colon_pos = line.find(":")
+            if 0 < colon_pos < 20:
+                continue
+            # Accept if it has no sentence structure (no verb-like words)
+            if not re.search(r"\b(are|is|we|our|this|has|have|will|the|a|an)\b", line, re.I):
+                return line
+
+    return ""
+
 
 def _xloc(text: str) -> str:
-    return _xf(text, ["location", "city", "based in", "office", "workplace",
-                      "work location", "place of work", "job location"])
+    """
+    Extract location with multi-strategy fallback:
+    1. Explicit label
+    2. Known city name scan
+    3. "based in / located in" patterns
+    """
+    t = text or ""
+
+    # Strategy 1: explicit label
+    val = _xf(t, [
+        "location", "job location", "work location", "place of work",
+        "city", "office location", "office", "based in", "based at",
+        "workplace", "work place",
+    ])
+    if val:
+        # strip if it looks like a full sentence
+        first_part = val.split(",")[0].split(".")[0].strip()
+        if len(first_part) < 60:
+            return _clean(first_part)
+
+    # Strategy 2: known city list
+    m = _KNOWN_CITIES.search(t)
+    if m:
+        # Grab up to ~30 chars around the match for context (e.g. "Bangalore, Karnataka")
+        start = m.start()
+        snippet = t[start:start+40].split("\n")[0]
+        return _clean(snippet.split(".")[0])
+
+    # Strategy 3: "based in / located in / office in" pattern
+    m2 = re.search(
+        r"(?i)(?:based\s+in|located\s+in|office\s+in|headquartered\s+in|"
+        r"presence\s+in|operating\s+in)\s+([^\n,\.]{3,50})",
+        t,
+    )
+    if m2:
+        return _clean(m2.group(1))
+
+    return ""
+
 
 def auto_extract(raw: str) -> dict:
     return {
@@ -377,59 +624,225 @@ def _extract_domain(s: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
+def _whois_age_fallback(domain: str) -> dict | None:
+    """
+    Lightweight raw WHOIS TCP query (port 43) as fallback when RDAP fails.
+    Tries the TLD's WHOIS server and parses 'Creation Date:' lines.
+    Returns a partial result dict or None if it cannot parse.
+    """
+    tld = domain.rsplit(".", 1)[-1].lower()
+    whois_servers = {
+        "com": "whois.verisign-grs.com", "net": "whois.verisign-grs.com",
+        "org": "whois.pir.org", "in": "whois.registry.in",
+        "io": "whois.nic.io", "co": "whois.nic.co",
+        "ai": "whois.nic.ai", "info": "whois.afilias.net",
+        "biz": "whois.biz", "uk": "whois.nic.uk",
+    }
+    server = whois_servers.get(tld, f"whois.nic.{tld}")
+    try:
+        with socket.create_connection((server, 43), timeout=5) as s:
+            s.sendall(f"{domain}\r\n".encode())
+            raw = b""
+            while True:
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                raw += chunk
+        text = raw.decode("utf-8", errors="ignore")
+        for line in text.splitlines():
+            ll = line.lower()
+            if any(k in ll for k in ("creation date", "created on", "registered on", "domain registered")):
+                m = re.search(r"(\d{4}-\d{2}-\d{2})", line)
+                if m:
+                    dt  = datetime.strptime(m.group(1), "%Y-%m-%d")
+                    age = (datetime.utcnow() - dt).days
+                    return {
+                        "status":     "young" if age < 180 else "old",
+                        "age_days":   age,
+                        "registered": dt.strftime("%d %b %Y"),
+                        "detail":     f"Registered {dt.strftime('%d %b %Y')} — {age} days old (via WHOIS)",
+                        "source":     "WHOIS",
+                    }
+    except Exception:
+        pass
+    return None
+
+
 def _probe_domain_age(domain: str) -> dict:
-    out = {"status": "unknown", "age_days": None, "registered": None, "detail": ""}
+    out = {"status": "unknown", "age_days": None, "registered": None, "detail": "", "source": "RDAP"}
     if not domain:
         return out
+    # ── Primary: RDAP ────────────────────────────────────────────────────────
     try:
-        req = urllib.request.Request(
+        # Try RDAP bootstrap first, then rdap.org as universal fallback
+        for rdap_url in [
             f"https://rdap.org/domain/{domain}",
-            headers={"User-Agent": "ScamDetector/3.0"},
-        )
-        with urllib.request.urlopen(req, timeout=_T_RDAP) as resp:
-            data = json.loads(resp.read().decode())
-        reg_date = None
-        for ev in data.get("events", []):
-            if ev.get("eventAction") in ("registration", "created"):
-                reg_date = ev.get("eventDate", "")
-                break
-        if reg_date:
-            for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S"):
-                try:
-                    dt  = datetime.strptime(reg_date[:19], fmt)
-                    age = (datetime.utcnow() - dt).days
-                    out.update(status="young" if age < 180 else "old", age_days=age,
-                               registered=dt.strftime("%d %b %Y"),
-                               detail=f"Registered {dt.strftime('%d %b %Y')} — {age} days old")
-                    return out
-                except ValueError:
-                    continue
-        out["detail"] = "Registration date not in RDAP response"
+            f"https://rdap.iana.org/domain/{domain}",
+        ]:
+            try:
+                req = urllib.request.Request(
+                    rdap_url, headers={"User-Agent": "ScamDetector/4.0"},
+                )
+                with urllib.request.urlopen(req, timeout=_T_RDAP) as resp:
+                    data = json.loads(resp.read().decode())
+                reg_date = None
+                exp_date = None
+                for ev in data.get("events", []):
+                    action = ev.get("eventAction", "")
+                    if action in ("registration", "created") and not reg_date:
+                        reg_date = ev.get("eventDate", "")
+                    elif action in ("expiration", "expiry") and not exp_date:
+                        exp_date = ev.get("eventDate", "")
+                if reg_date:
+                    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S"):
+                        try:
+                            dt  = datetime.strptime(reg_date[:19], fmt)
+                            age = (datetime.utcnow() - dt).days
+                            exp_str = ""
+                            if exp_date:
+                                with contextlib.suppress(Exception):
+                                    exp_dt  = datetime.strptime(exp_date[:19], fmt)
+                                    days_to_exp = (exp_dt - datetime.utcnow()).days
+                                    exp_str = f" | Expires {exp_dt.strftime('%d %b %Y')}"
+                                    if days_to_exp < 30:
+                                        exp_str += " ⚠ expiring soon"
+                            out.update(
+                                status="young" if age < 180 else "old",
+                                age_days=age,
+                                registered=dt.strftime("%d %b %Y"),
+                                detail=f"Registered {dt.strftime('%d %b %Y')} — {age} days old{exp_str}",
+                                source="RDAP",
+                            )
+                            return out
+                        except ValueError:
+                            continue
+                out["detail"] = "Registration date not in RDAP response"
+                break  # got a response, no point retrying second URL
+            except (urllib.error.HTTPError, urllib.error.URLError):
+                continue  # try next RDAP URL
     except Exception as e:
-        out.update(status="error", detail=f"RDAP unavailable ({type(e).__name__})")
+        out.update(status="error", detail=f"RDAP error: {type(e).__name__}")
+
+    # ── Fallback: raw WHOIS TCP ───────────────────────────────────────────────
+    fallback = _whois_age_fallback(domain)
+    if fallback:
+        out.update(fallback)
+        return out
+
+    if out["status"] == "unknown":
+        out["detail"] = "Domain age unavailable — verify manually on whois.domaintools.com"
     return out
 
 
+_PARKING_PATTERNS = re.compile(
+    r"(domain.*for sale|buy this domain|parked by|under construction"
+    r"|coming soon|this domain|godaddy|namecheap|sedo\.com|hugedomains)",
+    re.IGNORECASE,
+)
+
+
 def _probe_site_reachable(domain: str) -> dict:
-    out = {"reachable": None, "status_code": None, "detail": ""}
+    out = {
+        "reachable":    None,
+        "status_code":  None,
+        "ssl_valid":    None,
+        "is_parked":    False,
+        "redirect_to":  None,
+        "detail":       "",
+    }
     if not domain:
         return out
+
+    # ── DNS resolution check first ────────────────────────────────────────────
+    try:
+        resolved_ip = socket.gethostbyname(domain)
+        # Private/loopback IPs are a red flag
+        try:
+            addr = ipaddress.ip_address(resolved_ip)
+            if addr.is_private or addr.is_loopback:
+                out.update(
+                    reachable=False,
+                    detail=f"Domain resolves to private/loopback IP {resolved_ip} — suspicious",
+                )
+                return out
+        except ValueError:
+            pass
+    except socket.gaierror:
+        out.update(reachable=False, detail="DNS resolution failed — domain does not exist or is offline")
+        return out
+
+    # ── HTTP/HTTPS probes with redirect following ─────────────────────────────
     for scheme in ("https", "http"):
+        url = f"{scheme}://{domain}"
         try:
             req = urllib.request.Request(
-                f"{scheme}://{domain}", method="HEAD",
-                headers={"User-Agent": "Mozilla/5.0 ScamDetector/3.0"},
+                url, method="GET",
+                headers={"User-Agent": "Mozilla/5.0 (compatible; ScamDetector/4.0)"},
             )
-            with urllib.request.urlopen(req, timeout=_T_REACH) as resp:
-                out.update(reachable=True, status_code=resp.status,
-                           detail=f"HTTP {resp.status} — site is live")
-                return out
+            # Use a redirect-following opener (default)
+            opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler())
+            with opener.open(req, timeout=_T_REACH) as resp:
+                final_url  = resp.geturl()
+                status     = resp.status
+                body_bytes = resp.read(4096)
+
+            # Redirect detection
+            redirect_to = None
+            final_domain = re.search(r"https?://([^/]+)", final_url)
+            if final_domain and final_domain.group(1).rstrip("/") != domain:
+                redirect_to = final_url
+
+            # Parking page detection
+            body_text  = body_bytes.decode("utf-8", errors="ignore")
+            is_parked  = bool(_PARKING_PATTERNS.search(body_text))
+
+            # SSL validity (only for https)
+            ssl_valid = None
+            if scheme == "https":
+                try:
+                    ctx = ssl.create_default_context()
+                    with ctx.wrap_socket(
+                        socket.create_connection((domain, 443), timeout=4),
+                        server_hostname=domain,
+                    ) as ssock:
+                        cert = ssock.getpeercert()
+                        not_after = datetime.strptime(
+                            cert["notAfter"], "%b %d %H:%M:%S %Y %Z"
+                        )
+                        days_left  = (not_after - datetime.utcnow()).days
+                        ssl_valid  = True if days_left > 0 else False
+                except ssl.SSLCertVerificationError:
+                    ssl_valid = False
+                except Exception:
+                    ssl_valid = None  # could not verify, not necessarily bad
+
+            detail_parts = [f"HTTP {status} — site is live"]
+            if is_parked:
+                detail_parts.append("appears to be a PARKED domain")
+            if redirect_to:
+                detail_parts.append(f"redirects to {redirect_to[:60]}")
+            if ssl_valid is False:
+                detail_parts.append("SSL certificate INVALID")
+            elif ssl_valid is True:
+                detail_parts.append("SSL certificate valid")
+
+            out.update(
+                reachable=True,
+                status_code=status,
+                ssl_valid=ssl_valid,
+                is_parked=is_parked,
+                redirect_to=redirect_to,
+                detail=" | ".join(detail_parts),
+            )
+            return out
+
         except urllib.error.HTTPError as e:
             out.update(reachable=True, status_code=e.code,
                        detail=f"HTTP {e.code} — server responded")
             return out
         except (urllib.error.URLError, socket.timeout, OSError):
             continue
+
     out.update(reachable=False, detail="No HTTP/HTTPS response — site appears offline")
     return out
 
@@ -467,6 +880,140 @@ def _probe_free_email(contact: str) -> dict:
             return out
     out["detail"] = ("No free/personal email domains detected" if emails
                      else "No email address found in input")
+    return out
+
+
+def _probe_mx_record(contact: str) -> dict:
+    """
+    DNS MX record check for every corporate (non-free) email domain found
+    in the contact field.
+
+    Verdicts:
+      - NO_EMAIL       : no email address found at all
+      - FREE_DOMAIN    : all emails use free providers (Gmail etc.) — skip MX
+      - MX_FOUND       : at least one corporate domain has valid MX records
+      - NO_MX          : corporate domain exists in DNS but has NO mail servers
+                         configured — company doesn't actually use that domain
+                         for email (strongest scam signal)
+      - DNS_FAIL       : corporate domain doesn't resolve at all
+      - INCONCLUSIVE   : mixed or edge case
+    """
+    out = {
+        "status":          "NO_EMAIL",
+        "domain":          None,
+        "mx_records":      [],
+        "voip_risk":       False,
+        "detail":          "",
+    }
+
+    # ── Extract all email addresses ──────────────────────────────────────────
+    emails = re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", contact or "")
+    if not emails:
+        out["detail"] = "No email address found — cannot verify mail infrastructure"
+        return out
+
+    # Separate free vs corporate domains
+    corp_domains = [d.lower() for d in emails if d.lower() not in _FREE_DOMAINS]
+    free_domains = [d.lower() for d in emails if d.lower() in _FREE_DOMAINS]
+
+    if not corp_domains:
+        out.update(
+            status="FREE_DOMAIN",
+            detail=(
+                f"Only free email domain(s) found: {', '.join(list(set(free_domains))[:2])}. "
+                "MX check skipped — this is itself a red flag."
+            ),
+        )
+        return out
+
+    # ── Query MX records for each corporate domain via public DNS-over-HTTPS ─
+    # Using Cloudflare DoH (1.1.1.1) — no system DNS library needed,
+    # works in all environments including Streamlit Cloud.
+    for domain in dict.fromkeys(corp_domains):   # deduplicate, preserve order
+        out["domain"] = domain
+        try:
+            url = f"https://cloudflare-dns.com/dns-query?name={domain}&type=MX"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "Accept": "application/dns-json",
+                    "User-Agent": "ScamDetector/4.0",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+
+            status_code = data.get("Status", -1)
+
+            # NXDOMAIN (3) — domain does not exist in DNS at all
+            if status_code == 3:
+                out.update(
+                    status="DNS_FAIL",
+                    detail=(
+                        f"Domain '{domain}' does not exist in DNS. "
+                        "The company email domain is completely fake."
+                    ),
+                )
+                return out
+
+            answers = data.get("Answer", [])
+            mx_hosts = [
+                a["data"].rstrip(".")
+                for a in answers
+                if a.get("type") == 15   # type 15 = MX record
+            ]
+
+            if mx_hosts:
+                # ── VoIP / disposable mail server heuristic ────────────────
+                voip_indicators = (
+                    "mailgun", "sendgrid", "sparkpost", "mandrillapp",
+                    "amazonses", "mailchimp", "yopmail", "guerrilla",
+                    "trashmail", "mailinator",
+                )
+                voip_risk = any(
+                    v in h.lower() for h in mx_hosts for v in voip_indicators
+                )
+                out.update(
+                    status="MX_FOUND",
+                    mx_records=mx_hosts[:4],
+                    voip_risk=voip_risk,
+                    detail=(
+                        f"'{domain}' has {len(mx_hosts)} MX record(s): "
+                        f"{', '.join(mx_hosts[:2])}"
+                        + (" — TRANSACTIONAL/BULK mail server (not a real corporate inbox)" if voip_risk else "")
+                    ),
+                )
+                return out
+
+            # Domain resolves (no NXDOMAIN) but has zero MX records
+            # This is the critical scam signal: someone registered a domain
+            # for appearances but never set up actual email infrastructure.
+            out.update(
+                status="NO_MX",
+                detail=(
+                    f"'{domain}' has NO MX records. The domain exists but is NOT "
+                    "configured to send or receive email. A real company always "
+                    "has mail servers. This is a strong indicator of a fake domain."
+                ),
+            )
+            return out
+
+        except (urllib.error.URLError, socket.timeout, OSError):
+            out.update(
+                status="INCONCLUSIVE",
+                domain=domain,
+                detail=f"MX lookup timed out for '{domain}' — verify manually",
+            )
+            # try next domain if any
+            continue
+        except Exception as e:
+            out.update(
+                status="INCONCLUSIVE",
+                domain=domain,
+                detail=f"MX lookup error for '{domain}': {type(e).__name__}",
+            )
+            continue
+
     return out
 
 
@@ -520,6 +1067,7 @@ def run_live_probes(job: dict) -> dict:
         "site_reach": {"reachable": None,   "detail": "No domain provided"},
         "typosquat":  {"is_squatter": False, "detail": "No domain provided"},
         "free_email": {"uses_free_domain": False, "detail": ""},
+        "mx_record":  {"status": "NO_EMAIL", "detail": ""},
         "mca":        {"found": None,       "detail": ""},
     }
     lock = threading.Lock()
@@ -537,6 +1085,7 @@ def run_live_probes(job: dict) -> dict:
         ("site_reach", _probe_site_reachable, domain or ""),
         ("typosquat",  _probe_typosquatting,  domain or ""),
         ("free_email", _probe_free_email,     contact),
+        ("mx_record",  _probe_mx_record,      contact),
         ("mca",        _probe_mca,            company),
     ]
     threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
@@ -555,6 +1104,14 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
     if probes.get("site_reach", {}).get("reachable") is False:
         penalty += 12
         warnings.append("Company website is unreachable / does not exist")
+    else:
+        reach = probes.get("site_reach", {})
+        if reach.get("ssl_valid") is False:
+            penalty += 8
+            warnings.append("Company website has an INVALID SSL certificate")
+        if reach.get("is_parked"):
+            penalty += 14
+            warnings.append("Company website is a PARKED / placeholder domain")
     typo = probes.get("typosquat", {})
     if typo.get("is_squatter"):
         penalty += 20
@@ -563,6 +1120,26 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         penalty += 12
         dom = probes["free_email"].get("domain", "")
         warnings.append(f"Recruiter uses personal email domain: {dom}")
+    mx = probes.get("mx_record", {})
+    mx_status = mx.get("status", "")
+    if mx_status == "NO_MX":
+        penalty += 22   # strongest MX signal — domain exists but has no mail servers
+        warnings.append(
+            f"Corporate email domain '{mx.get('domain','')}' has NO MX records — "
+            "domain is registered for appearances only, not actually used for email"
+        )
+    elif mx_status == "DNS_FAIL":
+        penalty += 18
+        warnings.append(
+            f"Corporate email domain '{mx.get('domain','')}' does not exist in DNS — "
+            "the company email address is completely fabricated"
+        )
+    elif mx_status == "MX_FOUND" and mx.get("voip_risk"):
+        penalty += 8
+        warnings.append(
+            f"Email domain '{mx.get('domain','')}' routes through a transactional/bulk "
+            "mail service, not a real corporate mail server"
+        )
     if probes.get("mca", {}).get("found") is False:
         penalty += 10
         warnings.append("Company not found in MCA India registry")
@@ -959,6 +1536,21 @@ def _render_probe_table(probes: dict):
     b  = (_badge("FREE EMAIL","#dc2626","rgba(220,38,38,0.12)") if fe.get("uses_free_domain")
           else _badge("CLEAR","#22c55e","rgba(34,197,94,0.12)"))
     rows.append(_row(I.MAIL, "Email Domain", b, fe.get("detail","")))
+
+    mx = probes.get("mx_record", {})
+    mx_st = mx.get("status", "")
+    if mx_st == "MX_FOUND":
+        mx_b = (_badge("VOIP/BULK", "#f59e0b", "rgba(245,158,11,0.12)") if mx.get("voip_risk")
+                else _badge("MX OK", "#22c55e", "rgba(34,197,94,0.12)"))
+    elif mx_st == "NO_MX":
+        mx_b = _badge("NO MX RECORDS", "#dc2626", "rgba(220,38,38,0.12)")
+    elif mx_st == "DNS_FAIL":
+        mx_b = _badge("DOMAIN FAKE", "#dc2626", "rgba(220,38,38,0.12)")
+    elif mx_st == "FREE_DOMAIN":
+        mx_b = _badge("FREE EMAIL", "#f59e0b", "rgba(245,158,11,0.12)")
+    else:
+        mx_b = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
+    rows.append(_row(I.SERVER, "MX / Mail Server", mx_b, mx.get("detail", "")))
 
     mca = probes.get("mca", {})
     b   = (_badge("FOUND IN MCA", "#22c55e","rgba(34,197,94,0.12)")  if mca.get("found") is True  else
@@ -1430,7 +2022,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 type="primary",
                 use_container_width=True,
                 key="jsd_btn",
-                disabled=not allowed,
+                disabled=not allowed or st.session_state.get("jsd_running", False),
                 help=(
                     "Runs full AI analysis + 5 live network probes. Takes ~10s."
                     if allowed else
@@ -1443,111 +2035,122 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 "Reset",
                 use_container_width=True,
                 key="jsd_clear",
+                disabled=st.session_state.get("jsd_running", False),
                 help="Clear all inputs and results",
             )
 
         if clear:
-            for k in list(st.session_state.keys()):
-                if k.startswith("jsd_"):
-                    del st.session_state[k]
+            # Show spinner while clearing to give clear visual feedback
+            with st.spinner("Clearing…"):
+                for k in list(st.session_state.keys()):
+                    if k.startswith("jsd_"):
+                        del st.session_state[k]
+                time.sleep(0.25)  # brief pause so spinner is visible
             # scope="app" exits the fragment scope and reruns the full script,
             # clearing both the input fragment AND the results panel below it.
             st.rerun(scope="app")
 
         if run:
-            # Progress steps shown during the ~10s wait
-            prog = st.progress(0, text="Starting analysis…")
-            try:
-                prog.progress(10, text="Running 15-signal rule engine…")
-                rules_result = _run_rules(job)
+            # ── Set running flag so button shows disabled/spinner state ────────
+            st.session_state["jsd_running"] = True
 
-                prog.progress(30, text="Launching 5 live network probes (parallel)…")
-                probes = run_live_probes(job)
-                penalty, warnings = _probe_risk(probes)
-
-                prog.progress(60, text="Sending to AI for deep analysis…")
-                llm_raw = call_llm_fn(
-                    _llm_prompt(job, warnings),
-                    st.session_state,
-                    model="llama-3.3-70b-versatile",
-                    temperature=0,
-                )
-                llm_data: dict = {}
+            # ── Spinner wraps the entire analysis pipeline ─────────────────────
+            with st.spinner("Running analysis — this takes ~10 seconds…"):
+                # Progress steps shown during the ~10s wait
+                prog = st.progress(0, text="Starting analysis…")
                 try:
-                    clean = re.sub(r"```json|```", "", llm_raw).strip()
-                    m = re.search(r"\{.*\}", clean, re.DOTALL)
-                    if m:
-                        llm_data = json.loads(m.group())
-                except Exception:
-                    pass
+                    prog.progress(10, text="Running 15-signal rule engine…")
+                    rules_result = _run_rules(job)
 
-                prog.progress(90, text="Blending scores…")
-                ai_s   = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
-                rule_s = rules_result["rule_score"]
+                    prog.progress(30, text="Launching 5 live network probes (parallel)…")
+                    probes = run_live_probes(job)
+                    penalty, warnings = _probe_risk(probes)
 
-                # ── Calibrated blending ────────────────────────────────────────
-                # Base blend: AI carries 60%, rules 25%, probe penalty 15%.
-                # AI score is the most reliable signal — give it the most weight.
-                blended = int(0.60 * ai_s + 0.25 * rule_s + 0.15 * penalty)
-
-                # Hard floor only from HIGH-weight signals (>=18 pts each).
-                # Low-weight signals like missing_salary(+4) or poor_grammar(+6)
-                # must NOT floor the score — they fire on legitimate postings too
-                # and were causing scores of 11-20 on perfectly clean job ads.
-                critical_signals = [k for k, s in rules_result["signals"].items()
-                                    if _WEIGHTS.get(k, 0) >= 18]
-                critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
-                blended = max(blended, critical_weight)
-
-                # Probe penalty floor: only if penalty is itself significant (>= 20)
-                if penalty >= 20:
-                    blended = max(blended, penalty)
-
-                blended = min(blended, 100)
-
-                # Verdict from blended score
-                _sev = {"SAFE": 0, "SUSPICIOUS": 1, "LIKELY_SCAM": 2, "DEFINITE_SCAM": 3}
-                sv   = ("DEFINITE_SCAM" if blended >= 75 else
-                        "LIKELY_SCAM"   if blended >= 50 else
-                        "SUSPICIOUS"    if blended >= 25 else "SAFE")
-
-                # AI verdict overrides only if stricter than numeric verdict
-                av    = llm_data.get("verdict", sv)
-                final = av if _sev.get(av, 1) > _sev.get(sv, 0) else sv
-
-                res = {
-                    "blended_score":  blended,   "rule_score":     rule_s,
-                    "ai_score":       ai_s,      "probe_penalty":  penalty,
-                    "final_verdict":  final,     "signals":        rules_result["signals"],
-                    "probes":         probes,    "probe_warnings": warnings,
-                    "llm":            llm_data,  "job":            job,
-                    "timestamp":      _now_ist(),
-                }
-                prog.progress(100, text="Done.")
-                time.sleep(0.3)
-                prog.empty()
-
-                # Write result to session_state, then force a FULL app rerun
-                # so the results panel outside this fragment renders immediately.
-                # scope="app" is required — a plain st.rerun() inside a fragment
-                # only reruns the fragment itself, leaving the results panel stale.
-                st.session_state["jsd_last_result"] = res
-                _add_to_history(res)
-
-                # ── Record usage in Supabase (after success, not before) ───
-                fns = _get_rate_limit_fns()
-                if fns and username:
-                    _, record_usage, _ = fns
+                    prog.progress(60, text="Sending to AI for deep analysis…")
+                    llm_raw = call_llm_fn(
+                        _llm_prompt(job, warnings),
+                        st.session_state,
+                        model="llama-3.3-70b-versatile",
+                        temperature=0,
+                    )
+                    llm_data: dict = {}
                     try:
-                        record_usage(username, _SCAM_FEATURE)
+                        clean = re.sub(r"```json|```", "", llm_raw).strip()
+                        m = re.search(r"\{.*\}", clean, re.DOTALL)
+                        if m:
+                            llm_data = json.loads(m.group())
                     except Exception:
-                        pass  # non-fatal — don't block result display
+                        pass
 
-                st.rerun(scope="app")
+                    prog.progress(90, text="Blending scores…")
+                    ai_s   = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
+                    rule_s = rules_result["rule_score"]
 
-            except Exception as exc:
-                prog.empty()
-                st.error(f"Analysis failed: {exc}")
+                    # ── Calibrated blending ────────────────────────────────────────
+                    # Base blend: AI carries 60%, rules 25%, probe penalty 15%.
+                    # AI score is the most reliable signal — give it the most weight.
+                    blended = int(0.60 * ai_s + 0.25 * rule_s + 0.15 * penalty)
+
+                    # Hard floor only from HIGH-weight signals (>=18 pts each).
+                    # Low-weight signals like missing_salary(+4) or poor_grammar(+6)
+                    # must NOT floor the score — they fire on legitimate postings too
+                    # and were causing scores of 11-20 on perfectly clean job ads.
+                    critical_signals = [k for k, s in rules_result["signals"].items()
+                                        if _WEIGHTS.get(k, 0) >= 18]
+                    critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
+                    blended = max(blended, critical_weight)
+
+                    # Probe penalty floor: only if penalty is itself significant (>= 20)
+                    if penalty >= 20:
+                        blended = max(blended, penalty)
+
+                    blended = min(blended, 100)
+
+                    # Verdict from blended score
+                    _sev = {"SAFE": 0, "SUSPICIOUS": 1, "LIKELY_SCAM": 2, "DEFINITE_SCAM": 3}
+                    sv   = ("DEFINITE_SCAM" if blended >= 75 else
+                            "LIKELY_SCAM"   if blended >= 50 else
+                            "SUSPICIOUS"    if blended >= 25 else "SAFE")
+
+                    # AI verdict overrides only if stricter than numeric verdict
+                    av    = llm_data.get("verdict", sv)
+                    final = av if _sev.get(av, 1) > _sev.get(sv, 0) else sv
+
+                    res = {
+                        "blended_score":  blended,   "rule_score":     rule_s,
+                        "ai_score":       ai_s,      "probe_penalty":  penalty,
+                        "final_verdict":  final,     "signals":        rules_result["signals"],
+                        "probes":         probes,    "probe_warnings": warnings,
+                        "llm":            llm_data,  "job":            job,
+                        "timestamp":      _now_ist(),
+                    }
+                    prog.progress(100, text="Done.")
+                    time.sleep(0.3)
+                    prog.empty()
+
+                    # Write result to session_state, then force a FULL app rerun
+                    # so the results panel outside this fragment renders immediately.
+                    # scope="app" is required — a plain st.rerun() inside a fragment
+                    # only reruns the fragment itself, leaving the results panel stale.
+                    st.session_state["jsd_last_result"] = res
+                    _add_to_history(res)
+
+                    # ── Record usage in Supabase (after success, not before) ───
+                    fns = _get_rate_limit_fns()
+                    if fns and username:
+                        _, record_usage, _ = fns
+                        try:
+                            record_usage(username, _SCAM_FEATURE)
+                        except Exception:
+                            pass  # non-fatal — don't block result display
+
+                    st.session_state.pop("jsd_running", None)
+                    st.rerun(scope="app")
+
+                except Exception as exc:
+                    prog.empty()
+                    st.session_state.pop("jsd_running", None)
+                    st.error(f"Analysis failed: {exc}")
 
 
 def render_job_scam_detector_tab(call_llm_fn):
@@ -1555,45 +2158,85 @@ def render_job_scam_detector_tab(call_llm_fn):
     Call from main app:
         with tab_scam:
             render_job_scam_detector_tab(call_llm)
-
-    Architecture note (page re-render fix):
-    ----------------------------------------
-    The input widgets live inside _render_input_fragment() which is decorated
-    with @st.fragment.  Fragment re-runs are ISOLATED — only the fragment
-    re-executes on widget interaction, not the full Streamlit script.
-
-    Results are rendered AFTER the fragment call, at the top-level script
-    scope. When the Analyse button writes jsd_last_result to session_state
-    Streamlit triggers a full rerun (normal behaviour for st.session_state
-    writes), but the fragment preserves its own widget state so the textarea
-    text is NOT lost.  The Reset button explicitly calls st.rerun() to wipe
-    everything cleanly.
     """
 
-    # ── Header ────────────────────────────────────────────────────────────────
-    st.markdown(
-        f'<div style="padding:16px 0 6px;">'
-        f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">'
-        f'{_svg(I.SHIELD,32,"#ef4444",1.6)}'
-        f'<div><h2 style="margin:0;color:#e6edf3;font-size:1.4rem;font-weight:700;">'
-        f'Job Scam Detector</h2>'
-        f'<p style="margin:2px 0 0;color:#8b949e;font-size:0.81rem;">'
-        f'AI analysis + live network probes — detect fake postings before you apply.</p>'
-        f'</div></div></div>',
-        unsafe_allow_html=True,
-    )
+    # ── Premium tab hero header ────────────────────────────────────────────────
+    username   = str(st.session_state.get("username", "guest"))
+    fns        = _get_rate_limit_fns()
+    used_count = 0
+    if fns:
+        try:
+            used_count = fns[2](username, _SCAM_FEATURE)
+        except Exception:
+            pass
+    remaining = max(_SCAM_LIMIT - used_count, 0)
 
-    # ── Feature pills ─────────────────────────────────────────────────────────
     st.markdown(
-        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:22px;">'
+        # ── Outer hero card ───────────────────────────────────────────────
+        f'<div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.07);'
+        f'border-radius:16px;padding:24px 28px 20px;margin-bottom:20px;'
+        f'border-top:2px solid #ef4444;">'
+
+        # ── Top row: icon block + title + quota badge ─────────────────────
+        f'<div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:18px;">'
+
+        # Icon box
+        f'<div style="width:52px;height:52px;border-radius:14px;flex-shrink:0;'
+        f'background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.25);'
+        f'display:flex;align-items:center;justify-content:center;">'
+        f'{_svg(I.SHIELD, 26, "#ef4444", 1.5)}</div>'
+
+        # Title + subtitle
+        f'<div style="flex:1;min-width:0;">'
+        f'<h2 style="margin:0 0 4px;font-size:1.45rem;font-weight:700;color:#e6edf3;'
+        f'letter-spacing:-0.02em;">Job Scam Detector</h2>'
+        f'<p style="margin:0;color:#8b949e;font-size:0.82rem;line-height:1.5;">'
+        f'Paste any job posting — AI analysis + 5 live network probes detect '
+        f'fake listings before you apply or share personal data.</p>'
+        f'</div>'
+
+        # Quota badge top-right
+        f'<div style="flex-shrink:0;text-align:center;padding:10px 16px;border-radius:12px;'
+        f'background:{"rgba(34,197,94,0.08)" if remaining > 1 else "rgba(245,158,11,0.08)" if remaining == 1 else "rgba(239,68,68,0.08)"};'
+        f'border:1px solid {"rgba(34,197,94,0.22)" if remaining > 1 else "rgba(245,158,11,0.22)" if remaining == 1 else "rgba(239,68,68,0.22)"};">'
+        f'<div style="font-size:1.7rem;font-weight:800;line-height:1;'
+        f'color:{"#22c55e" if remaining > 1 else "#f59e0b" if remaining == 1 else "#ef4444"};">{remaining}</div>'
+        f'<div style="font-size:0.6rem;color:#6b7280;margin-top:2px;white-space:nowrap;">analyses left</div>'
+        f'</div>'
+        f'</div>'
+
+        # ── Stat row — 4 mini metric cards ────────────────────────────────
+        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">'
+        + "".join([
+            f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
+            f'border-radius:10px;padding:10px 12px;">'
+            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">'
+            f'{_svg(ic, 11, col)}'
+            f'<span style="font-size:0.62rem;color:#6b7280;text-transform:uppercase;'
+            f'letter-spacing:0.7px;">{label}</span></div>'
+            f'<div style="font-size:0.88rem;font-weight:600;color:{col};">{val}</div>'
+            f'</div>'
+            for ic, label, val, col in [
+                (I.CPU,      "AI Engine",     "LLaMA 3.3-70B",   "#a78bfa"),
+                (I.GLOBE,    "Live Probes",   "6 checks",        "#38bdf8"),
+                (I.LIST,     "Rule Signals",  "15 patterns",     "#f59e0b"),
+                (I.SHIELD,   "Hourly Limit",  f"{_SCAM_LIMIT} analyses", "#22c55e"),
+            ]
+        ])
+        + f'</div>'
+
+        # ── Feature pill row ──────────────────────────────────────────────
+        f'<div style="display:flex;flex-wrap:wrap;gap:5px;">'
         + _pill(I.CPU,      "AI Deep Analysis",     "#a78bfa")
         + _pill(I.CALENDAR, "Domain Age Probe",      "#38bdf8")
         + _pill(I.MAIL,     "Free Email Detection",  "#f59e0b")
+        + _pill(I.SERVER,   "MX Mail Server Check",  "#22c55e")
         + _pill(I.COPY,     "Typosquat Check",       "#ef4444")
         + _pill(I.BUILDING, "MCA Registry",          "#22c55e")
         + _pill(I.SERVER,   "Site Reachability",     "#6366f1")
         + _pill(I.LIST,     "15-Signal Rule Engine", "#8b949e")
-        + '</div>',
+        + f'</div>'
+        + f'</div>',
         unsafe_allow_html=True,
     )
 
@@ -1609,9 +2252,6 @@ def render_job_scam_detector_tab(call_llm_fn):
         _render_history()
 
     with form_col:
-        # ── Pull logged-in username from session_state ─────────────────────
-        username = str(st.session_state.get("username", ""))
-
         # ── Rate-limit bar — always visible, renders live quota from Supabase
         allowed = _render_rate_limit_bar(username)
 
