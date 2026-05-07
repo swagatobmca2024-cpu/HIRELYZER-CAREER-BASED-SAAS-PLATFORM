@@ -8453,6 +8453,149 @@ with tab2:
     with col2:
         if st.button("🚀 Generate AI Resume Preview"):
 
+            # ── Job Title Spell-Correction ─────────────────────────────────────────
+            # Fuzzy-matches the user's input against the canonical role list.
+            # If a close match is found (≥ 70% similarity) it silently corrects the
+            # title in session_state before anything else runs.
+            import difflib as _difflib
+
+            _CANONICAL_JOB_TITLES = [
+                # ── Software Engineering ──────────────────────────────────────
+                "Software Engineer", "Senior Software Engineer", "Staff Software Engineer",
+                "Frontend Developer", "Backend Developer", "Full Stack Developer",
+                "React Developer", "Angular Developer", "Vue.js Developer",
+                "Node.js Developer", "Python Developer", "Java Developer",
+                "Go Developer", "Rust Developer", "C++ Developer",
+                "PHP Developer", "Ruby on Rails Developer", ".NET Developer",
+                "iOS Developer", "Android Developer", "Mobile App Developer",
+                "Flutter Developer", "React Native Developer",
+                "Embedded Systems Engineer", "Firmware Engineer",
+                # ── Data & AI ─────────────────────────────────────────────────
+                "Data Scientist", "Senior Data Scientist",
+                "Data Analyst", "Senior Data Analyst",
+                "Data Engineer", "Senior Data Engineer",
+                "Machine Learning Engineer", "ML Engineer",
+                "AI Engineer", "Generative AI Engineer",
+                "LLM Engineer", "Prompt Engineer",
+                "Computer Vision Engineer", "NLP Engineer",
+                "Business Intelligence Analyst", "BI Developer",
+                "Analytics Engineer", "Quantitative Analyst",
+                # ── Infrastructure & Cloud ────────────────────────────────────
+                "DevOps Engineer", "Senior DevOps Engineer",
+                "Cloud Engineer", "AWS Engineer", "Azure Engineer", "GCP Engineer",
+                "Site Reliability Engineer", "Platform Engineer",
+                "Infrastructure Engineer", "Systems Administrator",
+                "Network Engineer", "Network Administrator",
+                "Database Administrator", "Database Engineer",
+                # ── Security ──────────────────────────────────────────────────
+                "Cybersecurity Analyst", "Information Security Analyst",
+                "Security Engineer", "Penetration Tester",
+                "SOC Analyst", "Cloud Security Engineer",
+                # ── QA & Testing ──────────────────────────────────────────────
+                "QA Engineer", "QA Analyst", "SDET",
+                "Automation Test Engineer", "Performance Test Engineer",
+                # ── Architecture & Leadership ─────────────────────────────────
+                "Solutions Architect", "Cloud Architect", "Enterprise Architect",
+                "Technical Lead", "Engineering Manager",
+                "Chief Technology Officer", "VP of Engineering",
+                # ── Product & Design ──────────────────────────────────────────
+                "Product Manager", "Senior Product Manager",
+                "Product Owner", "Technical Product Manager",
+                "UI/UX Designer", "UX Designer", "UI Designer",
+                "Product Designer", "Graphic Designer",
+                "Visual Designer", "Motion Designer",
+                "Interaction Designer", "Design Lead",
+                # ── Project & Delivery ────────────────────────────────────────
+                "Project Manager", "Senior Project Manager",
+                "Scrum Master", "Agile Coach",
+                "Program Manager", "Delivery Manager",
+                "IT Project Manager",
+                # ── Business & Analysis ───────────────────────────────────────
+                "Business Analyst", "Senior Business Analyst",
+                "Systems Analyst", "Functional Consultant",
+                "ERP Consultant", "Salesforce Developer",
+                "Salesforce Administrator",
+                # ── Marketing & Growth ────────────────────────────────────────
+                "Digital Marketing Specialist", "Digital Marketing Manager",
+                "SEO Specialist", "SEM Specialist",
+                "Content Strategist", "Content Writer",
+                "Social Media Manager", "Growth Hacker",
+                "Performance Marketing Manager", "Email Marketing Specialist",
+                "Brand Manager", "Marketing Analyst",
+                "E-commerce Specialist", "E-commerce Manager",
+                # ── Finance & Accounting ──────────────────────────────────────
+                "Financial Analyst", "Senior Financial Analyst",
+                "Chartered Accountant", "Cost Accountant",
+                "Investment Analyst", "Equity Research Analyst",
+                "Risk Analyst", "Credit Analyst",
+                "Fintech Developer", "Quantitative Developer",
+                "Accounts Manager", "Tax Consultant",
+                "Audit Manager", "CFO",
+                # ── HR & People ───────────────────────────────────────────────
+                "HR Manager", "HR Business Partner",
+                "Talent Acquisition Specialist", "Recruiter",
+                "Technical Recruiter", "HR Analyst",
+                "Learning and Development Manager", "Compensation Analyst",
+                # ── Sales & CRM ───────────────────────────────────────────────
+                "Sales Manager", "Account Executive",
+                "Business Development Manager", "Sales Engineer",
+                "Technical Sales Engineer", "Pre-Sales Consultant",
+                "Customer Success Manager",
+                # ── Operations & Supply Chain ─────────────────────────────────
+                "Operations Manager", "Supply Chain Analyst",
+                "Logistics Manager", "Procurement Manager",
+                # ── Niche Tech ────────────────────────────────────────────────
+                "Game Developer", "Blockchain Developer",
+                "AR/VR Developer", "IoT Engineer",
+                "EdTech Developer", "HealthTech Developer",
+                "Healthcare Software Engineer",
+                # ── Writing & Documentation ───────────────────────────────────
+                "Technical Writer", "API Documentation Specialist",
+                # ── Support & Admin ───────────────────────────────────────────
+                "IT Support Engineer", "Help Desk Analyst",
+                "Systems Engineer",
+            ]
+
+            def _normalize_job_title(raw: str) -> tuple[str, bool]:
+                """
+                Returns (corrected_title, was_corrected).
+                Tries an exact case-insensitive match first, then fuzzy.
+                Threshold: 0.70 similarity — catches typos but won't misfire on
+                completely unrelated inputs (e.g. 'Chef').
+                """
+                if not raw or not raw.strip():
+                    return raw, False
+                raw_stripped = raw.strip()
+                raw_lower = raw_stripped.lower()
+
+                # 1. Exact case-insensitive match → just fix capitalisation
+                for title in _CANONICAL_JOB_TITLES:
+                    if title.lower() == raw_lower:
+                        corrected = title
+                        return corrected, (corrected != raw_stripped)
+
+                # 2. Fuzzy match against canonical list (case-insensitive compare)
+                lower_map = {t.lower(): t for t in _CANONICAL_JOB_TITLES}
+                matches = _difflib.get_close_matches(
+                    raw_lower,
+                    lower_map.keys(),
+                    n=1,
+                    cutoff=0.70,
+                )
+                if matches:
+                    corrected = lower_map[matches[0]]
+                    return corrected, True
+
+                # 3. No confident match — return original unchanged
+                return raw_stripped, False
+
+            _raw_title = st.session_state.get("job_title", "").strip()
+            _corrected_title, _was_corrected = _normalize_job_title(_raw_title)
+            if _was_corrected:
+                st.session_state["job_title"] = _corrected_title
+                st.toast(f"✏️ Job title corrected: \"{_raw_title}\" → \"{_corrected_title}\"", icon="✅")
+            # ── End Job Title Spell-Correction ────────────────────────────────────
+
             # ── Helper: detect if a field has real user-entered content ──
             def _has_real_content(value, min_len=4):
                 if not value:
@@ -8515,62 +8658,136 @@ with tab2:
 
             # ── Build experience prompt section based on whether user has real data ──
             if user_has_real_experience:
-                experience_instruction = f"""2. EXPERIENCE (USER HAS PROVIDED REAL DATA — ENHANCE ONLY, DO NOT OVERWRITE):
-               Enhance the following experience entries. Keep company names, durations, and role titles
-               exactly as provided. Only improve bullet point descriptions for clarity, ATS alignment,
-               and measurable impact. Present as A., B., C. format.
-               Source data:
+                experience_instruction = f"""2. EXPERIENCE (USER HAS PROVIDED REAL DATA — LIGHT POLISH ONLY):
+               The user has already entered their experience. Your ONLY job is to lightly polish the bullet descriptions.
+               STRICT RULES — violating any of these is an error:
+               - DO NOT change, rename, or reword any company name. Copy it exactly as given.
+               - DO NOT change any role/job title. Copy it exactly as given.
+               - DO NOT change any date or duration. Copy it exactly as given.
+               - DO NOT add new entries that the user did not provide.
+               - DO NOT restructure or reorder entries.
+               - ONLY rewrite existing description bullets to be cleaner, more ATS-friendly, and results-oriented.
+               - If a description is already strong, make minimal or no edits.
+               Present as A., B., C. using the user's original data below:
                {normalized_experience_entries}"""
             else:
                 experience_instruction = f"""2. EXPERIENCE (NO USER DATA PROVIDED — GENERATE REALISTIC DUMMY DATA):
-               The user has only provided their job title: "{st.session_state['job_title']}".
-               Generate 2–3 realistic experience entries showing a natural career progression
-               (e.g., Junior → Mid → Senior level) for this role.
-               RULES FOR GENERATION:
-               - Use realistic, well-known company names (e.g., Infosys, Wipro, TCS, Accenture, Deloitte,
-                 Cognizant, HCL, Tech Mahindra, or similar based on role domain).
-               - Each entry must have a DIFFERENT company name.
-               - Dates must show logical progression — most recent first. Example:
-                   A. Senior Role at Company X (Jan 2022 – Present)
-                   B. Mid-Level Role at Company Y (Jun 2019 – Dec 2021)
-                   C. Junior Role at Company Z (Jul 2017 – May 2019)
-               - NEVER repeat the same dates across entries.
-               - Each entry must have 3–4 strong achievement bullets with metrics.
-               - Role titles must reflect realistic career progression toward "{st.session_state['job_title']}".
+               The user's target job title is: "{st.session_state['job_title']}".
+               Generate 2–3 realistic experience entries showing a natural career progression toward this SPECIFIC role.
+
+               COMPANY NAMING RULES:
+               - Choose company names that are REALISTIC and DOMAIN-APPROPRIATE for "{st.session_state['job_title']}".
+               - For tech/software roles: use companies like Google, Microsoft, Amazon, Flipkart, Razorpay, Zomato, Swiggy, PhonePe, Freshworks, Zoho, Paytm, Byju's, Ola, or similar product/tech companies.
+               - For finance/banking roles: use HDFC Bank, ICICI Bank, Axis Bank, Kotak, JPMorgan, Goldman Sachs, KPMG, Deloitte, EY, or similar.
+               - For data/analytics roles: use Mu Sigma, Fractal Analytics, ThoughtWorks, Tiger Analytics, or product companies with data teams.
+               - For marketing/design/HR roles: use relevant advertising agencies, startups, or consumer brands.
+               - NEVER use the same company list for every job title. Pick what makes sense for THIS domain.
+               - Each entry MUST have a DIFFERENT company name.
+
+               DATE RULES:
+               - Dates must show logical progression (most recent first, oldest last).
+               - NEVER repeat the same date range across entries.
+               - Use realistic tenure lengths (1–3 years per role).
+
+               CONTENT RULES:
+               - Role titles must be SPECIFIC to "{st.session_state['job_title']}" — not generic.
+               - Each entry must have 3–4 achievement bullets with measurable metrics relevant to this role.
+               - Tools, technologies, and responsibilities must match what someone in "{st.session_state['job_title']}" actually does.
                Present as A., B., C. format."""
 
             # ── Build projects prompt section based on whether user has real data ──
             if user_has_real_projects:
-                projects_instruction = f"""3. PROJECTS (USER HAS PROVIDED REAL DATA — ENHANCE ONLY, DO NOT OVERWRITE):
-               Enhance the following project entries. Keep project titles and tech stacks as provided.
-               Only improve descriptions for technical depth, clarity, and measurable outcomes.
-               Present as A., B., C. format.
-               Source data:
+                projects_instruction = f"""3. PROJECTS (USER HAS PROVIDED REAL DATA — LIGHT POLISH ONLY):
+               The user has already entered their projects. Your ONLY job is to lightly improve the descriptions.
+               STRICT RULES — violating any of these is an error:
+               - DO NOT change, rename, or reword any project title. Copy it exactly as given.
+               - DO NOT change any tech stack. Copy it exactly as given.
+               - DO NOT change any duration/date. Copy it exactly as given.
+               - DO NOT add new projects that the user did not provide.
+               - DO NOT restructure or reorder entries.
+               - ONLY rewrite existing description bullets to be more technical, impactful, and measurable.
+               - If a description is already strong, make minimal or no edits.
+               Present as A., B., C. using the user's original data below:
                {normalized_project_entries}"""
             else:
                 projects_instruction = f"""3. PROJECTS (NO USER DATA PROVIDED — GENERATE REALISTIC DUMMY DATA):
-               The user has only provided their job title: "{st.session_state['job_title']}".
-               Generate 2–3 realistic, industry-standard project entries relevant to this role.
-               RULES FOR GENERATION:
-               - Each project must have a UNIQUE, realistic name (not "Sample Project" or "Project A").
-               - Examples by domain:
-                   Software: "Distributed Cache Invalidation Service", "Multi-tenant SaaS Billing Engine"
-                   Data: "Real-time Fraud Detection Pipeline", "Customer Churn Prediction System"
-                   DevOps: "Zero-Downtime Kubernetes Migration", "GitOps CI/CD Automation Framework"
-                   Frontend: "Design System Component Library", "Progressive Web App with Offline Mode"
-               - Tech stacks must be realistic and role-appropriate (production-grade tools only).
-               - Dates must be DIFFERENT across projects and logically ordered. Example:
-                   A. Project Alpha — Jan 2024 – Apr 2024
-                   B. Project Beta  — Jun 2023 – Nov 2023
-                   C. Project Gamma — Jan 2023 – May 2023
-               - Each project must have 3–5 strong technical description bullets with metrics.
-               - NEVER use generic names like "Sample Project", "My Project", "Project 1".
+               The user's target job title is: "{st.session_state['job_title']}".
+               Generate 2–3 realistic, industry-standard projects that someone in THIS SPECIFIC ROLE would actually build.
+
+               PROJECT NAMING RULES:
+               - Project names MUST be derived directly from the domain of "{st.session_state['job_title']}".
+               - Do NOT use any generic or pre-existing example names. Think from scratch for this role.
+               - The name should sound like a real internal tool, product feature, or system — not a textbook exercise.
+               - For example: a "Digital Marketing Manager" would NOT build a Kubernetes migration; they'd build a "Campaign Attribution Analytics Dashboard" or "SEO Content Performance Tracker".
+               - A "Chartered Accountant" would NOT build a fraud detection pipeline; they'd build a "GST Reconciliation Automation Tool" or "Audit Trail Ledger System".
+               - Generate names that ONLY make sense for "{st.session_state['job_title']}" — if the name could apply to a different role, discard it and try again.
+
+               TECH STACK RULES:
+               - Use ONLY tools, frameworks, and technologies that are standard for "{st.session_state['job_title']}".
+               - Do NOT use backend/data engineering stacks (Kafka, Spark, Flink) for non-technical roles.
+               - Do NOT use frontend stacks (React, TypeScript) for data or infrastructure roles.
+               - Match the stack precisely to what this role uses day-to-day.
+
+               DATE RULES:
+               - All project dates must be DIFFERENT from each other.
+               - Ordered most recent first. Use realistic 3–5 month project durations.
+
+               CONTENT RULES:
+               - Each project must have 3–5 strong technical/functional bullets with measurable outcomes.
+               - Bullets must use vocabulary and actions that belong to "{st.session_state['job_title']}" — not generic software engineering language unless the role demands it.
+               - NEVER use names like "Sample Project", "My Project", "Project 1", or any name from unrelated domains.
                Present as A., B., C. format."""
+
+            # ── Build certificates prompt section ────────────────────────────────
+            _cert_entries = st.session_state.get("certificate_links", [])
+            _user_has_real_certs = any(
+                _has_real_content(c.get("name", "")) for c in _cert_entries
+            )
+            if _user_has_real_certs:
+                # Build structured representation passing ALL fields to the AI
+                _cert_lines = []
+                for c in _cert_entries:
+                    _cname = c.get("name", "").strip()
+                    _clink = c.get("link", "").strip()
+                    _cdur  = c.get("duration", "").strip()
+                    _cdesc = c.get("description", "").strip()
+                    if not _cname:
+                        continue
+                    parts = [f"Name: {_cname}"]
+                    if _clink:  parts.append(f"Link: {_clink}")
+                    if _cdur:   parts.append(f"Date: {_cdur}")
+                    if _cdesc:  parts.append(f"Description: {_cdesc}")
+                    _cert_lines.append("\n".join(parts))
+                _cert_data_str = "\n\n".join(_cert_lines)
+                certificates_instruction = f"""8. CERTIFICATES (USER HAS PROVIDED REAL DATA — PRESERVE EVERYTHING):
+               STRICT RULES — violating any of these is an error:
+               - DO NOT change the certificate name. Copy it exactly as given.
+               - DO NOT change, alter, or reformat the issued date in ANY way. Copy it character-for-character.
+               - DO NOT change the verification link. Copy it exactly as given.
+               - ONLY lightly polish the description if one was provided; otherwise leave it as-is.
+               - DO NOT invent or add certificates the user did not provide.
+               Output each certificate on one line as: [Name] - [Issuer] ([Date])
+               where [Date] is EXACTLY the date the user entered — no reformatting, no substitution.
+               User's certificate data:
+               {_cert_data_str}"""
+            else:
+                certificates_instruction = f"""8. CERTIFICATES (NO USER DATA — GENERATE):
+               Generate 3 realistic, industry-recognized certifications for {st.session_state['job_title']} with provider name."""
 
             enhance_prompt = f"""
             You are a professional Resume Optimization Specialist with deep expertise in ATS systems,
             industry hiring standards, and professional resume writing.
             Target role: "{st.session_state['job_title']}"
+
+            ⚠️ CRITICAL DOMAIN RULE — READ BEFORE GENERATING ANYTHING:
+            Every single piece of content you generate (projects, experience, skills, summary, certificates)
+            MUST be tailored specifically and exclusively to the role: "{st.session_state['job_title']}".
+            - A "Digital Marketing Manager" should NEVER have Java/Kafka/Kubernetes projects.
+            - A "Java Backend Developer" should NEVER have Excel/VLOOKUP or GST reconciliation content.
+            - A "Chartered Accountant" should NEVER have React/TypeScript or ML pipeline content.
+            Before writing any section, ask yourself: "Would someone hiring a {st.session_state['job_title']} 
+            care about this?" If no → discard and generate something domain-appropriate.
+            The output must look like it was written BY a {st.session_state['job_title']} FOR a {st.session_state['job_title']} role.
 
             LANGUAGE & TONE:
             - Neutral, professional, ATS-optimized tone throughout.
@@ -8582,7 +8799,7 @@ with tab2:
             SECTION LANGUAGE RULES:
             - SUMMARY: Third-person PRESENT tense. Strategic positioning bullets only.
             - EXPERIENCE: PAST tense. Ownership, delivery, accountability language.
-            - PROJECTS: PAST tense. Deep technical, architecture, engineering language.
+            - PROJECTS: PAST tense. Use vocabulary natural to the {st.session_state['job_title']} domain.
             - SKILLS / SOFTSKILLS: Nouns only. Comma-separated list.
             - INTERESTS: Professional domain-engagement language.
 
@@ -8597,11 +8814,11 @@ with tab2:
             {projects_instruction}
 
             4. SKILLS:
-               {"Enhance and expand the provided skills list." if _has_real_content(st.session_state.get('skills','')) else "Generate 6-8 current, role-relevant technical skills."}
+               {"Enhance and expand the provided skills list to be more specific and ATS-optimized for this role." if _has_real_content(st.session_state.get('skills','')) else f"Generate 6-8 current, highly specific technical/functional skills that are EXCLUSIVELY relevant to a {st.session_state['job_title']}. Do NOT list generic skills that apply to every role."}
                List only - no sentences.
 
             5. SOFTSKILLS:
-               {"Enhance the provided soft skills." if _has_real_content(st.session_state.get('Softskills','')) else "Generate 6-8 professional soft skills."}
+               {"Enhance the provided soft skills to align with this role's demands." if _has_real_content(st.session_state.get('Softskills','')) else f"Generate 5-6 soft skills that are most valued specifically for a {st.session_state['job_title']} — not a generic list."}
                List only - no sentences.
 
             6. LANGUAGES:
@@ -8610,8 +8827,7 @@ with tab2:
             7. INTERESTS:
                {"Enhance provided interests." if _has_real_content(st.session_state.get('interests','')) else f"Generate 3-5 professional interests aligned with {st.session_state['job_title']}."}
 
-            8. CERTIFICATES:
-               {"Enhance provided certificates." if st.session_state.get('certificate_links') and any(c.get('name') for c in st.session_state['certificate_links']) else f"Generate 3 realistic, industry-recognized certifications for {st.session_state['job_title']} with provider name."}
+            {certificates_instruction}
 
             OUTPUT FORMAT (FOLLOW EXACTLY):
 
@@ -8671,7 +8887,7 @@ with tab2:
             SoftSkills: {st.session_state.get('Softskills', '')}
             Languages: {st.session_state.get('languages', '')}
             Interests: {st.session_state.get('interests', '')}
-            Certificates: {[cert['name'] for cert in st.session_state.get('certificate_links', []) if cert.get('name')]}
+            Certificates: {[{"name": c.get("name",""), "date": c.get("duration",""), "link": c.get("link","")} for c in st.session_state.get('certificate_links', []) if c.get('name')]}
 
             CRITICAL RULES:
             - Output ONLY the formatted resume content. No explanations, no preamble.
@@ -8679,12 +8895,21 @@ with tab2:
             - ALL dates must be DIFFERENT across experience entries AND across project entries.
             - Experience dates must show logical career progression (most recent first, oldest last).
             - Project dates must all be different and logically ordered (most recent first).
-            - If user provided real experience/project data, PRESERVE company names, titles, dates exactly.
+            - If user provided real experience/project data, PRESERVE every company name, project title, tech stack, and date EXACTLY as written. Only polish the description bullets.
+            - If user provided real certificate data, PRESERVE the certificate name, issued date, and link EXACTLY as written. Never substitute or reformat the date.
+            - UNIQUENESS RULE: Every generation must produce fresh, original content. Never repeat the same project names, company names, or bullet phrasing across different runs. Treat each generation as a brand-new resume for a brand-new person.
+            - DOMAIN LOCK: Every project name, tech stack, skill, and certificate must be something a real "{st.session_state['job_title']}" would have. Cross-domain content is forbidden.
             """
 
 
 
 
+
+            import uuid as _uuid
+            import datetime as _datetime
+            _unique_seed = _uuid.uuid4().hex[:8]
+            _timestamp = _datetime.datetime.now().strftime("%H%M%S")
+            enhance_prompt += f"\n[Generation ID: {_unique_seed}-{_timestamp} — produce content unique to this exact run]"
 
             with st.spinner("🧠 Thinking..."):
                 ai_output = call_llm(enhance_prompt, session=st.session_state)
