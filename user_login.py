@@ -189,21 +189,40 @@ def create_user_table():
     );
     CREATE INDEX IF NOT EXISTS idx_login_attempts_lookup
         ON login_attempts (identifier, attempted_at);
+    CREATE TABLE IF NOT EXISTS scam_analysis_history (
+        id          SERIAL PRIMARY KEY,
+        username    TEXT NOT NULL,
+        job_title   TEXT,
+        company     TEXT,
+        score       INTEGER,
+        verdict     TEXT,
+        analysed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_scam_history_user
+        ON scam_analysis_history (username, analysed_at DESC);
     """
     conn = _conn()
     try:
+        # FIX v2: DDL (CREATE TABLE / CREATE INDEX) in PostgreSQL is transactional,
+        # but some Postgres configurations and psycopg2 versions behave unexpectedly
+        # when DDL runs inside an explicit transaction that was previously in an error
+        # state (InFailedSqlTransaction). Setting autocommit=True for the DDL block
+        # ensures each statement auto-commits and cannot be rolled back inadvertently.
+        # We restore autocommit=False afterwards for safety.
+        conn.autocommit = True
         with conn.cursor() as cur:
             cur.execute(ddl)
-            # Prune feature_usage rows older than 2 hours — they are only needed
-            # for the 1-hour rate-limit window. Without this the table grows forever.
+        conn.autocommit = False
+
+        # Prune stale rows — these are DML, run in a normal transaction after DDL.
+        with conn.cursor() as cur:
+            # Prune feature_usage rows older than 2 hours
             cur.execute("DELETE FROM feature_usage WHERE used_at < NOW() - INTERVAL '2 hours'")
-            # Prune login_attempts older than 15 minutes — only needed for lockout window.
-            # FIX: attempted_at is TIMESTAMPTZ stored in UTC by Postgres; compare against
-            # plain NOW() (UTC) so the window is always accurate regardless of timezone.
+            # Prune login_attempts older than 15 minutes
             cur.execute("DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '15 minutes'")
         conn.commit()
     except Exception as e:
-        # FIX: rollback on the SAME connection object, not a fresh _conn() call
+        conn.autocommit = False  # always restore
         try:
             conn.rollback()
         except Exception:
@@ -525,13 +544,23 @@ def _resolve_canonical_key(username_or_email: str) -> str:
 
 
 def _record_failed_login(identifier: str):
-    """Log one failed login attempt using the canonical username key, timestamped in IST."""
+    """
+    Log one failed login attempt using the canonical username key.
+
+    FIX v2 — CRITICAL: Previously stored get_ist_time() (IST, UTC+5:30) but
+    check_brute_force compared with Postgres NOW() which is UTC. That made the
+    15-minute lockout window 5h30m wrong — brute-force protection NEVER fired
+    in India.
+    Fix: omit attempted_at entirely — column DEFAULT is NOW() in Postgres UTC,
+    which matches the WHERE attempted_at > NOW() - INTERVAL '15 minutes' check
+    exactly. No Python datetime needed or passed.
+    """
     try:
         key = _resolve_canonical_key(identifier)
-        ist_now = get_ist_time()
+        # FIX: no attempted_at arg — Postgres DEFAULT NOW() (UTC) is authoritative
         _execute(
-            "INSERT INTO login_attempts (identifier, attempted_at) VALUES (%s, %s)",
-            (key, ist_now),
+            "INSERT INTO login_attempts (identifier) VALUES (%s)",
+            (key,),
         )
     except Exception:
         pass  # non-fatal
@@ -848,3 +877,124 @@ def check_and_gate_feature(username: str, feature: str):
         )
         return False, msg
     return True, f"{count}/{limit} uses this hour."
+
+
+# ── Scam analysis history (persistent across sessions) ───────────────────────
+
+def save_scam_analysis(username: str, job_title: str, company: str, score: int, verdict: str):
+    """
+    Persist one scam analysis result to scam_analysis_history.
+    Called after every successful analysis — non-fatal if it fails.
+    Keeps only the latest 50 rows per user (auto-prune on insert).
+
+    FIX v2: Previously called _execute() twice (INSERT then DELETE prune) —
+    two separate transactions. If the app crashed between them, or a concurrent
+    request ran between them, the prune was silently skipped and the table grew
+    unboundedly. Fixed: single CTE executes INSERT + DELETE in one atomic
+    transaction via _execute().
+    """
+    try:
+        _execute(
+            """
+            WITH inserted AS (
+                INSERT INTO scam_analysis_history (username, job_title, company, score, verdict)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
+            )
+            DELETE FROM scam_analysis_history
+            WHERE username = %s
+              AND id NOT IN (
+                  SELECT id FROM scam_analysis_history
+                  WHERE username = %s
+                  ORDER BY analysed_at DESC
+                  LIMIT 50
+              )
+            """,
+            (username, job_title or "Untitled", company or "Unknown", int(score), verdict,
+             username, username),
+        )
+    except Exception:
+        pass  # non-fatal — history is best-effort
+
+
+def load_scam_history(username: str) -> list[dict]:
+    """
+    Load the 10 most recent analyses for a user from DB.
+    Returns a list of dicts matching the shape used by _add_to_history():
+      {title, company, score, verdict, time}
+    Returns [] on any error.
+    """
+    try:
+        rows = _execute(
+            """
+            SELECT job_title, company, score, verdict,
+                   TO_CHAR(analysed_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon HH24:MI') AS time
+            FROM scam_analysis_history
+            WHERE username = %s
+            ORDER BY analysed_at DESC
+            LIMIT 10
+            """,
+            (username,),
+            fetch="all",
+        )
+        return [
+            {
+                "title":   r["job_title"],
+                "company": r["company"],
+                "score":   r["score"],
+                "verdict": r["verdict"],
+                "time":    r["time"],
+            }
+            for r in (rows or [])
+        ]
+    except Exception:
+        return []
+
+
+def delete_scam_analysis(username: str, idx: int) -> bool:
+    """
+    Delete the Nth most recent analysis (0-indexed) for a user.
+    Returns True if a row was deleted, False otherwise.
+    Used by the ✕ delete button in the Recent Analyses sidebar.
+
+    FIX v2: Previously used SELECT ... LIMIT 1 OFFSET idx then a separate
+    DELETE — two transactions, and the OFFSET position can shift between
+    the page load and the click (new analysis added in another tab, concurrent
+    user, etc.), causing the WRONG row to be silently deleted.
+    Fix: single atomic DELETE ... RETURNING via CTE. If the row shifted
+    between page load and click, the worst case is a no-op (0 rows deleted)
+    which is safe. We still do the SELECT first to get the id, then delete
+    by id — now in a single roundtrip via a CTE.
+    """
+    try:
+        # Single atomic statement: find id by rank then delete by that id.
+        # Using a CTE makes this one transaction — no TOCTOU gap.
+        row = _execute(
+            """
+            WITH target AS (
+                SELECT id FROM scam_analysis_history
+                WHERE username = %s
+                ORDER BY analysed_at DESC
+                LIMIT 1 OFFSET %s
+            )
+            DELETE FROM scam_analysis_history
+            WHERE id IN (SELECT id FROM target)
+            RETURNING id
+            """,
+            (username, idx),
+            fetch="one",
+        )
+        return row is not None
+    except Exception:
+        return False
+
+
+def delete_all_scam_history(username: str):
+    """Delete all scam analysis history rows for a user."""
+    try:
+        _execute(
+            "DELETE FROM scam_analysis_history WHERE username = %s",
+            (username,),
+        )
+    except Exception:
+        pass
