@@ -8452,15 +8452,28 @@ with tab2:
 
     with col2:
         if st.button("🚀 Generate AI Resume Preview"):
-            # Normalize experience — include ALL fields: title, company, duration, description
+
+            # ── Helper: detect if a field has real user-entered content ──
+            def _has_real_content(value, min_len=4):
+                if not value:
+                    return False
+                v = str(value).strip().lower()
+                placeholders = {"placeholder", "sample", "n/a", "na", "none", "tbd", ""}
+                return len(v) >= min_len and v not in placeholders
+
+            # ── Normalize experience entries + detect if user provided real data ──
             experience_entries = st.session_state.get('experience_entries', [])
             normalized_experience_entries = []
+            user_has_real_experience = False
+
             for entry in experience_entries:
                 if isinstance(entry, dict):
                     title    = entry.get("title", "").strip()
                     company  = entry.get("company", "").strip()
                     duration = entry.get("duration", "").strip()
                     desc     = entry.get("description", "").strip()
+                    if _has_real_content(company) or _has_real_content(desc):
+                        user_has_real_experience = True
                     parts = []
                     if title:    parts.append(f"Role: {title}")
                     if company:  parts.append(f"Company: {company}")
@@ -8469,20 +8482,24 @@ with tab2:
                     formatted = "\n".join(parts)
                 else:
                     formatted = entry.strip()
+                    if _has_real_content(formatted, min_len=10):
+                        user_has_real_experience = True
                 if formatted:
                     normalized_experience_entries.append(formatted)
-            while len(normalized_experience_entries) < 2:
-                normalized_experience_entries.append("Role: Software Engineer\nCompany: Previous Company\nDuration: Jan 2022 – Dec 2023\nDescription: Placeholder experience entry.")
 
-            # Normalize projects — include ALL fields: title, tech, duration, description
+            # ── Normalize project entries + detect if user provided real data ──
             project_entries = st.session_state.get('project_entries', [])
             normalized_project_entries = []
+            user_has_real_projects = False
+
             for entry in project_entries:
                 if isinstance(entry, dict):
                     title    = entry.get("title", "").strip()
                     tech     = entry.get("tech", "").strip()
                     duration = entry.get("duration", "").strip()
                     desc     = entry.get("description", "").strip()
+                    if _has_real_content(title) or _has_real_content(desc):
+                        user_has_real_projects = True
                     parts = []
                     if title:    parts.append(f"Title: {title}")
                     if tech:     parts.append(f"Tech Stack: {tech}")
@@ -8491,253 +8508,178 @@ with tab2:
                     formatted = "\n".join(parts)
                 else:
                     formatted = entry.strip()
+                    if _has_real_content(formatted, min_len=10):
+                        user_has_real_projects = True
                 if formatted:
                     normalized_project_entries.append(formatted)
-            while len(normalized_project_entries) < 2:
-                normalized_project_entries.append("Title: Sample Project\nTech Stack: Python\nDuration: Jan 2024 – Mar 2024\nDescription: Placeholder project entry.")
+
+            # ── Build experience prompt section based on whether user has real data ──
+            if user_has_real_experience:
+                experience_instruction = f"""2. EXPERIENCE (USER HAS PROVIDED REAL DATA — ENHANCE ONLY, DO NOT OVERWRITE):
+               Enhance the following experience entries. Keep company names, durations, and role titles
+               exactly as provided. Only improve bullet point descriptions for clarity, ATS alignment,
+               and measurable impact. Present as A., B., C. format.
+               Source data:
+               {normalized_experience_entries}"""
+            else:
+                experience_instruction = f"""2. EXPERIENCE (NO USER DATA PROVIDED — GENERATE REALISTIC DUMMY DATA):
+               The user has only provided their job title: "{st.session_state['job_title']}".
+               Generate 2–3 realistic experience entries showing a natural career progression
+               (e.g., Junior → Mid → Senior level) for this role.
+               RULES FOR GENERATION:
+               - Use realistic, well-known company names (e.g., Infosys, Wipro, TCS, Accenture, Deloitte,
+                 Cognizant, HCL, Tech Mahindra, or similar based on role domain).
+               - Each entry must have a DIFFERENT company name.
+               - Dates must show logical progression — most recent first. Example:
+                   A. Senior Role at Company X (Jan 2022 – Present)
+                   B. Mid-Level Role at Company Y (Jun 2019 – Dec 2021)
+                   C. Junior Role at Company Z (Jul 2017 – May 2019)
+               - NEVER repeat the same dates across entries.
+               - Each entry must have 3–4 strong achievement bullets with metrics.
+               - Role titles must reflect realistic career progression toward "{st.session_state['job_title']}".
+               Present as A., B., C. format."""
+
+            # ── Build projects prompt section based on whether user has real data ──
+            if user_has_real_projects:
+                projects_instruction = f"""3. PROJECTS (USER HAS PROVIDED REAL DATA — ENHANCE ONLY, DO NOT OVERWRITE):
+               Enhance the following project entries. Keep project titles and tech stacks as provided.
+               Only improve descriptions for technical depth, clarity, and measurable outcomes.
+               Present as A., B., C. format.
+               Source data:
+               {normalized_project_entries}"""
+            else:
+                projects_instruction = f"""3. PROJECTS (NO USER DATA PROVIDED — GENERATE REALISTIC DUMMY DATA):
+               The user has only provided their job title: "{st.session_state['job_title']}".
+               Generate 2–3 realistic, industry-standard project entries relevant to this role.
+               RULES FOR GENERATION:
+               - Each project must have a UNIQUE, realistic name (not "Sample Project" or "Project A").
+               - Examples by domain:
+                   Software: "Distributed Cache Invalidation Service", "Multi-tenant SaaS Billing Engine"
+                   Data: "Real-time Fraud Detection Pipeline", "Customer Churn Prediction System"
+                   DevOps: "Zero-Downtime Kubernetes Migration", "GitOps CI/CD Automation Framework"
+                   Frontend: "Design System Component Library", "Progressive Web App with Offline Mode"
+               - Tech stacks must be realistic and role-appropriate (production-grade tools only).
+               - Dates must be DIFFERENT across projects and logically ordered. Example:
+                   A. Project Alpha — Jan 2024 – Apr 2024
+                   B. Project Beta  — Jun 2023 – Nov 2023
+                   C. Project Gamma — Jan 2023 – May 2023
+               - Each project must have 3–5 strong technical description bullets with metrics.
+               - NEVER use generic names like "Sample Project", "My Project", "Project 1".
+               Present as A., B., C. format."""
 
             enhance_prompt = f"""
-            You are a professional and unbiased Resume Optimization Specialist with deep knowledge of ATS systems,
-            industry hiring standards, and professional resume writing conventions. Your goal is to enhance the
-            provided resume data for the role:
-            "{st.session_state['job_title']}" — ensuring strong ATS alignment, linguistic precision, and
-            real-world industry relevance.
+            You are a professional Resume Optimization Specialist with deep expertise in ATS systems,
+            industry hiring standards, and professional resume writing.
+            Target role: "{st.session_state['job_title']}"
 
-            ROLE-SPECIFIC INSTRUCTION:
-            - Tailor every section strictly toward the competencies, technical skills, and outcomes expected
-              for "{st.session_state['job_title']}".
-            - Infer the most essential 6–10 role-defining skills, tools, and responsibilities using industry standards.
-            - Prioritize factual accuracy, clarity, and hiring relevance over creative or generic rewriting.
+            LANGUAGE & TONE:
+            - Neutral, professional, ATS-optimized tone throughout.
+            - NO first-person (I, me, my, we, our). NO gendered pronouns.
+            - NO marketing terms (rockstar, guru, ninja).
+            - Concise, quantifiable, outcome-focused language only.
+            - Each section must use a DISTINCT verb set — no verb/phrase/action repeated across sections.
 
-            LANGUAGE & TONE GUIDELINES:
-            - Maintain neutral, inclusive, and strictly professional tone.
-            - Avoid biased, informal, exaggerated, or marketing-style terms (e.g., “rockstar,” “guru,” “ninja”).
-            - Use concise, quantifiable, outcome-focused language.
-            - Do NOT repeat the same verbs, verb roots, phrases, or semantic actions across different sections.
-            - Focus on measurable impact, scope, and responsibility.
-            - Avoid subjective adjectives like "excellent" or "great" — prefer evidence-based outcomes.
+            SECTION LANGUAGE RULES:
+            - SUMMARY: Third-person PRESENT tense. Strategic positioning bullets only.
+            - EXPERIENCE: PAST tense. Ownership, delivery, accountability language.
+            - PROJECTS: PAST tense. Deep technical, architecture, engineering language.
+            - SKILLS / SOFTSKILLS: Nouns only. Comma-separated list.
+            - INTERESTS: Professional domain-engagement language.
 
-            ABSOLUTE PRONOUN & VOICE RESTRICTIONS (NON-NEGOTIABLE):
-            - NEVER use first-person language under any circumstance (I, me, my, we, our).
-            - NEVER use gendered pronouns or possessives
-              (he, she, him, her, his, hers, himself, herself).
-            - NEVER refer to the AI, system, assistant, or writer in the output.
-            - ALL content must be written in third-person, candidate-focused, resume-standard language.
-            - Prefer implicit subject sentences or neutral nouns such as
-              “the candidate”, “the professional”, or role-based references.
-
-            CRITICAL PROFESSIONAL WRITING CONSTRAINT (VERY IMPORTANT):
-            - Treat each resume section as a completely isolated linguistic document.
-            - Once a verb, phrase, or action concept appears in one section, it is forbidden in all other sections,
-              even if reworded, paraphrased, or changed in tense.
-            - Each section (Summary, Experience, Projects, Skills, SoftSkills, Interests) MUST use a distinct
-              vocabulary set and unique action intent.
-            - Any repetition across sections is a strict quality failure.
-
-            GLOBAL ACTION & VERB ISOLATION PROTOCOL (MANDATORY EXECUTION STEP):
-
-            Before generating any resume content, you MUST internally perform the following steps:
-
-            STEP 1 — SECTION VOCABULARY PLANNING (INTERNAL, DO NOT OUTPUT):
-            - Create a private, internal list of verbs and action concepts for EACH section:
-              • Summary_Verb_Set
-              • Experience_Verb_Set
-              • Projects_Verb_Set
-              • Interests_Action_Set
-            - Each list MUST contain only verbs or action concepts unique to that section.
-            - NO verb, verb root, synonym, or semantic action may appear in more than one list.
-
-            STEP 2 — VOCABULARY LOCKING:
-            - Once a verb or action concept is assigned to a section, it becomes permanently locked.
-            - Locked verbs or actions are FORBIDDEN in all other sections, even if paraphrased.
-
-            STEP 3 — ENFORCED GENERATION:
-            - While writing each section, use ONLY the verbs and action concepts from its locked set.
-            - If a conflict is detected, you MUST rewrite the conflicting section completely
-              before producing final output.
-
-            FAILURE CONDITION:
-            - Any repeated verb, verb root, synonym, or semantic action across sections
-              is considered a critical failure and must be corrected before output.
-
-            FORMATTING REQUIREMENTS (FOLLOW EXACTLY):
-            Each section must start with its label followed by a colon and then the formatted content.
-
-            SECTION ENHANCEMENT RULES:
-
-            SECTION-SPECIFIC LANGUAGE ENFORCEMENT:
-
-            - SUMMARY:
-              Use third-person PRESENT tense ONLY.
-              Every bullet MUST begin with a third-person singular verb
-              (e.g., specializes, positions, focuses, leverages).
-              Do NOT use base verb forms (e.g., specialize, bring, focus).
-              Do NOT use past or future tense.
-              Use high-level professional positioning and strategic identity language only.
-              Do NOT include implementation, execution, or tooling verbs.
-
-            - EXPERIENCE:
-              Use PAST tense ONLY.
-              Use ownership, accountability, delivery, and responsibility-oriented language
-              (e.g., led, governed, executed, resolved, delivered).
-              Emphasize outcomes, scope, and measurable impact.
-              Do NOT reuse verbs, phrases, or semantic actions from the Summary.
-
-            - PROJECTS:
-              Use PAST tense ONLY.
-              Use deep technical, engineering, and system-design language
-              (e.g., architected, engineered, integrated, optimized, validated).
-              Projects MUST reflect industry-standard, real-world complexity.
-              Avoid basic CRUD apps, toy projects, or academic-only descriptions.
-              Emphasize architecture, constraints, scalability, performance, or security.
-              Do NOT reuse verbs, phrases, or action ideas from Summary or Experience.
-
-            - SKILLS & SOFTSKILLS:
-              Nouns only.
-              List-only format.
-              Do NOT include descriptive or explanatory sentences.
-
-            - INTERESTS:
-              Use professional learning, exploration, contribution, or domain-engagement language.
-              Avoid overlap with Skills or Projects.
+            SECTION INSTRUCTIONS:
 
             1. SUMMARY:
-               Write 3–4 bullet points defining the candidate’s current professional identity,
-               specialization, and measurable strengths for "{st.session_state['job_title']}". 
+               {"Enhance the provided summary." if _has_real_content(st.session_state.get('summary','')) else f"Generate a 3-4 bullet professional summary for a {st.session_state['job_title']}."}
+               Write 3-4 bullets defining professional identity, specialization, and measurable strengths.
 
-            2. EXPERIENCE:
-               Present entries as (A., B., C.) containing:
-               - Company Name (Duration)
-               - Role title
-               - 3–4 bullets focused on achievements, ownership, and measurable impact
-               - Include tools, metrics, scale, and outcomes where applicable
+            {experience_instruction}
 
-            3. PROJECTS:
-               Present as (A., B., C.) with:
-               - Project Title
-               - Tech Stack: (only relevant, production-grade technologies)
-               - Duration: (timeframe)
-               - Description:
-                 - System or feature engineered
-                 - Technical decisions or architectural approach
-                 - Performance, scalability, or security improvement with metrics
-                 - Complexity handled or constraints solved
-                 - Final measurable outcome or professional learning
+            {projects_instruction}
 
             4. SKILLS:
-               List 6–8 current, job-relevant technical skills only.
+               {"Enhance and expand the provided skills list." if _has_real_content(st.session_state.get('skills','')) else "Generate 6-8 current, role-relevant technical skills."}
+               List only - no sentences.
 
             5. SOFTSKILLS:
-               List 6–8 professional traits related to collaboration, ownership,
-               adaptability, communication, and analytical thinking.
+               {"Enhance the provided soft skills." if _has_real_content(st.session_state.get('Softskills','')) else "Generate 6-8 professional soft skills."}
+               List only - no sentences.
 
             6. LANGUAGES:
-               Include spoken or written languages only.
+               {"Use provided languages." if _has_real_content(st.session_state.get('languages','')) else "Generate 2-3 relevant languages (include English)."}
 
             7. INTERESTS:
-               Include 3–6 professional or domain-aligned interests.
+               {"Enhance provided interests." if _has_real_content(st.session_state.get('interests','')) else f"Generate 3-5 professional interests aligned with {st.session_state['job_title']}."}
 
             8. CERTIFICATES:
-               Include 3–6 verified, industry-recognized certifications with provider and duration.
+               {"Enhance provided certificates." if st.session_state.get('certificate_links') and any(c.get('name') for c in st.session_state['certificate_links']) else f"Generate 3 realistic, industry-recognized certifications for {st.session_state['job_title']} with provider name."}
 
-            DOMAIN-SPECIFIC FOCUS:
-            - Technical Roles → Frameworks, programming languages, CI/CD, cloud platforms, scalability, security.
-            - Security Roles → Threat modeling, SIEM tools, incident response, compliance frameworks.
-            - Data Roles → Python, SQL, analytics, machine learning, visualization, statistics.
-            - Management Roles → Leadership, KPIs, process optimization, strategic execution.
-
-            OUTPUT FORMAT (STRICTLY FOLLOW THIS STRUCTURE):
+            OUTPUT FORMAT (FOLLOW EXACTLY):
 
             Summary:
-            • [Third-person present tense, strategic positioning, measurable impact]
-            • [Distinct professional strength with role alignment]
-            • [Unique competency with quantified outcome]
+            * [bullet]
+            * [bullet]
+            * [bullet]
 
             Experience:
-            A. [Company Name] ([Duration])
-               • [Role Title]
-               • [Achievement with metrics]
-               • [Ownership or delivery responsibility]
-               • [Process or performance improvement]
+            A. [Company Name] ([Start Month Year - End Month Year or Present])
+               * [Role Title]
+               * [Achievement with metric]
+               * [Ownership/delivery bullet]
+               * [Impact/improvement bullet]
 
-            B. [Company Name] ([Duration])
-               • [Role Title]
-               • [Achievement with measurable outcome]
-               • [Contribution or responsibility]
-
-            Projects:
-            A. [Project Title]
-               • Tech Stack: [Relevant technologies only]
-               • Duration: [Start – End]
-               • Description:
-                 - [System or feature engineered]
-                 - [Technical decisions and implementation]
-                 - [Measured improvement or result]
-                 - [Complexity handled or innovation]
-
-            B. [Project Title]
-               • Tech Stack: [Relevant technologies only]
-               • Duration: [Start – End]
-               • Description:
-                 - [Technical scope]
-                 - [Challenges solved]
-                 - [Quantified results]
-                 - [Skills demonstrated]
-
-            Skills:
-            [Skill 1], [Skill 2], [Skill 3], [Skill 4], [Skill 5], [Skill 6], [Skill 7], [Skill 8]
-
-            SoftSkills:
-            [Soft Skill 1], [Soft Skill 2], [Soft Skill 3], [Soft Skill 4], [Soft Skill 5], [Soft Skill 6]
-
-            Languages:
-            [Language 1], [Language 2], [Language 3]
-
-            Interests:
-            [Interest 1], [Interest 2], [Interest 3], [Interest 4]
-
-            Certificates:
-            [Certificate Name] – [Provider] ([Duration/Level])
-            [Certificate Name] – [Provider] ([Duration/Level])
-            [Certificate Name] – [Provider] ([Duration/Level])
-
-            ENHANCEMENT SOURCE DATA:
-            Enhance the following inputs while maintaining factual accuracy
-            and logical alignment with "{st.session_state['job_title']}":
-
-            Summary:
-            {st.session_state['summary']}
-
-            Experience:
-            {normalized_experience_entries}
+            B. [Company Name] ([Start Month Year - End Month Year])
+               * [Role Title]
+               * [Achievement]
+               * [Responsibility]
 
             Projects:
-            {normalized_project_entries}
+            A. [Unique Realistic Project Name]
+               * Tech Stack: [tools]
+               * Duration: [Start Month Year - End Month Year]
+               * Description:
+                 - [bullet]
+                 - [bullet]
+                 - [bullet]
+
+            B. [Unique Realistic Project Name]
+               * Tech Stack: [tools]
+               * Duration: [Start Month Year - End Month Year]
+               * Description:
+                 - [bullet]
+                 - [bullet]
+                 - [bullet]
 
             Skills:
-            {st.session_state['skills']}
+            [skill1], [skill2], [skill3], [skill4], [skill5], [skill6]
 
             SoftSkills:
-            {st.session_state['Softskills']}
+            [soft1], [soft2], [soft3], [soft4], [soft5]
 
             Languages:
-            {st.session_state['languages']}
+            [lang1], [lang2]
 
             Interests:
-            {st.session_state['interests']}
+            [interest1], [interest2], [interest3]
 
             Certificates:
-            {[cert['name'] for cert in st.session_state['certificate_links'] if cert['name']]}
+            [Certificate] - [Provider] ([Year/Level])
+            [Certificate] - [Provider] ([Year/Level])
 
-            FINAL QUALITY & DE-DUPLICATION CHECK (MANDATORY):
-            - Ensure verb tense consistency per section.
-            - Ensure zero verb, phrase, or semantic repetition across sections.
-            - If any conflict exists, rewrite the later section entirely before output.
+            SOURCE DATA TO ENHANCE (where provided):
+            Summary: {st.session_state.get('summary', '')}
+            Skills: {st.session_state.get('skills', '')}
+            SoftSkills: {st.session_state.get('Softskills', '')}
+            Languages: {st.session_state.get('languages', '')}
+            Interests: {st.session_state.get('interests', '')}
+            Certificates: {[cert['name'] for cert in st.session_state.get('certificate_links', []) if cert.get('name')]}
 
-            IMPORTANT:
-            - Do NOT fabricate companies, experience, or certifications.
-            - Maintain professional, ATS-optimized language.
-            - Output ONLY the formatted resume content without explanations.
+            CRITICAL RULES:
+            - Output ONLY the formatted resume content. No explanations, no preamble.
+            - NEVER use "Sample Project", "Previous Company", "Placeholder", or any generic names.
+            - ALL dates must be DIFFERENT across experience entries AND across project entries.
+            - Experience dates must show logical career progression (most recent first, oldest last).
+            - Project dates must all be different and logically ordered (most recent first).
+            - If user provided real experience/project data, PRESERVE company names, titles, dates exactly.
             """
 
 
@@ -8752,41 +8694,37 @@ with tab2:
     if "ai_output" in st.session_state:
         ai_output = st.session_state["ai_output"]
 
-        # ── Bug Fix: robust section extractor handles multi-word labels & last section ──
         def extract_section(label, output, default=""):
-            # Matches label up to next ALL-CAPS-starting label or end of string
             pattern = rf"(?m)^{re.escape(label)}:\s*\n?(.*?)(?=\n[A-Za-z][A-Za-z\s]*:\s*\n?|\Z)"
             match = re.search(pattern, output, re.DOTALL)
             return match.group(1).strip() if match else default
 
-        summary_enhanced   = extract_section("Summary",     ai_output, st.session_state['summary'])
-        experience_raw     = extract_section("Experience",  ai_output)
-        projects_raw       = extract_section("Projects",    ai_output)
-        skills_list        = extract_section("Skills",      ai_output, st.session_state['skills'])
-        softskills_list    = extract_section("SoftSkills",  ai_output, st.session_state['Softskills'])
-        languages_list     = extract_section("Languages",   ai_output, st.session_state['languages'])
-        interests_list     = extract_section("Interests",   ai_output, st.session_state['interests'])
-        certificates_list  = extract_section("Certificates",ai_output)
+        summary_enhanced  = extract_section("Summary",      ai_output, st.session_state["summary"])
+        experience_raw    = extract_section("Experience",   ai_output)
+        projects_raw      = extract_section("Projects",     ai_output)
+        skills_list       = extract_section("Skills",       ai_output, st.session_state["skills"])
+        softskills_list   = extract_section("SoftSkills",   ai_output, st.session_state["Softskills"])
+        languages_list    = extract_section("Languages",    ai_output, st.session_state["languages"])
+        interests_list    = extract_section("Interests",    ai_output, st.session_state["interests"])
+        certificates_list = extract_section("Certificates", ai_output)
 
-        # Split into blocks on lines that start with a letter-dot like "A. " "B. "
         experience_blocks = [b.strip() for b in re.split(r"\n(?=[A-Z]\. )", experience_raw.strip()) if b.strip()]
         projects_blocks   = [b.strip() for b in re.split(r"\n(?=[A-Z]\. )", projects_raw.strip())   if b.strip()]
 
-        # ------------------------- UI RENDER -------------------------
         left, right = st.columns([1, 2])
 
         with left:
-            st.markdown(f"""
-                <h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>
-                <h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>
-                <p style='font-size:14px;'>
-                📍 {st.session_state['location']}<br>
-                📞 {st.session_state['phone']}<br>
-                📧 <a href="mailto:{st.session_state['email']}">{st.session_state['email']}</a><br>
-                🔗 <a href="{st.session_state['linkedin']}" target="_blank">LinkedIn</a><br>
-                🌐 <a href="{st.session_state['portfolio']}" target="_blank">Portfolio</a>
-                </p>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f"<h2 style='color:#2f2f2f;margin-bottom:0;'>{st.session_state['name']}</h2>"
+                f"<h4 style='margin-top:5px;color:#444;'>{st.session_state['job_title']}</h4>"
+                f"<p style='font-size:14px;'>"
+                f"📍 {st.session_state['location']}<br>"
+                f"📞 {st.session_state['phone']}<br>"
+                f"📧 <a href='mailto:{st.session_state['email']}'>{st.session_state['email']}</a><br>"
+                f"🔗 <a href='{st.session_state['linkedin']}' target='_blank'>LinkedIn</a><br>"
+                f"🌐 <a href='{st.session_state['portfolio']}' target='_blank'>Portfolio</a></p>",
+                unsafe_allow_html=True
+            )
 
             def render_bullet_section(title, items):
                 st.markdown(f"<h4 style='color:#336699;'>{title}</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
@@ -8799,67 +8737,52 @@ with tab2:
             render_bullet_section("Soft Skills", softskills_list)
 
         with right:
-            formatted_summary = summary_enhanced.replace('\n• ', '<br>• ').replace('\n', '<br>')
+            formatted_summary = summary_enhanced.replace("\n• ", "<br>• ").replace("\n* ", "<br>• ").replace("\n", "<br>")
             st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
             st.markdown(f"<p style='font-size:17px;'>{formatted_summary}</p>", unsafe_allow_html=True)
 
-            # ── Experience — Bug Fix: parse company, role, duration from AI output ──
             if experience_blocks:
                 st.markdown("<h4 style='color:#336699;'>Experience</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
                 for idx, exp_block in enumerate(experience_blocks):
-                    lines = [l for l in exp_block.strip().split("\n") if l.strip()]
-                    if not lines:
+                    lines_exp = [l for l in exp_block.strip().split("\n") if l.strip()]
+                    if not lines_exp:
                         continue
-                    heading = lines[0]  # e.g. "A. Google (Jun 2022 – Present)"
-
-                    # Try "A. Company (duration)" format first
+                    heading = lines_exp[0]
                     m = re.match(r"[A-Z]\.\s*(.+?)\s*\((.+?)\)\s*$", heading)
                     if m:
-                        company  = m.group(1).strip()
-                        duration = m.group(2).strip()
+                        company, duration = m.group(1).strip(), m.group(2).strip()
                     else:
-                        # Fallback: "A. Company — duration" or "A. Company"
-                        m2 = re.match(r"[A-Z]\.\s*(.+?)\s*[—–-]+\s*(.+)$", heading)
+                        m2 = re.match(r"[A-Z]\.\s*(.+?)\s*[\u2014\u2013-]+\s*(.+)$", heading)
                         if m2:
-                            company  = m2.group(1).strip()
-                            duration = m2.group(2).strip()
+                            company, duration = m2.group(1).strip(), m2.group(2).strip()
                         else:
                             company  = re.sub(r"^[A-Z]\.\s*", "", heading).strip()
                             duration = ""
-
-                    # Extract role from first bullet that looks like a role line
                     role = ""
                     bullet_lines = []
-                    for line in lines[1:]:
-                        stripped = line.strip().lstrip("•·-– ").strip()
-                        # First bullet that is short (≤ 60 chars) and has no verb-metrics pattern = role title
+                    for line in lines_exp[1:]:
+                        stripped = line.strip().lstrip("\u2022\u00b7*-\u2013\u2014 ").strip()
                         if not role and len(stripped) <= 60 and not re.search(r"\d+%|\d+ [a-z]", stripped):
                             role = stripped
                         else:
                             bullet_lines.append(line.strip())
-
-                    # If no role found from bullets, fall back to session_state title for that index
                     if not role:
                         ss_entries = st.session_state.get("experience_entries", [])
                         role = ss_entries[idx].get("title", "") if idx < len(ss_entries) else ""
-
                     formatted_exp = "".join(
-                        f"<div style='margin-left:12px;margin-bottom:4px;'>• {l.strip().lstrip('•·-– ').strip()}</div>"
+                        f"<div style='margin-left:12px;margin-bottom:4px;'>• {l.lstrip('\u2022\u00b7*-\u2013\u2014 ').strip()}</div>"
                         for l in bullet_lines if l.strip()
                     )
+                    st.markdown(
+                        f"<div style='margin-bottom:15px;padding:10px;border-radius:8px;border-left:3px solid #336699;'>"
+                        f"<div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>"
+                        f"<b style='font-size:15px;'>🏢 {company}</b>"
+                        f"<span style='color:gray;font-size:13px;'>📆 {duration}</span></div>"
+                        f"<div style='font-size:14px;margin-top:3px;'>💼 <i>{role}</i></div>"
+                        f"<div style='font-size:14px;margin-top:6px;'>{formatted_exp}</div></div>",
+                        unsafe_allow_html=True
+                    )
 
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px; border-radius:8px; border-left:3px solid #336699;'>
-                        <div style='display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px;'>
-                            <b style='font-size:15px;'>🏢 {company}</b>
-                            <span style='color:gray; font-size:13px;'>📆 {duration}</span>
-                        </div>
-                        <div style='font-size:14px; margin-top:3px;'>💼 <i>{role}</i></div>
-                        <div style='font-size:14px; margin-top:6px;'>{formatted_exp}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            # ── Education — Bug Fix: guard against empty entries ──
             edu_to_show = [e for e in st.session_state.education_entries if e.get("institution") or e.get("degree")]
             if edu_to_show:
                 st.markdown("<h4 style='color:#336699;'>🎓 Education</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
@@ -8867,35 +8790,28 @@ with tab2:
                     degree_val = edu.get("degree", "")
                     if isinstance(degree_val, list):
                         degree_val = ", ".join(degree_val)
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px 15px; border-radius:8px; border-left:3px solid #336699;'>
-                        <div style='display:flex; justify-content:space-between; font-size:16px; font-weight:bold; flex-wrap:wrap; gap:4px;'>
-                            <span>🏫 {edu.get('institution','')}</span>
-                            <span style='color:gray; font-size:13px;'>📅 {edu.get('year','')}</span>
-                        </div>
-                        <div style='font-size:14px;'>🎓 <i>{degree_val}</i></div>
-                        <div style='font-size:14px; color:#555;'>📄 {edu.get('details','')}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='margin-bottom:15px;padding:10px 15px;border-radius:8px;border-left:3px solid #336699;'>"
+                        f"<div style='display:flex;justify-content:space-between;font-size:16px;font-weight:bold;flex-wrap:wrap;gap:4px;'>"
+                        f"<span>🏫 {edu.get('institution','')}</span>"
+                        f"<span style='color:gray;font-size:13px;'>📅 {edu.get('year','')}</span></div>"
+                        f"<div style='font-size:14px;'>🎓 <i>{degree_val}</i></div>"
+                        f"<div style='font-size:14px;color:#555;'>📄 {edu.get('details','')}</div></div>",
+                        unsafe_allow_html=True
+                    )
 
-            # ── Projects — Bug Fix: parse title, tech, duration, description from AI output ──
             if projects_blocks:
                 st.markdown("<h4 style='color:#336699;'>Projects</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
                 for idx, proj_block in enumerate(projects_blocks):
-                    lines = proj_block.strip().split("\n")
-                    label = chr(65 + idx)
-
-                    # Parse heading line: "A. Project Title"
-                    heading = lines[0] if lines else ""
-                    ai_title = re.sub(r"^[A-Z]\.\s*", "", heading).strip()
-
-                    # Parse Tech Stack, Duration, Description from subsequent lines
+                    plines = proj_block.strip().split("\n")
+                    label  = chr(65 + idx)
+                    ai_title = re.sub(r"^[A-Z]\.\s*", "", plines[0]).strip() if plines else ""
                     ai_tech = ai_duration = ""
                     desc_lines = []
                     in_desc = False
-                    for line in lines[1:]:
+                    for line in plines[1:]:
                         stripped = line.strip()
-                        tl = stripped.lstrip("•·-– ").strip()
+                        tl = stripped.lstrip("\u2022\u00b7*-\u2013\u2014 ").strip()
                         if re.match(r"Tech\s*Stack\s*:", tl, re.I):
                             ai_tech = re.sub(r"(?i)^Tech\s*Stack\s*:\s*", "", tl).strip()
                         elif re.match(r"Duration\s*:", tl, re.I):
@@ -8905,35 +8821,29 @@ with tab2:
                             remainder = re.sub(r"(?i)^Description\s*:\s*", "", tl).strip()
                             if remainder:
                                 desc_lines.append(remainder)
-                        elif in_desc or (not ai_tech and not ai_duration and tl):
+                        elif in_desc and stripped:
                             desc_lines.append(stripped)
-
-                    # Fall back to session_state values if AI didn't produce them
                     ss_proj = st.session_state.project_entries[idx] if idx < len(st.session_state.project_entries) else {}
                     final_title    = ai_title    or ss_proj.get("title", "")
                     final_tech     = ai_tech     or ss_proj.get("tech", "")
                     final_duration = ai_duration or ss_proj.get("duration", "")
-
                     formatted_proj = "".join(
-                        f"<div style='margin-left:12px; margin-bottom:4px;'>• {dl.lstrip('•·-– ').strip()}</div>"
+                        f"<div style='margin-left:12px;margin-bottom:4px;'>• {dl.lstrip('\u2022\u00b7*-\u2013\u2014 ').strip()}</div>"
                         for dl in desc_lines if dl.strip()
                     )
+                    st.markdown(
+                        f"<div style='margin-bottom:15px;padding:10px;border-radius:8px;border-left:3px solid #336699;'>"
+                        f"<strong style='font-size:16px;'>📌 <span style='color:#444;'>{label}. </span>{final_title}</strong><br>"
+                        f"<span style='font-size:13px;color:#555;'>🛠️ <strong>Tech Stack:</strong> {final_tech}</span><br>"
+                        f"<span style='font-size:13px;color:#555;'>⏳ <strong>Duration:</strong> {final_duration}</span><br>"
+                        f"<div style='font-size:14px;margin-top:6px;'>{formatted_proj}</div></div>",
+                        unsafe_allow_html=True
+                    )
 
-                    st.markdown(f"""
-                    <div style='margin-bottom:15px; padding:10px; border-radius:8px; border-left:3px solid #336699;'>
-                        <strong style='font-size:16px;'>📌 <span style='color:#444;'>{label}. </span>{final_title}</strong><br>
-                        <span style='font-size:13px; color:#555;'>🛠️ <strong>Tech Stack:</strong> {final_tech}</span><br>
-                        <span style='font-size:13px; color:#555;'>⏳ <strong>Duration:</strong> {final_duration}</span><br>
-                        <div style='font-size:14px; margin-top:6px;'>{formatted_proj}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            # Certificates
             if certificates_list:
                 st.markdown("<h4 style='color:#336699;'>📜 Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                certs = re.split(r"\n", certificates_list)
-                for cert in [c.strip() for c in certs if c.strip()]:
-                    st.markdown(f"<div style='margin-left:10px; margin-bottom:4px;'>• {cert}</div>", unsafe_allow_html=True)
+                for cert in [c.strip() for c in certificates_list.split("\n") if c.strip()]:
+                    st.markdown(f"<div style='margin-left:10px;margin-bottom:4px;'>• {cert}</div>", unsafe_allow_html=True)
 
             if st.session_state.project_links:
                 st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
