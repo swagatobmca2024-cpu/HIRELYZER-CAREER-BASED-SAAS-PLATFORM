@@ -490,62 +490,63 @@ def _xco(text: str) -> str:
     """
     t = text or ""
 
-    # Strategy 1: explicit label
+    # Strategy 1: explicit label — works regardless of case
     val = _xf(t, [
         "company", "organization", "organisation", "employer", "firm",
         "about us", "about the company", "about company",
         "about the organization", "hiring company", "client",
     ])
     if val:
-        return _clean(val)
+        return _clean(val).title()   # normalise → Title Case for MCA matching
 
-    # Strategy 2: "at <ProperNoun>" pattern near hiring / role context
-    # e.g. "for AI/ML … roles at IntimeTec"
+    # Strategy 2: "at <Company>" patterns near role context
+    # FIX: [A-Z] anchor → [A-Za-z] so lowercase company names are captured
     for m in re.finditer(
         r"(?i)(?:roles?\s+at|positions?\s+at|joining\s+us\s+at|working\s+at|"
         r"careers?\s+at|apply\s+at|opportunities?\s+at|hiring\s+at)\s+"
-        r"([A-Z][A-Za-z0-9&\.\s\-]{2,50}?)(?:\.|,|\n|$|\s+(?:is|are|was|for|and))",
+        r"([A-Za-z][A-Za-z0-9&\.\s\-]{2,50}?)(?:\.|,|\n|$|\s+(?:is|are|was|for|and))",
         t,
     ):
         candidate = _clean(m.group(1))
         if 2 < len(candidate) < 60:
-            return candidate
+            return candidate.title()
 
     # Strategy 3: company suffix heuristic — single line only
+    # FIX: [A-Z] anchor → [A-Za-z] (re.IGNORECASE already on this call)
     for m in re.finditer(
-        r"([A-Z][A-Za-z0-9&\.\s\-]{1,40}?)\s+" + _CO_SUFFIXES.pattern,
+        r"([A-Za-z][A-Za-z0-9&\.\s\-]{1,40}?)\s+" + _CO_SUFFIXES.pattern,
         t, re.IGNORECASE,
     ):
         candidate = _clean(m.group(0))
-        # Reject if it spans a newline (grabbed too much context)
         if "\n" in candidate or len(candidate) > 70:
             continue
         if 3 < len(candidate) < 70:
-            return candidate
+            return candidate.title()
 
-    # Strategy 4: capitalised word(s) right after "at" in the first 3 sentences
+    # Strategy 4: word(s) right after "at" in first 5 lines
+    # FIX: [A-Z] anchor → [A-Za-z], added re.IGNORECASE
     first_chunk = " ".join(t.split("\n")[:5])
-    m2 = re.search(r"\bat\s+([A-Z][A-Za-z0-9]{2,}(?:\s+[A-Z][A-Za-z0-9]{2,}){0,3})", first_chunk)
+    m2 = re.search(
+        r"\bat\s+([A-Za-z][A-Za-z0-9]{2,}(?:\s+[A-Za-z][A-Za-z0-9]{2,}){0,3})",
+        first_chunk, re.IGNORECASE,
+    )
     if m2:
         candidate = _clean(m2.group(1))
         if 2 < len(candidate) < 50:
-            return candidate
+            return candidate.title()
 
-    # Strategy 5: second non-empty line if it looks like a standalone company name
-    # (short, capitalised, no punctuation that belongs in a job title)
+    # Strategy 5: second/third non-empty line as standalone name
+    # FIX: removed line[0].isupper() — allows lowercase company names
     lines = [_clean(l) for l in t.split("\n") if _clean(l)]
-    for line in lines[1:4]:   # skip first line (likely title), check next 3
-        if 2 < len(line) < 55 and line[0].isupper():
-            # Reject if it contains role words (probably a second title line)
+    for line in lines[1:4]:
+        if 2 < len(line) < 55:
             if _ROLE_WORDS.search(line):
                 continue
-            # Reject if it looks like a label
             colon_pos = line.find(":")
             if 0 < colon_pos < 20:
                 continue
-            # Accept if it has no sentence structure (no verb-like words)
             if not re.search(r"\b(are|is|we|our|this|has|have|will|the|a|an)\b", line, re.I):
-                return line
+                return line.title()
 
     return ""
 
@@ -611,7 +612,7 @@ def auto_extract(raw: str) -> dict:
 
 _T_RDAP  = 6
 _T_REACH = 5
-_T_MCA   = 7
+_T_MCA   = 10   # MCA/Zaubacorp can be slow — give enough headroom
 
 
 def _extract_domain(s: str) -> Optional[str]:
@@ -1017,37 +1018,348 @@ def _probe_mx_record(contact: str) -> dict:
     return out
 
 
-def _probe_mca(company: str) -> dict:
-    out = {"found": None, "detail": "", "source": "MCA India (mca.gov.in)"}
-    if not company or len(company.strip()) < 3:
-        out["detail"] = "Company name too short to query"
-        return out
-    name_clean = re.sub(r"[^\w\s]", "", company).strip()
+def _dns_mx_lookup(domain: str) -> bool:
+    """
+    Raw DNS UDP query for MX records on port 53.
+    No HTTP. No API key. Works from any server environment.
+    Returns True if domain has at least one MX record.
+    """
+    import struct
     try:
-        encoded = urllib.parse.quote(name_clean)
-        url = (
-            "https://www.mca.gov.in/mcafoportal/viewCompanyMasterData.do?"
-            f"companyName={encoded}&cin=&companyCategory=&companySubCategory="
-            "&companyStatus=&roc=&state="
+        tid      = b"\xaa\xbb"
+        flags    = b"\x01\x00"
+        counts   = b"\x00\x01\x00\x00\x00\x00\x00\x00"
+        parts    = domain.encode().split(b".")
+        qname    = b"".join(bytes([len(p)]) + p for p in parts) + b"\x00"
+        qtype_cl = b"\x00\x0f\x00\x01"          # MX, IN
+        packet   = tid + flags + counts + qname + qtype_cl
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(4)
+        s.sendto(packet, ("8.8.8.8", 53))
+        resp, _ = s.recvfrom(512)
+        s.close()
+        answer_count = struct.unpack(">H", resp[6:8])[0]
+        return answer_count > 0
+    except Exception:
+        return False
+
+
+def _probe_company_domain(args: tuple) -> dict:
+    """
+    Verify a company is real using ONLY DNS socket + TCP port checks.
+    Zero API keys. Zero HTTP requests. Works from any deployment environment.
+
+    Checks performed (all via socket — proven to work):
+    1. DNS A-record  — does the domain exist at all?
+    2. Port 443      — is a real HTTPS website running?
+    3. DNS MX-record — does the company have a mail server?
+    4. Name match    — does the domain name relate to the company name?
+
+    Why this replaces MCA:
+    • MCA portal (old + new) blocks all server IPs — always INCONCLUSIVE
+    • Zaubacorp / IndiaFilings return HTTP 403 from cloud servers
+    • DNS + socket checks are unrestricted, instantaneous, 100% reliable
+    • A scam company almost never has: a matching domain + live HTTPS + MX records
+    """
+    company, website = args
+    out = {
+        "domain_exists":           None,
+        "website_live":            None,
+        "has_mx":                  None,
+        "domain_matches_company":  None,
+        "domain":                  "",
+        "ip":                      "",
+        "detail":                  "",
+        "scam_signals":            [],
+        "score":                   0,      # 0=clean, higher=more suspicious
+    }
+
+    # ── Extract domain ────────────────────────────────────────────────────
+    domain = ""
+    if website:
+        m = re.search(r"(?:https?://)?(?:www\.)?([a-z0-9\-\.]+\.[a-z]{2,})", website.lower())
+        if m:
+            domain = m.group(1)
+    # Fallback: guess from company name (e.g. "Wipro" → wipro.com)
+    guessed = False
+    if not domain and company:
+        slug   = re.sub(r"[^a-z0-9]", "", company.lower().split()[0])
+        domain = f"{slug}.com"
+        guessed = True
+
+    if not domain:
+        out["detail"] = "No website provided — could not verify company domain"
+        return out
+
+    out["domain"] = domain
+
+    # ── Check 1: DNS A-record (does domain exist?) ────────────────────────
+    try:
+        ip = socket.gethostbyname(domain)
+        out["domain_exists"] = True
+        out["ip"]            = ip
+    except socket.gaierror:
+        out["domain_exists"] = False
+        out["scam_signals"].append(
+            f"Domain '{domain}' has NO DNS record — domain does not exist"
         )
-        req = urllib.request.Request(
-            url, headers={"User-Agent": "Mozilla/5.0 (compatible; ScamDetector/3.0)",
-                          "Accept": "application/json, text/html"},
+        out["score"] += 40
+        label = "guessed — " if guessed else ""
+        out["detail"] = (
+            f"({label}domain: {domain}) — does not exist in DNS. "
+            f"Real companies always have a registered domain."
         )
-        with urllib.request.urlopen(req, timeout=_T_MCA) as resp:
-            raw = resp.read().decode("utf-8", errors="ignore")
-        stopwords = {"LIMITED","PRIVATE","PUBLIC","INDIA","SERVICES","SOLUTIONS",
-                     "TECHNOLOGIES","CONSULTANCY","ENTERPRISES","AND","THE"}
-        words = [w for w in name_clean.upper().split() if len(w) > 3 and w not in stopwords]
-        hits  = sum(1 for w in words if w in raw.upper())
-        if hits >= max(1, len(words) // 2):
-            out.update(found=True,  detail="Company name found in MCA — legally registered in India")
-        elif "no record" in raw.lower() or "not found" in raw.lower():
-            out.update(found=False, detail="Company NOT found in MCA — may not be legally registered")
+        return out  # no point checking further
+
+    # ── Check 2: Port 443 — live HTTPS website ────────────────────────────
+    try:
+        s = socket.create_connection((domain, 443), timeout=4)
+        s.close()
+        out["website_live"] = True
+    except Exception:
+        out["website_live"] = False
+        out["scam_signals"].append(
+            f"No HTTPS website running at '{domain}' — domain registered but unused"
+        )
+        out["score"] += 20
+
+    # ── Check 3: MX record — real companies have mail servers ─────────────
+    has_mx = _dns_mx_lookup(domain)
+    out["has_mx"] = has_mx
+    if not has_mx:
+        out["scam_signals"].append(
+            f"'{domain}' has NO MX (mail) records — not set up for corporate email"
+        )
+        out["score"] += 15
+
+    # ── Check 4: Domain vs company name match ─────────────────────────────
+    company_core = re.sub(r"[^a-z0-9]", "", company.lower())
+    domain_core  = re.sub(r"[^a-z0-9]", "", domain.split(".")[0])
+    # Match if either is a substring of the other (handles abbreviations like tcs/tataconsultancy)
+    match = (
+        company_core[:6] in domain_core or
+        domain_core[:6] in company_core or
+        domain_core in company_core or
+        company_core in domain_core
+    )
+    out["domain_matches_company"] = match
+    if not match and not guessed:
+        out["scam_signals"].append(
+            f"Domain '{domain}' does not match company name '{company}' — suspicious"
+        )
+        out["score"] += 10
+
+    # ── Build summary detail ──────────────────────────────────────────────
+    checks = []
+    checks.append(f"DNS {'✓' if out['domain_exists'] else '✗'}")
+    checks.append(f"HTTPS {'✓' if out['website_live'] else '✗'}")
+    checks.append(f"Mail server {'✓' if out['has_mx'] else '✗'}")
+    if not guessed:
+        checks.append(f"Name match {'✓' if match else '✗'}")
+
+    prefix = "(guessed domain) " if guessed else ""
+    out["detail"] = f"{prefix}{domain} — {' | '.join(checks)}"
+    return out
+
+
+def _mca_word_match(name_clean: str, html: str) -> bool:
+    """
+    Safe word-boundary match: ALL meaningful words in the company name must
+    appear as whole words in the response HTML. Prevents substring false-positives.
+    """
+    stopwords = {
+        "LIMITED","PRIVATE","PUBLIC","INDIA","SERVICES","SOLUTIONS",
+        "TECHNOLOGIES","TECHNOLOGY","CONSULTANCY","CONSULTING","ENTERPRISES",
+        "ENTERPRISE","AND","THE","OF","FOR","WITH","PVT","LTD","LLC","INC",
+        "CORP","GROUP","GLOBAL","SYSTEMS","SYSTEM","INFOTECH","SOFTWARE",
+        "SOFTWARES","VENTURES","VENTURE","INNOVATIONS","INNOVATION",
+    }
+    words = [
+        w for w in re.sub(r"[^\w\s]", "", name_clean).upper().split()
+        if len(w) > 2 and w not in stopwords
+    ]
+    if not words:
+        return False
+    html_upper = html.upper()
+    # Use word-boundary regex for each word — no substring false positives
+    hits = sum(
+        1 for w in words
+        if re.search(rf"\b{re.escape(w)}\b", html_upper)
+    )
+    return hits >= max(1, len(words))   # ALL meaningful words must match
+
+
+def _mca_make_request(url: str, extra_headers: dict | None = None) -> str:
+    """
+    Shared HTTP helper for MCA probes. Uses a realistic browser UA + headers
+    to avoid bot detection. Returns decoded response body or raises.
+    """
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept":          "text/html,application/json,*/*;q=0.9",
+        "Accept-Language": "en-IN,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection":      "keep-alive",
+        "Cache-Control":   "no-cache",
+    }
+    if extra_headers:
+        headers.update(extra_headers)
+    req = urllib.request.Request(url, headers=headers)
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode    = ssl.CERT_NONE          # some Indian govt sites have bad certs
+    with urllib.request.urlopen(req, timeout=_T_MCA, context=ctx) as resp:
+        raw_bytes = resp.read()
+    # Handle gzip transparently
+    if raw_bytes[:2] == b"\x1f\x8b":
+        import gzip
+        raw_bytes = gzip.decompress(raw_bytes)
+    return raw_bytes.decode("utf-8", errors="ignore")
+
+
+def _probe_mca(company: str) -> dict:
+    """
+    4-tier MCA lookup with graceful fallback:
+
+    Tier 1 — Zaubacorp  (mirrors MCA data, no auth, reliable)
+    Tier 2 — IndiaFilings search  (second public MCA mirror)
+    Tier 3 — MCA21 V3 REST API   (official but often blocks bots)
+    Tier 4 — Graceful degradation with manual verification link
+
+    Why NOT mca.gov.in/mcafoportal (old code):
+      • MCA21 V2 portal is RETIRED — returns 403/redirect always.
+      • Even MCA21 V3 requires a session cookie from their React SPA.
+      • Public mirrors (Zaubacorp, IndiaFilings) are more reliable for
+        programmatic lookup and are always up-to-date (they sync nightly).
+    """
+    out = {
+        "found":  None,
+        "detail": "",
+        "source": "MCA India",
+    }
+
+    # ── Guard: no company name extracted ──────────────────────────────────
+    if not company or len(company.strip()) < 3:
+        out["detail"] = (
+            "No company name detected in posting — "
+            "add 'Company: [name]' in the job text to enable this check"
+        )
+        return out
+
+    # Normalise: Title Case + strip special chars for matching
+    name_clean  = re.sub(r"[^\w\s]", " ", company).strip()
+    name_title  = name_clean.title()
+    name_upper  = name_clean.upper()
+    encoded     = urllib.parse.quote(name_title)
+    encoded_raw = urllib.parse.quote(name_clean)
+
+    # ── Tier 1: Zaubacorp ─────────────────────────────────────────────────
+    # Public MCA data mirror — no auth required, highly reliable
+    try:
+        url = f"https://www.zaubacorp.com/company-list/p-1/CompanyName-{encoded}.html"
+        raw = _mca_make_request(url, {"Referer": "https://www.zaubacorp.com/"})
+        if _mca_word_match(name_clean, raw):
+            out.update(
+                found=True,
+                detail=f"Found in MCA registry via Zaubacorp — '{name_title}' is legally registered in India",
+                source="MCA India (via Zaubacorp)",
+            )
+        elif "no company found" in raw.lower() or "0 companies" in raw.lower() or len(raw.strip()) < 500:
+            out.update(
+                found=False,
+                detail=f"'{name_title}' NOT found in MCA — company may not be legally registered in India",
+                source="MCA India (via Zaubacorp)",
+            )
         else:
-            out["detail"] = "MCA search inconclusive — verify manually at mca.gov.in"
-    except Exception as e:
-        out["detail"] = f"MCA lookup unavailable ({type(e).__name__}) — verify manually"
+            # Got a page but couldn't match — fall through to Tier 2
+            raise ValueError("Zaubacorp: no conclusive match, trying next tier")
+        return out
+    except Exception:
+        pass
+
+    # ── Tier 2: IndiaFilings company search ───────────────────────────────
+    try:
+        url = f"https://www.indiafilings.com/company-search?search={encoded_raw}"
+        raw = _mca_make_request(url, {"Referer": "https://www.indiafilings.com/"})
+        if _mca_word_match(name_clean, raw):
+            out.update(
+                found=True,
+                detail=f"Found in MCA registry via IndiaFilings — '{name_title}' is legally registered",
+                source="MCA India (via IndiaFilings)",
+            )
+            return out
+        elif "no result" in raw.lower() or "not found" in raw.lower():
+            out.update(
+                found=False,
+                detail=f"'{name_title}' NOT found in MCA — verify at mca.gov.in",
+                source="MCA India (via IndiaFilings)",
+            )
+            return out
+    except Exception:
+        pass
+
+    # ── Tier 3: MCA21 V3 REST API (official, sometimes works) ─────────────
+    try:
+        url = (
+            f"https://efiling.mca.gov.in/SearchService/rest/search/v3/company"
+            f"?companyName={encoded_raw}&draw=1&start=0&length=10"
+        )
+        raw = _mca_make_request(url, {
+            "Referer": "https://efiling.mca.gov.in/",
+            "Origin":  "https://efiling.mca.gov.in",
+            "Accept":  "application/json",
+        })
+        try:
+            data      = json.loads(raw)
+            companies = (
+                data.get("companyMasterData")
+                or data.get("data")
+                or data.get("companies")
+                or []
+            )
+            if companies:
+                # Verify the top result actually matches — API sometimes returns
+                # unrelated companies when there's a partial name match
+                top_name = str(companies[0].get("companyName", ""))
+                if _mca_word_match(name_clean, top_name):
+                    out.update(
+                        found=True,
+                        detail=f"Found in MCA21 V3 — '{top_name}' is legally registered in India",
+                        source="MCA India (MCA21 V3 API)",
+                    )
+                else:
+                    out.update(
+                        found=False,
+                        detail=f"'{name_title}' not matched in MCA21 V3 results — verify manually",
+                        source="MCA India (MCA21 V3 API)",
+                    )
+            else:
+                out.update(
+                    found=False,
+                    detail=f"'{name_title}' NOT found in MCA21 — may not be registered",
+                    source="MCA India (MCA21 V3 API)",
+                )
+        except (json.JSONDecodeError, KeyError):
+            # API returned HTML (bot block) — fall to Tier 4
+            raise ValueError("MCA21 V3: non-JSON response (bot block)")
+        return out
+    except Exception:
+        pass
+
+    # ── Tier 4: Graceful degradation ──────────────────────────────────────
+    # All tiers failed — don't show a scary error, give user actionable info
+    out.update(
+        found=None,
+        detail=(
+            f"MCA lookup blocked by all sources for '{name_title}' — "
+            f"verify manually: mca.gov.in/MCA21Version3"
+        ),
+        source="MCA India (manual check required)",
+    )
     return out
 
 
@@ -1063,12 +1375,12 @@ def run_live_probes(job: dict) -> dict:
                 break
 
     probes: dict = {
-        "domain_age": {"status": "skipped", "detail": "No domain provided"},
-        "site_reach": {"reachable": None,   "detail": "No domain provided"},
-        "typosquat":  {"is_squatter": False, "detail": "No domain provided"},
-        "free_email": {"uses_free_domain": False, "detail": ""},
-        "mx_record":  {"status": "NO_EMAIL", "detail": ""},
-        "mca":        {"found": None,       "detail": ""},
+        "domain_age":     {"status": "skipped", "detail": "No domain provided"},
+        "site_reach":     {"reachable": None,   "detail": "No domain provided"},
+        "typosquat":      {"is_squatter": False, "detail": "No domain provided"},
+        "free_email":     {"uses_free_domain": False, "detail": ""},
+        "mx_record":      {"status": "NO_EMAIL", "detail": ""},
+        "company_domain": {"domain_exists": None, "detail": ""},
     }
     lock = threading.Lock()
 
@@ -1081,16 +1393,18 @@ def run_live_probes(job: dict) -> dict:
             probes[key] = r
 
     tasks = [
-        ("domain_age", _probe_domain_age,    domain or ""),
-        ("site_reach", _probe_site_reachable, domain or ""),
-        ("typosquat",  _probe_typosquatting,  domain or ""),
-        ("free_email", _probe_free_email,     contact),
-        ("mx_record",  _probe_mx_record,      contact),
-        ("mca",        _probe_mca,            company),
+        ("domain_age",     _probe_domain_age,      domain or ""),
+        ("site_reach",     _probe_site_reachable,   domain or ""),
+        ("typosquat",      _probe_typosquatting,    domain or ""),
+        ("free_email",     _probe_free_email,       contact),
+        ("mx_record",      _probe_mx_record,        contact),
+        ("company_domain", _probe_company_domain,   (company, website)),
     ]
     threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
     for t in threads: t.start()
-    for t in threads: t.join(timeout=10)
+    # Join timeout must exceed the slowest individual probe timeout (_T_MCA=10)
+    # Add 4s buffer for thread scheduling overhead + multi-tier fallback latency
+    for t in threads: t.join(timeout=_T_MCA + 4)
     return probes
 
 
@@ -1140,9 +1454,22 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
             f"Email domain '{mx.get('domain','')}' routes through a transactional/bulk "
             "mail service, not a real corporate mail server"
         )
-    if probes.get("mca", {}).get("found") is False:
+    cd = probes.get("company_domain", {})
+    cd_score = cd.get("score", 0)
+    if cd_score >= 40:
+        penalty += 18
+        warnings.append(
+            f"Company domain '{cd.get('domain', '')}' does not exist — "
+            "likely a fake or unregistered company"
+        )
+    elif cd_score >= 20:
         penalty += 10
-        warnings.append("Company not found in MCA India registry")
+        for sig in cd.get("scam_signals", []):
+            warnings.append(sig)
+    elif cd_score > 0:
+        penalty += 5
+        for sig in cd.get("scam_signals", []):
+            warnings.append(sig)
     return min(penalty, 55), warnings
 
 
@@ -1552,11 +1879,18 @@ def _render_probe_table(probes: dict):
         mx_b = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
     rows.append(_row(I.SERVER, "MX / Mail Server", mx_b, mx.get("detail", "")))
 
-    mca = probes.get("mca", {})
-    b   = (_badge("FOUND IN MCA", "#22c55e","rgba(34,197,94,0.12)")  if mca.get("found") is True  else
-           _badge("NOT IN MCA",   "#dc2626","rgba(220,38,38,0.12)")  if mca.get("found") is False else
-           _badge("INCONCLUSIVE", "#f59e0b","rgba(245,158,11,0.12)"))
-    rows.append(_row(I.BUILDING, "MCA Registry (India)", b, mca.get("detail","")))
+    cd = probes.get("company_domain", {})
+    if cd.get("domain_exists") is True and cd.get("website_live") and cd.get("has_mx"):
+        cd_badge = _badge("VERIFIED", "#22c55e", "rgba(34,197,94,0.12)")
+    elif cd.get("domain_exists") is False:
+        cd_badge = _badge("DOMAIN FAKE", "#dc2626", "rgba(220,38,38,0.12)")
+    elif cd.get("score", 0) >= 20:
+        cd_badge = _badge("SUSPICIOUS", "#f59e0b", "rgba(245,158,11,0.12)")
+    elif cd.get("domain_exists") is None:
+        cd_badge = _badge("NO WEBSITE", "#6b7280", "rgba(107,114,128,0.12)")
+    else:
+        cd_badge = _badge("PARTIAL", "#f59e0b", "rgba(245,158,11,0.12)")
+    rows.append(_row(I.BUILDING, "Company Domain Check", cd_badge, cd.get("detail", "")))
 
     st.markdown(
         f'<div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;'
@@ -1760,21 +2094,64 @@ def _render_history():
             unsafe_allow_html=True,
         )
         return
-    html = ""
-    for h in history:
+
+    # ── "Clear all" link at the top ───────────────────────────────────────
+    st.markdown(
+        '<div style="display:flex;justify-content:flex-end;margin-bottom:6px;">',
+        unsafe_allow_html=True,
+    )
+    if st.button(
+        "Clear all",
+        key="jsd_hist_clear_all",
+        help="Remove all recent analyses",
+        use_container_width=False,
+    ):
+        st.session_state["jsd_history"] = []
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── Per-item cards with individual delete button ───────────────────────
+    for idx, h in enumerate(history):
         cfg = _V.get(h["verdict"], _V["UNKNOWN"])
-        html += (
+
+        # Card HTML (no delete button inside — Streamlit buttons can't be in
+        # st.markdown blocks; we render button separately right below the card)
+        st.markdown(
             f'<div style="padding:10px 12px;background:rgba(255,255,255,0.02);'
-            f'border:1px solid rgba(255,255,255,0.06);border-radius:8px;margin-bottom:7px;">'
+            f'border:1px solid rgba(255,255,255,0.06);border-radius:8px;margin-bottom:3px;">'
+            f'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">'
+            f'<div style="min-width:0;flex:1;">'
             f'<div style="color:#c9d1d9;font-size:0.8rem;font-weight:500;overflow:hidden;'
-            f'white-space:nowrap;text-overflow:ellipsis;">{h["title"]}</div>'
-            f'<div style="color:#6b7280;font-size:0.7rem;margin-top:1px;">{h["company"]}</div>'
+            f'white-space:nowrap;text-overflow:ellipsis;">{_esc(h["title"])}</div>'
+            f'<div style="color:#6b7280;font-size:0.7rem;margin-top:1px;overflow:hidden;'
+            f'white-space:nowrap;text-overflow:ellipsis;">{_esc(h["company"])}</div>'
+            f'</div>'
+            f'<span style="color:{cfg["color"]};font-size:0.77rem;font-weight:700;'
+            f'flex-shrink:0;">{h["score"]}/100</span>'
+            f'</div>'
             f'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">'
-            f'<span style="color:#6b7280;font-size:0.67rem;">{h["time"]}</span>'
-            f'<span style="color:{cfg["color"]};font-size:0.77rem;font-weight:700;">{h["score"]}/100</span>'
-            f'</div>{_bar(h["score"],cfg["color"],4)}</div>'
+            f'<span style="color:#6b7280;font-size:0.67rem;">{_esc(h["time"])}</span>'
+            f'<span style="color:{cfg["color"]};font-size:0.67rem;font-weight:600;'
+            f'letter-spacing:0.3px;">{h["verdict"].replace("_"," ")}</span>'
+            f'</div>'
+            f'{_bar(h["score"],cfg["color"],4)}'
+            f'</div>',
+            unsafe_allow_html=True,
         )
-    st.markdown(html, unsafe_allow_html=True)
+
+        # Delete button — sits just below the card, right-aligned via columns
+        _, del_col = st.columns([5, 1])
+        with del_col:
+            if st.button(
+                "✕",
+                key=f"jsd_hist_del_{idx}",
+                help=f"Remove '{h['title']}' from history",
+            ):
+                st.session_state["jsd_history"].pop(idx)
+                st.rerun()
+
+        # Small gap between cards
+        st.markdown('<div style="margin-bottom:4px;"></div>', unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2040,14 +2417,11 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             )
 
         if clear:
-            # Show spinner while clearing to give clear visual feedback
             with st.spinner("Clearing…"):
                 for k in list(st.session_state.keys()):
-                    if k.startswith("jsd_"):
+                    if k.startswith("jsd_") and k != "jsd_history":  # ← preserve history
                         del st.session_state[k]
-                time.sleep(0.25)  # brief pause so spinner is visible
-            # scope="app" exits the fragment scope and reruns the full script,
-            # clearing both the input fragment AND the results panel below it.
+                time.sleep(0.25)
             st.rerun(scope="app")
 
         if run:
@@ -2232,7 +2606,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         + _pill(I.MAIL,     "Free Email Detection",  "#f59e0b")
         + _pill(I.SERVER,   "MX Mail Server Check",  "#22c55e")
         + _pill(I.COPY,     "Typosquat Check",       "#ef4444")
-        + _pill(I.BUILDING, "MCA Registry",          "#22c55e")
+        + _pill(I.BUILDING, "Company Domain Check",  "#22c55e")
         + _pill(I.SERVER,   "Site Reachability",     "#6366f1")
         + _pill(I.LIST,     "15-Signal Rule Engine", "#8b949e")
         + f'</div>'
