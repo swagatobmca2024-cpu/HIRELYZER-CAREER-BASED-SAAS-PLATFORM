@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 job_scam_detector.py  —  Production Grade v5
 ─────────────────────────────────────────────
@@ -82,8 +83,6 @@ Detection layers (unchanged):
   C. LLM deep analysis      (llama-3.3-70b-versatile via Groq)
   D. Blended score          (60% AI + 25% rules + 15% probe penalty)
 """
-
-from __future__ import annotations
 
 import html as _html_escape
 import os
