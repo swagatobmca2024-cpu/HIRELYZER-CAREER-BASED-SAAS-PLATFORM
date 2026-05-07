@@ -8550,34 +8550,22 @@ with tab2:
             else:
                 projects_instruction = f"""3. PROJECTS (NO USER DATA PROVIDED — GENERATE REALISTIC DUMMY DATA):
                The user has only provided their job title: "{st.session_state['job_title']}".
-               Generate exactly 2 realistic, industry-standard project entries for this role.
-
-               CRITICAL NAMING RULE — READ CAREFULLY:
-               You MUST invent a specific, descriptive, professional project name based on the role.
-               The project name must clearly describe what the project does.
-               FORBIDDEN names (never use these or anything similar):
-               "Personal Project", "Sample Project", "My Project", "Project 1", "Project 2",
-               "Academic Project", "College Project", "Mini Project", "My App", "Demo Project",
-               "Test Project", "Placeholder", "Project A", "Project B", "Side Project".
-
-               GOOD name examples by role domain (use similar naming style):
-               - Python Developer: "Async Task Queue with Redis and Celery", "REST API Rate Limiter with FastAPI"
-               - Data Scientist: "Real-time Fraud Detection Pipeline", "Customer Churn Prediction System"
-               - Full Stack: "Multi-tenant SaaS Dashboard with Role-Based Access", "Real-time Chat with WebSockets"
-               - DevOps: "Zero-Downtime Kubernetes Migration Framework", "GitOps CI/CD Automation Pipeline"
-               - Frontend: "Accessible Design System Component Library", "Progressive Web App with Offline Mode"
-               - ML Engineer: "Image Classification API with Model Versioning", "NLP Sentiment Analysis Service"
-               - Backend: "Distributed Cache Invalidation Service", "Event-Driven Microservices with Kafka"
-
-               Generate role-appropriate names in this style for "{st.session_state['job_title']}".
-
-               OTHER RULES:
+               Generate 2–3 realistic, industry-standard project entries relevant to this role.
+               RULES FOR GENERATION:
+               - Each project must have a UNIQUE, realistic name (not "Sample Project" or "Project A").
+               - Examples by domain:
+                   Software: "Distributed Cache Invalidation Service", "Multi-tenant SaaS Billing Engine"
+                   Data: "Real-time Fraud Detection Pipeline", "Customer Churn Prediction System"
+                   DevOps: "Zero-Downtime Kubernetes Migration", "GitOps CI/CD Automation Framework"
+                   Frontend: "Design System Component Library", "Progressive Web App with Offline Mode"
                - Tech stacks must be realistic and role-appropriate (production-grade tools only).
-               - Dates must be DIFFERENT across projects and logically ordered (most recent first):
-                   A. [Project Name] — Jan 2024 – Apr 2024
-                   B. [Project Name] — Jun 2023 – Nov 2023
+               - Dates must be DIFFERENT across projects and logically ordered. Example:
+                   A. Project Alpha — Jan 2024 – Apr 2024
+                   B. Project Beta  — Jun 2023 – Nov 2023
+                   C. Project Gamma — Jan 2023 – May 2023
                - Each project must have 3–5 strong technical description bullets with metrics.
-               Present as A., B. format."""
+               - NEVER use generic names like "Sample Project", "My Project", "Project 1".
+               Present as A., B., C. format."""
 
             enhance_prompt = f"""
             You are a professional Resume Optimization Specialist with deep expertise in ATS systems,
@@ -8749,12 +8737,7 @@ with tab2:
             render_bullet_section("Soft Skills", softskills_list)
 
         with right:
-            # Normalize all bullet styles (* • -) including the very first line
-            _sum = summary_enhanced.strip()
-            _sum = re.sub(r"^[*•\-]\s*", "• ", _sum)
-            _sum = re.sub(r"\n[*•\-]\s*", "<br>• ", _sum)
-            _sum = _sum.replace("\n", "<br>")
-            formatted_summary = _sum
+            formatted_summary = summary_enhanced.replace("\n• ", "<br>• ").replace("\n* ", "<br>• ").replace("\n", "<br>")
             st.markdown("<h4 style='color:#336699;'>Summary</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
             st.markdown(f"<p style='font-size:17px;'>{formatted_summary}</p>", unsafe_allow_html=True)
 
@@ -8823,18 +8806,6 @@ with tab2:
                     plines = proj_block.strip().split("\n")
                     label  = chr(65 + idx)
                     ai_title = re.sub(r"^[A-Z]\.\s*", "", plines[0]).strip() if plines else ""
-                    # Sanitize generic/leaked project names
-                    _generic_titles = {
-                        "personal project", "sample project", "my project", "project 1",
-                        "project 2", "project a", "project b", "academic project",
-                        "college project", "mini project", "my app", "demo project",
-                        "test project", "placeholder"
-                    }
-                    if ai_title.lower().strip() in _generic_titles:
-                        # Fall back to user-entered title or a role-based label
-                        _ss = st.session_state.project_entries[idx] if idx < len(st.session_state.project_entries) else {}
-                        _fallback = _ss.get("title", "").strip()
-                        ai_title = _fallback if _fallback and _fallback.lower() not in _generic_titles else f"Project {chr(65+idx)}"
                     ai_tech = ai_duration = ""
                     desc_lines = []
                     in_desc = False
