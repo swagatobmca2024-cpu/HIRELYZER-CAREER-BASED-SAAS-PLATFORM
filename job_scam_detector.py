@@ -2094,16 +2094,12 @@ def _add_to_history(result: dict):
 
 def _render_history():
     # ── Load from DB on first render (session startup / page refresh) ─────
-    # jsd_history_loaded flag ensures we only hit DB once per session,
-    # not on every Streamlit rerun.
     if not st.session_state.get("jsd_history_loaded"):
         try:
             from user_login import load_scam_history
             username = st.session_state.get("username", "")
             if username:
                 db_history = load_scam_history(username)
-                # Merge: DB rows are source of truth on first load;
-                # any in-session additions already prepended via _add_to_history
                 existing = st.session_state.get("jsd_history", [])
                 if not existing:
                     st.session_state["jsd_history"] = db_history
@@ -2121,63 +2117,122 @@ def _render_history():
         )
         return
 
-    # ── "Clear all" button ────────────────────────────────────────────────
-    _, ca_col = st.columns([4, 1])
-    with ca_col:
-        if st.button("Clear all", key="jsd_hist_clear_all", help="Remove all recent analyses"):
-            try:
-                from user_login import delete_all_scam_history
-                username = st.session_state.get("username", "")
-                if username:
-                    delete_all_scam_history(username)
-            except Exception:
-                pass
-            st.session_state["jsd_history"] = []
-            st.rerun()
+    # ── CSS injection — style Streamlit buttons to look like small icon/text
+    # buttons without using st.columns() which collapses in the narrow sidebar.
+    # We target the specific keys via the data-testid attribute Streamlit adds.
+    # "Clear all" → full-width subtle text button at top.
+    # "✕" delete  → small inline icon button flush-right inside each card.
+    st.markdown(
+        """
+        <style>
+        /* ── Clear-all button: full-width, subtle, right-aligned label ── */
+        div[data-testid="stButton"] > button[kind="secondary"][id*="jsd_hist_clear_all"],
+        div[data-testid="stButton"]:has(button[key="jsd_hist_clear_all"]) button {
+            width: 100% !important;
+            font-size: 0.68rem !important;
+            color: #6b7280 !important;
+            background: transparent !important;
+            border: 1px solid rgba(255,255,255,0.08) !important;
+            border-radius: 6px !important;
+            padding: 4px 8px !important;
+            white-space: nowrap !important;
+            min-height: unset !important;
+        }
+        div[data-testid="stButton"]:has(button[key="jsd_hist_clear_all"]) button:hover {
+            color: #ef4444 !important;
+            border-color: rgba(239,68,68,0.3) !important;
+            background: rgba(239,68,68,0.06) !important;
+        }
+        /* ── Delete (✕) buttons: compact, no column needed ── */
+        div[data-testid="stButton"]:has(button[key^="jsd_hist_del_"]) {
+            display: flex !important;
+            justify-content: flex-end !important;
+            margin-top: -2px !important;
+            margin-bottom: 4px !important;
+        }
+        div[data-testid="stButton"]:has(button[key^="jsd_hist_del_"]) button {
+            font-size: 0.7rem !important;
+            color: #4b5563 !important;
+            background: transparent !important;
+            border: 1px solid rgba(255,255,255,0.06) !important;
+            border-radius: 5px !important;
+            padding: 2px 7px !important;
+            min-height: unset !important;
+            white-space: nowrap !important;
+            width: auto !important;
+        }
+        div[data-testid="stButton"]:has(button[key^="jsd_hist_del_"]) button:hover {
+            color: #ef4444 !important;
+            border-color: rgba(239,68,68,0.28) !important;
+            background: rgba(239,68,68,0.06) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    # ── Per-item cards with individual ✕ delete button ───────────────────
+    # ── "Clear all" — full-width button, NO st.columns ───────────────────
+    # FIX: removed st.columns([4,1]) which squeezed the button into ~40px
+    # in the already-narrow hist_col, making text render vertically.
+    if st.button("Clear all", key="jsd_hist_clear_all", help="Remove all recent analyses",
+                 use_container_width=True):
+        try:
+            from user_login import delete_all_scam_history
+            username = st.session_state.get("username", "")
+            if username:
+                delete_all_scam_history(username)
+        except Exception:
+            pass
+        st.session_state["jsd_history"] = []
+        st.rerun()
+
+    # ── Per-item cards ────────────────────────────────────────────────────
     for idx, h in enumerate(history):
         cfg = _V.get(h["verdict"], _V["UNKNOWN"])
 
+        # Card HTML — self-contained, no button inside (avoids HTML-button conflicts)
         st.markdown(
             f'<div style="padding:10px 12px;background:rgba(255,255,255,0.02);'
-            f'border:1px solid rgba(255,255,255,0.06);border-radius:8px;margin-bottom:3px;">'
-            f'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;">'
+            f'border:1px solid rgba(255,255,255,0.06);border-radius:8px;margin-bottom:2px;">'
+            f'<div style="display:flex;align-items:flex-start;'
+            f'justify-content:space-between;gap:6px;">'
             f'<div style="min-width:0;flex:1;">'
-            f'<div style="color:#c9d1d9;font-size:0.8rem;font-weight:500;overflow:hidden;'
-            f'white-space:nowrap;text-overflow:ellipsis;">{_esc(h["title"])}</div>'
-            f'<div style="color:#6b7280;font-size:0.7rem;margin-top:1px;overflow:hidden;'
-            f'white-space:nowrap;text-overflow:ellipsis;">{_esc(h["company"])}</div>'
+            f'<div style="color:#c9d1d9;font-size:0.79rem;font-weight:500;'
+            f'overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">'
+            f'{_esc(h["title"])}</div>'
+            f'<div style="color:#6b7280;font-size:0.69rem;margin-top:1px;'
+            f'overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">'
+            f'{_esc(h["company"])}</div>'
             f'</div>'
             f'<span style="color:{cfg["color"]};font-size:0.77rem;font-weight:700;'
             f'flex-shrink:0;">{h["score"]}/100</span>'
             f'</div>'
-            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">'
-            f'<span style="color:#6b7280;font-size:0.67rem;">{_esc(h["time"])}</span>'
-            f'<span style="color:{cfg["color"]};font-size:0.67rem;font-weight:600;'
+            f'<div style="display:flex;justify-content:space-between;'
+            f'align-items:center;margin-top:4px;">'
+            f'<span style="color:#6b7280;font-size:0.66rem;">{_esc(h["time"])}</span>'
+            f'<span style="color:{cfg["color"]};font-size:0.66rem;font-weight:600;'
             f'letter-spacing:0.3px;">{h["verdict"].replace("_"," ")}</span>'
             f'</div>'
-            f'{_bar(h["score"],cfg["color"],4)}'
+            f'{_bar(h["score"], cfg["color"], 4)}'
             f'</div>',
             unsafe_allow_html=True,
         )
 
-        _, del_col = st.columns([5, 1])
-        with del_col:
-            if st.button("✕", key=f"jsd_hist_del_{idx}", help=f"Remove '{h['title']}'"):
-                # Delete from DB first
-                try:
-                    from user_login import delete_scam_analysis
-                    username = st.session_state.get("username", "")
-                    if username:
-                        delete_scam_analysis(username, idx)
-                except Exception:
-                    pass
-                # Then remove from session state
-                st.session_state["jsd_history"].pop(idx)
-                st.rerun()
-
-        st.markdown('<div style="margin-bottom:4px;"></div>', unsafe_allow_html=True)
+        # ✕ Delete button — full-width container, CSS above right-aligns it.
+        # FIX: removed st.columns([5,1]) — the 1-unit column was ~30px wide
+        # inside hist_col, making the ✕ symbol wrap or disappear entirely.
+        if st.button("✕ Remove", key=f"jsd_hist_del_{idx}",
+                     help=f"Remove '{h['title']}'",
+                     use_container_width=True):
+            try:
+                from user_login import delete_scam_analysis
+                username = st.session_state.get("username", "")
+                if username:
+                    delete_scam_analysis(username, idx)
+            except Exception:
+                pass
+            st.session_state["jsd_history"].pop(idx)
+            st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
