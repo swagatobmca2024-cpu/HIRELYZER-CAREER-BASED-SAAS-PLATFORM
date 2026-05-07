@@ -42,8 +42,28 @@ import urllib.error
 import urllib.parse
 from datetime import datetime
 from typing import Optional
+import pytz
+
+_IST = pytz.timezone("Asia/Kolkata")
+
+def _now_ist() -> str:
+    """Return current time as IST string — never UTC."""
+    return datetime.now(_IST).strftime("%Y-%m-%d %H:%M")
 
 import streamlit as st
+
+# Rate-limit helpers — imported lazily so job_scam_detector can run standalone
+# (unit tests, etc.) without requiring the full user_login module.
+def _get_rate_limit_fns():
+    """Return (check_and_gate, record_usage, get_count) or None if unavailable."""
+    try:
+        from user_login import check_and_gate_feature, record_feature_usage, get_usage_count_last_hour
+        return check_and_gate_feature, record_feature_usage, get_usage_count_last_hour
+    except ImportError:
+        return None
+
+_SCAM_FEATURE   = "scam_detector"
+_SCAM_LIMIT     = 3   # analyses per hour — mirrors USAGE_LIMITS in user_login.py
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -752,27 +772,92 @@ def _field_row(icon_path: str, label: str, value: str) -> str:
 # RESULT SECTIONS
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _score_meaning(score: int, verdict: str) -> tuple[str, str]:
+    """Return (plain-English headline, one-line explanation) for any score."""
+    if verdict == "SAFE":
+        if score <= 10:
+            return "Extremely clean posting", "No meaningful red flags found. Background noise only."
+        else:
+            return "Looks legitimate", "Minor low-weight signals only — common in real job ads. Safe to apply."
+    elif verdict == "SUSPICIOUS":
+        return "Worth investigating first", "Some signals raised caution. Verify company details before applying."
+    elif verdict == "LIKELY_SCAM":
+        return "High scam probability", "Multiple strong signals detected. Do not share personal data yet."
+    else:
+        return "Do NOT apply", "Critical scam patterns confirmed. Block the sender and report this listing."
+
+
 def _render_verdict_banner(result: dict):
     v   = result["final_verdict"]
     cfg = _V.get(v, _V["UNKNOWN"])
     s   = result["blended_score"]
+    headline, meaning = _score_meaning(s, v)
+
+    # Score zone markers on the bar — 4 coloured segments
+    zone_bar = (
+        '<div style="position:relative;height:10px;border-radius:999px;overflow:hidden;'
+        'background:linear-gradient(to right,#22c55e 0%,#22c55e 24%,'
+        '#f59e0b 24%,#f59e0b 49%,#ef4444 49%,#ef4444 74%,'
+        '#dc2626 74%,#dc2626 100%);margin:10px 0 4px;">'
+        f'<div style="position:absolute;top:-2px;left:calc({min(s,99)}% - 7px);'
+        f'width:14px;height:14px;background:{cfg["color"]};border:2px solid #0d1117;'
+        f'border-radius:50%;box-shadow:0 0 0 2px {cfg["color"]}44;"></div></div>'
+        '<div style="display:flex;justify-content:space-between;'
+        'font-size:0.62rem;color:#6b7280;margin-bottom:12px;">'
+        '<span style="color:#22c55e;">0 — Safe</span>'
+        '<span style="color:#f59e0b;">25 — Suspicious</span>'
+        '<span style="color:#ef4444;">50 — Likely scam</span>'
+        '<span style="color:#dc2626;">75 — Definite scam</span>'
+        '</div>'
+    )
+
     st.markdown(
         f'<div style="padding:24px 28px;border-radius:14px;background:{cfg["bg"]};'
-        f'border:1.5px solid {cfg["border"]};margin-bottom:22px;">'
-        f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">'
-        f'<div>{_svg(cfg["icon"], 32, cfg["color"], 1.5)}</div>'
+        f'border:1.5px solid {cfg["border"]};margin-bottom:16px;">'
+
+        # ── Top row: icon + verdict label + big score ──
+        f'<div style="display:flex;align-items:flex-start;gap:14px;margin-bottom:14px;">'
+        f'<div style="margin-top:2px;">{_svg(cfg["icon"], 34, cfg["color"], 1.5)}</div>'
         f'<div style="flex:1;">'
         f'<div style="font-size:1.35rem;font-weight:700;color:{cfg["color"]};'
-        f'letter-spacing:0.3px;">{cfg["label"]}</div>'
-        f'<div style="color:#8b949e;font-size:0.79rem;margin-top:2px;">'
-        f'Blended score across AI analysis, rule engine and live network probes</div>'
+        f'letter-spacing:0.3px;line-height:1.2;">{cfg["label"]}</div>'
+        f'<div style="color:#c9d1d9;font-size:0.92rem;font-weight:500;margin-top:4px;">'
+        f'{headline}</div>'
+        f'<div style="color:#8b949e;font-size:0.78rem;margin-top:3px;">{meaning}</div>'
         f'</div>'
-        f'<div style="text-align:right;flex-shrink:0;">'
-        f'<div style="font-size:2.4rem;font-weight:800;color:{cfg["color"]};line-height:1;">{s}</div>'
-        f'<div style="font-size:0.71rem;color:#6b7280;">/ 100</div>'
+        # Big score number
+        f'<div style="text-align:right;flex-shrink:0;'
+        f'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);'
+        f'border-radius:10px;padding:10px 18px;">'
+        f'<div style="font-size:2.6rem;font-weight:800;color:{cfg["color"]};line-height:1;">{s}</div>'
+        f'<div style="font-size:0.68rem;color:#6b7280;margin-top:2px;">RISK SCORE / 100</div>'
+        f'<div style="font-size:0.64rem;color:#4b5563;margin-top:1px;">lower = safer</div>'
         f'</div></div>'
-        f'{_bar(s, cfg["color"], 8)}'
-        f'</div>',
+
+        # ── Gradient zone bar ──
+        + zone_bar +
+
+        # ── What this score means inline explanation ──
+        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px;">'
+        + "".join([
+            f'<div style="padding:7px 10px;border-radius:8px;text-align:center;'
+            f'background:{bg};border:1px solid {bc};">'
+            f'<div style="font-size:0.62rem;font-weight:700;color:{tc};'
+            f'text-transform:uppercase;letter-spacing:0.5px;">{label}</div>'
+            f'<div style="font-size:0.6rem;color:{dc};margin-top:2px;">{desc}</div>'
+            f'</div>'
+            for label, desc, tc, dc, bg, bc in [
+                ("0–24 · Safe",      "Apply normally",           "#22c55e", "#4ade80",
+                 "rgba(34,197,94,0.08)",  "rgba(34,197,94,0.2)"),
+                ("25–49 · Caution",  "Verify first",             "#f59e0b", "#fcd34d",
+                 "rgba(245,158,11,0.08)", "rgba(245,158,11,0.2)"),
+                ("50–74 · Risky",    "Avoid sharing data",       "#ef4444", "#fca5a5",
+                 "rgba(239,68,68,0.08)",  "rgba(239,68,68,0.2)"),
+                ("75–100 · Scam",    "Do not apply",             "#dc2626", "#f87171",
+                 "rgba(220,38,38,0.10)",  "rgba(220,38,38,0.28)"),
+            ]
+        ])
+        + f'</div></div>',
         unsafe_allow_html=True,
     )
 
@@ -780,7 +865,11 @@ def _render_verdict_banner(result: dict):
 def _render_score_strip(result: dict):
     cfg = _V.get(result["final_verdict"], _V["UNKNOWN"])
 
-    def _card(icon_path, label, val, color, sub=""):
+    def _card(icon_path, label, val, color, sub="", tooltip=""):
+        tip_html = (
+            f'<div style="font-size:0.62rem;color:#4b5563;margin-top:4px;'
+            f'line-height:1.4;font-style:italic;">{tooltip}</div>'
+        ) if tooltip else ""
         return (
             f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
             f'border-radius:10px;padding:14px 16px;text-align:center;">'
@@ -788,15 +877,48 @@ def _render_score_strip(result: dict):
             f'color:#6b7280;font-size:0.66rem;text-transform:uppercase;letter-spacing:1px;'
             f'margin-bottom:6px;">{_svg(icon_path,10,"#6b7280")}{label}</div>'
             f'<div style="font-size:1.75rem;font-weight:700;color:{color};line-height:1;">{val}</div>'
-            f'{"<div style=font-size:0.66rem;color:#6b7280;margin-top:3px;>" + sub + "</div>" if sub else ""}'
+            f'<div style="font-size:0.68rem;color:#6b7280;margin-top:3px;">{sub}</div>'
+            f'{tip_html}'
             f'</div>'
         )
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(_card(I.CPU,      "AI Score",      result["ai_score"],      cfg["color"], "LLM analysis"),  unsafe_allow_html=True)
-    c2.markdown(_card(I.LIST,     "Rule Score",    result["rule_score"],    "#f59e0b",    "15 signals"),     unsafe_allow_html=True)
-    c3.markdown(_card(I.GLOBE,    "Probe Penalty", result["probe_penalty"], "#38bdf8",    "5 live checks"),  unsafe_allow_html=True)
-    c4.markdown(_card(I.ZAP,      "Flags Fired",   len(result["signals"]),  "#a78bfa",    "rule signals"),   unsafe_allow_html=True)
+    c1.markdown(_card(I.CPU,   "AI Score",      result["ai_score"],
+                      cfg["color"], "LLM analysis",
+                      "AI's 0–100 risk read of the full text"),
+                unsafe_allow_html=True)
+    c2.markdown(_card(I.LIST,  "Rule Score",    result["rule_score"],
+                      "#f59e0b", "15 pattern signals",
+                      "Sum of weights for matched red-flag phrases"),
+                unsafe_allow_html=True)
+    c3.markdown(_card(I.GLOBE, "Probe Penalty", result["probe_penalty"],
+                      "#38bdf8", "5 live network checks",
+                      "Added for young domain, free email, bad MCA etc."),
+                unsafe_allow_html=True)
+    c4.markdown(_card(I.ZAP,   "Flags Fired",   len(result["signals"]),
+                      "#a78bfa", "rule signals triggered",
+                      "How many of 15 pattern rules matched"),
+                unsafe_allow_html=True)
+
+    # Formula explainer — shows users exactly how the number was built
+    ai_s  = result["ai_score"]
+    rul_s = result["rule_score"]
+    pen   = result["probe_penalty"]
+    raw   = round(0.60*ai_s + 0.25*rul_s + 0.15*pen, 1)
+    st.markdown(
+        f'<div style="margin-top:10px;padding:10px 16px;'
+        f'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
+        f'border-radius:8px;font-family:monospace;font-size:0.73rem;color:#6b7280;">'
+        f'<span style="color:#8b949e;font-weight:600;">How your score was calculated: </span>'
+        f'(0.60 × AI&nbsp;<span style="color:{cfg["color"]}">{ai_s}</span>) + '
+        f'(0.25 × Rules&nbsp;<span style="color:#f59e0b">{rul_s}</span>) + '
+        f'(0.15 × Probes&nbsp;<span style="color:#38bdf8">{pen}</span>) '
+        f'= <span style="color:#c9d1d9;font-weight:700;">{raw} → {result["blended_score"]}</span>'
+        f'&nbsp;&nbsp;<span style="color:#4b5563;font-size:0.66rem;">'
+        f'(floored up by critical signals if any)</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _render_probe_table(probes: dict):
@@ -1077,11 +1199,15 @@ def _quick_prescan(raw: str) -> dict | None:
     extracted = auto_extract(raw)
     rules = _run_rules(extracted)
     score = rules["rule_score"]
+    # Calibrated thresholds — a single low-weight signal (e.g. missing_salary=4)
+    # must NOT trigger a SUSPICIOUS banner. Only meaningful rule hits qualify.
     if score == 0:
         verdict = "SAFE"
-    elif score < 25:
+    elif score < 15:
+        verdict = "SAFE"        # low-weight noise signals — not a meaningful warning
+    elif score < 30:
         verdict = "SUSPICIOUS"
-    elif score < 50:
+    elif score < 55:
         verdict = "LIKELY_SCAM"
     else:
         verdict = "DEFINITE_SCAM"
@@ -1118,8 +1244,91 @@ def _render_quick_prescan(prescan: dict):
     )
 
 
+def _render_rate_limit_bar(username: str) -> bool:
+    """
+    Render the 'X analyses remaining this hour' UI strip.
+
+    Returns True  → user is allowed to run an analysis.
+    Returns False → user is at limit; Analyse button must be suppressed.
+
+    Reads live from Supabase via get_usage_count_last_hour so the count
+    is always accurate even across browser tabs / devices.
+    """
+    fns = _get_rate_limit_fns()
+    if fns is None:
+        return True   # standalone / no user_login — allow
+
+    _, _, get_count = fns
+    try:
+        used = get_count(username, _SCAM_FEATURE)
+    except Exception:
+        used = 0   # fail open
+
+    remaining = max(_SCAM_LIMIT - used, 0)
+
+    if remaining == _SCAM_LIMIT:
+        bar_color, text_color = "#22c55e", "#22c55e"
+        bg, border           = "rgba(34,197,94,0.07)",  "rgba(34,197,94,0.22)"
+        status_label         = "Full quota available"
+    elif remaining > 0:
+        bar_color, text_color = "#f59e0b", "#f59e0b"
+        bg, border           = "rgba(245,158,11,0.07)", "rgba(245,158,11,0.22)"
+        status_label         = f"{remaining} left this hour"
+    else:
+        bar_color, text_color = "#ef4444", "#ef4444"
+        bg, border           = "rgba(239,68,68,0.07)",  "rgba(239,68,68,0.22)"
+        status_label         = "Limit reached — resets within 60 min"
+
+    # Segmented pip display — filled pips = used, coloured pips = remaining
+    pips = ""
+    for i in range(_SCAM_LIMIT):
+        filled = i < used
+        pips += (
+            f'<div style="width:28px;height:8px;border-radius:999px;'
+            f'background:{"rgba(255,255,255,0.10)" if filled else bar_color};"></div>'
+        )
+
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:14px;padding:11px 16px;'
+        f'background:{bg};border:1px solid {border};border-radius:10px;margin-bottom:14px;">'
+        f'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{text_color}" '
+        f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">'
+        f'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>'
+        f'<div style="flex:1;min-width:0;">'
+        f'<div style="font-size:0.78rem;font-weight:600;color:{text_color};">'
+        f'Analyses remaining this hour &mdash; {status_label}</div>'
+        f'<div style="font-size:0.69rem;color:#6b7280;margin-top:1px;">'
+        f'{used}/{_SCAM_LIMIT} used &middot; rolling 60-min window, not a fixed clock reset</div>'
+        f'</div>'
+        f'<div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">{pips}</div>'
+        f'<div style="text-align:right;flex-shrink:0;">'
+        f'<div style="font-size:1.6rem;font-weight:800;color:{text_color};line-height:1;">{remaining}</div>'
+        f'<div style="font-size:0.6rem;color:#6b7280;">/ {_SCAM_LIMIT}</div>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    if remaining == 0:
+        st.markdown(
+            f'<div style="display:flex;align-items:flex-start;gap:9px;padding:12px 16px;'
+            f'background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.22);'
+            f'border-radius:10px;margin-bottom:10px;">'
+            f'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" '
+            f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;">'
+            f'<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>'
+            f'<div style="font-size:0.8rem;color:#fca5a5;line-height:1.55;">'
+            f'You have used all <strong style="color:#ef4444;">{_SCAM_LIMIT} analyses</strong> '
+            f'for this hour. The Analyse button will re-enable once a slot opens. '
+            f'Previous results are still visible in the Recent Analyses panel.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    return remaining > 0
+
+
 @st.fragment
-def _render_input_fragment(call_llm_fn):
+def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True):
     """
     FRAGMENT FIX:
     Wrapping the entire input section in @st.fragment means widget interactions
@@ -1217,11 +1426,17 @@ def _render_input_fragment(call_llm_fn):
         btn_col, clear_col = st.columns([4, 1])
         with btn_col:
             run = st.button(
-                "Analyse for Scam Signals",
+                "Analyse for Scam Signals" if allowed else "Analyse for Scam Signals (limit reached)",
                 type="primary",
                 use_container_width=True,
                 key="jsd_btn",
-                help="Runs full AI analysis + 5 live network probes. Takes ~10s.",
+                disabled=not allowed,
+                help=(
+                    "Runs full AI analysis + 5 live network probes. Takes ~10s."
+                    if allowed else
+                    f"You have used all {_SCAM_LIMIT} analyses for this hour. "
+                    "Please wait — quota resets on a rolling 60-minute window."
+                ),
             )
         with clear_col:
             clear = st.button(
@@ -1235,7 +1450,9 @@ def _render_input_fragment(call_llm_fn):
             for k in list(st.session_state.keys()):
                 if k.startswith("jsd_"):
                     del st.session_state[k]
-            st.rerun()
+            # scope="app" exits the fragment scope and reruns the full script,
+            # clearing both the input fragment AND the results panel below it.
+            st.rerun(scope="app")
 
         if run:
             # Progress steps shown during the ~10s wait
@@ -1265,15 +1482,38 @@ def _render_input_fragment(call_llm_fn):
                     pass
 
                 prog.progress(90, text="Blending scores…")
-                ai_s    = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
-                rule_s  = rules_result["rule_score"]
-                blended = int(0.55 * ai_s + 0.30 * rule_s + 0.15 * penalty)
-                blended = min(max(blended, rule_s, penalty), 100)
-                _sev    = {"SAFE":0,"SUSPICIOUS":1,"LIKELY_SCAM":2,"DEFINITE_SCAM":3}
-                sv      = ("DEFINITE_SCAM" if blended>=75 else "LIKELY_SCAM" if blended>=50
-                           else "SUSPICIOUS" if blended>=25 else "SAFE")
-                av      = llm_data.get("verdict", sv)
-                final   = av if _sev.get(av,1) > _sev.get(sv,0) else sv
+                ai_s   = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
+                rule_s = rules_result["rule_score"]
+
+                # ── Calibrated blending ────────────────────────────────────────
+                # Base blend: AI carries 60%, rules 25%, probe penalty 15%.
+                # AI score is the most reliable signal — give it the most weight.
+                blended = int(0.60 * ai_s + 0.25 * rule_s + 0.15 * penalty)
+
+                # Hard floor only from HIGH-weight signals (>=18 pts each).
+                # Low-weight signals like missing_salary(+4) or poor_grammar(+6)
+                # must NOT floor the score — they fire on legitimate postings too
+                # and were causing scores of 11-20 on perfectly clean job ads.
+                critical_signals = [k for k, s in rules_result["signals"].items()
+                                    if _WEIGHTS.get(k, 0) >= 18]
+                critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
+                blended = max(blended, critical_weight)
+
+                # Probe penalty floor: only if penalty is itself significant (>= 20)
+                if penalty >= 20:
+                    blended = max(blended, penalty)
+
+                blended = min(blended, 100)
+
+                # Verdict from blended score
+                _sev = {"SAFE": 0, "SUSPICIOUS": 1, "LIKELY_SCAM": 2, "DEFINITE_SCAM": 3}
+                sv   = ("DEFINITE_SCAM" if blended >= 75 else
+                        "LIKELY_SCAM"   if blended >= 50 else
+                        "SUSPICIOUS"    if blended >= 25 else "SAFE")
+
+                # AI verdict overrides only if stricter than numeric verdict
+                av    = llm_data.get("verdict", sv)
+                final = av if _sev.get(av, 1) > _sev.get(sv, 0) else sv
 
                 res = {
                     "blended_score":  blended,   "rule_score":     rule_s,
@@ -1281,17 +1521,29 @@ def _render_input_fragment(call_llm_fn):
                     "final_verdict":  final,     "signals":        rules_result["signals"],
                     "probes":         probes,    "probe_warnings": warnings,
                     "llm":            llm_data,  "job":            job,
-                    "timestamp":      datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "timestamp":      _now_ist(),
                 }
                 prog.progress(100, text="Done.")
                 time.sleep(0.3)
                 prog.empty()
 
-                # ── KEY FIX: write result to session_state so results panel
-                #    (which lives OUTSIDE this fragment) can render it without
-                #    the input section re-running or losing its state. ──────
+                # Write result to session_state, then force a FULL app rerun
+                # so the results panel outside this fragment renders immediately.
+                # scope="app" is required — a plain st.rerun() inside a fragment
+                # only reruns the fragment itself, leaving the results panel stale.
                 st.session_state["jsd_last_result"] = res
                 _add_to_history(res)
+
+                # ── Record usage in Supabase (after success, not before) ───
+                fns = _get_rate_limit_fns()
+                if fns and username:
+                    _, record_usage, _ = fns
+                    try:
+                        record_usage(username, _SCAM_FEATURE)
+                    except Exception:
+                        pass  # non-fatal — don't block result display
+
+                st.rerun(scope="app")
 
             except Exception as exc:
                 prog.empty()
@@ -1357,8 +1609,14 @@ def render_job_scam_detector_tab(call_llm_fn):
         _render_history()
 
     with form_col:
+        # ── Pull logged-in username from session_state ─────────────────────
+        username = str(st.session_state.get("username", ""))
+
+        # ── Rate-limit bar — always visible, renders live quota from Supabase
+        allowed = _render_rate_limit_bar(username)
+
         # ── Input section (fragment-isolated) ─────────────────────────────
-        _render_input_fragment(call_llm_fn)
+        _render_input_fragment(call_llm_fn, username=username, allowed=allowed)
 
     # ── Results — rendered at TOP-LEVEL scope, outside the fragment ────────
     # This is the critical fix: results live here so they persist across
