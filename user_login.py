@@ -788,6 +788,7 @@ def update_password_by_email(email, new_password):
 USAGE_LIMITS = {
     "resume_analyzer": 2,
     "ai_coach": 2,
+    "scam_detector": 3,   # 3 full AI analyses per hour per user
 }
 
 
