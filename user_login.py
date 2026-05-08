@@ -952,7 +952,7 @@ def load_scam_history(username: str) -> list[dict]:
         rows = _execute(
             """
             SELECT id, job_title, company, score, verdict,
-                   TO_CHAR(analysed_at, 'FMDD Mon HH24:MI') AS time
+                   TO_CHAR(analysed_at AT TIME ZONE 'Asia/Kolkata', 'FMDD Mon HH24:MI') AS time
             FROM scam_analysis_history
             WHERE username  = %s
               AND is_deleted = FALSE
