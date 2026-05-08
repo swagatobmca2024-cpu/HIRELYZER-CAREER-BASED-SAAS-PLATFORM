@@ -6514,66 +6514,55 @@ with tab1:
     elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
 def html_to_pdf_bytes(html_string):
-    styled_html = f"""
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{
-                size: A4 portrait;  /* Standard A4: 210mm x 297mm */
-                margin-top: 15mm;
-                margin-bottom: 15mm;
-                margin-left: 15mm;
-                margin-right: 15mm;
-            }}
-            body {{
-                font-size: 14pt;
-                font-family: "Segoe UI", "Helvetica", sans-serif;
-                line-height: 1.5;
-                color: #000;
-            }}
-            h1, h2, h3 {{
-                color: #2f4f6f;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 15px;
-            }}
-            td {{
-                padding: 4px;
-                vertical-align: top;
-                border: 1px solid #ccc;
-            }}
-            .section-title {{
-                background-color: #e0e0e0;
-                font-weight: bold;
-                padding: 6px;
-                margin-top: 10px;
-            }}
-            .box {{
-                padding: 8px;
-                margin-top: 6px;
-                background-color: #f9f9f9;
-                border-left: 4px solid #999;  /* More elegant than full border */
-            }}
-            ul {{
-                margin: 0.5em 0;
-                padding-left: 1.5em;
-            }}
-            li {{
-                margin-bottom: 5px;
-            }}
-        </style>
-    </head>
-    <body>
-        {html_string}
-    </body>
-    </html>
     """
+    Convert an HTML string to a PDF BytesIO object using xhtml2pdf/pisa.
+
+    The templates already ship as complete <!DOCTYPE html> documents with
+    their own <head>, <style>, and <body> — so we must NOT re-wrap them
+    in another <html><body>. Doing so creates two nested <body> tags and
+    two conflicting CSS rule-sets (the wrapper's font-size:14pt and margins
+    fight with the template's own padding/font rules).
+
+    Strategy:
+      1. If the HTML is a full document (contains <html or <!DOCTYPE),
+         inject only a minimal @page rule into its existing <head> — only
+         when the template hasn't already declared one.
+      2. If it's a fragment (plain HTML without a doc shell), wrap it
+         minimally with just the @page rule and no extra body styles.
+    """
+    import re as _re
+
+    # Minimal @page block — only controls paper size + margins.
+    # The template handles all font/color/padding itself.
+    PAGE_RULE = (
+        "<style>"
+        "@page{size:A4 portrait;margin:12mm 12mm 14mm 12mm;}"
+        "-webkit-print-color-adjust:exact;"
+        "print-color-adjust:exact;"
+        "</style>"
+    )
+
+    is_full_doc = bool(_re.search(r"<html[\s>]|<!DOCTYPE", html_string, _re.I))
+
+    if is_full_doc:
+        # Only inject @page if the template doesn't already have one
+        has_page_rule = bool(_re.search(r"@page\s*\{", html_string, _re.I))
+        if not has_page_rule:
+            html_string = html_string.replace("</head>", PAGE_RULE + "\n</head>", 1)
+        final_html = html_string
+    else:
+        # Bare fragment — give it the minimum shell needed
+        final_html = (
+            "<!DOCTYPE html><html><head>"
+            "<meta charset='UTF-8'>"
+            + PAGE_RULE +
+            "</head><body>"
+            + html_string +
+            "</body></html>"
+        )
 
     pdf_io = BytesIO()
-    pisa.CreatePDF(styled_html, dest=pdf_io)
+    pisa.CreatePDF(final_html, dest=pdf_io)
     pdf_io.seek(0)
     return pdf_io
 # ══════════════════════════════════════════════════════════════════════════════
@@ -8568,11 +8557,11 @@ with tab2:
                 raw_stripped = raw.strip()
                 raw_lower = raw_stripped.lower()
 
-                # 1. Exact case-insensitive match → just fix capitalisation
+                # 1. Exact case-insensitive match → silently fix capitalisation only
+                #    was_corrected = False here because only casing changed, not spelling
                 for title in _CANONICAL_JOB_TITLES:
                     if title.lower() == raw_lower:
-                        corrected = title
-                        return corrected, (corrected != raw_stripped)
+                        return title, False  # no toast — user spelled it right
 
                 # 2. Fuzzy match against canonical list (case-insensitive compare)
                 lower_map = {t.lower(): t for t in _CANONICAL_JOB_TITLES}
@@ -9065,10 +9054,40 @@ with tab2:
                         unsafe_allow_html=True
                     )
 
-            if certificates_list:
+            # ── Certificate rendering — strip AI-invented "Unknown" placeholders ──
+            # Build a name→date lookup from session state so we can fall back to
+            # the user's real data if the AI mangles or omits it.
+            _ss_cert_lookup = {
+                c.get("name", "").strip(): c.get("duration", "").strip()
+                for c in st.session_state.get("certificate_links", [])
+                if c.get("name", "").strip()
+            }
+
+            _cert_lines_raw = [c.strip() for c in certificates_list.split("\n") if c.strip()] if certificates_list else []
+
+            # Fall back to session state when AI produced nothing or only garbage
+            if not _cert_lines_raw and _ss_cert_lookup:
+                _cert_lines_raw = [
+                    f"{name} ({date})" if date else name
+                    for name, date in _ss_cert_lookup.items()
+                ]
+
+            if _cert_lines_raw:
                 st.markdown("<h4 style='color:#336699;'>📜 Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for cert in [c.strip() for c in certificates_list.split("\n") if c.strip()]:
-                    st.markdown(f"<div style='margin-left:10px;margin-bottom:4px;'>• {cert}</div>", unsafe_allow_html=True)
+                for _cert_line in _cert_lines_raw:
+                    # Remove any " - Unknown" or "Unknown - " the AI injected
+                    _cleaned = re.sub(r'\s*-\s*Unknown\b', '', _cert_line, flags=re.IGNORECASE).strip()
+                    _cleaned = re.sub(r'\bUnknown\s*-\s*', '', _cleaned, flags=re.IGNORECASE).strip()
+                    _cleaned = re.sub(r'\bUnknown\b', '', _cleaned, flags=re.IGNORECASE).strip(" -–—").strip()
+
+                    # If AI dropped the date, re-inject it from session state
+                    for _ss_name, _ss_date in _ss_cert_lookup.items():
+                        if _ss_name.lower() in _cleaned.lower() and _ss_date and _ss_date not in _cleaned:
+                            _cleaned = f"{_cleaned} ({_ss_date})"
+                            break
+
+                    if _cleaned:
+                        st.markdown(f"<div style='margin-left:10px;margin-bottom:4px;'>• {_cleaned}</div>", unsafe_allow_html=True)
 
             if st.session_state.project_links:
                 st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
