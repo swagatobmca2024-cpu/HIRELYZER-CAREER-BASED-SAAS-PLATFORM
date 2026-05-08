@@ -234,21 +234,22 @@ class I:
 
 
 _SIG_ICON: dict[str, str] = {
-    "upfront_payment":      I.CREDIT_CARD,
-    "mlm_pyramid":          I.TRIANGLE,
-    "too_good_salary":      I.TRENDING_UP,
-    "unrealistic_benefits": I.DOLLAR,
-    "vague_description":    I.EDIT,
-    "free_email_contact":   I.MAIL,
-    "urgency_pressure":     I.CLOCK,
-    "no_company_info":      I.BUILDING,
-    "req_paradox":          I.LAYERS,
-    "personal_info_demand": I.ID_CARD,
-    "location_mismatch":    I.MAP_PIN,
-    "work_from_home_bait":  I.HOME,
-    "missing_salary":       I.DOLLAR_OFF,
-    "poor_grammar":         I.FILE_TEXT,
-    "generic_template":     I.COPY,
+    "upfront_payment":         I.CREDIT_CARD,
+    "mlm_pyramid":             I.TRIANGLE,
+    "too_good_salary":         I.TRENDING_UP,
+    "unrealistic_benefits":    I.DOLLAR,
+    "vague_description":       I.EDIT,
+    "free_email_contact":      I.MAIL,
+    "urgency_pressure":        I.CLOCK,
+    "no_company_info":         I.BUILDING,
+    "req_paradox":             I.LAYERS,
+    "personal_info_demand":    I.ID_CARD,
+    "location_mismatch":       I.MAP_PIN,
+    "work_from_home_bait":     I.HOME,
+    "missing_salary":          I.DOLLAR_OFF,
+    "poor_grammar":            I.FILE_TEXT,
+    "generic_template":        I.COPY,
+    "whatsapp_only_contact":   I.PHONE,
 }
 
 
@@ -257,21 +258,22 @@ _SIG_ICON: dict[str, str] = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 _WEIGHTS: dict[str, int] = {
-    "upfront_payment":      25,
-    "mlm_pyramid":          20,
-    "too_good_salary":      18,
-    "vague_description":    14,
-    "free_email_contact":   12,
-    "urgency_pressure":     12,
-    "no_company_info":      11,
-    "req_paradox":          10,
-    "personal_info_demand":  9,
-    "unrealistic_benefits":  7,
-    "location_mismatch":     7,
-    "poor_grammar":          6,
-    "work_from_home_bait":   5,
-    "missing_salary":        4,
-    "generic_template":      4,
+    "upfront_payment":         25,
+    "mlm_pyramid":             20,
+    "too_good_salary":         18,
+    "vague_description":       14,
+    "free_email_contact":      12,
+    "urgency_pressure":        12,
+    "whatsapp_only_contact":   15,
+    "no_company_info":         11,
+    "req_paradox":             10,
+    "personal_info_demand":     9,
+    "unrealistic_benefits":     7,
+    "location_mismatch":        7,
+    "poor_grammar":             6,
+    "work_from_home_bait":      5,
+    "missing_salary":           4,
+    "generic_template":         4,
 }
 
 _FREE_DOMAINS: frozenset[str] = frozenset({
@@ -298,6 +300,12 @@ _PAY_PHRASES = [
     r"processing fee",r"joining fee",r"membership fee",r"buy.*starter kit",
     r"purchase.*materials",r"invest.*joining",r"small.*investment",
     r"courier.*charge",r"background.*check.*fee",r"verification.*charge",
+    # NEW — common Indian scam variants
+    r"pay.*before.*joining",r"deposit.*refund.*after",r"id.*card.*fee",
+    r"uniform.*charge",r"laptop.*deposit",r"tool.*kit.*purchase",
+    r"sim.*card.*fee",r"scanner.*fee",r"biometric.*fee",
+    r"police.*verification.*fee",r"insurance.*premium.*joining",
+    r"token.*amount",r"earnest.*money",r"caution.*deposit",
 ]
 _MLM_PHRASES = [
     r"unlimited earning",r"be your own boss",r"passive income",
@@ -305,6 +313,12 @@ _MLM_PHRASES = [
     r"downline",r"upline",r"pyramid",r"direct selling",
     r"recruit.*friends",r"grow your team",r"commission.*recruit",
     r"financial freedom.*join",r"work from.*anywhere.*earn",
+    # NEW — Indian MLM / chain marketing
+    r"chain.*marketing",r"binary.*plan",r"matrix.*plan",r"level.*income",
+    r"team.*bonus",r"generation.*income",r"franchise.*opportunity",
+    r"business.*opportunity.*join",r"modicare",r"amway.*distributor",
+    r"vestige",r"herbalife.*join",r"earn.*per.*referral",
+    r"direct.*sales.*representative",r"field.*sales.*executive.*commission",
 ]
 _URGENCY_PHRASES = [
     r"limited.*position",r"act now",r"respond.*immediately",
@@ -312,18 +326,43 @@ _URGENCY_PHRASES = [
     r"immediate.*joiner",r"joining.*asap",r"last.*few.*seat",
     r"don.t miss",r"apply.*before.*[0-9]",r"deadline.*today",
     r"positions.*filling.*fast",r"only.*[0-9].*seat.*left",
+    # NEW
+    r"interview.*today",r"joining.*tomorrow",r"walk.*in.*today",
+    r"last.*date.*tomorrow",r"closing.*soon",r"hurry.*apply",
+    r"final.*round.*today",r"selected.*candidate.*report.*immediately",
 ]
 _VAGUE_PHRASES = [
     r"dynamic.*individual",r"go.getter",r"passionate.*person",
     r"attractive.*salary",r"good.*communication",r"fast.paced.*environment",
     r"various.*responsibilities",r"other.*duties.*assigned",
     r"exciting.*opportunity",r"ground.*floor.*opportunity",
+    # NEW
+    r"multitasking.*ability",r"smart.*worker",r"self.*motivated",
+    r"result.*oriented",r"team.*player.*required",r"flexible.*working",
+    r"as per.*industry standard",r"best in.*industry",r"market.*competitive",
+    r"handsome.*salary",r"good.*package",r"salary.*no.*bar",
 ]
 _PERSONAL_PHRASES = [
     r"bank.*account.*detail",r"aadhaar.*number",r"pan.*number",
     r"passport.*copy.*apply",r"ssn.*apply",r"social.*security.*apply",
     r"photo.*mandatory.*apply",r"dob.*required.*apply",
     r"mother.*maiden.*name",r"send.*id.*proof.*apply",r"aadhar.*card.*apply",
+    # NEW
+    r"voter.*id.*apply",r"driving.*licence.*apply",r"send.*selfie",
+    r"whatsapp.*photo.*apply",r"family.*detail.*apply",
+    r"nominee.*detail.*joining",r"bank.*ifsc.*apply",r"upi.*id.*apply",
+    r"gpay.*number.*apply",r"paytm.*number.*apply",
+]
+_URGENCY_PHRASES_WA = [
+    r"whatsapp.*apply",r"whatsapp.*us.*now",r"message.*on.*whatsapp",
+    r"contact.*on.*whatsapp",r"ping.*on.*wa",r"chat.*on.*whatsapp",
+    r"apply.*on.*telegram",r"telegram.*group.*join",
+]
+_PLATFORM_TRUST = [
+    r"linkedin\.com/jobs",r"naukri\.com",r"indeed\.com",
+    r"foundit\.in",r"shine\.com",r"monster\.com",r"timesjobs\.com",
+    r"instahyre\.com",r"cutshort\.io",r"wellfound\.com",r"angellist",
+    r"iimjobs\.com",r"freshersworld\.com",r"hirist\.com",
 ]
 _PARADOX_PATTERNS = [
     (r"(fresher|entry.level|0.year)", r"([5-9]|10|\d\d).year.*experience"),
@@ -1541,17 +1580,13 @@ def _probe_mca(company: str) -> dict:
     return out
 
 
-def run_live_probes(job: dict) -> dict:
-    website = job.get("website", "")
-    contact = job.get("contact", "") + " " + job.get("description", "")
-    company = job.get("company", "")
-    domain  = _extract_domain(website)
-    if not domain:
-        for em_dom in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", contact):
-            if em_dom.lower() not in _FREE_DOMAINS:
-                domain = em_dom
-                break
-
+@st.cache_data(ttl=3600, show_spinner=False)
+def _run_live_probes_cached(domain: str, contact: str, company: str, website: str) -> dict:
+    """
+    Cache probe results for 1 hour keyed on (domain, contact, company, website).
+    Identical domain lookups within the same server session skip all network calls.
+    Cache is per-server-process — cleared on app restart (acceptable for Streamlit Cloud).
+    """
     probes: dict = {
         "domain_age":     {"status": "skipped", "detail": "No domain provided"},
         "site_reach":     {"reachable": None,   "detail": "No domain provided"},
@@ -1580,10 +1615,24 @@ def run_live_probes(job: dict) -> dict:
     ]
     threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
     for t in threads: t.start()
-    # Join timeout must exceed the slowest individual probe timeout (_T_MCA=10)
-    # Add 4s buffer for thread scheduling overhead + multi-tier fallback latency
     for t in threads: t.join(timeout=_T_MCA + 4)
     return probes
+
+
+def run_live_probes(job: dict) -> dict:
+    website = job.get("website", "")
+    contact = job.get("contact", "") + " " + job.get("description", "")
+    company = job.get("company", "")
+    domain  = _extract_domain(website)
+    if not domain:
+        for em_dom in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", contact):
+            if em_dom.lower() not in _FREE_DOMAINS:
+                domain = em_dom
+                break
+
+    # Delegate to cached version — identical (domain, contact, company, website)
+    # combinations skip all network calls for 1 hour (st.cache_data TTL).
+    return _run_live_probes_cached(domain or "", contact, company, website)
 
 
 def _probe_risk(probes: dict) -> tuple[int, list[str]]:
@@ -1658,14 +1707,133 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
 def _any(text: str, patterns: list) -> list:
     return [p for p in patterns if re.search(p, text, re.IGNORECASE)]
 
-def _salary_outlier(text: str) -> bool:
-    for n in re.findall(r"\d+", text.replace(",", "")):
-        v = int(n)
-        if 500000 <= v <= 99999999:
-            return True
-        if 15000 <= v <= 999999 and "$" in text:
-            return True
-    return False
+# ─────────────────────────────────────────────────────────────────────────────
+# SALARY CALIBRATION — role × city bands (INR per annum, LPA)
+# Replaces the blunt ₹5L–₹9.9Cr outlier rule that was flagging senior roles.
+# Format: { role_keyword: (min_lpa, max_lpa) }
+# If the detected salary falls ABOVE max_lpa by >2× it is flagged as outlier.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SALARY_BANDS: dict[str, tuple[float, float]] = {
+    # Tech roles
+    "software engineer":      (4.0,  45.0),
+    "senior engineer":        (12.0, 70.0),
+    "lead engineer":          (18.0, 90.0),
+    "principal engineer":     (25.0, 120.0),
+    "data scientist":         (6.0,  55.0),
+    "data analyst":           (3.5,  20.0),
+    "machine learning":       (8.0,  70.0),
+    "devops":                 (6.0,  45.0),
+    "frontend":               (4.0,  35.0),
+    "backend":                (4.0,  40.0),
+    "fullstack":              (5.0,  45.0),
+    "full stack":             (5.0,  45.0),
+    "android":                (4.0,  35.0),
+    "ios":                    (4.0,  35.0),
+    "qa":                     (3.0,  25.0),
+    "tester":                 (3.0,  20.0),
+    "product manager":        (10.0, 60.0),
+    "project manager":        (8.0,  40.0),
+    "architect":              (20.0, 100.0),
+    "intern":                 (0.5,  6.0),
+    "trainee":                (1.5,  5.0),
+    # Non-tech roles
+    "hr":                     (2.5,  20.0),
+    "recruiter":              (2.5,  18.0),
+    "sales":                  (2.0,  25.0),
+    "marketing":              (2.5,  20.0),
+    "content writer":         (2.0,  15.0),
+    "graphic designer":       (2.0,  18.0),
+    "accountant":             (2.5,  15.0),
+    "finance":                (4.0,  35.0),
+    "operations":             (3.0,  25.0),
+    "customer support":       (2.0,  10.0),
+    "customer service":       (2.0,  10.0),
+    # Management
+    "manager":                (8.0,  50.0),
+    "director":               (20.0, 150.0),
+    "vp":                     (30.0, 200.0),
+    "cto":                    (40.0, 300.0),
+    "ceo":                    (40.0, 500.0),
+}
+
+# City cost-of-living multipliers — applied to max band threshold
+_CITY_MULTIPLIERS: dict[str, float] = {
+    "bangalore": 1.3, "bengaluru": 1.3,
+    "mumbai": 1.25, "delhi": 1.2, "gurgaon": 1.2, "gurugram": 1.2,
+    "hyderabad": 1.15, "pune": 1.1, "chennai": 1.1, "noida": 1.15,
+    "kolkata": 0.9, "jaipur": 0.85, "ahmedabad": 0.9, "indore": 0.85,
+}
+
+def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
+    """
+    Calibrated salary outlier detection.
+
+    1. Extract numeric salary value from text (LPA or absolute INR/USD).
+    2. Look up the role band from job title keywords.
+    3. Apply city multiplier to the band ceiling.
+    4. Flag only if salary exceeds band ceiling by >2× (scam headroom).
+    5. Fall back to the old blunt rule only when no band is matched.
+    """
+    text = salary_text or ""
+    title = (job or {}).get("title", "") if job else ""
+    location = (job or {}).get("location", "") if job else ""
+
+    # ── Extract numeric salary value ──────────────────────────────────────
+    lpa_val: Optional[float] = None
+
+    # Try LPA pattern first (most common in Indian postings)
+    m = re.search(
+        r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?)",
+        text, re.IGNORECASE,
+    )
+    if m:
+        lpa_val = float(m.group(2))   # use upper bound of range
+    else:
+        m2 = re.search(r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?)", text, re.IGNORECASE)
+        if m2:
+            lpa_val = float(m2.group(1))
+
+    # Try absolute INR (₹ / Rs / INR + raw number)
+    if lpa_val is None:
+        for n in re.findall(r"\d+", text.replace(",", "")):
+            v = int(n)
+            if 100000 <= v <= 99999999:
+                lpa_val = v / 100000   # convert to LPA
+                break
+            if 15000 <= v <= 999999 and "$" in text:
+                lpa_val = (v * 12) / 100000   # monthly USD → rough LPA
+                break
+
+    if lpa_val is None:
+        return False   # no salary number found — don't flag
+
+    # ── Look up role band ──────────────────────────────────────────────────
+    title_lower = title.lower()
+    band: Optional[tuple[float, float]] = None
+    for keyword, b in _SALARY_BANDS.items():
+        if keyword in title_lower:
+            band = b
+            break
+
+    # ── Apply city multiplier ──────────────────────────────────────────────
+    city_mult = 1.0
+    loc_lower = location.lower()
+    for city, mult in _CITY_MULTIPLIERS.items():
+        if city in loc_lower:
+            city_mult = mult
+            break
+
+    # ── Decision ──────────────────────────────────────────────────────────
+    if band:
+        _, max_lpa = band
+        effective_max = max_lpa * city_mult
+        # Flag only if salary is more than 2× the ceiling — clear scam territory
+        return lpa_val > effective_max * 2.0
+    else:
+        # No band match — fall back to old blunt rule but with tighter range
+        # Only flag truly impossible numbers (>₹5Cr / >500 LPA)
+        return lpa_val > 500.0
 
 def _run_rules(job: dict) -> dict:
     full = " ".join([job.get(k,"") for k in
@@ -1681,9 +1849,9 @@ def _run_rules(job: dict) -> dict:
     h = _any(full, _MLM_PHRASES)
     if h: _add("mlm_pyramid","MLM / Pyramid Scheme Indicators",
                 "Language suggests a recruitment-based commission model, not a real job.", h)
-    if _salary_outlier(job.get("salary","") + " " + job.get("description","")):
+    if _salary_outlier(job.get("salary","") + " " + job.get("description",""), job):
         _add("too_good_salary","Unrealistically High Salary",
-             "Offered compensation is far above verified market rates for this role.")
+             "Offered compensation is far above verified market rates for this role and city.")
     h = _any(full, _UNREALISTIC_PHRASES)
     if h: _add("unrealistic_benefits","Unrealistic Benefit Claims",
                 "Promised earnings or perks are statistically implausible.", h)
@@ -1713,6 +1881,17 @@ def _run_rules(job: dict) -> dict:
             _add("req_paradox","Requirement Contradiction",
                  "Asking for senior experience under a fresher posting is a bait tactic.")
             break
+    # ── Job board source trust multiplier ────────────────────────────────────
+    # Postings from verified job boards carry implicit trust — lower score.
+    # WhatsApp/Telegram-only contact with no verifiable URL is a red flag.
+    source_hits = _any(full, _PLATFORM_TRUST)
+    wa_hits     = _any(full, _URGENCY_PHRASES_WA)
+    has_url     = bool(re.search(r"https?://[^\s]{8,}", full))
+    if wa_hits and not source_hits and not has_url:
+        _add("whatsapp_only_contact", "WhatsApp / Telegram Only — No Verifiable URL",
+             "Legitimate companies post on official portals. WhatsApp-only jobs are a major red flag.",
+             wa_hits)
+
     h = _any(full, _PERSONAL_PHRASES)
     if h: _add("personal_info_demand","Premature Personal Info Request",
                 "Requesting Aadhaar/PAN/passport at application stage is a major red flag.", h)
@@ -1988,6 +2167,13 @@ def _render_score_strip(result: dict):
     rul_s = result["rule_score"]
     pen   = result["probe_penalty"]
     raw   = round(0.60*ai_s + 0.25*rul_s + 0.15*pen, 1)
+    final_blended = result["blended_score"]
+    floor_note = (
+        f' → floored to <span style="color:#ef4444;font-weight:700;">{final_blended}</span>'
+        f'&nbsp;<span style="color:#4b5563;font-size:0.66rem;">(critical signal/probe floor applied)</span>'
+        if int(raw) != final_blended else
+        f' = <span style="color:#c9d1d9;font-weight:700;">{final_blended}</span>'
+    )
     st.markdown(
         f'<div style="margin-top:10px;padding:10px 16px;'
         f'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
@@ -1996,9 +2182,8 @@ def _render_score_strip(result: dict):
         f'(0.60 × AI&nbsp;<span style="color:{cfg["color"]}">{ai_s}</span>) + '
         f'(0.25 × Rules&nbsp;<span style="color:#f59e0b">{rul_s}</span>) + '
         f'(0.15 × Probes&nbsp;<span style="color:#38bdf8">{pen}</span>) '
-        f'= <span style="color:#c9d1d9;font-weight:700;">{raw} → {result["blended_score"]}</span>'
-        f'&nbsp;&nbsp;<span style="color:#4b5563;font-size:0.66rem;">'
-        f'(floored up by critical signals if any)</span>'
+        f'= <span style="color:#8b949e;">{raw}</span>'
+        f'{floor_note}'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -2754,24 +2939,30 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             )
 
         if clear:
-            # FIX v5 BUG 1: st.rerun(scope="app") raises AttributeError in
-            # Streamlit ≥ 1.33 when called inside a @st.fragment.
-            # Plain st.rerun() always works and forces a full app rerun which
-            # is exactly what we need to clear the text area widget.
             with st.spinner("Clearing…"):
+                # Explicitly blank the text area value BEFORE deleting the key.
+                # Streamlit re-uses widget state by key — if the key is simply
+                # deleted the widget may re-render with its last cached value.
+                # Setting to "" first guarantees the textarea shows empty.
+                for blank_key in ("jsd_raw", "jsd_mode"):
+                    if blank_key in st.session_state:
+                        st.session_state[blank_key] = "" if blank_key == "jsd_raw" else "Paste Full Job Description"
+
+                # Delete ALL jsd_ keys except history (preserve past analyses)
+                # and jsd_history_loaded (prevent unnecessary DB re-fetch).
+                preserve = {"jsd_history", "jsd_history_loaded"}
                 keys_to_delete = [
                     k for k in list(st.session_state.keys())
-                    if k.startswith("jsd_") and k != "jsd_history"
+                    if k.startswith("jsd_") and k not in preserve
                 ]
-                # FIX v5 BUG 1 (part 2): explicitly include the text area and radio
-                # keys even if they don't start with jsd_ due to naming drift.
-                for extra in ("jsd_raw", "jsd_mode", "jsd_last_result", "jsd_running"):
+                # Also catch jsd_last_result and jsd_running explicitly
+                for extra in ("jsd_last_result", "jsd_running"):
                     if extra in st.session_state and extra not in keys_to_delete:
                         keys_to_delete.append(extra)
                 for k in keys_to_delete:
                     del st.session_state[k]
                 time.sleep(0.25)
-            st.rerun()   # FIX: was st.rerun(scope="app") — invalid in fragment
+            st.rerun()
 
         if run:
             # FIX v5 BUG 2: Set jsd_running INSIDE the run block, not before
@@ -2813,13 +3004,9 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     # ── Calibrated blending ────────────────────────────────────────
                     # Base blend: AI carries 60%, rules 25%, probe penalty 15%.
-                    # AI score is the most reliable signal — give it the most weight.
                     blended = int(0.60 * ai_s + 0.25 * rule_s + 0.15 * penalty)
 
                     # Hard floor only from HIGH-weight signals (>=18 pts each).
-                    # Low-weight signals like missing_salary(+4) or poor_grammar(+6)
-                    # must NOT floor the score — they fire on legitimate postings too
-                    # and were causing scores of 11-20 on perfectly clean job ads.
                     critical_signals = [k for k, s in rules_result["signals"].items()
                                         if _WEIGHTS.get(k, 0) >= 18]
                     critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
@@ -2828,6 +3015,30 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     # Probe penalty floor: only if penalty is itself significant (>= 20)
                     if penalty >= 20:
                         blended = max(blended, penalty)
+
+                    # ── HARD PROBE OVERRIDE (Improvement 4) ───────────────────────
+                    # If multiple critical network probes fire together, force the
+                    # verdict to DEFINITE_SCAM regardless of the LLM score.
+                    # These combos are near-impossible for legitimate companies.
+                    mx_status   = probes.get("mx_record", {}).get("status", "")
+                    domain_fail = not probes.get("company_domain", {}).get("domain_exists", True)
+                    young_days  = probes.get("domain_age", {}).get("age_days") or 999
+                    is_squatter = probes.get("typosquat", {}).get("is_squatter", False)
+                    is_parked   = probes.get("site_reach", {}).get("is_parked", False)
+
+                    critical_probe_count = sum([
+                        mx_status in ("NO_MX", "DNS_FAIL"),
+                        domain_fail,
+                        young_days < 90,
+                        is_squatter,
+                        is_parked,
+                    ])
+                    if critical_probe_count >= 3:
+                        # 3+ critical network failures = confirmed infrastructure scam
+                        blended = max(blended, 80)
+                    elif critical_probe_count == 2 and mx_status in ("NO_MX", "DNS_FAIL"):
+                        # NO_MX/DNS_FAIL + any other critical = force LIKELY_SCAM floor
+                        blended = max(blended, 55)
 
                     blended = min(blended, 100)
 
@@ -2874,6 +3085,92 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     prog.empty()
                     st.session_state.pop("jsd_running", None)
                     st.error(f"Analysis failed: {exc}")
+
+
+def _render_feedback(result: dict):
+    """
+    Thumbs up / thumbs down widget shown after every analysis result.
+    Saves to Supabase scam_feedback table (created on first use).
+    Feedback is keyed by (username, job_title, company, verdict) so the same
+    user can't spam — but they can correct a previous vote.
+    """
+    # Stable key based on result content, not object id
+    fb_key = f"jsd_fb_{result.get('timestamp','')}"
+    already = st.session_state.get(fb_key)
+
+    st.markdown(
+        f'<div style="margin-top:16px;padding:12px 16px;background:rgba(255,255,255,0.02);'
+        f'border:1px solid rgba(255,255,255,0.07);border-radius:10px;'
+        f'display:flex;align-items:center;gap:12px;">'
+        f'{_svg(I.SPARKLE,13,"#6b7280")}'
+        f'<span style="color:#8b949e;font-size:0.78rem;flex:1;">Was this verdict correct?'
+        f' Your feedback helps improve detection accuracy.</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    if already:
+        st.markdown(
+            f'<div style="color:#22c55e;font-size:0.78rem;margin-top:6px;padding-left:4px;">'
+            f'{_svg(I.CHECK,12,"#22c55e")} Thanks for your feedback!</div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    col_up, col_dn, col_sp = st.columns([1, 1, 5])
+    with col_up:
+        if st.button("👍 Correct", key=f"{fb_key}_up", use_container_width=True):
+            _save_feedback(result, "correct")
+            st.session_state[fb_key] = "correct"
+            st.rerun()
+    with col_dn:
+        if st.button("👎 Wrong", key=f"{fb_key}_dn", use_container_width=True):
+            _save_feedback(result, "wrong")
+            st.session_state[fb_key] = "wrong"
+            st.rerun()
+
+
+def _save_feedback(result: dict, rating: str):
+    """
+    Persist feedback to Supabase. Creates table if it doesn't exist.
+    Non-fatal — UI never errors even if DB write fails.
+    """
+    try:
+        from user_login import _execute
+        # Create table once (idempotent)
+        _execute("""
+            CREATE TABLE IF NOT EXISTS scam_feedback (
+                id          SERIAL PRIMARY KEY,
+                username    TEXT NOT NULL,
+                job_title   TEXT,
+                company     TEXT,
+                verdict     TEXT,
+                blended_score INTEGER,
+                rating      TEXT NOT NULL,
+                submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS idx_scam_feedback_user
+                ON scam_feedback (username, submitted_at DESC);
+        """)
+        username = st.session_state.get("username", "guest")
+        _execute(
+            """
+            INSERT INTO scam_feedback
+                (username, job_title, company, verdict, blended_score, rating)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            (
+                username,
+                result.get("job", {}).get("title", "")[:200],
+                result.get("job", {}).get("company", "")[:200],
+                result.get("final_verdict", ""),
+                result.get("blended_score", 0),
+                rating,
+            ),
+        )
+    except Exception:
+        pass  # non-fatal
 
 
 def render_job_scam_detector_tab(call_llm_fn):
@@ -3026,3 +3323,6 @@ def render_job_scam_detector_tab(call_llm_fn):
         f'does not guarantee a legitimate job. Always perform your own due diligence.</span></div>',
         unsafe_allow_html=True,
     )
+
+    # ── Feedback widget ───────────────────────────────────────────────────────
+    _render_feedback(res)
