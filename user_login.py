@@ -174,6 +174,18 @@ def create_user_table():
     );
     CREATE INDEX IF NOT EXISTS idx_feature_usage_lookup
         ON feature_usage (username, feature, used_at);
+    CREATE TABLE IF NOT EXISTS scam_feedback (
+        id           SERIAL PRIMARY KEY,
+        username     TEXT NOT NULL,
+        job_title    TEXT,
+        company      TEXT,
+        verdict      TEXT,
+        blended_score INTEGER,
+        rating       TEXT NOT NULL,
+        submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_scam_feedback_user
+        ON scam_feedback (username, submitted_at DESC);
     CREATE TABLE IF NOT EXISTS login_tokens (
         id         SERIAL PRIMARY KEY,
         token      TEXT UNIQUE NOT NULL,
