@@ -16,85 +16,6 @@
 
 from collections import Counter as _Counter
 
-# ── Responsive CSS + injection helper ─────────────────────────────────────────
-_RESPONSIVE_CSS = """<style>
-*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-.resume-wrap{display:flex;width:100%;align-items:stretch;}
-.resume-sidebar{flex:0 0 30%;min-width:200px;max-width:300px;}
-.resume-main{flex:1 1 0;min-width:0;overflow-wrap:break-word;word-break:break-word;}
-.page-wrap{width:100%;max-width:794px;margin:0 auto;
-  padding:clamp(20px,4vw,48px) clamp(14px,5vw,60px);}
-.cl-header-flex{display:flex;justify-content:space-between;
-  align-items:flex-end;flex-wrap:wrap;gap:12px;}
-@media(max-width:640px){
-  .resume-wrap{flex-direction:column;}
-  .resume-sidebar{flex:none;width:100%!important;max-width:100%!important;min-width:0!important;}
-  .resume-main{width:100%!important;}
-  .cl-header-flex{flex-direction:column;align-items:flex-start;}
-  .cl-contact{text-align:left!important;}
-  .page-wrap{padding:14px 12px!important;}
-  h1{font-size:clamp(18px,6vw,30px)!important;}
-}
-@page{size:A4 portrait;margin:12mm 12mm 14mm 12mm;}
-@media print{
-  .resume-wrap{flex-direction:row!important;}
-  .resume-sidebar{flex:0 0 30%!important;max-width:280px!important;}
-  body{padding:0!important;}
-  .page-wrap{padding:0!important;}
-}
-</style>"""
-
-def _inject_responsive(html, mode="two-col", sidebar_width="300px"):
-    import re as _re
-    if "</head>" in html:
-        html = html.replace("</head>", _RESPONSIVE_CSS + "\n</head>", 1)
-    if mode == "two-col":
-        html = _re.sub(
-            r"<table role='presentation' style='width:100%;(?:min-height:100vh;)?border-collapse:collapse;table-layout:fixed;'>",
-            "<div class='resume-wrap'>", html)
-        html = _re.sub(r"\n<tr>\n", "\n", html)
-        html = _re.sub(r"\n</tr>\n", "\n", html)
-        html = html.replace("</table>\n</body></html>", "</div>\n</body></html>")
-        html = html.replace("</table></body></html>", "</div></body></html>")
-        esc = _re.escape(sidebar_width)
-        def _sid(m):
-            s = _re.sub(r"width:\d+px;?\s*", "", m.group(1)).strip().rstrip(";")
-            return f"<div class='resume-sidebar' style='{s};'>"
-        html = _re.sub(rf"<td style='width:{esc};([^']*)'>" , _sid, html)
-        def _main(m):
-            return f"<div class='resume-main' style='{m.group(1).strip().rstrip(chr(59))};'>"
-        html = _re.sub(r"<td style='(padding:[^']+vertical-align:top;?)'>" , _main, html)
-        html = html.replace("</td>", "</div>")
-    elif mode == "single":
-        def _sb(m):
-            s = _re.sub(r"padding:[^;]+;?\s*", "", m.group(1))
-            s = _re.sub(r"max-width:[^;]+;?\s*", "", s)
-            s = _re.sub(r"\bmargin:[^;]+;?\s*", "", s)
-            return f"<body style='{s.strip().rstrip(chr(59))};'>"
-        html = _re.sub(r"<body style='([^']*)'>" , _sb, html)
-        html = _re.sub(r"(<body[^>]*>)", r"\1\n<div class='page-wrap'>", html)
-        html = html.replace("</body>", "</div>\n</body>")
-    elif mode == "cover":
-        def _cb(m):
-            s = _re.sub(r"padding:[^;]+;?\s*", "", m.group(1))
-            return f"<body style='{s.strip().rstrip(chr(59))};'>"
-        html = _re.sub(r"<body style='([^']*)'>" , _cb, html)
-        html = _re.sub(
-            r"<div style='display:flex;justify-content:space-between;align-items:flex-end;([^']*?)'>",
-            r"<div class='cl-header-flex' style='\1'>", html)
-        html = _re.sub(
-            r"<div style='text-align:right;([^']*?)'>",
-            r"<div class='cl-contact' style='text-align:right;\1'>", html)
-        # strip padding from CSS body {} rule in <style> block
-        html = _re.sub(r"(body\s*\{[^}]*?)padding:[^;]+;?\s*", r"\1", html)
-        html = _re.sub(
-            r"<div style='padding:(?:40|42|36|38)px (?:56|64|50|42)px;'>",
-            "<div class='page-wrap'>", html)
-        html = _re.sub(r"(<body[^>]*>)", r"\1\n<div class='page-wrap'>", html)
-        html = html.replace("</body>", "</div>\n</body>")
-    return html
-
-
 def _fmt_desc(text, font_size="14px", color="#374151", line_height="1.75"):
     """
     ATS-friendly, readable description formatter shared by all 9 templates.
@@ -344,6 +265,7 @@ def render_template_default(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:300px;background:linear-gradient(180deg,#374151,#4b5563);color:#ffffff;padding:36px 24px;vertical-align:top;'>
@@ -366,9 +288,10 @@ def render_template_default(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
+</div>
 </body></html>"""
 
-    return _inject_responsive(html_content, mode='two-col', sidebar_width='300px')
+    return html_content
 
 def render_template_modern(session_state, profile_img_html=""):
     """Modern Minimal template - ATS-friendly single-column layout with clean inline styles"""
@@ -551,10 +474,11 @@ def render_template_modern(session_state, profile_img_html=""):
   {_section("Professional Certifications", cert_html) if cert_html else ''}
   {proj_links_section}
 
+</div>
 </body>
 </html>"""
 
-    return _inject_responsive(html_content, mode='single')
+    return html_content
 
 def render_template_sidebar(session_state, profile_img_html=""):
     """Enhanced elegant sidebar template with improved styling, pill tags, and better visual hierarchy"""
@@ -755,6 +679,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:300px;background:linear-gradient(180deg,#1e293b,#334155);color:white;padding:36px 24px;vertical-align:top;'>
@@ -777,9 +702,10 @@ def render_template_sidebar(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
+</div>
 </body></html>"""
 
-    return _inject_responsive(html_content, mode='two-col', sidebar_width='300px')
+    return html_content
     
 
 
@@ -916,11 +842,12 @@ def render_template_classic(session_state, profile_img_html=""):
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Georgia',serif; color:#1a1a1a; background:#fff; padding:40px 60px; line-height:1.6; }}
+  body {{ font-family:'Georgia',serif; color:#1a1a1a; background:#fff; padding:40px 60px; line-height:1.6; max-width:794px; margin:0 auto; }}
   a {{ color:#1e3a5f; }}
 </style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
   <div style='text-align:center;margin-bottom:6px;'>
     {fixed_img}
     <h1 style='font-size:32px;font-weight:700;letter-spacing:1px;color:#1a1a1a;'>{session_state.get('name','')}</h1>
@@ -939,8 +866,9 @@ def render_template_classic(session_state, profile_img_html=""):
   {section("Projects", projects_html) if projects_html else ''}
   {section("Project Links", all_links_html) if all_links_html else ''}
   {section("Certifications", cert_html) if cert_html else ''}
+</div>
 </body></html>"""
-    return _inject_responsive(html_content, mode='single')
+    return html_content
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1080,12 +1008,13 @@ def render_template_executive(session_state, profile_img_html=""):
     fixed_img = _fix_img(profile_img_html)
     job_title_val = session_state.get('job_title','') or session_state.get('title','')
 
-    return _inject_responsive(f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Executive Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',Arial,sans-serif; color:#1a1a1a; background:#fff; line-height:1.6; }}</style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
   <!-- Header Band -->
   <div style='background:linear-gradient(135deg,#1e1b4b 0%,#3730a3 100%);color:white;padding:36px 50px;'>
     <table role='presentation' style='width:100%;border-collapse:collapse;'>
@@ -1112,8 +1041,7 @@ def render_template_executive(session_state, profile_img_html=""):
     {sec("Project Links", proj_links_section) if proj_links_section else ''}
     {sec("Certifications", cert_html) if cert_html else ''}
   </div>
-</body></html>""", mode='single')
-
+</body></html>"""
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1232,12 +1160,13 @@ def render_template_timeline(session_state, profile_img_html=""):
     contact_line = " · ".join(contact_parts)
     summary_html = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#374151', line_height='1.8')
 
-    return _inject_responsive(f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Timeline Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
   <div style='background:#0d9488;height:6px;'></div>
   <div style='padding:36px 50px 24px;border-bottom:1px solid #e2e8f0;'>
     <table role='presentation' style='width:100%;border-collapse:collapse;'>
@@ -1263,8 +1192,7 @@ def render_template_timeline(session_state, profile_img_html=""):
     {sec("Interests", chips(session_state.get('interests',''),'#fee2e2','#991b1b')) if session_state.get('interests') else ''}
     {sec("Certifications", cert_items) if cert_items else ''}
   </div>
-</body></html>""", mode='single')
-
+</body></html>"""
 # ─────────────────────────────────────────────────────────────
 # NEW TEMPLATE 4: Corporate Two-Column (Blue Theme)
 # ─────────────────────────────────────────────────────────────
@@ -1390,12 +1318,13 @@ def render_template_corporate(session_state, profile_img_html=""):
             <h3 style='font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#93c5fd;font-weight:700;
                 border-bottom:1px solid rgba(147,197,253,0.3);padding-bottom:5px;margin-bottom:12px;'>{title}</h3>{body}</div>"""
 
-    return _inject_responsive(f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Corporate Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:300px;background:linear-gradient(180deg,#1e3a8a,#1d4ed8);color:white;padding:36px 24px;vertical-align:top;'>
@@ -1418,8 +1347,8 @@ def render_template_corporate(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
-</body></html>""", mode='two-col', sidebar_width='300px')
-
+</div>
+</body></html>"""
 
 
 def render_template_creative_green(session_state, profile_img_html=""):
@@ -1543,12 +1472,13 @@ def render_template_creative_green(session_state, profile_img_html=""):
             <h3 style='font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:#064e3b;font-weight:700;
                 border-bottom:2px solid #059669;padding-bottom:4px;margin-bottom:12px;'>{title}</h3>{body}</div>"""
 
-    return _inject_responsive(f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Creative Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#f0fdf4; }}</style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:280px;background:#fff;border-right:2px solid #a7f3d0;padding:32px 22px;vertical-align:top;'>
@@ -1571,8 +1501,8 @@ def render_template_creative_green(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
-</body></html>""", mode='two-col', sidebar_width='280px')
-
+</div>
+</body></html>"""
 
 
 def render_template_terracotta(session_state, profile_img_html=""):
@@ -1693,12 +1623,13 @@ def render_template_terracotta(session_state, profile_img_html=""):
             <h3 style='font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:#b45309;font-weight:700;
                 border-bottom:2px solid #d97706;padding-bottom:4px;margin-bottom:12px;'>{title}</h3>{body}</div>"""
 
-    return _inject_responsive(f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Terracotta Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fafaf9; }}</style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:290px;background:linear-gradient(180deg,#7c2d12,#b45309);color:white;padding:34px 22px;vertical-align:top;'>
@@ -1721,8 +1652,8 @@ def render_template_terracotta(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
-</body></html>""", mode='two-col', sidebar_width='290px')
-
+</div>
+</body></html>"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1857,6 +1788,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:290px;background:linear-gradient(180deg,#0d1b3e,#1a2f6b);color:#f5e6b2;padding:34px 22px;vertical-align:top;'>
@@ -1879,9 +1811,10 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
+</div>
 </body></html>"""
 
-    return _inject_responsive(html_content, mode='two-col', sidebar_width='290px')
+    return html_content
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2047,11 +1980,12 @@ def render_template_slate_gray(session_state, profile_img_html=""):
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; color:{C_PRIMARY}; background:#ffffff; padding:40px 60px; line-height:1.6; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; color:{{C_PRIMARY}}; background:#ffffff; padding:40px 60px; line-height:1.6; max-width:794px; margin:0 auto; }}
   a {{ color:{C_PRIMARY}; }}
 </style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
   <!-- HEADER -->
   <div style='text-align:center;margin-bottom:8px;'>
     {fixed_img}
@@ -2071,9 +2005,10 @@ def render_template_slate_gray(session_state, profile_img_html=""):
   {section("Projects", projects_html) if projects_html else ''}
   {section("Project Links", all_links_html) if all_links_html else ''}
   {section("Certifications", cert_html) if cert_html else ''}
+</div>
 </body></html>"""
 
-    return _inject_responsive(html_content, mode='single')
+    return html_content
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2208,6 +2143,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:290px;background:linear-gradient(180deg,#0f766e,#0d9488);color:#ccfbf1;padding:34px 22px;vertical-align:top;'>
@@ -2230,9 +2166,10 @@ def render_template_teal_impact(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
+</div>
 </body></html>"""
 
-    return _inject_responsive(html_content, mode='two-col', sidebar_width='290px')
+    return html_content
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2378,11 +2315,12 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; }}
+  body {{ font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; max-width:794px; margin:0 auto; }}
   a {{ color:#7f1d1d; }}
 </style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
   <div style='text-align:center;margin-bottom:6px;'>
     {fixed_img}
     <h1 style='font-size:32px;font-weight:700;letter-spacing:1px;color:#7f1d1d;font-family:"Georgia",serif;'>{session_state.get('name','')}</h1>
@@ -2401,9 +2339,10 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
   {section("Projects", projects_html) if projects_html else ''}
   {section("Project Links", all_links_html) if all_links_html else ''}
   {section("Certifications", cert_html) if cert_html else ''}
+</div>
 </body></html>"""
 
-    return _inject_responsive(html_content, mode='single')
+    return html_content
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2538,6 +2477,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:290px;background:linear-gradient(180deg,#1e1b4b,#312e81);color:#a5f3fc;padding:34px 22px;vertical-align:top;'>
@@ -2560,9 +2500,10 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
+</div>
 </body></html>"""
 
-    return _inject_responsive(html_content, mode='two-col', sidebar_width='290px')
+    return html_content
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2696,9 +2637,10 @@ def render_template_forest_green(session_state, profile_img_html=""):
   {_sec_fg("Interests", f"<div style='padding:6px 0;'>{_tags_fg(session_state.get('interests',''),'#fdf4ff','#581c87','#e9d5ff')}</div>") if session_state.get('interests','').strip() else ''}
   {_sec_fg("Certifications", cert_html_fg) if cert_html_fg else ''}
   {_sec_fg("Project Links", proj_links_sec_fg) if proj_links_sec_fg else ''}
+</div>
 </body></html>"""
 
-    return _inject_responsive(html_content, mode='single')
+    return html_content
 
 
 # ── Resume template registry ──────────────────────────────────────────────────
