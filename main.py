@@ -8568,11 +8568,11 @@ with tab2:
                 raw_stripped = raw.strip()
                 raw_lower = raw_stripped.lower()
 
-                # 1. Exact case-insensitive match → just fix capitalisation
+                # 1. Exact case-insensitive match → silently fix capitalisation only
+                #    was_corrected = False here because only casing changed, not spelling
                 for title in _CANONICAL_JOB_TITLES:
                     if title.lower() == raw_lower:
-                        corrected = title
-                        return corrected, (corrected != raw_stripped)
+                        return title, False  # no toast — user spelled it right
 
                 # 2. Fuzzy match against canonical list (case-insensitive compare)
                 lower_map = {t.lower(): t for t in _CANONICAL_JOB_TITLES}
@@ -9065,10 +9065,40 @@ with tab2:
                         unsafe_allow_html=True
                     )
 
-            if certificates_list:
+            # ── Certificate rendering — strip AI-invented "Unknown" placeholders ──
+            # Build a name→date lookup from session state so we can fall back to
+            # the user's real data if the AI mangles or omits it.
+            _ss_cert_lookup = {
+                c.get("name", "").strip(): c.get("duration", "").strip()
+                for c in st.session_state.get("certificate_links", [])
+                if c.get("name", "").strip()
+            }
+
+            _cert_lines_raw = [c.strip() for c in certificates_list.split("\n") if c.strip()] if certificates_list else []
+
+            # Fall back to session state when AI produced nothing or only garbage
+            if not _cert_lines_raw and _ss_cert_lookup:
+                _cert_lines_raw = [
+                    f"{name} ({date})" if date else name
+                    for name, date in _ss_cert_lookup.items()
+                ]
+
+            if _cert_lines_raw:
                 st.markdown("<h4 style='color:#336699;'>📜 Certificates</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
-                for cert in [c.strip() for c in certificates_list.split("\n") if c.strip()]:
-                    st.markdown(f"<div style='margin-left:10px;margin-bottom:4px;'>• {cert}</div>", unsafe_allow_html=True)
+                for _cert_line in _cert_lines_raw:
+                    # Remove any " - Unknown" or "Unknown - " the AI injected
+                    _cleaned = re.sub(r'\s*-\s*Unknown\b', '', _cert_line, flags=re.IGNORECASE).strip()
+                    _cleaned = re.sub(r'\bUnknown\s*-\s*', '', _cleaned, flags=re.IGNORECASE).strip()
+                    _cleaned = re.sub(r'\bUnknown\b', '', _cleaned, flags=re.IGNORECASE).strip(" -–—").strip()
+
+                    # If AI dropped the date, re-inject it from session state
+                    for _ss_name, _ss_date in _ss_cert_lookup.items():
+                        if _ss_name.lower() in _cleaned.lower() and _ss_date and _ss_date not in _cleaned:
+                            _cleaned = f"{_cleaned} ({_ss_date})"
+                            break
+
+                    if _cleaned:
+                        st.markdown(f"<div style='margin-left:10px;margin-bottom:4px;'>• {_cleaned}</div>", unsafe_allow_html=True)
 
             if st.session_state.project_links:
                 st.markdown("<h4 style='color:#336699;'>Project Links</h4><hr style='margin-top:-10px;'>", unsafe_allow_html=True)
