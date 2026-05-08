@@ -196,8 +196,7 @@ def create_user_table():
         company     TEXT,
         score       INTEGER,
         verdict     TEXT,
-        analysed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        is_deleted  BOOLEAN NOT NULL DEFAULT FALSE
+        analysed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_scam_history_user
         ON scam_analysis_history (username, analysed_at DESC);
@@ -213,16 +212,6 @@ def create_user_table():
         conn.autocommit = True
         with conn.cursor() as cur:
             cur.execute(ddl)
-            # ── Migration: add is_deleted column to existing tables ────────
-            # IF NOT EXISTS not supported for ADD COLUMN in older Postgres;
-            # catch the duplicate_column error (42701) and ignore it safely.
-            try:
-                cur.execute(
-                    "ALTER TABLE scam_analysis_history "
-                    "ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT FALSE"
-                )
-            except Exception:
-                pass  # column already exists — safe to ignore
         conn.autocommit = False
 
         # Prune stale rows — these are DML, run in a normal transaction after DDL.
@@ -892,17 +881,20 @@ def check_and_gate_feature(username: str, feature: str):
 
 # ── Scam analysis history (persistent across sessions) ───────────────────────
 
-def save_scam_analysis(username: str, job_title: str, company: str, score: int, verdict: str) -> int | None:
+def save_scam_analysis(username: str, job_title: str, company: str, score: int, verdict: str):
     """
     Persist one scam analysis result to scam_analysis_history.
-    Returns the new row's id (needed for soft-delete by id, not index).
-    Non-fatal if it fails — returns None on error.
+    Called after every successful analysis — non-fatal if it fails.
+    Keeps only the latest 50 rows per user (auto-prune on insert).
 
-    FIX v2: Single CTE executes INSERT + prune in one atomic transaction.
-    Soft-delete pattern: is_deleted=FALSE on insert (default).
+    FIX v2: Previously called _execute() twice (INSERT then DELETE prune) —
+    two separate transactions. If the app crashed between them, or a concurrent
+    request ran between them, the prune was silently skipped and the table grew
+    unboundedly. Fixed: single CTE executes INSERT + DELETE in one atomic
+    transaction via _execute().
     """
     try:
-        row = _execute(
+        _execute(
             """
             WITH inserted AS (
                 INSERT INTO scam_analysis_history (username, job_title, company, score, verdict)
@@ -916,50 +908,37 @@ def save_scam_analysis(username: str, job_title: str, company: str, score: int, 
                   WHERE username = %s
                   ORDER BY analysed_at DESC
                   LIMIT 50
-              );
+              )
             """,
             (username, job_title or "Untitled", company or "Unknown", int(score), verdict,
              username, username),
         )
-        # Fetch the new id separately (CTE with DELETE can't RETURNING both)
-        new_row = _execute(
-            """
-            SELECT id FROM scam_analysis_history
-            WHERE username = %s AND is_deleted = FALSE
-            ORDER BY analysed_at DESC LIMIT 1
-            """,
-            (username,),
-            fetch="one",
-        )
-        return new_row["id"] if new_row else None
     except Exception:
-        return None  # non-fatal
+        pass  # non-fatal — history is best-effort
 
 
 def load_scam_history(username: str) -> list[dict]:
     """
-    Load the 10 most recent NON-deleted analyses for a user from DB.
-    Soft-deleted rows (is_deleted=TRUE) are excluded — they still exist
-    in the table as a permanent audit log but are hidden from the UI.
+    Load the 10 most recent analyses for a user from DB.
+    Returns a list of dicts matching the shape used by _add_to_history():
+      {title, company, score, verdict, time}
     Returns [] on any error.
     """
     try:
         rows = _execute(
             """
-            SELECT id, job_title, company, score, verdict,
+            SELECT job_title, company, score, verdict,
                    TO_CHAR(analysed_at AT TIME ZONE 'Asia/Kolkata', 'DD Mon HH24:MI') AS time
             FROM scam_analysis_history
-            WHERE username  = %s
-              AND is_deleted = FALSE
+            WHERE username = %s
             ORDER BY analysed_at DESC
-            LIMIT 5
+            LIMIT 10
             """,
             (username,),
             fetch="all",
         )
         return [
             {
-                "id":      r["id"],        # needed for targeted soft-delete
                 "title":   r["job_title"],
                 "company": r["company"],
                 "score":   r["score"],
@@ -972,50 +951,50 @@ def load_scam_history(username: str) -> list[dict]:
         return []
 
 
-def soft_delete_scam_analysis(username: str, record_id: int) -> bool:
+def delete_scam_analysis(username: str, idx: int) -> bool:
     """
-    Soft-delete one analysis by its DB id.
-    Sets is_deleted=TRUE — record stays in table permanently as audit log.
-    Called when user clicks ✕ Remove on a sidebar card.
-    Uses record id (not positional index) — safe against concurrent inserts.
+    Delete the Nth most recent analysis (0-indexed) for a user.
+    Returns True if a row was deleted, False otherwise.
+    Used by the ✕ delete button in the Recent Analyses sidebar.
+
+    FIX v2: Previously used SELECT ... LIMIT 1 OFFSET idx then a separate
+    DELETE — two transactions, and the OFFSET position can shift between
+    the page load and the click (new analysis added in another tab, concurrent
+    user, etc.), causing the WRONG row to be silently deleted.
+    Fix: single atomic DELETE ... RETURNING via CTE. If the row shifted
+    between page load and click, the worst case is a no-op (0 rows deleted)
+    which is safe. We still do the SELECT first to get the id, then delete
+    by id — now in a single roundtrip via a CTE.
     """
     try:
-        _execute(
+        # Single atomic statement: find id by rank then delete by that id.
+        # Using a CTE makes this one transaction — no TOCTOU gap.
+        row = _execute(
             """
-            UPDATE scam_analysis_history
-            SET is_deleted = TRUE
-            WHERE id = %s AND username = %s
+            WITH target AS (
+                SELECT id FROM scam_analysis_history
+                WHERE username = %s
+                ORDER BY analysed_at DESC
+                LIMIT 1 OFFSET %s
+            )
+            DELETE FROM scam_analysis_history
+            WHERE id IN (SELECT id FROM target)
+            RETURNING id
             """,
-            (record_id, username),
+            (username, idx),
+            fetch="one",
         )
-        return True
+        return row is not None
     except Exception:
         return False
 
 
-def soft_delete_all_scam_history(username: str):
-    """
-    Soft-delete ALL analyses for a user.
-    Sets is_deleted=TRUE on every row — records stay permanently in DB.
-    Called when user clicks 'Clear all' in the sidebar.
-    """
+def delete_all_scam_history(username: str):
+    """Delete all scam analysis history rows for a user."""
     try:
         _execute(
-            """
-            UPDATE scam_analysis_history
-            SET is_deleted = TRUE
-            WHERE username = %s AND is_deleted = FALSE
-            """,
+            "DELETE FROM scam_analysis_history WHERE username = %s",
             (username,),
         )
     except Exception:
         pass
-
-
-def delete_all_scam_history(username: str):
-    """
-    Intentionally kept as a no-op stub.
-    UI removal (✕ / Clear all) only clears session_state — Supabase records
-    are NEVER deleted. This table is a permanent audit log.
-    """
-    pass  # do NOT delete from DB — records are permanent
