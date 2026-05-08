@@ -1,51 +1,7 @@
 from __future__ import annotations
 """
-job_scam_detector.py  —  Production Grade v6
+job_scam_detector.py  —  Production Grade v5
 ─────────────────────────────────────────────
-New in v6 — Production-grade company verification (India-first):
-
-  TIER 1 EXPANSIONS (DNS/network):
-    • DKIM record check  — real companies sign email; scammers never do
-    • Reverse DNS (PTR)  — IP has no PTR = throwaway hosting
-    • IP geolocation     — hosting in known scam geographies vs India mismatch
-    • Port fingerprint   — checks 80/443/25/587; ghost domains leave all closed
-
-  TIER 2 — Indian government registries (4 parallel sources):
-    • MCA21 V3 (existing, improved fallback chain)
-    • GST registry       — extract GSTIN from post, validate checksum + state code
-    • EPFO establishment — unifiedportal.epfindia.gov.in probe
-    • MSME Udyam         — udyamregistration.gov.in probe
-
-  TIER 3 — Public web presence signals (5 parallel probes):
-    • LinkedIn company page existence + follower count hint
-    • Glassdoor employer page probe
-    • Google News presence  — real companies appear in news
-    • Justdial / IndiaMART  — local business listing check
-    • Wikipedia / Wikidata  — structured knowledge graph entity
-
-  TIER 4 — Smart identity extraction from the job post itself:
-    • GSTIN extractor    — 15-char + state code checksum validation
-    • CIN extractor      — 21-char MCA format + regex validation
-    • PAN extractor      — 10-char + structural validation
-    • Phone carrier check — VoIP vs real carrier via telecom circle
-    • Address + pincode  — district/state cross-validation
-
-  TIER 5 — Scam-specific signals:
-    • Clone name detector — fuzzy match vs 60+ major Indian brands
-    • Negative web signal — searches for "company name fraud/scam/cheated"
-    • Template fingerprint — detects recycled scam posting text
-    • NCS/NSDC cross-check — govt job board verification
-
-  SCORE FORMULA (updated):
-    • Old: 60% AI + 25% rules + 15% probes
-    • New: 55% AI + 20% rules + 25% probes  (probes now far stronger)
-
-  ARCHITECTURE:
-    • All new probes run in the existing parallel thread pool
-    • Each probe degrades gracefully — failure = INCONCLUSIVE, never crash
-    • Results cached 1hr via st.cache_data (unchanged)
-    • No new paid APIs or external dependencies added
-
 Fixes in v5 (over v4):
 
   BUG 1 — RESET BUTTON BROKEN:
@@ -120,15 +76,12 @@ Fixes in v4:
   - PRODUCTION GUIDANCE: See PRODUCTION.md that is printed to console on
     first run (set env PRINT_PROD_GUIDE=1).
 
-Detection layers (v6 — expanded):
-  A. 22 live network probes  (parallel threads — 5 tiers)
-     Tier 1: domain age · site reachability · typosquatting · free-email · MX · SPF/DMARC · DKIM · PTR · port fingerprint
-     Tier 2: MCA registry · GSTIN validation · CIN extraction · EPFO check
-     Tier 3: LinkedIn · Glassdoor · Google News · Justdial · Wikipedia
-     Tier 5: clone name detection · template fingerprint · negative web signal
-  B. 16-signal rule engine   (weighted, 0-100)
-  C. LLM deep analysis       (llama-3.3-70b-versatile via Groq)
-  D. Blended score           (55% AI + 20% rules + 25% probe penalty)
+Detection layers (unchanged):
+  A. 6 live network probes  (parallel threads)
+     domain age · site reachability · typosquatting · free-email · MX mail server · MCA registry
+  B. 15-signal rule engine  (weighted, 0-100)
+  C. LLM deep analysis      (llama-3.3-70b-versatile via Groq)
+  D. Blended score          (60% AI + 25% rules + 15% probe penalty)
 """
 
 import html as _html_escape
@@ -138,7 +91,6 @@ import json
 import time
 import socket
 import difflib
-import hashlib
 import threading
 import urllib.request
 import urllib.error
@@ -333,53 +285,14 @@ _FREE_DOMAINS: frozenset[str] = frozenset({
 })
 
 _BRAND_DOMAINS: list[str] = [
-    # IT / Tech
     "infosys.com","tcs.com","wipro.com","hcltech.com","accenture.com",
     "ibm.com","amazon.in","amazon.com","google.com","microsoft.com",
-    "mindtree.com","mphasis.com","ltimindtree.com","capgemini.com",
-    "cognizant.com","hexaware.com","persistent.com","tech-mahindra.com",
-    "techmahindra.com","niit.com","kpit.com","cyient.com","zensar.com",
-    "mastek.com","birlasoft.com","sonata-software.com","happiest-minds.com",
-    # E-commerce / Startups
     "flipkart.com","swiggy.in","zomato.com","paytm.com","ola.com",
     "myntra.com","meesho.com","byju.com","razorpay.com","freshworks.com",
-    "zoho.com","phonepe.com","nykaa.com","bigbasket.com","dunzo.com",
-    "udaan.com","lenskart.com","pepperfry.com","urban-company.com",
-    "urbancompany.com","policybazaar.com","groww.in","zerodha.com",
-    "sharekhan.com","icicidirect.com","hdfcsec.com",
-    # Job boards
-    "naukri.com","linkedin.com","indeed.com","glassdoor.com","shine.com",
-    "monster.com","timesjobs.com","foundit.in","apna.co","workindia.in",
-    # Banking / Finance
-    "hdfcbank.com","icicibank.com","sbi.co.in","axisbank.com",
-    "kotak.com","yesbank.in","indusind.com","federalbank.co.in",
-    # Others
-    "reliance.com","jio.com","airtel.in","vodafone.in","bsnl.co.in",
-    "tata.com","tatamotors.com","tatasteel.com","adani.com",
-    "mahindra.com","bajajauto.com","herogroup.com","ultratech-cement.com",
+    "zoho.com","mindtree.com","mphasis.com","ltimindtree.com",
+    "capgemini.com","cognizant.com","hexaware.com","persistent.com",
+    "naukri.com","linkedin.com","indeed.com","glassdoor.com",
 ]
-
-# Mapping of common company name → canonical domain for Tier 4 name-to-domain matching
-_BRAND_ALIASES: dict[str, str] = {
-    "tata consultancy services": "tcs.com",
-    "tcs": "tcs.com",
-    "tech mahindra": "techmahindra.com",
-    "hcl technologies": "hcltech.com",
-    "hcl": "hcltech.com",
-    "lti mindtree": "ltimindtree.com",
-    "larsen toubro infotech": "ltimindtree.com",
-    "happiest minds": "happiest-minds.com",
-    "urban company": "urbancompany.com",
-    "l&t infotech": "ltimindtree.com",
-    "hdfc bank": "hdfcbank.com",
-    "icici bank": "icicibank.com",
-    "state bank of india": "sbi.co.in",
-    "axis bank": "axisbank.com",
-    "policy bazaar": "policybazaar.com",
-    "phone pe": "phonepe.com",
-    "big basket": "bigbasket.com",
-    "fresh works": "freshworks.com",
-}
 
 _PAY_PHRASES = [
     r"pay.*registration",r"registration fee",r"training fee",r"kit fee",
@@ -1476,774 +1389,6 @@ def _dns_mx_lookup(domain: str) -> bool:
         return False
 
 
-
-def _probe_spf_dmarc(domain: str) -> dict:
-    """
-    Check SPF and DMARC TXT records for a domain.
-
-    SPF  — "v=spf1 ..." TXT record on the domain itself
-    DMARC — "v=DMARC1 ..." TXT record on _dmarc.{domain}
-
-    Why it matters:
-    - Real companies always configure SPF (authorises their mail servers)
-    - Real companies almost always configure DMARC (prevents spoofing)
-    - A domain with MX but NO SPF + NO DMARC = set up just enough to look real
-      but the owner never actually uses it for legitimate business email
-
-    Uses Cloudflare DoH — same as _probe_mx_record. No dnspython needed.
-    Gracefully returns SKIPPED if domain is empty or network fails.
-    """
-    out = {
-        "spf":    None,   # True/False/None(skipped)
-        "dmarc":  None,
-        "spf_record":   "",
-        "dmarc_record": "",
-        "detail": "",
-        "score":  0,
-    }
-
-    if not domain:
-        out["detail"] = "No domain — SPF/DMARC check skipped"
-        return out
-
-    def _txt_query(name: str) -> list[str]:
-        """Return list of TXT record strings for `name` via Cloudflare DoH."""
-        try:
-            url = f"https://cloudflare-dns.com/dns-query?name={name}&type=TXT"
-            req = urllib.request.Request(
-                url,
-                headers={"Accept": "application/dns-json", "User-Agent": "ScamDetector/4.0"},
-            )
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                data = json.loads(resp.read().decode())
-            return [
-                a["data"].strip('"').replace('" "', "")   # join split TXT chunks
-                for a in data.get("Answer", [])
-                if a.get("type") == 16   # type 16 = TXT
-            ]
-        except Exception:
-            return []
-
-    # ── SPF ──────────────────────────────────────────────────────────────────
-    txt_records = _txt_query(domain)
-    spf_records = [r for r in txt_records if r.lower().startswith("v=spf1")]
-    out["spf"] = bool(spf_records)
-    if spf_records:
-        out["spf_record"] = spf_records[0][:80]
-
-    # ── DMARC ─────────────────────────────────────────────────────────────────
-    dmarc_records = _txt_query(f"_dmarc.{domain}")
-    dmarc_found = [r for r in dmarc_records if r.lower().startswith("v=dmarc1")]
-    out["dmarc"] = bool(dmarc_found)
-    if dmarc_found:
-        out["dmarc_record"] = dmarc_found[0][:80]
-
-    # ── Score ─────────────────────────────────────────────────────────────────
-    details = []
-    if not out["spf"]:
-        out["score"] += 10
-        details.append("No SPF record")
-    else:
-        details.append(f"SPF ✓")
-
-    if not out["dmarc"]:
-        out["score"] += 8
-        details.append("No DMARC record")
-    else:
-        details.append(f"DMARC ✓")
-
-    if not out["spf"] and not out["dmarc"]:
-        out["score"] += 5   # extra penalty for both missing
-        details.append("→ domain not configured for legitimate email use")
-
-    out["detail"] = f"'{domain}': " + " | ".join(details)
-    return out
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TIER 1 EXPANSIONS — DNS / network probes
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _probe_dkim(domain: str) -> dict:
-    """
-    Check for DKIM public key record at default._domainkey.<domain>.
-    Real companies using Google Workspace / Microsoft 365 / Zoho always have this.
-    Absence is not conclusive alone but combined with no SPF/DMARC = very suspicious.
-    Uses Cloudflare DoH — no extra deps.
-    """
-    out = {"found": None, "detail": "", "score": 0}
-    if not domain:
-        out["detail"] = "No domain — DKIM check skipped"
-        return out
-    selectors = ["default", "google", "selector1", "selector2", "mail", "zoho", "k1"]
-    try:
-        for sel in selectors:
-            url = f"https://cloudflare-dns.com/dns-query?name={sel}._domainkey.{domain}&type=TXT"
-            req = urllib.request.Request(
-                url, headers={"Accept": "application/dns-json", "User-Agent": "ScamDetector/6.0"}
-            )
-            with urllib.request.urlopen(req, timeout=4) as resp:
-                data = json.loads(resp.read().decode())
-            answers = [
-                a["data"] for a in data.get("Answer", [])
-                if a.get("type") == 16 and "p=" in a.get("data", "")
-            ]
-            if answers:
-                out.update(found=True, detail=f"DKIM key found at '{sel}._domainkey.{domain}'")
-                return out
-        out.update(found=False, score=8,
-                   detail=f"No DKIM key found for '{domain}' — email signing not configured")
-    except Exception:
-        out.update(found=None, detail="DKIM check inconclusive")
-    return out
-
-
-def _probe_ptr_record(domain: str) -> dict:
-    """
-    Reverse DNS (PTR) check: resolve domain → IP → PTR record.
-    Legitimate hosting has meaningful PTR (mail.company.com, cloud provider names).
-    Throwaway VPS hosting often has no PTR or generic numeric PTR.
-    """
-    out = {"has_ptr": None, "ptr": "", "ip": "", "detail": "", "score": 0}
-    if not domain:
-        return out
-    try:
-        ip = socket.gethostbyname(domain)
-        out["ip"] = ip
-        try:
-            ptr = socket.gethostbyaddr(ip)[0]
-            out.update(has_ptr=True, ptr=ptr,
-                       detail=f"PTR record: {ip} → {ptr}")
-        except socket.herror:
-            out.update(has_ptr=False, score=6,
-                       detail=f"No reverse DNS (PTR) for {ip} — throwaway hosting pattern")
-    except socket.gaierror:
-        out.update(has_ptr=None, detail="PTR check skipped — domain DNS failed")
-    return out
-
-
-def _probe_port_fingerprint(domain: str) -> dict:
-    """
-    Check which ports are open: 80 (HTTP), 443 (HTTPS), 25 (SMTP), 587 (submission).
-    A ghost domain (registered for appearances only) leaves all ports closed.
-    Real companies: 80+443 always open; 25/587 open if they run own mail server.
-    """
-    out = {"ports": {}, "open_count": 0, "detail": "", "score": 0}
-    if not domain:
-        return out
-    checks = {80: "HTTP", 443: "HTTPS", 25: "SMTP", 587: "SMTP-submit"}
-    results = {}
-    for port, label in checks.items():
-        try:
-            s = socket.create_connection((domain, port), timeout=3)
-            s.close()
-            results[port] = True
-        except Exception:
-            results[port] = False
-    out["ports"] = results
-    out["open_count"] = sum(results.values())
-    open_labels = [f"{checks[p]}({p})" for p, v in results.items() if v]
-    closed_labels = [f"{checks[p]}({p})" for p, v in results.items() if not v]
-    if out["open_count"] == 0:
-        out["score"] = 15
-        out["detail"] = f"ALL ports closed on '{domain}' — ghost domain, not a live business"
-    elif not results[80] and not results[443]:
-        out["score"] = 10
-        out["detail"] = f"No web server on '{domain}' (ports 80/443 closed) | Open: {', '.join(open_labels) or 'none'}"
-    else:
-        out["detail"] = f"Open: {', '.join(open_labels)} | Closed: {', '.join(closed_labels)}"
-    return out
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TIER 2 — Indian government registries
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Indian state codes for GSTIN validation
-_GSTIN_STATE_CODES: dict[str, str] = {
-    "01": "Jammu & Kashmir", "02": "Himachal Pradesh", "03": "Punjab",
-    "04": "Chandigarh", "05": "Uttarakhand", "06": "Haryana",
-    "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh",
-    "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh",
-    "13": "Nagaland", "14": "Manipur", "15": "Mizoram",
-    "16": "Tripura", "17": "Meghalaya", "18": "Assam",
-    "19": "West Bengal", "20": "Jharkhand", "21": "Odisha",
-    "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat",
-    "25": "Daman & Diu", "26": "Dadra & Nagar Haveli", "27": "Maharashtra",
-    "28": "Andhra Pradesh", "29": "Karnataka", "30": "Goa",
-    "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu",
-    "34": "Puducherry", "35": "Andaman & Nicobar", "36": "Telangana",
-    "37": "Andhra Pradesh (new)", "38": "Ladakh",
-}
-
-
-def _validate_gstin_checksum(gstin: str) -> bool:
-    """
-    Validate GSTIN checksum using the official algorithm.
-    GSTIN = 2 digit state + 10 PAN + 1 entity + 1 Z + 1 checksum
-    """
-    if len(gstin) != 15:
-        return False
-    chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    try:
-        total = 0
-        for i, c in enumerate(gstin[:-1]):
-            val = chars.index(c)
-            if i % 2 == 1:
-                val *= 2
-            total += val // len(chars) + val % len(chars)
-        checksum = chars[(len(chars) - total % len(chars)) % len(chars)]
-        return checksum == gstin[-1]
-    except (ValueError, IndexError):
-        return False
-
-
-def _extract_gstin(text: str) -> Optional[str]:
-    """Extract GSTIN from text — 15-char alphanumeric with state code prefix."""
-    pattern = r"\b([0-3][0-9][A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z])\b"
-    m = re.search(pattern, text or "", re.IGNORECASE)
-    if m:
-        return m.group(1).upper()
-    return None
-
-
-def _extract_cin(text: str) -> Optional[str]:
-    """
-    Extract CIN (Corporate Identity Number) from text.
-    Format: L/U + 5 digits + 2 letter state + 4 digit year + PLC/PTC/LLC + 6 digits
-    Example: L17110MH1973PLC019786
-    """
-    pattern = r"\b([LU]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6})\b"
-    m = re.search(pattern, text or "", re.IGNORECASE)
-    if m:
-        return m.group(1).upper()
-    return None
-
-
-def _extract_pan(text: str) -> Optional[str]:
-    """
-    Extract PAN number from text.
-    Format: 5 uppercase letters + 4 digits + 1 uppercase letter
-    Example: ABCDE1234F
-    """
-    # Avoid matching inside email addresses or URLs
-    pattern = r"(?<![/@\w])([A-Z]{5}[0-9]{4}[A-Z])(?![a-zA-Z0-9])"
-    m = re.search(pattern, text or "")
-    if m:
-        pan = m.group(1)
-        # PAN 4th character encodes entity type — P=person, C=company, H=HUF etc.
-        if pan[3] in "ABCFGHJLPT":
-            return pan
-    return None
-
-
-def _probe_gstin(text: str, company: str) -> dict:
-    """
-    Tier 2a: Extract GSTIN from job post text and validate it.
-    Steps:
-    1. Extract GSTIN via regex
-    2. Validate checksum (cryptographic — no network needed)
-    3. Cross-check state code vs claimed job location
-    4. Probe GST API for registration status (best-effort)
-    """
-    out = {
-        "gstin": None, "valid_checksum": None, "state": None,
-        "registered": None, "detail": "", "score": 0,
-    }
-    gstin = _extract_gstin(text)
-    if not gstin:
-        out["detail"] = "No GSTIN found in job posting"
-        return out
-
-    out["gstin"] = gstin
-    state_code = gstin[:2]
-    out["state"] = _GSTIN_STATE_CODES.get(state_code, f"Unknown state code {state_code}")
-
-    # Checksum validation (zero network — deterministic)
-    valid = _validate_gstin_checksum(gstin)
-    out["valid_checksum"] = valid
-    if not valid:
-        out["score"] = 25
-        out["detail"] = f"GSTIN '{gstin}' has INVALID checksum — fabricated number"
-        return out
-
-    # Probe GST portal (best-effort — often blocks bots but worth trying)
-    try:
-        url = f"https://www.gstin.gov.in/gstfetch.php?gstin={gstin}"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json, text/html, */*",
-            "Referer": "https://www.gstin.gov.in/",
-        })
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        with urllib.request.urlopen(req, timeout=6, context=ctx) as resp:
-            body = resp.read().decode("utf-8", errors="ignore")
-        if "Active" in body or "active" in body:
-            out.update(registered=True,
-                       detail=f"GSTIN '{gstin}' — {out['state']} — ACTIVE registration verified")
-        elif "Cancelled" in body or "cancelled" in body:
-            out.update(registered=False, score=20,
-                       detail=f"GSTIN '{gstin}' — registration CANCELLED")
-        elif "Invalid" in body or "invalid" in body or "not found" in body.lower():
-            out.update(registered=False, score=20,
-                       detail=f"GSTIN '{gstin}' — NOT FOUND in GST registry")
-        else:
-            out["detail"] = f"GSTIN '{gstin}' — {out['state']} — checksum valid (portal inconclusive)"
-    except Exception:
-        out["detail"] = f"GSTIN '{gstin}' — {out['state']} — checksum valid (portal unreachable)"
-
-    return out
-
-
-def _probe_cin_extract(text: str) -> dict:
-    """Tier 2b: Extract and validate CIN from job posting."""
-    out = {"cin": None, "valid_format": None, "detail": "", "score": 0}
-    cin = _extract_cin(text)
-    if not cin:
-        out["detail"] = "No CIN found in job posting"
-        return out
-    out["cin"] = cin
-    # Basic structural validation
-    m = re.match(r"^([LU])(\d{5})([A-Z]{2})(\d{4})([A-Z]{3})(\d{6})$", cin)
-    if not m:
-        out.update(valid_format=False, score=15,
-                   detail=f"CIN '{cin}' has invalid structure")
-        return out
-    listed = m.group(1) == "L"
-    state = m.group(3)
-    year = int(m.group(4))
-    entity_type = m.group(5)
-    out.update(valid_format=True,
-               detail=(f"CIN '{cin}' — {'Listed' if listed else 'Unlisted'} company | "
-                       f"State: {state} | Incorporated: {year} | Type: {entity_type}"))
-    if year > datetime.utcnow().year:
-        out.update(valid_format=False, score=20,
-                   detail=f"CIN '{cin}' has FUTURE incorporation year {year} — fabricated")
-    return out
-
-
-def _probe_epfo(company: str) -> dict:
-    """
-    Tier 2c: Check EPFO (Employee Provident Fund) establishment registration.
-    Real employers with >20 employees MUST be EPFO registered.
-    Probes the EPFO unified portal search.
-    """
-    out = {"found": None, "detail": "", "score": 0}
-    if not company or len(company.strip()) < 3:
-        out["detail"] = "No company name — EPFO check skipped"
-        return out
-    try:
-        encoded = urllib.parse.quote(company.strip())
-        url = f"https://unifiedportal-emp.epfindia.gov.in/epfo/searchEstablishment?name={encoded}"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json, */*",
-            "Referer": "https://unifiedportal-emp.epfindia.gov.in/",
-        })
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
-            body = resp.read().decode("utf-8", errors="ignore")
-        body_lower = body.lower()
-        company_words = [w for w in re.sub(r"[^\w\s]", "", company).lower().split()
-                         if len(w) > 2]
-        hits = sum(1 for w in company_words if w in body_lower)
-        if hits >= max(1, len(company_words) - 1):
-            out.update(found=True,
-                       detail=f"'{company}' found in EPFO establishment registry — registered employer")
-        elif "no record" in body_lower or "not found" in body_lower or len(body.strip()) < 200:
-            out.update(found=False, score=8,
-                       detail=f"'{company}' NOT found in EPFO registry — may be unregistered or very small")
-        else:
-            out.update(found=None, detail="EPFO probe inconclusive — verify at epfindia.gov.in")
-    except Exception:
-        out.update(found=None, detail="EPFO portal unreachable — verify manually")
-    return out
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TIER 3 — Public web presence signals
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _probe_linkedin_company(company: str) -> dict:
-    """
-    Tier 3a: Check LinkedIn company page existence.
-    Method: probe linkedin.com/company/<slug> — 200 = exists, 404 = doesn't.
-    Slug is derived from company name (same algorithm LinkedIn uses).
-    No auth needed for public page existence check.
-    """
-    out = {"exists": None, "url": "", "detail": "", "score": 0}
-    if not company or len(company.strip()) < 2:
-        out["detail"] = "No company name — LinkedIn check skipped"
-        return out
-
-    # Generate LinkedIn slug: lowercase, strip special chars, spaces → hyphens
-    def _li_slug(name: str) -> str:
-        s = name.lower()
-        s = re.sub(r"\s+pvt\.?\s*ltd\.?|\s+private\s+limited|\s+limited|\s+ltd\.?", "", s, flags=re.I)
-        s = re.sub(r"[^a-z0-9\s]", "", s)
-        s = re.sub(r"\s+", "-", s.strip())
-        return s
-
-    # Also try alias table
-    alias_key = company.lower().strip()
-    canonical = _BRAND_ALIASES.get(alias_key)
-
-    slugs_to_try = [_li_slug(company)]
-    # Try without common suffixes
-    base = re.sub(r"\s+(pvt|private|limited|ltd|llp|inc|corp)\.?\s*$", "", company, flags=re.I).strip()
-    if base != company:
-        slugs_to_try.append(_li_slug(base))
-    # Try first word only (e.g. "Infosys Technologies" → "infosys")
-    first_word = company.split()[0].lower() if company.split() else ""
-    if first_word and first_word not in slugs_to_try:
-        slugs_to_try.append(first_word)
-
-    for slug in slugs_to_try:
-        if not slug:
-            continue
-        url = f"https://www.linkedin.com/company/{slug}"
-        try:
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; ScamDetector/6.0)",
-                "Accept": "text/html",
-            })
-            with urllib.request.urlopen(req, timeout=6) as resp:
-                status = resp.status
-                body = resp.read(2048).decode("utf-8", errors="ignore")
-            if status == 200 and ("company" in body.lower() or "linkedin" in body.lower()):
-                out.update(exists=True, url=url,
-                           detail=f"LinkedIn company page found: linkedin.com/company/{slug}")
-                return out
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                continue  # try next slug
-            # 999 = LinkedIn bot block — inconclusive
-            out.update(exists=None,
-                       detail="LinkedIn check blocked (rate limit) — verify manually")
-            return out
-        except Exception:
-            continue
-
-    out.update(exists=False, score=10,
-               detail=f"No LinkedIn company page found for '{company}' — verify at linkedin.com/company/")
-    return out
-
-
-def _probe_glassdoor(company: str) -> dict:
-    """
-    Tier 3b: Check Glassdoor employer existence.
-    Real employers with any scale have Glassdoor pages.
-    Absence for large claimed companies is a red flag.
-    """
-    out = {"exists": None, "detail": "", "score": 0}
-    if not company or len(company.strip()) < 2:
-        out["detail"] = "No company name — Glassdoor check skipped"
-        return out
-    try:
-        encoded = urllib.parse.quote(company.strip())
-        url = f"https://www.glassdoor.co.in/Search/results.htm?keyword={encoded}&type=EMPLOYER"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "text/html,*/*",
-            "Accept-Language": "en-IN,en;q=0.9",
-        })
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            body = resp.read(8192).decode("utf-8", errors="ignore")
-        company_words = [w.lower() for w in re.sub(r"[^\w\s]", "", company).split() if len(w) > 2]
-        hits = sum(1 for w in company_words if w in body.lower())
-        if hits >= max(1, len(company_words) - 1):
-            out.update(exists=True, detail=f"Glassdoor employer profile found for '{company}'")
-        elif "no results" in body.lower() or "0 results" in body.lower():
-            out.update(exists=False, score=7,
-                       detail=f"No Glassdoor profile for '{company}' — uncommon for established employers")
-        else:
-            out.update(exists=None, detail="Glassdoor check inconclusive")
-    except Exception:
-        out.update(exists=None, detail="Glassdoor probe failed — verify manually")
-    return out
-
-
-def _probe_google_news(company: str) -> dict:
-    """
-    Tier 3c: Check if company appears in Google News results.
-    Scam companies almost never appear in legitimate news.
-    Real companies of any scale have press coverage.
-    Also checks for NEGATIVE signals: fraud/scam/cheated in results.
-    """
-    out = {"has_news": None, "negative_signal": False, "detail": "", "score": 0}
-    if not company or len(company.strip()) < 2:
-        out["detail"] = "No company name — news check skipped"
-        return out
-    try:
-        # Google News RSS — no auth, public, reliable
-        encoded = urllib.parse.quote(f'"{company}"')
-        url = f"https://news.google.com/rss/search?q={encoded}&hl=en-IN&gl=IN&ceid=IN:en"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; ScamDetector/6.0)",
-            "Accept": "application/rss+xml, application/xml, */*",
-        })
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            body = resp.read(16384).decode("utf-8", errors="ignore")
-
-        # Count articles
-        item_count = body.lower().count("<item>")
-        negative_terms = ["fraud", "scam", "cheated", "fake", "ponzi", "arrested",
-                          "fir", "police", "duped", "complaint", "sebi order", "rbi ban"]
-        negative_hit = any(t in body.lower() for t in negative_terms)
-
-        if item_count >= 3:
-            if negative_hit:
-                out.update(has_news=True, negative_signal=True, score=20,
-                           detail=f"'{company}' appears in news BUT with FRAUD/SCAM mentions — high risk")
-            else:
-                out.update(has_news=True, negative_signal=False,
-                           detail=f"'{company}' found in {item_count} news articles — legitimate press presence")
-        elif item_count >= 1:
-            out.update(has_news=True,
-                       detail=f"'{company}' has minimal news coverage ({item_count} articles)")
-        else:
-            out.update(has_news=False, score=8,
-                       detail=f"No news coverage found for '{company}' — invisible to press")
-    except Exception:
-        out.update(has_news=None, detail="News probe failed — verify manually")
-    return out
-
-
-def _probe_justdial(company: str) -> dict:
-    """
-    Tier 3d: Check Justdial / IndiaMART business listing.
-    Local Indian business directories — very reliable for SMEs.
-    Legitimate local businesses almost always have a Justdial listing.
-    """
-    out = {"found": None, "detail": "", "score": 0}
-    if not company or len(company.strip()) < 2:
-        out["detail"] = "No company — Justdial check skipped"
-        return out
-    try:
-        encoded = urllib.parse.quote(company.strip())
-        url = f"https://www.justdial.com/India/{encoded}"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "text/html",
-            "Accept-Language": "en-IN,en;q=0.9",
-        })
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            body = resp.read(8192).decode("utf-8", errors="ignore")
-        company_core = re.sub(r"[^\w\s]", "", company).lower()
-        if company_core[:8] in body.lower() or company.lower() in body.lower():
-            out.update(found=True, detail=f"'{company}' found in Justdial listings")
-        elif "no results" in body.lower() or len(body.strip()) < 1000:
-            out.update(found=False, score=5,
-                       detail=f"'{company}' not found in Justdial")
-        else:
-            out.update(found=None, detail="Justdial check inconclusive")
-    except Exception:
-        out.update(found=None, detail="Justdial probe failed")
-    return out
-
-
-def _probe_wikipedia(company: str) -> dict:
-    """
-    Tier 3e: Check Wikipedia / Wikidata for company entity.
-    Major companies always have Wikipedia pages.
-    For mid-tier companies, Wikidata entity presence is a positive signal.
-    """
-    out = {"found": None, "detail": "", "score": 0}
-    if not company or len(company.strip()) < 2:
-        out["detail"] = "No company — Wikipedia check skipped"
-        return out
-    try:
-        # Wikipedia search API
-        encoded = urllib.parse.quote(company.strip())
-        url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={encoded}&format=json&srlimit=3"
-        req = urllib.request.Request(url, headers={"User-Agent": "ScamDetector/6.0 (job-scam-detection)"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode())
-        results = data.get("query", {}).get("search", [])
-        company_lower = company.lower()
-        for r in results:
-            title_lower = r.get("title", "").lower()
-            # Check if title meaningfully matches company name
-            if (company_lower[:8] in title_lower or title_lower[:8] in company_lower or
-                    any(w in title_lower for w in company_lower.split() if len(w) > 4)):
-                out.update(found=True,
-                           detail=f"Wikipedia article found: '{r['title']}'")
-                return out
-        out.update(found=False,
-                   detail=f"No Wikipedia article for '{company}' — unknown company globally")
-    except Exception:
-        out.update(found=None, detail="Wikipedia probe failed")
-    return out
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TIER 5 — Scam-specific signals
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Known scam-associated phrases and company name patterns for clone detection
-_SCAM_CLONE_PREFIXES = [
-    "infosyss", "wipros", "tcs india", "hcls", "accentures",
-    "amazon india jobs", "google india jobs", "microsoft india jobs",
-    "flipkart jobs", "swiggy jobs", "zomato jobs",
-]
-
-def _probe_clone_name(company: str) -> dict:
-    """
-    Tier 5a: Detect company names that clone or impersonate known brands.
-    Checks:
-    1. Fuzzy similarity to brand list (already in typosquatting for domain;
-       this does it for the COMPANY NAME itself)
-    2. Known scam clone prefixes
-    3. Extra word patterns: "Infosys Group", "TCS Solutions Pvt Ltd" etc.
-    """
-    out = {"is_clone": False, "closest_brand": None, "similarity": 0.0,
-           "detail": "", "score": 0}
-    if not company or len(company.strip()) < 2:
-        return out
-
-    company_lower = company.lower().strip()
-    # Strip common suffixes for core comparison
-    core = re.sub(
-        r"\s+(pvt|private|limited|ltd|llp|inc|corp|group|solutions?|services?|"
-        r"technologies|tech|consultancy|consulting|india|global|infotech|systems?)\.?\s*$",
-        "", company_lower, flags=re.I
-    ).strip()
-
-    best_score = 0.0
-    best_brand = ""
-    for brand_domain in _BRAND_DOMAINS:
-        brand_core = brand_domain.split(".")[0].replace("-", " ")
-        # Also check against brand aliases
-        for alias in _BRAND_ALIASES:
-            sc = difflib.SequenceMatcher(None, core, alias).ratio()
-            if sc > best_score:
-                best_score, best_brand = sc, alias
-
-        sc = difflib.SequenceMatcher(None, core, brand_core).ratio()
-        if sc > best_score:
-            best_score, best_brand = sc, brand_core
-
-    out.update(similarity=round(best_score, 3), closest_brand=best_brand)
-
-    # Flag if very similar but NOT an exact match (impersonator zone)
-    if best_score >= 0.80 and core != best_brand and core not in best_brand and best_brand not in core:
-        out.update(is_clone=True, score=25,
-                   detail=f"Company name '{company}' is {int(best_score*100)}% similar to '{best_brand}' — possible impersonation")
-    elif core in _SCAM_CLONE_PREFIXES:
-        out.update(is_clone=True, score=30,
-                   detail=f"Company name '{company}' matches known scam clone pattern")
-    else:
-        out["detail"] = f"No brand impersonation detected (best match: {int(best_score*100)}% to '{best_brand}')"
-    return out
-
-
-def _probe_template_fingerprint(description: str) -> dict:
-    """
-    Tier 5b: Detect recycled scam posting templates.
-    Method: compute structural fingerprint of the posting (not content hash —
-    content varies; structure doesn't).
-    Known scam templates have identical paragraph count, line lengths, and
-    keyword density patterns.
-
-    Also checks against a static list of known scam template phrases.
-    """
-    out = {"is_template": False, "fingerprint": "", "matches": [], "detail": "", "score": 0}
-    if not description or len(description) < 100:
-        return out
-
-    # Known verbatim scam template phrases (high-confidence signals)
-    SCAM_TEMPLATES = [
-        r"urgent requirement.*work from home.*no experience.*required",
-        r"data entry.*work.*home.*₹?\s*\d+.*daily",
-        r"earn.*₹\s*\d+.*per\s+(?:day|week|hour).*from\s+home",
-        r"simple\s+copy\s+paste.*work.*₹",
-        r"part\s+time\s+job.*no\s+investment.*earn",
-        r"freshers?\s+can\s+apply.*no\s+experience.*no\s+interview",
-        r"100%\s+job\s+guarantee.*after\s+training\s+fee",
-        r"immediate\s+joining.*whatsapp.*only.*contact",
-        r"no\s+target.*no\s+pressure.*unlimited\s+earning",
-        r"investment\s+\d+.*get\s+returns?\s+\d+",
-        r"refer\s+\d+\s+friends.*earn\s+₹",
-        r"work\s+from\s+home.*mobile.*required.*only",
-        r"typing\s+work.*home.*earn.*daily",
-        r"online\s+form\s+filling.*work.*from.*home",
-        r"packing.*work.*home.*earn.*daily.*basis",
-    ]
-
-    text_lower = description.lower()
-    matches = []
-    for pat in SCAM_TEMPLATES:
-        if re.search(pat, text_lower):
-            matches.append(pat[:50])
-
-    if matches:
-        out.update(is_template=True, matches=matches, score=20,
-                   detail=f"Job posting matches {len(matches)} known scam template pattern(s)")
-        return out
-
-    # Structural fingerprint: paragraph count + avg line length + keyword density
-    lines = [l.strip() for l in description.split("\n") if l.strip()]
-    if not lines:
-        return out
-    avg_len = sum(len(l) for l in lines) / len(lines)
-    short_lines = sum(1 for l in lines if len(l) < 30)
-    # High ratio of very short lines = typical scam template (bullet spam)
-    if len(lines) > 5 and short_lines / len(lines) > 0.6:
-        out.update(is_template=True, score=10,
-                   detail="Posting structure matches scam template pattern (excessive short bullet lines)")
-        return out
-
-    fp = hashlib.md5(f"{len(lines)}|{int(avg_len)}|{short_lines}".encode()).hexdigest()[:8]
-    out["fingerprint"] = fp
-    out["detail"] = f"Structural fingerprint: {fp} — no known scam template match"
-    return out
-
-
-def _probe_negative_web(company: str) -> dict:
-    """
-    Tier 5c: Search for negative web signals — fraud/scam/cheated mentions.
-    Uses Google News RSS and DuckDuckGo lite search to find negative press.
-    This is purely additive — presence of negative results raises score;
-    absence does NOT lower it (many small scams have no press coverage).
-    """
-    out = {"negative_found": False, "snippets": [], "detail": "", "score": 0}
-    if not company or len(company.strip()) < 2:
-        return out
-
-    NEGATIVE_TERMS = ["fraud", "scam", "fake", "cheated", "duped", "fir filed",
-                      "arrested", "ponzi", "complaint", "case registered", "sebi ban",
-                      "rbi penalty", "nclt order"]
-    try:
-        search_q = urllib.parse.quote(f'"{company}" fraud OR scam OR cheated OR fake')
-        url = f"https://news.google.com/rss/search?q={search_q}&hl=en-IN&gl=IN&ceid=IN:en"
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; ScamDetector/6.0)",
-            "Accept": "application/rss+xml",
-        })
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            body = resp.read(16384).decode("utf-8", errors="ignore")
-
-        # Extract titles from RSS
-        titles = re.findall(r"<title><!\[CDATA\[(.*?)\]\]></title>", body)
-        titles += re.findall(r"<title>(.*?)</title>", body)
-        negative_titles = [
-            t for t in titles
-            if any(nt in t.lower() for nt in NEGATIVE_TERMS)
-            and company.lower().split()[0] in t.lower()
-        ]
-        if negative_titles:
-            out.update(negative_found=True, snippets=negative_titles[:3], score=25,
-                       detail=f"NEGATIVE WEB SIGNAL: '{company}' linked to fraud/scam in {len(negative_titles)} news items")
-        else:
-            out["detail"] = f"No negative news signals found for '{company}'"
-    except Exception:
-        out["detail"] = "Negative web probe failed — verify manually"
-    return out
-
-
 def _probe_company_domain(args: tuple) -> dict:
     """
     Verify a company is real using ONLY DNS socket + TCP port checks.
@@ -2280,39 +1425,12 @@ def _probe_company_domain(args: tuple) -> dict:
         m = re.search(r"(?:https?://)?(?:www\.)?([a-z0-9\-\.]+\.[a-z]{2,})", website.lower())
         if m:
             domain = m.group(1)
-    # Smart domain guessing from company name — v6 upgraded
+    # Fallback: guess from company name (e.g. "Wipro" → wipro.com)
     guessed = False
     if not domain and company:
-        co_lower = company.lower().strip()
-        # 1. Check alias table first (TCS → tcs.com, HDFC Bank → hdfcbank.com)
-        alias_key = re.sub(r"\s+(pvt\.?|ltd\.?|private limited|limited|llp)$", "", co_lower).strip()
-        if alias_key in _BRAND_ALIASES:
-            domain = _BRAND_ALIASES[alias_key]
-            guessed = True
-        else:
-            # 2. Check if company name directly matches a brand domain SLD
-            core_name = re.sub(r"[^a-z0-9]", "", alias_key.split()[0]) if alias_key.split() else ""
-            for bd in _BRAND_DOMAINS:
-                bd_sld = bd.split(".")[0].replace("-", "")
-                if core_name and (core_name == bd_sld or bd_sld.startswith(core_name)):
-                    domain = bd
-                    guessed = True
-                    break
-            # 3. Generic fallback: try .com, .in, .co.in
-            if not domain and core_name:
-                for tld in (".com", ".in", ".co.in"):
-                    candidate = f"{core_name}{tld}"
-                    try:
-                        socket.gethostbyname(candidate)
-                        domain = candidate
-                        guessed = True
-                        break
-                    except socket.gaierror:
-                        continue
-            # 4. Last resort: first word + .com
-            if not domain and core_name:
-                domain = f"{core_name}.com"
-                guessed = True
+        slug   = re.sub(r"[^a-z0-9]", "", company.lower().split()[0])
+        domain = f"{slug}.com"
+        guessed = True
 
     if not domain:
         out["detail"] = "No website provided — could not verify company domain"
@@ -2591,40 +1709,19 @@ def _probe_mca(company: str) -> dict:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _run_live_probes_cached(domain: str, contact: str, company: str, website: str, description: str) -> dict:
+def _run_live_probes_cached(domain: str, contact: str, company: str, website: str) -> dict:
     """
-    v6: Expanded probe set — 17 parallel checks across 5 tiers.
-    Cache key now includes description (for template fingerprint).
-    All new probes degrade gracefully — failure = INCONCLUSIVE, never crash.
+    Cache probe results for 1 hour keyed on (domain, contact, company, website).
+    Identical domain lookups within the same server session skip all network calls.
+    Cache is per-server-process — cleared on app restart (acceptable for Streamlit Cloud).
     """
     probes: dict = {
-        # Tier 1 — DNS / network (existing)
         "domain_age":     {"status": "skipped", "detail": "No domain provided"},
         "site_reach":     {"reachable": None,   "detail": "No domain provided"},
         "typosquat":      {"is_squatter": False, "detail": "No domain provided"},
         "free_email":     {"uses_free_domain": False, "detail": ""},
         "mx_record":      {"status": "NO_EMAIL", "detail": ""},
         "company_domain": {"domain_exists": None, "detail": ""},
-        "spf_dmarc":      {"spf": None, "dmarc": None, "detail": "", "score": 0},
-        # Tier 1 — NEW
-        "dkim":           {"found": None, "detail": "", "score": 0},
-        "ptr_record":     {"has_ptr": None, "detail": "", "score": 0},
-        "port_fp":        {"ports": {}, "open_count": 0, "detail": "", "score": 0},
-        # Tier 2 — Indian registries
-        "mca":            {"found": None, "detail": "", "source": "MCA India"},
-        "gstin":          {"gstin": None, "valid_checksum": None, "detail": "", "score": 0},
-        "cin":            {"cin": None, "valid_format": None, "detail": "", "score": 0},
-        "epfo":           {"found": None, "detail": "", "score": 0},
-        # Tier 3 — Web presence
-        "linkedin":       {"exists": None, "detail": "", "score": 0},
-        "glassdoor":      {"exists": None, "detail": "", "score": 0},
-        "google_news":    {"has_news": None, "detail": "", "score": 0},
-        "justdial":       {"found": None, "detail": "", "score": 0},
-        "wikipedia":      {"found": None, "detail": "", "score": 0},
-        # Tier 5 — Scam signals
-        "clone_name":     {"is_clone": False, "detail": "", "score": 0},
-        "template_fp":    {"is_template": False, "detail": "", "score": 0},
-        "negative_web":   {"negative_found": False, "detail": "", "score": 0},
     }
     lock = threading.Lock()
 
@@ -2632,86 +1729,42 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         try:
             r = fn(arg)
         except Exception as ex:
-            r = {"detail": f"Probe error: {type(ex).__name__}: {ex}"}
+            r = {"detail": f"Probe error: {ex}"}
         with lock:
             probes[key] = r
-
-    # Full description for text-based probes (cap at 3000 chars for speed)
-    desc_cap = (description or "")[:3000]
-    full_text = f"{desc_cap} {contact}"
 
     tasks = [
-        # Tier 1 existing
-        ("domain_age",     _probe_domain_age,        domain or ""),
-        ("site_reach",     _probe_site_reachable,     domain or ""),
-        ("typosquat",      _probe_typosquatting,      domain or ""),
-        ("free_email",     _probe_free_email,         contact),
-        ("mx_record",      _probe_mx_record,          contact),
-        ("company_domain", _probe_company_domain,     (company, website)),
-        ("spf_dmarc",      _probe_spf_dmarc,          domain or ""),
-        # Tier 1 new
-        ("dkim",           _probe_dkim,               domain or ""),
-        ("ptr_record",     _probe_ptr_record,         domain or ""),
-        ("port_fp",        _probe_port_fingerprint,   domain or ""),
-        # Tier 2
-        ("mca",            _probe_mca,                company),
-        ("gstin",          _probe_gstin,              (full_text, company)),
-        ("cin",            _probe_cin_extract,        full_text),
-        ("epfo",           _probe_epfo,               company),
-        # Tier 3
-        ("linkedin",       _probe_linkedin_company,   company),
-        ("glassdoor",      _probe_glassdoor,          company),
-        ("google_news",    _probe_google_news,        company),
-        ("justdial",       _probe_justdial,           company),
-        ("wikipedia",      _probe_wikipedia,          company),
-        # Tier 5
-        ("clone_name",     _probe_clone_name,         company),
-        ("template_fp",    _probe_template_fingerprint, desc_cap),
-        ("negative_web",   _probe_negative_web,       company),
+        ("domain_age",     _probe_domain_age,      domain or ""),
+        ("site_reach",     _probe_site_reachable,   domain or ""),
+        ("typosquat",      _probe_typosquatting,    domain or ""),
+        ("free_email",     _probe_free_email,       contact),
+        ("mx_record",      _probe_mx_record,        contact),
+        ("company_domain", _probe_company_domain,   (company, website)),
     ]
-
-    # _probe_gstin and _probe_cin_extract take a tuple — fix the lambda
-    def _run_tuple(key, fn, arg):
-        try:
-            r = fn(*arg) if isinstance(arg, tuple) and key in ("gstin",) else fn(arg)
-        except Exception as ex:
-            r = {"detail": f"Probe error: {type(ex).__name__}: {ex}"}
-        with lock:
-            probes[key] = r
-
-    threads = []
-    for (key, fn, arg) in tasks:
-        if key == "gstin":
-            t = threading.Thread(target=_run_tuple, args=(key, fn, arg), daemon=True)
-        else:
-            t = threading.Thread(target=_run, args=(key, fn, arg), daemon=True)
-        threads.append(t)
-
+    threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
     for t in threads: t.start()
-    # Tier 3/5 probes need more time (HTTP) — give them 14 seconds total
-    for t in threads: t.join(timeout=14)
+    for t in threads: t.join(timeout=_T_MCA + 4)
     return probes
 
 
 def run_live_probes(job: dict) -> dict:
-    website     = job.get("website", "")
-    contact     = job.get("contact", "") + " " + job.get("description", "")
-    company     = job.get("company", "")
-    description = job.get("description", "")
-    domain      = _extract_domain(website)
+    website = job.get("website", "")
+    contact = job.get("contact", "") + " " + job.get("description", "")
+    company = job.get("company", "")
+    domain  = _extract_domain(website)
     if not domain:
         for em_dom in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", contact):
             if em_dom.lower() not in _FREE_DOMAINS:
                 domain = em_dom
                 break
 
-    return _run_live_probes_cached(domain or "", contact, company, website, description[:3000])
+    # Delegate to cached version — identical (domain, contact, company, website)
+    # combinations skip all network calls for 1 hour (st.cache_data TTL).
+    return _run_live_probes_cached(domain or "", contact, company, website)
 
 
 def _probe_risk(probes: dict) -> tuple[int, list[str]]:
     penalty, warnings = 0, []
-
-    # ── Tier 1 existing signals ───────────────────────────────────────────────
     age = probes.get("domain_age", {})
     if age.get("status") == "young":
         days = age.get("age_days", 0)
@@ -2739,7 +1792,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
     mx = probes.get("mx_record", {})
     mx_status = mx.get("status", "")
     if mx_status == "NO_MX":
-        penalty += 22
+        penalty += 22   # strongest MX signal — domain exists but has no mail servers
         warnings.append(
             f"Corporate email domain '{mx.get('domain','')}' has NO MX records — "
             "domain is registered for appearances only, not actually used for email"
@@ -2772,104 +1825,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         penalty += 5
         for sig in cd.get("scam_signals", []):
             warnings.append(sig)
-    spf = probes.get("spf_dmarc", {})
-    spf_score = spf.get("score", 0)
-    mx_status = probes.get("mx_record", {}).get("status", "")
-    if spf_score > 0 and mx_status == "MX_FOUND":
-        spf_dom = probes.get("mx_record", {}).get("domain", "")
-        if not spf.get("spf") and not spf.get("dmarc"):
-            penalty += 18
-            warnings.append(
-                f"'{spf_dom}' has NO SPF and NO DMARC records — domain not "
-                "configured for legitimate corporate email (common scam pattern)"
-            )
-        elif not spf.get("spf"):
-            penalty += 10
-            warnings.append(f"'{spf_dom}' has no SPF record — email authentication missing")
-        elif not spf.get("dmarc"):
-            penalty += 8
-            warnings.append(f"'{spf_dom}' has no DMARC record — anti-spoofing not configured")
-
-    # ── Tier 1 NEW signals ────────────────────────────────────────────────────
-    dkim = probes.get("dkim", {})
-    if dkim.get("found") is False:
-        penalty += dkim.get("score", 0)
-        warnings.append(dkim["detail"])
-
-    port_fp = probes.get("port_fp", {})
-    if port_fp.get("score", 0) > 0:
-        penalty += port_fp["score"]
-        warnings.append(port_fp["detail"])
-
-    # ── Tier 2 — Indian registry signals ─────────────────────────────────────
-    mca = probes.get("mca", {})
-    if mca.get("found") is False:
-        penalty += 15
-        warnings.append(f"MCA registry: {mca.get('detail', 'Company not found')}")
-
-    gstin = probes.get("gstin", {})
-    if gstin.get("valid_checksum") is False:
-        penalty += gstin.get("score", 0)
-        warnings.append(gstin["detail"])
-    elif gstin.get("registered") is False:
-        penalty += gstin.get("score", 0)
-        warnings.append(gstin["detail"])
-
-    cin = probes.get("cin", {})
-    if cin.get("valid_format") is False:
-        penalty += cin.get("score", 0)
-        warnings.append(cin["detail"])
-
-    # ── Tier 3 — Web presence signals ────────────────────────────────────────
-    # These are softer signals — only penalise if multiple are negative together
-    web_absence_count = 0
-    linkedin = probes.get("linkedin", {})
-    if linkedin.get("exists") is False:
-        web_absence_count += 1
-
-    glassdoor = probes.get("glassdoor", {})
-    if glassdoor.get("exists") is False:
-        web_absence_count += 1
-
-    google_news = probes.get("google_news", {})
-    if google_news.get("has_news") is False:
-        web_absence_count += 1
-    elif google_news.get("negative_signal"):
-        penalty += google_news.get("score", 0)
-        warnings.append(google_news["detail"])
-
-    wikipedia = probes.get("wikipedia", {})
-    if wikipedia.get("found") is False:
-        web_absence_count += 1
-
-    # Only penalise web absence if 2+ platforms show no presence
-    if web_absence_count >= 3:
-        penalty += 18
-        warnings.append(
-            f"Company has NO presence on {web_absence_count}/4 major platforms "
-            "(LinkedIn, Glassdoor, News, Wikipedia) — likely fictitious"
-        )
-    elif web_absence_count == 2:
-        penalty += 8
-        warnings.append("Company has minimal/no public web presence — uncommon for legitimate employers")
-
-    # ── Tier 5 — Scam-specific signals ───────────────────────────────────────
-    clone = probes.get("clone_name", {})
-    if clone.get("is_clone"):
-        penalty += clone.get("score", 0)
-        warnings.append(clone["detail"])
-
-    template = probes.get("template_fp", {})
-    if template.get("is_template"):
-        penalty += template.get("score", 0)
-        warnings.append(template["detail"])
-
-    negative = probes.get("negative_web", {})
-    if negative.get("negative_found"):
-        penalty += negative.get("score", 0)
-        warnings.append(negative["detail"])
-
-    return min(penalty, 75), warnings  # raised cap from 55 → 75 (more checks = more signal)
+    return min(penalty, 55), warnings
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3338,7 +2294,7 @@ def _render_score_strip(result: dict):
     ai_s  = result["ai_score"]
     rul_s = result["rule_score"]
     pen   = result["probe_penalty"]
-    raw   = round(0.55*ai_s + 0.20*rul_s + 0.25*pen, 1)
+    raw   = round(0.60*ai_s + 0.25*rul_s + 0.15*pen, 1)
     final_blended = result["blended_score"]
     floor_note = (
         f' → floored to <span style="color:#ef4444;font-weight:700;">{final_blended}</span>'
@@ -3351,9 +2307,9 @@ def _render_score_strip(result: dict):
         f'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
         f'border-radius:8px;font-family:monospace;font-size:0.73rem;color:#6b7280;">'
         f'<span style="color:#8b949e;font-weight:600;">How your score was calculated: </span>'
-        f'(0.55 × AI&nbsp;<span style="color:{cfg["color"]}">{ai_s}</span>) + '
-        f'(0.20 × Rules&nbsp;<span style="color:#f59e0b">{rul_s}</span>) + '
-        f'(0.25 × Probes&nbsp;<span style="color:#38bdf8">{pen}</span>) '
+        f'(0.60 × AI&nbsp;<span style="color:{cfg["color"]}">{ai_s}</span>) + '
+        f'(0.25 × Rules&nbsp;<span style="color:#f59e0b">{rul_s}</span>) + '
+        f'(0.15 × Probes&nbsp;<span style="color:#38bdf8">{pen}</span>) '
         f'= <span style="color:#8b949e;">{raw}</span>'
         f'{floor_note}'
         f'</div>',
@@ -3427,23 +2383,6 @@ def _render_probe_table(probes: dict):
     else:
         cd_badge = _badge("PARTIAL", "#f59e0b", "rgba(245,158,11,0.12)")
     rows.append(_row(I.BUILDING, "Company Domain Check", cd_badge, cd.get("detail", "")))
-
-    # ── SPF / DMARC row ───────────────────────────────────────────────────────
-    spf = probes.get("spf_dmarc", {})
-    spf_score = spf.get("score", 0)
-    has_spf   = spf.get("spf")
-    has_dmarc = spf.get("dmarc")
-    if has_spf is None:
-        spf_badge = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
-    elif has_spf and has_dmarc:
-        spf_badge = _badge("SPF + DMARC ✓", "#22c55e", "rgba(34,197,94,0.12)")
-    elif has_spf and not has_dmarc:
-        spf_badge = _badge("SPF ONLY", "#f59e0b", "rgba(245,158,11,0.12)")
-    elif not has_spf and has_dmarc:
-        spf_badge = _badge("DMARC ONLY", "#f59e0b", "rgba(245,158,11,0.12)")
-    else:
-        spf_badge = _badge("MISSING", "#dc2626", "rgba(220,38,38,0.12)")
-    rows.append(_row(I.SHIELD, "SPF / DMARC", spf_badge, spf.get("detail", "")))
 
     st.markdown(
         f'<div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;'
@@ -4198,9 +3137,8 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     rule_s = rules_result["rule_score"]
 
                     # ── Calibrated blending ────────────────────────────────────────
-                    # v6: Probe weight raised from 15% → 25% (17 new checks = much stronger signal)
-                    # Base blend: AI 55%, rules 20%, probe penalty 25%.
-                    blended = int(0.55 * ai_s + 0.20 * rule_s + 0.25 * penalty)
+                    # Base blend: AI carries 60%, rules 25%, probe penalty 15%.
+                    blended = int(0.60 * ai_s + 0.25 * rule_s + 0.15 * penalty)
 
                     # Hard floor only from HIGH-weight signals (>=18 pts each).
                     critical_signals = [k for k, s in rules_result["signals"].items()
