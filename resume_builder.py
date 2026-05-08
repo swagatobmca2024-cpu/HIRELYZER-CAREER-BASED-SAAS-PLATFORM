@@ -265,7 +265,6 @@ def render_template_default(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:300px;background:linear-gradient(180deg,#374151,#4b5563);color:#ffffff;padding:36px 24px;vertical-align:top;'>
@@ -288,7 +287,6 @@ def render_template_default(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
-</div>
 </body></html>"""
 
     return html_content
@@ -679,7 +677,6 @@ def render_template_sidebar(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:300px;background:linear-gradient(180deg,#1e293b,#334155);color:white;padding:36px 24px;vertical-align:top;'>
@@ -702,7 +699,6 @@ def render_template_sidebar(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
-</div>
 </body></html>"""
 
     return html_content
@@ -1324,7 +1320,6 @@ def render_template_corporate(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:300px;background:linear-gradient(180deg,#1e3a8a,#1d4ed8);color:white;padding:36px 24px;vertical-align:top;'>
@@ -1347,7 +1342,6 @@ def render_template_corporate(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
-</div>
 </body></html>"""
 
 
@@ -1478,7 +1472,6 @@ def render_template_creative_green(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#f0fdf4; }}</style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:280px;background:#fff;border-right:2px solid #a7f3d0;padding:32px 22px;vertical-align:top;'>
@@ -1501,7 +1494,6 @@ def render_template_creative_green(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
-</div>
 </body></html>"""
 
 
@@ -1629,7 +1621,6 @@ def render_template_terracotta(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fafaf9; }}</style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:290px;background:linear-gradient(180deg,#7c2d12,#b45309);color:white;padding:34px 22px;vertical-align:top;'>
@@ -1652,7 +1643,6 @@ def render_template_terracotta(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
-</div>
 </body></html>"""
 
 
@@ -1788,7 +1778,6 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:290px;background:linear-gradient(180deg,#0d1b3e,#1a2f6b);color:#f5e6b2;padding:34px 22px;vertical-align:top;'>
@@ -1811,7 +1800,6 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
-</div>
 </body></html>"""
 
     return html_content
@@ -2143,7 +2131,6 @@ def render_template_teal_impact(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:290px;background:linear-gradient(180deg,#0f766e,#0d9488);color:#ccfbf1;padding:34px 22px;vertical-align:top;'>
@@ -2166,7 +2153,6 @@ def render_template_teal_impact(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
-</div>
 </body></html>"""
 
     return html_content
@@ -2477,7 +2463,6 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
 <tr>
   <td style='width:290px;background:linear-gradient(180deg,#1e1b4b,#312e81);color:#a5f3fc;padding:34px 22px;vertical-align:top;'>
@@ -2500,7 +2485,6 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
   </td>
 </tr>
 </table>
-</div>
 </body></html>"""
 
     return html_content
