@@ -1968,7 +1968,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; color:{{C_PRIMARY}}; background:#ffffff; padding:40px 60px; line-height:1.6; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; color:{C_PRIMARY}; background:#ffffff; padding:40px 60px; line-height:1.6; }}
   a {{ color:{C_PRIMARY}; }}
 </style>
 </head>
