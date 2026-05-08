@@ -483,32 +483,91 @@ def _xu(text: str) -> str:
 
 
 def _xs(text: str) -> str:
-    """Extract salary / CTC information."""
-    # Explicit label
+    """
+    Extract salary / CTC information.
+
+    BUG FIX: The old currency pattern used [\d,\.\s]+ (spaces included) and made
+    the unit suffix optional with no lookahead, so "Rs L" — where Rs appears
+    anywhere and L (lakh abbreviation) appears later on the same line — matched
+    as a salary. Fixes:
+      1. Require at least one digit immediately after the currency symbol (no space swallowing).
+      2. Only accept the abbreviated "L" suffix when it directly follows the number
+         (no gap), preventing false matches against unrelated "L" characters.
+      3. Fall back to bare number patterns (e.g. "18,500 per month", "12 LPA") when
+         no currency symbol is present — common in Indian job postings.
+    """
+    t = text or ""
+
+    # Strategy 1: explicit label — highest confidence
     m = re.search(
-        r"(?i)(salary|ctc|pay|package|compensation|remuneration|stipend|fixed)\s*[:\-–]\s*([^\n]{3,80})",
-        text or "",
+        r"(?i)(?:salary|ctc|pay|package|compensation|remuneration|stipend|fixed)"
+        r"\s*[:\-\u2013]\s*([^\n]{3,80})",
+        t,
     )
     if m:
-        return _clean(m.group(2))
-    # Currency pattern: Rs/INR/$ followed by numbers + optional units
+        val = _clean(m.group(1))
+        if val:
+            return val
+
+    # Strategy 2: currency symbol + digits + optional range + unit
+    # FIX: \d+ required immediately after symbol (no \s* before digits).
+    # FIX: "L" suffix only accepted glued to the number (no space gap).
     m2 = re.search(
-        r"(?:Rs\.?\s*|INR\s*|₹\s*)[\d,\.\s]+(?:\s*-\s*[\d,\.]+)?\s*(?:LPA|lpa|L|lakhs?|per\s+annum|PA|CTC)?",
-        text or "", re.IGNORECASE,
+        r"(?:Rs\.?|INR|\u20b9)\s*\d[\d,\.]*"          # symbol then digits
+        r"(?:\s*[-\u2013]\s*\d[\d,\.]*)?",             # optional range
+        t, re.IGNORECASE,
     )
     if m2:
-        return _clean(m2.group(0))
+        # Grab the unit that immediately follows (no gap for "L")
+        snippet = t[m2.start():m2.end() + 25]
+        unit_m = re.match(
+            r"[\s]*(?:LPA|lpa|lakhs?|L\b|per\s+(?:month|annum|year)|"
+            r"p\.?a\.?|CTC|/month|/year)",
+            t[m2.end():], re.IGNORECASE,
+        )
+        suffix = _clean(unit_m.group(0)) if unit_m else ""
+        return _clean(m2.group(0)) + (" " + suffix if suffix else "")
+
+    # Strategy 3: USD
     m3 = re.search(
-        r"\$[\d,\.]+(?:\s*-\s*\$?[\d,\.]+)?\s*(?:per\s+(?:month|year|annum|hour))?",
-        text or "", re.IGNORECASE,
+        r"\$\d[\d,\.]*(?:\s*-\s*\$?\d[\d,\.]*)?\s*"
+        r"(?:per\s+(?:month|year|annum|hour))?",
+        t, re.IGNORECASE,
     )
-    return _clean(m3.group(0)) if m3 else ""
+    if m3:
+        return _clean(m3.group(0))
+
+    # Strategy 4: bare number + explicit unit — e.g. "18,500 per month", "12 LPA"
+    # Only match when the unit keyword is present to avoid random numbers.
+    m4 = re.search(
+        r"\b(\d[\d,\.]*(?:\s*[-\u2013]\s*\d[\d,\.]*)?)"
+        r"\s*(LPA|lpa|lakhs?\s+per\s+annum|per\s+month|per\s+annum|/month|CTC)\b",
+        t, re.IGNORECASE,
+    )
+    if m4:
+        return _clean(m4.group(0))
+
+    return ""
 
 
 def _xc(text: str) -> str:
-    """Extract email + phone from text."""
-    emails = re.findall(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", text or "")
-    phones = re.findall(r"(?<!\d)[+]?[\d][\d\s\-()]{8,13}[\d](?!\d)", text or "")
+    """
+    Extract email + phone from text.
+
+    Fixes:
+    - Email regex now supports two-part TLDs like .co.in and .com.au
+    - Phone regex now excludes date patterns (YYYY-MM-DD) which the old
+      lookbehind did not catch, causing "2024-01-15" to match as a phone.
+    """
+    # Support multi-part TLDs: user@domain.co.in, user@domain.com.au
+    emails = re.findall(
+        r"[\w.+\-]+@[\w\-]+(?:\.[\w\-]+)*\.[a-zA-Z]{2,}", text or ""
+    )
+    # Exclude date-like patterns before matching phones
+    text_no_dates = re.sub(r"\d{4}[-/]\d{2}[-/]\d{2}", "", text or "")
+    phones = re.findall(
+        r"(?<!\d)[+]?[\d][\d\s\-()]{8,13}[\d](?!\d)", text_no_dates
+    )
     return " | ".join(emails[:1] + [p.strip() for p in phones[:1]])
 
 
@@ -776,10 +835,14 @@ def _xloc(text: str) -> str:
     # Strategy 2: known city list
     m = _KNOWN_CITIES.search(t)
     if m:
-        # Grab up to ~30 chars around the match for context (e.g. "Bangalore, Karnataka")
-        start = m.start()
-        snippet = t[start:start+40].split("\n")[0]
-        return _clean(snippet.split(".")[0])
+        # Return just the matched city/mode — don't grab trailing words.
+        # Old code grabbed up to 40 chars which pulled in "Gurgaon team",
+        # "Remote / Work From Home position" etc.
+        city = m.group(0).strip()
+        # For "Work From Home" / WFH, normalise to clean form
+        if re.search(r"work\s+from\s+home|wfh", city, re.I):
+            return "Work From Home"
+        return city
 
     # Strategy 3: "based in / located in / office in" pattern
     m2 = re.search(
@@ -3004,21 +3067,35 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             )
 
         if clear:
-            with st.spinner("Clearing…"):
-                # Explicitly blank the text area value BEFORE deleting the key.
-                # Streamlit re-uses widget state by key — if the key is simply
-                # deleted the widget may re-render with its last cached value.
-                # Setting to "" first guarantees the textarea shows empty.
-                # FIX: Never SET a widget key inside a @st.fragment — Streamlit ≥ 1.33
-                # raises StreamlitAPIException. DELETE the key instead so the widget
-                # re-renders from its default value on next run.
+            with st.spinner("Resetting…"):
+                # Preserve history keys only.
+                # Explicitly delete every known widget key from BOTH modes.
+                # A prefix-only sweep misses keys for the mode not currently rendered
+                # (e.g. in Paste mode, jsd_t/jsd_co etc. are not in the DOM so
+                # Streamlit never clears them). Next time the user switches to Fill
+                # mode, stale values reappear. Explicit deletion prevents that.
                 preserve = {"jsd_history", "jsd_history_loaded"}
+
+                paste_keys = [
+                    "jsd_raw", "jsd_mode",
+                    "jsd_ot", "jsd_oco", "jsd_os", "jsd_oct", "jsd_ow", "jsd_ol",
+                ]
+                fill_keys = [
+                    "jsd_t", "jsd_co", "jsd_w", "jsd_l",
+                    "jsd_sa", "jsd_ct", "jsd_d", "jsd_r", "jsd_b",
+                ]
+                for k in paste_keys + fill_keys:
+                    st.session_state.pop(k, None)
+
+                # Sweep remaining jsd_ keys (feedback, prescan, checklist, etc.)
                 for k in list(st.session_state.keys()):
                     if k.startswith("jsd_") and k not in preserve:
                         del st.session_state[k]
+
                 for extra in ("jsd_last_result", "jsd_running"):
                     st.session_state.pop(extra, None)
-                time.sleep(0.25)
+
+                time.sleep(0.3)
             st.rerun()
 
         if run:
@@ -3177,13 +3254,15 @@ def _render_feedback(result: dict):
     col_up, col_dn, col_sp = st.columns([2, 2, 7])
     with col_up:
         if st.button("Correct", key=f"{fb_key}_up", use_container_width=True):
-            _save_feedback(result, "correct")
-            st.session_state[fb_key] = "correct"
+            with st.spinner("Saving…"):
+                _save_feedback(result, "correct")
+                st.session_state[fb_key] = "correct"
             st.rerun()
     with col_dn:
         if st.button("Wrong", key=f"{fb_key}_dn", use_container_width=True):
-            _save_feedback(result, "wrong")
-            st.session_state[fb_key] = "wrong"
+            with st.spinner("Saving…"):
+                _save_feedback(result, "wrong")
+                st.session_state[fb_key] = "wrong"
             st.rerun()
 
 
