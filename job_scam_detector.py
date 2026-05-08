@@ -793,7 +793,68 @@ def _xloc(text: str) -> str:
     return ""
 
 
-def auto_extract(raw: str) -> dict:
+def _llm_extract_missing(raw: str, partial: dict, call_llm_fn) -> dict:
+    """
+    Use LLaMA 3.3 70B to fill only the fields regex left blank.
+
+    Only fires when title OR company is still empty — the two most
+    important fields for scam detection. If regex got both, returns
+    immediately with zero LLM cost.
+
+    Uses the same call_llm_fn already used for full analysis so:
+    - Same 100-key rotation + TPM rate limiting applies
+    - Same Supabase llm_cache (24hr TTL) — identical posting never hits API twice
+    - Same model: llama-3.3-70b-versatile (consistent with rest of app)
+    - temperature=0 for deterministic JSON output
+    """
+    # Only trigger if title or company is missing — the critical fields
+    missing = [f for f in ("title", "company", "location", "salary")
+               if not partial.get(f)]
+    if "title" not in missing and "company" not in missing:
+        return partial   # regex got the important ones — skip LLM call entirely
+
+    prompt = f"""Extract specific fields from this job posting. Return ONLY a valid JSON object — no explanation, no markdown, no extra text.
+
+Fields to extract: {', '.join(missing)}
+
+Rules:
+- "title": the exact job role/position being hired for (e.g. "Software Engineer", "Data Analyst")
+- "company": the hiring company name only, no extra words (e.g. "Infosys", "Zoho Corporation")
+- "location": city or work mode only (e.g. "Bangalore", "Remote", "Hybrid - Mumbai")
+- "salary": CTC or stipend exactly as written (e.g. "12-18 LPA", "₹50,000/month")
+- Use null for any field not clearly mentioned in the posting
+
+Job posting:
+{raw[:3000]}
+
+JSON response:"""
+
+    try:
+        response = call_llm_fn(
+            prompt,
+            st.session_state,
+            model="llama-3.3-70b-versatile",
+            temperature=0,
+        )
+        # Strip markdown fences if model adds them
+        clean = re.sub(r"```(?:json)?|```", "", response).strip()
+        # Extract JSON object even if model adds preamble
+        m = re.search(r"\{.*\}", clean, re.DOTALL)
+        if not m:
+            return partial
+        extracted = json.loads(m.group())
+        # Only fill fields that regex left empty — never overwrite regex results
+        for field in missing:
+            val = extracted.get(field)
+            if val and val != "null" and isinstance(val, str) and len(val.strip()) > 1:
+                partial[field] = val.strip()
+    except Exception:
+        pass   # LLM failed or returned bad JSON — regex result still usable
+
+    return partial
+
+
+def auto_extract(raw: str, call_llm_fn=None) -> dict:
     """
     BUG FIX v5: requirements and benefits are NO LONGER set to the full raw text.
 
@@ -806,21 +867,25 @@ def auto_extract(raw: str) -> dict:
       - requirements = ""  (rules will not double-count)
       - benefits     = ""  (rules will not double-count)
 
-    The rule engine's `full` join is: title + description + requirements + benefits
-    + contact + salary — so keeping description=raw is sufficient for all pattern
-    matching. requirements/benefits sections are naturally embedded in the raw text.
+    LLM FALLBACK: if call_llm_fn is supplied and regex left title or company
+    blank, _llm_extract_missing fires one LLaMA 3.3 call to fill the gaps.
+    Uses the same llm_manager cache — identical postings hit cache, not API.
     """
-    return {
+    partial = {
         "title":        _xt(raw),
         "company":      _xco(raw),
         "website":      _xu(raw),
         "location":     _xloc(raw),
-        "salary":       _xs(raw),   # FIX: only the extracted snippet, not full raw
+        "salary":       _xs(raw),
         "contact":      _xc(raw),
         "description":  raw,
-        "requirements": "",         # FIX: was raw — caused 3x phrase duplication
-        "benefits":     "",         # FIX: was raw — caused 3x phrase duplication
+        "requirements": "",
+        "benefits":     "",
     }
+    # LLM fills only what regex missed — skipped entirely if all key fields found
+    if call_llm_fn is not None:
+        partial = _llm_extract_missing(raw, partial, call_llm_fn)
+    return partial
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2632,7 +2697,7 @@ def _quick_prescan(raw: str) -> dict | None:
 
     # FIX: Build a clean prescan job dict — description is raw (full text),
     # requirements and benefits are intentionally empty to avoid triple-counting.
-    extracted = auto_extract(raw)
+    extracted = auto_extract(raw)   # prescan — no LLM fallback (speed priority)
     prescan_job = {
         "title":        extracted["title"],
         "company":      extracted["company"],
@@ -2822,7 +2887,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             ),
         )
 
-        extracted = auto_extract(raw or "")
+        extracted = auto_extract(raw or "", call_llm_fn=call_llm_fn)
 
         if raw and len(raw.strip()) > 20:
             # ── Inline quick pre-scan ──────────────────────────────────────
@@ -3109,7 +3174,7 @@ def _render_feedback(result: dict):
         )
         return
 
-    col_up, col_dn, col_sp = st.columns([1, 1, 5])
+    col_up, col_dn, col_sp = st.columns([2, 2, 7])
     with col_up:
         if st.button("Correct", key=f"{fb_key}_up", use_container_width=True):
             _save_feedback(result, "correct")
