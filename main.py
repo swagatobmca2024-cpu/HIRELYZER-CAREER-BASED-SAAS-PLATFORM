@@ -6514,63 +6514,67 @@ with tab1:
     elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
 def html_to_pdf_bytes(html_string):
-    styled_html = f"""
+    # NOTE: Do NOT use f-string here. Template HTML contains CSS variables like
+    # {C_PRIMARY} which Python re-evaluates as f-string placeholders → CSSParseError crash.
+    # Use plain string + .replace() to safely inject html_string.
+    wrapper = """
     <html>
     <head>
         <meta charset="UTF-8">
         <style>
-            @page {{
-                size: A4 portrait;  /* Standard A4: 210mm x 297mm */
+            @page {
+                size: A4 portrait;
                 margin-top: 15mm;
                 margin-bottom: 15mm;
                 margin-left: 15mm;
                 margin-right: 15mm;
-            }}
-            body {{
+            }
+            body {
                 font-size: 14pt;
                 font-family: "Segoe UI", "Helvetica", sans-serif;
                 line-height: 1.5;
                 color: #000;
-            }}
-            h1, h2, h3 {{
+            }
+            h1, h2, h3 {
                 color: #2f4f6f;
-            }}
-            table {{
+            }
+            table {
                 width: 100%;
                 border-collapse: collapse;
                 margin-bottom: 15px;
-            }}
-            td {{
+            }
+            td {
                 padding: 4px;
                 vertical-align: top;
                 border: 1px solid #ccc;
-            }}
-            .section-title {{
+            }
+            .section-title {
                 background-color: #e0e0e0;
                 font-weight: bold;
                 padding: 6px;
                 margin-top: 10px;
-            }}
-            .box {{
+            }
+            .box {
                 padding: 8px;
                 margin-top: 6px;
                 background-color: #f9f9f9;
-                border-left: 4px solid #999;  /* More elegant than full border */
-            }}
-            ul {{
+                border-left: 4px solid #999;
+            }
+            ul {
                 margin: 0.5em 0;
                 padding-left: 1.5em;
-            }}
-            li {{
+            }
+            li {
                 margin-bottom: 5px;
-            }}
+            }
         </style>
     </head>
     <body>
-        {html_string}
+        __HTML_CONTENT__
     </body>
     </html>
     """
+    styled_html = wrapper.replace("__HTML_CONTENT__", html_string)
 
     pdf_io = BytesIO()
     pisa.CreatePDF(styled_html, dest=pdf_io)
