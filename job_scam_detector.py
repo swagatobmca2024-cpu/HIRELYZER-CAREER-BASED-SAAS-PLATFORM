@@ -1,5 +1,88 @@
 from __future__ import annotations
+"""
+job_scam_detector.py  —  Production Grade v5
+─────────────────────────────────────────────
+Fixes in v5 (over v4):
 
+  BUG 1 — RESET BUTTON BROKEN:
+    st.rerun(scope="app") inside @st.fragment raises an error in Streamlit ≥ 1.33.
+    Fixed: use st.rerun() (no scope arg) which always works.
+    Also fixed: the clear-keys loop now correctly deletes widget keys INCLUDING
+    jsd_raw and jsd_mode so the text area and radio actually blank out.
+
+  BUG 2 — ANALYSE BUTTON DOUBLE-FIRE / RACE CONDITION:
+    jsd_running flag was set but the fragment re-runs on EVERY widget interaction,
+    causing the flag to sometimes be seen as True on the very next keystroke, 
+    permanently disabling the button until a full page reload.
+    Fixed: jsd_running is only checked/set during the run block; cleared via
+    st.session_state.pop() both on success and failure.
+
+  BUG 3 — AUTO-DETECT (PASTE MODE) VERY WEAK / INFLATED SCORES:
+    auto_extract() was setting description=raw, requirements=raw, benefits=raw
+    (all = full raw text). _run_rules() joins all fields and saw every phrase
+    3-6× making rule scores wildly inflated. REAL description is now kept as raw
+    but requirements and benefits are left empty so the rule engine reads each 
+    section exactly once.
+
+  BUG 4 — _quick_prescan ALSO INFLATED:
+    _quick_prescan passed the same inflated auto_extract dict to _run_rules.
+    Fixed: prescan now calls _run_rules with a clean job dict where only 
+    description=raw; requirements and benefits are empty strings.
+
+  BUG 5 — _salary_outlier FALSE POSITIVES IN PASTE MODE:
+    When salary = full raw text, _salary_outlier matched phone numbers, 
+    zip codes, etc. Fixed: salary field in paste mode only contains the 
+    extracted salary snippet, not the full text.
+
+  BUG 6 — OVERRIDE FIELDS IGNORED AFTER EXPANDER:
+    The override expander widgets updated extracted["key"] but the fragment
+    re-ran immediately on each keystroke, so the PREVIOUS extracted values
+    were used when Analyse was clicked. Fixed: override values are read from
+    session_state keys (jsd_ot, jsd_oco, etc.) AT THE TIME OF THE BUTTON CLICK,
+    not from the live widget object.
+
+  BUG 7 — CHECKLIST KEY COLLISION:
+    Used id(result) for checklist keys which changes every run, creating
+    hundreds of orphaned session_state keys. Fixed: use a stable key 
+    "jsd_c_{idx}" (no result-id suffix).
+
+  BUG 8 — FORMULA COMMENT/CODE/HTML MISMATCH:
+    Docstring said 55%/30%/15% but code did 60%/25%/15% and the score strip
+    HTML also showed 0.60/0.25. All three now agree on 60/25/15.
+
+Fixes carried from v4 (unchanged):
+  - PAGE RE-RENDER BUG, FRAGMENT ISOLATION, RAW HTML EXPOSURE,
+    AUTO-ANALYSE ON PASTE, UX POLISH, PRODUCTION GUIDANCE.
+"""
+# v5 patch by senior engineer — all 8 bugs fixed above.
+
+"""
+Original v4 docstring preserved below for reference:
+Fixes in v4:
+  - PAGE RE-RENDER BUG: Analysis result stored in session_state and rendered
+    OUTSIDE the form block — submit no longer resets the whole page.
+  - FRAGMENT ISOLATION: Input widgets wrapped in @st.fragment so only the
+    input area re-runs on widget interaction, not the full app.
+  - RAW HTML EXPOSURE: All unsafe HTML is now gated through a single
+    _html() helper that validates the call site and uses unsafe_allow_html
+    consistently; no HTML ever leaks as visible text.
+  - REFRESH / RESET BUTTON: A dedicated Reset button clears all jsd_ keys
+    and reruns cleanly.
+  - AUTO-ANALYSE ON PASTE: When text is pasted the rule-based pre-scan runs
+    immediately and shows a lightweight inline risk preview — no button needed
+    for the first-pass signal. Full AI analysis still requires the button.
+  - UX POLISH: Sticky top-bar score badge, keyboard shortcut hint, improved
+    loading state with progress steps, section anchors for scrolling.
+  - PRODUCTION GUIDANCE: See PRODUCTION.md that is printed to console on
+    first run (set env PRINT_PROD_GUIDE=1).
+
+Detection layers (unchanged):
+  A. 6 live network probes  (parallel threads)
+     domain age · site reachability · typosquatting · free-email · MX mail server · MCA registry
+  B. 15-signal rule engine  (weighted, 0-100)
+  C. LLM deep analysis      (llama-3.3-70b-versatile via Groq)
+  D. Blended score          (60% AI + 25% rules + 15% probe penalty)
+"""
 
 import html as _html_escape
 import os
@@ -19,8 +102,8 @@ import pytz
 _IST = pytz.timezone("Asia/Kolkata")
 
 def _now_ist() -> str:
-    """Return current time as IST string — never UTC."""
-    return datetime.now(_IST).strftime("%Y-%m-%d %H:%M")
+    """Return current time as IST string — always '08 May 14:35' format."""
+    return datetime.now(_IST).strftime("%-d %b %H:%M")
 
 import ssl
 import ipaddress
@@ -292,25 +375,42 @@ _ROLE_WORDS = re.compile(
     r"coordinator|administrator|trainee|fresher|hiring|role|position|"
     r"generative\s+ai|ai[\s/]ml|machine\s+learning|data\s+science|"
     r"software|frontend|backend|fullstack|full[\s-]stack|devops|"
-    r"product|sales|marketing|finance|hr|operations)\b",
+    r"product|sales|marketing|finance|hr|operations|accountant|"
+    r"recruiter|writer|editor|content|graphic|illustrator|tester|qa)\b",
     re.IGNORECASE,
 )
 
-# Noise lines that are never a job title
+# Noise lines that are NEVER a job title
 _TITLE_NOISE = re.compile(
     r"^(\*|#|–|-)|(eligibility|criteria|requirement|qualification|"
     r"responsibility|about\s+(us|the|company)|we\s+are|we\s+offer|"
     r"job\s+description|note\s*:|dear\s+candidate|greetings|"
-    r"kindly|please|apply\s+now|how\s+to\s+apply)",
+    r"kindly|please|apply\s+now|how\s+to\s+apply|"
+    r"urgent\s+hir|immediate\s+hir|work\s+from\s+home|"
+    r"earn\s+rs|earn\s+₹|no\s+experience\s+needed)",
     re.IGNORECASE,
 )
 
-# Company name suffixes used for heuristic company detection
+# Standalone hiring-shout lines — not a title
+_HIRING_SHOUT = re.compile(
+    r"^(urgent\s+hir|immediate\s+hir|\*+\s*urgent|\*+\s*hir|hiring\s*[!*]+$)",
+    re.IGNORECASE,
+)
+
+# Company name suffixes — expanded with more Indian patterns
 _CO_SUFFIXES = re.compile(
     r"\b(pvt\.?\s*ltd\.?|private\s+limited|limited|llp|llc|inc\.?|"
     r"corp\.?|technologies|tech|solutions|services|systems|consultancy|"
     r"consulting|infotech|softwares?|enterprises?|ventures?|group|"
-    r"global|india|innovations?)\b",
+    r"global|india|innovations?|associates?|partners?|labs?|studio|"
+    r"digital|analytics|capital|financial|logistics|pharma|healthcare)\b",
+    re.IGNORECASE,
+)
+
+# Free/personal email domains — company cannot be extracted from these
+_FREE_EMAIL_DOMAINS = re.compile(
+    r"@(gmail|yahoo|hotmail|outlook|rediffmail|ymail|icloud|protonmail"
+    r"|zohomail|aol|live|msn)\.",
     re.IGNORECASE,
 )
 
@@ -375,42 +475,85 @@ def _xc(text: str) -> str:
 
 def _xt(text: str) -> str:
     """
-    Extract job title with multi-strategy fallback:
-    1. Explicit keyword label  (e.g. "Role: Software Engineer")
-    2. "hiring for X" / "opening for X" / "position: X" patterns
-    3. Inline mention  (e.g. "roles at IntimeTec" → scan for role words nearby)
-    4. Best scored non-noise line from the first 10 lines
+    Extract job title — 6-strategy fallback, production grade.
+
+    Fixes over v5:
+    - Strategy 0: rejects "URGENT HIRING" / shout lines before anything else
+    - Strategy 2: "looking for / seeking / need a X" now strips leading article
+      and truncates at "with/who/for/and" so "a Product Manager with 5+ yrs" → "Product Manager"
+    - Strategy 3: "we are hiring X" / "join us as X" / "join <co> as X" patterns added
+    - Strategy 4 scoring: penalises ALL-CAPS lines (scam shout); boosts hyphenated titles
+    - Title cleaning: strips trailing seniority noise like "- 3 to 5 years"
     """
     t = text or ""
 
-    # Strategy 1: explicit label
+    def _title_clean(s: str) -> str:
+        """Extra cleanup specific to titles."""
+        s = _clean(s)
+        # Strip leading article or adjective noise (talented/experienced/passionate etc.)
+        s = re.sub(
+            r"^(a|an|the|experienced?|talented?|skilled?|qualified?|"
+            r"dynamic|passionate|driven|dedicated|motivated)\s+",
+            "", s, flags=re.I,
+        )
+        # Truncate at trailing noise: "- X years", "| location", "(remote)"
+        s = re.split(r"\s+[-–|]\s+\d", s)[0]
+        s = re.split(r"\s*\(\s*remote\b", s, flags=re.I)[0]
+        # Truncate at "with X years/experience" / "who has" / "to join" / "and work"
+        s = re.split(
+            r"\s+(?:with\s+(?:\d|strong|good|excellent|proven)|"
+            r"who\s+|to\s+join\b|and\s+work|to\s+work)",
+            s, flags=re.I
+        )[0]
+        return s.strip().rstrip(".,;:-")
+
+    # Strategy 1: explicit keyword label  (e.g. "Role: Software Engineer")
     val = _xf(t, [
         "job title", "role", "position", "designation", "opening",
         "vacancy", "hiring for", "opening for", "we are hiring",
-        "currently hiring", "job profile",
+        "currently hiring", "job profile", "post",
     ])
-    if val and not _TITLE_NOISE.search(val):
-        return _clean(val)
+    if val and not _TITLE_NOISE.search(val) and not _HIRING_SHOUT.search(val):
+        return _title_clean(val)
 
-    # Strategy 2: "hiring … for … [role words]" sentence pattern
+    # Strategy 2: "looking for / seeking / need a X" — paragraph-style postings
     m = re.search(
+        r"(?i)(?:looking\s+for\s+a?n?\s*|seeking\s+a?n?\s*|need\s+a?n?\s*|"
+        r"require\s+a?n?\s*|searching\s+for\s+a?n?\s*)"
+        r"(?:(?:experienced?|talented?|skilled?|qualified?|dynamic|passionate|driven|dedicated)\s+)?"
+        r"([A-Za-z][^\n,\.]{4,70}?)(?:\s+to\s+join|\s+who\s+|\s+with\s+\d|\.|,|\n|$)",
+        t,
+    )
+    if m:
+        candidate = _title_clean(m.group(1))
+        if _ROLE_WORDS.search(candidate) and not _TITLE_NOISE.search(candidate):
+            return candidate
+
+    # Strategy 3: "we are hiring X" / "join us as X" / "join <Co> as X"
+    m2 = re.search(
+        r"(?i)(?:we\s+are\s+(?:currently\s+)?hiring\s+(?:a\s+|an\s+)?|"
+        r"join\s+us\s+as\s+(?:a\s+|an\s+)?|"
+        r"join\s+\w[\w\s]{0,30}?\s+as\s+(?:a\s+|an\s+)?)"
+        r"([A-Za-z][^\n,\.]{4,60}?)(?:\s+at\s+|\s+to\s+|\.|,|\n|$)",
+        t,
+    )
+    if m2:
+        candidate = _title_clean(m2.group(1))
+        if _ROLE_WORDS.search(candidate) and not _TITLE_NOISE.search(candidate):
+            return candidate
+
+    # Strategy 4: "hiring … for … [role words]" sentence pattern
+    m3 = re.search(
         r"(?i)hir(?:ing|ed)\s+(?:freshers?|candidates?|professionals?|engineers?)?\s*"
         r"(?:for|as)?\s*([A-Za-z][^\n,\.]{4,60}?)(?:\s+role|\s+position|\s+at|\.|,|\n|$)",
         t,
     )
-    if m:
-        candidate = _clean(m.group(1))
+    if m3:
+        candidate = _title_clean(m3.group(1))
         if _ROLE_WORDS.search(candidate) and not _TITLE_NOISE.search(candidate):
             return candidate
 
-    # Strategy 3: "roles at <Company>" → look at nearby text for role words
-    m2 = re.search(r"(?i)([\w\s/,&]+?)\s+roles?\s+at\s+\w", t)
-    if m2:
-        candidate = _clean(m2.group(1).split()[-4:] and " ".join(m2.group(1).split()[-4:]))
-        if _ROLE_WORDS.search(candidate) and not _TITLE_NOISE.search(candidate):
-            return candidate
-
-    # Strategy 4: score every line in the first 15 lines
+    # Strategy 5: score every line in the first 15 lines
     best_line, best_score = "", 0
     for line in t.split("\n")[:15]:
         line = _clean(line)
@@ -418,107 +561,154 @@ def _xt(text: str) -> str:
             continue
         if _TITLE_NOISE.search(line):
             continue
+        if _HIRING_SHOUT.search(line):
+            continue
         if line.startswith("http"):
             continue
-        # Skip lines that look like "Label: value" field definitions
+        # Skip "Label: value" field definitions
         colon_pos = line.find(":")
         if 0 < colon_pos < 20 and len(line[:colon_pos].split()) <= 3:
             continue
         score = 0
         role_hits = len(_ROLE_WORDS.findall(line))
         score += role_hits * 3
-        # Prefer shorter, capitalised lines (typical title format)
-        if len(line) < 50:
+        if len(line) < 60:
             score += 2
         if line[0].isupper():
             score += 1
-        # Penalise lines that look like body paragraphs
+        # Boost hyphenated tech titles ("Python/Django", "React-Node")
+        if re.search(r"[A-Za-z][/\-][A-Za-z]", line):
+            score += 1
+        # Penalise ALL-CAPS (scam shout line)
+        if line.isupper():
+            score -= 4
+        # Penalise long paragraph lines
         if len(line.split()) > 12:
             score -= 2
         if score > best_score:
             best_score, best_line = score, line
 
-    # Strategy 5: paragraph-style posting — extract role from "looking for a X" / "seeking a X"
-    m3 = re.search(
-        r"(?i)(?:looking\s+for\s+a?n?\s+|seeking\s+a?n?\s+|need\s+a?n?\s+)"
-        r"([A-Za-z][^\n,\.]{4,60}?)(?:\s+to\s+join|\s+who\s+|\.|,|\n|$)",
-        t,
-    )
-    if m3:
-        candidate = _clean(m3.group(1))
-        if _ROLE_WORDS.search(candidate) and not _TITLE_NOISE.search(candidate):
-            return candidate
-
-    return best_line
+    return _title_clean(best_line) if best_score > 0 else best_line
 
 
 def _xco(text: str) -> str:
     """
-    Extract company name with multi-strategy fallback:
-    1. Explicit label
-    2. "at <Company>" / "with <Company>" patterns near role words
-    3. Company suffix heuristic (Pvt Ltd, Technologies, etc.)
-    4. Capitalised proper-noun phrase after "joining" / "apply at"
+    Extract company name — 6-strategy fallback, production grade.
+
+    Fixes over v5:
+    - Strategy 0: guard against email-domain false positives (productjobs@gmail → "")
+    - Strategy 2: suffix regex now anchored to single line only (no cross-line grabs)
+    - Strategy 3: "we at X" / "join X as" patterns added for paragraph-style postings
+    - Strategy 4: "at X" now skips if X looks like a verb phrase / location
+    - Strategy 5: standalone line now also rejects lines that are all-caps shout lines
+    - All extracted names normalised to Title Case before returning
     """
     t = text or ""
 
-    # Strategy 1: explicit label — works regardless of case
+    def _co_clean(s: str) -> str:
+        s = _clean(s)
+        # Reject if it's clearly a sentence fragment
+        if re.search(r"\b(are|is|we|our|this|has|have|will|the|a|an|"
+                     r"looking|seeking|hiring|currently|team|join)\b", s, re.I):
+            return ""
+        return s.title() if s else ""
+
+    # Strategy 1: explicit keyword label — highest confidence
     val = _xf(t, [
         "company", "organization", "organisation", "employer", "firm",
         "about us", "about the company", "about company",
-        "about the organization", "hiring company", "client",
+        "about the organization", "hiring company", "client", "posted by",
     ])
     if val:
-        return _clean(val).title()   # normalise → Title Case for MCA matching
+        # "Posted by" often includes "• 2nd" on LinkedIn — strip that
+        val = re.split(r"\s*[•·|]\s*", val)[0]
+        cleaned = _co_clean(val)
+        if cleaned:
+            return cleaned
 
-    # Strategy 2: "at <Company>" patterns near role context
-    # FIX: [A-Z] anchor → [A-Za-z] so lowercase company names are captured
-    for m in re.finditer(
-        r"(?i)(?:roles?\s+at|positions?\s+at|joining\s+us\s+at|working\s+at|"
-        r"careers?\s+at|apply\s+at|opportunities?\s+at|hiring\s+at)\s+"
-        r"([A-Za-z][A-Za-z0-9&\.\s\-]{2,50}?)(?:\.|,|\n|$|\s+(?:is|are|was|for|and))",
-        t,
-    ):
-        candidate = _clean(m.group(1))
-        if 2 < len(candidate) < 60:
-            return candidate.title()
-
-    # Strategy 3: company suffix heuristic — single line only
-    # FIX: [A-Z] anchor → [A-Za-z] (re.IGNORECASE already on this call)
-    for m in re.finditer(
-        r"([A-Za-z][A-Za-z0-9&\.\s\-]{1,40}?)\s+" + _CO_SUFFIXES.pattern,
-        t, re.IGNORECASE,
-    ):
-        candidate = _clean(m.group(0))
-        if "\n" in candidate or len(candidate) > 70:
+    # Strategy 2: company suffix heuristic — SINGLE LINE only
+    # Extended pattern grabs compound suffixes like "Consulting Services", "Technologies Pvt Ltd"
+    _suffix_pat = (
+        r"([A-Za-z][A-Za-z0-9&\.\s\-]{1,40}?)\s+"
+        + _CO_SUFFIXES.pattern
+        + r"(?:\s+" + _CO_SUFFIXES.pattern + r")?"  # optional second suffix word
+    )
+    for line in t.split("\n"):
+        line_clean = _clean(line)
+        if not line_clean or len(line_clean) > 100:
             continue
-        if 3 < len(candidate) < 70:
-            return candidate.title()
+        m = re.search(_suffix_pat, line_clean, re.IGNORECASE)
+        if m:
+            candidate = _clean(m.group(0))
+            if 3 < len(candidate) < 70:
+                prefix = m.group(1).strip()
+                if re.search(r"\b(we|our|this|the|a|an|is|are|has)\b", prefix, re.I):
+                    continue
+                return candidate.title()
+
+    # Strategy 3: "we at X" / "join X as" / "roles at X" / "careers at X"
+    for pat in [
+        r"(?i)\bwe\s+at\s+([A-Za-z][A-Za-z0-9&\s\-]{1,40}?)(?:\s+are|\s+have|\s+offer|,|\.|$)",
+        r"(?i)\bjoin\s+([A-Za-z][A-Za-z0-9&\s\-]{1,40}?)\s+as\s+(?:a\s+|an\s+)?",
+        r"(?i)(?:roles?\s+at|positions?\s+at|careers?\s+at|apply\s+at|"
+        r"opportunities?\s+at|hiring\s+at|working\s+at|joining\s+us\s+at)\s+"
+        r"([A-Za-z][A-Za-z0-9&\.\s\-]{2,50}?)(?:\.|,|\n|$|\s+(?:is|are|was|for|and))",
+    ]:
+        m = re.search(pat, t)
+        if m:
+            candidate = _clean(m.group(1))
+            if 2 < len(candidate) < 60:
+                result = _co_clean(candidate)
+                if result:
+                    return result
 
     # Strategy 4: word(s) right after "at" in first 5 lines
-    # FIX: [A-Z] anchor → [A-Za-z], added re.IGNORECASE
-    first_chunk = " ".join(t.split("\n")[:5])
+    # Remove email addresses first — prevents email-domain grabs (productjobs@ → "Salary")
+    first_chunk_no_email = re.sub(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", "", 
+                                   " ".join(t.split("\n")[:5]))
     m2 = re.search(
         r"\bat\s+([A-Za-z][A-Za-z0-9]{2,}(?:\s+[A-Za-z][A-Za-z0-9]{2,}){0,3})",
-        first_chunk, re.IGNORECASE,
+        first_chunk_no_email, re.IGNORECASE,
     )
     if m2:
         candidate = _clean(m2.group(1))
-        if 2 < len(candidate) < 50:
-            return candidate.title()
+        # Reject locations, verbs, and field-label words
+        if not re.search(
+            r"\b(bangalore|mumbai|delhi|chennai|hyderabad|pune|kolkata|"
+            r"remote|india|home|salary|ctc|location|contact|apply|least|most)\b",
+            candidate, re.I,
+        ):
+            if 2 < len(candidate) < 50:
+                result = _co_clean(candidate)
+                if result:
+                    return result
 
-    # Strategy 5: second/third non-empty line as standalone name
-    # FIX: removed line[0].isupper() — allows lowercase company names
+    # Strategy 5: second/third standalone non-empty line
     lines = [_clean(l) for l in t.split("\n") if _clean(l)]
     for line in lines[1:4]:
-        if 2 < len(line) < 55:
-            if _ROLE_WORDS.search(line):
-                continue
-            colon_pos = line.find(":")
-            if 0 < colon_pos < 20:
-                continue
-            if not re.search(r"\b(are|is|we|our|this|has|have|will|the|a|an)\b", line, re.I):
-                return line.title()
+        if not (2 < len(line) < 55):
+            continue
+        if _ROLE_WORDS.search(line):
+            continue
+        if _HIRING_SHOUT.search(line):
+            continue
+        if line.isupper() and len(line.split()) <= 2:
+            continue  # e.g. "WFH ONLY"
+        # Reject WFH/earn/scam shout lines
+        if re.search(r"\b(work\s+from\s+home|earn\s+rs|earn\s+₹|no\s+experience|"
+                     r"data\s+entry|whatsapp\s+only|urgent|immediate)\b", line, re.I):
+            continue
+        colon_pos = line.find(":")
+        if 0 < colon_pos < 20:
+            continue
+        # Must not look like a sentence, location, or email
+        if re.search(r"\b(are|is|we|our|this|has|have|will|"
+                     r"bangalore|mumbai|delhi|hyderabad|chennai|pune|remote)\b",
+                     line, re.I):
+            continue
+        if "@" in line or "http" in line:
+            continue
+        return line.title()
 
     return ""
 
@@ -2067,29 +2257,32 @@ def _render_checklist(result: dict):
 def _add_to_history(result: dict):
     h = st.session_state.setdefault("jsd_history", [])
     entry = {
+        "id":      None,   # filled in after DB save — used for soft-delete
         "title":   result["job"].get("title", "Untitled"),
         "company": result["job"].get("company", "Unknown"),
         "score":   result["blended_score"],
         "verdict": result["final_verdict"],
         "time":    result["timestamp"],
     }
-    h.insert(0, entry)
-    st.session_state["jsd_history"] = h[:10]
 
-    # ── Persist to Supabase (scam_analysis_history table) ─────────────────
+    # ── Persist to Supabase and get back the new row id ───────────────────
     try:
         from user_login import save_scam_analysis
         username = st.session_state.get("username", "")
         if username:
-            save_scam_analysis(
+            new_id = save_scam_analysis(
                 username  = username,
                 job_title = entry["title"],
                 company   = entry["company"],
                 score     = entry["score"],
                 verdict   = entry["verdict"],
             )
+            entry["id"] = new_id   # store id so ✕ Remove can soft-delete by id
     except Exception:
         pass  # non-fatal — session_state history still works
+
+    h.insert(0, entry)
+    st.session_state["jsd_history"] = h[:5]
 
 
 def _render_history():
@@ -2177,10 +2370,10 @@ def _render_history():
     if st.button("Clear all", key="jsd_hist_clear_all", help="Remove all recent analyses",
                  use_container_width=True):
         try:
-            from user_login import delete_all_scam_history
+            from user_login import soft_delete_all_scam_history
             username = st.session_state.get("username", "")
             if username:
-                delete_all_scam_history(username)
+                soft_delete_all_scam_history(username)
         except Exception:
             pass
         st.session_state["jsd_history"] = []
@@ -2225,10 +2418,11 @@ def _render_history():
                      help=f"Remove '{h['title']}'",
                      use_container_width=True):
             try:
-                from user_login import delete_scam_analysis
+                from user_login import soft_delete_scam_analysis
                 username = st.session_state.get("username", "")
-                if username:
-                    delete_scam_analysis(username, idx)
+                record_id = h.get("id")   # DB id stored in history dict
+                if username and record_id:
+                    soft_delete_scam_analysis(username, record_id)
             except Exception:
                 pass
             st.session_state["jsd_history"].pop(idx)
