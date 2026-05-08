@@ -13,86 +13,6 @@
 #   )
 # ══════════════════════════════════════════════════════════════════════════════
 
-
-# ── Responsive CSS + injection helper ─────────────────────────────────────────
-_RESPONSIVE_CSS = """<style>
-*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-.resume-wrap{display:flex;width:100%;align-items:stretch;}
-.resume-sidebar{flex:0 0 30%;min-width:200px;max-width:300px;}
-.resume-main{flex:1 1 0;min-width:0;overflow-wrap:break-word;word-break:break-word;}
-.page-wrap{width:100%;max-width:794px;margin:0 auto;
-  padding:clamp(20px,4vw,48px) clamp(14px,5vw,60px);}
-.cl-header-flex{display:flex;justify-content:space-between;
-  align-items:flex-end;flex-wrap:wrap;gap:12px;}
-@media(max-width:640px){
-  .resume-wrap{flex-direction:column;}
-  .resume-sidebar{flex:none;width:100%!important;max-width:100%!important;min-width:0!important;}
-  .resume-main{width:100%!important;}
-  .cl-header-flex{flex-direction:column;align-items:flex-start;}
-  .cl-contact{text-align:left!important;}
-  .page-wrap{padding:14px 12px!important;}
-  h1{font-size:clamp(18px,6vw,30px)!important;}
-}
-@page{size:A4 portrait;margin:12mm 12mm 14mm 12mm;}
-@media print{
-  .resume-wrap{flex-direction:row!important;}
-  .resume-sidebar{flex:0 0 30%!important;max-width:280px!important;}
-  body{padding:0!important;}
-  .page-wrap{padding:0!important;}
-}
-</style>"""
-
-def _inject_responsive(html, mode="two-col", sidebar_width="300px"):
-    import re as _re
-    if "</head>" in html:
-        html = html.replace("</head>", _RESPONSIVE_CSS + "\n</head>", 1)
-    if mode == "two-col":
-        html = _re.sub(
-            r"<table role='presentation' style='width:100%;(?:min-height:100vh;)?border-collapse:collapse;table-layout:fixed;'>",
-            "<div class='resume-wrap'>", html)
-        html = _re.sub(r"\n<tr>\n", "\n", html)
-        html = _re.sub(r"\n</tr>\n", "\n", html)
-        html = html.replace("</table>\n</body></html>", "</div>\n</body></html>")
-        html = html.replace("</table></body></html>", "</div></body></html>")
-        esc = _re.escape(sidebar_width)
-        def _sid(m):
-            s = _re.sub(r"width:\d+px;?\s*", "", m.group(1)).strip().rstrip(";")
-            return f"<div class='resume-sidebar' style='{s};'>"
-        html = _re.sub(rf"<td style='width:{esc};([^']*)'>" , _sid, html)
-        def _main(m):
-            return f"<div class='resume-main' style='{m.group(1).strip().rstrip(chr(59))};'>"
-        html = _re.sub(r"<td style='(padding:[^']+vertical-align:top;?)'>" , _main, html)
-        html = html.replace("</td>", "</div>")
-    elif mode == "single":
-        def _sb(m):
-            s = _re.sub(r"padding:[^;]+;?\s*", "", m.group(1))
-            s = _re.sub(r"max-width:[^;]+;?\s*", "", s)
-            s = _re.sub(r"\bmargin:[^;]+;?\s*", "", s)
-            return f"<body style='{s.strip().rstrip(chr(59))};'>"
-        html = _re.sub(r"<body style='([^']*)'>" , _sb, html)
-        html = _re.sub(r"(<body[^>]*>)", r"\1\n<div class='page-wrap'>", html)
-        html = html.replace("</body>", "</div>\n</body>")
-    elif mode == "cover":
-        def _cb(m):
-            s = _re.sub(r"padding:[^;]+;?\s*", "", m.group(1))
-            return f"<body style='{s.strip().rstrip(chr(59))};'>"
-        html = _re.sub(r"<body style='([^']*)'>" , _cb, html)
-        html = _re.sub(
-            r"<div style='display:flex;justify-content:space-between;align-items:flex-end;([^']*?)'>",
-            r"<div class='cl-header-flex' style='\1'>", html)
-        html = _re.sub(
-            r"<div style='text-align:right;([^']*?)'>",
-            r"<div class='cl-contact' style='text-align:right;\1'>", html)
-        # strip padding from CSS body {} rule in <style> block
-        html = _re.sub(r"(body\s*\{[^}]*?)padding:[^;]+;?\s*", r"\1", html)
-        html = _re.sub(
-            r"<div style='padding:(?:40|42|36|38)px (?:56|64|50|42)px;'>",
-            "<div class='page-wrap'>", html)
-        html = _re.sub(r"(<body[^>]*>)", r"\1\n<div class='page-wrap'>", html)
-        html = html.replace("</body>", "</div>\n</body>")
-    return html
-
-
 def render_cover_letter_professional(data):
     """
     Cover Letter Template 1 — Professional / Corporate
@@ -130,7 +50,7 @@ def render_cover_letter_professional(data):
         for p in paragraphs
     )
 
-    return _inject_responsive(f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
 <style>
@@ -139,6 +59,7 @@ def render_cover_letter_professional(data):
 </style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
   <!-- HEADER -->
   <div style='border-bottom:3px solid #1e3a5f;padding-bottom:18px;margin-bottom:28px;'>
     <h1 style='font-size:30px;font-weight:700;color:#1e3a5f;letter-spacing:1px;margin-bottom:4px;'>{name}</h1>
@@ -166,8 +87,8 @@ def render_cover_letter_professional(data):
   <p style='font-size:14px;color:#1a1a1a;margin-top:28px;'>Sincerely,</p>
   <p style='font-size:15px;font-weight:700;color:#1e3a5f;margin-top:8px;'>{name}</p>
   {f"<p style='font-size:13px;color:#555;margin-top:4px;'>{job_title}</p>" if job_title else ''}
-</body></html>""", mode='cover')
-
+</div>
+</body></html>"""
 
 
 def render_cover_letter_modern(data):
@@ -205,7 +126,7 @@ def render_cover_letter_modern(data):
         for p in paragraphs
     )
 
-    return _inject_responsive(f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
 <style>
@@ -214,6 +135,7 @@ def render_cover_letter_modern(data):
 </style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
   <!-- HEADER BAND -->
   <div style='display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #0d9488;padding-bottom:16px;margin-bottom:32px;'>
     <div>
@@ -243,8 +165,7 @@ def render_cover_letter_modern(data):
     <p style='font-size:16px;font-weight:700;color:#0f172a;'>{name}</p>
     {f"<p style='font-size:13px;color:#0d9488;'>{job_title}</p>" if job_title else ''}
   </div>
-</body></html>""", mode='cover')
-
+</body></html>"""
 
 
 def render_cover_letter_creative(data):
@@ -287,7 +208,7 @@ def render_cover_letter_creative(data):
         for p in paragraphs
     )
 
-    return _inject_responsive(f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
 <style>
@@ -296,6 +217,7 @@ def render_cover_letter_creative(data):
 </style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
   <!-- CREATIVE HEADER BAND -->
   <div style='background:{accent};padding:36px 56px 28px;'>
     <h1 style='font-size:32px;font-weight:800;color:#ffffff;letter-spacing:1px;margin-bottom:4px;'>{name}</h1>
@@ -322,8 +244,7 @@ def render_cover_letter_creative(data):
     <p style='font-size:17px;font-weight:800;color:{accent};margin-top:10px;'>{name}</p>
     {f"<p style='font-size:13px;color:#6b7280;'>{job_title}</p>" if job_title else ''}
   </div>
-</body></html>""", mode='cover')
-
+</body></html>"""
 
 
 def render_cover_letter_executive(data):
@@ -361,7 +282,7 @@ def render_cover_letter_executive(data):
         for p in paragraphs
     )
 
-    return _inject_responsive(f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
 <style>
@@ -370,6 +291,7 @@ def render_cover_letter_executive(data):
 </style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
   <!-- EXECUTIVE DARK HEADER -->
   <div style='background:linear-gradient(135deg,#0d1b2a,#1a2f4c);padding:40px 64px 32px;'>
     <h1 style='font-size:30px;font-weight:700;color:#ffffff;letter-spacing:2px;margin-bottom:4px;font-family:"Georgia",serif;'>{name}</h1>
@@ -397,8 +319,7 @@ def render_cover_letter_executive(data):
     <p style='font-size:18px;font-weight:700;color:#0d1b2a;margin-top:12px;font-family:"Georgia",serif;'>{name}</p>
     {f"<p style='font-size:13px;color:#d4af37;font-weight:600;margin-top:4px;'>{job_title}</p>" if job_title else ''}
   </div>
-</body></html>""", mode='cover')
-
+</body></html>"""
 
 
 def render_cover_letter_entry_level(data):
@@ -436,7 +357,7 @@ def render_cover_letter_entry_level(data):
         for p in paragraphs
     )
 
-    return _inject_responsive(f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
 <style>
@@ -445,6 +366,7 @@ def render_cover_letter_entry_level(data):
 </style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
   <!-- HEADER -->
   <div style='background:#eff6ff;border-left:5px solid #1d4ed8;padding:22px 28px;margin-bottom:30px;border-radius:0 8px 8px 0;'>
     <h1 style='font-size:26px;font-weight:800;color:#1e3a8a;margin-bottom:2px;'>{name}</h1>
@@ -470,8 +392,8 @@ def render_cover_letter_entry_level(data):
   <p style='font-size:14px;'>Sincerely,</p>
   <p style='font-size:16px;font-weight:700;color:#1e3a8a;margin-top:10px;'>{name}</p>
   {f"<p style='font-size:13px;color:#6b7280;'>{job_title}</p>" if job_title else ''}
-</body></html>""", mode='cover')
-
+</div>
+</body></html>"""
 
 
 def render_cover_letter_ats(data):
@@ -514,7 +436,7 @@ def render_cover_letter_ats(data):
         for p in paragraphs
     )
 
-    return _inject_responsive(f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
 <style>
@@ -524,6 +446,7 @@ def render_cover_letter_ats(data):
 </style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;'>
   <!-- ATS HEADER — plain text, no images -->
   <div style='margin-bottom:6px;'>
     <p style='font-size:22px;font-weight:700;color:#111827;'>{contact_parts_line}</p>
@@ -559,8 +482,8 @@ def render_cover_letter_ats(data):
   <p>Sincerely,</p>
   <p style='font-weight:700;font-size:15px;margin-top:10px;'>{name}</p>
   {f"<p style='color:#374151;margin-top:2px;'>{job_title}</p>" if job_title else ''}
-</body></html>""", mode='cover')
-
+</div>
+</body></html>"""
 
 
 # ── Cover Letter template registry ────────────────────────────────────────────
