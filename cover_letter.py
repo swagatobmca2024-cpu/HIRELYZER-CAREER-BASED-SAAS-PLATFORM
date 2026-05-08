@@ -59,7 +59,7 @@ def render_cover_letter_professional(data):
 </style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
+<div>
   <!-- HEADER -->
   <div style='border-bottom:3px solid #1e3a5f;padding-bottom:18px;margin-bottom:28px;'>
     <h1 style='font-size:30px;font-weight:700;color:#1e3a5f;letter-spacing:1px;margin-bottom:4px;'>{name}</h1>
@@ -135,7 +135,7 @@ def render_cover_letter_modern(data):
 </style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
+<div>
   <!-- HEADER BAND -->
   <div style='display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #0d9488;padding-bottom:16px;margin-bottom:32px;'>
     <div>
@@ -217,7 +217,7 @@ def render_cover_letter_creative(data):
 </style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
+<div>
   <!-- CREATIVE HEADER BAND -->
   <div style='background:{accent};padding:36px 56px 28px;'>
     <h1 style='font-size:32px;font-weight:800;color:#ffffff;letter-spacing:1px;margin-bottom:4px;'>{name}</h1>
@@ -291,7 +291,7 @@ def render_cover_letter_executive(data):
 </style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
+<div>
   <!-- EXECUTIVE DARK HEADER -->
   <div style='background:linear-gradient(135deg,#0d1b2a,#1a2f4c);padding:40px 64px 32px;'>
     <h1 style='font-size:30px;font-weight:700;color:#ffffff;letter-spacing:2px;margin-bottom:4px;font-family:"Georgia",serif;'>{name}</h1>
@@ -366,7 +366,7 @@ def render_cover_letter_entry_level(data):
 </style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
+<div>
   <!-- HEADER -->
   <div style='background:#eff6ff;border-left:5px solid #1d4ed8;padding:22px 28px;margin-bottom:30px;border-radius:0 8px 8px 0;'>
     <h1 style='font-size:26px;font-weight:800;color:#1e3a8a;margin-bottom:2px;'>{name}</h1>
@@ -446,7 +446,7 @@ def render_cover_letter_ats(data):
 </style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
+<div>
   <!-- ATS HEADER — plain text, no images -->
   <div style='margin-bottom:6px;'>
     <p style='font-size:22px;font-weight:700;color:#111827;'>{contact_parts_line}</p>
