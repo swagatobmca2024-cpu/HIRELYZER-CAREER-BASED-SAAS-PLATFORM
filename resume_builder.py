@@ -450,7 +450,7 @@ def render_template_modern(session_state, profile_img_html=""):
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{session_state.get('name', '')} - Resume</title>
 </head>
-<body style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;line-height:1.6;color:#1f2937;background:#ffffff;max-width:794px;margin:0 auto;padding:36px 32px;">
+<body style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;line-height:1.6;color:#1f2937;background:#ffffff;padding:36px 32px;">
 
   <!-- HEADER -->
   <div style="text-align:center;margin-bottom:30px;padding-bottom:20px;border-bottom:3px solid #2563eb;">
@@ -838,12 +838,12 @@ def render_template_classic(session_state, profile_img_html=""):
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Georgia',serif; color:#1a1a1a; background:#fff; padding:40px 60px; line-height:1.6; max-width:794px; margin:0 auto; }}
+  body {{ font-family:'Georgia',serif; color:#1a1a1a; background:#fff; padding:40px 60px; line-height:1.6; }}
   a {{ color:#1e3a5f; }}
 </style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
+<div>
   <div style='text-align:center;margin-bottom:6px;'>
     {fixed_img}
     <h1 style='font-size:32px;font-weight:700;letter-spacing:1px;color:#1a1a1a;'>{session_state.get('name','')}</h1>
@@ -1010,7 +1010,7 @@ def render_template_executive(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',Arial,sans-serif; color:#1a1a1a; background:#fff; line-height:1.6; }}</style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
+<div>
   <!-- Header Band -->
   <div style='background:linear-gradient(135deg,#1e1b4b 0%,#3730a3 100%);color:white;padding:36px 50px;'>
     <table role='presentation' style='width:100%;border-collapse:collapse;'>
@@ -1162,7 +1162,7 @@ def render_template_timeline(session_state, profile_img_html=""):
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
+<div>
   <div style='background:#0d9488;height:6px;'></div>
   <div style='padding:36px 50px 24px;border-bottom:1px solid #e2e8f0;'>
     <table role='presentation' style='width:100%;border-collapse:collapse;'>
@@ -1968,12 +1968,12 @@ def render_template_slate_gray(session_state, profile_img_html=""):
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; color:{{C_PRIMARY}}; background:#ffffff; padding:40px 60px; line-height:1.6; max-width:794px; margin:0 auto; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; color:{{C_PRIMARY}}; background:#ffffff; padding:40px 60px; line-height:1.6; }}
   a {{ color:{C_PRIMARY}; }}
 </style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
+<div>
   <!-- HEADER -->
   <div style='text-align:center;margin-bottom:8px;'>
     {fixed_img}
@@ -2301,12 +2301,12 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; max-width:794px; margin:0 auto; }}
+  body {{ font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; }}
   a {{ color:#7f1d1d; }}
 </style>
 </head>
 <body>
-<div style='max-width:794px;margin:0 auto;'>
+<div>
   <div style='text-align:center;margin-bottom:6px;'>
     {fixed_img}
     <h1 style='font-size:32px;font-weight:700;letter-spacing:1px;color:#7f1d1d;font-family:"Georgia",serif;'>{session_state.get('name','')}</h1>
@@ -2604,7 +2604,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title></head>
-<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;max-width:794px;margin:0 auto;padding:36px 40px;">
+<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;padding:36px 40px;">
   {fixed_img if fixed_img else ''}
   <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #166534;">
     <h1 style="font-size:28px;font-weight:800;color:#14532d;margin-bottom:4px;">{session_state.get('name','')}</h1>
