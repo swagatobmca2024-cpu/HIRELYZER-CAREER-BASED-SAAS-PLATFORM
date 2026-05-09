@@ -6594,7 +6594,7 @@ from resume_builder import (
     render_template_forest_green,
     render_template_pure_white, render_template_midnight_black,
     render_template_soft_lavender, render_template_warm_sand,
-    render_template_ice_blue, render_template_rose_gold,
+    render_template_ice_blue,
     RESUME_TEMPLATES, render_resume,
     _fmt_desc, _cert_name_html,
 )
