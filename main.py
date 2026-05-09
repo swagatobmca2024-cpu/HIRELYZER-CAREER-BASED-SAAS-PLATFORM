@@ -2907,26 +2907,25 @@ if st.session_state.username == "admin":
         Data is stored in Supabase PostgreSQL. Use the Admin DB View tab to export records as CSV.
     </div>""", unsafe_allow_html=True)
 # Always-visible tabs
-tab_labels = [
-    "📊 Dashboard",
-    "🧾 Resume Builder",
-    "💼 Job Search",
-    "📚 Course Recommendation",
-	"🛡️ Scam Detector"
-]
-
-# Add Admin tab only for admin user
 if st.session_state.username == "admin":
-    tab_labels.append("📁 Admin DB View")
+    # Admin sees only the Admin DB View tab
+    tabs = st.tabs(["📁 Admin DB View"])
+    tab5 = tabs[0]
+    tab1 = tab2 = tab3 = tab4 = tab_scam = None
+else:
+    # Regular users see all feature tabs
+    tabs = st.tabs([
+        "📊 Dashboard",
+        "🧾 Resume Builder",
+        "💼 Job Search",
+        "📚 Course Recommendation",
+        "🛡️ Scam Detector"
+    ])
+    tab1, tab2, tab3, tab4, tab_scam = tabs
+    tab5 = None
 
-# Create tabs dynamically
-tabs = st.tabs(tab_labels)
-
-# Unpack first five (always exist)
-tab1, tab2, tab3, tab4, tab_scam = tabs[:5]
-
-# Handle optional admin tab (index shifts to 5 now)
-tab5 = tabs[5] if len(tabs) > 5 else None
+    with tab_scam:
+        render_job_scam_detector_tab(call_llm)
 with tab1:
     st.markdown("""
     <style>
