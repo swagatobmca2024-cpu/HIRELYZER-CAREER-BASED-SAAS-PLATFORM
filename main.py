@@ -2906,14 +2906,29 @@ if st.session_state.username == "admin":
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         Data is stored in Supabase PostgreSQL. Use the Admin DB View tab to export records as CSV.
     </div>""", unsafe_allow_html=True)
-# Always-visible tabs
+# Tab setup
 if st.session_state.username == "admin":
-    # Admin sees only the Admin DB View tab
-    tabs = st.tabs(["📁 Admin DB View"])
-    tab5 = tabs[0]
-    tab1 = tab2 = tab3 = tab4 = tab_scam = None
+    tabs = st.tabs([
+        "📊 Dashboard",
+        "🧾 Resume Builder",
+        "💼 Job Search",
+        "📚 Course Recommendation",
+        "🛡️ Scam Detector",
+        "📁 Admin DB View"
+    ])
+    tab1, tab2, tab3, tab4, tab_scam, tab5 = tabs
+    st.markdown("""
+    <style>
+    .stTabs [data-baseweb="tab-list"] button:nth-child(1),
+    .stTabs [data-baseweb="tab-list"] button:nth-child(2),
+    .stTabs [data-baseweb="tab-list"] button:nth-child(3),
+    .stTabs [data-baseweb="tab-list"] button:nth-child(4),
+    .stTabs [data-baseweb="tab-list"] button:nth-child(5) {
+        display: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 else:
-    # Regular users see all feature tabs
     tabs = st.tabs([
         "📊 Dashboard",
         "🧾 Resume Builder",
@@ -2924,8 +2939,8 @@ else:
     tab1, tab2, tab3, tab4, tab_scam = tabs
     tab5 = None
 
-    with tab_scam:
-        render_job_scam_detector_tab(call_llm)
+with tab_scam:
+    render_job_scam_detector_tab(call_llm)
 with tab1:
     st.markdown("""
     <style>
@@ -17759,8 +17774,3 @@ if tab5:
 
 with tab_scam:
     render_job_scam_detector_tab(call_llm)
-
-
-
-
-
