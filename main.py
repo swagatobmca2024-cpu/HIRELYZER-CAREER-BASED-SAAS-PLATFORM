@@ -17772,5 +17772,3 @@ if tab5:
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
 
-with tab_scam:
-    render_job_scam_detector_tab(call_llm)
