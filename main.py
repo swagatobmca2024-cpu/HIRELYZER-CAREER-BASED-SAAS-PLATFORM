@@ -1072,6 +1072,10 @@ h3, .stMarkdown h3 {
     letter-spacing: -0.025em !important;
     color: var(--text-primary) !important;
     line-height: 1.3 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 .welcome-subtitle {
     font-size: 0.85rem;
@@ -1082,6 +1086,17 @@ h3, .stMarkdown h3 {
 .welcome-username {
     color: var(--accent-cyan);
     font-weight: 700;
+    display: inline-block;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+.welcome-left {
+    min-width: 0;
+    flex: 1 1 0;
+    overflow: hidden;
 }
 
 /* ══════════════════════════════════════
@@ -1857,6 +1872,7 @@ if not st.session_state.get("authenticated", False):
                                         success, saved_key = verify_user(_input, pwd.strip())
                                         if success:
                                             st.session_state.authenticated = True
+                                            st.session_state["_just_logged_in"] = True
                                             log_user_action(st.session_state.username, "login")
                                             notify("login", "success", "Login successful!")
                                             time.sleep(1.5)
@@ -2449,6 +2465,20 @@ if not st.session_state.get("authenticated", False):
 # ------------------- AFTER LOGIN -------------------
 if st.session_state.get("authenticated"):
 
+    # Smooth fade-in transition when arriving from login
+    if st.session_state.pop("_just_logged_in", False):
+        st.markdown("""
+        <style>
+        @keyframes dashboardFadeIn {
+            from { opacity: 0; transform: translateY(18px); filter: blur(4px); }
+            to   { opacity: 1; transform: translateY(0);   filter: blur(0);   }
+        }
+        .stApp [data-testid="stAppViewBlockContainer"] {
+            animation: dashboardFadeIn 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
     # If logging_out flag is set, show full-width spinner and complete logout
     if st.session_state.get("_logging_out"):
         with st.spinner("Logging out, please wait..."):
@@ -2459,25 +2489,22 @@ if st.session_state.get("authenticated"):
         st.rerun()
 
     else:
-        # Layout: welcome banner (left) + logout button (right) in same row
-        _banner_col, _logout_col = st.columns([5, 1])
-
-        with _banner_col:
-            st.markdown(
-                f'<div class="welcome-banner">'
-                f'<div>'
-                f'<div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span> 👋</div>'
-                f'<div class="welcome-subtitle">HIRELYZER — AI-Powered Resume Intelligence Platform</div>'
-                f'</div>'
-                f'<div style="display:flex;align-items:center;gap:8px;">'
-                f'<div style="background:linear-gradient(135deg,rgba(52,211,153,0.15) 0%,rgba(52,211,153,0.06) 100%);border:1px solid rgba(52,211,153,0.25);border-radius:99px;padding:5px 14px;font-size:0.75rem;font-weight:600;color:#6ee7b7;letter-spacing:0.04em;text-transform:uppercase;font-family:-apple-system,sans-serif;">&#9679; Live</div>'
-                f'</div>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-
+        # Unified welcome banner with logout button overlaid on the right
+        st.markdown(
+            f'<div class="welcome-banner" style="display:flex;align-items:center;justify-content:space-between;">'
+            f'<div class="welcome-left">'
+            f'<div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span> 👋</div>'
+            f'<div class="welcome-subtitle">HIRELYZER — AI-Powered Resume Intelligence Platform</div>'
+            f'</div>'
+            f'<div style="display:flex;align-items:center;gap:12px;">'
+            f'<div style="background:linear-gradient(135deg,rgba(52,211,153,0.15) 0%,rgba(52,211,153,0.06) 100%);border:1px solid rgba(52,211,153,0.25);border-radius:99px;padding:5px 14px;font-size:0.75rem;font-weight:600;color:#6ee7b7;letter-spacing:0.04em;text-transform:uppercase;font-family:-apple-system,sans-serif;">&#9679; Live</div>'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        _spacer, _logout_col = st.columns([5, 1])
         with _logout_col:
-            st.markdown("<div style='display:flex;align-items:center;height:100%;padding-top:10px;'>", unsafe_allow_html=True)
+            st.markdown("<div style='margin-top:-62px;'>", unsafe_allow_html=True)
             if st.button("🚪 Logout", use_container_width=True, help="Sign out of your account"):
                 st.session_state["_logging_out"] = True
                 st.rerun()
