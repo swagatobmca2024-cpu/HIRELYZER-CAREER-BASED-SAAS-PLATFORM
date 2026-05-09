@@ -1159,9 +1159,10 @@ def render_template_timeline(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>{session_state.get('name','')} - Timeline Resume</title>
-<style>@page {{ size: A4; margin: 0; }} * {{ box-sizing:border-box; margin:0; padding:0; }} body {{ width:794px;max-width:794px;margin:0 auto;font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
+<style>@page {{ size: A4; margin: 18mm 15mm; }} * {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;padding:36px 48px;box-sizing:border-box;'>
 <div>
   <div style='background:#0d9488;height:6px;'></div>
   <div style='padding:36px 50px 24px;border-bottom:1px solid #e2e8f0;'>
@@ -1188,6 +1189,7 @@ def render_template_timeline(session_state, profile_img_html=""):
     {sec("Interests", chips(session_state.get('interests',''),'#fee2e2','#991b1b')) if session_state.get('interests') else ''}
     {sec("Certifications", cert_items) if cert_items else ''}
   </div>
+</div>
 </body></html>"""
 # ─────────────────────────────────────────────────────────────
 # NEW TEMPLATE 4: Corporate Two-Column (Blue Theme)
@@ -1967,14 +1969,15 @@ def render_template_slate_gray(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  @page {{ size: A4; margin: 0; }}
+  @page {{ size: A4; margin: 18mm 15mm; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; color:{C_PRIMARY}; background:#ffffff; padding:40px 60px; line-height:1.6; }}
+  body {{  font-family:'Segoe UI',Arial,sans-serif; color:{C_PRIMARY}; background:#ffffff;  line-height:1.6; }}
   a {{ color:{C_PRIMARY}; }}
 </style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;padding:36px 48px;box-sizing:border-box;'>
 <div>
   <!-- HEADER -->
   <div style='text-align:center;margin-bottom:8px;'>
@@ -1995,6 +1998,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
   {section("Projects", projects_html) if projects_html else ''}
   {section("Project Links", all_links_html) if all_links_html else ''}
   {section("Certifications", cert_html) if cert_html else ''}
+</div>
 </div>
 </body></html>"""
 
@@ -2302,14 +2306,15 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  @page {{ size: A4; margin: 0; }}
+  @page {{ size: A4; margin: 18mm 15mm; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; }}
+  body {{  font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa;  line-height:1.6; }}
   a {{ color:#7f1d1d; }}
 </style>
 </head>
 <body>
+<div style='max-width:794px;margin:0 auto;padding:36px 48px;box-sizing:border-box;'>
 <div>
   <div style='text-align:center;margin-bottom:6px;'>
     {fixed_img}
@@ -2329,6 +2334,7 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
   {section("Projects", projects_html) if projects_html else ''}
   {section("Project Links", all_links_html) if all_links_html else ''}
   {section("Certifications", cert_html) if cert_html else ''}
+</div>
 </div>
 </body></html>"""
 
@@ -2607,8 +2613,9 @@ def render_template_forest_green(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>{session_state.get('name','')} - Resume</title><style>@page {{ size: A4; margin: 0; }} * {{ box-sizing:border-box; margin:0; padding:0; }} body {{ width:794px;max-width:794px;margin:0 auto;font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; line-height:1.6; }}</style></head>
-<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;padding:36px 40px;">
+<head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>{session_state.get('name','')} - Resume</title><style>@page {{ size: A4; margin: 18mm 15mm; }} * {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; line-height:1.6; }}</style></head>
+<body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;">
+<div style='max-width:794px;margin:0 auto;padding:36px 48px;box-sizing:border-box;'>
   {fixed_img if fixed_img else ''}
   <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #166534;">
     <h1 style="font-size:32px;font-weight:800;color:#14532d;margin-bottom:4px;">{session_state.get('name','')}</h1>
@@ -2625,6 +2632,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
   {_sec_fg("Interests", f"<div style='padding:6px 0;'>{_tags_fg(session_state.get('interests',''),'#fdf4ff','#581c87','#e9d5ff')}</div>") if session_state.get('interests','').strip() else ''}
   {_sec_fg("Certifications", cert_html_fg) if cert_html_fg else ''}
   {_sec_fg("Project Links", proj_links_sec_fg) if proj_links_sec_fg else ''}
+</div>
 </div>
 </body></html>"""
 
@@ -2756,12 +2764,13 @@ def render_template_pure_white(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  @page {{ size: A4; margin: 0; }}
+  @page {{ size: A4; margin: 18mm 15mm; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Georgia',serif; color:#111827; background:#ffffff; padding:48px 64px; line-height:1.6; }}
+  body {{  font-family:'Georgia',serif; color:#111827; background:#ffffff;  line-height:1.6; }}
   a {{ color:#111827; }}
 </style></head><body>
+<div style='max-width:794px;margin:0 auto;padding:36px 48px;box-sizing:border-box;'>
 <div>
   <div style='text-align:center;margin-bottom:6px;'>
     {fixed_img}
@@ -2780,6 +2789,7 @@ def render_template_pure_white(session_state, profile_img_html=""):
   {section("Projects", proj_html) if proj_html else ''}
   {section("Project Links", all_links_html) if all_links_html else ''}
   {section("Certifications", cert_html) if cert_html else ''}
+</div>
 </div></body></html>"""
 
 
@@ -2910,19 +2920,20 @@ def render_template_midnight_black(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  @page {{ size: A4; margin: 0; }}
+  @page {{ size: A4; margin: 18mm 15mm; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:#111827; line-height:1.6; }}
+  body {{  font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:#111827; line-height:1.6; }}
   a {{ color:{ACCENT}; }}
 </style></head><body>
-<div style='background:{ACCENT};padding:36px 60px 28px;text-align:center;'>
+<div style='max-width:794px;margin:0 auto;padding:36px 48px;box-sizing:border-box;'>
+<div style='background:{ACCENT};padding:20px 0px 16px;text-align:center;'>
     {fixed_img}
     <h1 style='font-size:32px;font-weight:800;letter-spacing:1px;color:#ffffff;'>{session_state.get('name','')}</h1>
     {job_title_line}
     <p style='font-size:13px;color:#d1d5db;margin-top:8px;'>{contact_line}</p>
 </div>
-<div style='padding:36px 60px;'>
+<div style='padding:20px 0px;'>
   {section("Professional Summary", summary_html) if summary_html else ''}
   {section("Work Experience", exp_html) if exp_html else ''}
   {section("Education", edu_html) if edu_html else ''}
@@ -2933,6 +2944,7 @@ def render_template_midnight_black(session_state, profile_img_html=""):
   {section("Projects", proj_html) if proj_html else ''}
   {section("Project Links", all_links_html) if all_links_html else ''}
   {section("Certifications", cert_html) if cert_html else ''}
+</div>
 </div></body></html>"""
 
 
@@ -3072,12 +3084,13 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  @page {{ size: A4; margin: 0; }}
+  @page {{ size: A4; margin: 18mm 15mm; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
+  body {{  font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY};  line-height:1.6; }}
   a {{ color:{C_HEAD}; }}
 </style></head><body>
+<div style='max-width:794px;margin:0 auto;padding:36px 48px;box-sizing:border-box;'>
 <div>
   <div style='text-align:center;margin-bottom:10px;'>
     {fixed_img}
@@ -3096,6 +3109,8 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
   {section("Projects", proj_html) if proj_html else ''}
   {section("Project Links", all_links_html) if all_links_html else ''}
   {section("Certifications", cert_html) if cert_html else ''}
+</div>
+</div>
 </div></body></html>"""
 
 
@@ -3233,11 +3248,12 @@ def render_template_warm_sand(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  @page {{ size: A4; margin: 0; }}
+  @page {{ size: A4; margin: 18mm 15mm; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Georgia',serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
+  body {{  font-family:'Georgia',serif; background:#ffffff; color:{C_BODY};  line-height:1.6; }}
   a {{ color:{C_HEAD}; }}
+<div style='max-width:794px;margin:0 auto;padding:36px 48px;box-sizing:border-box;'>
 </style></head><body>
 <div>
   <div style='text-align:center;margin-bottom:10px;'>
@@ -3257,6 +3273,7 @@ def render_template_warm_sand(session_state, profile_img_html=""):
   {section("Projects", proj_html) if proj_html else ''}
   {section("Project Links", all_links_html) if all_links_html else ''}
   {section("Certifications", cert_html) if cert_html else ''}
+</div>
 </div></body></html>"""
 
 
@@ -3395,11 +3412,12 @@ def render_template_ice_blue(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  @page {{ size: A4; margin: 0; }}
+  @page {{ size: A4; margin: 18mm 15mm; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
+  body {{  font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY};  line-height:1.6; }}
   a {{ color:{C_ACC}; }}
+<div style='max-width:794px;margin:0 auto;padding:36px 48px;box-sizing:border-box;'>
 </style></head><body>
 <div>
   <div style='text-align:center;margin-bottom:10px;'>
