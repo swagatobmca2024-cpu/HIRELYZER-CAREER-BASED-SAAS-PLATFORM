@@ -7329,6 +7329,13 @@ with tab2:
         ("Burgundy Classic (Single Column)","#881337","#fff1f2"),
         ("Indigo Tech (Two Column)",       "#4338ca", "#eef2ff"),
         ("Forest Green (Single Column)",   "#14532d", "#f0fdf4"),
+        # ── 6 new premium templates ──────────────────────────────────────────
+        ("Pure White (Single Column)",     "#111111", "#ffffff"),
+        ("Midnight Black (Single Column)", "#f59e0b", "#111827"),
+        ("Soft Lavender (Single Column)",  "#6366f1", "#f5f3ff"),
+        ("Warm Sand (Single Column)",      "#b45309", "#fdf8f0"),
+        ("Ice Blue (Single Column)",       "#0369a1", "#eff9ff"),
+        ("Rose Gold (Single Column)",      "#be185d", "#fff0f6"),
     ]
     TEMPLATE_NAMES = [t[0] for t in TEMPLATE_META]
 
