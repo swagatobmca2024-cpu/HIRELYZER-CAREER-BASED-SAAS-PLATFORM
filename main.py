@@ -2912,21 +2912,25 @@ tab_labels = [
     "🧾 Resume Builder",
     "💼 Job Search",
     "📚 Course Recommendation",
-	"🛡️ Scam Detector"
+    "🛡️ Scam Detector"
 ]
 
-# Add Admin tab only for admin user
+# Insert Admin tab at position 1 (right after Dashboard) so Scam Detector stays visible
 if st.session_state.username == "admin":
-    tab_labels.append("📁 Admin DB View")
+    tab_labels.insert(1, "📁 Admin DB View")
 
 # Create tabs dynamically
 tabs = st.tabs(tab_labels)
 
-# Unpack first five (always exist)
-tab1, tab2, tab3, tab4, tab_scam = tabs[:5]
+# Unpack based on whether admin tab is present
+if st.session_state.username == "admin":
+    tab1, tab5, tab2, tab3, tab4, tab_scam = tabs  # 6 tabs: Dashboard, Admin, Resume, Job, Course, Scam
+else:
+    tab1, tab2, tab3, tab4, tab_scam = tabs         # 5 tabs
+    tab5 = None
 
-# Handle optional admin tab (index shifts to 5 now)
-tab5 = tabs[5] if len(tabs) > 5 else None
+with tab_scam:
+    render_job_scam_detector_tab(call_llm)
 with tab1:
     st.markdown("""
     <style>
@@ -17758,8 +17762,6 @@ if tab5:
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
 
-with tab_scam:
-    render_job_scam_detector_tab(call_llm)
 
 
 
