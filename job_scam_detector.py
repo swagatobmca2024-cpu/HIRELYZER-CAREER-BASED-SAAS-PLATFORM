@@ -272,7 +272,7 @@ _WEIGHTS: dict[str, int] = {
     "location_mismatch":        7,
     "poor_grammar":             6,
     "work_from_home_bait":      5,
-    "missing_salary":           2,   # FIX 4: reduced from 4 → 2; very common in real Indian postings
+    "missing_salary":           4,
     "generic_template":         4,
     # ── India-specific signals ────────────────────────────────────────────────
     "india_scam_pattern":      16,   # data entry, typing, captcha, fake govt jobs
@@ -407,13 +407,10 @@ _UNREALISTIC_PHRASES = [
     r"earn.*\$\d{4,}.*week",r"work.*2.*hour.*earn.*\d{4,}",
 ]
 _GRAMMAR_PATTERNS = [
-    # FIX 3: Removed "kindly revert", "do the needful", "revert back", "prepone" —
-    # these are standard professional Indian English used daily by real companies.
-    # Flagging them is a cultural bias, not a scam signal.
-    # Kept only patterns that are genuinely unusual in legitimate job postings:
-    r"\b(myself is|myself am|i am having)\b",   # broken grammar — not Indian-English norm
-    r"(!{3,}|\.{4,})",                           # excessive punctuation (!!!!, ....)
-    r"\b[A-Z]{5,}\b",                            # ALL-CAPS shouting words
+    r"\b(kindly revert|do the needful|revert back|prepone)\b",
+    r"\b(myself is|myself am|i am having)\b",
+    r"(!{3,}|\.{4,})",
+    r"\b[A-Z]{5,}\b",
 ]
 _LOCATION_CLUES = [
     r"(usa|united states|uk|london|dubai|singapore).*(work from.*india|indian.*candidate)",
@@ -978,19 +975,9 @@ def _llm_extract_missing(raw: str, partial: dict, call_llm_fn) -> dict:
     """
     Use LLaMA 3.3 70B to fill only the fields regex left blank.
 
-    IMPROVED trigger logic (over v5):
-    - Old: only fired when title OR company was blank.
-    - New: fires when ANY important field (title, company, location, salary,
-      contact) is blank AND the raw text is long enough (>200 chars) to
-      reasonably contain that field. This catches paragraph-style postings
-      where regex fails on creative formatting:
-        "We're looking for a rockstar PM..." → regex misses title
-        "Our team at Zomato is expanding..." → regex may miss company
-        "You'll be based out of Whitefield" → regex misses location
-        "Twelve lakhs per annum" → regex misses salary (no digit+unit)
-
-    Cost guard: if regex already filled ALL five important fields, we skip
-    the LLM call entirely — zero API cost for well-structured postings.
+    Only fires when title OR company is still empty — the two most
+    important fields for scam detection. If regex got both, returns
+    immediately with zero LLM cost.
 
     Uses the same call_llm_fn already used for full analysis so:
     - Same 100-key rotation + TPM rate limiting applies
@@ -998,32 +985,22 @@ def _llm_extract_missing(raw: str, partial: dict, call_llm_fn) -> dict:
     - Same model: llama-3.3-70b-versatile (consistent with rest of app)
     - temperature=0 for deterministic JSON output
     """
-    # All 5 important fields — wider net than before
-    _IMPORTANT = {"title", "company", "location", "salary", "contact"}
-
-    missing = [f for f in ("title", "company", "location", "salary", "contact")
+    # Only trigger if title or company is missing — the critical fields
+    missing = [f for f in ("title", "company", "location", "salary")
                if not partial.get(f)]
-
-    # Skip if no important field is missing, or text too short to have them
-    missing_important = [f for f in missing if f in _IMPORTANT]
-    if not missing_important or len((raw or "").strip()) < 200:
-        return partial   # regex got everything important — zero LLM cost
+    if "title" not in missing and "company" not in missing:
+        return partial   # regex got the important ones — skip LLM call entirely
 
     prompt = f"""Extract specific fields from this job posting. Return ONLY a valid JSON object — no explanation, no markdown, no extra text.
 
-Fields to extract: {', '.join(missing_important)}
+Fields to extract: {', '.join(missing)}
 
 Rules:
-- "title": the exact job role/position being hired for (e.g. "Software Engineer", "Data Analyst", "Product Manager")
-  Look for creative phrasings like "We're looking for a...", "Join us as a...", "We need a..."
-- "company": the hiring company name only, no extra words (e.g. "Infosys", "Zoho Corporation", "Zomato")
-  Look for "at <Company>", "join <Company>", "we at <Company>", "team at <Company>"
-- "location": city or work mode only (e.g. "Bangalore", "Remote", "Hybrid - Mumbai", "Work From Home")
-  Look for "based out of", "our office in", "work from", "located in", neighbourhood names
-- "salary": CTC or stipend exactly as written — include units (e.g. "12-18 LPA", "₹50,000/month", "twelve lakhs per annum")
-  Look for written-out numbers too ("twelve lakhs", "five thousand per month")
-- "contact": email address or phone number of the recruiter/company
-- Use null for any field not clearly mentioned in the posting — do NOT guess or invent values
+- "title": the exact job role/position being hired for (e.g. "Software Engineer", "Data Analyst")
+- "company": the hiring company name only, no extra words (e.g. "Infosys", "Zoho Corporation")
+- "location": city or work mode only (e.g. "Bangalore", "Remote", "Hybrid - Mumbai")
+- "salary": CTC or stipend exactly as written (e.g. "12-18 LPA", "₹50,000/month")
+- Use null for any field not clearly mentioned in the posting
 
 Job posting:
 {raw[:3000]}
@@ -1045,7 +1022,7 @@ JSON response:"""
             return partial
         extracted = json.loads(m.group())
         # Only fill fields that regex left empty — never overwrite regex results
-        for field in missing_important:
+        for field in missing:
             val = extracted.get(field)
             if val and val != "null" and isinstance(val, str) and len(val.strip()) > 1:
                 partial[field] = val.strip()
@@ -1083,9 +1060,7 @@ def auto_extract(raw: str, call_llm_fn=None) -> dict:
         "requirements": "",
         "benefits":     "",
     }
-    # LLM fills any important field regex missed (title/company/location/salary/contact).
-    # Skipped entirely when all 5 are already filled by regex — zero API cost.
-    # Text must be >200 chars for the LLM call to be worthwhile.
+    # LLM fills only what regex missed — skipped entirely if all key fields found
     if call_llm_fn is not None:
         partial = _llm_extract_missing(raw, partial, call_llm_fn)
     return partial
@@ -2304,37 +2279,16 @@ def _probe_company_domain(args: tuple) -> dict:
         out["score"] = max(0, out["score"] - 8)
 
     # If all tried identity sources deny → add suspicion
-    # FIX 1: Small/regional Indian companies (Pvt Ltd, Limited, LLP) are
-    # almost never on Clearbit or Wikipedia. Penalising them for this causes
-    # massive false positives. Only apply the penalty when the company name
-    # has NO Indian registered-entity suffix — i.e. it's claiming to be a
-    # larger/global org but can't be found anywhere.
     all_tried = sum(
         1 for k in ("clearbit", "wikipedia", "linkedin")
         if identity_results.get(k, {}).get("found") is not None
     )
-    _INDIAN_ENTITY_SUFFIXES = re.compile(
-        r"\b(pvt\.?\s*ltd\.?|private\s+limited|limited|llp|llc|inc\.?|"
-        r"enterprises?|solutions|services|technologies|consultancy|"
-        r"infotech|industries|traders?|associates?|group)\b",
-        re.IGNORECASE,
-    )
-    is_small_indian_co = bool(_INDIAN_ENTITY_SUFFIXES.search(company or ""))
     if all_tried >= 2 and denied == all_tried:
-        if is_small_indian_co:
-            # Small registered Indian entity — not finding it on global DBs
-            # is normal. Apply a tiny penalty only, not the full +15.
-            out["score"] += 4
-            out["scam_signals"].append(
-                f"'{company}' not found in global databases (Clearbit/Wikipedia/LinkedIn) "
-                "— expected for small Indian registered companies; verify on MCA India"
-            )
-        else:
-            out["score"] += 15
-            out["scam_signals"].append(
-                f"'{company}' not found in any public company database "
-                "(Clearbit, Wikipedia, LinkedIn) — likely not a real registered company"
-            )
+        out["score"] += 15
+        out["scam_signals"].append(
+            f"'{company}' not found in any public company database "
+            "(Clearbit, Wikipedia, LinkedIn) — likely not a real registered company"
+        )
 
     # ── E. Build detail string ────────────────────────────────────────────────
     infra_parts = []
@@ -2717,40 +2671,23 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
     cd_score = cd.get("score", 0)
     confirmed= cd.get("identity_sources", 0)
 
-    # FIX 1: Detect small Indian registered companies — lower score thresholds
-    # for them since they legitimately won't appear on Clearbit/Wikipedia/LinkedIn.
-    _INDIAN_ENTITY_RE = re.compile(
-        r"\b(pvt\.?\s*ltd\.?|private\s+limited|limited|llp|llc|inc\.?|"
-        r"enterprises?|solutions|services|technologies|consultancy|"
-        r"infotech|industries|traders?|associates?|group)\b",
-        re.IGNORECASE,
-    )
-    _cd_signals_text = " ".join(cd.get("scam_signals", []))
-    is_small_indian = bool(_INDIAN_ENTITY_RE.search(_cd_signals_text))
-
     # Identity sources confirmed → reduce overall probe penalty
     if confirmed >= 2:
         penalty = max(0, penalty - 8)
     elif confirmed == 1:
         penalty = max(0, penalty - 3)
 
-    # Score thresholds are softer for small Indian companies —
-    # their low global web presence is not evidence of fraud.
-    _cd_threshold_high   = 60 if is_small_indian else 50
-    _cd_threshold_mid    = 45 if is_small_indian else 35
-    _cd_threshold_low    = 28 if is_small_indian else 20
-
-    if cd_score >= _cd_threshold_high:
+    if cd_score >= 50:
         penalty += 20
         warnings.append(
             f"Company domain '{cd.get('domain', '')}' does not exist and "
             "not found in any public company database — very likely fake"
         )
-    elif cd_score >= _cd_threshold_mid:
+    elif cd_score >= 35:
         penalty += 15
         for sig in cd.get("scam_signals", [])[:2]:
             warnings.append(sig)
-    elif cd_score >= _cd_threshold_low:
+    elif cd_score >= 20:
         penalty += 10
         for sig in cd.get("scam_signals", [])[:2]:
             warnings.append(sig)
@@ -2830,38 +2767,6 @@ _SALARY_BANDS: dict[str, tuple[float, float]] = {
     "operations":             (3.0,  25.0),
     "customer support":       (2.0,  10.0),
     "customer service":       (2.0,  10.0),
-    # FIX 5: Added common Indian non-tech roles missing from original bands
-    "business development":   (2.5,  20.0),
-    "bd executive":           (2.5,  18.0),
-    "relationship manager":   (3.0,  22.0),
-    "field executive":        (1.8,  8.0),
-    "field officer":          (1.8,  8.0),
-    "field sales":            (2.0,  12.0),
-    "telecaller":             (1.5,  5.0),
-    "telesales":              (1.5,  6.0),
-    "collection":             (2.0,  8.0),
-    "logistics":              (2.0,  12.0),
-    "supply chain":           (3.0,  20.0),
-    "warehouse":              (1.8,  8.0),
-    "driver":                 (1.5,  6.0),
-    "delivery":               (1.5,  5.0),
-    "teacher":                (1.8,  10.0),
-    "faculty":                (2.0,  12.0),
-    "lecturer":               (2.0,  12.0),
-    "nurse":                  (2.0,  8.0),
-    "pharmacist":             (2.5,  10.0),
-    "lab technician":         (1.8,  7.0),
-    "civil engineer":         (3.0,  20.0),
-    "mechanical engineer":    (3.0,  20.0),
-    "electrical engineer":    (3.0,  20.0),
-    "purchase":               (2.5,  15.0),
-    "procurement":            (3.0,  18.0),
-    "store":                  (1.8,  8.0),
-    "admin":                  (2.0,  10.0),
-    "back office":            (1.8,  7.0),
-    "data entry":             (1.5,  4.0),
-    "receptionist":           (1.5,  4.0),
-    "security":               (1.5,  4.0),
     # Management
     "manager":                (8.0,  50.0),
     "director":               (20.0, 150.0),
@@ -2969,7 +2874,7 @@ def _run_rules(job: dict) -> dict:
     if h: _add("unrealistic_benefits","Unrealistic Benefit Claims",
                 "Promised earnings or perks are statistically implausible.", h)
     h = _any(full, _VAGUE_PHRASES)
-    if len(h) >= 3:   # FIX 2: raised from 2 → 3; 2 hits fires on almost every real posting
+    if len(h) >= 2:
         _add("vague_description","Vague / Generic Description",
              "Real postings specify responsibilities. Vagueness may hide a non-existent role.", h)
     free_hits = [e for e in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", full)
@@ -3106,16 +3011,6 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
-
-IMPORTANT CONTEXT — Indian job market specifics:
-- Small and mid-sized Indian companies (Pvt Ltd, Limited, LLP) routinely lack a Clearbit/Wikipedia/LinkedIn
-  presence. Absence from global databases is NOT evidence of fraud for these entities.
-- Phrases like "kindly revert", "do the needful", "revert back" are standard professional Indian English —
-  NOT grammar errors or scam signals.
-- Many legitimate Indian SME job postings omit salary, use Gmail/Yahoo contact emails, and are shared via
-  WhatsApp. These alone are weak signals — weigh them only in combination with stronger red flags.
-- Focus on: upfront payment demands, MLM/pyramid language, fake government job impersonation,
-  data-entry/captcha scams, requests for Aadhaar/PAN before interview, and impossible salary claims.
 
 JOB POSTING:
 Title: {job.get('title','N/A')}
@@ -4135,15 +4030,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                                             placeholder="Skills, experience, qualifications...")
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
                                             placeholder="What the employer offers...")
-        # FIX 6: Merge requirements + benefits into description for _run_rules
-        # so the rule engine sees each phrase exactly once (same fix as paste mode v5 BUG 3).
-        # We keep the original keys for the LLM prompt which can handle them separately.
-        _combined = "\n".join(filter(None, [
-            job["description"], job["requirements"], job["benefits"]
-        ]))
-        job["description"]  = _combined
-        job["requirements"] = ""
-        job["benefits"]     = ""
 
     # Use only meaningful fields for "is there any input" check — not description
     # (which in paste mode is raw and always present once the user types).
@@ -4190,44 +4076,14 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             )
 
         if clear:
-            # Show confirmation dialog instead of resetting immediately
-            st.session_state["jsd_confirm_reset"] = True
+            # Show spinner while clearing — use a flag so the fragment
+            # re-renders itself cleanly without a full page blink.
+            # st.rerun() kills any active spinner immediately (Streamlit
+            # limitation), so we set a flag, rerun once to show the spinner
+            # state, do the work, then rerun again to show the empty form.
+            st.session_state["jsd_resetting"] = True
             st.rerun()
 
-        # ── Confirmation dialog ───────────────────────────────────────────────
-        if st.session_state.get("jsd_confirm_reset"):
-            st.markdown(
-                f'<div style="margin-top:12px;padding:16px 20px;'
-                f'background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.25);'
-                f'border-radius:10px;display:flex;align-items:flex-start;gap:10px;">'
-                f'{_svg(I.ALERT_TRI,16,"#ef4444")}'
-                f'<div style="color:#fca5a5;font-size:0.85rem;font-weight:600;line-height:1.5;">'
-                f'Reset everything? This will clear the job description, all detected fields, '
-                f'and the current analysis result.'
-                f'</div></div>',
-                unsafe_allow_html=True,
-            )
-            yes_col, no_col, _ = st.columns([2, 2, 7])
-            with yes_col:
-                if st.button(
-                    "Yes, reset",
-                    key="jsd_confirm_yes",
-                    use_container_width=True,
-                    type="primary",
-                ):
-                    st.session_state.pop("jsd_confirm_reset", None)
-                    st.session_state["jsd_resetting"] = True
-                    st.rerun()
-            with no_col:
-                if st.button(
-                    "Cancel",
-                    key="jsd_confirm_no",
-                    use_container_width=True,
-                ):
-                    st.session_state.pop("jsd_confirm_reset", None)
-                    st.rerun()
-
-        # ── Actual reset with spinner (fires only after Yes confirmation) ──────
         if st.session_state.get("jsd_resetting"):
             with st.spinner("Resetting…"):
                 time.sleep(0.5)   # spinner visible for at least half a second
@@ -4245,10 +4101,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 for k in list(st.session_state.keys()):
                     if k.startswith("jsd_") and k not in preserve and k != "jsd_resetting":
                         del st.session_state[k]
-                for extra in (
-                    "jsd_last_result", "jsd_running", "jsd_resetting",
-                    "jsd_confirm_reset", "jsd_confirm_yes", "jsd_confirm_no",
-                ):
+                for extra in ("jsd_last_result", "jsd_running", "jsd_resetting"):
                     st.session_state.pop(extra, None)
             st.rerun()
 
