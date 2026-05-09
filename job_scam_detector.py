@@ -1039,6 +1039,34 @@ def _probe_domain_age(domain: str) -> dict:
                         reg_date = ev.get("eventDate", "")
                     elif action in ("expiration", "expiry") and not exp_date:
                         exp_date = ev.get("eventDate", "")
+                # ── Extract registrar + privacy from same RDAP response ──────
+                registrar     = ""
+                privacy_proxy = False
+                _SUSPICIOUS_REGISTRARS = {
+                    "namecheap", "namesilo", "pdr ltd", "publicdomainregistry",
+                    "godaddy",   "name.com", "rebel.com", "eranet",
+                }
+                # entities[] contains registrar info
+                for ent in data.get("entities", []):
+                    roles = [r.lower() for r in ent.get("roles", [])]
+                    if "registrar" in roles:
+                        # vcard array: [["fn","","text","Registrar Name"], ...]
+                        for vcard in ent.get("vcardArray", [[]])[1:]:
+                            for field in vcard:
+                                if isinstance(field, list) and field[0] == "fn":
+                                    registrar = str(field[3]).strip()
+                # Privacy proxy detection via remarks or status flags
+                remarks_text = " ".join(
+                    r.get("description", "")
+                    for r in data.get("remarks", [])
+                    if isinstance(r, dict)
+                ).lower()
+                status_flags = " ".join(data.get("status", [])).lower()
+                if any(kw in remarks_text + status_flags for kw in
+                       ("redacted for privacy", "data protected", "privacy protect",
+                        "whoisguard", "perfect privacy", "registrant redacted")):
+                    privacy_proxy = True
+
                 if reg_date:
                     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S"):
                         try:
@@ -1052,11 +1080,29 @@ def _probe_domain_age(domain: str) -> dict:
                                     exp_str = f" | Expires {exp_dt.strftime('%d %b %Y')}"
                                     if days_to_exp < 30:
                                         exp_str += " ⚠ expiring soon"
+
+                            # Build registrar detail string
+                            reg_str = ""
+                            if registrar:
+                                is_suspicious = any(
+                                    s in registrar.lower()
+                                    for s in _SUSPICIOUS_REGISTRARS
+                                )
+                                reg_str = f" | Registrar: {registrar}"
+                                if is_suspicious and age < 180:
+                                    reg_str += " ⚠"
+                            privacy_str = " | ⚠ Privacy-protected WHOIS" if privacy_proxy and age < 180 else ""
+
                             out.update(
                                 status="young" if age < 180 else "old",
                                 age_days=age,
                                 registered=dt.strftime("%d %b %Y"),
-                                detail=f"Registered {dt.strftime('%d %b %Y')} — {age} days old{exp_str}",
+                                registrar=registrar,
+                                privacy_proxy=privacy_proxy,
+                                detail=(
+                                    f"Registered {dt.strftime('%d %b %Y')} — "
+                                    f"{age} days old{exp_str}{reg_str}{privacy_str}"
+                                ),
                                 source="RDAP",
                             )
                             return out
@@ -1310,7 +1356,14 @@ def _probe_mx_record(contact: str) -> dict:
             ]
 
             if mx_hosts:
-                # ── VoIP / disposable mail server heuristic ────────────────
+                # Strip priority prefix (e.g. "10 mail.domain.com" → "mail.domain.com")
+                mx_clean = []
+                for h in mx_hosts:
+                    parts = h.strip().split()
+                    mx_clean.append(parts[-1] if len(parts) > 1 else parts[0])
+                mx_hosts = mx_clean
+
+                # ── Check 1: VoIP / disposable mail server ─────────────────
                 voip_indicators = (
                     "mailgun", "sendgrid", "sparkpost", "mandrillapp",
                     "amazonses", "mailchimp", "yopmail", "guerrilla",
@@ -1319,15 +1372,58 @@ def _probe_mx_record(contact: str) -> dict:
                 voip_risk = any(
                     v in h.lower() for h in mx_hosts for v in voip_indicators
                 )
+
+                # ── Check 2: Free provider MX (Google/Outlook for "corp" domain)
+                # Real companies using GSuite/O365 are legitimate, but a domain
+                # claiming to be a company that routes through Google/Outlook
+                # personal mail tiers is a yellow flag.
+                _FREE_MX_PROVIDERS = (
+                    "google.com", "googlemail.com",
+                    "outlook.com", "hotmail.com", "protection.outlook.com",
+                    "yahoodns.net",
+                )
+                free_mx = any(
+                    any(p in h.lower() for p in _FREE_MX_PROVIDERS)
+                    for h in mx_hosts
+                )
+
+                # ── Check 3: MX hostname actually resolves ─────────────────
+                # A scammer can add a fake MX record pointing to a non-existent
+                # hostname. Verify each MX host resolves in DNS.
+                unresolvable = []
+                for mx_host in mx_hosts[:3]:   # check first 3 only for speed
+                    # strip trailing dot
+                    mx_host_clean = mx_host.rstrip(".")
+                    try:
+                        socket.gethostbyname(mx_host_clean)
+                    except socket.gaierror:
+                        unresolvable.append(mx_host_clean)
+
+                ghost_mx = len(unresolvable) > 0 and len(unresolvable) >= len(mx_hosts[:3])
+
+                # ── Build detail string ────────────────────────────────────
+                flags = []
+                if voip_risk:
+                    flags.append("BULK/TRANSACTIONAL mail — not a real corporate inbox")
+                if free_mx and not voip_risk:
+                    flags.append("routes through free provider (Google/Outlook)")
+                if ghost_mx:
+                    flags.append(f"MX hostname(s) do not resolve: {', '.join(unresolvable[:2])}")
+
+                detail = (
+                    f"'{domain}' has {len(mx_hosts)} MX record(s): "
+                    f"{', '.join(mx_hosts[:2])}"
+                )
+                if flags:
+                    detail += " — " + " | ".join(flags)
+
                 out.update(
                     status="MX_FOUND",
                     mx_records=mx_hosts[:4],
                     voip_risk=voip_risk,
-                    detail=(
-                        f"'{domain}' has {len(mx_hosts)} MX record(s): "
-                        f"{', '.join(mx_hosts[:2])}"
-                        + (" — TRANSACTIONAL/BULK mail server (not a real corporate inbox)" if voip_risk else "")
-                    ),
+                    free_mx=free_mx,
+                    ghost_mx=ghost_mx,
+                    detail=detail,
                 )
                 return out
 
@@ -1388,6 +1484,89 @@ def _dns_mx_lookup(domain: str) -> bool:
     except Exception:
         return False
 
+
+
+def _probe_spf_dmarc(domain: str) -> dict:
+    """
+    Check SPF and DMARC TXT records for a domain.
+
+    SPF  — "v=spf1 ..." TXT record on the domain itself
+    DMARC — "v=DMARC1 ..." TXT record on _dmarc.{domain}
+
+    Why it matters:
+    - Real companies always configure SPF (authorises their mail servers)
+    - Real companies almost always configure DMARC (prevents spoofing)
+    - A domain with MX but NO SPF + NO DMARC = set up just enough to look real
+      but the owner never actually uses it for legitimate business email
+
+    Uses Cloudflare DoH — same as _probe_mx_record. No dnspython needed.
+    Gracefully returns SKIPPED if domain is empty or network fails.
+    """
+    out = {
+        "spf":    None,   # True/False/None(skipped)
+        "dmarc":  None,
+        "spf_record":   "",
+        "dmarc_record": "",
+        "detail": "",
+        "score":  0,
+    }
+
+    if not domain:
+        out["detail"] = "No domain — SPF/DMARC check skipped"
+        return out
+
+    def _txt_query(name: str) -> list[str]:
+        """Return list of TXT record strings for `name` via Cloudflare DoH."""
+        try:
+            url = f"https://cloudflare-dns.com/dns-query?name={name}&type=TXT"
+            req = urllib.request.Request(
+                url,
+                headers={"Accept": "application/dns-json", "User-Agent": "ScamDetector/4.0"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode())
+            return [
+                a["data"].strip('"').replace('" "', "")   # join split TXT chunks
+                for a in data.get("Answer", [])
+                if a.get("type") == 16   # type 16 = TXT
+            ]
+        except Exception:
+            return []
+
+    # ── SPF ──────────────────────────────────────────────────────────────────
+    txt_records = _txt_query(domain)
+    spf_records = [r for r in txt_records if r.lower().startswith("v=spf1")]
+    out["spf"] = bool(spf_records)
+    if spf_records:
+        out["spf_record"] = spf_records[0][:80]
+
+    # ── DMARC ─────────────────────────────────────────────────────────────────
+    dmarc_records = _txt_query(f"_dmarc.{domain}")
+    dmarc_found = [r for r in dmarc_records if r.lower().startswith("v=dmarc1")]
+    out["dmarc"] = bool(dmarc_found)
+    if dmarc_found:
+        out["dmarc_record"] = dmarc_found[0][:80]
+
+    # ── Score ─────────────────────────────────────────────────────────────────
+    details = []
+    if not out["spf"]:
+        out["score"] += 10
+        details.append("No SPF record")
+    else:
+        details.append(f"SPF ✓")
+
+    if not out["dmarc"]:
+        out["score"] += 8
+        details.append("No DMARC record")
+    else:
+        details.append(f"DMARC ✓")
+
+    if not out["spf"] and not out["dmarc"]:
+        out["score"] += 5   # extra penalty for both missing
+        details.append("→ domain not configured for legitimate email use")
+
+    out["detail"] = f"'{domain}': " + " | ".join(details)
+    return out
 
 def _probe_company_domain(args: tuple) -> dict:
     """
@@ -1722,6 +1901,7 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         "free_email":     {"uses_free_domain": False, "detail": ""},
         "mx_record":      {"status": "NO_EMAIL", "detail": ""},
         "company_domain": {"domain_exists": None, "detail": ""},
+        "spf_dmarc":      {"spf": None, "dmarc": None, "detail": "", "score": 0},
     }
     lock = threading.Lock()
 
@@ -1740,6 +1920,7 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         ("free_email",     _probe_free_email,       contact),
         ("mx_record",      _probe_mx_record,        contact),
         ("company_domain", _probe_company_domain,   (company, website)),
+        ("spf_dmarc",      _probe_spf_dmarc,        domain or ""),
     ]
     threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
     for t in threads: t.start()
@@ -1791,24 +1972,59 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         warnings.append(f"Recruiter uses personal email domain: {dom}")
     mx = probes.get("mx_record", {})
     mx_status = mx.get("status", "")
+    mx_dom = mx.get("domain", "")
     if mx_status == "NO_MX":
         penalty += 22   # strongest MX signal — domain exists but has no mail servers
         warnings.append(
-            f"Corporate email domain '{mx.get('domain','')}' has NO MX records — "
+            f"Corporate email domain '{mx_dom}' has NO MX records — "
             "domain is registered for appearances only, not actually used for email"
         )
     elif mx_status == "DNS_FAIL":
         penalty += 18
         warnings.append(
-            f"Corporate email domain '{mx.get('domain','')}' does not exist in DNS — "
+            f"Corporate email domain '{mx_dom}' does not exist in DNS — "
             "the company email address is completely fabricated"
         )
-    elif mx_status == "MX_FOUND" and mx.get("voip_risk"):
-        penalty += 8
+    elif mx_status == "MX_FOUND":
+        if mx.get("ghost_mx"):
+            penalty += 20
+            warnings.append(
+                f"'{mx_dom}' MX records point to non-existent hostnames — "
+                "mail server is fake (ghost MX)"
+            )
+        if mx.get("voip_risk"):
+            penalty += 8
+            warnings.append(
+                f"Email domain '{mx_dom}' routes through a transactional/bulk "
+                "mail service, not a real corporate mail server"
+            )
+        if mx.get("free_mx") and not mx.get("voip_risk"):
+            penalty += 6
+            warnings.append(
+                f"'{mx_dom}' uses a free mail provider (Google/Outlook) — "
+                "not a dedicated corporate mail server"
+            )
+
+    # ── RDAP registrar / privacy signals ─────────────────────────────────────
+    age = probes.get("domain_age", {})
+    if age.get("privacy_proxy") and age.get("status") == "young":
+        penalty += 10
         warnings.append(
-            f"Email domain '{mx.get('domain','')}' routes through a transactional/bulk "
-            "mail service, not a real corporate mail server"
+            "Domain WHOIS is privacy-protected and less than 6 months old — "
+            "common pattern for scam domains"
         )
+    if age.get("registrar"):
+        _SUSPICIOUS_REGISTRARS = {
+            "namecheap", "namesilo", "pdr ltd", "publicdomainregistry",
+            "godaddy",   "name.com", "rebel.com", "eranet",
+        }
+        reg_lower = age["registrar"].lower()
+        if any(s in reg_lower for s in _SUSPICIOUS_REGISTRARS) and age.get("status") == "young":
+            penalty += 8
+            warnings.append(
+                f"Domain registered with '{age['registrar']}' and is less than "
+                "6 months old — registrar commonly used for disposable scam domains"
+            )
     cd = probes.get("company_domain", {})
     cd_score = cd.get("score", 0)
     if cd_score >= 40:
@@ -1825,6 +2041,26 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         penalty += 5
         for sig in cd.get("scam_signals", []):
             warnings.append(sig)
+    # ── SPF / DMARC ──────────────────────────────────────────────────────────
+    spf = probes.get("spf_dmarc", {})
+    spf_score = spf.get("score", 0)
+    mx_status = probes.get("mx_record", {}).get("status", "")
+    # Only penalise SPF/DMARC when the domain has MX (i.e. claims to use email)
+    # Penalising a domain with NO_MX for missing SPF is redundant noise.
+    if spf_score > 0 and mx_status == "MX_FOUND":
+        spf_dom = probes.get("mx_record", {}).get("domain", "")
+        if not spf.get("spf") and not spf.get("dmarc"):
+            penalty += 18
+            warnings.append(
+                f"'{spf_dom}' has NO SPF and NO DMARC records — domain not "
+                "configured for legitimate corporate email (common scam pattern)"
+            )
+        elif not spf.get("spf"):
+            penalty += 10
+            warnings.append(f"'{spf_dom}' has no SPF record — email authentication missing")
+        elif not spf.get("dmarc"):
+            penalty += 8
+            warnings.append(f"'{spf_dom}' has no DMARC record — anti-spoofing not configured")
     return min(penalty, 55), warnings
 
 
@@ -2383,6 +2619,23 @@ def _render_probe_table(probes: dict):
     else:
         cd_badge = _badge("PARTIAL", "#f59e0b", "rgba(245,158,11,0.12)")
     rows.append(_row(I.BUILDING, "Company Domain Check", cd_badge, cd.get("detail", "")))
+
+    # ── SPF / DMARC row ───────────────────────────────────────────────────────
+    spf = probes.get("spf_dmarc", {})
+    spf_score = spf.get("score", 0)
+    has_spf   = spf.get("spf")
+    has_dmarc = spf.get("dmarc")
+    if has_spf is None:
+        spf_badge = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
+    elif has_spf and has_dmarc:
+        spf_badge = _badge("SPF + DMARC ✓", "#22c55e", "rgba(34,197,94,0.12)")
+    elif has_spf and not has_dmarc:
+        spf_badge = _badge("SPF ONLY", "#f59e0b", "rgba(245,158,11,0.12)")
+    elif not has_spf and has_dmarc:
+        spf_badge = _badge("DMARC ONLY", "#f59e0b", "rgba(245,158,11,0.12)")
+    else:
+        spf_badge = _badge("MISSING", "#dc2626", "rgba(220,38,38,0.12)")
+    rows.append(_row(I.SHIELD, "SPF / DMARC", spf_badge, spf.get("detail", "")))
 
     st.markdown(
         f'<div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;'
@@ -3067,15 +3320,18 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             )
 
         if clear:
-            with st.spinner("Resetting…"):
-                # Preserve history keys only.
-                # Explicitly delete every known widget key from BOTH modes.
-                # A prefix-only sweep misses keys for the mode not currently rendered
-                # (e.g. in Paste mode, jsd_t/jsd_co etc. are not in the DOM so
-                # Streamlit never clears them). Next time the user switches to Fill
-                # mode, stale values reappear. Explicit deletion prevents that.
-                preserve = {"jsd_history", "jsd_history_loaded"}
+            # Show spinner while clearing — use a flag so the fragment
+            # re-renders itself cleanly without a full page blink.
+            # st.rerun() kills any active spinner immediately (Streamlit
+            # limitation), so we set a flag, rerun once to show the spinner
+            # state, do the work, then rerun again to show the empty form.
+            st.session_state["jsd_resetting"] = True
+            st.rerun()
 
+        if st.session_state.get("jsd_resetting"):
+            with st.spinner("Resetting…"):
+                time.sleep(0.5)   # spinner visible for at least half a second
+                preserve = {"jsd_history", "jsd_history_loaded"}
                 paste_keys = [
                     "jsd_raw", "jsd_mode",
                     "jsd_ot", "jsd_oco", "jsd_os", "jsd_oct", "jsd_ow", "jsd_ol",
@@ -3086,16 +3342,11 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 ]
                 for k in paste_keys + fill_keys:
                     st.session_state.pop(k, None)
-
-                # Sweep remaining jsd_ keys (feedback, prescan, checklist, etc.)
                 for k in list(st.session_state.keys()):
-                    if k.startswith("jsd_") and k not in preserve:
+                    if k.startswith("jsd_") and k not in preserve and k != "jsd_resetting":
                         del st.session_state[k]
-
-                for extra in ("jsd_last_result", "jsd_running"):
+                for extra in ("jsd_last_result", "jsd_running", "jsd_resetting"):
                     st.session_state.pop(extra, None)
-
-                time.sleep(0.3)
             st.rerun()
 
         if run:
