@@ -2572,7 +2572,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
             pl = ""
             if idx < len(proj_links_all_fg) and proj_links_all_fg[idx]:
                 pl = (f"<div style='margin-top:4px;'><a href='{proj_links_all_fg[idx]}' target='_blank' "
-                      f"style='color:#16a34a;font-size:13px;font-weight:600;'>&#128279; View Project</a></div>")
+                      f"style='color:#16a34a;font-size:14px;font-weight:600;'>&#128279; View Project</a></div>")
             proj_html_fg += (
                 f"<div style='margin-bottom:14px;padding:10px 12px;background:#f0fdf4;"
                 f"border-radius:6px;border:1px solid #bbf7d0;'>"
@@ -2596,7 +2596,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
     proj_links_sec_fg = ""
     if session_state.project_links:
         proj_links_sec_fg = "".join(
-            f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#16a34a;font-size:13px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
+            f"<div style='margin-bottom:5px;'><a href='{lnk}' target='_blank' style='color:#16a34a;font-size:14px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
             for i, lnk in enumerate(session_state.project_links) if lnk)
 
     summary_html_fg = _fmt_desc(session_state.get('summary',''), font_size='14px', color='#1c1c1c', line_height='1.8')
@@ -2649,7 +2649,7 @@ def render_template_pure_white(session_state, profile_img_html=""):
     def section(title, content):
         return f"""
         <div style='margin-bottom:22px;'>
-            <p style='font-size:13px;font-weight:700;letter-spacing:2.5px;
+            <p style='font-size:14px;font-weight:700;letter-spacing:2.5px;
                 text-transform:uppercase;color:#111827;margin-bottom:8px;
                 border-bottom:1px solid #111827;padding-bottom:4px;'>{title}</p>
             {content}
@@ -2682,7 +2682,7 @@ def render_template_pure_white(session_state, profile_img_html=""):
             exp_html += f"""
             <div style='margin-bottom:16px;'>
                 <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
-                    <strong style='font-size:15px;color:#111827;'>{exp.get('company','')}</strong>
+                    <strong style='font-size:16px;color:#111827;'>{exp.get('company','')}</strong>
                     <span style='font-size:13px;color:#6b7280;'>{exp.get('duration','')}</span>
                 </div>
                 <div style='font-size:14px;color:#374151;font-style:italic;margin:2px 0 6px;'>{exp.get('title','')}</div>
@@ -2697,7 +2697,7 @@ def render_template_pure_white(session_state, profile_img_html=""):
             edu_html += f"""
             <div style='margin-bottom:12px;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
-                    <strong style='font-size:15px;color:#111827;'>{edu.get('institution','')}</strong>
+                    <strong style='font-size:16px;color:#111827;'>{edu.get('institution','')}</strong>
                     <span style='font-size:13px;color:#6b7280;'>{edu.get('year','')}</span>
                 </div>
                 <div style='font-size:14px;color:#374151;font-style:italic;margin-top:2px;'>{dv}</div>
@@ -2711,7 +2711,7 @@ def render_template_pure_white(session_state, profile_img_html=""):
             desc = _fmt_desc(proj.get('description',''), font_size='14px', color='#374151', line_height='1.7')
             lnk_html = ""
             if idx < len(proj_links) and proj_links[idx]:
-                lnk_html = (f"<a href='{proj_links[idx]}' target='_blank' style='font-size:13px;"
+                lnk_html = (f"<a href='{proj_links[idx]}' target='_blank' style='font-size:14px;"
                             f"color:#111827;text-decoration:underline;'>&#128279; View Project</a>")
             proj_html += f"""
             <div style='margin-bottom:14px;'>
@@ -2728,7 +2728,7 @@ def render_template_pure_white(session_state, profile_img_html=""):
     if proj_links_all:
         all_links_html = "".join(
             f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
-            f"style='color:#111827;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"style='color:#111827;font-weight:700;font-size:14px;text-decoration:underline;'>"
             f"&#128279; Project {i+1}: {lnk}</a></div>"
             for i, lnk in enumerate(proj_links_all) if lnk)
 
@@ -2801,7 +2801,7 @@ def render_template_midnight_black(session_state, profile_img_html=""):
     def section(title, content):
         return f"""
         <div style='margin-bottom:24px;'>
-            <h2 style='font-size:13px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
+            <h2 style='font-size:14px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
                 color:{ACCENT};background:#f9fafb;padding:6px 10px;
                 border-left:4px solid {GOLD};margin-bottom:14px;'>{title}</h2>
             {content}
@@ -2834,7 +2834,7 @@ def render_template_midnight_black(session_state, profile_img_html=""):
             exp_html += f"""
             <div style='margin-bottom:18px;padding-left:12px;border-left:2px solid #e5e7eb;'>
                 <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
-                    <strong style='font-size:15px;color:{ACCENT};'>{exp.get('company','')}</strong>
+                    <strong style='font-size:16px;color:{ACCENT};'>{exp.get('company','')}</strong>
                     <span style='font-size:13px;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:3px;'>{exp.get('duration','')}</span>
                 </div>
                 <div style='font-size:14px;color:#4b5563;font-weight:600;margin:3px 0 6px;'>{exp.get('title','')}</div>
@@ -2849,7 +2849,7 @@ def render_template_midnight_black(session_state, profile_img_html=""):
             edu_html += f"""
             <div style='margin-bottom:14px;padding-left:12px;border-left:2px solid #e5e7eb;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
-                    <strong style='font-size:15px;color:{ACCENT};'>{edu.get('institution','')}</strong>
+                    <strong style='font-size:16px;color:{ACCENT};'>{edu.get('institution','')}</strong>
                     <span style='font-size:13px;color:#6b7280;'>{edu.get('year','')}</span>
                 </div>
                 <div style='font-size:14px;color:#4b5563;font-style:italic;margin-top:3px;'>{dv}</div>
@@ -2864,7 +2864,7 @@ def render_template_midnight_black(session_state, profile_img_html=""):
             lnk_html = ""
             if idx < len(proj_links) and proj_links[idx]:
                 lnk_html = (f"<div style='margin-top:4px;'><a href='{proj_links[idx]}' target='_blank' "
-                            f"style='font-size:13px;color:{ACCENT};text-decoration:underline;font-weight:600;'>&#128279; View Project</a></div>")
+                            f"style='font-size:14px;color:{ACCENT};text-decoration:underline;font-weight:600;'>&#128279; View Project</a></div>")
             proj_html += f"""
             <div style='margin-bottom:16px;padding:10px 12px;background:#f9fafb;border-radius:4px;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
@@ -2880,7 +2880,7 @@ def render_template_midnight_black(session_state, profile_img_html=""):
     if proj_links_all:
         all_links_html = "".join(
             f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
-            f"style='color:#111827;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"style='color:#111827;font-weight:700;font-size:14px;text-decoration:underline;'>"
             f"&#128279; Project {i+1}: {lnk}</a></div>"
             for i, lnk in enumerate(proj_links_all) if lnk)
 
@@ -2955,7 +2955,7 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
     def section(title, content):
         return f"""
         <div style='margin-bottom:24px;'>
-            <h2 style='font-size:13px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;
+            <h2 style='font-size:14px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;
                 color:{C_HEAD};background:{C_BG};padding:6px 14px;
                 border-radius:4px 4px 0 0;margin-bottom:14px;border-bottom:2px solid {C_ACC};'>{title}</h2>
             {content}
@@ -2989,7 +2989,7 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
             <div style='margin-bottom:18px;padding:12px 16px;background:#fafafa;
                         border-radius:6px;border:1px solid #e0e7ff;'>
                 <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
-                    <strong style='font-size:15px;color:{C_HEAD};'>{exp.get('company','')}</strong>
+                    <strong style='font-size:16px;color:{C_HEAD};'>{exp.get('company','')}</strong>
                     <span style='font-size:13px;color:{C_HEAD};background:#ede9fe;
                           padding:2px 8px;border-radius:12px;font-weight:600;'>{exp.get('duration','')}</span>
                 </div>
@@ -3006,7 +3006,7 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
             <div style='margin-bottom:12px;padding:10px 14px;background:#fafafa;
                         border-radius:6px;border:1px solid #e0e7ff;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
-                    <strong style='font-size:15px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
+                    <strong style='font-size:16px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
                     <span style='font-size:13px;color:{C_HEAD};background:#ede9fe;
                           padding:2px 8px;border-radius:12px;font-weight:600;'>{edu.get('year','')}</span>
                 </div>
@@ -3022,7 +3022,7 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
             lnk_html = ""
             if idx < len(proj_links) and proj_links[idx]:
                 lnk_html = (f"<div style='margin-top:5px;'><a href='{proj_links[idx]}' target='_blank' "
-                            f"style='font-size:13px;color:{C_HEAD};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
+                            f"style='font-size:14px;color:{C_HEAD};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
             proj_html += f"""
             <div style='margin-bottom:14px;padding:12px 16px;background:#fafafa;
                         border-radius:6px;border:1px solid #e0e7ff;'>
@@ -3039,7 +3039,7 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
     if proj_links_all:
         all_links_html = "".join(
             f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
-            f"style='color:#3730a3;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"style='color:#3730a3;font-weight:700;font-size:14px;text-decoration:underline;'>"
             f"&#128279; Project {i+1}: {lnk}</a></div>"
             for i, lnk in enumerate(proj_links_all) if lnk)
 
@@ -3116,7 +3116,7 @@ def render_template_warm_sand(session_state, profile_img_html=""):
     def section(title, content):
         return f"""
         <div style='margin-bottom:24px;'>
-            <h2 style='font-size:13px;font-weight:800;letter-spacing:2px;text-transform:uppercase;
+            <h2 style='font-size:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase;
                 color:{C_HEAD};padding-bottom:5px;border-bottom:2px solid {C_ACC};margin-bottom:14px;'>{title}</h2>
             {content}
         </div>"""
@@ -3148,7 +3148,7 @@ def render_template_warm_sand(session_state, profile_img_html=""):
             exp_html += f"""
             <div style='margin-bottom:18px;'>
                 <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
-                    <strong style='font-size:15px;color:{C_HEAD};'>{exp.get('company','')}</strong>
+                    <strong style='font-size:16px;color:{C_HEAD};'>{exp.get('company','')}</strong>
                     <span style='font-size:13px;color:{C_MUTED};background:{C_BG};
                           padding:2px 8px;border-radius:4px;font-weight:600;border:1px solid #fcd34d;'>{exp.get('duration','')}</span>
                 </div>
@@ -3165,7 +3165,7 @@ def render_template_warm_sand(session_state, profile_img_html=""):
             edu_html += f"""
             <div style='margin-bottom:14px;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
-                    <strong style='font-size:15px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
+                    <strong style='font-size:16px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
                     <span style='font-size:13px;color:{C_MUTED};background:{C_BG};
                           padding:2px 8px;border-radius:4px;font-weight:600;border:1px solid #fcd34d;'>{edu.get('year','')}</span>
                 </div>
@@ -3181,7 +3181,7 @@ def render_template_warm_sand(session_state, profile_img_html=""):
             lnk_html = ""
             if idx < len(proj_links) and proj_links[idx]:
                 lnk_html = (f"<div style='margin-top:4px;'><a href='{proj_links[idx]}' target='_blank' "
-                            f"style='font-size:13px;color:{C_HEAD};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
+                            f"style='font-size:14px;color:{C_HEAD};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
             proj_html += f"""
             <div style='margin-bottom:16px;padding:10px 14px;background:#fffbeb;
                         border-left:3px solid {C_ACC};border-radius:0 6px 6px 0;'>
@@ -3198,7 +3198,7 @@ def render_template_warm_sand(session_state, profile_img_html=""):
     if proj_links_all:
         all_links_html = "".join(
             f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
-            f"style='color:#78350f;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"style='color:#78350f;font-weight:700;font-size:14px;text-decoration:underline;'>"
             f"&#128279; Project {i+1}: {lnk}</a></div>"
             for i, lnk in enumerate(proj_links_all) if lnk)
 
@@ -3275,7 +3275,7 @@ def render_template_ice_blue(session_state, profile_img_html=""):
     def section(title, content):
         return f"""
         <div style='margin-bottom:24px;'>
-            <h2 style='font-size:13px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
+            <h2 style='font-size:14px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
                 color:#ffffff;background:{C_ACC};padding:5px 12px;
                 display:inline-block;border-radius:3px;margin-bottom:14px;'>{title}</h2>
             {content}
@@ -3308,7 +3308,7 @@ def render_template_ice_blue(session_state, profile_img_html=""):
             exp_html += f"""
             <div style='margin-bottom:18px;'>
                 <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
-                    <strong style='font-size:15px;color:{C_HEAD};'>{exp.get('company','')}</strong>
+                    <strong style='font-size:16px;color:{C_HEAD};'>{exp.get('company','')}</strong>
                     <span style='font-size:13px;color:{C_ACC};background:{C_LIGHT};
                           padding:2px 8px;border-radius:3px;font-weight:600;'>{exp.get('duration','')}</span>
                 </div>
@@ -3325,7 +3325,7 @@ def render_template_ice_blue(session_state, profile_img_html=""):
             edu_html += f"""
             <div style='margin-bottom:14px;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
-                    <strong style='font-size:15px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
+                    <strong style='font-size:16px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
                     <span style='font-size:13px;color:{C_ACC};background:{C_LIGHT};
                           padding:2px 8px;border-radius:3px;font-weight:600;'>{edu.get('year','')}</span>
                 </div>
@@ -3341,7 +3341,7 @@ def render_template_ice_blue(session_state, profile_img_html=""):
             lnk_html = ""
             if idx < len(proj_links) and proj_links[idx]:
                 lnk_html = (f"<div style='margin-top:4px;'><a href='{proj_links[idx]}' target='_blank' "
-                            f"style='font-size:13px;color:{C_ACC};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
+                            f"style='font-size:14px;color:{C_ACC};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
             proj_html += f"""
             <div style='margin-bottom:14px;padding:10px 14px;background:{C_LIGHT};
                         border-left:3px solid {C_ACC};border-radius:0 6px 6px 0;'>
@@ -3358,7 +3358,7 @@ def render_template_ice_blue(session_state, profile_img_html=""):
     if proj_links_all:
         all_links_html = "".join(
             f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
-            f"style='color:#0c4a6e;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"style='color:#0c4a6e;font-weight:700;font-size:14px;text-decoration:underline;'>"
             f"&#128279; Project {i+1}: {lnk}</a></div>"
             for i, lnk in enumerate(proj_links_all) if lnk)
 
