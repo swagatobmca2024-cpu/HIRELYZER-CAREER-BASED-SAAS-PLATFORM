@@ -274,6 +274,12 @@ _WEIGHTS: dict[str, int] = {
     "work_from_home_bait":      5,
     "missing_salary":           4,
     "generic_template":         4,
+    # ── India-specific signals ────────────────────────────────────────────────
+    "india_scam_pattern":      16,   # data entry, typing, captcha, fake govt jobs
+    "invalid_gstin":           18,   # GST number present but fails format check
+    "invalid_phone":           10,   # phone present but not valid Indian format
+    "invalid_pin":              8,   # PIN code present but invalid for claimed state
+    "fake_govt_job":           20,   # impersonating railway/bank/defence recruitment
 }
 
 _FREE_DOMAINS: frozenset[str] = frozenset({
@@ -285,13 +291,39 @@ _FREE_DOMAINS: frozenset[str] = frozenset({
 })
 
 _BRAND_DOMAINS: list[str] = [
-    "infosys.com","tcs.com","wipro.com","hcltech.com","accenture.com",
-    "ibm.com","amazon.in","amazon.com","google.com","microsoft.com",
-    "flipkart.com","swiggy.in","zomato.com","paytm.com","ola.com",
-    "myntra.com","meesho.com","byju.com","razorpay.com","freshworks.com",
-    "zoho.com","mindtree.com","mphasis.com","ltimindtree.com",
-    "capgemini.com","cognizant.com","hexaware.com","persistent.com",
+    # ── Tier-1 Indian IT / tech ───────────────────────────────────────────────
+    "infosys.com","tcs.com","wipro.com","hcltech.com","hcl.com",
+    "ltimindtree.com","mindtree.com","mphasis.com","hexaware.com",
+    "persistent.com","cyient.com","niit.com","kpit.com","l&t.com",
+    "larsentoubro.com","tech-mahindra.com","techmahindra.com",
+    # ── Indian banks / fintech ────────────────────────────────────────────────
+    "hdfcbank.com","icicibank.com","sbi.co.in","axisbank.com",
+    "kotakbank.com","yesbank.in","idfcfirstbank.com","federalbank.co.in",
+    "paytm.com","phonepe.com","razorpay.com","cred.club","groww.in",
+    "zerodha.com","upstox.com","policybazaar.com","lendingkart.com",
+    # ── Indian consumer / e-comm ──────────────────────────────────────────────
+    "flipkart.com","myntra.com","meesho.com","ajio.com","nykaa.com",
+    "swiggy.in","zomato.com","ola.com","olamoney.com","oyo.com",
+    "bigbasket.com","blinkit.com","dunzo.com","urbancompany.com",
+    "byju.com","byjus.com","unacademy.com","vedantu.com","upgrad.com",
+    # ── Indian conglomerates ──────────────────────────────────────────────────
+    "relianceindustries.com","ril.com","jio.com","jiosaavn.com",
+    "tatamotors.com","tatagroup.com","tatasteel.com","tatacommunications.com",
+    "mahindra.com","bajajfinserv.com","bajajfinance.in","bajaj.com",
+    "adanigroup.com","adaniports.com","aditya-birla.com",
+    # ── Global MNCs with India ops ────────────────────────────────────────────
+    "accenture.com","capgemini.com","cognizant.com","deloitte.com",
+    "pwc.com","kpmg.com","ey.com","mckinsey.com","bain.com","bcg.com",
+    "ibm.com","oracle.com","sap.com","salesforce.com","adobe.com",
+    "amazon.in","amazon.com","google.com","microsoft.com",
+    "meta.com","apple.com","netflix.com","uber.com","airbnb.com",
+    # ── Job boards / platforms ────────────────────────────────────────────────
     "naukri.com","linkedin.com","indeed.com","glassdoor.com",
+    "shine.com","monster.com","foundit.in","internshala.com",
+    "freshersworld.com","iimjobs.com","hirist.com","apna.co",
+    # ── Freshworks / SaaS ────────────────────────────────────────────────────
+    "freshworks.com","zoho.com","chargebee.com","postman.com",
+    "browserstack.com","hasura.io","clevertap.com","moengage.com",
 ]
 
 _PAY_PHRASES = [
@@ -391,6 +423,89 @@ _WFH_PHRASES = [
     r"data.*entry.*earn.*\d{4,}",r"captcha.*job",r"ad.*posting.*earn",
     r"copy.*paste.*earn",r"form.*filling.*earn",
 ]
+
+# ── India-specific scam patterns ──────────────────────────────────────────────
+_INDIA_SCAM_PHRASES = [
+    # Classic India data-entry / typing scams
+    r"typing.*job.*earn",r"form.*filling.*\d{3,}.*per",r"data.*entry.*operator.*home",
+    r"copy.*paste.*job",r"ad.*posting.*job",r"captcha.*entry.*earn",
+    r"online.*survey.*earn",r"product.*review.*earn",r"youtube.*like.*earn",
+    r"facebook.*like.*earn",r"instagram.*follower.*earn",
+    # Fake government / PSU impersonation
+    r"government.*job.*guaranteed",r"sarkari.*naukri.*guarantee",
+    r"psu.*recruitment.*2\d{3}",r"railway.*recruitment.*apply",
+    r"defence.*job.*guaranteed",r"bank.*job.*guaranteed",
+    r"upsc.*coaching.*job",r"ssc.*job.*guaranteed",
+    r"nabard.*recruitment",r"rrb.*ntpc.*apply.*fee",
+    # Fake internship / fresher traps
+    r"stipend.*\d{4,}.*per.*day",r"internship.*earn.*\d{5,}",
+    r"fresher.*earn.*\d{5,}.*month",r"training.*period.*unpaid",
+    r"apprentice.*pay.*own.*kit",r"industrial.*training.*fee",
+    # Courier / logistics scams
+    r"courier.*partner.*earn",r"delivery.*partner.*deposit",
+    r"amazon.*delivery.*franchise.*fee",r"flipkart.*delivery.*fee",
+    r"logistics.*partner.*investment",
+    # Fake HR / recruiter patterns
+    r"shortlisted.*from.*resume",r"profile.*selected.*naukri",
+    r"hr.*from.*mnc.*contacted",r"campus.*placement.*fee",
+    r"placement.*guarantee.*course",r"job.*guarantee.*after.*course",
+    r"100%.*placement.*assured",r"job.*ready.*program.*fee",
+]
+
+_INDIA_PHONE_PREFIXES_VOIP = re.compile(
+    r"(140|141|142|143|144|145|146|147|148|149"  # Telemarketing prefixes
+    r"|160|161|162|163|164|165|166|167|168|169"    # Service numbers
+    r"|1800\d{6,7}"                                  # Toll-free (legitimate but check context)
+    r")"
+)
+
+# Valid Indian mobile: starts with 6,7,8,9 and is exactly 10 digits
+_INDIA_MOBILE_RE = re.compile(r"([6-9]\d{9})")
+# Valid Indian landline: 0 + STD code (2-4 digits) + number = 10-11 digits total
+_INDIA_LANDLINE_RE = re.compile(r"(0\d{9,10})")
+
+# PIN code first-digit → state mapping (first 2 digits)
+_PIN_STATE_MAP: dict[str, str] = {
+    "11": "Delhi",       "12": "Haryana",     "13": "Haryana",
+    "14": "Punjab",      "15": "Punjab",       "16": "Punjab/Chandigarh",
+    "17": "Himachal Pradesh","18": "Jammu & Kashmir","19": "Jammu & Kashmir",
+    "20": "Uttar Pradesh","21": "Uttar Pradesh","22": "Uttar Pradesh",
+    "23": "Uttar Pradesh","24": "Uttar Pradesh","25": "Uttar Pradesh",
+    "26": "Uttar Pradesh","28": "Uttar Pradesh",
+    "30": "Rajasthan",   "31": "Rajasthan",    "32": "Rajasthan",
+    "33": "Rajasthan",   "34": "Rajasthan",
+    "36": "Gujarat",     "37": "Gujarat",      "38": "Gujarat",
+    "39": "Gujarat/Daman & Diu",
+    "40": "Maharashtra", "41": "Maharashtra",  "42": "Maharashtra",
+    "43": "Maharashtra", "44": "Maharashtra",  "45": "Maharashtra/MP",
+    "46": "Maharashtra", "47": "Maharashtra",  "48": "Maharashtra",
+    "49": "Maharashtra/Chhattisgarh",
+    "50": "Telangana",   "51": "MP",           "52": "MP",
+    "53": "MP",          "56": "MP",           "57": "MP",           "58": "MP",
+    "60": "Tamil Nadu",  "61": "Tamil Nadu",   "62": "Tamil Nadu",
+    "63": "Tamil Nadu",  "64": "Tamil Nadu",
+    "67": "Kerala",      "68": "Kerala",       "69": "Kerala",
+    "70": "West Bengal", "71": "West Bengal",  "72": "West Bengal",
+    "73": "West Bengal", "74": "West Bengal",
+    "75": "Odisha",      "76": "Odisha",       "77": "Odisha",
+    "78": "Assam",       "79": "Assam",
+    "80": "Karnataka",   "81": "Karnataka",    "82": "Karnataka",
+    "83": "Karnataka",   "84": "Karnataka",    "85": "Karnataka",
+    "40": "Telangana",   "50": "Telangana",    "53": "Andhra Pradesh",
+    "52": "Andhra Pradesh","51": "Andhra Pradesh",
+    "110": "Delhi",      "400": "Mumbai",       "500": "Hyderabad",
+    "600": "Chennai",    "700": "Kolkata",      "560": "Bangalore",
+    "411": "Pune",       "380": "Ahmedabad",    "302": "Jaipur",
+}
+
+# GSTIN format: 2-digit state + 10-char PAN + 1 entity + Z + 1 checksum
+_GSTIN_RE = re.compile(
+    r"([0-3][0-9])"          # state code 01-37
+    r"([A-Z]{5}[0-9]{4}[A-Z])" # PAN (10 chars)
+    r"([1-9A-Z])"               # entity number
+    r"Z"                        # always Z
+    r"([0-9A-Z])"             # checksum
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -970,21 +1085,53 @@ def _extract_domain(s: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
+def _age_status(age_days: int) -> str:
+    """
+    Tiered domain age status — replaces binary young/old.
+    0-30   = very_young  (very high risk)
+    31-90  = young       (high risk)
+    91-180 = moderate    (moderate risk)
+    180+   = established (low/no risk)
+    """
+    if age_days <= 30:   return "very_young"
+    if age_days <= 90:   return "young"
+    if age_days <= 180:  return "moderate"
+    return "established"
+
+
 def _whois_age_fallback(domain: str) -> dict | None:
     """
     Lightweight raw WHOIS TCP query (port 43) as fallback when RDAP fails.
-    Tries the TLD's WHOIS server and parses 'Creation Date:' lines.
-    Returns a partial result dict or None if it cannot parse.
+    Blocked on Streamlit Cloud (port 43 TCP blocked) — degrades gracefully.
+
+    Date format fixes:
+    - ISO:    2020-01-15  (standard)
+    - Indian: 15-Jan-2020 (used by .co.in / .in registries)
+    - Slash:  15/01/2020  (some ccTLD registrars)
     """
     tld = domain.rsplit(".", 1)[-1].lower()
+    # Handle two-part TLDs: company.co.in → tld = "in"
+    parts = domain.lower().split(".")
+    if len(parts) >= 3 and parts[-2] in ("co", "net", "org", "firm", "gen"):
+        tld = "in"  # treat all *.co.in, *.net.in etc as .in
+
     whois_servers = {
         "com": "whois.verisign-grs.com", "net": "whois.verisign-grs.com",
-        "org": "whois.pir.org", "in": "whois.registry.in",
-        "io": "whois.nic.io", "co": "whois.nic.co",
-        "ai": "whois.nic.ai", "info": "whois.afilias.net",
-        "biz": "whois.biz", "uk": "whois.nic.uk",
+        "org": "whois.pir.org",          "in":  "whois.registry.in",
+        "io":  "whois.nic.io",           "co":  "whois.nic.co",
+        "ai":  "whois.nic.ai",           "info":"whois.afilias.net",
+        "biz": "whois.biz",              "uk":  "whois.nic.uk",
+        "tech":"whois.nic.tech",         "app": "whois.nic.google",
     }
     server = whois_servers.get(tld, f"whois.nic.{tld}")
+
+    # Multiple date format parsers — handles Indian WHOIS format
+    date_formats = [
+        (r"(\d{4}-\d{2}-\d{2})",         "%Y-%m-%d"),   # 2020-01-15
+        (r"(\d{2}-\w{3}-\d{4})",          "%d-%b-%Y"),   # 15-Jan-2020 ← Indian
+        (r"(\d{2}/\d{2}/\d{4})",          "%d/%m/%Y"),   # 15/01/2020
+        (r"(\d{4}\.\d{2}\.\d{2})",        "%Y.%m.%d"),   # 2020.01.15
+    ]
     try:
         with socket.create_connection((server, 43), timeout=5) as s:
             s.sendall(f"{domain}\r\n".encode())
@@ -997,26 +1144,137 @@ def _whois_age_fallback(domain: str) -> dict | None:
         text = raw.decode("utf-8", errors="ignore")
         for line in text.splitlines():
             ll = line.lower()
-            if any(k in ll for k in ("creation date", "created on", "registered on", "domain registered")):
-                m = re.search(r"(\d{4}-\d{2}-\d{2})", line)
-                if m:
-                    dt  = datetime.strptime(m.group(1), "%Y-%m-%d")
-                    age = (datetime.utcnow() - dt).days
-                    return {
-                        "status":     "young" if age < 180 else "old",
-                        "age_days":   age,
-                        "registered": dt.strftime("%d %b %Y"),
-                        "detail":     f"Registered {dt.strftime('%d %b %Y')} — {age} days old (via WHOIS)",
-                        "source":     "WHOIS",
-                    }
+            if any(k in ll for k in (
+                "creation date", "created on", "registered on",
+                "domain registered", "registration time", "created:",
+            )):
+                for pat, fmt in date_formats:
+                    m = re.search(pat, line, re.IGNORECASE)
+                    if m:
+                        try:
+                            dt  = datetime.strptime(m.group(1), fmt)
+                            age = (datetime.utcnow() - dt).days
+                            return {
+                                "status":     _age_status(age),
+                                "age_days":   age,
+                                "registered": dt.strftime("%d %b %Y"),
+                                "detail":     (
+                                    f"Registered {dt.strftime('%d %b %Y')} — "
+                                    f"{age} days old (via WHOIS)"
+                                ),
+                                "source": "WHOIS",
+                            }
+                        except ValueError:
+                            continue
     except Exception:
         pass
     return None
 
 
+
+# ── SSRF Protection ───────────────────────────────────────────────────────────
+# All probe functions must call _safe_domain() before making any network
+# request. This prevents Server-Side Request Forgery — a user pasting
+# "http://169.254.169.254" (AWS metadata) or "http://localhost/admin"
+# as a company website would otherwise cause the probe to hit internal infra.
+
+_SSRF_BLOCKED_RANGES = None  # lazy-init below
+
+def _get_ssrf_ranges():
+    """Lazy-initialise the blocked IP network list (avoids import at module level)."""
+    global _SSRF_BLOCKED_RANGES
+    if _SSRF_BLOCKED_RANGES is None:
+        import ipaddress as _ip
+        _SSRF_BLOCKED_RANGES = [
+            _ip.ip_network("10.0.0.0/8"),        # RFC1918 private
+            _ip.ip_network("172.16.0.0/12"),      # RFC1918 private
+            _ip.ip_network("192.168.0.0/16"),     # RFC1918 private
+            _ip.ip_network("127.0.0.0/8"),        # Loopback
+            _ip.ip_network("169.254.0.0/16"),     # Link-local / AWS metadata
+            _ip.ip_network("100.64.0.0/10"),      # Carrier-grade NAT
+            _ip.ip_network("::1/128"),             # IPv6 loopback
+            _ip.ip_network("fc00::/7"),            # IPv6 private
+            _ip.ip_network("fe80::/10"),           # IPv6 link-local
+            _ip.ip_network("0.0.0.0/8"),           # Reserved
+            _ip.ip_network("240.0.0.0/4"),         # Reserved
+        ]
+    return _SSRF_BLOCKED_RANGES
+
+# Domains that must never be probed (internal/metadata endpoints)
+_SSRF_BLOCKED_DOMAINS: frozenset = frozenset({
+    "localhost", "metadata.google.internal",
+    "169.254.169.254",   # AWS/GCP/Azure metadata
+    "metadata.azure.com",
+    "instance-data",
+})
+
+def _safe_domain(domain: str) -> tuple[bool, str]:
+    """
+    Validate a domain is safe to probe — blocks SSRF attack vectors.
+
+    Returns (is_safe: bool, reason: str).
+    Call before ANY socket/HTTP operation on user-supplied input.
+
+    Checks:
+    1. Domain is not empty or too short
+    2. Domain is not a known internal/metadata hostname
+    3. Domain does not contain path traversal or port injection
+    4. Resolved IP is not in any private/reserved range
+
+    On resolution failure → allowed (domain simply doesn't exist,
+    the probe will catch that naturally).
+    """
+    import ipaddress as _ip
+
+    if not domain or len(domain.strip()) < 4:
+        return False, "Domain too short"
+
+    # Strip scheme if accidentally included
+    d = re.sub(r"^https?://", "", domain.strip().lower())
+    d = d.split("/")[0].split("?")[0]   # strip path and query
+
+    # Block known internal hostnames
+    if d in _SSRF_BLOCKED_DOMAINS:
+        return False, f"Blocked internal hostname: {d}"
+
+    # Block port injection (domain:port where port is internal service)
+    if ":" in d:
+        try:
+            host, port = d.rsplit(":", 1)
+            port_n = int(port)
+            # Block any non-standard web port that could hit internal services
+            if port_n not in (80, 443, 8080, 8443):
+                return False, f"Non-standard port {port_n} blocked (SSRF prevention)"
+            d = host
+        except ValueError:
+            return False, "Invalid host:port format"
+
+    # Block path traversal attempts
+    if any(c in d for c in ("@", "..", "%", " ")):
+        return False, f"Suspicious characters in domain: {d}"
+
+    # Resolve and check IP range
+    try:
+        ip_str = socket.gethostbyname(d)
+        addr   = _ip.ip_address(ip_str)
+        for blocked in _get_ssrf_ranges():
+            if addr in blocked:
+                return False, (
+                    f"Domain resolves to blocked IP range {ip_str} "
+                    "(private/loopback/metadata — SSRF blocked)"
+                )
+    except socket.gaierror:
+        pass   # domain doesn't resolve — let probe handle it naturally
+
+    return True, ""
+
 def _probe_domain_age(domain: str) -> dict:
     out = {"status": "unknown", "age_days": None, "registered": None, "detail": "", "source": "RDAP"}
     if not domain:
+        return out
+    safe, reason = _safe_domain(domain)
+    if not safe:
+        out.update(status="blocked", detail=f"SSRF blocked: {reason}")
         return out
     # ── Primary: RDAP ────────────────────────────────────────────────────────
     try:
@@ -1094,7 +1352,7 @@ def _probe_domain_age(domain: str) -> dict:
                             privacy_str = " | ⚠ Privacy-protected WHOIS" if privacy_proxy and age < 180 else ""
 
                             out.update(
-                                status="young" if age < 180 else "old",
+                                status=_age_status(age),
                                 age_days=age,
                                 registered=dt.strftime("%d %b %Y"),
                                 registrar=registrar,
@@ -1145,16 +1403,22 @@ def _probe_site_reachable(domain: str) -> dict:
     if not domain:
         return out
 
+    # ── SSRF check before any network call ───────────────────────────────────
+    safe, reason = _safe_domain(domain)
+    if not safe:
+        out.update(reachable=False, detail=f"SSRF blocked: {reason}")
+        return out
+
     # ── DNS resolution check first ────────────────────────────────────────────
     try:
         resolved_ip = socket.gethostbyname(domain)
-        # Private/loopback IPs are a red flag
+        # Private/loopback IPs are a red flag (defence in depth after _safe_domain)
         try:
             addr = ipaddress.ip_address(resolved_ip)
             if addr.is_private or addr.is_loopback:
                 out.update(
                     reachable=False,
-                    detail=f"Domain resolves to private/loopback IP {resolved_ip} — suspicious",
+                    detail=f"Domain resolves to private/loopback IP {resolved_ip} — SSRF blocked",
                 )
                 return out
         except ValueError:
@@ -1701,7 +1965,10 @@ def _fuzzy_name_match(company: str, domain_sld: str, threshold: float = 0.72) ->
     return False, best
 
 
-_TLDS_TO_TRY = [".com", ".in", ".co.in", ".net", ".org", ".io", ".co"]
+_TLDS_TO_TRY = [
+    ".com", ".in", ".co.in", ".net.in", ".org.in",
+    ".net", ".org", ".io", ".co", ".tech", ".app",
+]
 
 def _probe_domain_candidates(company: str) -> tuple[str, bool]:
     """
@@ -2411,11 +2678,28 @@ def run_live_probes(job: dict) -> dict:
 
 def _probe_risk(probes: dict) -> tuple[int, list[str]]:
     penalty, warnings = 0, []
-    age = probes.get("domain_age", {})
-    if age.get("status") == "young":
-        days = age.get("age_days", 0)
-        penalty += 18 if days < 90 else 10
-        warnings.append(f"Domain registered only {days} days ago")
+    age      = probes.get("domain_age", {})
+    da_status = age.get("status", "unknown")
+    age_days  = age.get("age_days", 999) or 999
+    reg_str   = age.get("registered", "recently")
+    if da_status == "very_young":      # 0-30 days
+        penalty += 30
+        warnings.append(
+            f"Domain registered {reg_str} — only {age_days} days old. "
+            "Extremely new: scam sites are often created days before a campaign."
+        )
+    elif da_status == "young":         # 31-90 days
+        penalty += 20
+        warnings.append(
+            f"Domain registered {reg_str} — only {age_days} days old (< 3 months). "
+            "Legitimate businesses rarely recruit this soon after registering a domain."
+        )
+    elif da_status == "moderate":      # 91-180 days
+        penalty += 10
+        warnings.append(
+            f"Domain registered {reg_str} — {age_days} days old (3–6 months). "
+            "Relatively new domain — verify through other channels."
+        )
     if probes.get("site_reach", {}).get("reachable") is False:
         penalty += 12
         warnings.append("Company website is unreachable / does not exist")
@@ -2472,7 +2756,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
 
     # ── RDAP registrar / privacy signals ─────────────────────────────────────
     age = probes.get("domain_age", {})
-    if age.get("privacy_proxy") and age.get("status") == "young":
+    if age.get("privacy_proxy") and da_status in ("very_young", "young", "moderate"):
         penalty += 10
         warnings.append(
             "Domain WHOIS is privacy-protected and less than 6 months old — "
@@ -2749,6 +3033,79 @@ def _run_rules(job: dict) -> dict:
     if len(g_hits) >= 2:
         _add("poor_grammar","Suspicious Grammar / Formatting",
              "Excessive punctuation, random CAPS or known spam-text patterns detected.", g_hits)
+
+    # ── India-specific signal checks ─────────────────────────────────────────
+    h = _any(full, _INDIA_SCAM_PHRASES)
+    if h:
+        # Check if it is also a fake govt job — give it the higher weight
+        fake_govt = _any(full, [
+            r"government.*job.*guaranteed", r"sarkari.*naukri",
+            r"railway.*recruitment.*apply.*fee", r"rrb.*ntpc.*apply.*fee",
+            r"defence.*job.*guaranteed", r"bank.*job.*guaranteed",
+            r"100%.*placement.*assured.*fee", r"job.*guarantee.*after.*course.*fee",
+        ])
+        if fake_govt:
+            _add("fake_govt_job", "Fake Government / Railway / Bank Job",
+                 "Impersonating PSU/railway/bank recruitment — no government job "
+                 "ever charges a fee or guarantees selection.", fake_govt)
+        else:
+            _add("india_scam_pattern", "Indian Scam Job Pattern Detected",
+                 "Matches known India-specific scam patterns: data-entry, typing, "
+                 "captcha, fake internship, courier franchise, or placement fee traps.",
+                 h)
+
+    # ── GSTIN validation ──────────────────────────────────────────────────────
+    gstin_matches = _GSTIN_RE.findall(full)
+    raw_gstin_mentions = re.findall(
+        r"\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]", full
+    )
+    # Also catch near-misses: 15-char alphanumeric strings that look like GSTIN
+    near_gstin = re.findall(r"[0-9]{2}[A-Z0-9]{13}", full)
+    if near_gstin and not gstin_matches:
+        # Something that looks like a GSTIN but fails format check
+        _add("invalid_gstin", "Invalid GSTIN Format",
+             "A GST number was found but it fails the official format check "
+             "(2-digit state + PAN + entity + Z + checksum). Fake GSTINs are "
+             "used to appear legitimate.", near_gstin[:2])
+    elif gstin_matches:
+        # Valid format — check state code is real (01-37)
+        for state_code, pan, entity, chk in gstin_matches:
+            sc = int(state_code)
+            if not (1 <= sc <= 37):
+                _add("invalid_gstin", "Invalid GSTIN State Code",
+                     f"GSTIN state code '{state_code}' is not a valid Indian state code (01-37).")
+                break
+
+    # ── Indian phone number validation ────────────────────────────────────────
+    # Extract all phone-like numbers from contact field specifically
+    contact_field = job.get("contact", "") + " " + job.get("description", "")[:500]
+    phone_like = re.findall(r"\d{10,11}", contact_field)
+    if phone_like:
+        valid_phones  = [p for p in phone_like if
+                         _INDIA_MOBILE_RE.match(p) or _INDIA_LANDLINE_RE.match(p)]
+        invalid_phones = [p for p in phone_like if p not in valid_phones]
+        if invalid_phones and not valid_phones:
+            _add("invalid_phone", "Invalid Indian Phone Number Format",
+                 "Phone number(s) found but none match valid Indian mobile "
+                 "(6-9xxxxxxxxx) or landline (0xx-xxxxxxx) format. "
+                 "Scammers often use virtual/VoIP numbers.", invalid_phones[:2])
+
+    # ── PIN code validation ───────────────────────────────────────────────────
+    pin_matches = re.findall(r"([1-9]\d{5})", full)
+    invalid_pins = []
+    for pin in pin_matches[:5]:   # check first 5 found
+        prefix2 = pin[:2]
+        prefix3 = pin[:3]
+        # First digit must be 1-9 (already guaranteed by regex)
+        # Prefix must exist in our map for a specific state claim
+        if prefix2 not in _PIN_STATE_MAP and prefix3 not in _PIN_STATE_MAP:
+            # Not a known valid PIN prefix
+            if not re.search(r"(phone|mobile|contact|call|whatsapp)", full[:200], re.I):
+                invalid_pins.append(pin)  # only flag if not near contact section
+    if invalid_pins:
+        _add("invalid_pin", "Suspicious PIN Code",
+             f"PIN code(s) {invalid_pins[:2]} do not match any known Indian postal prefix.",
+             invalid_pins[:2])
 
     return {"signals": sigs, "rule_score": min(sum(_WEIGHTS.get(k,0) for k in sigs), 100)}
 
@@ -3045,8 +3402,10 @@ def _render_probe_table(probes: dict):
     rows = []
     age = probes.get("domain_age", {})
     st_ = age.get("status", "unknown")
-    b   = (_badge("YOUNG DOMAIN","#dc2626","rgba(220,38,38,0.12)") if st_ == "young" else
-           _badge("ESTABLISHED", "#22c55e","rgba(34,197,94,0.12)")  if st_ == "old"   else
+    b   = (_badge("VERY NEW ⚠⚠","#dc2626","rgba(220,38,38,0.12)") if st_ == "very_young" else
+           _badge("NEW ⚠",       "#f59e0b","rgba(245,158,11,0.12)") if st_ == "young"      else
+           _badge("RECENT",      "#f59e0b","rgba(245,158,11,0.12)") if st_ == "moderate"   else
+           _badge("ESTABLISHED", "#22c55e","rgba(34,197,94,0.12)")  if st_ in ("old","established") else
            _badge("LOOKUP FAILED","#6b7280","rgba(107,114,128,0.12)") if st_ == "error" else
            _badge("NO DOMAIN",  "#6b7280","rgba(107,114,128,0.12)"))
     rows.append(_row(I.CALENDAR, "Domain Age", b, age.get("detail","")))
@@ -3872,28 +4231,101 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     penalty, warnings = _probe_risk(probes)
 
                     prog.progress(60, text="Sending to AI for deep analysis…")
-                    llm_raw = call_llm_fn(
-                        _llm_prompt(job, warnings),
-                        st.session_state,
-                        model="llama-3.3-70b-versatile",
-                        temperature=0,
-                    )
+
+                    # ── LLM call with retry + structured output enforcement ────────
+                    # Retry logic: attempt 1 = normal, attempt 2 = stricter prompt
+                    # if JSON parse fails on attempt 1. Covers transient Groq errors
+                    # and occasional LLM refusals to return JSON.
+                    _LLM_SCHEMA = {
+                        "ai_risk_score":      "int 0-100",
+                        "verdict":            "SAFE|SUSPICIOUS|LIKELY_SCAM|DEFINITE_SCAM",
+                        "confidence":         "int 0-100",
+                        "red_flags":          ["string"],
+                        "explanation":        "string",
+                        "recommended_action": "string",
+                    }
                     llm_data: dict = {}
-                    try:
-                        clean = re.sub(r"```json|```", "", llm_raw).strip()
-                        m = re.search(r"\{.*\}", clean, re.DOTALL)
-                        if m:
-                            llm_data = json.loads(m.group())
-                    except Exception:
-                        pass
+                    llm_parse_ok  = False
+                    ai_failed     = False
+
+                    for attempt in range(2):
+                        try:
+                            prompt = _llm_prompt(job, warnings)
+                            if attempt == 1:
+                                # Stricter retry prompt — force JSON only
+                                prompt += (
+                                    "\n\nCRITICAL: Your previous response could not be "
+                                    "parsed as JSON. Return ONLY a raw JSON object — "
+                                    "no markdown, no explanation, no preamble. "
+                                    f"Schema required: {json.dumps(_LLM_SCHEMA)}"
+                                )
+                            llm_raw = call_llm_fn(
+                                prompt,
+                                st.session_state,
+                                model="llama-3.3-70b-versatile",
+                                temperature=0,
+                            )
+                            # Parse: strip markdown fences, extract first JSON object
+                            clean = re.sub(r"```(?:json)?|```", "", llm_raw or "").strip()
+                            m     = re.search(r"\{.*\}", clean, re.DOTALL)
+                            if m:
+                                candidate = json.loads(m.group())
+                                # Schema validation — must have these keys
+                                required = {"ai_risk_score", "verdict"}
+                                if required.issubset(candidate.keys()):
+                                    llm_data      = candidate
+                                    llm_parse_ok  = True
+                                    break
+                        except Exception as _llm_err:
+                            if attempt == 1:
+                                ai_failed = True   # both attempts failed
+
+                    # If both attempts failed, AI score falls back to rule score
+                    # but we flag it so the UI can show a warning
+                    if not llm_parse_ok:
+                        ai_failed = True
 
                     prog.progress(90, text="Blending scores…")
                     ai_s   = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
                     rule_s = rules_result["rule_score"]
 
-                    # ── Calibrated blending ────────────────────────────────────────
-                    # Base blend: AI carries 60%, rules 25%, probe penalty 15%.
-                    blended = int(0.60 * ai_s + 0.25 * rule_s + 0.15 * penalty)
+                    # Clamp AI score to valid range (guard against hallucinated values)
+                    ai_s = max(0, min(100, ai_s))
+
+                    # ── 3. ADAPTIVE BLENDING ───────────────────────────────────────
+                    # Fixed 60/25/15 is wrong when:
+                    # (a) AI failed → AI weight should drop to 0, rules absorb it
+                    # (b) Many probes timed out → probe weight should drop, AI absorbs
+                    # (c) AI confidence is low → reduce AI weight, increase rules
+                    #
+                    # Count how many probes actually returned meaningful data
+                    probes_ran = sum(
+                        1 for k, v in probes.items()
+                        if v.get("detail") and "No domain" not in v.get("detail","")
+                        and "skipped" not in str(v.get("status",""))
+                        and "Probe error" not in v.get("detail","")
+                    )
+                    probes_total = len(probes)
+                    probe_coverage = probes_ran / max(probes_total, 1)
+
+                    # AI confidence from LLM response (0-100, default 70 if not provided)
+                    ai_confidence = int(llm_data.get("confidence", 70))
+                    ai_confidence = max(0, min(100, ai_confidence))
+
+                    if ai_failed:
+                        # AI completely failed — redistribute its 60% to rules
+                        w_ai, w_rule, w_probe = 0.00, 0.75, 0.25
+                    elif ai_confidence < 50:
+                        # AI unsure — reduce its weight, boost rules
+                        w_ai, w_rule, w_probe = 0.40, 0.40, 0.20
+                    elif probe_coverage < 0.5:
+                        # Less than half probes ran — boost AI, reduce probe weight
+                        w_ai, w_rule, w_probe = 0.70, 0.25, 0.05
+                    else:
+                        # Normal: standard 60/25/15
+                        w_ai, w_rule, w_probe = 0.60, 0.25, 0.15
+
+                    blended = int(w_ai * ai_s + w_rule * rule_s + w_probe * penalty)
 
                     # Hard floor only from HIGH-weight signals (>=18 pts each).
                     critical_signals = [k for k, s in rules_result["signals"].items()
@@ -3937,9 +4369,23 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                             "LIKELY_SCAM"   if blended >= 50 else
                             "SUSPICIOUS"    if blended >= 25 else "SAFE")
 
-                    # AI verdict overrides only if stricter than numeric verdict
+                    # AI verdict override — only allowed within 5 points of next band.
+                    # FIX: old logic let LLM upgrade verdict at any score, causing
+                    # score=19 to show SUSPICIOUS (yellow) because LLM returned
+                    # "SUSPICIOUS". The blended score already incorporates AI score
+                    # at 60% weight — double-counting LLM verdict creates false warnings.
+                    # Now: LLM can only push verdict up if blended is close to the next
+                    # threshold (within 5 pts). Score 19 → next threshold 25 → 25-5=20,
+                    # 19 < 20 → override blocked → correctly stays SAFE (green).
+                    _thresholds = {1: 25, 2: 50, 3: 75}
                     av    = llm_data.get("verdict", sv)
-                    final = av if _sev.get(av, 1) > _sev.get(sv, 0) else sv
+                    av_sev = _sev.get(av, 0)
+                    sv_sev = _sev.get(sv, 0)
+                    if av_sev > sv_sev:
+                        next_threshold = _thresholds.get(av_sev, 100)
+                        final = av if blended >= next_threshold - 5 else sv
+                    else:
+                        final = sv
 
                     res = {
                         "blended_score":  blended,   "rule_score":     rule_s,
