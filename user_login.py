@@ -913,42 +913,60 @@ def save_scam_analysis(username: str, job_title: str, company: str, score: int, 
     IST FIX: Passes analysed_at explicitly as IST timestamp so Supabase
     stores IST (UTC+5:30) instead of UTC. DEFAULT NOW() in Postgres always
     uses the server clock in UTC — we override it with the correct IST value.
+
+    FIX v2: Replaced broken CTE pattern (WITH inserted AS ... DELETE) with
+    two clean separate queries:
+
+    OLD (broken):
+      - CTE did INSERT ... RETURNING id but outer query was DELETE, so
+        RETURNING id was never selected out — row was always None.
+      - Second SELECT grabbed most recent row by timestamp which could
+        return the wrong row under concurrent inserts (race condition).
+      - DELETE inside CTE had undefined visibility of the just-inserted
+        row in the subquery, making prune logic unreliable.
+
+    NEW (fixed):
+      1. INSERT ... RETURNING id  — gets the exact new row id, no ambiguity.
+      2. Separate DELETE prune    — runs after insert succeeds, clean and safe.
+         Prunes rows beyond the 50 most recent (by id DESC, not timestamp,
+         which is stable and index-friendly).
     """
     try:
         ist = pytz.timezone("Asia/Kolkata")
         now_ist = datetime.now(ist)
 
-        row = _execute(
+        # Step 1: Insert and get the new row's id directly via RETURNING
+        new_row = _execute(
             """
-            WITH inserted AS (
-                INSERT INTO scam_analysis_history
-                    (username, job_title, company, score, verdict, analysed_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING id
-            )
+            INSERT INTO scam_analysis_history
+                (username, job_title, company, score, verdict, analysed_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (username, job_title or "Untitled", company or "Unknown",
+             int(score), verdict, now_ist),
+            fetch="one",
+        )
+        new_id = new_row["id"] if new_row else None
+
+        # Step 2: Prune rows beyond 50 most recent for this user.
+        # Uses id DESC (stable, index-friendly) instead of analysed_at
+        # to avoid timestamp tie-breaking issues.
+        _execute(
+            """
             DELETE FROM scam_analysis_history
             WHERE username = %s
               AND id NOT IN (
                   SELECT id FROM scam_analysis_history
                   WHERE username = %s
-                  ORDER BY analysed_at DESC
+                  ORDER BY id DESC
                   LIMIT 50
-              );
+              )
             """,
-            (username, job_title or "Untitled", company or "Unknown",
-             int(score), verdict, now_ist,
-             username, username),
+            (username, username),
         )
-        new_row = _execute(
-            """
-            SELECT id FROM scam_analysis_history
-            WHERE username = %s AND is_deleted = FALSE
-            ORDER BY analysed_at DESC LIMIT 1
-            """,
-            (username,),
-            fetch="one",
-        )
-        return new_row["id"] if new_row else None
+
+        return new_id
     except Exception:
         return None
 
