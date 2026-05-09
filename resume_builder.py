@@ -2627,6 +2627,942 @@ def render_template_forest_green(session_state, profile_img_html=""):
     return html_content
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 16 — Pure White (Single Column)
+# Ultra-minimal, Google/Apple recruiter style. No color anywhere — only
+# typography weight and spacing do the work. ATS perfect.
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_pure_white(session_state, profile_img_html=""):
+    """Pure White — single-column, zero-color, typography-driven minimal."""
+    import re as _re16
+
+    def _fix_img(html, size=80):
+        if not html: return ""
+        m = _re16.search(r'<img[^>]*>', html)
+        if not m: return ""
+        tag = _re16.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+        tag = tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;"
+                          f"border-radius:50%;object-fit:cover;display:block;"
+                          f"margin:0 auto 10px;border:1px solid #d1d5db;' ")
+        return tag
+
+    def section(title, content):
+        return f"""
+        <div style='margin-bottom:22px;'>
+            <p style='font-size:11px;font-weight:700;letter-spacing:2.5px;
+                text-transform:uppercase;color:#111827;margin-bottom:8px;
+                border-bottom:1px solid #111827;padding-bottom:4px;'>{title}</p>
+            {content}
+        </div>"""
+
+    def pills(s, bg="#f3f4f6", color="#111827", border="#d1d5db"):
+        return "".join(
+            f"<span style='display:inline-block;background:{bg};color:{color};"
+            f"border:1px solid {border};border-radius:3px;padding:3px 10px;"
+            f"margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            for x in s.split(',') if x.strip())
+
+    contact_parts = []
+    for key in ['email','phone','location','linkedin','portfolio','github']:
+        val = session_state.get(key,'')
+        if val:
+            if key == 'email':
+                contact_parts.append(f"<a href='mailto:{val}' style='color:#111827;text-decoration:none;'>{val}</a>")
+            elif key in ('linkedin','portfolio','github'):
+                href = val if val.startswith('http') else f"https://{val}"
+                contact_parts.append(f"<a href='{href}' target='_blank' style='color:#111827;text-decoration:none;'>{val}</a>")
+            else:
+                contact_parts.append(f"<span>{val}</span>")
+    contact_line = " &nbsp;&middot;&nbsp; ".join(contact_parts)
+
+    exp_html = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#374151', line_height='1.7')
+            exp_html += f"""
+            <div style='margin-bottom:16px;'>
+                <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:#111827;'>{exp.get('company','')}</strong>
+                    <span style='font-size:12px;color:#6b7280;'>{exp.get('duration','')}</span>
+                </div>
+                <div style='font-size:13px;color:#374151;font-style:italic;margin:2px 0 6px;'>{exp.get('title','')}</div>
+                {desc}
+            </div>"""
+
+    edu_html = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution') or edu.get('degree'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list): dv = ", ".join(dv)
+            edu_html += f"""
+            <div style='margin-bottom:12px;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:#111827;'>{edu.get('institution','')}</strong>
+                    <span style='font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>
+                </div>
+                <div style='font-size:13px;color:#374151;font-style:italic;margin-top:2px;'>{dv}</div>
+                <div style='font-size:12px;color:#6b7280;margin-top:2px;'>{edu.get('details','')}</div>
+            </div>"""
+
+    proj_html = ""
+    proj_links = getattr(session_state,'project_links',[]) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#374151', line_height='1.7')
+            lnk_html = ""
+            if idx < len(proj_links) and proj_links[idx]:
+                lnk_html = (f"<a href='{proj_links[idx]}' target='_blank' style='font-size:12px;"
+                            f"color:#111827;text-decoration:underline;'>&#128279; View Project</a>")
+            proj_html += f"""
+            <div style='margin-bottom:14px;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:#111827;'>{proj.get('title','')}</strong>
+                    <span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:#6b7280;margin:2px 0 4px;'>{proj.get('tech','')}</div>
+                {desc}{lnk_html}
+            </div>"""
+
+    all_links_html = ""
+    proj_links_all = getattr(session_state, 'project_links', []) or []
+    if proj_links_all:
+        all_links_html = "".join(
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
+            f"style='color:#111827;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"&#128279; Project {i+1}: {lnk}</a></div>"
+            for i, lnk in enumerate(proj_links_all) if lnk)
+
+    cert_html = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html += f"""
+            <div style='margin-bottom:10px;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    {_cert_name_html(cert,'font-size:14px;font-weight:600;color:#111827;text-decoration:none;')}
+                    <span style='font-size:12px;color:#6b7280;'>{cert.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:#6b7280;margin-top:2px;'>{_fmt_desc(cert.get('description',''), font_size='12px', color='#6b7280', line_height='1.65')}</div>
+            </div>"""
+
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='13px', color='#374151', line_height='1.75')
+    fixed_img = _fix_img(profile_img_html)
+    job_title_line = (f"<p style='font-size:14px;color:#6b7280;margin-top:4px;letter-spacing:0.5px;'>"
+                      f"{session_state.get('job_title','') or session_state.get('title','')}</p>") if session_state.get('job_title','') or session_state.get('title','') else ""
+
+    return f"""<!DOCTYPE html>
+<html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ font-family:'Georgia',serif; color:#111827; background:#ffffff; padding:48px 64px; line-height:1.6; }}
+  a {{ color:#111827; }}
+</style></head><body>
+<div>
+  <div style='text-align:center;margin-bottom:6px;'>
+    {fixed_img}
+    <h1 style='font-size:28px;font-weight:700;letter-spacing:0.5px;color:#111827;'>{session_state.get('name','')}</h1>
+    {job_title_line}
+    <p style='font-size:12px;color:#6b7280;margin-top:6px;'>{contact_line}</p>
+  </div>
+  <hr style='border:none;border-top:1px solid #111827;margin:18px 0 24px 0;'>
+  {section("Summary", summary_html) if summary_html else ''}
+  {section("Experience", exp_html) if exp_html else ''}
+  {section("Education", edu_html) if edu_html else ''}
+  {section("Skills", pills(session_state.get('skills',''))) if session_state.get('skills') else ''}
+  {section("Soft Skills", pills(session_state.get('Softskills',''),bg='#f9fafb')) if session_state.get('Softskills') else ''}
+  {section("Languages", pills(session_state.get('languages',''),bg='#f9fafb')) if session_state.get('languages') else ''}
+  {section("Interests", pills(session_state.get('interests',''),bg='#f9fafb')) if session_state.get('interests') else ''}
+  {section("Projects", proj_html) if proj_html else ''}
+  {section("Project Links", all_links_html) if all_links_html else ''}
+  {section("Certifications", cert_html) if cert_html else ''}
+</div></body></html>"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 17 — Midnight Black (Single Column)
+# Bold dark-header strip, white body. High contrast, tech/startup ready.
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_midnight_black(session_state, profile_img_html=""):
+    """Midnight Black — single-column, dark header band, crisp white body."""
+    import re as _re17
+
+    ACCENT = "#111827"
+    GOLD   = "#f59e0b"
+
+    def _fix_img(html, size=84):
+        if not html: return ""
+        m = _re17.search(r'<img[^>]*>', html)
+        if not m: return ""
+        tag = _re17.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+        tag = tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;"
+                          f"border-radius:50%;object-fit:cover;display:block;"
+                          f"margin:0 auto 12px;border:3px solid {GOLD};' ")
+        return tag
+
+    def section(title, content):
+        return f"""
+        <div style='margin-bottom:24px;'>
+            <h2 style='font-size:11px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
+                color:{ACCENT};background:#f9fafb;padding:6px 10px;
+                border-left:4px solid {GOLD};margin-bottom:14px;'>{title}</h2>
+            {content}
+        </div>"""
+
+    def pills(s, bg="#111827", color="#f9fafb", border="#374151"):
+        return "".join(
+            f"<span style='display:inline-block;background:{bg};color:{color};"
+            f"border:1px solid {border};border-radius:3px;padding:4px 12px;"
+            f"margin:4px 4px 4px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            for x in s.split(',') if x.strip())
+
+    contact_parts = []
+    for key in ['email','phone','location','linkedin','portfolio','github']:
+        val = session_state.get(key,'')
+        if val:
+            if key == 'email':
+                contact_parts.append(f"<a href='mailto:{val}' style='color:#f9fafb;text-decoration:none;'>{val}</a>")
+            elif key in ('linkedin','portfolio','github'):
+                href = val if val.startswith('http') else f"https://{val}"
+                contact_parts.append(f"<a href='{href}' target='_blank' style='color:#f9fafb;text-decoration:none;'>{val}</a>")
+            else:
+                contact_parts.append(f"<span style='color:#f9fafb;'>{val}</span>")
+    contact_line = " &nbsp;&middot;&nbsp; ".join(contact_parts)
+
+    exp_html = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color='#374151', line_height='1.7')
+            exp_html += f"""
+            <div style='margin-bottom:18px;padding-left:12px;border-left:2px solid #e5e7eb;'>
+                <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
+                    <strong style='font-size:15px;color:{ACCENT};'>{exp.get('company','')}</strong>
+                    <span style='font-size:12px;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:3px;'>{exp.get('duration','')}</span>
+                </div>
+                <div style='font-size:13px;color:#4b5563;font-weight:600;margin:3px 0 6px;'>{exp.get('title','')}</div>
+                {desc}
+            </div>"""
+
+    edu_html = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution') or edu.get('degree'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list): dv = ", ".join(dv)
+            edu_html += f"""
+            <div style='margin-bottom:14px;padding-left:12px;border-left:2px solid #e5e7eb;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{ACCENT};'>{edu.get('institution','')}</strong>
+                    <span style='font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>
+                </div>
+                <div style='font-size:13px;color:#4b5563;font-style:italic;margin-top:3px;'>{dv}</div>
+                <div style='font-size:12px;color:#6b7280;margin-top:2px;'>{edu.get('details','')}</div>
+            </div>"""
+
+    proj_html = ""
+    proj_links = getattr(session_state,'project_links',[]) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#374151', line_height='1.7')
+            lnk_html = ""
+            if idx < len(proj_links) and proj_links[idx]:
+                lnk_html = (f"<div style='margin-top:4px;'><a href='{proj_links[idx]}' target='_blank' "
+                            f"style='font-size:12px;color:{ACCENT};text-decoration:underline;font-weight:600;'>&#128279; View Project</a></div>")
+            proj_html += f"""
+            <div style='margin-bottom:16px;padding:10px 12px;background:#f9fafb;border-radius:4px;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{ACCENT};'>{proj.get('title','')}</strong>
+                    <span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:#6b7280;margin:3px 0 5px;font-weight:600;'>{proj.get('tech','')}</div>
+                {desc}{lnk_html}
+            </div>"""
+
+    all_links_html = ""
+    proj_links_all = getattr(session_state, 'project_links', []) or []
+    if proj_links_all:
+        all_links_html = "".join(
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
+            f"style='color:#111827;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"&#128279; Project {i+1}: {lnk}</a></div>"
+            for i, lnk in enumerate(proj_links_all) if lnk)
+
+    cert_html = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html += f"""
+            <div style='margin-bottom:10px;padding-left:12px;border-left:2px solid #e5e7eb;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    {_cert_name_html(cert,'font-size:14px;font-weight:700;color:#111827;text-decoration:none;')}
+                    <span style='font-size:12px;color:#6b7280;'>{cert.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:#6b7280;margin-top:2px;'>{_fmt_desc(cert.get('description',''), font_size='12px', color='#6b7280', line_height='1.65')}</div>
+            </div>"""
+
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='13px', color='#374151', line_height='1.75')
+    fixed_img = _fix_img(profile_img_html)
+    job_title_line = (f"<p style='font-size:15px;color:{GOLD};font-weight:600;margin-top:4px;letter-spacing:1px;'>"
+                      f"{session_state.get('job_title','') or session_state.get('title','')}</p>") if session_state.get('job_title','') or session_state.get('title','') else ""
+
+    return f"""<!DOCTYPE html>
+<html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:#111827; line-height:1.6; }}
+  a {{ color:{ACCENT}; }}
+</style></head><body>
+<div style='background:{ACCENT};padding:36px 60px 28px;text-align:center;'>
+    {fixed_img}
+    <h1 style='font-size:30px;font-weight:800;letter-spacing:1px;color:#ffffff;'>{session_state.get('name','')}</h1>
+    {job_title_line}
+    <p style='font-size:12px;color:#d1d5db;margin-top:8px;'>{contact_line}</p>
+</div>
+<div style='padding:36px 60px;'>
+  {section("Professional Summary", summary_html) if summary_html else ''}
+  {section("Work Experience", exp_html) if exp_html else ''}
+  {section("Education", edu_html) if edu_html else ''}
+  {section("Technical Skills", pills(session_state.get('skills',''))) if session_state.get('skills') else ''}
+  {section("Soft Skills", pills(session_state.get('Softskills',''),bg='#f3f4f6',color='#111827',border='#d1d5db')) if session_state.get('Softskills') else ''}
+  {section("Languages", pills(session_state.get('languages',''),bg='#f3f4f6',color='#111827',border='#d1d5db')) if session_state.get('languages') else ''}
+  {section("Interests", pills(session_state.get('interests',''),bg='#f3f4f6',color='#111827',border='#d1d5db')) if session_state.get('interests') else ''}
+  {section("Projects", proj_html) if proj_html else ''}
+  {section("Project Links", all_links_html) if all_links_html else ''}
+  {section("Certifications", cert_html) if cert_html else ''}
+</div></body></html>"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 18 — Soft Lavender (Single Column)
+# Calming lavender accents, rounded corners, great for design / HR / creative.
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_soft_lavender(session_state, profile_img_html=""):
+    """Soft Lavender — single-column, gentle purple accents, rounded card style."""
+    import re as _re18
+
+    C_HEAD  = "#3730a3"   # indigo-800 — heading text
+    C_BODY  = "#1e1b4b"   # indigo-950 — body text
+    C_MUTED = "#6b7280"
+    C_ACC   = "#818cf8"   # indigo-400 — accent lines/borders
+    C_BG    = "#eef2ff"   # indigo-50  — section bg strip
+
+    def _fix_img(html, size=86):
+        if not html: return ""
+        m = _re18.search(r'<img[^>]*>', html)
+        if not m: return ""
+        tag = _re18.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+        tag = tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;"
+                          f"border-radius:50%;object-fit:cover;display:block;"
+                          f"margin:0 auto 10px;border:3px solid {C_ACC};' ")
+        return tag
+
+    def section(title, content):
+        return f"""
+        <div style='margin-bottom:24px;'>
+            <h2 style='font-size:11px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;
+                color:{C_HEAD};background:{C_BG};padding:6px 14px;
+                border-radius:4px 4px 0 0;margin-bottom:14px;border-bottom:2px solid {C_ACC};'>{title}</h2>
+            {content}
+        </div>"""
+
+    def pills(s, bg="#ede9fe", color="#3730a3", border="#c4b5fd"):
+        return "".join(
+            f"<span style='display:inline-block;background:{bg};color:{color};"
+            f"border:1px solid {border};border-radius:20px;padding:4px 14px;"
+            f"margin:4px 4px 4px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            for x in s.split(',') if x.strip())
+
+    contact_parts = []
+    for key in ['email','phone','location','linkedin','portfolio','github']:
+        val = session_state.get(key,'')
+        if val:
+            if key == 'email':
+                contact_parts.append(f"<a href='mailto:{val}' style='color:{C_HEAD};text-decoration:none;'>{val}</a>")
+            elif key in ('linkedin','portfolio','github'):
+                href = val if val.startswith('http') else f"https://{val}"
+                contact_parts.append(f"<a href='{href}' target='_blank' style='color:{C_HEAD};text-decoration:none;'>{val}</a>")
+            else:
+                contact_parts.append(f"<span style='color:{C_MUTED};'>{val}</span>")
+    contact_line = " &nbsp;|&nbsp; ".join(contact_parts)
+
+    exp_html = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
+            exp_html += f"""
+            <div style='margin-bottom:18px;padding:12px 16px;background:#fafafa;
+                        border-radius:6px;border:1px solid #e0e7ff;'>
+                <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
+                    <strong style='font-size:15px;color:{C_HEAD};'>{exp.get('company','')}</strong>
+                    <span style='font-size:12px;color:{C_HEAD};background:#ede9fe;
+                          padding:2px 8px;border-radius:12px;font-weight:600;'>{exp.get('duration','')}</span>
+                </div>
+                <div style='font-size:13px;color:{C_MUTED};font-style:italic;margin:3px 0 8px;'>{exp.get('title','')}</div>
+                {desc}
+            </div>"""
+
+    edu_html = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution') or edu.get('degree'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list): dv = ", ".join(dv)
+            edu_html += f"""
+            <div style='margin-bottom:12px;padding:10px 14px;background:#fafafa;
+                        border-radius:6px;border:1px solid #e0e7ff;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
+                    <span style='font-size:12px;color:{C_HEAD};background:#ede9fe;
+                          padding:2px 8px;border-radius:12px;font-weight:600;'>{edu.get('year','')}</span>
+                </div>
+                <div style='font-size:13px;color:{C_MUTED};font-style:italic;margin-top:3px;'>{dv}</div>
+                <div style='font-size:12px;color:{C_MUTED};margin-top:2px;'>{edu.get('details','')}</div>
+            </div>"""
+
+    proj_html = ""
+    proj_links = getattr(session_state,'project_links',[]) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
+            lnk_html = ""
+            if idx < len(proj_links) and proj_links[idx]:
+                lnk_html = (f"<div style='margin-top:5px;'><a href='{proj_links[idx]}' target='_blank' "
+                            f"style='font-size:12px;color:{C_HEAD};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
+            proj_html += f"""
+            <div style='margin-bottom:14px;padding:12px 16px;background:#fafafa;
+                        border-radius:6px;border:1px solid #e0e7ff;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{C_HEAD};'>{proj.get('title','')}</strong>
+                    <span style='font-size:12px;color:{C_MUTED};'>{proj.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:{C_ACC};font-weight:600;margin:3px 0 5px;'>{proj.get('tech','')}</div>
+                {desc}{lnk_html}
+            </div>"""
+
+    all_links_html = ""
+    proj_links_all = getattr(session_state, 'project_links', []) or []
+    if proj_links_all:
+        all_links_html = "".join(
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
+            f"style='color:#3730a3;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"&#128279; Project {i+1}: {lnk}</a></div>"
+            for i, lnk in enumerate(proj_links_all) if lnk)
+
+    cert_html = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html += f"""
+            <div style='margin-bottom:10px;padding:8px 14px;background:#fafafa;
+                        border-radius:6px;border:1px solid #e0e7ff;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    {_cert_name_html(cert,f'font-size:14px;font-weight:700;color:{C_HEAD};text-decoration:none;')}
+                    <span style='font-size:12px;color:{C_MUTED};'>{cert.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:{C_MUTED};margin-top:2px;'>{_fmt_desc(cert.get('description',''), font_size='12px', color='#6b7280', line_height='1.65')}</div>
+            </div>"""
+
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='13px', color=C_BODY, line_height='1.75')
+    fixed_img = _fix_img(profile_img_html)
+    job_title_line = (f"<p style='font-size:15px;color:{C_ACC};font-weight:600;margin-top:5px;'>"
+                      f"{session_state.get('job_title','') or session_state.get('title','')}</p>") if session_state.get('job_title','') or session_state.get('title','') else ""
+
+    return f"""<!DOCTYPE html>
+<html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
+  a {{ color:{C_HEAD}; }}
+</style></head><body>
+<div>
+  <div style='text-align:center;margin-bottom:10px;'>
+    {fixed_img}
+    <h1 style='font-size:30px;font-weight:800;color:{C_HEAD};letter-spacing:0.5px;'>{session_state.get('name','')}</h1>
+    {job_title_line}
+    <p style='font-size:12px;color:{C_MUTED};margin-top:8px;'>{contact_line}</p>
+  </div>
+  <hr style='border:none;border-top:2px solid {C_ACC};margin:16px 0 24px;'>
+  {section("Professional Summary", summary_html) if summary_html else ''}
+  {section("Work Experience", exp_html) if exp_html else ''}
+  {section("Education", edu_html) if edu_html else ''}
+  {section("Technical Skills", pills(session_state.get('skills',''))) if session_state.get('skills') else ''}
+  {section("Soft Skills", pills(session_state.get('Softskills',''),bg='#f0fdf4',color='#166534',border='#86efac')) if session_state.get('Softskills') else ''}
+  {section("Languages", pills(session_state.get('languages',''),bg='#fff7ed',color='#9a3412',border='#fdba74')) if session_state.get('languages') else ''}
+  {section("Interests", pills(session_state.get('interests',''),bg='#fdf4ff',color='#6b21a8',border='#d8b4fe')) if session_state.get('interests') else ''}
+  {section("Projects", proj_html) if proj_html else ''}
+  {section("Project Links", all_links_html) if all_links_html else ''}
+  {section("Certifications", cert_html) if cert_html else ''}
+</div></body></html>"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 19 — Warm Sand (Single Column)
+# Earthy beige / warm-neutral palette. MBA, consulting, finance-ready.
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_warm_sand(session_state, profile_img_html=""):
+    """Warm Sand — single-column, earthy neutral tones, consulting/finance style."""
+    import re as _re19
+
+    C_HEAD  = "#78350f"   # amber-900
+    C_BODY  = "#292524"   # stone-800
+    C_MUTED = "#78716c"   # stone-500
+    C_ACC   = "#d97706"   # amber-600
+    C_BG    = "#fef3c7"   # amber-100
+
+    def _fix_img(html, size=84):
+        if not html: return ""
+        m = _re19.search(r'<img[^>]*>', html)
+        if not m: return ""
+        tag = _re19.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+        tag = tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;"
+                          f"border-radius:50%;object-fit:cover;display:block;"
+                          f"margin:0 auto 10px;border:3px solid {C_ACC};' ")
+        return tag
+
+    def section(title, content):
+        return f"""
+        <div style='margin-bottom:24px;'>
+            <h2 style='font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;
+                color:{C_HEAD};padding-bottom:5px;border-bottom:2px solid {C_ACC};margin-bottom:14px;'>{title}</h2>
+            {content}
+        </div>"""
+
+    def pills(s, bg="#fef3c7", color="#78350f", border="#fcd34d"):
+        return "".join(
+            f"<span style='display:inline-block;background:{bg};color:{color};"
+            f"border:1px solid {border};border-radius:4px;padding:4px 12px;"
+            f"margin:4px 4px 4px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            for x in s.split(',') if x.strip())
+
+    contact_parts = []
+    for key in ['email','phone','location','linkedin','portfolio','github']:
+        val = session_state.get(key,'')
+        if val:
+            if key == 'email':
+                contact_parts.append(f"<a href='mailto:{val}' style='color:{C_HEAD};text-decoration:none;'>{val}</a>")
+            elif key in ('linkedin','portfolio','github'):
+                href = val if val.startswith('http') else f"https://{val}"
+                contact_parts.append(f"<a href='{href}' target='_blank' style='color:{C_HEAD};text-decoration:none;'>{val}</a>")
+            else:
+                contact_parts.append(f"<span style='color:{C_MUTED};'>{val}</span>")
+    contact_line = " &nbsp;&middot;&nbsp; ".join(contact_parts)
+
+    exp_html = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
+            exp_html += f"""
+            <div style='margin-bottom:18px;'>
+                <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
+                    <strong style='font-size:15px;color:{C_HEAD};'>{exp.get('company','')}</strong>
+                    <span style='font-size:12px;color:{C_MUTED};background:{C_BG};
+                          padding:2px 8px;border-radius:4px;font-weight:600;border:1px solid #fcd34d;'>{exp.get('duration','')}</span>
+                </div>
+                <div style='font-size:13px;color:{C_ACC};font-weight:700;margin:3px 0 6px;'>{exp.get('title','')}</div>
+                {desc}
+            </div>
+            <hr style='border:none;border-top:1px solid #e7e5e4;margin:10px 0;'>"""
+
+    edu_html = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution') or edu.get('degree'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list): dv = ", ".join(dv)
+            edu_html += f"""
+            <div style='margin-bottom:14px;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
+                    <span style='font-size:12px;color:{C_MUTED};background:{C_BG};
+                          padding:2px 8px;border-radius:4px;font-weight:600;border:1px solid #fcd34d;'>{edu.get('year','')}</span>
+                </div>
+                <div style='font-size:13px;color:{C_ACC};font-style:italic;font-weight:600;margin-top:3px;'>{dv}</div>
+                <div style='font-size:12px;color:{C_MUTED};margin-top:2px;'>{edu.get('details','')}</div>
+            </div>"""
+
+    proj_html = ""
+    proj_links = getattr(session_state,'project_links',[]) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
+            lnk_html = ""
+            if idx < len(proj_links) and proj_links[idx]:
+                lnk_html = (f"<div style='margin-top:4px;'><a href='{proj_links[idx]}' target='_blank' "
+                            f"style='font-size:12px;color:{C_HEAD};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
+            proj_html += f"""
+            <div style='margin-bottom:16px;padding:10px 14px;background:#fffbeb;
+                        border-left:3px solid {C_ACC};border-radius:0 6px 6px 0;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{C_HEAD};'>{proj.get('title','')}</strong>
+                    <span style='font-size:12px;color:{C_MUTED};'>{proj.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:{C_ACC};font-weight:600;margin:3px 0 5px;'>{proj.get('tech','')}</div>
+                {desc}{lnk_html}
+            </div>"""
+
+    all_links_html = ""
+    proj_links_all = getattr(session_state, 'project_links', []) or []
+    if proj_links_all:
+        all_links_html = "".join(
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
+            f"style='color:#78350f;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"&#128279; Project {i+1}: {lnk}</a></div>"
+            for i, lnk in enumerate(proj_links_all) if lnk)
+
+    cert_html = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html += f"""
+            <div style='margin-bottom:10px;padding:8px 14px;background:#fffbeb;
+                        border-left:3px solid {C_ACC};border-radius:0 6px 6px 0;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    {_cert_name_html(cert,f'font-size:14px;font-weight:700;color:{C_HEAD};text-decoration:none;')}
+                    <span style='font-size:12px;color:{C_MUTED};'>{cert.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:{C_MUTED};margin-top:2px;'>{_fmt_desc(cert.get('description',''), font_size='12px', color='#6b7280', line_height='1.65')}</div>
+            </div>"""
+
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='13px', color=C_BODY, line_height='1.75')
+    fixed_img = _fix_img(profile_img_html)
+    job_title_line = (f"<p style='font-size:15px;color:{C_ACC};font-weight:600;margin-top:5px;'>"
+                      f"{session_state.get('job_title','') or session_state.get('title','')}</p>") if session_state.get('job_title','') or session_state.get('title','') else ""
+
+    return f"""<!DOCTYPE html>
+<html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ font-family:'Georgia',serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
+  a {{ color:{C_HEAD}; }}
+</style></head><body>
+<div>
+  <div style='text-align:center;margin-bottom:10px;'>
+    {fixed_img}
+    <h1 style='font-size:30px;font-weight:700;color:{C_HEAD};letter-spacing:0.5px;'>{session_state.get('name','')}</h1>
+    {job_title_line}
+    <p style='font-size:12px;color:{C_MUTED};margin-top:8px;'>{contact_line}</p>
+  </div>
+  <hr style='border:none;border-top:3px solid {C_ACC};margin:16px 0 24px;'>
+  {section("Professional Summary", summary_html) if summary_html else ''}
+  {section("Work Experience", exp_html) if exp_html else ''}
+  {section("Education", edu_html) if edu_html else ''}
+  {section("Technical Skills", pills(session_state.get('skills',''))) if session_state.get('skills') else ''}
+  {section("Soft Skills", pills(session_state.get('Softskills',''),bg='#f0fdf4',color='#166534',border='#86efac')) if session_state.get('Softskills') else ''}
+  {section("Languages", pills(session_state.get('languages',''),bg='#eff6ff',color='#1e40af',border='#93c5fd')) if session_state.get('languages') else ''}
+  {section("Interests", pills(session_state.get('interests',''),bg='#fdf4ff',color='#6b21a8',border='#d8b4fe')) if session_state.get('interests') else ''}
+  {section("Projects", proj_html) if proj_html else ''}
+  {section("Project Links", all_links_html) if all_links_html else ''}
+  {section("Certifications", cert_html) if cert_html else ''}
+</div></body></html>"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 20 — Ice Blue (Single Column)
+# Cool steel-blue palette, ultra-clean lines. Engineering / data science ready.
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_ice_blue(session_state, profile_img_html=""):
+    """Ice Blue — single-column, cool steel-blue accent, engineering/DS style."""
+    import re as _re20
+
+    C_HEAD  = "#0c4a6e"   # sky-900
+    C_BODY  = "#0f172a"   # slate-950
+    C_MUTED = "#475569"   # slate-600
+    C_ACC   = "#0284c7"   # sky-600
+    C_LIGHT = "#e0f2fe"   # sky-100
+
+    def _fix_img(html, size=84):
+        if not html: return ""
+        m = _re20.search(r'<img[^>]*>', html)
+        if not m: return ""
+        tag = _re20.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+        tag = tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;"
+                          f"border-radius:50%;object-fit:cover;display:block;"
+                          f"margin:0 auto 10px;border:3px solid {C_ACC};' ")
+        return tag
+
+    def section(title, content):
+        return f"""
+        <div style='margin-bottom:24px;'>
+            <h2 style='font-size:11px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
+                color:#ffffff;background:{C_ACC};padding:5px 12px;
+                display:inline-block;border-radius:3px;margin-bottom:14px;'>{title}</h2>
+            {content}
+        </div>"""
+
+    def pills(s, bg="#e0f2fe", color="#0c4a6e", border="#7dd3fc"):
+        return "".join(
+            f"<span style='display:inline-block;background:{bg};color:{color};"
+            f"border:1px solid {border};border-radius:4px;padding:4px 12px;"
+            f"margin:4px 4px 4px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            for x in s.split(',') if x.strip())
+
+    contact_parts = []
+    for key in ['email','phone','location','linkedin','portfolio','github']:
+        val = session_state.get(key,'')
+        if val:
+            if key == 'email':
+                contact_parts.append(f"<a href='mailto:{val}' style='color:{C_ACC};text-decoration:none;'>{val}</a>")
+            elif key in ('linkedin','portfolio','github'):
+                href = val if val.startswith('http') else f"https://{val}"
+                contact_parts.append(f"<a href='{href}' target='_blank' style='color:{C_ACC};text-decoration:none;'>{val}</a>")
+            else:
+                contact_parts.append(f"<span style='color:{C_MUTED};'>{val}</span>")
+    contact_line = " &nbsp;|&nbsp; ".join(contact_parts)
+
+    exp_html = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
+            exp_html += f"""
+            <div style='margin-bottom:18px;'>
+                <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
+                    <strong style='font-size:15px;color:{C_HEAD};'>{exp.get('company','')}</strong>
+                    <span style='font-size:12px;color:{C_ACC};background:{C_LIGHT};
+                          padding:2px 8px;border-radius:3px;font-weight:600;'>{exp.get('duration','')}</span>
+                </div>
+                <div style='font-size:13px;color:{C_MUTED};font-weight:700;margin:3px 0 6px;letter-spacing:0.3px;'>{exp.get('title','')}</div>
+                {desc}
+                <hr style='border:none;border-top:1px dashed #bae6fd;margin-top:10px;'>
+            </div>"""
+
+    edu_html = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution') or edu.get('degree'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list): dv = ", ".join(dv)
+            edu_html += f"""
+            <div style='margin-bottom:14px;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
+                    <span style='font-size:12px;color:{C_ACC};background:{C_LIGHT};
+                          padding:2px 8px;border-radius:3px;font-weight:600;'>{edu.get('year','')}</span>
+                </div>
+                <div style='font-size:13px;color:{C_MUTED};font-style:italic;margin-top:3px;'>{dv}</div>
+                <div style='font-size:12px;color:{C_MUTED};margin-top:2px;'>{edu.get('details','')}</div>
+            </div>"""
+
+    proj_html = ""
+    proj_links = getattr(session_state,'project_links',[]) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
+            lnk_html = ""
+            if idx < len(proj_links) and proj_links[idx]:
+                lnk_html = (f"<div style='margin-top:4px;'><a href='{proj_links[idx]}' target='_blank' "
+                            f"style='font-size:12px;color:{C_ACC};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
+            proj_html += f"""
+            <div style='margin-bottom:14px;padding:10px 14px;background:{C_LIGHT};
+                        border-left:3px solid {C_ACC};border-radius:0 6px 6px 0;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{C_HEAD};'>{proj.get('title','')}</strong>
+                    <span style='font-size:12px;color:{C_MUTED};'>{proj.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:{C_ACC};font-weight:600;margin:3px 0 5px;'>{proj.get('tech','')}</div>
+                {desc}{lnk_html}
+            </div>"""
+
+    all_links_html = ""
+    proj_links_all = getattr(session_state, 'project_links', []) or []
+    if proj_links_all:
+        all_links_html = "".join(
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
+            f"style='color:#0c4a6e;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"&#128279; Project {i+1}: {lnk}</a></div>"
+            for i, lnk in enumerate(proj_links_all) if lnk)
+
+    cert_html = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html += f"""
+            <div style='margin-bottom:10px;padding:8px 14px;background:{C_LIGHT};
+                        border-left:3px solid {C_ACC};border-radius:0 6px 6px 0;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    {_cert_name_html(cert,f'font-size:14px;font-weight:700;color:{C_HEAD};text-decoration:none;')}
+                    <span style='font-size:12px;color:{C_MUTED};'>{cert.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:{C_MUTED};margin-top:2px;'>{_fmt_desc(cert.get('description',''), font_size='12px', color='#6b7280', line_height='1.65')}</div>
+            </div>"""
+
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='13px', color=C_BODY, line_height='1.75')
+    fixed_img = _fix_img(profile_img_html)
+    job_title_line = (f"<p style='font-size:15px;color:{C_ACC};font-weight:600;margin-top:5px;letter-spacing:0.5px;'>"
+                      f"{session_state.get('job_title','') or session_state.get('title','')}</p>") if session_state.get('job_title','') or session_state.get('title','') else ""
+
+    return f"""<!DOCTYPE html>
+<html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
+  a {{ color:{C_ACC}; }}
+</style></head><body>
+<div>
+  <div style='text-align:center;margin-bottom:10px;'>
+    {fixed_img}
+    <h1 style='font-size:30px;font-weight:800;color:{C_HEAD};letter-spacing:1px;'>{session_state.get('name','')}</h1>
+    {job_title_line}
+    <p style='font-size:12px;color:{C_MUTED};margin-top:8px;'>{contact_line}</p>
+  </div>
+  <hr style='border:none;border-top:3px solid {C_ACC};margin:16px 0 24px;'>
+  {section("Professional Summary", summary_html) if summary_html else ''}
+  {section("Work Experience", exp_html) if exp_html else ''}
+  {section("Education", edu_html) if edu_html else ''}
+  {section("Technical Skills", pills(session_state.get('skills',''))) if session_state.get('skills') else ''}
+  {section("Soft Skills", pills(session_state.get('Softskills',''),bg='#f0fdf4',color='#166534',border='#86efac')) if session_state.get('Softskills') else ''}
+  {section("Languages", pills(session_state.get('languages',''),bg='#fdf4ff',color='#6b21a8',border='#d8b4fe')) if session_state.get('languages') else ''}
+  {section("Interests", pills(session_state.get('interests',''),bg='#fff7ed',color='#9a3412',border='#fdba74')) if session_state.get('interests') else ''}
+  {section("Projects", proj_html) if proj_html else ''}
+  {section("Project Links", all_links_html) if all_links_html else ''}
+  {section("Certifications", cert_html) if cert_html else ''}
+</div></body></html>"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 21 — Rose Gold (Single Column)
+# Sophisticated rose-pink palette. Fashion, marketing, HR, PR industries.
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_rose_gold(session_state, profile_img_html=""):
+    """Rose Gold — single-column, elegant pink-gold palette, fashion/marketing style."""
+    import re as _re21
+
+    C_HEAD  = "#881337"   # rose-900
+    C_BODY  = "#1c1917"   # stone-950
+    C_MUTED = "#9f1239"   # rose-800
+    C_ACC   = "#e11d48"   # rose-600
+    C_SOFT  = "#ffe4e6"   # rose-100
+
+    def _fix_img(html, size=88):
+        if not html: return ""
+        m = _re21.search(r'<img[^>]*>', html)
+        if not m: return ""
+        tag = _re21.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+        tag = tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;"
+                          f"border-radius:50%;object-fit:cover;display:block;"
+                          f"margin:0 auto 10px;border:3px solid {C_ACC};' ")
+        return tag
+
+    def section(title, content):
+        return f"""
+        <div style='margin-bottom:24px;'>
+            <h2 style='font-size:11px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
+                color:{C_HEAD};margin-bottom:10px;padding-bottom:5px;
+                border-bottom:2px solid {C_ACC};'>{title}</h2>
+            {content}
+        </div>"""
+
+    def pills(s, bg="#ffe4e6", color="#881337", border="#fda4af"):
+        return "".join(
+            f"<span style='display:inline-block;background:{bg};color:{color};"
+            f"border:1px solid {border};border-radius:20px;padding:4px 14px;"
+            f"margin:4px 4px 4px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            for x in s.split(',') if x.strip())
+
+    contact_parts = []
+    for key in ['email','phone','location','linkedin','portfolio','github']:
+        val = session_state.get(key,'')
+        if val:
+            if key == 'email':
+                contact_parts.append(f"<a href='mailto:{val}' style='color:{C_ACC};text-decoration:none;'>{val}</a>")
+            elif key in ('linkedin','portfolio','github'):
+                href = val if val.startswith('http') else f"https://{val}"
+                contact_parts.append(f"<a href='{href}' target='_blank' style='color:{C_ACC};text-decoration:none;'>{val}</a>")
+            else:
+                contact_parts.append(f"<span style='color:#6b7280;'>{val}</span>")
+    contact_line = " &nbsp;&middot;&nbsp; ".join(contact_parts)
+
+    exp_html = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
+            exp_html += f"""
+            <div style='margin-bottom:18px;padding:12px 16px;background:{C_SOFT};border-radius:6px;'>
+                <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
+                    <strong style='font-size:15px;color:{C_HEAD};'>{exp.get('company','')}</strong>
+                    <span style='font-size:12px;color:{C_ACC};font-weight:700;'>{exp.get('duration','')}</span>
+                </div>
+                <div style='font-size:13px;color:#9f1239;font-style:italic;margin:3px 0 8px;font-weight:600;'>{exp.get('title','')}</div>
+                {desc}
+            </div>"""
+
+    edu_html = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution') or edu.get('degree'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list): dv = ", ".join(dv)
+            edu_html += f"""
+            <div style='margin-bottom:12px;padding:10px 14px;background:{C_SOFT};border-radius:6px;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
+                    <span style='font-size:12px;color:{C_ACC};font-weight:700;'>{edu.get('year','')}</span>
+                </div>
+                <div style='font-size:13px;color:{C_MUTED};font-style:italic;margin-top:3px;'>{dv}</div>
+                <div style='font-size:12px;color:#9f1239;margin-top:2px;'>{edu.get('details','')}</div>
+            </div>"""
+
+    proj_html = ""
+    proj_links = getattr(session_state,'project_links',[]) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
+            lnk_html = ""
+            if idx < len(proj_links) and proj_links[idx]:
+                lnk_html = (f"<div style='margin-top:4px;'><a href='{proj_links[idx]}' target='_blank' "
+                            f"style='font-size:12px;color:{C_ACC};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
+            proj_html += f"""
+            <div style='margin-bottom:14px;padding:10px 16px;background:{C_SOFT};border-radius:6px;border-left:3px solid {C_ACC};'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{C_HEAD};'>{proj.get('title','')}</strong>
+                    <span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:{C_ACC};font-weight:600;margin:3px 0 5px;'>{proj.get('tech','')}</div>
+                {desc}{lnk_html}
+            </div>"""
+
+    all_links_html = ""
+    proj_links_all = getattr(session_state, 'project_links', []) or []
+    if proj_links_all:
+        all_links_html = "".join(
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
+            f"style='color:#881337;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"&#128279; Project {i+1}: {lnk}</a></div>"
+            for i, lnk in enumerate(proj_links_all) if lnk)
+
+    cert_html = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html += f"""
+            <div style='margin-bottom:10px;padding:8px 14px;background:{C_SOFT};border-radius:6px;border-left:3px solid {C_ACC};'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    {_cert_name_html(cert,f'font-size:14px;font-weight:700;color:{C_HEAD};text-decoration:none;')}
+                    <span style='font-size:12px;color:#6b7280;'>{cert.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:#6b7280;margin-top:2px;'>{_fmt_desc(cert.get('description',''), font_size='12px', color='#6b7280', line_height='1.65')}</div>
+            </div>"""
+
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='13px', color=C_BODY, line_height='1.75')
+    fixed_img = _fix_img(profile_img_html)
+    job_title_line = (f"<p style='font-size:15px;color:{C_ACC};font-weight:600;margin-top:5px;letter-spacing:0.5px;'>"
+                      f"{session_state.get('job_title','') or session_state.get('title','')}</p>") if session_state.get('job_title','') or session_state.get('title','') else ""
+
+    return f"""<!DOCTYPE html>
+<html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
+  a {{ color:{C_ACC}; }}
+</style></head><body>
+<div>
+  <div style='text-align:center;margin-bottom:10px;'>
+    {fixed_img}
+    <h1 style='font-size:30px;font-weight:800;color:{C_HEAD};letter-spacing:0.5px;'>{session_state.get('name','')}</h1>
+    {job_title_line}
+    <p style='font-size:12px;color:#6b7280;margin-top:8px;'>{contact_line}</p>
+  </div>
+  <hr style='border:none;border-top:2px solid {C_ACC};margin:16px 0 24px;'>
+  {section("Professional Summary", summary_html) if summary_html else ''}
+  {section("Work Experience", exp_html) if exp_html else ''}
+  {section("Education", edu_html) if edu_html else ''}
+  {section("Technical Skills", pills(session_state.get('skills',''))) if session_state.get('skills') else ''}
+  {section("Soft Skills", pills(session_state.get('Softskills',''),bg='#eff6ff',color='#1e40af',border='#93c5fd')) if session_state.get('Softskills') else ''}
+  {section("Languages", pills(session_state.get('languages',''),bg='#f0fdf4',color='#166534',border='#86efac')) if session_state.get('languages') else ''}
+  {section("Interests", pills(session_state.get('interests',''),bg='#fdf4ff',color='#6b21a8',border='#d8b4fe')) if session_state.get('interests') else ''}
+  {section("Projects", proj_html) if proj_html else ''}
+  {section("Project Links", all_links_html) if all_links_html else ''}
+  {section("Certifications", cert_html) if cert_html else ''}
+</div></body></html>"""
+
+
 # ── Resume template registry ──────────────────────────────────────────────────
 RESUME_TEMPLATES = {
     "Default (Professional)":           render_template_default,
@@ -2644,6 +3580,13 @@ RESUME_TEMPLATES = {
     "Burgundy Classic (Single Column)": render_template_burgundy_classic,
     "Indigo Tech (Two Column)":         render_template_indigo_tech,
     "Forest Green (Single Column)":     render_template_forest_green,
+    # ── 6 new minimal single-column templates ──
+    "Pure White (Single Column)":       render_template_pure_white,
+    "Midnight Black (Single Column)":   render_template_midnight_black,
+    "Soft Lavender (Single Column)":    render_template_soft_lavender,
+    "Warm Sand (Single Column)":        render_template_warm_sand,
+    "Ice Blue (Single Column)":         render_template_ice_blue,
+    "Rose Gold (Single Column)":        render_template_rose_gold,
 }
 
 
