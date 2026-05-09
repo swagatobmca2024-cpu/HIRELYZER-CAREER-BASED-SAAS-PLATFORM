@@ -2448,29 +2448,34 @@ if not st.session_state.get("authenticated", False):
 
 # ------------------- AFTER LOGIN -------------------
 if st.session_state.get("authenticated"):
-    st.markdown(
-        f'<div class="welcome-banner">'
-        f'<div>'
-        f'<div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span> 👋</div>'
-        f'<div class="welcome-subtitle">HIRELYZER — AI-Powered Resume Intelligence Platform</div>'
-        f'</div>'
-        f'<div style="display:flex;align-items:center;gap:8px;">'
-        f'<div style="background:linear-gradient(135deg,rgba(52,211,153,0.15) 0%,rgba(52,211,153,0.06) 100%);border:1px solid rgba(52,211,153,0.25);border-radius:99px;padding:5px 14px;font-size:0.75rem;font-weight:600;color:#6ee7b7;letter-spacing:0.04em;text-transform:uppercase;font-family:-apple-system,sans-serif;">&#9679; Live</div>'
-        f'</div>'
-        f'</div>',
-        unsafe_allow_html=True
-    )
+    # Layout: welcome banner (left) + logout button (right) in same row
+    _banner_col, _logout_col = st.columns([5, 1])
 
-    # 🔓 LOGOUT BUTTON
-    if st.button("🚪 Logout"):
-        log_user_action(st.session_state.get("username", "unknown"), "logout")
+    with _banner_col:
+        st.markdown(
+            f'<div class="welcome-banner">'
+            f'<div>'
+            f'<div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span> 👋</div>'
+            f'<div class="welcome-subtitle">HIRELYZER — AI-Powered Resume Intelligence Platform</div>'
+            f'</div>'
+            f'<div style="display:flex;align-items:center;gap:8px;">'
+            f'<div style="background:linear-gradient(135deg,rgba(52,211,153,0.15) 0%,rgba(52,211,153,0.06) 100%);border:1px solid rgba(52,211,153,0.25);border-radius:99px;padding:5px 14px;font-size:0.75rem;font-weight:600;color:#6ee7b7;letter-spacing:0.04em;text-transform:uppercase;font-family:-apple-system,sans-serif;">&#9679; Live</div>'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
-        # ✅ Clear all session keys safely
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-
-        st.success("✅ Logged out successfully.")
-        st.rerun()  # Force rerun to prevent stale UI
+    with _logout_col:
+        st.markdown("<div style='display:flex;align-items:center;height:100%;padding-top:10px;'>", unsafe_allow_html=True)
+        if st.button("🚪 Logout", use_container_width=True, help="Sign out of your account"):
+            with st.spinner("Logging out..."):
+                log_user_action(st.session_state.get("username", "unknown"), "logout")
+                time.sleep(1)
+                for key in list(st.session_state.keys()):
+                    del st.session_state[key]
+            st.success("✅ Logged out successfully.")
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 if st.session_state.username == "admin":
