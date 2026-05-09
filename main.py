@@ -1057,12 +1057,6 @@ h3, .stMarkdown h3 {
     position: relative;
     overflow: hidden;
 }
-/* Make the logout column vertically centred beside the banner */
-[data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: flex-end !important;
-}
 .welcome-banner::before {
     content: '';
     position: absolute;
@@ -1078,8 +1072,6 @@ h3, .stMarkdown h3 {
     letter-spacing: -0.025em !important;
     color: var(--text-primary) !important;
     line-height: 1.3 !important;
-    white-space: normal;
-    word-break: break-word;
 }
 .welcome-subtitle {
     font-size: 0.85rem;
@@ -1090,15 +1082,6 @@ h3, .stMarkdown h3 {
 .welcome-username {
     color: var(--accent-cyan);
     font-weight: 700;
-}
-.welcome-left {
-    min-width: 0;
-    flex: 1 1 0;
-}
-.welcome-right {
-    flex-shrink: 0;
-    align-self: flex-start;
-    padding-top: 2px;
 }
 
 /* ══════════════════════════════════════
@@ -1874,7 +1857,6 @@ if not st.session_state.get("authenticated", False):
                                         success, saved_key = verify_user(_input, pwd.strip())
                                         if success:
                                             st.session_state.authenticated = True
-                                            st.session_state["_just_logged_in"] = True
                                             log_user_action(st.session_state.username, "login")
                                             notify("login", "success", "Login successful!")
                                             time.sleep(1.5)
@@ -2466,59 +2448,29 @@ if not st.session_state.get("authenticated", False):
 
 # ------------------- AFTER LOGIN -------------------
 if st.session_state.get("authenticated"):
+    st.markdown(
+        f'<div class="welcome-banner">'
+        f'<div>'
+        f'<div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span> 👋</div>'
+        f'<div class="welcome-subtitle">HIRELYZER — AI-Powered Resume Intelligence Platform</div>'
+        f'</div>'
+        f'<div style="display:flex;align-items:center;gap:8px;">'
+        f'<div style="background:linear-gradient(135deg,rgba(52,211,153,0.15) 0%,rgba(52,211,153,0.06) 100%);border:1px solid rgba(52,211,153,0.25);border-radius:99px;padding:5px 14px;font-size:0.75rem;font-weight:600;color:#6ee7b7;letter-spacing:0.04em;text-transform:uppercase;font-family:-apple-system,sans-serif;">&#9679; Live</div>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
 
-    # Smooth fade-in transition when arriving from login
-    if st.session_state.pop("_just_logged_in", False):
-        st.markdown("""
-        <style>
-        @keyframes dashboardFadeIn {
-            from { opacity: 0; transform: translateY(18px); filter: blur(4px); }
-            to   { opacity: 1; transform: translateY(0);   filter: blur(0);   }
-        }
-        .stApp [data-testid="stAppViewBlockContainer"] {
-            animation: dashboardFadeIn 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+    # 🔓 LOGOUT BUTTON
+    if st.button("🚪 Logout"):
+        log_user_action(st.session_state.get("username", "unknown"), "logout")
 
-    # If logging_out flag is set, show full-width spinner and complete logout
-    if st.session_state.get("_logging_out"):
-        with st.spinner("Logging out, please wait..."):
-            log_user_action(st.session_state.get("username", "unknown"), "logout")
-            time.sleep(1.5)
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-        st.rerun()
+        # ✅ Clear all session keys safely
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
 
-    else:
-        # Banner + logout in one row using columns
-        _banner_col, _logout_col = st.columns([5, 1])
-        with _banner_col:
-            st.markdown(
-                f'<div class="welcome-banner" style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0;">'
-                f'<div class="welcome-left">'
-                f'<div class="welcome-title">Welcome back, <span class="welcome-username">{st.session_state.username}</span> 👋</div>'
-                f'<div class="welcome-subtitle">HIRELYZER — AI-Powered Resume Intelligence Platform</div>'
-                f'</div>'
-                f'<div class="welcome-right">'
-                f'<div style="background:linear-gradient(135deg,rgba(52,211,153,0.15) 0%,rgba(52,211,153,0.06) 100%);border:1px solid rgba(52,211,153,0.25);border-radius:99px;padding:5px 14px;font-size:0.75rem;font-weight:600;color:#6ee7b7;letter-spacing:0.04em;text-transform:uppercase;font-family:-apple-system,sans-serif;">&#9679; Live</div>'
-                f'</div>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-        with _logout_col:
-            st.markdown("""
-            <style>
-            div[data-testid="stButton"] > button {
-                margin-top: 0 !important;
-            }
-            </style>
-            <div style='display:flex;align-items:center;justify-content:flex-end;height:100%;'>
-            """, unsafe_allow_html=True)
-            if st.button("🚪 Logout", use_container_width=True, key="logout_btn", help="Sign out of your account"):
-                st.session_state["_logging_out"] = True
-                st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
+        st.success("✅ Logged out successfully.")
+        st.rerun()  # Force rerun to prevent stale UI
 
 
 if st.session_state.username == "admin":
@@ -2960,25 +2912,21 @@ tab_labels = [
     "🧾 Resume Builder",
     "💼 Job Search",
     "📚 Course Recommendation",
-    "🛡️ Scam Detector"
+	"🛡️ Scam Detector"
 ]
 
-# Insert Admin tab at position 1 (right after Dashboard) so Scam Detector stays visible
+# Add Admin tab only for admin user
 if st.session_state.username == "admin":
-    tab_labels.insert(1, "📁 Admin DB View")
+    tab_labels.append("📁 Admin DB View")
 
 # Create tabs dynamically
 tabs = st.tabs(tab_labels)
 
-# Unpack based on whether admin tab is present
-if st.session_state.username == "admin":
-    tab1, tab5, tab2, tab3, tab4, tab_scam = tabs  # 6 tabs: Dashboard, Admin, Resume, Job, Course, Scam
-else:
-    tab1, tab2, tab3, tab4, tab_scam = tabs         # 5 tabs
-    tab5 = None
+# Unpack first five (always exist)
+tab1, tab2, tab3, tab4, tab_scam = tabs[:5]
 
-with tab_scam:
-    render_job_scam_detector_tab(call_llm)
+# Handle optional admin tab (index shifts to 5 now)
+tab5 = tabs[5] if len(tabs) > 5 else None
 with tab1:
     st.markdown("""
     <style>
@@ -17810,6 +17758,8 @@ if tab5:
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
 
+with tab_scam:
+    render_job_scam_detector_tab(call_llm)
 
 
 
