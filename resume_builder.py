@@ -1159,7 +1159,7 @@ def render_template_timeline(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>{session_state.get('name','')} - Timeline Resume</title>
-<style>@page { size: A4; margin: 0; } * {{ box-sizing:border-box; margin:0; padding:0; }} body { width:794px;max-width:794px;margin:0 auto;font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
+<style>@page {{ size: A4; margin: 0; }} * {{ box-sizing:border-box; margin:0; padding:0; }} body {{ width:794px;max-width:794px;margin:0 auto;font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
 </head>
 <body>
 <div>
@@ -1970,7 +1970,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
   @page {{ size: A4; margin: 0; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body { width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; color:{C_PRIMARY}; background:#ffffff; padding:40px 60px; line-height:1.6; }}
+  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; color:{C_PRIMARY}; background:#ffffff; padding:40px 60px; line-height:1.6; }}
   a {{ color:{C_PRIMARY}; }}
 </style>
 </head>
@@ -2305,7 +2305,7 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
   @page {{ size: A4; margin: 0; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body { width:794px;max-width:794px;margin:0 auto; font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; }}
+  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; }}
   a {{ color:#7f1d1d; }}
 </style>
 </head>
@@ -2607,7 +2607,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>{session_state.get('name','')} - Resume</title><style>@page { size: A4; margin: 0; } * { box-sizing:border-box; margin:0; padding:0; } body { width:794px;max-width:794px;margin:0 auto;font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; line-height:1.6; }</style></head>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=794px'><title>{session_state.get('name','')} - Resume</title><style>@page {{ size: A4; margin: 0; }} * {{ box-sizing:border-box; margin:0; padding:0; }} body {{ width:794px;max-width:794px;margin:0 auto;font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; line-height:1.6; }}</style></head>
 <body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;padding:36px 40px;">
   {fixed_img if fixed_img else ''}
   <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #166534;">
@@ -2759,7 +2759,7 @@ def render_template_pure_white(session_state, profile_img_html=""):
   @page {{ size: A4; margin: 0; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body { width:794px;max-width:794px;margin:0 auto; font-family:'Georgia',serif; color:#111827; background:#ffffff; padding:48px 64px; line-height:1.6; }}
+  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Georgia',serif; color:#111827; background:#ffffff; padding:48px 64px; line-height:1.6; }}
   a {{ color:#111827; }}
 </style></head><body>
 <div>
@@ -2913,7 +2913,7 @@ def render_template_midnight_black(session_state, profile_img_html=""):
   @page {{ size: A4; margin: 0; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body { width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:#111827; line-height:1.6; }}
+  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:#111827; line-height:1.6; }}
   a {{ color:{ACCENT}; }}
 </style></head><body>
 <div style='background:{ACCENT};padding:36px 60px 28px;text-align:center;'>
@@ -3075,7 +3075,7 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
   @page {{ size: A4; margin: 0; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body { width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
+  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
   a {{ color:{C_HEAD}; }}
 </style></head><body>
 <div>
@@ -3236,7 +3236,7 @@ def render_template_warm_sand(session_state, profile_img_html=""):
   @page {{ size: A4; margin: 0; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body { width:794px;max-width:794px;margin:0 auto; font-family:'Georgia',serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
+  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Georgia',serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
   a {{ color:{C_HEAD}; }}
 </style></head><body>
 <div>
@@ -3398,7 +3398,7 @@ def render_template_ice_blue(session_state, profile_img_html=""):
   @page {{ size: A4; margin: 0; }}
 
   * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body { width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
+  body {{ width:794px;max-width:794px;margin:0 auto; font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
   a {{ color:{C_ACC}; }}
 </style></head><body>
 <div>
