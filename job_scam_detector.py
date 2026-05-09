@@ -274,6 +274,12 @@ _WEIGHTS: dict[str, int] = {
     "work_from_home_bait":      5,
     "missing_salary":           4,
     "generic_template":         4,
+    # ── India-specific signals ────────────────────────────────────────────────
+    "india_scam_pattern":      16,   # data entry, typing, captcha, fake govt jobs
+    "invalid_gstin":           18,   # GST number present but fails format check
+    "invalid_phone":           10,   # phone present but not valid Indian format
+    "invalid_pin":              8,   # PIN code present but invalid for claimed state
+    "fake_govt_job":           20,   # impersonating railway/bank/defence recruitment
 }
 
 _FREE_DOMAINS: frozenset[str] = frozenset({
@@ -285,13 +291,39 @@ _FREE_DOMAINS: frozenset[str] = frozenset({
 })
 
 _BRAND_DOMAINS: list[str] = [
-    "infosys.com","tcs.com","wipro.com","hcltech.com","accenture.com",
-    "ibm.com","amazon.in","amazon.com","google.com","microsoft.com",
-    "flipkart.com","swiggy.in","zomato.com","paytm.com","ola.com",
-    "myntra.com","meesho.com","byju.com","razorpay.com","freshworks.com",
-    "zoho.com","mindtree.com","mphasis.com","ltimindtree.com",
-    "capgemini.com","cognizant.com","hexaware.com","persistent.com",
+    # ── Tier-1 Indian IT / tech ───────────────────────────────────────────────
+    "infosys.com","tcs.com","wipro.com","hcltech.com","hcl.com",
+    "ltimindtree.com","mindtree.com","mphasis.com","hexaware.com",
+    "persistent.com","cyient.com","niit.com","kpit.com","l&t.com",
+    "larsentoubro.com","tech-mahindra.com","techmahindra.com",
+    # ── Indian banks / fintech ────────────────────────────────────────────────
+    "hdfcbank.com","icicibank.com","sbi.co.in","axisbank.com",
+    "kotakbank.com","yesbank.in","idfcfirstbank.com","federalbank.co.in",
+    "paytm.com","phonepe.com","razorpay.com","cred.club","groww.in",
+    "zerodha.com","upstox.com","policybazaar.com","lendingkart.com",
+    # ── Indian consumer / e-comm ──────────────────────────────────────────────
+    "flipkart.com","myntra.com","meesho.com","ajio.com","nykaa.com",
+    "swiggy.in","zomato.com","ola.com","olamoney.com","oyo.com",
+    "bigbasket.com","blinkit.com","dunzo.com","urbancompany.com",
+    "byju.com","byjus.com","unacademy.com","vedantu.com","upgrad.com",
+    # ── Indian conglomerates ──────────────────────────────────────────────────
+    "relianceindustries.com","ril.com","jio.com","jiosaavn.com",
+    "tatamotors.com","tatagroup.com","tatasteel.com","tatacommunications.com",
+    "mahindra.com","bajajfinserv.com","bajajfinance.in","bajaj.com",
+    "adanigroup.com","adaniports.com","aditya-birla.com",
+    # ── Global MNCs with India ops ────────────────────────────────────────────
+    "accenture.com","capgemini.com","cognizant.com","deloitte.com",
+    "pwc.com","kpmg.com","ey.com","mckinsey.com","bain.com","bcg.com",
+    "ibm.com","oracle.com","sap.com","salesforce.com","adobe.com",
+    "amazon.in","amazon.com","google.com","microsoft.com",
+    "meta.com","apple.com","netflix.com","uber.com","airbnb.com",
+    # ── Job boards / platforms ────────────────────────────────────────────────
     "naukri.com","linkedin.com","indeed.com","glassdoor.com",
+    "shine.com","monster.com","foundit.in","internshala.com",
+    "freshersworld.com","iimjobs.com","hirist.com","apna.co",
+    # ── Freshworks / SaaS ────────────────────────────────────────────────────
+    "freshworks.com","zoho.com","chargebee.com","postman.com",
+    "browserstack.com","hasura.io","clevertap.com","moengage.com",
 ]
 
 _PAY_PHRASES = [
@@ -378,7 +410,9 @@ _GRAMMAR_PATTERNS = [
     r"\b(kindly revert|do the needful|revert back|prepone)\b",
     r"\b(myself is|myself am|i am having)\b",
     r"(!{3,}|\.{4,})",
-    r"\b[A-Z]{5,}\b",
+    # ALL-CAPS run: 6+ consecutive capital letters NOT preceded/followed by a dot
+    # This avoids firing on MBA, CPA, KPMG, EY, CTC, LPA, HR, IT, AI etc.
+    r"(?<![A-Z.])\b[A-Z]{6,}\b(?![.])",
 ]
 _LOCATION_CLUES = [
     r"(usa|united states|uk|london|dubai|singapore).*(work from.*india|indian.*candidate)",
@@ -391,6 +425,89 @@ _WFH_PHRASES = [
     r"data.*entry.*earn.*\d{4,}",r"captcha.*job",r"ad.*posting.*earn",
     r"copy.*paste.*earn",r"form.*filling.*earn",
 ]
+
+# ── India-specific scam patterns ──────────────────────────────────────────────
+_INDIA_SCAM_PHRASES = [
+    # Classic India data-entry / typing scams
+    r"typing.*job.*earn",r"form.*filling.*\d{3,}.*per",r"data.*entry.*operator.*home",
+    r"copy.*paste.*job",r"ad.*posting.*job",r"captcha.*entry.*earn",
+    r"online.*survey.*earn",r"product.*review.*earn",r"youtube.*like.*earn",
+    r"facebook.*like.*earn",r"instagram.*follower.*earn",
+    # Fake government / PSU impersonation
+    r"government.*job.*guaranteed",r"sarkari.*naukri.*guarantee",
+    r"psu.*recruitment.*2\d{3}",r"railway.*recruitment.*apply",
+    r"defence.*job.*guaranteed",r"bank.*job.*guaranteed",
+    r"upsc.*coaching.*job",r"ssc.*job.*guaranteed",
+    r"nabard.*recruitment",r"rrb.*ntpc.*apply.*fee",
+    # Fake internship / fresher traps
+    r"stipend.*\d{4,}.*per.*day",r"internship.*earn.*\d{5,}",
+    r"fresher.*earn.*\d{5,}.*month",r"training.*period.*unpaid",
+    r"apprentice.*pay.*own.*kit",r"industrial.*training.*fee",
+    # Courier / logistics scams
+    r"courier.*partner.*earn",r"delivery.*partner.*deposit",
+    r"amazon.*delivery.*franchise.*fee",r"flipkart.*delivery.*fee",
+    r"logistics.*partner.*investment",
+    # Fake HR / recruiter patterns
+    r"shortlisted.*from.*resume",r"profile.*selected.*naukri",
+    r"hr.*from.*mnc.*contacted",r"campus.*placement.*fee",
+    r"placement.*guarantee.*course",r"job.*guarantee.*after.*course",
+    r"100%.*placement.*assured",r"job.*ready.*program.*fee",
+]
+
+_INDIA_PHONE_PREFIXES_VOIP = re.compile(
+    r"(140|141|142|143|144|145|146|147|148|149"  # Telemarketing prefixes
+    r"|160|161|162|163|164|165|166|167|168|169"    # Service numbers
+    r"|1800\d{6,7}"                                  # Toll-free (legitimate but check context)
+    r")"
+)
+
+# Valid Indian mobile: starts with 6,7,8,9 and is exactly 10 digits
+_INDIA_MOBILE_RE = re.compile(r"([6-9]\d{9})")
+# Valid Indian landline: 0 + STD code (2-4 digits) + number = 10-11 digits total
+_INDIA_LANDLINE_RE = re.compile(r"(0\d{9,10})")
+
+# PIN code first-digit → state mapping (first 2 digits)
+_PIN_STATE_MAP: dict[str, str] = {
+    "11": "Delhi",       "12": "Haryana",     "13": "Haryana",
+    "14": "Punjab",      "15": "Punjab",       "16": "Punjab/Chandigarh",
+    "17": "Himachal Pradesh","18": "Jammu & Kashmir","19": "Jammu & Kashmir",
+    "20": "Uttar Pradesh","21": "Uttar Pradesh","22": "Uttar Pradesh",
+    "23": "Uttar Pradesh","24": "Uttar Pradesh","25": "Uttar Pradesh",
+    "26": "Uttar Pradesh","28": "Uttar Pradesh",
+    "30": "Rajasthan",   "31": "Rajasthan",    "32": "Rajasthan",
+    "33": "Rajasthan",   "34": "Rajasthan",
+    "36": "Gujarat",     "37": "Gujarat",      "38": "Gujarat",
+    "39": "Gujarat/Daman & Diu",
+    "40": "Maharashtra", "41": "Maharashtra",  "42": "Maharashtra",
+    "43": "Maharashtra", "44": "Maharashtra",  "45": "Maharashtra/MP",
+    "46": "Maharashtra", "47": "Maharashtra",  "48": "Maharashtra",
+    "49": "Maharashtra/Chhattisgarh",
+    "50": "Telangana",   "51": "MP",           "52": "MP",
+    "53": "MP",          "56": "MP",           "57": "MP",           "58": "MP",
+    "60": "Tamil Nadu",  "61": "Tamil Nadu",   "62": "Tamil Nadu",
+    "63": "Tamil Nadu",  "64": "Tamil Nadu",
+    "67": "Kerala",      "68": "Kerala",       "69": "Kerala",
+    "70": "West Bengal", "71": "West Bengal",  "72": "West Bengal",
+    "73": "West Bengal", "74": "West Bengal",
+    "75": "Odisha",      "76": "Odisha",       "77": "Odisha",
+    "78": "Assam",       "79": "Assam",
+    "80": "Karnataka",   "81": "Karnataka",    "82": "Karnataka",
+    "83": "Karnataka",   "84": "Karnataka",    "85": "Karnataka",
+    "40": "Telangana",   "50": "Telangana",    "53": "Andhra Pradesh",
+    "52": "Andhra Pradesh","51": "Andhra Pradesh",
+    "110": "Delhi",      "400": "Mumbai",       "500": "Hyderabad",
+    "600": "Chennai",    "700": "Kolkata",      "560": "Bangalore",
+    "411": "Pune",       "380": "Ahmedabad",    "302": "Jaipur",
+}
+
+# GSTIN format: 2-digit state + 10-char PAN + 1 entity + Z + 1 checksum
+_GSTIN_RE = re.compile(
+    r"([0-3][0-9])"          # state code 01-37
+    r"([A-Z]{5}[0-9]{4}[A-Z])" # PAN (10 chars)
+    r"([1-9A-Z])"               # entity number
+    r"Z"                        # always Z
+    r"([0-9A-Z])"             # checksum
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -970,21 +1087,53 @@ def _extract_domain(s: str) -> Optional[str]:
     return m.group(1) if m else None
 
 
+def _age_status(age_days: int) -> str:
+    """
+    Tiered domain age status — replaces binary young/old.
+    0-30   = very_young  (very high risk)
+    31-90  = young       (high risk)
+    91-180 = moderate    (moderate risk)
+    180+   = established (low/no risk)
+    """
+    if age_days <= 30:   return "very_young"
+    if age_days <= 90:   return "young"
+    if age_days <= 180:  return "moderate"
+    return "established"
+
+
 def _whois_age_fallback(domain: str) -> dict | None:
     """
     Lightweight raw WHOIS TCP query (port 43) as fallback when RDAP fails.
-    Tries the TLD's WHOIS server and parses 'Creation Date:' lines.
-    Returns a partial result dict or None if it cannot parse.
+    Blocked on Streamlit Cloud (port 43 TCP blocked) — degrades gracefully.
+
+    Date format fixes:
+    - ISO:    2020-01-15  (standard)
+    - Indian: 15-Jan-2020 (used by .co.in / .in registries)
+    - Slash:  15/01/2020  (some ccTLD registrars)
     """
     tld = domain.rsplit(".", 1)[-1].lower()
+    # Handle two-part TLDs: company.co.in → tld = "in"
+    parts = domain.lower().split(".")
+    if len(parts) >= 3 and parts[-2] in ("co", "net", "org", "firm", "gen"):
+        tld = "in"  # treat all *.co.in, *.net.in etc as .in
+
     whois_servers = {
         "com": "whois.verisign-grs.com", "net": "whois.verisign-grs.com",
-        "org": "whois.pir.org", "in": "whois.registry.in",
-        "io": "whois.nic.io", "co": "whois.nic.co",
-        "ai": "whois.nic.ai", "info": "whois.afilias.net",
-        "biz": "whois.biz", "uk": "whois.nic.uk",
+        "org": "whois.pir.org",          "in":  "whois.registry.in",
+        "io":  "whois.nic.io",           "co":  "whois.nic.co",
+        "ai":  "whois.nic.ai",           "info":"whois.afilias.net",
+        "biz": "whois.biz",              "uk":  "whois.nic.uk",
+        "tech":"whois.nic.tech",         "app": "whois.nic.google",
     }
     server = whois_servers.get(tld, f"whois.nic.{tld}")
+
+    # Multiple date format parsers — handles Indian WHOIS format
+    date_formats = [
+        (r"(\d{4}-\d{2}-\d{2})",         "%Y-%m-%d"),   # 2020-01-15
+        (r"(\d{2}-\w{3}-\d{4})",          "%d-%b-%Y"),   # 15-Jan-2020 ← Indian
+        (r"(\d{2}/\d{2}/\d{4})",          "%d/%m/%Y"),   # 15/01/2020
+        (r"(\d{4}\.\d{2}\.\d{2})",        "%Y.%m.%d"),   # 2020.01.15
+    ]
     try:
         with socket.create_connection((server, 43), timeout=5) as s:
             s.sendall(f"{domain}\r\n".encode())
@@ -997,18 +1146,28 @@ def _whois_age_fallback(domain: str) -> dict | None:
         text = raw.decode("utf-8", errors="ignore")
         for line in text.splitlines():
             ll = line.lower()
-            if any(k in ll for k in ("creation date", "created on", "registered on", "domain registered")):
-                m = re.search(r"(\d{4}-\d{2}-\d{2})", line)
-                if m:
-                    dt  = datetime.strptime(m.group(1), "%Y-%m-%d")
-                    age = (datetime.utcnow() - dt).days
-                    return {
-                        "status":     "young" if age < 180 else "old",
-                        "age_days":   age,
-                        "registered": dt.strftime("%d %b %Y"),
-                        "detail":     f"Registered {dt.strftime('%d %b %Y')} — {age} days old (via WHOIS)",
-                        "source":     "WHOIS",
-                    }
+            if any(k in ll for k in (
+                "creation date", "created on", "registered on",
+                "domain registered", "registration time", "created:",
+            )):
+                for pat, fmt in date_formats:
+                    m = re.search(pat, line, re.IGNORECASE)
+                    if m:
+                        try:
+                            dt  = datetime.strptime(m.group(1), fmt)
+                            age = (datetime.utcnow() - dt).days
+                            return {
+                                "status":     _age_status(age),
+                                "age_days":   age,
+                                "registered": dt.strftime("%d %b %Y"),
+                                "detail":     (
+                                    f"Registered {dt.strftime('%d %b %Y')} — "
+                                    f"{age} days old (via WHOIS)"
+                                ),
+                                "source": "WHOIS",
+                            }
+                        except ValueError:
+                            continue
     except Exception:
         pass
     return None
@@ -1094,7 +1253,7 @@ def _probe_domain_age(domain: str) -> dict:
                             privacy_str = " | ⚠ Privacy-protected WHOIS" if privacy_proxy and age < 180 else ""
 
                             out.update(
-                                status="young" if age < 180 else "old",
+                                status=_age_status(age),
                                 age_days=age,
                                 registered=dt.strftime("%d %b %Y"),
                                 registrar=registrar,
@@ -1252,7 +1411,16 @@ def _probe_typosquatting(domain: str) -> dict:
         if sc > best:
             best, brand = sc, b
     out.update(similarity=round(best, 3), closest_brand=brand)
-    if best >= 0.72 and domain != brand:
+    # Short domains (≤4 chars) have too few characters for meaningful similarity scoring.
+    # "ey.com" vs "ey" = 100%, "tcs.com" vs "tcs" = 100% — all short brands self-match.
+    # We need both the candidate AND brand to be long enough for the comparison to be meaningful.
+    b_sld_best = (brand or "").split(".")[0]
+    too_short = len(d_sld) <= 4 or len(b_sld_best) <= 4
+    if best >= 0.85 and domain != brand and not too_short:
+        out.update(is_squatter=True,
+                   detail=f"'{domain}' is {int(best*100)}% similar to '{brand}' — possible impersonation")
+    elif best >= 0.92 and domain != brand and too_short and len(d_sld) > 2:
+        # For short domains, only flag at very high threshold (e.g. pwcc.com vs pwc.com)
         out.update(is_squatter=True,
                    detail=f"'{domain}' is {int(best*100)}% similar to '{brand}' — possible impersonation")
     else:
@@ -1701,7 +1869,10 @@ def _fuzzy_name_match(company: str, domain_sld: str, threshold: float = 0.72) ->
     return False, best
 
 
-_TLDS_TO_TRY = [".com", ".in", ".co.in", ".net", ".org", ".io", ".co"]
+_TLDS_TO_TRY = [
+    ".com", ".in", ".co.in", ".net.in", ".org.in",
+    ".net", ".org", ".io", ".co", ".tech", ".app",
+]
 
 def _probe_domain_candidates(company: str) -> tuple[str, bool]:
     """
@@ -2411,11 +2582,28 @@ def run_live_probes(job: dict) -> dict:
 
 def _probe_risk(probes: dict) -> tuple[int, list[str]]:
     penalty, warnings = 0, []
-    age = probes.get("domain_age", {})
-    if age.get("status") == "young":
-        days = age.get("age_days", 0)
-        penalty += 18 if days < 90 else 10
-        warnings.append(f"Domain registered only {days} days ago")
+    age      = probes.get("domain_age", {})
+    da_status = age.get("status", "unknown")
+    age_days  = age.get("age_days", 999) or 999
+    reg_str   = age.get("registered", "recently")
+    if da_status == "very_young":      # 0-30 days
+        penalty += 30
+        warnings.append(
+            f"Domain registered {reg_str} — only {age_days} days old. "
+            "Extremely new: scam sites are often created days before a campaign."
+        )
+    elif da_status == "young":         # 31-90 days
+        penalty += 20
+        warnings.append(
+            f"Domain registered {reg_str} — only {age_days} days old (< 3 months). "
+            "Legitimate businesses rarely recruit this soon after registering a domain."
+        )
+    elif da_status == "moderate":      # 91-180 days
+        penalty += 10
+        warnings.append(
+            f"Domain registered {reg_str} — {age_days} days old (3–6 months). "
+            "Relatively new domain — verify through other channels."
+        )
     if probes.get("site_reach", {}).get("reachable") is False:
         penalty += 12
         warnings.append("Company website is unreachable / does not exist")
@@ -2472,7 +2660,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
 
     # ── RDAP registrar / privacy signals ─────────────────────────────────────
     age = probes.get("domain_age", {})
-    if age.get("privacy_proxy") and age.get("status") == "young":
+    if age.get("privacy_proxy") and da_status in ("very_young", "young", "moderate"):
         penalty += 10
         warnings.append(
             "Domain WHOIS is privacy-protected and less than 6 months old — "
@@ -2681,6 +2869,22 @@ def _run_rules(job: dict) -> dict:
                      ("title","description","requirements","benefits","contact","salary")])
     sigs: dict = {}
 
+    # ── Known-brand detection — computed once, used by multiple rules ─────────
+    # If the company name matches a brand in our trusted list, several soft signals
+    # (missing salary, vague phrasing, no website URL) should not fire because
+    # these are normal patterns for large legitimate corporations.
+    _company_str = job.get("company","").strip().lower().replace(" ","").replace(".","")
+    _known_brand_posting = bool(
+        _company_str and
+        any(
+            b.split(".")[0].lower().replace("-","") in _company_str or
+            _company_str in b.split(".")[0].lower().replace("-","")
+            for b in _BRAND_DOMAINS
+            if len(b.split(".")[0]) >= 2
+        )
+    )
+    # ─────────────────────────────────────────────────────────────────────────
+
     def _add(k, label, detail, hits=None):
         sigs[k] = {"label": label, "detail": detail, "hits": (hits or [])[:3]}
 
@@ -2697,7 +2901,11 @@ def _run_rules(job: dict) -> dict:
     if h: _add("unrealistic_benefits","Unrealistic Benefit Claims",
                 "Promised earnings or perks are statistically implausible.", h)
     h = _any(full, _VAGUE_PHRASES)
-    if len(h) >= 2:
+    # Require 3+ vague phrases for standard postings, 4+ for known brand companies.
+    # "Good communication skills", "team player", "result-oriented" appear in virtually
+    # every legitimate corporate job posting from PwC, EY, Infosys, Google etc.
+    _vague_threshold = 4 if _known_brand_posting else 3
+    if len(h) >= _vague_threshold:
         _add("vague_description","Vague / Generic Description",
              "Real postings specify responsibilities. Vagueness may hide a non-existent role.", h)
     free_hits = [e for e in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", full)
@@ -2713,9 +2921,13 @@ def _run_rules(job: dict) -> dict:
     bad_site = not job.get("website","").strip() or len(job.get("website","").strip()) < 6
     no_addr  = not re.search(r"\b(street|road|nagar|colony|sector|floor|building|office)\b",
                               job.get("description",""), re.IGNORECASE)
-    if (bad_name and bad_site) or (bad_site and no_addr):
-        _add("no_company_info","No Verifiable Company Identity",
-             "Legitimate companies provide verifiable name, website and physical address.")
+    # If the company name is recognised as a known brand, never fire no_company_info —
+    # major firms like PwC, EY, Deloitte, TCS post without listing their website URL
+    # because they are universally known. Requiring a URL from them is a false positive.
+    if not _known_brand_posting:
+        if (bad_name and bad_site) or (bad_site and no_addr):
+            _add("no_company_info","No Verifiable Company Identity",
+                 "Legitimate companies provide verifiable name, website and physical address.")
     for fp, ep in _PARADOX_PATTERNS:
         txt = job.get("requirements","") + " " + job.get("description","")
         if re.search(fp, txt, re.IGNORECASE) and re.search(ep, txt, re.IGNORECASE):
@@ -2742,13 +2954,91 @@ def _run_rules(job: dict) -> dict:
     h = _any(full, _WFH_PHRASES)
     if h: _add("work_from_home_bait","WFH Bait — Data Entry / Form Filling",
                 "High-pay work-from-home roles with no skills required are almost always scams.", h)
-    if not job.get("salary","").strip() or len(job.get("salary","").strip()) < 4:
+    # missing_salary: only flag when salary is absent AND other suspicion signals exist.
+    # Big legitimate companies (PwC, EY, TCS, Infosys, Google etc.) routinely omit salary
+    # from job postings — this alone is NOT a meaningful scam signal.
+    # Only fire if there are already 2+ other signals (salary absence is corroborating, not primary).
+    _no_salary = not job.get("salary","").strip() or len(job.get("salary","").strip()) < 4
+    if _no_salary and not _known_brand_posting and len(sigs) >= 2:
         _add("missing_salary","Salary Completely Absent",
              "Hidden salary is commonly used to lure, then lowball candidates.")
     g_hits = _any(full, _GRAMMAR_PATTERNS)
     if len(g_hits) >= 2:
         _add("poor_grammar","Suspicious Grammar / Formatting",
              "Excessive punctuation, random CAPS or known spam-text patterns detected.", g_hits)
+
+    # ── India-specific signal checks ─────────────────────────────────────────
+    h = _any(full, _INDIA_SCAM_PHRASES)
+    if h:
+        # Check if it is also a fake govt job — give it the higher weight
+        fake_govt = _any(full, [
+            r"government.*job.*guaranteed", r"sarkari.*naukri",
+            r"railway.*recruitment.*apply.*fee", r"rrb.*ntpc.*apply.*fee",
+            r"defence.*job.*guaranteed", r"bank.*job.*guaranteed",
+            r"100%.*placement.*assured.*fee", r"job.*guarantee.*after.*course.*fee",
+        ])
+        if fake_govt:
+            _add("fake_govt_job", "Fake Government / Railway / Bank Job",
+                 "Impersonating PSU/railway/bank recruitment — no government job "
+                 "ever charges a fee or guarantees selection.", fake_govt)
+        else:
+            _add("india_scam_pattern", "Indian Scam Job Pattern Detected",
+                 "Matches known India-specific scam patterns: data-entry, typing, "
+                 "captcha, fake internship, courier franchise, or placement fee traps.",
+                 h)
+
+    # ── GSTIN validation ──────────────────────────────────────────────────────
+    gstin_matches = _GSTIN_RE.findall(full)
+    raw_gstin_mentions = re.findall(
+        r"\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]", full
+    )
+    # Also catch near-misses: 15-char alphanumeric strings that look like GSTIN
+    near_gstin = re.findall(r"[0-9]{2}[A-Z0-9]{13}", full)
+    if near_gstin and not gstin_matches:
+        # Something that looks like a GSTIN but fails format check
+        _add("invalid_gstin", "Invalid GSTIN Format",
+             "A GST number was found but it fails the official format check "
+             "(2-digit state + PAN + entity + Z + checksum). Fake GSTINs are "
+             "used to appear legitimate.", near_gstin[:2])
+    elif gstin_matches:
+        # Valid format — check state code is real (01-37)
+        for state_code, pan, entity, chk in gstin_matches:
+            sc = int(state_code)
+            if not (1 <= sc <= 37):
+                _add("invalid_gstin", "Invalid GSTIN State Code",
+                     f"GSTIN state code '{state_code}' is not a valid Indian state code (01-37).")
+                break
+
+    # ── Indian phone number validation ────────────────────────────────────────
+    # Extract all phone-like numbers from contact field specifically
+    contact_field = job.get("contact", "") + " " + job.get("description", "")[:500]
+    phone_like = re.findall(r"\d{10,11}", contact_field)
+    if phone_like:
+        valid_phones  = [p for p in phone_like if
+                         _INDIA_MOBILE_RE.match(p) or _INDIA_LANDLINE_RE.match(p)]
+        invalid_phones = [p for p in phone_like if p not in valid_phones]
+        if invalid_phones and not valid_phones:
+            _add("invalid_phone", "Invalid Indian Phone Number Format",
+                 "Phone number(s) found but none match valid Indian mobile "
+                 "(6-9xxxxxxxxx) or landline (0xx-xxxxxxx) format. "
+                 "Scammers often use virtual/VoIP numbers.", invalid_phones[:2])
+
+    # ── PIN code validation ───────────────────────────────────────────────────
+    pin_matches = re.findall(r"([1-9]\d{5})", full)
+    invalid_pins = []
+    for pin in pin_matches[:5]:   # check first 5 found
+        prefix2 = pin[:2]
+        prefix3 = pin[:3]
+        # First digit must be 1-9 (already guaranteed by regex)
+        # Prefix must exist in our map for a specific state claim
+        if prefix2 not in _PIN_STATE_MAP and prefix3 not in _PIN_STATE_MAP:
+            # Not a known valid PIN prefix
+            if not re.search(r"(phone|mobile|contact|call|whatsapp)", full[:200], re.I):
+                invalid_pins.append(pin)  # only flag if not near contact section
+    if invalid_pins:
+        _add("invalid_pin", "Suspicious PIN Code",
+             f"PIN code(s) {invalid_pins[:2]} do not match any known Indian postal prefix.",
+             invalid_pins[:2])
 
     return {"signals": sigs, "rule_score": min(sum(_WEIGHTS.get(k,0) for k in sigs), 100)}
 
@@ -3045,8 +3335,10 @@ def _render_probe_table(probes: dict):
     rows = []
     age = probes.get("domain_age", {})
     st_ = age.get("status", "unknown")
-    b   = (_badge("YOUNG DOMAIN","#dc2626","rgba(220,38,38,0.12)") if st_ == "young" else
-           _badge("ESTABLISHED", "#22c55e","rgba(34,197,94,0.12)")  if st_ == "old"   else
+    b   = (_badge("VERY NEW ⚠⚠","#dc2626","rgba(220,38,38,0.12)") if st_ == "very_young" else
+           _badge("NEW ⚠",       "#f59e0b","rgba(245,158,11,0.12)") if st_ == "young"      else
+           _badge("RECENT",      "#f59e0b","rgba(245,158,11,0.12)") if st_ == "moderate"   else
+           _badge("ESTABLISHED", "#22c55e","rgba(34,197,94,0.12)")  if st_ in ("old","established") else
            _badge("LOOKUP FAILED","#6b7280","rgba(107,114,128,0.12)") if st_ == "error" else
            _badge("NO DOMAIN",  "#6b7280","rgba(107,114,128,0.12)"))
     rows.append(_row(I.CALENDAR, "Domain Age", b, age.get("detail","")))
@@ -3890,6 +4182,19 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     prog.progress(90, text="Blending scores…")
                     ai_s   = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
                     rule_s = rules_result["rule_score"]
+
+                    # ── Identity confirmation discount ─────────────────────────────
+                    # If Clearbit / Wikipedia / LinkedIn confirmed the company as real,
+                    # reduce both AI and rule scores before blending. This is the primary
+                    # fix for legitimate companies like PwC, EY, TCS being over-flagged.
+                    identity_confirmed = probes.get("company_domain", {}).get("identity_sources", 0)
+                    if identity_confirmed >= 2:
+                        # 2+ independent sources confirmed → strong legitimacy signal
+                        ai_s   = max(0, ai_s   - 20)
+                        rule_s = max(0, rule_s - 15)
+                    elif identity_confirmed == 1:
+                        ai_s   = max(0, ai_s   - 10)
+                        rule_s = max(0, rule_s -  7)
 
                     # ── Calibrated blending ────────────────────────────────────────
                     # Base blend: AI carries 60%, rules 25%, probe penalty 15%.
