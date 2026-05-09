@@ -1568,121 +1568,586 @@ def _probe_spf_dmarc(domain: str) -> dict:
     out["detail"] = f"'{domain}': " + " | ".join(details)
     return out
 
+
+# ── Company name intelligence ─────────────────────────────────────────────────
+# Noise suffixes stripped before matching — prevents "Innovateloop Solutions"
+# failing to match "innovateloop" because "solutions" shifts the slug.
+_CORP_SUFFIXES = re.compile(
+    r"(private|pvt|public|limited|ltd|llp|llc|inc|corp|corporation|"
+    r"technologies|technology|tech|solutions|services|enterprises|enterprise|"
+    r"consultancy|consulting|innovations|innovation|infotech|softwares?|"
+    r"systems?|ventures?|group|global|india|international|associates?|"
+    r"partners?|holdings?|industries|industrial|networks?|digital|"
+    r"analytics|research|labs?|studio|studios|works|co)",
+    re.IGNORECASE,
+)
+
+# Known abbreviation expansions for Indian/global companies.
+# Key = abbreviation slug, Value = list of possible full-name slugs.
+_ABBREV_MAP: dict[str, list[str]] = {
+    "tcs":      ["tataconsultancy", "tata"],
+    "hcl":      ["hindustancomputers", "hindustan"],
+    "wipro":    ["wipro"],
+    "infosys":  ["infosys"],
+    "hdfcbank": ["hdfc"],
+    "icicibank":["icici"],
+    "l&t":      ["larsentoubro", "larsen"],
+    "lt":       ["larsentoubro", "larsen"],
+    "bsnl":     ["bharatsanchar"],
+    "ongc":     ["oilnatural"],
+    "ntpc":     ["nationalthermal"],
+    "sail":     ["steelindia"],
+    "bhel":     ["bharatheavy"],
+    "drdo":     ["defenceresearch"],
+    "isro":     ["indianspace"],
+    "barc":     ["bhabhaatomic"],
+    "ril":      ["relianceindustries", "reliance"],
+    "jio":      ["reliancejio", "reliance"],
+    "byju":     ["byjus", "thinkandlearn"],
+    "zomato":   ["zomato"],
+    "swiggy":   ["swiggy"],
+    "razorpay": ["razorpay"],
+    "paytm":    ["paytm", "onemobitech"],
+    "phonepe":  ["phonepe"],
+    "flipkart": ["flipkart"],
+    "amazon":   ["amazon"],
+    "google":   ["google", "alphabet"],
+    "microsoft":["microsoft"],
+    "ibm":      ["ibm", "internationalbusiness"],
+    "oracle":   ["oracle"],
+    "sap":      ["sap"],
+    "accenture":["accenture"],
+    "cognizant":["cognizant"],
+    "capgemini":["capgemini"],
+    "deloitte": ["deloitte"],
+    "pwc":      ["pricewaterhouse", "pwc"],
+    "kpmg":     ["kpmg"],
+    "ey":       ["ernstandyoung", "eyindia"],
+}
+
+
+def _normalize_company(name: str) -> str:
+    """
+    Strip noise suffixes + punctuation, return lowercase slug.
+    'Innovateloop Solutions Pvt Ltd' → 'innovateloop'
+    'Tata Consultancy Services Limited' → 'tataconsultancy'
+    """
+    cleaned = _CORP_SUFFIXES.sub("", name).strip()
+    cleaned = re.sub(r"[^a-z0-9\s]", "", cleaned.lower()).strip()
+    # Collapse multiple spaces, take first two meaningful words
+    words = [w for w in cleaned.split() if len(w) > 1]
+    return "".join(words[:2])
+
+
+def _company_slug_variants(company: str) -> list[str]:
+    """
+    Return all slug variants to try for a company name.
+    E.g. 'Tata Consultancy Services' → ['tataconsultancy', 'tcs', 'tata']
+    """
+    base = _normalize_company(company)
+    variants = [base] if base else []
+
+    # First word only (tata, wipro, infosys)
+    first = re.sub(r"[^a-z0-9]", "", company.lower().split()[0]) if company.split() else ""
+    if first and first not in variants:
+        variants.append(first)
+
+    # Abbreviation: first letters of each word
+    words = re.findall(r"[a-zA-Z]+", company)
+    abbrev = "".join(w[0].lower() for w in words if w)
+    if len(abbrev) >= 2 and abbrev not in variants:
+        variants.append(abbrev)
+
+    # Known map lookups
+    for key, expansions in _ABBREV_MAP.items():
+        if key in variants or key == first or key == abbrev:
+            for exp in expansions:
+                if exp not in variants:
+                    variants.append(exp)
+
+    return [v for v in variants if v]
+
+
+def _fuzzy_name_match(company: str, domain_sld: str, threshold: float = 0.72) -> tuple[bool, float]:
+    """
+    Multi-strategy fuzzy match between company name and domain SLD.
+    Returns (matched: bool, best_score: float).
+
+    Strategies (in order of reliability):
+    1. Slug variants exact match
+    2. difflib SequenceMatcher on cleaned strings
+    3. Abbreviated form match
+    """
+    if not company or not domain_sld:
+        return False, 0.0
+
+    domain_clean = re.sub(r"[^a-z0-9]", "", domain_sld.lower())
+    variants = _company_slug_variants(company)
+
+    # Strategy 1: exact slug match
+    for v in variants:
+        if v == domain_clean or v in domain_clean or domain_clean in v:
+            return True, 1.0
+
+    # Strategy 2: difflib on all variant pairs
+    best = 0.0
+    for v in variants:
+        score = difflib.SequenceMatcher(None, v, domain_clean).ratio()
+        best = max(best, score)
+
+    if best >= threshold:
+        return True, best
+
+    return False, best
+
+
+_TLDS_TO_TRY = [".com", ".in", ".co.in", ".net", ".org", ".io", ".co"]
+
+def _probe_domain_candidates(company: str) -> tuple[str, bool]:
+    """
+    Guess the most likely real domain for a company by trying multiple
+    slug variants × TLD combinations via DNS A-record lookup.
+    Returns (best_domain, guessed) where guessed=True means no website was provided.
+
+    Uses parallel socket checks — all candidates probed simultaneously.
+    """
+    variants = _company_slug_variants(company)
+    candidates = [
+        f"{v}{tld}"
+        for v in variants[:3]    # top 3 slug variants
+        for tld in _TLDS_TO_TRY
+    ]
+
+    found = {}
+    lock  = threading.Lock()
+
+    def _try(domain):
+        try:
+            ip = socket.gethostbyname(domain)
+            with lock:
+                found[domain] = ip
+        except Exception:
+            pass
+
+    threads = [threading.Thread(target=_try, args=(d,), daemon=True) for d in candidates]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=3)
+
+    if not found:
+        return "", True
+
+    # Prefer .com > .in > .co.in > others
+    for tld in _TLDS_TO_TRY:
+        for v in variants[:3]:
+            d = f"{v}{tld}"
+            if d in found:
+                return d, True
+    return next(iter(found)), True
+
+
+def _check_clearbit(company: str) -> dict:
+    """
+    Clearbit Autocomplete API — completely free, no API key, no rate limit issues.
+    Returns known company details (domain, logo) for globally recognised companies.
+    If a company appears here it is almost certainly real.
+
+    URL: https://autocomplete.clearbit.com/v1/companies/suggest?query={name}
+    Returns: [{"name": "Infosys", "domain": "infosys.com", "logo": "..."}, ...]
+    """
+    out = {"found": None, "domain": "", "detail": ""}
+    if not company or len(company.strip()) < 3:
+        out["detail"] = "Company name too short for Clearbit check"
+        return out
+
+    try:
+        query   = urllib.parse.quote(company.strip()[:60])
+        url     = f"https://autocomplete.clearbit.com/v1/companies/suggest?query={query}"
+        req     = urllib.request.Request(
+            url,
+            headers={"User-Agent": "ScamDetector/4.0", "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            results = json.loads(resp.read().decode())
+
+        if not results:
+            out.update(found=False, detail=f"'{company}' not found in Clearbit global company index")
+            return out
+
+        # Check if any result closely matches our company name
+        name_slug = _normalize_company(company)
+        for r in results[:5]:
+            cb_name  = r.get("name", "")
+            cb_domain= r.get("domain", "")
+            cb_slug  = _normalize_company(cb_name)
+            matched, score = _fuzzy_name_match(company, cb_slug or cb_domain.split(".")[0])
+            if matched or score >= 0.70:
+                out.update(
+                    found=True,
+                    domain=cb_domain,
+                    detail=(
+                        f"Clearbit: '{cb_name}' ({cb_domain}) — "
+                        f"globally recognised company ✓"
+                    ),
+                )
+                return out
+
+        out.update(
+            found=False,
+            detail=f"'{company}' not matched in Clearbit — may be a small/regional company",
+        )
+    except Exception as e:
+        out.update(found=None, detail=f"Clearbit check skipped: {type(e).__name__}")
+    return out
+
+
+def _check_wikipedia(company: str) -> dict:
+    """
+    Wikipedia REST API — free, no key, zero rate limit issues.
+    A company with a Wikipedia article is almost certainly a real legal entity.
+
+    Checks both the company name directly and key word variants.
+    Uses /api/rest_v1/page/summary/{title} — returns 200 for real pages, 404 for none.
+    """
+    out = {"found": None, "detail": ""}
+    if not company or len(company.strip()) < 3:
+        return out
+
+    # Try the company name directly, then first word only
+    name_clean = re.sub(r"[^\w\s]", " ", company).strip()
+    candidates = [
+        name_clean,
+        name_clean.split()[0] if name_clean.split() else "",
+    ]
+    # Also try with "company" appended — e.g. "Innovateloop company"
+    candidates.append(name_clean + " company")
+
+    for candidate in candidates:
+        if not candidate.strip():
+            continue
+        try:
+            slug = urllib.parse.quote(candidate.strip().replace(" ", "_"))
+            url  = f"https://en.wikipedia.org/api/rest_v1/page/summary/{slug}"
+            req  = urllib.request.Request(
+                url,
+                headers={"User-Agent": "ScamDetector/4.0 (educational)"},
+            )
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                if resp.status == 200:
+                    data  = json.loads(resp.read().decode())
+                    ptype = data.get("type", "")
+                    title = data.get("title", "")
+                    desc  = data.get("description", "")
+                    # Filter out disambiguation pages
+                    if ptype == "disambiguation":
+                        continue
+                    # Verify the page is actually about a company/org
+                    company_keywords = (
+                        "company", "corporation", "founded", "headquartered",
+                        "multinational", "firm", "enterprise", "organisation",
+                        "organization", "incorporated", "ltd", "pvt",
+                    )
+                    extract = (data.get("extract", "") + " " + desc).lower()
+                    if any(kw in extract for kw in company_keywords):
+                        out.update(
+                            found=True,
+                            detail=f"Wikipedia: '{title}' — {desc[:80] if desc else 'verified company article'} ✓",
+                        )
+                        return out
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                continue   # not found — try next candidate
+        except Exception:
+            continue
+
+    out.update(
+        found=False,
+        detail=f"'{company}' has no Wikipedia article — not a globally known company",
+    )
+    return out
+
+
+def _check_linkedin_existence(company: str) -> dict:
+    """
+    Check if a LinkedIn company page exists for this company.
+    Method: HEAD request to linkedin.com/company/{slug} — 200=exists, 404=does not.
+    No login required for existence check.
+
+    LinkedIn slugs are typically: company name lowercased, spaces→hyphens.
+    We try 3 slug variants in parallel.
+    """
+    out = {"found": None, "detail": ""}
+    if not company or len(company.strip()) < 3:
+        return out
+
+    def _make_slug(s: str) -> str:
+        s = _CORP_SUFFIXES.sub("", s).strip()
+        s = re.sub(r"[^a-z0-9\s]", "", s.lower())
+        return re.sub(r"\s+", "-", s.strip()).strip("-")
+
+    name_clean = re.sub(r"[^\w\s]", " ", company).strip()
+    slugs = list(dict.fromkeys(filter(None, [
+        _make_slug(name_clean),
+        _make_slug(name_clean.split()[0]) if name_clean.split() else "",
+        re.sub(r"[^a-z0-9]", "", name_clean.lower().replace(" ", "")),
+    ])))
+
+    found_slug = None
+    lock = threading.Lock()
+
+    def _try_slug(slug):
+        nonlocal found_slug
+        if not slug or len(slug) < 2:
+            return
+        try:
+            url = f"https://www.linkedin.com/company/{slug}"
+            req = urllib.request.Request(
+                url,
+                method="HEAD",
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/124.0.0.0 Safari/537.36"
+                    ),
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status in (200, 301, 302):
+                    with lock:
+                        if found_slug is None:
+                            found_slug = slug
+        except urllib.error.HTTPError as e:
+            pass   # 404 = not found, 999 = LinkedIn bot block
+        except Exception:
+            pass
+
+    threads = [threading.Thread(target=_try_slug, args=(s,), daemon=True) for s in slugs]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=6)
+
+    if found_slug:
+        out.update(
+            found=True,
+            detail=f"LinkedIn company page exists: linkedin.com/company/{found_slug} ✓",
+        )
+    else:
+        out.update(
+            found=False,
+            detail=f"No LinkedIn company page found for '{company}'",
+        )
+    return out
+
 def _probe_company_domain(args: tuple) -> dict:
     """
-    Verify a company is real using ONLY DNS socket + TCP port checks.
-    Zero API keys. Zero HTTP requests. Works from any deployment environment.
+    Production-grade company identity verification — multi-source, parallel.
 
-    Checks performed (all via socket — proven to work):
-    1. DNS A-record  — does the domain exist at all?
-    2. Port 443      — is a real HTTPS website running?
-    3. DNS MX-record — does the company have a mail server?
-    4. Name match    — does the domain name relate to the company name?
+    Sub-checks (all run in parallel threads):
+    A. Domain infrastructure  — DNS, HTTPS port, MX, multi-TLD guessing
+    B. Clearbit autocomplete  — free global company index, no API key
+    C. Wikipedia API          — company article existence, no API key
+    D. LinkedIn existence     — HEAD request to company page slug
+    E. Name intelligence      — fuzzy match, abbreviation resolver, suffix strip
 
-    Why this replaces MCA:
-    • MCA portal (old + new) blocks all server IPs — always INCONCLUSIVE
-    • Zaubacorp / IndiaFilings return HTTP 403 from cloud servers
-    • DNS + socket checks are unrestricted, instantaneous, 100% reliable
-    • A scam company almost never has: a matching domain + live HTTPS + MX records
+    Scoring philosophy:
+    - Each source that CONFIRMS the company subtracts from suspicion.
+    - Each source that DENIES adds to suspicion.
+    - Unknown (API failed) is neutral — no penalty.
+    - Infrastructure signals (no DNS, no MX) are the hardest evidence.
+
+    Score range: 0 = fully verified, 75+ = likely fake company
     """
     company, website = args
     out = {
-        "domain_exists":           None,
-        "website_live":            None,
-        "has_mx":                  None,
-        "domain_matches_company":  None,
-        "domain":                  "",
-        "ip":                      "",
-        "detail":                  "",
-        "scam_signals":            [],
-        "score":                   0,      # 0=clean, higher=more suspicious
+        "domain_exists":          None,
+        "website_live":           None,
+        "has_mx":                 None,
+        "domain_matches_company": None,
+        "domain":                 "",
+        "ip":                     "",
+        "detail":                 "",
+        "scam_signals":           [],
+        "score":                  0,
+        # Identity sub-check results
+        "clearbit":               {},
+        "wikipedia":              {},
+        "linkedin":               {},
+        "identity_sources":       0,   # how many identity sources confirmed
     }
 
-    # ── Extract domain ────────────────────────────────────────────────────
-    domain = ""
+    if not company and not website:
+        out["detail"] = "No company name or website — cannot verify"
+        return out
+
+    # ── A. Domain resolution ──────────────────────────────────────────────────
+    domain  = ""
+    guessed = False
+
     if website:
-        m = re.search(r"(?:https?://)?(?:www\.)?([a-z0-9\-\.]+\.[a-z]{2,})", website.lower())
+        m = re.search(
+            r"(?:https?://)?(?:www\.)?([a-z0-9\-\.]+\.[a-z]{2,})",
+            website.lower(),
+        )
         if m:
             domain = m.group(1)
-    # Fallback: guess from company name (e.g. "Wipro" → wipro.com)
-    guessed = False
-    if not domain and company:
-        slug   = re.sub(r"[^a-z0-9]", "", company.lower().split()[0])
-        domain = f"{slug}.com"
-        guessed = True
+            # Skip job-board domains — checking linkedin.com tells us nothing
+            _JOB_BOARDS = {
+                "linkedin.com", "naukri.com", "indeed.com", "glassdoor.com",
+                "shine.com", "monster.com", "internshala.com", "foundit.in",
+                "timesjobs.com", "apna.co", "hirist.com",
+            }
+            if any(jb in domain for jb in _JOB_BOARDS):
+                domain = ""   # treat as no website
 
-    if not domain:
-        out["detail"] = "No website provided — could not verify company domain"
-        return out
+    if not domain and company:
+        # Multi-TLD parallel DNS probe to find the real domain
+        found_domain, guessed = _probe_domain_candidates(company)
+        domain = found_domain
 
     out["domain"] = domain
 
-    # ── Check 1: DNS A-record (does domain exist?) ────────────────────────
-    try:
-        ip = socket.gethostbyname(domain)
-        out["domain_exists"] = True
-        out["ip"]            = ip
-    except socket.gaierror:
-        out["domain_exists"] = False
-        out["scam_signals"].append(
-            f"Domain '{domain}' has NO DNS record — domain does not exist"
-        )
-        out["score"] += 40
-        label = "guessed — " if guessed else ""
-        out["detail"] = (
-            f"({label}domain: {domain}) — does not exist in DNS. "
-            f"Real companies always have a registered domain."
-        )
-        return out  # no point checking further
+    # ── B. Run identity checks in parallel (independent of domain) ────────────
+    identity_results: dict = {}
+    id_lock = threading.Lock()
 
-    # ── Check 2: Port 443 — live HTTPS website ────────────────────────────
-    try:
-        s = socket.create_connection((domain, 443), timeout=4)
-        s.close()
-        out["website_live"] = True
-    except Exception:
-        out["website_live"] = False
-        out["scam_signals"].append(
-            f"No HTTPS website running at '{domain}' — domain registered but unused"
-        )
-        out["score"] += 20
+    def _run_id(key, fn, arg):
+        try:
+            r = fn(arg)
+        except Exception as ex:
+            r = {"found": None, "detail": f"Check error: {type(ex).__name__}"}
+        with id_lock:
+            identity_results[key] = r
 
-    # ── Check 3: MX record — real companies have mail servers ─────────────
-    has_mx = _dns_mx_lookup(domain)
-    out["has_mx"] = has_mx
-    if not has_mx:
-        out["scam_signals"].append(
-            f"'{domain}' has NO MX (mail) records — not set up for corporate email"
-        )
-        out["score"] += 15
+    id_tasks = [
+        ("clearbit",  _check_clearbit,           company),
+        ("wikipedia", _check_wikipedia,           company),
+        ("linkedin",  _check_linkedin_existence,  company),
+    ]
+    id_threads = [
+        threading.Thread(target=_run_id, args=t, daemon=True)
+        for t in id_tasks
+    ]
+    for t in id_threads: t.start()
 
-    # ── Check 4: Domain vs company name match ─────────────────────────────
-    company_core = re.sub(r"[^a-z0-9]", "", company.lower())
-    domain_core  = re.sub(r"[^a-z0-9]", "", domain.split(".")[0])
-    # Match if either is a substring of the other (handles abbreviations like tcs/tataconsultancy)
-    match = (
-        company_core[:6] in domain_core or
-        domain_core[:6] in company_core or
-        domain_core in company_core or
-        company_core in domain_core
+    # ── C. Domain infrastructure checks (while identity checks run) ───────────
+    domain_signals = []
+    if domain:
+        # DNS A-record
+        try:
+            ip = socket.gethostbyname(domain)
+            out["domain_exists"] = True
+            out["ip"]            = ip
+        except socket.gaierror:
+            out["domain_exists"] = False
+            domain_signals.append(f"Domain '{domain}' has NO DNS record")
+            out["score"] += 40
+            out["scam_signals"].append(
+                f"Domain '{domain}' does not exist in DNS — "
+                "real companies always have a registered domain"
+            )
+
+        if out["domain_exists"]:
+            # HTTPS port
+            try:
+                s = socket.create_connection((domain, 443), timeout=4)
+                s.close()
+                out["website_live"] = True
+            except Exception:
+                out["website_live"] = False
+                domain_signals.append(f"No HTTPS at '{domain}'")
+                out["score"] += 20
+                out["scam_signals"].append(
+                    f"No HTTPS website at '{domain}' — domain registered but unused"
+                )
+
+            # MX records
+            has_mx = _dns_mx_lookup(domain)
+            out["has_mx"] = has_mx
+            if not has_mx:
+                domain_signals.append(f"No MX at '{domain}'")
+                out["score"] += 15
+                out["scam_signals"].append(
+                    f"'{domain}' has no MX records — not set up for corporate email"
+                )
+
+            # Name match (fuzzy + abbreviation-aware)
+            domain_sld = domain.split(".")[0]
+            matched, score = _fuzzy_name_match(company, domain_sld)
+            out["domain_matches_company"] = matched
+            if not matched and not guessed:
+                domain_signals.append(
+                    f"Domain '{domain}' does not match '{company}' "
+                    f"(similarity {score:.0%})"
+                )
+                out["score"] += 10
+                out["scam_signals"].append(
+                    f"Domain '{domain}' has low name similarity to '{company}' "
+                    f"({score:.0%}) — suspicious mismatch"
+                )
+    else:
+        out["score"] += 15   # no domain at all — mild penalty
+        out["scam_signals"].append(
+            "No company domain found or guessed — cannot verify infrastructure"
+        )
+
+    # ── D. Collect identity results ───────────────────────────────────────────
+    for t in id_threads:
+        t.join(timeout=7)
+
+    out["clearbit"]  = identity_results.get("clearbit",  {})
+    out["wikipedia"] = identity_results.get("wikipedia", {})
+    out["linkedin"]  = identity_results.get("linkedin",  {})
+
+    confirmed = 0
+    denied    = 0
+    id_details = []
+
+    for key in ("clearbit", "wikipedia", "linkedin"):
+        r = identity_results.get(key, {})
+        if r.get("found") is True:
+            confirmed += 1
+            id_details.append(r.get("detail", ""))
+        elif r.get("found") is False:
+            denied += 1
+
+    out["identity_sources"] = confirmed
+
+    # If 2+ identity sources confirm → strong legitimacy signal, reduce score
+    if confirmed >= 2:
+        out["score"] = max(0, out["score"] - 20)
+    elif confirmed == 1:
+        out["score"] = max(0, out["score"] - 8)
+
+    # If all tried identity sources deny → add suspicion
+    all_tried = sum(
+        1 for k in ("clearbit", "wikipedia", "linkedin")
+        if identity_results.get(k, {}).get("found") is not None
     )
-    out["domain_matches_company"] = match
-    if not match and not guessed:
+    if all_tried >= 2 and denied == all_tried:
+        out["score"] += 15
         out["scam_signals"].append(
-            f"Domain '{domain}' does not match company name '{company}' — suspicious"
+            f"'{company}' not found in any public company database "
+            "(Clearbit, Wikipedia, LinkedIn) — likely not a real registered company"
         )
-        out["score"] += 10
 
-    # ── Build summary detail ──────────────────────────────────────────────
-    checks = []
-    checks.append(f"DNS {'✓' if out['domain_exists'] else '✗'}")
-    checks.append(f"HTTPS {'✓' if out['website_live'] else '✗'}")
-    checks.append(f"Mail server {'✓' if out['has_mx'] else '✗'}")
-    if not guessed:
-        checks.append(f"Name match {'✓' if match else '✗'}")
+    # ── E. Build detail string ────────────────────────────────────────────────
+    infra_parts = []
+    if domain:
+        infra_parts.append(f"DNS {'✓' if out.get('domain_exists') else '✗'}")
+        infra_parts.append(f"HTTPS {'✓' if out.get('website_live') else '✗'}")
+        infra_parts.append(f"MX {'✓' if out.get('has_mx') else '✗'}")
+        if not guessed:
+            matched = out.get("domain_matches_company")
+            infra_parts.append(f"Name match {'✓' if matched else '✗'}")
+    infra_str = f"{'(guessed) ' if guessed else ''}{domain} — {' | '.join(infra_parts)}" if domain else "No domain"
 
-    prefix = "(guessed domain) " if guessed else ""
-    out["detail"] = f"{prefix}{domain} — {' | '.join(checks)}"
+    id_str = ""
+    if confirmed > 0:
+        id_str = f" | Identity: {confirmed} source(s) confirmed"
+    elif all_tried >= 2 and denied == all_tried:
+        id_str = " | Identity: not found in any public database"
+
+    out["detail"] = infra_str + id_str
     return out
 
 
@@ -2025,21 +2490,33 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
                 f"Domain registered with '{age['registrar']}' and is less than "
                 "6 months old — registrar commonly used for disposable scam domains"
             )
-    cd = probes.get("company_domain", {})
+    cd       = probes.get("company_domain", {})
     cd_score = cd.get("score", 0)
-    if cd_score >= 40:
-        penalty += 18
+    confirmed= cd.get("identity_sources", 0)
+
+    # Identity sources confirmed → reduce overall probe penalty
+    if confirmed >= 2:
+        penalty = max(0, penalty - 8)
+    elif confirmed == 1:
+        penalty = max(0, penalty - 3)
+
+    if cd_score >= 50:
+        penalty += 20
         warnings.append(
-            f"Company domain '{cd.get('domain', '')}' does not exist — "
-            "likely a fake or unregistered company"
+            f"Company domain '{cd.get('domain', '')}' does not exist and "
+            "not found in any public company database — very likely fake"
         )
+    elif cd_score >= 35:
+        penalty += 15
+        for sig in cd.get("scam_signals", [])[:2]:
+            warnings.append(sig)
     elif cd_score >= 20:
         penalty += 10
-        for sig in cd.get("scam_signals", []):
+        for sig in cd.get("scam_signals", [])[:2]:
             warnings.append(sig)
     elif cd_score > 0:
         penalty += 5
-        for sig in cd.get("scam_signals", []):
+        for sig in cd.get("scam_signals", [])[:1]:
             warnings.append(sig)
     # ── SPF / DMARC ──────────────────────────────────────────────────────────
     spf = probes.get("spf_dmarc", {})
@@ -2607,18 +3084,45 @@ def _render_probe_table(probes: dict):
         mx_b = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
     rows.append(_row(I.SERVER, "MX / Mail Server", mx_b, mx.get("detail", "")))
 
-    cd = probes.get("company_domain", {})
-    if cd.get("domain_exists") is True and cd.get("website_live") and cd.get("has_mx"):
+    cd        = probes.get("company_domain", {})
+    cd_score  = cd.get("score", 0)
+    confirmed = cd.get("identity_sources", 0)
+    if cd.get("domain_exists") is True and cd.get("website_live") and cd.get("has_mx") and confirmed >= 1:
+        cd_badge = _badge("VERIFIED", "#22c55e", "rgba(34,197,94,0.12)")
+    elif cd.get("domain_exists") is True and confirmed >= 2:
         cd_badge = _badge("VERIFIED", "#22c55e", "rgba(34,197,94,0.12)")
     elif cd.get("domain_exists") is False:
-        cd_badge = _badge("DOMAIN FAKE", "#dc2626", "rgba(220,38,38,0.12)")
-    elif cd.get("score", 0) >= 20:
+        cd_badge = _badge("FAKE DOMAIN", "#dc2626", "rgba(220,38,38,0.12)")
+    elif cd_score >= 35:
         cd_badge = _badge("SUSPICIOUS", "#f59e0b", "rgba(245,158,11,0.12)")
     elif cd.get("domain_exists") is None:
-        cd_badge = _badge("NO WEBSITE", "#6b7280", "rgba(107,114,128,0.12)")
+        cd_badge = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
     else:
         cd_badge = _badge("PARTIAL", "#f59e0b", "rgba(245,158,11,0.12)")
     rows.append(_row(I.BUILDING, "Company Domain Check", cd_badge, cd.get("detail", "")))
+
+    # ── Identity sources row ──────────────────────────────────────────────────
+    cb  = cd.get("clearbit",  {})
+    wp  = cd.get("wikipedia", {})
+    li  = cd.get("linkedin",  {})
+    id_parts = []
+    for label, r in [("Clearbit", cb), ("Wikipedia", wp), ("LinkedIn", li)]:
+        if r.get("found") is True:
+            id_parts.append(f"{label} ✓")
+        elif r.get("found") is False:
+            id_parts.append(f"{label} ✗")
+        else:
+            id_parts.append(f"{label} —")
+    if confirmed >= 2:
+        id_badge = _badge("CONFIRMED", "#22c55e", "rgba(34,197,94,0.12)")
+    elif confirmed == 1:
+        id_badge = _badge("PARTIAL", "#f59e0b", "rgba(245,158,11,0.12)")
+    elif all(r.get("found") is False for r in [cb, wp, li] if r):
+        id_badge = _badge("NOT FOUND", "#dc2626", "rgba(220,38,38,0.12)")
+    else:
+        id_badge = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
+    id_detail = " | ".join(id_parts) if id_parts else "Identity checks not run"
+    rows.append(_row(I.SHIELD, "Company Identity", id_badge, id_detail))
 
     # ── SPF / DMARC row ───────────────────────────────────────────────────────
     spf = probes.get("spf_dmarc", {})
