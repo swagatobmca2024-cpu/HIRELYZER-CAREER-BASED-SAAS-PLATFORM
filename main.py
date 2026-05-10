@@ -2906,7 +2906,7 @@ if st.session_state.username == "admin":
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         Data is stored in Supabase PostgreSQL. Use the Admin DB View tab to export records as CSV.
     </div>""", unsafe_allow_html=True)
-# Tab setup
+# Always-visible tabs
 if st.session_state.username == "admin":
     tabs = st.tabs([
         "📊 Dashboard",
@@ -2939,8 +2939,8 @@ else:
     tab1, tab2, tab3, tab4, tab_scam = tabs
     tab5 = None
 
-with tab_scam:
-    render_job_scam_detector_tab(call_llm)
+    with tab_scam:
+        render_job_scam_detector_tab(call_llm)
 with tab1:
     st.markdown("""
     <style>
@@ -3211,10 +3211,11 @@ working_dir = os.path.dirname(os.path.abspath(__file__))
 # (get_easyocr_reader and ensure_nltk are in resume_processor.py)
 
 # ---------------- Sidebar Layout with Inline Images ----------------
-st.sidebar.markdown(
-    "<p style='font-size:0.72rem;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;color:#4a5568;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:8px;margin-bottom:12px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;'>Job Configuration</p>",
-    unsafe_allow_html=True
-)
+if st.session_state.get("username") != "admin":
+    st.sidebar.markdown(
+        "<p style='font-size:0.72rem;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;color:#4a5568;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:8px;margin-bottom:12px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;'>Job Configuration</p>",
+        unsafe_allow_html=True
+    )
 
 # ── Job Title options — one clean title per VALID_DOMAIN in db_manager ──────
 _JOB_TITLE_OPTIONS = [
@@ -4370,121 +4371,122 @@ def _on_jt_change() -> None:
         st.session_state["jd_textarea"] = ""
 
 # ---------------- Job Information Dropdown ----------------
-with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Enter Job Details", expanded=False):
+if st.session_state.get("username") != "admin":
+    with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Enter Job Details", expanded=False):
 
-    # ── Job Title ────────────────────────────────────────────────────────────
-    _jt_choice = st.selectbox(
-        "![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Job Title",
-        _JOB_TITLE_OPTIONS,
-        key="jt_select",
-        on_change=_on_jt_change,
-    )
-    if _jt_choice == "Other (type below)":
-        job_title = st.text_input(
-            "Enter Job Title",
-            placeholder="e.g. Prompt Engineer",
-            key="jt_other_input",
+        # ── Job Title ────────────────────────────────────────────────────────────
+        _jt_choice = st.selectbox(
+            "![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Job Title",
+            _JOB_TITLE_OPTIONS,
+            key="jt_select",
+            on_change=_on_jt_change,
         )
-    elif _jt_choice == "— Select Job Title —":
-        job_title = ""
-    else:
-        job_title = _jt_choice
+        if _jt_choice == "Other (type below)":
+            job_title = st.text_input(
+                "Enter Job Title",
+                placeholder="e.g. Prompt Engineer",
+                key="jt_other_input",
+            )
+        elif _jt_choice == "— Select Job Title —":
+            job_title = ""
+        else:
+            job_title = _jt_choice
 
-    # ── Location ─────────────────────────────────────────────────────────────
-    _loc_choice = st.selectbox(
-        "![Location](https://img.icons8.com/ios-filled/20/marker.png) Preferred Job Location",
-        _LOCATION_OPTIONS,
-        key="loc_select",
-    )
-    if _loc_choice == "Other (type below)":
-        user_location = st.text_input(
-            "Enter Location",
-            placeholder="e.g. Mysore, India",
-            key="loc_other_input",
+        # ── Location ─────────────────────────────────────────────────────────────
+        _loc_choice = st.selectbox(
+            "![Location](https://img.icons8.com/ios-filled/20/marker.png) Preferred Job Location",
+            _LOCATION_OPTIONS,
+            key="loc_select",
         )
-    elif _loc_choice == "— Select Location —":
-        user_location = ""
-    else:
-        user_location = _loc_choice
+        if _loc_choice == "Other (type below)":
+            user_location = st.text_input(
+                "Enter Location",
+                placeholder="e.g. Mysore, India",
+                key="loc_other_input",
+            )
+        elif _loc_choice == "— Select Location —":
+            user_location = ""
+        else:
+            user_location = _loc_choice
 
-    # ── Job Description — pre-filled from template, fully editable ───────────
-    if "jd_textarea" not in st.session_state:
-        st.session_state["jd_textarea"] = ""
+        # ── Job Description — pre-filled from template, fully editable ───────────
+        if "jd_textarea" not in st.session_state:
+            st.session_state["jd_textarea"] = ""
 
-    job_description = st.text_area(
-        "![Description](https://img.icons8.com/ios-filled/20/document.png) Paste Job Description",
-        height=200,
-        key="jd_textarea",
-        placeholder="Select a Job Title above to auto-fill a standard JD, or paste your own here.",
-    )
-
-    # ── Resume Analyzer quota badge — unchanged below this line ──────────────
-
-    # ── Resume Analyzer quota badge ───────────────────────────────────────────
-    _ra_username = st.session_state.get("username")
-    if _ra_username:
-        _ra_used = get_usage_count_last_hour(_ra_username, "resume_analyzer")
-        _ra_remaining = max(0, 2 - _ra_used)
-
-        # colours
-        _ra_accent   = "#34d399" if _ra_remaining > 0 else "#fb7185"
-        _ra_bg       = "rgba(52,211,153,0.08)" if _ra_remaining > 0 else "rgba(251,113,133,0.08)"
-        _ra_border   = "rgba(52,211,153,0.25)" if _ra_remaining > 0 else "rgba(251,113,133,0.25)"
-        _ra_dot_col  = _ra_accent
-
-        # animated pulse dot (green = ok, red = exhausted)
-        _ra_dot = (
-            f'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;'
-            f'background:{_ra_dot_col};box-shadow:0 0 0 0 {_ra_dot_col};'
-            f'animation:raPulse 2s infinite;flex-shrink:0;"></span>'
+        job_description = st.text_area(
+            "![Description](https://img.icons8.com/ios-filled/20/document.png) Paste Job Description",
+            height=200,
+            key="jd_textarea",
+            placeholder="Select a Job Title above to auto-fill a standard JD, or paste your own here.",
         )
 
-        # clock icon
-        _ra_clock = (
-            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" '
-            f'stroke="{_ra_accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
-            'style="flex-shrink:0;">'
-            '<circle cx="12" cy="12" r="10"/>'
-            '<polyline points="12 6 12 12 16 14"/>'
-            '</svg>'
-        )
+        # ── Resume Analyzer quota badge — unchanged below this line ──────────────
 
-        # pill counter badge
-        _ra_pill = (
-            f'<span style="display:inline-flex;align-items:center;justify-content:center;'
-            f'background:{_ra_accent};color:#0f172a;font-weight:700;font-size:0.72rem;'
-            f'border-radius:999px;padding:1px 8px;min-width:32px;letter-spacing:0.01em;">'
-            f'{_ra_remaining}/2</span>'
-        )
+        # ── Resume Analyzer quota badge ───────────────────────────────────────────
+        _ra_username = st.session_state.get("username")
+        if _ra_username:
+            _ra_used = get_usage_count_last_hour(_ra_username, "resume_analyzer")
+            _ra_remaining = max(0, 2 - _ra_used)
 
-        st.markdown(
-            f"""
-            <style>
-            @keyframes raPulse {{
-                0%   {{ box-shadow: 0 0 0 0 {_ra_dot_col}66; }}
-                70%  {{ box-shadow: 0 0 0 5px {_ra_dot_col}00; }}
-                100% {{ box-shadow: 0 0 0 0 {_ra_dot_col}00; }}
-            }}
-            </style>
-            <div style="display:flex;align-items:center;gap:8px;
-                        margin-top:10px;padding:8px 12px;
-                        background:{_ra_bg};
-                        border:1px solid {_ra_border};
-                        border-radius:10px;
-                        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-                {_ra_dot}
-                {_ra_clock}
-                <span style="font-size:0.78rem;color:#94a3b8;flex:1;">
-                    Analyses remaining this hour
-                </span>
-                {_ra_pill}
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+            # colours
+            _ra_accent   = "#34d399" if _ra_remaining > 0 else "#fb7185"
+            _ra_bg       = "rgba(52,211,153,0.08)" if _ra_remaining > 0 else "rgba(251,113,133,0.08)"
+            _ra_border   = "rgba(52,211,153,0.25)" if _ra_remaining > 0 else "rgba(251,113,133,0.25)"
+            _ra_dot_col  = _ra_accent
 
-    if job_description.strip() == "":
-        st.warning("Please enter a job description to evaluate the resumes.")
+            # animated pulse dot (green = ok, red = exhausted)
+            _ra_dot = (
+                f'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;'
+                f'background:{_ra_dot_col};box-shadow:0 0 0 0 {_ra_dot_col};'
+                f'animation:raPulse 2s infinite;flex-shrink:0;"></span>'
+            )
+
+            # clock icon
+            _ra_clock = (
+                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" '
+                f'stroke="{_ra_accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+                'style="flex-shrink:0;">'
+                '<circle cx="12" cy="12" r="10"/>'
+                '<polyline points="12 6 12 12 16 14"/>'
+                '</svg>'
+            )
+
+            # pill counter badge
+            _ra_pill = (
+                f'<span style="display:inline-flex;align-items:center;justify-content:center;'
+                f'background:{_ra_accent};color:#0f172a;font-weight:700;font-size:0.72rem;'
+                f'border-radius:999px;padding:1px 8px;min-width:32px;letter-spacing:0.01em;">'
+                f'{_ra_remaining}/2</span>'
+            )
+
+            st.markdown(
+                f"""
+                <style>
+                @keyframes raPulse {{
+                    0%   {{ box-shadow: 0 0 0 0 {_ra_dot_col}66; }}
+                    70%  {{ box-shadow: 0 0 0 5px {_ra_dot_col}00; }}
+                    100% {{ box-shadow: 0 0 0 0 {_ra_dot_col}00; }}
+                }}
+                </style>
+                <div style="display:flex;align-items:center;gap:8px;
+                            margin-top:10px;padding:8px 12px;
+                            background:{_ra_bg};
+                            border:1px solid {_ra_border};
+                            border-radius:10px;
+                            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+                    {_ra_dot}
+                    {_ra_clock}
+                    <span style="font-size:0.78rem;color:#94a3b8;flex:1;">
+                        Analyses remaining this hour
+                    </span>
+                    {_ra_pill}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        if job_description.strip() == "":
+            st.warning("Please enter a job description to evaluate the resumes.")
 
 # ── ATS Scoring Weights — Career Presets + Fine-tune Sliders ─────────────────
 
@@ -4564,189 +4566,190 @@ if "sl_edu" not in st.session_state:
     _apply_career_preset()
 
 # ---------------- Advanced Weights Dropdown ----------------
-with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/settings.png) Customize ATS Scoring Weights", expanded=False):
+if st.session_state.get("username") != "admin":
+    with st.sidebar.expander("![Settings](https://img.icons8.com/ios-filled/20/settings.png) Customize ATS Scoring Weights", expanded=False):
 
-    # ── Description ──────────────────────────────────────────────────────────
-    st.markdown(
-        "<div style='font-size:0.72rem;color:#64748b;margin-bottom:14px;"
-        "font-family:-apple-system,sans-serif;line-height:1.55;'>"
-        "Format quality is scored automatically (10 pts fixed). "
-        "Adjust the remaining <b style='color:#94a3b8;'>90 pts</b> below."
-        "</div>",
-        unsafe_allow_html=True,
-    )
+        # ── Description ──────────────────────────────────────────────────────────
+        st.markdown(
+            "<div style='font-size:0.72rem;color:#64748b;margin-bottom:14px;"
+            "font-family:-apple-system,sans-serif;line-height:1.55;'>"
+            "Format quality is scored automatically (10 pts fixed). "
+            "Adjust the remaining <b style='color:#94a3b8;'>90 pts</b> below."
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
-    # ── Slider CSS — red track, cyan thumb, bold red value label, uppercase labels
-    st.markdown("""
-    <style>
-    div[data-testid="stSidebar"] .stSlider > label {
-        font-size: 0.68rem !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.10em !important;
-        text-transform: uppercase !important;
-        color: #64748b !important;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
-        margin-bottom: 2px !important;
-    }
-    div[data-testid="stSidebar"] .stSlider [data-testid="stSliderTrackFill"] {
-        background: linear-gradient(90deg, #dc2626, #ef4444) !important;
-    }
-    div[data-testid="stSidebar"] .stSlider [role="slider"] {
-        background: #38bdf8 !important;
-        width: 17px !important;
-        height: 17px !important;
-        border: 2px solid #0f172a !important;
-        box-shadow: 0 0 0 3px rgba(56,189,248,0.35), 0 2px 6px rgba(0,0,0,0.5) !important;
-    }
-    div[data-testid="stSidebar"] .stSlider [data-baseweb="tooltip"] div {
-        color: #f87171 !important;
-        font-weight: 700 !important;
-        font-size: 0.78rem !important;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
-        background: transparent !important;
-        box-shadow: none !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+        # ── Slider CSS — red track, cyan thumb, bold red value label, uppercase labels
+        st.markdown("""
+        <style>
+        div[data-testid="stSidebar"] .stSlider > label {
+            font-size: 0.68rem !important;
+            font-weight: 700 !important;
+            letter-spacing: 0.10em !important;
+            text-transform: uppercase !important;
+            color: #64748b !important;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+            margin-bottom: 2px !important;
+        }
+        div[data-testid="stSidebar"] .stSlider [data-testid="stSliderTrackFill"] {
+            background: linear-gradient(90deg, #dc2626, #ef4444) !important;
+        }
+        div[data-testid="stSidebar"] .stSlider [role="slider"] {
+            background: #38bdf8 !important;
+            width: 17px !important;
+            height: 17px !important;
+            border: 2px solid #0f172a !important;
+            box-shadow: 0 0 0 3px rgba(56,189,248,0.35), 0 2px 6px rgba(0,0,0,0.5) !important;
+        }
+        div[data-testid="stSidebar"] .stSlider [data-baseweb="tooltip"] div {
+            color: #f87171 !important;
+            font-weight: 700 !important;
+            font-size: 0.78rem !important;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
-    # ── Hidden radio — actual state driver; styled cards below are the visual UI
-    _cur_level = st.session_state.get("career_mode_radio", "fresher")
-    selected_mode = st.radio(
-        "Career level",
-        options=list(_CAREER_PRESETS.keys()),
-        index=list(_CAREER_PRESETS.keys()).index(_cur_level),
-        key="career_mode_radio",
-        on_change=_apply_career_preset,
-        label_visibility="collapsed",
-        horizontal=True,
-    )
+        # ── Hidden radio — actual state driver; styled cards below are the visual UI
+        _cur_level = st.session_state.get("career_mode_radio", "fresher")
+        selected_mode = st.radio(
+            "Career level",
+            options=list(_CAREER_PRESETS.keys()),
+            index=list(_CAREER_PRESETS.keys()).index(_cur_level),
+            key="career_mode_radio",
+            on_change=_apply_career_preset,
+            label_visibility="collapsed",
+            horizontal=True,
+        )
 
-    # ── 3 styled preset cards ─────────────────────────────────────────────────
-    _pcols = st.columns(3)
-    for _col, (_pkey, _pd) in zip(_pcols, _CAREER_PRESETS.items()):
-        _is_active   = (selected_mode == _pkey)
-        _icon_color  = _pd["color"] if _is_active else "#4a5568"
-        _label_color = _pd["color"] if _is_active else "#4a5568"
-        _sub_color   = _pd["color"] if _is_active else "#2d3748"
-        _border      = f"2px solid {_pd['border']}" if _is_active else "1px solid rgba(255,255,255,0.07)"
-        _bg          = _pd["bg"] if _is_active else "rgba(255,255,255,0.025)"
-        _shadow      = f"0 0 12px {_pd['glow']}" if _is_active else "none"
-        _icon_svg    = _pd["svg_tpl"].replace("{color}", _icon_color)
-        with _col:
+        # ── 3 styled preset cards ─────────────────────────────────────────────────
+        _pcols = st.columns(3)
+        for _col, (_pkey, _pd) in zip(_pcols, _CAREER_PRESETS.items()):
+            _is_active   = (selected_mode == _pkey)
+            _icon_color  = _pd["color"] if _is_active else "#4a5568"
+            _label_color = _pd["color"] if _is_active else "#4a5568"
+            _sub_color   = _pd["color"] if _is_active else "#2d3748"
+            _border      = f"2px solid {_pd['border']}" if _is_active else "1px solid rgba(255,255,255,0.07)"
+            _bg          = _pd["bg"] if _is_active else "rgba(255,255,255,0.025)"
+            _shadow      = f"0 0 12px {_pd['glow']}" if _is_active else "none"
+            _icon_svg    = _pd["svg_tpl"].replace("{color}", _icon_color)
+            with _col:
+                st.markdown(
+                    f"""<div style="
+                        border:{_border};background:{_bg};box-shadow:{_shadow};
+                        border-radius:10px;padding:12px 4px 10px;text-align:center;
+                        font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+                        user-select:none;">
+                        <div style="display:flex;justify-content:center;margin-bottom:6px;">
+                            {_icon_svg}
+                        </div>
+                        <div style="font-size:0.65rem;font-weight:700;
+                                    color:{_label_color};letter-spacing:0.01em;line-height:1.2;
+                                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+                                    width:100%;">
+                            {_pd['label']}
+                        </div>
+                        <div style="font-size:0.60rem;color:{_sub_color};
+                                    margin-top:3px;font-weight:500;white-space:nowrap;">
+                            {_pd['sublabel']}
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+        # ── Hint card — icon + color matches active tier ──────────────────────────
+        _ap = _CAREER_PRESETS[selected_mode]
+        _hint_icon = _ap["svg_tpl"].replace("{color}", _ap["color"])
+        st.markdown(
+            f"""<div style="
+                margin-top:14px;padding:10px 12px;
+                background:{_ap['bg']};border:1px solid {_ap['border']};
+                border-radius:9px;box-shadow:0 0 14px {_ap['glow']};
+                font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+                font-size:0.75rem;color:{_ap['color']};line-height:1.5;
+                display:flex;align-items:flex-start;gap:9px;">
+                <div style="flex-shrink:0;margin-top:1px;">{_hint_icon}</div>
+                <span style="font-weight:500;">{_ap['hint']}</span>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+        # ── FINE-TUNE label ───────────────────────────────────────────────────────
+        st.markdown(
+            "<div style='margin:16px 0 4px;font-size:0.63rem;font-weight:700;"
+            "letter-spacing:0.13em;text-transform:uppercase;color:#334155;"
+            "font-family:-apple-system,sans-serif;'>Fine-Tune</div>",
+            unsafe_allow_html=True,
+        )
+
+        # ── Sliders — keyed to session_state; callback writes here, no full rerun ─
+        edu_weight = st.slider(
+            "Education", 5, 40, key="sl_edu",
+            help="Weight given to academic qualifications and degrees.",
+        )
+        exp_weight = st.slider(
+            "Experience", 5, 45, key="sl_exp",
+            help="Weight given to work history, roles, and tenure.",
+        )
+        skills_weight = st.slider(
+            "Skills", 5, 40, key="sl_skills",
+            help="Weight given to technical and domain skill matches.",
+        )
+        lang_weight = st.slider(
+            "Language", 2, 10, key="sl_lang",
+            help="Weight given to grammar quality and language clarity.",
+        )
+        keyword_weight = st.slider(
+            "Keywords", 3, 20, key="sl_kw",
+            help="Weight given to job-description keyword alignment.",
+        )
+
+        total_weight  = edu_weight + exp_weight + skills_weight + lang_weight + keyword_weight
+        weights_valid = (total_weight == 90)
+
+        # ── Validation badge ──────────────────────────────────────────────────────
+        if not weights_valid:
+            _remaining = 90 - total_weight
+            _direction = f"remove {abs(_remaining)}" if _remaining < 0 else f"add {_remaining}"
             st.markdown(
-                f"""<div style="
-                    border:{_border};background:{_bg};box-shadow:{_shadow};
-                    border-radius:10px;padding:12px 4px 10px;text-align:center;
-                    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-                    user-select:none;">
-                    <div style="display:flex;justify-content:center;margin-bottom:6px;">
-                        {_icon_svg}
-                    </div>
-                    <div style="font-size:0.65rem;font-weight:700;
-                                color:{_label_color};letter-spacing:0.01em;line-height:1.2;
-                                white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-                                width:100%;">
-                        {_pd['label']}
-                    </div>
-                    <div style="font-size:0.60rem;color:{_sub_color};
-                                margin-top:3px;font-weight:500;white-space:nowrap;">
-                        {_pd['sublabel']}
-                    </div>
+                f"""<div style="margin-top:12px;display:flex;align-items:center;gap:8px;
+                    border:1px solid rgba(251,113,133,0.3);
+                    background:linear-gradient(135deg,rgba(251,113,133,0.12) 0%,rgba(251,113,133,0.05) 100%);
+                    padding:10px 13px;border-radius:10px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                         fill="none" stroke="#fb7185" stroke-width="2" stroke-linecap="round"
+                         stroke-linejoin="round" style="flex-shrink:0;">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <span style="color:#fca5a5;font-weight:600;font-size:0.76rem;
+                                 font-family:-apple-system,sans-serif;">
+                        Total = {total_weight} / 90 &mdash; {_direction} pts to balance.
+                    </span>
                 </div>""",
                 unsafe_allow_html=True,
             )
-
-    # ── Hint card — icon + color matches active tier ──────────────────────────
-    _ap = _CAREER_PRESETS[selected_mode]
-    _hint_icon = _ap["svg_tpl"].replace("{color}", _ap["color"])
-    st.markdown(
-        f"""<div style="
-            margin-top:14px;padding:10px 12px;
-            background:{_ap['bg']};border:1px solid {_ap['border']};
-            border-radius:9px;box-shadow:0 0 14px {_ap['glow']};
-            font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-            font-size:0.75rem;color:{_ap['color']};line-height:1.5;
-            display:flex;align-items:flex-start;gap:9px;">
-            <div style="flex-shrink:0;margin-top:1px;">{_hint_icon}</div>
-            <span style="font-weight:500;">{_ap['hint']}</span>
-        </div>""",
-        unsafe_allow_html=True,
-    )
-
-    # ── FINE-TUNE label ───────────────────────────────────────────────────────
-    st.markdown(
-        "<div style='margin:16px 0 4px;font-size:0.63rem;font-weight:700;"
-        "letter-spacing:0.13em;text-transform:uppercase;color:#334155;"
-        "font-family:-apple-system,sans-serif;'>Fine-Tune</div>",
-        unsafe_allow_html=True,
-    )
-
-    # ── Sliders — keyed to session_state; callback writes here, no full rerun ─
-    edu_weight = st.slider(
-        "Education", 5, 40, key="sl_edu",
-        help="Weight given to academic qualifications and degrees.",
-    )
-    exp_weight = st.slider(
-        "Experience", 5, 45, key="sl_exp",
-        help="Weight given to work history, roles, and tenure.",
-    )
-    skills_weight = st.slider(
-        "Skills", 5, 40, key="sl_skills",
-        help="Weight given to technical and domain skill matches.",
-    )
-    lang_weight = st.slider(
-        "Language", 2, 10, key="sl_lang",
-        help="Weight given to grammar quality and language clarity.",
-    )
-    keyword_weight = st.slider(
-        "Keywords", 3, 20, key="sl_kw",
-        help="Weight given to job-description keyword alignment.",
-    )
-
-    total_weight  = edu_weight + exp_weight + skills_weight + lang_weight + keyword_weight
-    weights_valid = (total_weight == 90)
-
-    # ── Validation badge ──────────────────────────────────────────────────────
-    if not weights_valid:
-        _remaining = 90 - total_weight
-        _direction = f"remove {abs(_remaining)}" if _remaining < 0 else f"add {_remaining}"
-        st.markdown(
-            f"""<div style="margin-top:12px;display:flex;align-items:center;gap:8px;
-                border:1px solid rgba(251,113,133,0.3);
-                background:linear-gradient(135deg,rgba(251,113,133,0.12) 0%,rgba(251,113,133,0.05) 100%);
-                padding:10px 13px;border-radius:10px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-                     fill="none" stroke="#fb7185" stroke-width="2" stroke-linecap="round"
-                     stroke-linejoin="round" style="flex-shrink:0;">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                <span style="color:#fca5a5;font-weight:600;font-size:0.76rem;
-                             font-family:-apple-system,sans-serif;">
-                    Total = {total_weight} / 90 &mdash; {_direction} pts to balance.
-                </span>
-            </div>""",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            """<div style="margin-top:12px;display:flex;align-items:center;gap:8px;
-                border:1px solid rgba(52,211,153,0.28);
-                background:linear-gradient(135deg,rgba(52,211,153,0.12) 0%,rgba(52,211,153,0.05) 100%);
-                padding:10px 13px;border-radius:10px;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
-                     fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"
-                     stroke-linejoin="round" style="flex-shrink:0;">
-                    <polyline points="20 6 9 17 4 12"/>
-                </svg>
-                <span style="color:#6ee7b7;font-weight:600;font-size:0.76rem;
-                             font-family:-apple-system,sans-serif;">
-                    Weights balanced &middot; Content = 90 pts &middot; Format = 10 pts &middot; Total = 100
-                </span>
-            </div>""",
-            unsafe_allow_html=True,
-        )
+        else:
+            st.markdown(
+                """<div style="margin-top:12px;display:flex;align-items:center;gap:8px;
+                    border:1px solid rgba(52,211,153,0.28);
+                    background:linear-gradient(135deg,rgba(52,211,153,0.12) 0%,rgba(52,211,153,0.05) 100%);
+                    padding:10px 13px;border-radius:10px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                         fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"
+                         stroke-linejoin="round" style="flex-shrink:0;">
+                        <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    <span style="color:#6ee7b7;font-weight:600;font-size:0.76rem;
+                                 font-family:-apple-system,sans-serif;">
+                        Weights balanced &middot; Content = 90 pts &middot; Format = 10 pts &middot; Total = 100
+                    </span>
+                </div>""",
+                unsafe_allow_html=True,
+            )
 
 with tab1:
     # Slide message styles already defined in global CSS — no extra block needed
@@ -7852,10 +7855,11 @@ with tab2:
         )
 
         # ── render into sidebar ────────────────────────────────────────────────
-        with st.sidebar:
+        if st.session_state.get("username") != "admin":
+            with st.sidebar:
 
-            # ── XP header ─────────────────────────────────────────────────────
-            st.markdown(f"""
+                # ── XP header ─────────────────────────────────────────────────────
+                st.markdown(f"""
 <div style='margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;'>
   <span style='font-size:10px;letter-spacing:1.2px;text-transform:uppercase;
                color:#6b7280;font-weight:500;'>Resume XP</span>
@@ -17772,3 +17776,5 @@ if tab5:
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
 
+with tab_scam:
+    render_job_scam_detector_tab(call_llm)
