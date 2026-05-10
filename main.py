@@ -4370,135 +4370,123 @@ def _on_jt_change() -> None:
     else:
         st.session_state["jd_textarea"] = ""
 
-def _on_loc_change() -> None:
-    """Called when location changes — re-apply JD if title is set but JD is empty."""
-    _cur_title = st.session_state.get("jt_select", "")
-    if _cur_title not in ("— Select Job Title —", "Other (type below)", ""):
-        if not st.session_state.get("jd_textarea", "").strip():
-            st.session_state["jd_textarea"] = _JD_TEMPLATES.get(_cur_title, "")
-
 # ---------------- Job Information Dropdown ----------------
 if st.session_state.get("username") != "admin":
-    @st.fragment
-    def _render_job_details_sidebar():
-        with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Enter Job Details", expanded=False):
+    with st.sidebar.expander("![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Enter Job Details", expanded=False):
 
-            # ── Job Title ────────────────────────────────────────────────────────────
-            _jt_choice = st.selectbox(
-                "![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Job Title",
-                _JOB_TITLE_OPTIONS,
-                key="jt_select",
-                on_change=_on_jt_change,
+        # ── Job Title ────────────────────────────────────────────────────────────
+        _jt_choice = st.selectbox(
+            "![Job](https://img.icons8.com/ios-filled/20/briefcase.png) Job Title",
+            _JOB_TITLE_OPTIONS,
+            key="jt_select",
+            on_change=_on_jt_change,
+        )
+        if _jt_choice == "Other (type below)":
+            job_title = st.text_input(
+                "Enter Job Title",
+                placeholder="e.g. Prompt Engineer",
+                key="jt_other_input",
             )
-            if _jt_choice == "Other (type below)":
-                job_title = st.text_input(
-                    "Enter Job Title",
-                    placeholder="e.g. Prompt Engineer",
-                    key="jt_other_input",
-                )
-            elif _jt_choice == "— Select Job Title —":
-                job_title = ""
-            else:
-                job_title = _jt_choice
+        elif _jt_choice == "— Select Job Title —":
+            job_title = ""
+        else:
+            job_title = _jt_choice
 
-            # ── Location ─────────────────────────────────────────────────────────────
-            _loc_choice = st.selectbox(
-                "![Location](https://img.icons8.com/ios-filled/20/marker.png) Preferred Job Location",
-                _LOCATION_OPTIONS,
-                key="loc_select",
-                on_change=_on_loc_change,
+        # ── Location ─────────────────────────────────────────────────────────────
+        _loc_choice = st.selectbox(
+            "![Location](https://img.icons8.com/ios-filled/20/marker.png) Preferred Job Location",
+            _LOCATION_OPTIONS,
+            key="loc_select",
+        )
+        if _loc_choice == "Other (type below)":
+            user_location = st.text_input(
+                "Enter Location",
+                placeholder="e.g. Mysore, India",
+                key="loc_other_input",
             )
-            if _loc_choice == "Other (type below)":
-                user_location = st.text_input(
-                    "Enter Location",
-                    placeholder="e.g. Mysore, India",
-                    key="loc_other_input",
-                )
-            elif _loc_choice == "— Select Location —":
-                user_location = ""
-            else:
-                user_location = _loc_choice
+        elif _loc_choice == "— Select Location —":
+            user_location = ""
+        else:
+            user_location = _loc_choice
 
-            # ── Job Description — pre-filled from template, fully editable ───────────
-            if "jd_textarea" not in st.session_state:
-                st.session_state["jd_textarea"] = ""
+        # ── Job Description — pre-filled from template, fully editable ───────────
+        if "jd_textarea" not in st.session_state:
+            st.session_state["jd_textarea"] = ""
 
-            job_description = st.text_area(
-                "![Description](https://img.icons8.com/ios-filled/20/document.png) Paste Job Description",
-                height=200,
-                key="jd_textarea",
-                placeholder="Select a Job Title above to auto-fill a standard JD, or paste your own here.",
+        job_description = st.text_area(
+            "![Description](https://img.icons8.com/ios-filled/20/document.png) Paste Job Description",
+            height=200,
+            key="jd_textarea",
+            placeholder="Select a Job Title above to auto-fill a standard JD, or paste your own here.",
+        )
+
+        # ── Resume Analyzer quota badge — unchanged below this line ──────────────
+
+        # ── Resume Analyzer quota badge ───────────────────────────────────────────
+        _ra_username = st.session_state.get("username")
+        if _ra_username:
+            _ra_used = get_usage_count_last_hour(_ra_username, "resume_analyzer")
+            _ra_remaining = max(0, 2 - _ra_used)
+
+            # colours
+            _ra_accent   = "#34d399" if _ra_remaining > 0 else "#fb7185"
+            _ra_bg       = "rgba(52,211,153,0.08)" if _ra_remaining > 0 else "rgba(251,113,133,0.08)"
+            _ra_border   = "rgba(52,211,153,0.25)" if _ra_remaining > 0 else "rgba(251,113,133,0.25)"
+            _ra_dot_col  = _ra_accent
+
+            # animated pulse dot (green = ok, red = exhausted)
+            _ra_dot = (
+                f'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;'
+                f'background:{_ra_dot_col};box-shadow:0 0 0 0 {_ra_dot_col};'
+                f'animation:raPulse 2s infinite;flex-shrink:0;"></span>'
             )
 
-            # ── Resume Analyzer quota badge — unchanged below this line ──────────────
+            # clock icon
+            _ra_clock = (
+                '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" '
+                f'stroke="{_ra_accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+                'style="flex-shrink:0;">'
+                '<circle cx="12" cy="12" r="10"/>'
+                '<polyline points="12 6 12 12 16 14"/>'
+                '</svg>'
+            )
 
-            # ── Resume Analyzer quota badge ───────────────────────────────────────────
-            _ra_username = st.session_state.get("username")
-            if _ra_username:
-                _ra_used = get_usage_count_last_hour(_ra_username, "resume_analyzer")
-                _ra_remaining = max(0, 2 - _ra_used)
+            # pill counter badge
+            _ra_pill = (
+                f'<span style="display:inline-flex;align-items:center;justify-content:center;'
+                f'background:{_ra_accent};color:#0f172a;font-weight:700;font-size:0.72rem;'
+                f'border-radius:999px;padding:1px 8px;min-width:32px;letter-spacing:0.01em;">'
+                f'{_ra_remaining}/2</span>'
+            )
 
-                # colours
-                _ra_accent   = "#34d399" if _ra_remaining > 0 else "#fb7185"
-                _ra_bg       = "rgba(52,211,153,0.08)" if _ra_remaining > 0 else "rgba(251,113,133,0.08)"
-                _ra_border   = "rgba(52,211,153,0.25)" if _ra_remaining > 0 else "rgba(251,113,133,0.25)"
-                _ra_dot_col  = _ra_accent
+            st.markdown(
+                f"""
+                <style>
+                @keyframes raPulse {{
+                    0%   {{ box-shadow: 0 0 0 0 {_ra_dot_col}66; }}
+                    70%  {{ box-shadow: 0 0 0 5px {_ra_dot_col}00; }}
+                    100% {{ box-shadow: 0 0 0 0 {_ra_dot_col}00; }}
+                }}
+                </style>
+                <div style="display:flex;align-items:center;gap:8px;
+                            margin-top:10px;padding:8px 12px;
+                            background:{_ra_bg};
+                            border:1px solid {_ra_border};
+                            border-radius:10px;
+                            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+                    {_ra_dot}
+                    {_ra_clock}
+                    <span style="font-size:0.78rem;color:#94a3b8;flex:1;">
+                        Analyses remaining this hour
+                    </span>
+                    {_ra_pill}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-                # animated pulse dot (green = ok, red = exhausted)
-                _ra_dot = (
-                    f'<span style="display:inline-block;width:7px;height:7px;border-radius:50%;'
-                    f'background:{_ra_dot_col};box-shadow:0 0 0 0 {_ra_dot_col};'
-                    f'animation:raPulse 2s infinite;flex-shrink:0;"></span>'
-                )
-
-                # clock icon
-                _ra_clock = (
-                    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" '
-                    f'stroke="{_ra_accent}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
-                    'style="flex-shrink:0;">'
-                    '<circle cx="12" cy="12" r="10"/>'
-                    '<polyline points="12 6 12 12 16 14"/>'
-                    '</svg>'
-                )
-
-                # pill counter badge
-                _ra_pill = (
-                    f'<span style="display:inline-flex;align-items:center;justify-content:center;'
-                    f'background:{_ra_accent};color:#0f172a;font-weight:700;font-size:0.72rem;'
-                    f'border-radius:999px;padding:1px 8px;min-width:32px;letter-spacing:0.01em;">'
-                    f'{_ra_remaining}/2</span>'
-                )
-
-                st.markdown(
-                    f"""
-                    <style>
-                    @keyframes raPulse {{
-                        0%   {{ box-shadow: 0 0 0 0 {_ra_dot_col}66; }}
-                        70%  {{ box-shadow: 0 0 0 5px {_ra_dot_col}00; }}
-                        100% {{ box-shadow: 0 0 0 0 {_ra_dot_col}00; }}
-                    }}
-                    </style>
-                    <div style="display:flex;align-items:center;gap:8px;
-                                margin-top:10px;padding:8px 12px;
-                                background:{_ra_bg};
-                                border:1px solid {_ra_border};
-                                border-radius:10px;
-                                font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-                        {_ra_dot}
-                        {_ra_clock}
-                        <span style="font-size:0.78rem;color:#94a3b8;flex:1;">
-                            Analyses remaining this hour
-                        </span>
-                        {_ra_pill}
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-            if job_description.strip() == "":
-                st.warning("Please enter a job description to evaluate the resumes.")
-
-    _render_job_details_sidebar()
+        if job_description.strip() == "":
+            st.warning("Please enter a job description to evaluate the resumes.")
 
 # ── ATS Scoring Weights — Career Presets + Fine-tune Sliders ─────────────────
 
@@ -8053,8 +8041,7 @@ with tab2:
 
     # ── call gamified sidebar AFTER fk is known so widget keys resolve correctly ──
     fk = st.session_state["form_key_counter"]
-    if st.session_state.get("username") != "admin":
-        render_gamified_sidebar(st.session_state, fk)
+    render_gamified_sidebar(st.session_state, fk)
     mode = st.session_state.get("edit_mode", "Add")
 
     # ── Shared section-header style injected once ────────────────────────────
