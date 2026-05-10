@@ -1725,31 +1725,26 @@ def _probe_mx_record(contact: str) -> dict:
 
 def _dns_mx_lookup(domain: str) -> bool:
     """
-    MX record check via Cloudflare DNS-over-HTTPS (port 443 HTTPS).
-
-    FIX v6: replaced raw UDP socket (SOCK_DGRAM → 8.8.8.8:53) which is
-    blocked on Streamlit Cloud and silently returned False for every posting,
-    adding a spurious +15 probe penalty to all analyses.
-    Now uses the same Cloudflare DoH endpoint as _probe_mx_record() —
-    works identically on Cloud, Railway, Docker, and local dev.
-    Returns True if the domain has at least one MX record.
+    Raw DNS UDP query for MX records on port 53.
+    No HTTP. No API key. Works from any server environment.
+    Returns True if domain has at least one MX record.
     """
+    import struct
     try:
-        url = f"https://cloudflare-dns.com/dns-query?name={domain}&type=MX"
-        req = urllib.request.Request(
-            url,
-            headers={
-                "Accept": "application/dns-json",
-                "User-Agent": "ScamDetector/6.0",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode())
-        # Status 3 = NXDOMAIN — domain does not exist
-        if data.get("Status", -1) == 3:
-            return False
-        answers = data.get("Answer", [])
-        return any(a.get("type") == 15 for a in answers)  # type 15 = MX
+        tid      = b"\xaa\xbb"
+        flags    = b"\x01\x00"
+        counts   = b"\x00\x01\x00\x00\x00\x00\x00\x00"
+        parts    = domain.encode().split(b".")
+        qname    = b"".join(bytes([len(p)]) + p for p in parts) + b"\x00"
+        qtype_cl = b"\x00\x0f\x00\x01"          # MX, IN
+        packet   = tid + flags + counts + qname + qtype_cl
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(4)
+        s.sendto(packet, ("8.8.8.8", 53))
+        resp, _ = s.recvfrom(512)
+        s.close()
+        answer_count = struct.unpack(">H", resp[6:8])[0]
+        return answer_count > 0
     except Exception:
         return False
 
@@ -2190,16 +2185,7 @@ def _check_linkedin_existence(company: str) -> dict:
                         if found_slug is None:
                             found_slug = slug
         except urllib.error.HTTPError as e:
-            # 999 = LinkedIn bot-block (page may still exist) — treat as
-            # inconclusive, NOT as "company not found". We set a sentinel
-            # so the caller knows LinkedIn was unreachable rather than
-            # returning a false negative.
-            # FIX v6: previously 999 fell through to found=False,
-            # incorrectly adding to the "denied" count for small companies.
-            if e.code == 999:
-                with lock:
-                    if found_slug is None:
-                        found_slug = "__bot_blocked__"
+            pass   # 404 = not found, 999 = LinkedIn bot block
         except Exception:
             pass
 
@@ -2207,15 +2193,10 @@ def _check_linkedin_existence(company: str) -> dict:
     for t in threads: t.start()
     for t in threads: t.join(timeout=6)
 
-    if found_slug and found_slug != "__bot_blocked__":
+    if found_slug:
         out.update(
             found=True,
             detail=f"LinkedIn company page exists: linkedin.com/company/{found_slug} ✓",
-        )
-    elif found_slug == "__bot_blocked__":
-        out.update(
-            found=None,  # inconclusive — LinkedIn blocked the check, not proof of absence
-            detail=f"LinkedIn check blocked by bot-protection (HTTP 999) — inconclusive",
         )
     else:
         out.update(
@@ -2404,19 +2385,12 @@ def _probe_company_domain(args: tuple) -> dict:
     elif confirmed == 1:
         out["score"] = max(0, out["score"] - 8)
 
-    # If all tried identity sources deny → add suspicion ONLY when infrastructure
-    # also looks weak. A company with valid DNS + HTTPS + MX + SPF that isn't on
-    # Wikipedia/Clearbit is simply small/regional — not a scam.
+    # If all tried identity sources deny → add suspicion
     all_tried = sum(
         1 for k in ("clearbit", "wikipedia", "linkedin")
         if identity_results.get(k, {}).get("found") is not None
     )
-    infra_clean = (
-        out.get("domain_exists") is True
-        and out.get("website_live") is True
-        and out.get("has_mx") is True
-    )
-    if all_tried >= 2 and denied == all_tried and not infra_clean:
+    if all_tried >= 2 and denied == all_tried:
         out["score"] += 15
         out["scam_signals"].append(
             f"'{company}' not found in any public company database "
@@ -3140,224 +3114,10 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_probe_context(probes: dict, warnings: list) -> str:
-    """
-    FIX v6 — Build a COMPLETE probe summary for the LLM, covering both
-    VERIFIED (positive) and WARNING (negative) findings.
-
-    Previously the LLM only received the `warnings` list from _probe_risk(),
-    which only appends entries when something is BAD. A 10-year-old domain
-    with valid SSL, MX, SPF, and DMARC produced an empty warnings list —
-    the LLM saw "LIVE PROBE FINDINGS: None" and correctly assumed the worst.
-
-    This function gives the LLM the full picture so it can weight its
-    company_legitimacy and ai_risk_score against actual infrastructure evidence.
-    """
-    lines = []
-
-    # ── Domain age ────────────────────────────────────────────────────────────
-    age = probes.get("domain_age", {})
-    da_status = age.get("status", "unknown")
-    if da_status == "established":
-        lines.append(
-            f"VERIFIED: Domain is {age.get('age_days')} days old "
-            f"(registered {age.get('registered', 'unknown')}) — well-established, "
-            "consistent with a real company."
-        )
-    elif da_status == "moderate":
-        lines.append(
-            f"CAUTION: Domain is {age.get('age_days')} days old (3–6 months) — "
-            "relatively new, verify through other channels."
-        )
-    elif da_status in ("young", "very_young"):
-        lines.append(
-            f"WARNING: Domain is only {age.get('age_days')} days old — "
-            "extremely new domain is a strong scam signal."
-        )
-
-    # Registrar
-    if age.get("registrar"):
-        lines.append(f"INFO: Domain registrar is '{age['registrar']}'.")
-    if age.get("privacy_proxy"):
-        lines.append("CAUTION: Domain WHOIS is privacy-protected.")
-
-    # ── Site reachability ─────────────────────────────────────────────────────
-    reach = probes.get("site_reach", {})
-    if reach.get("reachable") is True:
-        ssl_note = ""
-        if reach.get("ssl_valid") is True:
-            ssl_note = " with a valid SSL certificate"
-        elif reach.get("ssl_valid") is False:
-            ssl_note = " but SSL certificate is INVALID"
-        parked_note = " (domain appears PARKED — no real content)" if reach.get("is_parked") else ""
-        lines.append(f"VERIFIED: Company website is live{ssl_note}{parked_note}.")
-    elif reach.get("reachable") is False:
-        lines.append("WARNING: Company website is completely unreachable.")
-
-    # ── Typosquatting ─────────────────────────────────────────────────────────
-    typo = probes.get("typosquat", {})
-    if typo.get("is_squatter"):
-        lines.append(f"WARNING: {typo.get('detail', 'Domain may be impersonating a known brand.')} ")
-    elif typo.get("similarity", 0) < 0.72:
-        lines.append("VERIFIED: Domain does not impersonate any known brand.")
-
-    # ── Free email ────────────────────────────────────────────────────────────
-    free_email = probes.get("free_email", {})
-    if free_email.get("uses_free_domain"):
-        lines.append(
-            f"WARNING: Recruiter uses personal free email domain "
-            f"'{free_email.get('domain')}' — legitimate companies use corporate email."
-        )
-    elif free_email.get("emails_found"):
-        lines.append("VERIFIED: Contact email uses a corporate domain, not a free provider.")
-
-    # ── MX record ─────────────────────────────────────────────────────────────
-    mx = probes.get("mx_record", {})
-    mx_status = mx.get("status", "")
-    mx_dom = mx.get("domain", "")
-    if mx_status == "MX_FOUND":
-        flags = []
-        if mx.get("ghost_mx"):
-            flags.append("MX hostnames do not resolve — ghost MX (fake mail server)")
-        if mx.get("voip_risk"):
-            flags.append("routes through bulk/transactional mail service")
-        if mx.get("free_mx") and not mx.get("voip_risk"):
-            flags.append("uses free provider (Google/Outlook) for corporate domain")
-        if flags:
-            lines.append(f"CAUTION: '{mx_dom}' has MX records but — {' | '.join(flags)}.")
-        else:
-            lines.append(
-                f"VERIFIED: Corporate email domain '{mx_dom}' has valid, "
-                "functioning MX records — real mail infrastructure."
-            )
-    elif mx_status == "NO_MX":
-        lines.append(
-            f"WARNING: '{mx_dom}' has NO MX records — domain registered "
-            "for appearances only, not configured for real email."
-        )
-    elif mx_status == "DNS_FAIL":
-        lines.append(
-            f"WARNING: Email domain '{mx_dom}' does not exist in DNS — "
-            "completely fabricated."
-        )
-    elif mx_status == "FREE_DOMAIN":
-        lines.append(
-            "WARNING: Only free email domain(s) found — no corporate email domain to verify."
-        )
-    elif mx_status == "NO_EMAIL":
-        lines.append("INFO: No email address found in job posting — MX check skipped.")
-
-    # ── SPF / DMARC ───────────────────────────────────────────────────────────
-    spf = probes.get("spf_dmarc", {})
-    if spf.get("spf") and spf.get("dmarc"):
-        lines.append(
-            "VERIFIED: Domain has both SPF and DMARC records — properly "
-            "configured for legitimate corporate email use."
-        )
-    elif spf.get("spf") and not spf.get("dmarc"):
-        lines.append("CAUTION: Domain has SPF but no DMARC — partial email authentication.")
-    elif not spf.get("spf") and spf.get("dmarc") is False and mx_status == "MX_FOUND":
-        lines.append("WARNING: Domain has MX records but no SPF or DMARC — suspicious.")
-
-    # ── Company domain infrastructure ─────────────────────────────────────────
-    cd = probes.get("company_domain", {})
-    cd_domain = cd.get("domain", "")
-    if cd_domain:
-        infra_parts = []
-        if cd.get("domain_exists") is True:
-            infra_parts.append("DNS resolves")
-        if cd.get("website_live") is True:
-            infra_parts.append("HTTPS live")
-        if cd.get("has_mx") is True:
-            infra_parts.append("MX configured")
-        if cd.get("domain_matches_company") is True:
-            infra_parts.append("domain name matches company")
-        if len(infra_parts) >= 3:
-            lines.append(
-                f"VERIFIED: Company domain '{cd_domain}' passes infrastructure checks: "
-                + ", ".join(infra_parts) + "."
-            )
-        elif cd.get("domain_exists") is False:
-            lines.append(f"WARNING: Company domain '{cd_domain}' does not exist in DNS.")
-
-    # ── Identity sources ──────────────────────────────────────────────────────
-    confirmed = cd.get("identity_sources", 0)
-    cb = cd.get("clearbit", {})
-    wp = cd.get("wikipedia", {})
-    li = cd.get("linkedin", {})
-
-    id_lines = []
-    if cb.get("found") is True:
-        id_lines.append(f"Clearbit ✓ ({cb.get('detail', '')})")
-    elif cb.get("found") is False:
-        id_lines.append("Clearbit ✗ (not in global company index — may be small/regional)")
-
-    if wp.get("found") is True:
-        id_lines.append(f"Wikipedia ✓ ({wp.get('detail', '')})")
-    elif wp.get("found") is False:
-        id_lines.append("Wikipedia ✗ (no article — expected for small companies)")
-
-    if li.get("found") is True:
-        id_lines.append(f"LinkedIn ✓ ({li.get('detail', '')})")
-    elif li.get("found") is None:
-        id_lines.append("LinkedIn — inconclusive (bot-blocked)")
-    elif li.get("found") is False:
-        id_lines.append("LinkedIn ✗ (no company page found)")
-
-    if confirmed >= 2:
-        lines.append(
-            f"VERIFIED: Company confirmed by {confirmed} independent public "
-            f"databases. " + " | ".join(id_lines)
-        )
-    elif confirmed == 1:
-        lines.append(
-            f"PARTIAL: Company found in 1 public database (small/regional companies "
-            f"often absent from others). " + " | ".join(id_lines)
-        )
-    else:
-        # Not found in any — but only flag if infra is also weak
-        infra_clean = (
-            cd.get("domain_exists") is True
-            and cd.get("website_live") is True
-            and cd.get("has_mx") is True
-        )
-        if infra_clean:
-            lines.append(
-                "NOTE: Company not found in Clearbit/Wikipedia/LinkedIn — however "
-                "infrastructure checks pass, suggesting this is a real but small or "
-                "regional company not indexed by global databases. "
-                + " | ".join(id_lines)
-            )
-        else:
-            lines.append(
-                "WARNING: Company not found in any public database AND infrastructure "
-                "checks are weak — high likelihood of fake company. "
-                + " | ".join(id_lines)
-            )
-
-    return "\n".join(f"  - {l}" for l in lines) if lines else "  - No significant probe findings."
-
-
-def _llm_prompt(job: dict, probe_context: str) -> str:
-    """
-    FIX v6: probe_context is now a pre-built string from _build_probe_context()
-    containing both VERIFIED (positive) and WARNING (negative) probe findings.
-    Previously only received the raw `warnings` list which was empty when all
-    probes passed — causing the LLM to reason without any infrastructure evidence.
-    """
+def _llm_prompt(job: dict, probe_warnings: list) -> str:
+    ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
-Analyse the job posting below using the LIVE PROBE FINDINGS as ground truth — these are
-verified network checks that override your general assumptions about the company.
-
-IMPORTANT INSTRUCTIONS:
-- If probe findings show VERIFIED signals (established domain, valid MX, SPF+DMARC, live website),
-  treat the company infrastructure as real even if the company is not globally known.
-- Small regional companies are NOT indexed in Clearbit/Wikipedia/LinkedIn — absence from these
-  databases alone does NOT indicate a scam if infrastructure checks pass.
-- Only flag company_legitimacy as LIKELY_FAKE or GHOST_COMPANY when infrastructure probes
-  show actual failures (no DNS, no MX, fake domain), not merely because it is unknown.
-- Weight your ai_risk_score against the probe evidence: strong infrastructure = lower score,
-  failed infrastructure = higher score, regardless of company name recognition.
+Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
 JOB POSTING:
 Title: {job.get('title','N/A')}
@@ -3370,8 +3130,8 @@ Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
 
-LIVE PROBE FINDINGS (treat these as verified facts):
-{probe_context}
+LIVE PROBE FINDINGS:
+{ctx}
 
 Required JSON schema (all keys mandatory):
 {{
@@ -3380,7 +3140,7 @@ Required JSON schema (all keys mandatory):
   "company_legitimacy": "<VERIFIED|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
   "top_red_flags": ["<str>","<str>","<str>"],
   "positive_signals": ["<str>"],
-  "fake_company_evidence": "<detailed reasoning about company authenticity, referencing probe findings>",
+  "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
   "salary_assessment": "<realistic or not for this role and location>",
   "recommended_action": "<specific advice for the job seeker>",
@@ -4472,12 +4232,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     prog.progress(60, text="Sending to AI for deep analysis…")
 
-                    # ── Build full probe context (positive + negative) for LLM ──
-                    # FIX v6: replaces bare `warnings` list (negatives only) with
-                    # _build_probe_context() which surfaces both VERIFIED and WARNING
-                    # signals so the LLM reasons with the complete infrastructure picture.
-                    probe_context = _build_probe_context(probes, warnings)
-
                     # ── LLM call with retry + structured output enforcement ────────
                     # Retry logic: attempt 1 = normal, attempt 2 = stricter prompt
                     # if JSON parse fails on attempt 1. Covers transient Groq errors
@@ -4496,7 +4250,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     for attempt in range(2):
                         try:
-                            prompt = _llm_prompt(job, probe_context)
+                            prompt = _llm_prompt(job, warnings)
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
@@ -4530,34 +4284,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     # but we flag it so the UI can show a warning
                     if not llm_parse_ok:
                         ai_failed = True
-
-                    # ── FIX v6: Post-LLM company_legitimacy correction ────────────
-                    # The LLM may return LIKELY_FAKE or GHOST_COMPANY even when
-                    # infrastructure probes show the company is real (established
-                    # domain, live HTTPS, valid MX, SPF+DMARC). Cap the field
-                    # at UNVERIFIABLE when hard infrastructure evidence is positive.
-                    cd_post   = probes.get("company_domain", {})
-                    spf_post  = probes.get("spf_dmarc", {})
-                    age_post  = probes.get("domain_age", {})
-                    infra_strong = (
-                        cd_post.get("domain_exists") is True
-                        and cd_post.get("website_live") is True
-                        and cd_post.get("has_mx") is True
-                        and age_post.get("status") in ("established", "moderate")
-                    )
-                    if infra_strong:
-                        llm_legitimacy = llm_data.get("company_legitimacy", "UNVERIFIABLE")
-                        if llm_legitimacy in ("LIKELY_FAKE", "GHOST_COMPANY"):
-                            llm_data["company_legitimacy"] = "UNVERIFIABLE"
-                            # Also note this correction in positive_signals
-                            pos = llm_data.get("positive_signals", [])
-                            pos.append(
-                                "Infrastructure probes confirm real domain: "
-                                f"established domain ({age_post.get('age_days')} days), "
-                                "live HTTPS, valid MX — company legitimacy upgraded "
-                                "from AI assumption to UNVERIFIABLE (real but small/regional)."
-                            )
-                            llm_data["positive_signals"] = pos
 
                     prog.progress(90, text="Blending scores…")
                     ai_s   = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
