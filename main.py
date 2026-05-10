@@ -7877,101 +7877,101 @@ with tab2:
             color:#4b5563;margin-bottom:10px;font-weight:500;'>Sections</div>
 """, unsafe_allow_html=True)
 
-            # ── section rows ──────────────────────────────────────────────────
-            for (label, fill), icon_key in zip(SECTIONS.items(), ICON_KEYS):
-                st.markdown(_section_row(label, icon_key, fill), unsafe_allow_html=True)
+                # ── section rows ──────────────────────────────────────────────────
+                for (label, fill), icon_key in zip(SECTIONS.items(), ICON_KEYS):
+                    st.markdown(_section_row(label, icon_key, fill), unsafe_allow_html=True)
 
-            # ── UX Feedback Panel ─────────────────────────────────────────────
-            # Generate actionable, ranked feedback tips based on current state.
-            # Tips are prioritised by XP weight (highest-impact sections first).
-            _feedback_tips = []
+                # ── UX Feedback Panel ─────────────────────────────────────────────
+                # Generate actionable, ranked feedback tips based on current state.
+                # Tips are prioritised by XP weight (highest-impact sections first).
+                _feedback_tips = []
 
-            # Experience feedback
-            if _fill_exp == 0.0:
-                _feedback_tips.append("Add work experience to strengthen your resume (+30 XP potential)")
-            elif _fill_exp < DONE_THRESHOLD["Experience"]:
-                _exp_entries = ss.get("experience_entries", [])
-                _has_desc = any(
-                    len(str(e.get("description", "")).strip()) > 40
-                    for e in _exp_entries
-                )
-                if not _has_desc:
-                    _feedback_tips.append("Add detailed descriptions to your work experience to unlock more XP")
-                else:
-                    _feedback_tips.append("Enrich your experience descriptions with specific achievements and metrics")
+                # Experience feedback
+                if _fill_exp == 0.0:
+                    _feedback_tips.append("Add work experience to strengthen your resume (+30 XP potential)")
+                elif _fill_exp < DONE_THRESHOLD["Experience"]:
+                    _exp_entries = ss.get("experience_entries", [])
+                    _has_desc = any(
+                        len(str(e.get("description", "")).strip()) > 40
+                        for e in _exp_entries
+                    )
+                    if not _has_desc:
+                        _feedback_tips.append("Add detailed descriptions to your work experience to unlock more XP")
+                    else:
+                        _feedback_tips.append("Enrich your experience descriptions with specific achievements and metrics")
 
-            # Projects feedback
-            if _fill_proj == 0.0:
-                _feedback_tips.append("Add a project to gain up to 22 XP — projects are highly valued")
-            elif _fill_proj < DONE_THRESHOLD["Projects"]:
-                _proj_entries = ss.get("project_entries", [])
-                _has_tech = any(
-                    _count_valid_tokens(e.get("tech", "")) >= 1
-                    for e in _proj_entries if e.get("title")
-                )
-                if not _has_tech:
-                    _feedback_tips.append("List the technologies used in your projects to improve your score")
-                else:
-                    _feedback_tips.append("Improve your project descriptions — explain the problem solved and your impact")
-            elif _fill_proj < 0.90:
-                n_projs = len([e for e in ss.get("project_entries", []) if e.get("title")])
-                if n_projs < 2:
-                    _feedback_tips.append("Add another project to increase your Projects score further")
+                # Projects feedback
+                if _fill_proj == 0.0:
+                    _feedback_tips.append("Add a project to gain up to 22 XP — projects are highly valued")
+                elif _fill_proj < DONE_THRESHOLD["Projects"]:
+                    _proj_entries = ss.get("project_entries", [])
+                    _has_tech = any(
+                        _count_valid_tokens(e.get("tech", "")) >= 1
+                        for e in _proj_entries if e.get("title")
+                    )
+                    if not _has_tech:
+                        _feedback_tips.append("List the technologies used in your projects to improve your score")
+                    else:
+                        _feedback_tips.append("Improve your project descriptions — explain the problem solved and your impact")
+                elif _fill_proj < 0.90:
+                    n_projs = len([e for e in ss.get("project_entries", []) if e.get("title")])
+                    if n_projs < 2:
+                        _feedback_tips.append("Add another project to increase your Projects score further")
 
-            # Skills feedback
-            if _fill_skills < DONE_THRESHOLD["Skills & More"]:
-                if _skill_count < 3:
-                    _feedback_tips.append(f"Add more technical skills — you have {_skill_count}, aim for 5+ (comma-separated)")
-                if _soft_count < 2:
-                    _feedback_tips.append("Add 2–3 soft skills (e.g. Leadership, Communication) to boost your score")
+                # Skills feedback
+                if _fill_skills < DONE_THRESHOLD["Skills & More"]:
+                    if _skill_count < 3:
+                        _feedback_tips.append(f"Add more technical skills — you have {_skill_count}, aim for 5+ (comma-separated)")
+                    if _soft_count < 2:
+                        _feedback_tips.append("Add 2–3 soft skills (e.g. Leadership, Communication) to boost your score")
 
-            # Education feedback
-            if _fill_edu == 0.0:
-                _feedback_tips.append("Add your education details to build a complete resume")
-            elif _fill_edu < DONE_THRESHOLD["Education"]:
-                _feedback_tips.append("Add graduation year and academic details/achievements to complete education")
+                # Education feedback
+                if _fill_edu == 0.0:
+                    _feedback_tips.append("Add your education details to build a complete resume")
+                elif _fill_edu < DONE_THRESHOLD["Education"]:
+                    _feedback_tips.append("Add graduation year and academic details/achievements to complete education")
 
-            # Summary feedback
-            if _fill_summary == 0.0:
-                _feedback_tips.append("Write a professional summary — it's your first impression on recruiters")
-            elif _fill_summary < DONE_THRESHOLD["Summary"]:
-                _feedback_tips.append("Expand your summary with more specific skills, experience, and career goals")
+                # Summary feedback
+                if _fill_summary == 0.0:
+                    _feedback_tips.append("Write a professional summary — it's your first impression on recruiters")
+                elif _fill_summary < DONE_THRESHOLD["Summary"]:
+                    _feedback_tips.append("Expand your summary with more specific skills, experience, and career goals")
 
-            # Certificate feedback
-            if _fill_cert == 0.0 and pct >= 40:
-                _feedback_tips.append("Add a certification to differentiate yourself from other candidates")
-            elif 0.0 < _fill_cert < DONE_THRESHOLD["Certificates"]:
-                _feedback_tips.append("Add a verification link and description to your certificates for full credit")
+                # Certificate feedback
+                if _fill_cert == 0.0 and pct >= 40:
+                    _feedback_tips.append("Add a certification to differentiate yourself from other candidates")
+                elif 0.0 < _fill_cert < DONE_THRESHOLD["Certificates"]:
+                    _feedback_tips.append("Add a verification link and description to your certificates for full credit")
 
-            # Contact feedback
-            if _fill_contact < 1.0:
-                if not pi_phone2:
-                    _feedback_tips.append("Add your phone number to make your resume complete")
-                if not pi_linkedin:
-                    _feedback_tips.append("Add your LinkedIn profile URL — recruiters always check it")
+                # Contact feedback
+                if _fill_contact < 1.0:
+                    if not pi_phone2:
+                        _feedback_tips.append("Add your phone number to make your resume complete")
+                    if not pi_linkedin:
+                        _feedback_tips.append("Add your LinkedIn profile URL — recruiters always check it")
 
-            # Show up to 3 tips (highest priority = highest XP weight = listed first)
-            if _feedback_tips:
-                _tips_to_show = _feedback_tips[:3]
-                _tip_html_items = "".join(
-                    f"<div style='display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;'>"
-                    f"<span style='color:#f59e0b;font-size:12px;flex-shrink:0;margin-top:1px;'>&#9654;</span>"
-                    f"<span style='font-size:11px;color:#cbd5e1;line-height:1.5;'>{tip}</span>"
-                    f"</div>"
-                    for tip in _tips_to_show
-                )
-                st.markdown(
-                    f"<div style='margin:12px 0 6px;padding:10px 12px;background:#111827;"
-                    f"border-radius:8px;border:0.5px solid #374151;'>"
-                    f"<div style='font-size:9px;letter-spacing:1.2px;text-transform:uppercase;"
-                    f"color:#6b7280;font-weight:600;margin-bottom:8px;'>Tips to Boost XP</div>"
-                    f"{_tip_html_items}"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
+                # Show up to 3 tips (highest priority = highest XP weight = listed first)
+                if _feedback_tips:
+                    _tips_to_show = _feedback_tips[:3]
+                    _tip_html_items = "".join(
+                        f"<div style='display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;'>"
+                        f"<span style='color:#f59e0b;font-size:12px;flex-shrink:0;margin-top:1px;'>&#9654;</span>"
+                        f"<span style='font-size:11px;color:#cbd5e1;line-height:1.5;'>{tip}</span>"
+                        f"</div>"
+                        for tip in _tips_to_show
+                    )
+                    st.markdown(
+                        f"<div style='margin:12px 0 6px;padding:10px 12px;background:#111827;"
+                        f"border-radius:8px;border:0.5px solid #374151;'>"
+                        f"<div style='font-size:9px;letter-spacing:1.2px;text-transform:uppercase;"
+                        f"color:#6b7280;font-weight:600;margin-bottom:8px;'>Tips to Boost XP</div>"
+                        f"{_tip_html_items}"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
 
-            # ── divider + stats footer ─────────────────────────────────────────
-            st.markdown(f"""
+                # ── divider + stats footer ─────────────────────────────────────────
+                st.markdown(f"""
 <hr style='border:none;border-top:0.5px solid #1e2535;margin:14px 0;'>
 <div style='display:flex;justify-content:space-between;text-align:center;margin-bottom:18px;'>
   <div>
@@ -7989,55 +7989,55 @@ with tab2:
 </div>
 <hr style='border:none;border-top:0.5px solid #1e2535;margin:0 0 14px;'>
 <div style='font-size:10px;letter-spacing:1.4px;text-transform:uppercase;
-            color:#4b5563;margin-bottom:10px;font-weight:500;'>Manage Sections</div>
+                color:#4b5563;margin-bottom:10px;font-weight:500;'>Manage Sections</div>
 """, unsafe_allow_html=True)
 
-            # ── section add/delete controls ────────────────────────────────────
-            if "edit_mode" not in ss:
-                ss.edit_mode = "Add"
+                # ── section add/delete controls ────────────────────────────────────
+                if "edit_mode" not in ss:
+                    ss.edit_mode = "Add"
 
-            mode = st.selectbox(
-                "Mode",
-                ["Add", "Delete"],
-                index=0,
-                key="mode_dropdown",
-                label_visibility="collapsed",
-            )
-            ss.edit_mode = mode
+                mode = st.selectbox(
+                    "Mode",
+                    ["Add", "Delete"],
+                    index=0,
+                    key="mode_dropdown",
+                    label_visibility="collapsed",
+                )
+                ss.edit_mode = mode
 
-            st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
-            # Experience
-            with st.expander("Experience", expanded=False):
-                if st.button(("Add" if mode == "Add" else "Delete") + " Experience", key="exp_btn", use_container_width=True):
-                    if mode == "Add":
-                        ss.experience_entries.append({"title": "", "company": "", "duration": "", "description": ""})
-                    elif mode == "Delete" and len(ss.experience_entries) > 1:
-                        ss.experience_entries.pop()
+                # Experience
+                with st.expander("Experience", expanded=False):
+                    if st.button(("Add" if mode == "Add" else "Delete") + " Experience", key="exp_btn", use_container_width=True):
+                        if mode == "Add":
+                            ss.experience_entries.append({"title": "", "company": "", "duration": "", "description": ""})
+                        elif mode == "Delete" and len(ss.experience_entries) > 1:
+                            ss.experience_entries.pop()
 
-            # Education
-            with st.expander("Education", expanded=False):
-                if st.button(("Add" if mode == "Add" else "Delete") + " Education", key="edu_btn", use_container_width=True):
-                    if mode == "Add":
-                        ss.education_entries.append({"degree": "", "institution": "", "year": "", "details": ""})
-                    elif mode == "Delete" and len(ss.education_entries) > 1:
-                        ss.education_entries.pop()
+                # Education
+                with st.expander("Education", expanded=False):
+                    if st.button(("Add" if mode == "Add" else "Delete") + " Education", key="edu_btn", use_container_width=True):
+                        if mode == "Add":
+                            ss.education_entries.append({"degree": "", "institution": "", "year": "", "details": ""})
+                        elif mode == "Delete" and len(ss.education_entries) > 1:
+                            ss.education_entries.pop()
 
-            # Projects
-            with st.expander("Projects", expanded=False):
-                if st.button(("Add" if mode == "Add" else "Delete") + " Project", key="proj_btn", use_container_width=True):
-                    if mode == "Add":
-                        ss.project_entries.append({"title": "", "tech": "", "duration": "", "description": ""})
-                    elif mode == "Delete" and len(ss.project_entries) > 1:
-                        ss.project_entries.pop()
+                # Projects
+                with st.expander("Projects", expanded=False):
+                    if st.button(("Add" if mode == "Add" else "Delete") + " Project", key="proj_btn", use_container_width=True):
+                        if mode == "Add":
+                            ss.project_entries.append({"title": "", "tech": "", "duration": "", "description": ""})
+                        elif mode == "Delete" and len(ss.project_entries) > 1:
+                            ss.project_entries.pop()
 
-            # Certificates
-            with st.expander("Certificates", expanded=False):
-                if st.button(("Add" if mode == "Add" else "Delete") + " Certificate", key="cert_btn", use_container_width=True):
-                    if mode == "Add":
-                        ss.certificate_links.append({"name": "", "link": "", "duration": "", "description": ""})
-                    elif mode == "Delete" and len(ss.certificate_links) > 1:
-                        ss.certificate_links.pop()
+                # Certificates
+                with st.expander("Certificates", expanded=False):
+                    if st.button(("Add" if mode == "Add" else "Delete") + " Certificate", key="cert_btn", use_container_width=True):
+                        if mode == "Add":
+                            ss.certificate_links.append({"name": "", "link": "", "duration": "", "description": ""})
+                        elif mode == "Delete" and len(ss.certificate_links) > 1:
+                            ss.certificate_links.pop()
 
     # ── call gamified sidebar AFTER fk is known so widget keys resolve correctly ──
     fk = st.session_state["form_key_counter"]
