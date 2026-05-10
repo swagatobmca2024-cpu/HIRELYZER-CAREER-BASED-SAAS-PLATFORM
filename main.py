@@ -6594,7 +6594,7 @@ from resume_builder import (
     render_template_forest_green,
     render_template_pure_white, render_template_midnight_black,
     render_template_soft_lavender, render_template_warm_sand,
-    render_template_ice_blue, render_template_rose_gold,
+    render_template_ice_blue,
     RESUME_TEMPLATES, render_resume,
     _fmt_desc, _cert_name_html,
 )
@@ -7364,8 +7364,9 @@ with tab2:
                     unsafe_allow_html=True,
                 )
                 if st.button("✓" if _is_sel else "Select", key=f"tpl_btn_{_tname}", use_container_width=True):
-                    st.session_state["selected_template_name"] = _tname
-                    st.rerun()
+                    if st.session_state["selected_template_name"] != _tname:
+                        st.session_state["selected_template_name"] = _tname
+                        st.rerun()
 
     selected_template = st.session_state["selected_template_name"]
 
@@ -7838,10 +7839,11 @@ with tab2:
         )
 
         # ── render into sidebar ────────────────────────────────────────────────
-        with st.sidebar:
+        if st.session_state.get("username") != "admin":
+            with st.sidebar:
 
-            # ── XP header ─────────────────────────────────────────────────────
-            st.markdown(f"""
+                # ── XP header ─────────────────────────────────────────────────────
+                st.markdown(f"""
 <div style='margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;'>
   <span style='font-size:10px;letter-spacing:1.2px;text-transform:uppercase;
                color:#6b7280;font-weight:500;'>Resume XP</span>
@@ -7859,101 +7861,101 @@ with tab2:
             color:#4b5563;margin-bottom:10px;font-weight:500;'>Sections</div>
 """, unsafe_allow_html=True)
 
-            # ── section rows ──────────────────────────────────────────────────
-            for (label, fill), icon_key in zip(SECTIONS.items(), ICON_KEYS):
-                st.markdown(_section_row(label, icon_key, fill), unsafe_allow_html=True)
+                # ── section rows ──────────────────────────────────────────────────
+                for (label, fill), icon_key in zip(SECTIONS.items(), ICON_KEYS):
+                    st.markdown(_section_row(label, icon_key, fill), unsafe_allow_html=True)
 
-            # ── UX Feedback Panel ─────────────────────────────────────────────
-            # Generate actionable, ranked feedback tips based on current state.
-            # Tips are prioritised by XP weight (highest-impact sections first).
-            _feedback_tips = []
+                # ── UX Feedback Panel ─────────────────────────────────────────────
+                # Generate actionable, ranked feedback tips based on current state.
+                # Tips are prioritised by XP weight (highest-impact sections first).
+                _feedback_tips = []
 
-            # Experience feedback
-            if _fill_exp == 0.0:
-                _feedback_tips.append("Add work experience to strengthen your resume (+30 XP potential)")
-            elif _fill_exp < DONE_THRESHOLD["Experience"]:
-                _exp_entries = ss.get("experience_entries", [])
-                _has_desc = any(
-                    len(str(e.get("description", "")).strip()) > 40
-                    for e in _exp_entries
-                )
-                if not _has_desc:
-                    _feedback_tips.append("Add detailed descriptions to your work experience to unlock more XP")
-                else:
-                    _feedback_tips.append("Enrich your experience descriptions with specific achievements and metrics")
+                # Experience feedback
+                if _fill_exp == 0.0:
+                    _feedback_tips.append("Add work experience to strengthen your resume (+30 XP potential)")
+                elif _fill_exp < DONE_THRESHOLD["Experience"]:
+                    _exp_entries = ss.get("experience_entries", [])
+                    _has_desc = any(
+                        len(str(e.get("description", "")).strip()) > 40
+                        for e in _exp_entries
+                    )
+                    if not _has_desc:
+                        _feedback_tips.append("Add detailed descriptions to your work experience to unlock more XP")
+                    else:
+                        _feedback_tips.append("Enrich your experience descriptions with specific achievements and metrics")
 
-            # Projects feedback
-            if _fill_proj == 0.0:
-                _feedback_tips.append("Add a project to gain up to 22 XP — projects are highly valued")
-            elif _fill_proj < DONE_THRESHOLD["Projects"]:
-                _proj_entries = ss.get("project_entries", [])
-                _has_tech = any(
-                    _count_valid_tokens(e.get("tech", "")) >= 1
-                    for e in _proj_entries if e.get("title")
-                )
-                if not _has_tech:
-                    _feedback_tips.append("List the technologies used in your projects to improve your score")
-                else:
-                    _feedback_tips.append("Improve your project descriptions — explain the problem solved and your impact")
-            elif _fill_proj < 0.90:
-                n_projs = len([e for e in ss.get("project_entries", []) if e.get("title")])
-                if n_projs < 2:
-                    _feedback_tips.append("Add another project to increase your Projects score further")
+                # Projects feedback
+                if _fill_proj == 0.0:
+                    _feedback_tips.append("Add a project to gain up to 22 XP — projects are highly valued")
+                elif _fill_proj < DONE_THRESHOLD["Projects"]:
+                    _proj_entries = ss.get("project_entries", [])
+                    _has_tech = any(
+                        _count_valid_tokens(e.get("tech", "")) >= 1
+                        for e in _proj_entries if e.get("title")
+                    )
+                    if not _has_tech:
+                        _feedback_tips.append("List the technologies used in your projects to improve your score")
+                    else:
+                        _feedback_tips.append("Improve your project descriptions — explain the problem solved and your impact")
+                elif _fill_proj < 0.90:
+                    n_projs = len([e for e in ss.get("project_entries", []) if e.get("title")])
+                    if n_projs < 2:
+                        _feedback_tips.append("Add another project to increase your Projects score further")
 
-            # Skills feedback
-            if _fill_skills < DONE_THRESHOLD["Skills & More"]:
-                if _skill_count < 3:
-                    _feedback_tips.append(f"Add more technical skills — you have {_skill_count}, aim for 5+ (comma-separated)")
-                if _soft_count < 2:
-                    _feedback_tips.append("Add 2–3 soft skills (e.g. Leadership, Communication) to boost your score")
+                # Skills feedback
+                if _fill_skills < DONE_THRESHOLD["Skills & More"]:
+                    if _skill_count < 3:
+                        _feedback_tips.append(f"Add more technical skills — you have {_skill_count}, aim for 5+ (comma-separated)")
+                    if _soft_count < 2:
+                        _feedback_tips.append("Add 2–3 soft skills (e.g. Leadership, Communication) to boost your score")
 
-            # Education feedback
-            if _fill_edu == 0.0:
-                _feedback_tips.append("Add your education details to build a complete resume")
-            elif _fill_edu < DONE_THRESHOLD["Education"]:
-                _feedback_tips.append("Add graduation year and academic details/achievements to complete education")
+                # Education feedback
+                if _fill_edu == 0.0:
+                    _feedback_tips.append("Add your education details to build a complete resume")
+                elif _fill_edu < DONE_THRESHOLD["Education"]:
+                    _feedback_tips.append("Add graduation year and academic details/achievements to complete education")
 
-            # Summary feedback
-            if _fill_summary == 0.0:
-                _feedback_tips.append("Write a professional summary — it's your first impression on recruiters")
-            elif _fill_summary < DONE_THRESHOLD["Summary"]:
-                _feedback_tips.append("Expand your summary with more specific skills, experience, and career goals")
+                # Summary feedback
+                if _fill_summary == 0.0:
+                    _feedback_tips.append("Write a professional summary — it's your first impression on recruiters")
+                elif _fill_summary < DONE_THRESHOLD["Summary"]:
+                    _feedback_tips.append("Expand your summary with more specific skills, experience, and career goals")
 
-            # Certificate feedback
-            if _fill_cert == 0.0 and pct >= 40:
-                _feedback_tips.append("Add a certification to differentiate yourself from other candidates")
-            elif 0.0 < _fill_cert < DONE_THRESHOLD["Certificates"]:
-                _feedback_tips.append("Add a verification link and description to your certificates for full credit")
+                # Certificate feedback
+                if _fill_cert == 0.0 and pct >= 40:
+                    _feedback_tips.append("Add a certification to differentiate yourself from other candidates")
+                elif 0.0 < _fill_cert < DONE_THRESHOLD["Certificates"]:
+                    _feedback_tips.append("Add a verification link and description to your certificates for full credit")
 
-            # Contact feedback
-            if _fill_contact < 1.0:
-                if not pi_phone2:
-                    _feedback_tips.append("Add your phone number to make your resume complete")
-                if not pi_linkedin:
-                    _feedback_tips.append("Add your LinkedIn profile URL — recruiters always check it")
+                # Contact feedback
+                if _fill_contact < 1.0:
+                    if not pi_phone2:
+                        _feedback_tips.append("Add your phone number to make your resume complete")
+                    if not pi_linkedin:
+                        _feedback_tips.append("Add your LinkedIn profile URL — recruiters always check it")
 
-            # Show up to 3 tips (highest priority = highest XP weight = listed first)
-            if _feedback_tips:
-                _tips_to_show = _feedback_tips[:3]
-                _tip_html_items = "".join(
-                    f"<div style='display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;'>"
-                    f"<span style='color:#f59e0b;font-size:12px;flex-shrink:0;margin-top:1px;'>&#9654;</span>"
-                    f"<span style='font-size:11px;color:#cbd5e1;line-height:1.5;'>{tip}</span>"
-                    f"</div>"
-                    for tip in _tips_to_show
-                )
-                st.markdown(
-                    f"<div style='margin:12px 0 6px;padding:10px 12px;background:#111827;"
-                    f"border-radius:8px;border:0.5px solid #374151;'>"
-                    f"<div style='font-size:9px;letter-spacing:1.2px;text-transform:uppercase;"
-                    f"color:#6b7280;font-weight:600;margin-bottom:8px;'>Tips to Boost XP</div>"
-                    f"{_tip_html_items}"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
+                # Show up to 3 tips (highest priority = highest XP weight = listed first)
+                if _feedback_tips:
+                    _tips_to_show = _feedback_tips[:3]
+                    _tip_html_items = "".join(
+                        f"<div style='display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;'>"
+                        f"<span style='color:#f59e0b;font-size:12px;flex-shrink:0;margin-top:1px;'>&#9654;</span>"
+                        f"<span style='font-size:11px;color:#cbd5e1;line-height:1.5;'>{tip}</span>"
+                        f"</div>"
+                        for tip in _tips_to_show
+                    )
+                    st.markdown(
+                        f"<div style='margin:12px 0 6px;padding:10px 12px;background:#111827;"
+                        f"border-radius:8px;border:0.5px solid #374151;'>"
+                        f"<div style='font-size:9px;letter-spacing:1.2px;text-transform:uppercase;"
+                        f"color:#6b7280;font-weight:600;margin-bottom:8px;'>Tips to Boost XP</div>"
+                        f"{_tip_html_items}"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
 
-            # ── divider + stats footer ─────────────────────────────────────────
-            st.markdown(f"""
+                # ── divider + stats footer ─────────────────────────────────────────
+                st.markdown(f"""
 <hr style='border:none;border-top:0.5px solid #1e2535;margin:14px 0;'>
 <div style='display:flex;justify-content:space-between;text-align:center;margin-bottom:18px;'>
   <div>
@@ -7971,55 +7973,55 @@ with tab2:
 </div>
 <hr style='border:none;border-top:0.5px solid #1e2535;margin:0 0 14px;'>
 <div style='font-size:10px;letter-spacing:1.4px;text-transform:uppercase;
-            color:#4b5563;margin-bottom:10px;font-weight:500;'>Manage Sections</div>
+                color:#4b5563;margin-bottom:10px;font-weight:500;'>Manage Sections</div>
 """, unsafe_allow_html=True)
 
-            # ── section add/delete controls ────────────────────────────────────
-            if "edit_mode" not in ss:
-                ss.edit_mode = "Add"
+                # ── section add/delete controls ────────────────────────────────────
+                if "edit_mode" not in ss:
+                    ss.edit_mode = "Add"
 
-            mode = st.selectbox(
-                "Mode",
-                ["Add", "Delete"],
-                index=0,
-                key="mode_dropdown",
-                label_visibility="collapsed",
-            )
-            ss.edit_mode = mode
+                mode = st.selectbox(
+                    "Mode",
+                    ["Add", "Delete"],
+                    index=0,
+                    key="mode_dropdown",
+                    label_visibility="collapsed",
+                )
+                ss.edit_mode = mode
 
-            st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
 
-            # Experience
-            with st.expander("Experience", expanded=False):
-                if st.button(("Add" if mode == "Add" else "Delete") + " Experience", key="exp_btn", use_container_width=True):
-                    if mode == "Add":
-                        ss.experience_entries.append({"title": "", "company": "", "duration": "", "description": ""})
-                    elif mode == "Delete" and len(ss.experience_entries) > 1:
-                        ss.experience_entries.pop()
+                # Experience
+                with st.expander("Experience", expanded=False):
+                    if st.button(("Add" if mode == "Add" else "Delete") + " Experience", key="exp_btn", use_container_width=True):
+                        if mode == "Add":
+                            ss.experience_entries.append({"title": "", "company": "", "duration": "", "description": ""})
+                        elif mode == "Delete" and len(ss.experience_entries) > 1:
+                            ss.experience_entries.pop()
 
-            # Education
-            with st.expander("Education", expanded=False):
-                if st.button(("Add" if mode == "Add" else "Delete") + " Education", key="edu_btn", use_container_width=True):
-                    if mode == "Add":
-                        ss.education_entries.append({"degree": "", "institution": "", "year": "", "details": ""})
-                    elif mode == "Delete" and len(ss.education_entries) > 1:
-                        ss.education_entries.pop()
+                # Education
+                with st.expander("Education", expanded=False):
+                    if st.button(("Add" if mode == "Add" else "Delete") + " Education", key="edu_btn", use_container_width=True):
+                        if mode == "Add":
+                            ss.education_entries.append({"degree": "", "institution": "", "year": "", "details": ""})
+                        elif mode == "Delete" and len(ss.education_entries) > 1:
+                            ss.education_entries.pop()
 
-            # Projects
-            with st.expander("Projects", expanded=False):
-                if st.button(("Add" if mode == "Add" else "Delete") + " Project", key="proj_btn", use_container_width=True):
-                    if mode == "Add":
-                        ss.project_entries.append({"title": "", "tech": "", "duration": "", "description": ""})
-                    elif mode == "Delete" and len(ss.project_entries) > 1:
-                        ss.project_entries.pop()
+                # Projects
+                with st.expander("Projects", expanded=False):
+                    if st.button(("Add" if mode == "Add" else "Delete") + " Project", key="proj_btn", use_container_width=True):
+                        if mode == "Add":
+                            ss.project_entries.append({"title": "", "tech": "", "duration": "", "description": ""})
+                        elif mode == "Delete" and len(ss.project_entries) > 1:
+                            ss.project_entries.pop()
 
-            # Certificates
-            with st.expander("Certificates", expanded=False):
-                if st.button(("Add" if mode == "Add" else "Delete") + " Certificate", key="cert_btn", use_container_width=True):
-                    if mode == "Add":
-                        ss.certificate_links.append({"name": "", "link": "", "duration": "", "description": ""})
-                    elif mode == "Delete" and len(ss.certificate_links) > 1:
-                        ss.certificate_links.pop()
+                # Certificates
+                with st.expander("Certificates", expanded=False):
+                    if st.button(("Add" if mode == "Add" else "Delete") + " Certificate", key="cert_btn", use_container_width=True):
+                        if mode == "Add":
+                            ss.certificate_links.append({"name": "", "link": "", "duration": "", "description": ""})
+                        elif mode == "Delete" and len(ss.certificate_links) > 1:
+                            ss.certificate_links.pop()
 
     # ── call gamified sidebar AFTER fk is known so widget keys resolve correctly ──
     fk = st.session_state["form_key_counter"]
@@ -8109,17 +8111,22 @@ with tab2:
         _sec_hdr("👤", "Personal Information")
         col1, col2 = st.columns(2)
         with col1:
-            st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, placeholder="e.g., Arjun Sharma", key=f"name_input_{fk}")
-            st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, placeholder="e.g., +91 98765 43210", key=f"phone_input_{fk}")
-            st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, placeholder="e.g., Kolkata, West Bengal", key=f"loc_input_{fk}")
+            # FIX: Do NOT assign back to session_state inside the form.
+            # Streamlit batches form widgets — writing to session_state here
+            # triggers an immediate rerun on every keystroke, defeating the form.
+            # Instead, just render the widget with `value=` for pre-fill.
+            # Values are committed to session_state only when submitted=True below.
+            st.text_input("👤 Full Name", value=st.session_state.name, placeholder="e.g., Arjun Sharma", key=f"name_input_{fk}")
+            st.text_input("📞 Phone Number", value=st.session_state.phone, placeholder="e.g., +91 98765 43210", key=f"phone_input_{fk}")
+            st.text_input("📍 Location", value=st.session_state.location, placeholder="e.g., Kolkata, West Bengal", key=f"loc_input_{fk}")
         with col2:
-            st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, placeholder="e.g., arjun@gmail.com", key=f"email_input_{fk}")
-            st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, placeholder="e.g., linkedin.com/in/arjun", key=f"ln_input_{fk}")
-            st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, placeholder="e.g., arjun.dev or github.com/arjun", key=f"port_input_{fk}")
-            st.session_state.job_title = st.text_input("💼 Job Title / Target Role", value=st.session_state.job_title, placeholder="e.g., Full Stack Developer", key=f"job_input_{fk}")
+            st.text_input("📧 Email", value=st.session_state.email, placeholder="e.g., arjun@gmail.com", key=f"email_input_{fk}")
+            st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, placeholder="e.g., linkedin.com/in/arjun", key=f"ln_input_{fk}")
+            st.text_input("🌐 Portfolio", value=st.session_state.portfolio, placeholder="e.g., arjun.dev or github.com/arjun", key=f"port_input_{fk}")
+            st.text_input("💼 Job Title / Target Role", value=st.session_state.job_title, placeholder="e.g., Full Stack Developer", key=f"job_input_{fk}")
 
         _sec_hdr("📝", "Professional Summary")
-        st.session_state.summary = st.text_area(
+        st.text_area(
             "Summary",
             value=st.session_state.summary,
             placeholder="Write 3–5 sentences about your career goals, key strengths, and what makes you stand out. E.g., 'Results-driven software engineer with 3+ years building scalable web apps...'",
@@ -8129,7 +8136,7 @@ with tab2:
         _hint("Aim for 80–200 characters. Recruiters read this first — make it count.")
 
         _sec_hdr("🛠️", "Skills, Languages, Interests & Soft Skills")
-        st.session_state.skills = st.text_area(
+        st.text_area(
             "Technical Skills (comma-separated)",
             value=st.session_state.skills,
             placeholder="e.g., Python, React, Node.js, PostgreSQL, Docker, AWS",
@@ -8137,32 +8144,34 @@ with tab2:
             key=f"skills_input_{fk}",
         )
         _hint("List 5+ skills for best score. Separate each with a comma.")
-        _tag_chips(st.session_state.skills, "Preview:")
+        # FIX: _tag_chips now reads from the widget key directly (live value),
+        # not from session_state.skills which lags by one submit cycle.
+        _tag_chips(st.session_state.get(f"skills_input_{fk}", st.session_state.skills), "Preview:")
 
-        st.session_state.languages = st.text_area(
+        st.text_area(
             "Languages (comma-separated)",
             value=st.session_state.languages,
             placeholder="e.g., English, Bengali, Hindi",
             height=60,
             key=f"lang_input_{fk}",
         )
-        _tag_chips(st.session_state.languages, "Preview:")
-        st.session_state.interests = st.text_area(
+        _tag_chips(st.session_state.get(f"lang_input_{fk}", st.session_state.languages), "Preview:")
+        st.text_area(
             "Interests / Hobbies (comma-separated)",
             value=st.session_state.interests,
             placeholder="e.g., Open Source, Machine Learning, Chess, Blogging",
             height=60,
             key=f"int_input_{fk}",
         )
-        _tag_chips(st.session_state.interests, "Preview:")
-        st.session_state.Softskills = st.text_area(
+        _tag_chips(st.session_state.get(f"int_input_{fk}", st.session_state.interests), "Preview:")
+        st.text_area(
             "Soft Skills (comma-separated)",
             value=st.session_state.Softskills,
             placeholder="e.g., Leadership, Communication, Problem Solving, Teamwork",
             height=60,
             key=f"soft_input_{fk}",
         )
-        _tag_chips(st.session_state.Softskills, "Preview:")
+        _tag_chips(st.session_state.get(f"soft_input_{fk}", st.session_state.Softskills), "Preview:")
 
         _sec_hdr("🧱", "Work Experience", badge=f"{len(st.session_state.experience_entries)} entr{'y' if len(st.session_state.experience_entries)==1 else 'ies'}")
         for idx, exp in enumerate(st.session_state.experience_entries):
@@ -8171,10 +8180,14 @@ with tab2:
             _display = f"{_entry_label} @ {_entry_company}" if _entry_company else _entry_label
             with st.expander(f"🏢 {_display}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Entry #{idx+1}</div>", unsafe_allow_html=True)
-                exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), placeholder="e.g., Software Engineer", key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["company"] = st.text_input("Company", value=exp.get("company", ""), placeholder="e.g., Infosys, TCS, Google", key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), placeholder="e.g., Jun 2022 – Present", key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["description"] = st.text_area("Description", value=exp.get("description", ""), placeholder="• Developed REST APIs using Node.js that reduced response time by 35%\n• Led a team of 4 engineers to deliver the project 2 weeks ahead of schedule", height=100, key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                # FIX: Do not assign back to exp dict here — that mutates session_state
+                # inside the form, causing a rerun on every keystroke.
+                # Widget keys are unique and Streamlit persists their values automatically.
+                # _sync_entries() in the sidebar and the submit handler below read them.
+                st.text_input("Job Title", value=exp.get("title", ""), placeholder="e.g., Software Engineer", key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                st.text_input("Company", value=exp.get("company", ""), placeholder="e.g., Infosys, TCS, Google", key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                st.text_input("Duration", value=exp.get("duration", ""), placeholder="e.g., Jun 2022 – Present", key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                st.text_area("Description", value=exp.get("description", ""), placeholder="• Developed REST APIs using Node.js that reduced response time by 35%\n• Led a team of 4 engineers to deliver the project 2 weeks ahead of schedule", height=100, key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
                 _hint("Use bullet points starting with action verbs. Include metrics where possible.")
 
         _sec_hdr("🎓", "Education", badge=f"{len(st.session_state.education_entries)} entr{'y' if len(st.session_state.education_entries)==1 else 'ies'}")
@@ -8184,41 +8197,42 @@ with tab2:
             _edu_display = f"{_edu_label} — {_edu_inst}" if _edu_inst else _edu_label
             with st.expander(f"🏫 {_edu_display}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Entry #{idx+1}</div>", unsafe_allow_html=True)
-                edu["degree"] = st.text_input("Degree / Qualification", value=edu.get("degree", ""), placeholder="e.g., B.Tech in Computer Science", key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), placeholder="e.g., Jadavpur University", key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["year"] = st.text_input("Year / Duration", value=edu.get("year", ""), placeholder="e.g., 2019 – 2023", key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["details"] = st.text_area("Academic Details", value=edu.get("details", ""), placeholder="e.g., CGPA: 8.7/10 | Relevant: Data Structures, OS, DBMS | Dean's List 2022", height=80, key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                st.text_input("Degree / Qualification", value=edu.get("degree", ""), placeholder="e.g., B.Tech in Computer Science", key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                st.text_input("Institution", value=edu.get("institution", ""), placeholder="e.g., Jadavpur University", key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                st.text_input("Year / Duration", value=edu.get("year", ""), placeholder="e.g., 2019 – 2023", key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                st.text_area("Academic Details", value=edu.get("details", ""), placeholder="e.g., CGPA: 8.7/10 | Relevant: Data Structures, OS, DBMS | Dean's List 2022", height=80, key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
 
         _sec_hdr("🚀", "Projects", badge=f"{len(st.session_state.project_entries)} entr{'y' if len(st.session_state.project_entries)==1 else 'ies'}")
         for idx, proj in enumerate(st.session_state.project_entries):
             _proj_label = proj.get("title", "") or f"Project #{idx+1}"
             with st.expander(f"📌 {_proj_label}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Project #{idx+1}</div>", unsafe_allow_html=True)
-                proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), placeholder="e.g., AI Resume Builder", key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), placeholder="e.g., Python, Streamlit, OpenAI API, PostgreSQL", key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), placeholder="e.g., Jan 2024 – Mar 2024  (or  2 months)", key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["description"] = st.text_area("Description", value=proj.get("description", ""), placeholder="• Built a full-stack resume builder with AI-powered cover letter generation\n• Reduced resume creation time by 70% compared to manual methods", height=100, key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                st.text_input("Project Title", value=proj.get("title", ""), placeholder="e.g., AI Resume Builder", key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                st.text_input("Tech Stack", value=proj.get("tech", ""), placeholder="e.g., Python, Streamlit, OpenAI API, PostgreSQL", key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                st.text_input("Duration", value=proj.get("duration", ""), placeholder="e.g., Jan 2024 – Mar 2024  (or  2 months)", key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                st.text_area("Description", value=proj.get("description", ""), placeholder="• Built a full-stack resume builder with AI-powered cover letter generation\n• Reduced resume creation time by 70% compared to manual methods", height=100, key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
                 _hint("Describe the problem solved, your role, and the impact or outcome.")
 
         _sec_hdr("🔗", "Project Links")
-        project_links_input = st.text_area(
+        st.text_area(
             "Enter one project link per line:",
             value="\n".join(st.session_state.project_links),
             placeholder="https://github.com/yourname/project1\nhttps://yourproject.netlify.app",
             height=80,
             key=f"proj_links_input_{fk}",
         )
-        st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
+        # FIX: Do NOT write session_state.project_links here — that's a mutation
+        # inside the form. It will be committed on submit below.
 
         _sec_hdr("🏅", "Certificates", badge=f"{len(st.session_state.certificate_links)} entr{'y' if len(st.session_state.certificate_links)==1 else 'ies'}")
         for idx, cert in enumerate(st.session_state.certificate_links):
             _cert_label = cert.get("name", "") or f"Certificate #{idx+1}"
             with st.expander(f"🎖️ {_cert_label}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Certificate #{idx+1}</div>", unsafe_allow_html=True)
-                cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), placeholder="e.g., AWS Certified Solutions Architect", key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["link"] = st.text_input("Verification Link", value=cert.get("link", ""), placeholder="e.g., https://credly.com/badges/...", key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["duration"] = st.text_input("Issued Date", value=cert.get("duration", ""), placeholder="e.g., March 2024", key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["description"] = st.text_area("Description", value=cert.get("description", ""), placeholder="e.g., Demonstrates expertise in designing distributed systems on AWS. Covers EC2, S3, RDS, and networking.", height=80, key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                st.text_input("Certificate Name", value=cert.get("name", ""), placeholder="e.g., AWS Certified Solutions Architect", key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                st.text_input("Verification Link", value=cert.get("link", ""), placeholder="e.g., https://credly.com/badges/...", key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                st.text_input("Issued Date", value=cert.get("duration", ""), placeholder="e.g., March 2024", key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                st.text_area("Description", value=cert.get("description", ""), placeholder="e.g., Demonstrates expertise in designing distributed systems on AWS. Covers EC2, S3, RDS, and networking.", height=80, key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
 
         st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
         btn_col1, btn_col2 = st.columns([1, 1])
@@ -8237,6 +8251,52 @@ with tab2:
         if submitted:
             st.session_state["_resume_generated_msg"] = True
             st.session_state["_resume_generating"] = True
+            # ── Commit all form widget values to session_state on submit ──────
+            # This is the ONLY place we write widget values back — not during typing.
+            ss = st.session_state
+            ss.name      = ss.get(f"name_input_{fk}",    ss.name)
+            ss.email     = ss.get(f"email_input_{fk}",   ss.email)
+            ss.phone     = ss.get(f"phone_input_{fk}",   ss.phone)
+            ss.location  = ss.get(f"loc_input_{fk}",     ss.location)
+            ss.linkedin  = ss.get(f"ln_input_{fk}",      ss.linkedin)
+            ss.portfolio = ss.get(f"port_input_{fk}",    ss.portfolio)
+            ss.job_title = ss.get(f"job_input_{fk}",     ss.job_title)
+            ss.summary   = ss.get(f"summary_input_{fk}", ss.summary)
+            ss.skills    = ss.get(f"skills_input_{fk}",  ss.skills)
+            ss.languages = ss.get(f"lang_input_{fk}",    ss.languages)
+            ss.interests = ss.get(f"int_input_{fk}",     ss.interests)
+            ss.Softskills = ss.get(f"soft_input_{fk}",   ss.Softskills)
+            # Project links
+            _pl_raw = ss.get(f"proj_links_input_{fk}", "")
+            ss.project_links = [lnk.strip() for lnk in _pl_raw.splitlines() if lnk.strip()]
+            # Sync experience entry dicts
+            _n_exp = len(ss.experience_entries)
+            for _i, _e in enumerate(ss.experience_entries):
+                _e["title"]       = ss.get(f"title_{_i}_{_n_exp}_{fk}",       _e.get("title", ""))
+                _e["company"]     = ss.get(f"company_{_i}_{_n_exp}_{fk}",     _e.get("company", ""))
+                _e["duration"]    = ss.get(f"duration_{_i}_{_n_exp}_{fk}",    _e.get("duration", ""))
+                _e["description"] = ss.get(f"description_{_i}_{_n_exp}_{fk}", _e.get("description", ""))
+            # Sync education entry dicts
+            _n_edu = len(ss.education_entries)
+            for _i, _e in enumerate(ss.education_entries):
+                _e["degree"]      = ss.get(f"degree_{_i}_{_n_edu}_{fk}",      _e.get("degree", ""))
+                _e["institution"] = ss.get(f"institution_{_i}_{_n_edu}_{fk}", _e.get("institution", ""))
+                _e["year"]        = ss.get(f"edu_year_{_i}_{_n_edu}_{fk}",    _e.get("year", ""))
+                _e["details"]     = ss.get(f"edu_details_{_i}_{_n_edu}_{fk}", _e.get("details", ""))
+            # Sync project entry dicts
+            _n_proj = len(ss.project_entries)
+            for _i, _e in enumerate(ss.project_entries):
+                _e["title"]       = ss.get(f"proj_title_{_i}_{_n_proj}_{fk}",    _e.get("title", ""))
+                _e["tech"]        = ss.get(f"proj_tech_{_i}_{_n_proj}_{fk}",     _e.get("tech", ""))
+                _e["duration"]    = ss.get(f"proj_duration_{_i}_{_n_proj}_{fk}", _e.get("duration", ""))
+                _e["description"] = ss.get(f"proj_desc_{_i}_{_n_proj}_{fk}",     _e.get("description", ""))
+            # Sync certificate entry dicts
+            _n_cert = len(ss.certificate_links)
+            for _i, _e in enumerate(ss.certificate_links):
+                _e["name"]        = ss.get(f"cert_name_{_i}_{_n_cert}_{fk}",        _e.get("name", ""))
+                _e["link"]        = ss.get(f"cert_link_{_i}_{_n_cert}_{fk}",        _e.get("link", ""))
+                _e["duration"]    = ss.get(f"cert_duration_{_i}_{_n_cert}_{fk}",    _e.get("duration", ""))
+                _e["description"] = ss.get(f"cert_description_{_i}_{_n_cert}_{fk}", _e.get("description", ""))
 
         if clear_clicked:
             st.session_state["_confirm_clear"] = True
