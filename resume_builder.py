@@ -16,6 +16,44 @@
 
 from collections import Counter as _Counter
 
+def _tech_pills(tech_str, color="#374151", bg="#f3f4f6", border="#d1d5db", font_size="11px"):
+    """
+    Converts a comma-separated tech stack string into wrapping pill badges.
+    Prevents overflow in project cards by rendering each technology as an
+    individual pill inside a flex-wrap container.
+    Falls back gracefully to plain text if tech_str is empty.
+    """
+    if not tech_str or not tech_str.strip():
+        return ""
+    items = [t.strip() for t in tech_str.split(',') if t.strip()]
+    if not items:
+        return ""
+    pills = "".join(
+        f"<span style='"
+        f"display:inline-block;"
+        f"background:{bg};"
+        f"color:{color};"
+        f"border:1px solid {border};"
+        f"border-radius:4px;"
+        f"padding:2px 8px;"
+        f"font-size:{font_size};"
+        f"font-weight:600;"
+        f"white-space:nowrap;"
+        f"'>{item}</span>"
+        for item in items
+    )
+    return (
+        f"<div style='"
+        f"display:flex;"
+        f"flex-wrap:wrap;"
+        f"gap:4px 6px;"
+        f"margin:4px 0 6px 0;"
+        f"line-height:1.6;"
+        f"overflow:visible;"
+        f"'>{pills}</div>"
+    )
+
+
 def _fmt_desc(text, font_size="14px", color="#374151", line_height="1.75"):
     """
     ATS-friendly, readable description formatter shared by all 9 templates.
@@ -117,66 +155,6 @@ def _cert_name_html(cert, link_style, span_style=""):
         return f"<a href='{link}' target='_blank' style='{link_style}'>{name}</a>"
     else:
         return f"<span style='{span_style or link_style}'>{name}</span>"
-
-
-def _render_tech_pills(tech_str, pill_bg="#f3f4f6", pill_color="#374151",
-                       pill_border="1px solid #e5e7eb", font_size="11px",
-                       font_weight="600", label="", label_color=None):
-    """
-    Converts a comma-separated tech string into flex-wrapped pill badges.
-    Falls back to plain text if tech_str is empty.
-
-    Args:
-        tech_str   : raw tech stack string e.g. "Python,HTML,CSS,JS,Supabase"
-        pill_bg    : pill background colour
-        pill_color : pill text colour
-        pill_border: pill border CSS
-        font_size  : font size for each pill
-        font_weight: font weight for each pill
-        label      : optional prefix label e.g. "Tech Stack:" rendered before pills
-        label_color: colour of the label span; defaults to pill_color
-    Returns:
-        HTML string — a flex-wrap container of pill <span> elements.
-    """
-    if not tech_str or not tech_str.strip():
-        return ""
-    items = [t.strip() for t in tech_str.replace(";", ",").split(",") if t.strip()]
-    if not items:
-        return ""
-    label_html = ""
-    if label:
-        lc = label_color or pill_color
-        label_html = (
-            f"<span style='font-size:{font_size};font-weight:700;"
-            f"color:{lc};white-space:nowrap;margin-right:6px;flex-shrink:0;'>"
-            f"{label}</span>"
-        )
-    pills = "".join(
-        f"<span style='"
-        f"display:inline-block;"
-        f"background:{pill_bg};"
-        f"color:{pill_color};"
-        f"border:{pill_border};"
-        f"border-radius:4px;"
-        f"padding:2px 7px;"
-        f"font-size:{font_size};"
-        f"font-weight:{font_weight};"
-        f"white-space:nowrap;"
-        f"line-height:1.6;"
-        f"'>{item}</span>"
-        for item in items
-    )
-    return (
-        f"<div style='"
-        f"display:flex;"
-        f"flex-wrap:wrap;"
-        f"align-items:center;"
-        f"gap:4px 6px;"
-        f"margin:3px 0 5px;"
-        f"overflow-wrap:break-word;"
-        f"word-break:break-word;"
-        f"'>{label_html}{pills}</div>"
-    )
 
 
 def render_template_default(session_state, profile_img_html=""):
@@ -311,7 +289,7 @@ def render_template_default(session_state, profile_img_html=""):
                 f"<strong style='font-size:14px;color:#1f2937;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"<div>{_render_tech_pills(proj.get('tech',''), pill_bg='#f3f4f6', pill_color='#4b5563', font_size='11px')}</div>"
+                f"{_tech_pills(proj.get('tech',''), color='#4b5563', bg='#f1f5f9', border='#cbd5e1')}"
                 f"<div style='font-size:13px;color:#374151;'>{desc}</div>"
                 f"{proj_link_html}</div>"
             )
@@ -321,12 +299,7 @@ def render_template_default(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Professional Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Professional Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -376,16 +349,11 @@ def render_template_modern(session_state, profile_img_html=""):
 
     # Helper: build a comma-separated tag list (ATS-safe plain spans)
     def _tag_list(items_str, bg="#eff6ff", color="#1e3a8a", border="#bfdbfe"):
-        pills = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};"
             f"border:1px solid {border};border-radius:4px;padding:4px 12px;"
-            f"margin:3px 4px 3px 0;font-size:13px;font-weight:600;white-space:nowrap;"
-            f"line-height:1.6;word-break:break-word;'>{s.strip()}</span>"
+            f"margin:3px 4px 3px 0;font-size:13px;font-weight:600;'>{s.strip()}</span>"
             for s in items_str.split(',') if s.strip()
-        )
-        return (
-            f"<div style='display:flex;flex-wrap:wrap;align-items:center;"
-            f"gap:4px 0;overflow-wrap:break-word;'>{pills}</div>"
         )
 
     # Section header helper (left-aligned, underlined — ATS parses left-to-right)
@@ -472,7 +440,7 @@ def render_template_modern(session_state, profile_img_html=""):
                 f"<span style='font-size:13px;color:#374151;background:#e0e7ff;padding:2px 10px;"
                 f"border-radius:6px;font-weight:600;border:1px solid #c7d2fe;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"<div>{_render_tech_pills(proj.get('tech',''), label='Tech Stack:', pill_bg='#f0f9ff', pill_color='#374151', pill_border='1px solid #bae6fd', font_size='12px')}</div>"
+                f"{_tech_pills(proj.get('tech',''), color='#374151', bg='#f3f4f6', border='#d1d5db')}"
                 f"<div style='font-size:14px;color:#1f2937;'>{desc}</div>"
                 f"{proj_link_html}</div>"
             )
@@ -518,11 +486,6 @@ def render_template_modern(session_state, profile_img_html=""):
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style>
 <title>{session_state.get('name', '')} - Resume</title>
 </head>
 <body style="font-family:'Segoe UI',Arial,Helvetica,sans-serif;line-height:1.6;color:#1f2937;background:#ffffff;padding:36px 32px;">
@@ -662,15 +625,10 @@ def render_template_sidebar(session_state, profile_img_html=""):
 
     def _badge_sb(item, bg="rgba(56,189,248,0.25)", color="#ffffff"):
         return (f"<span style='display:inline-block;background:{bg};color:{color};border-radius:4px;"
-                f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;"
-                f"border:1px solid rgba(56,189,248,0.4);white-space:nowrap;line-height:1.6;'>{item.strip()}</span>")
+                f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;border:1px solid rgba(56,189,248,0.4);'>{item.strip()}</span>")
 
     def _badges_sb(items_str, bg="rgba(56,189,248,0.25)", color="#ffffff"):
-        pills = "".join(_badge_sb(s, bg, color) for s in items_str.split(',') if s.strip())
-        return (
-            f"<div style='display:flex;flex-wrap:wrap;align-items:center;"
-            f"gap:4px 0;overflow-wrap:break-word;'>{pills}</div>"
-        )
+        return "".join(_badge_sb(s, bg, color) for s in items_str.split(',') if s.strip())
 
     def _main_sec_sb(title, body):
         return (f"<div style='margin-bottom:26px;'>"
@@ -743,7 +701,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
                 f"<strong style='font-size:14px;color:#0c4a6e;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:12px;color:#64748b;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"<div>{_render_tech_pills(proj.get('tech',''), pill_bg='#e0f2fe', pill_color='#0284c7', pill_border='1px solid #7dd3fc', font_size='11px')}</div>"
+                f"{_tech_pills(proj.get('tech',''), color='#0284c7', bg='#e0f2fe', border='#7dd3fc')}"
                 f"<div style='font-size:13px;color:#374151;'>{desc}</div>"
                 f"{proj_link_html}</div>"
             )
@@ -753,12 +711,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -861,7 +814,7 @@ def render_template_classic(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:#1e3a5f;'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:#555;'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), label='Tech:', pill_bg='#f9fafb', pill_color='#555', font_size='12px')}</div>
+                {_tech_pills(proj.get('tech',''), color='#374151', bg='#f3f4f6', border='#d1d5db')}
                 <div style='font-size:14px;color:#333;line-height:1.6;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -920,12 +873,7 @@ def render_template_classic(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Georgia',serif; color:#1a1a1a; background:#fff; padding:40px 60px; line-height:1.6; }}
@@ -1029,7 +977,7 @@ def render_template_executive(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:#1a1a1a;'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:#777;'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), label='Stack:', pill_bg='#eef2ff', pill_color='#3730a3', pill_border='1px solid #c7d2fe', font_size='12px')}</div>
+                {_tech_pills(proj.get('tech',''), color='#3730a3', bg='#eef2ff', border='#a5b4fc')}
                 <div style='font-size:14px;margin-top:4px;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -1096,12 +1044,7 @@ def render_template_executive(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Executive Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Executive Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',Arial,sans-serif; color:#1a1a1a; background:#fff; line-height:1.6; }}</style>
 </head>
 <body>
@@ -1253,12 +1196,7 @@ def render_template_timeline(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Timeline Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Timeline Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
 </head>
 <body>
@@ -1356,7 +1294,7 @@ def render_template_corporate(session_state, profile_img_html=""):
                     <strong style='font-size:14px;color:#1e3a8a;'>{proj.get('title','')}</strong>
                     <span style='font-size:12px;color:#64748b;'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), pill_bg='#eff6ff', pill_color='#3b82f6', pill_border='1px solid #bfdbfe', font_size='11px')}</div>
+                {_tech_pills(proj.get('tech',''), color='#1d4ed8', bg='#dbeafe', border='#93c5fd')}
                 <div style='font-size:13px;color:#374151;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -1416,12 +1354,7 @@ def render_template_corporate(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Corporate Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Corporate Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -1515,7 +1448,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
                     <strong style='font-size:14px;color:#064e3b;'>{proj.get('title','')}</strong>
                     <span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), pill_bg='#ecfdf5', pill_color='#059669', pill_border='1px solid #6ee7b7', font_size='11px')}</div>
+                {_tech_pills(proj.get('tech',''), color='#065f46', bg='#d1fae5', border='#6ee7b7')}
                 <div style='font-size:13px;color:#374151;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -1573,12 +1506,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Creative Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Creative Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#f0fdf4; }}</style>
 </head>
 <body>
@@ -1672,7 +1600,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
                     <strong style='font-size:14px;color:#292524;'>{proj.get('title','')}</strong>
                     <span style='font-size:12px;color:#a8a29e;'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), pill_bg='#fffbeb', pill_color='#b45309', pill_border='1px solid #fcd34d', font_size='11px')}</div>
+                {_tech_pills(proj.get('tech',''), color='#92400e', bg='#fef3c7', border='#fcd34d')}
                 <div style='font-size:13px;color:#44403c;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -1727,12 +1655,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Terracotta Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Terracotta Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fafaf9; }}</style>
 </head>
 <body>
@@ -1881,7 +1804,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
                 f"<strong style='font-size:13px;color:#0d1b3e;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"<div>{_render_tech_pills(proj.get('tech',''), pill_bg='#f8f8f2', pill_color='#374151', font_size='11px')}</div>"
+                f"{_tech_pills(proj.get('tech',''), color='#374151', bg='#f3f4f6', border='#d1d5db')}"
                 f"<div>{desc}</div>{pl}</div>"
             )
 
@@ -1889,12 +1812,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -2047,7 +1965,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:{C_PRIMARY};'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:{C_MUTED};font-weight:600;'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), label='Tech Stack:', pill_bg='#f8fafc', pill_color=C_SECONDARY, pill_border=f'1px solid #cbd5e1', font_size='11px')}</div>
+                {_tech_pills(proj.get('tech',''), color=C_SECONDARY, bg='#f3f4f6', border='#d1d5db')}
                 <div style='font-size:14px;color:{C_BODY};line-height:1.75;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -2085,12 +2003,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Segoe UI',Arial,sans-serif; color:{C_PRIMARY}; background:#ffffff; padding:40px 60px; line-height:1.6; }}
@@ -2244,7 +2157,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
                 f"<strong style='font-size:13px;color:#0f4c4c;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"<div>{_render_tech_pills(proj.get('tech',''), pill_bg='#f8f8f2', pill_color='#374151', font_size='11px')}</div>"
+                f"{_tech_pills(proj.get('tech',''), color='#374151', bg='#f3f4f6', border='#d1d5db')}"
                 f"<div>{desc}</div>{pl}</div>"
             )
 
@@ -2252,12 +2165,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -2394,7 +2302,7 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:#7f1d1d;'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:#6b7280;'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), label='Tech:', pill_bg='#f9fafb', pill_color='#6b7280', font_size='12px')}</div>
+                {_tech_pills(proj.get('tech',''), color='#374151', bg='#f3f4f6', border='#d1d5db')}
                 <div style='font-size:14px;color:#1c1c1c;line-height:1.6;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -2428,12 +2336,7 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; }}
@@ -2586,7 +2489,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
                 f"<strong style='font-size:13px;color:#1e1b4b;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"<div>{_render_tech_pills(proj.get('tech',''), pill_bg='#f8f8f2', pill_color='#374151', font_size='11px')}</div>"
+                f"{_tech_pills(proj.get('tech',''), color='#374151', bg='#f3f4f6', border='#d1d5db')}"
                 f"<div>{desc}</div>{pl}</div>"
             )
 
@@ -2594,12 +2497,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Resume</title>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
@@ -2654,15 +2552,10 @@ def render_template_forest_green(session_state, profile_img_html=""):
                 f"{body}</div>")
 
     def _tags_fg(s, bg="#f0fdf4", color="#14532d", border="#bbf7d0"):
-        pills = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};border:1px solid {border};"
-            f"border-radius:4px;padding:4px 11px;margin:3px 4px 3px 0;font-size:13px;font-weight:600;"
-            f"white-space:nowrap;line-height:1.6;word-break:break-word;'>{x.strip()}</span>"
+            f"border-radius:4px;padding:4px 11px;margin:3px 4px 3px 0;font-size:13px;font-weight:600;'>{x.strip()}</span>"
             for x in s.split(',') if x.strip())
-        return (
-            f"<div style='display:flex;flex-wrap:wrap;align-items:center;"
-            f"gap:4px 0;overflow-wrap:break-word;'>{pills}</div>"
-        )
 
     contact_parts_fg = []
     for key, label in [('location',''),('phone',''),('email',''),('linkedin','LinkedIn'),('portfolio','Portfolio')]:
@@ -2725,7 +2618,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
                 f"<strong style='font-size:15px;color:#14532d;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:13px;color:#6b7280;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"<div>{_render_tech_pills(proj.get('tech',''), label='Tech:', pill_bg='#f0fdf4', pill_color='#15803d', pill_border='1px solid #86efac', font_size='11px')}</div>"
+                f"{_tech_pills(proj.get('tech',''), color='#374151', bg='#f3f4f6', border='#d1d5db')}"
                 f"<div>{desc}</div>{pl}</div>"
             )
 
@@ -2748,12 +2641,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
 
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
-<style>
-*{{box-sizing:border-box;}}
-body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
-div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
-</style><title>{session_state.get('name','')} - Resume</title></head>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title></head>
 <body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;padding:36px 40px;">
   {fixed_img if fixed_img else ''}
   <div style="text-align:center;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #166534;">
@@ -2869,7 +2757,7 @@ def render_template_pure_white(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:#111827;'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:#6b7280;'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), pill_bg='#f9fafb', pill_color='#6b7280', font_size='12px')}</div>
+                {_tech_pills(proj.get('tech',''), color='#374151', bg='#f3f4f6', border='#d1d5db')}
                 {desc}{lnk_html}
             </div>"""
 
@@ -3021,7 +2909,7 @@ def render_template_midnight_black(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:{ACCENT};'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:#6b7280;'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), pill_bg='#1f2937', pill_color='#9ca3af', pill_border='1px solid #374151', font_size='11px')}</div>
+                {_tech_pills(proj.get('tech',''), color='#374151', bg='#f3f4f6', border='#d1d5db')}
                 {desc}{lnk_html}
             </div>"""
 
@@ -3180,7 +3068,7 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:{C_HEAD};'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:{C_MUTED};'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), pill_bg='#faf5ff', pill_color=C_ACC, pill_border=f'1px solid #e9d5ff', font_size='11px')}</div>
+                {_tech_pills(proj.get('tech',''), color=C_ACC, bg='#f3f4f6', border='#d1d5db')}
                 {desc}{lnk_html}
             </div>"""
 
@@ -3339,7 +3227,7 @@ def render_template_warm_sand(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:{C_HEAD};'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:{C_MUTED};'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), pill_bg='#faf5ff', pill_color=C_ACC, pill_border=f'1px solid #e9d5ff', font_size='11px')}</div>
+                {_tech_pills(proj.get('tech',''), color=C_ACC, bg='#f3f4f6', border='#d1d5db')}
                 {desc}{lnk_html}
             </div>"""
 
@@ -3499,7 +3387,7 @@ def render_template_ice_blue(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:{C_HEAD};'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:{C_MUTED};'>{proj.get('duration','')}</span>
                 </div>
-                <div>{_render_tech_pills(proj.get('tech',''), pill_bg='#faf5ff', pill_color=C_ACC, pill_border=f'1px solid #e9d5ff', font_size='11px')}</div>
+                {_tech_pills(proj.get('tech',''), color=C_ACC, bg='#f3f4f6', border='#d1d5db')}
                 {desc}{lnk_html}
             </div>"""
 
@@ -3558,6 +3446,161 @@ def render_template_ice_blue(session_state, profile_img_html=""):
 </div></body></html>"""
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TEMPLATE 21 — Rose Gold (Single Column)
+# Sophisticated rose-pink palette. Fashion, marketing, HR, PR industries.
+# ─────────────────────────────────────────────────────────────────────────────
+def render_template_rose_gold(session_state, profile_img_html=""):
+    """Rose Gold — single-column, elegant pink-gold palette, fashion/marketing style."""
+    import re as _re21
+
+    C_HEAD  = "#881337"   # rose-900
+    C_BODY  = "#1c1917"   # stone-950
+    C_MUTED = "#9f1239"   # rose-800
+    C_ACC   = "#e11d48"   # rose-600
+    C_SOFT  = "#ffe4e6"   # rose-100
+
+    def _fix_img(html, size=88):
+        if not html: return ""
+        m = _re21.search(r'<img[^>]*>', html)
+        if not m: return ""
+        tag = _re21.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
+        tag = tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;"
+                          f"border-radius:50%;object-fit:cover;display:block;"
+                          f"margin:0 auto 10px;border:3px solid {C_ACC};' ")
+        return tag
+
+    def section(title, content):
+        return f"""
+        <div style='margin-bottom:24px;'>
+            <h2 style='font-size:11px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
+                color:{C_HEAD};margin-bottom:10px;padding-bottom:5px;
+                border-bottom:2px solid {C_ACC};'>{title}</h2>
+            {content}
+        </div>"""
+
+    def pills(s, bg="#ffe4e6", color="#881337", border="#fda4af"):
+        return "".join(
+            f"<span style='display:inline-block;background:{bg};color:{color};"
+            f"border:1px solid {border};border-radius:20px;padding:4px 14px;"
+            f"margin:4px 4px 4px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
+            for x in s.split(',') if x.strip())
+
+    contact_parts = []
+    for key in ['email','phone','location','linkedin','portfolio','github']:
+        val = session_state.get(key,'')
+        if val:
+            if key == 'email':
+                contact_parts.append(f"<a href='mailto:{val}' style='color:{C_ACC};text-decoration:none;'>{val}</a>")
+            elif key in ('linkedin','portfolio','github'):
+                href = val if val.startswith('http') else f"https://{val}"
+                contact_parts.append(f"<a href='{href}' target='_blank' style='color:{C_ACC};text-decoration:none;'>{val}</a>")
+            else:
+                contact_parts.append(f"<span style='color:#6b7280;'>{val}</span>")
+    contact_line = " &nbsp;&middot;&nbsp; ".join(contact_parts)
+
+    exp_html = ""
+    for exp in session_state.experience_entries:
+        if exp.get('company') or exp.get('title'):
+            desc = _fmt_desc(exp.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
+            exp_html += f"""
+            <div style='margin-bottom:18px;padding:12px 16px;background:{C_SOFT};border-radius:6px;'>
+                <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
+                    <strong style='font-size:15px;color:{C_HEAD};'>{exp.get('company','')}</strong>
+                    <span style='font-size:12px;color:{C_ACC};font-weight:700;'>{exp.get('duration','')}</span>
+                </div>
+                <div style='font-size:13px;color:#9f1239;font-style:italic;margin:3px 0 8px;font-weight:600;'>{exp.get('title','')}</div>
+                {desc}
+            </div>"""
+
+    edu_html = ""
+    for edu in session_state.education_entries:
+        if edu.get('institution') or edu.get('degree'):
+            dv = edu.get('degree','')
+            if isinstance(dv, list): dv = ", ".join(dv)
+            edu_html += f"""
+            <div style='margin-bottom:12px;padding:10px 14px;background:{C_SOFT};border-radius:6px;'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
+                    <span style='font-size:12px;color:{C_ACC};font-weight:700;'>{edu.get('year','')}</span>
+                </div>
+                <div style='font-size:13px;color:{C_MUTED};font-style:italic;margin-top:3px;'>{dv}</div>
+                <div style='font-size:12px;color:#9f1239;margin-top:2px;'>{edu.get('details','')}</div>
+            </div>"""
+
+    proj_html = ""
+    proj_links = getattr(session_state,'project_links',[]) or []
+    for idx, proj in enumerate(session_state.project_entries):
+        if proj.get('title'):
+            desc = _fmt_desc(proj.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
+            lnk_html = ""
+            if idx < len(proj_links) and proj_links[idx]:
+                lnk_html = (f"<div style='margin-top:4px;'><a href='{proj_links[idx]}' target='_blank' "
+                            f"style='font-size:12px;color:{C_ACC};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
+            proj_html += f"""
+            <div style='margin-bottom:14px;padding:10px 16px;background:{C_SOFT};border-radius:6px;border-left:3px solid {C_ACC};'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    <strong style='font-size:14px;color:{C_HEAD};'>{proj.get('title','')}</strong>
+                    <span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>
+                </div>
+                {_tech_pills(proj.get('tech',''), color=C_ACC, bg='#fdf2f8', border='#f0abfc')}
+                {desc}{lnk_html}
+            </div>"""
+
+    all_links_html = ""
+    proj_links_all = getattr(session_state, 'project_links', []) or []
+    if proj_links_all:
+        all_links_html = "".join(
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
+            f"style='color:#881337;font-weight:700;font-size:13px;text-decoration:underline;'>"
+            f"&#128279; Project {i+1}: {lnk}</a></div>"
+            for i, lnk in enumerate(proj_links_all) if lnk)
+
+    cert_html = ""
+    for cert in session_state.certificate_links:
+        if cert.get('name'):
+            cert_html += f"""
+            <div style='margin-bottom:10px;padding:8px 14px;background:{C_SOFT};border-radius:6px;border-left:3px solid {C_ACC};'>
+                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
+                    {_cert_name_html(cert,f'font-size:14px;font-weight:700;color:{C_HEAD};text-decoration:none;')}
+                    <span style='font-size:12px;color:#6b7280;'>{cert.get('duration','')}</span>
+                </div>
+                <div style='font-size:12px;color:#6b7280;margin-top:2px;'>{_fmt_desc(cert.get('description',''), font_size='12px', color='#6b7280', line_height='1.65')}</div>
+            </div>"""
+
+    summary_html = _fmt_desc(session_state.get('summary',''), font_size='13px', color=C_BODY, line_height='1.75')
+    fixed_img = _fix_img(profile_img_html)
+    job_title_line = (f"<p style='font-size:15px;color:{C_ACC};font-weight:600;margin-top:5px;letter-spacing:0.5px;'>"
+                      f"{session_state.get('job_title','') or session_state.get('title','')}</p>") if session_state.get('job_title','') or session_state.get('title','') else ""
+
+    return f"""<!DOCTYPE html>
+<html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
+  a {{ color:{C_ACC}; }}
+</style></head><body>
+<div>
+  <div style='text-align:center;margin-bottom:10px;'>
+    {fixed_img}
+    <h1 style='font-size:30px;font-weight:800;color:{C_HEAD};letter-spacing:0.5px;'>{session_state.get('name','')}</h1>
+    {job_title_line}
+    <p style='font-size:12px;color:#6b7280;margin-top:8px;'>{contact_line}</p>
+  </div>
+  <hr style='border:none;border-top:2px solid {C_ACC};margin:16px 0 24px;'>
+  {section("Professional Summary", summary_html) if summary_html else ''}
+  {section("Work Experience", exp_html) if exp_html else ''}
+  {section("Education", edu_html) if edu_html else ''}
+  {section("Technical Skills", pills(session_state.get('skills',''))) if session_state.get('skills') else ''}
+  {section("Soft Skills", pills(session_state.get('Softskills',''),bg='#eff6ff',color='#1e40af',border='#93c5fd')) if session_state.get('Softskills') else ''}
+  {section("Languages", pills(session_state.get('languages',''),bg='#f0fdf4',color='#166534',border='#86efac')) if session_state.get('languages') else ''}
+  {section("Interests", pills(session_state.get('interests',''),bg='#fdf4ff',color='#6b21a8',border='#d8b4fe')) if session_state.get('interests') else ''}
+  {section("Projects", proj_html) if proj_html else ''}
+  {section("Project Links", all_links_html) if all_links_html else ''}
+  {section("Certifications", cert_html) if cert_html else ''}
+</div></body></html>"""
+
+
 # ── Resume template registry ──────────────────────────────────────────────────
 RESUME_TEMPLATES = {
     "Default (Professional)":           render_template_default,
@@ -3581,251 +3624,13 @@ RESUME_TEMPLATES = {
     "Soft Lavender (Single Column)":    render_template_soft_lavender,
     "Warm Sand (Single Column)":        render_template_warm_sand,
     "Ice Blue (Single Column)":         render_template_ice_blue,
+    "Rose Gold (Single Column)":        render_template_rose_gold,
 }
-
-
-_OVERFLOW_GUARD_CSS = """
-<style id="__overflow_guard__">
-body { word-wrap: break-word; }
-div { word-wrap: break-word; }
-td { word-wrap: break-word; }
-th { word-wrap: break-word; }
-table { width: 100%; }
-a { word-wrap: break-word; }
-</style>"""
-
-# xhtml2pdf-safe version — only properties that xhtml2pdf understands.
-# Used by prepare_html_for_pdf() to avoid CSSParseError on attribute
-# selectors, pseudo-elements, flex, overflow-x, overflow-wrap, !important.
-_OVERFLOW_GUARD_CSS_BROWSER = """
-<style id="__overflow_guard__">
-*, *::before, *::after { box-sizing: border-box; }
-html, body {
-    overflow-x: hidden;
-    max-width: 100%;
-    word-break: break-word;
-    overflow-wrap: break-word;
-}
-div, section, article, aside, main, header, footer, nav {
-    max-width: 100%;
-    overflow-wrap: break-word;
-    word-break: break-word;
-}
-[style*="display:flex"], [style*="display: flex"] {
-    flex-wrap: wrap;
-    min-width: 0;
-}
-span[style*="white-space:nowrap"] { flex-shrink: 0; }
-table { width: 100%; table-layout: fixed; }
-td, th { word-break: break-word; overflow-wrap: break-word; }
-a { word-break: break-all; }
-</style>"""
-
-_OVERFLOW_GUARD_JS = r"""
-<script id="__tech_wrap_js__">
-// ── Runtime tech-stack guardian ──────────────────────────────────────────
-// Scans the rendered DOM for any text node that looks like a comma-separated
-// tech list sitting inside a plain <div> (i.e. NOT already inside a flex
-// pill container).  Converts it automatically into wrapped pills.
-// This covers future templates that forget to call _render_tech_pills().
-(function() {
-  var TECH_PATTERN = /^[\w\s\+\#\.\-\/]+(,[\w\s\+\#\.\-\/]+){2,}$/;
-  var PILL_STYLE = [
-    "display:inline-block",
-    "background:#f3f4f6",
-    "color:#374151",
-    "border:1px solid #e5e7eb",
-    "border-radius:4px",
-    "padding:2px 8px",
-    "font-size:11px",
-    "font-weight:600",
-    "white-space:nowrap",
-    "line-height:1.7",
-    "margin:2px 3px 2px 0"
-  ].join(";");
-  var WRAP_STYLE = [
-    "display:flex",
-    "flex-wrap:wrap",
-    "align-items:center",
-    "gap:4px 5px",
-    "margin:3px 0 5px",
-    "overflow-wrap:break-word",
-    "max-width:100%"
-  ].join(";");
-
-  function isPillContainer(el) {
-    var s = (el.getAttribute("style") || "");
-    return s.indexOf("flex-wrap") !== -1 || s.indexOf("flex-wrap:wrap") !== -1;
-  }
-
-  function wrapTech(div) {
-    if (isPillContainer(div)) return;
-    var text = div.textContent || div.innerText || "";
-    // Strip common labels before testing
-    var cleaned = text.replace(/^(tech\s*stack\s*:|tech\s*:|stack\s*:|technologies\s*:)/i, "").trim();
-    if (!TECH_PATTERN.test(cleaned)) return;
-    // Looks like a tech list — convert to pills
-    var labelMatch = text.match(/^(tech\s*stack\s*:|tech\s*:|stack\s*:|technologies\s*:)/i);
-    var labelHtml = labelMatch
-      ? "<span style='font-size:11px;font-weight:700;color:inherit;white-space:nowrap;margin-right:6px;flex-shrink:0;'>" + labelMatch[0] + "</span>"
-      : "";
-    var items = cleaned.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
-    var pills = items.map(function(item) {
-      return "<span style='" + PILL_STYLE + "'>" + item + "</span>";
-    }).join("");
-    div.innerHTML = labelHtml + pills;
-    div.setAttribute("style", (div.getAttribute("style") || "") + ";" + WRAP_STYLE);
-  }
-
-  // Run after DOM is ready
-  function run() {
-    var divs = document.querySelectorAll("div");
-    for (var i = 0; i < divs.length; i++) {
-      // Only look at leaf divs (no child elements — pure text containers)
-      if (divs[i].children.length === 0) {
-        wrapTech(divs[i]);
-      }
-    }
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", run);
-  } else {
-    run();
-  }
-})();
-</script>"""
-
-
-def _sanitize_html_overflow(html):
-    import re as _re
-    """
-    Post-processes any resume HTML string to guarantee:
-      1. The universal overflow-guard <style> block is present in <head>.
-      2. The runtime JS tech-wrap guardian is present before </body>.
-      3. Any remaining raw tech-stack text (comma lists in plain divs)
-         is converted to flex-wrapped pills via a Python regex pass
-         BEFORE the HTML even reaches the browser.
-
-    This function is called by render_resume() on ALL templates — current
-    and future — so new templates are protected automatically.
-    """
-    import re as _re
-
-    # ── 1. Inject CSS into <head> (idempotent) ──────────────────────────
-    if "__overflow_guard__" not in html:
-        html = html.replace("</head>", _OVERFLOW_GUARD_CSS_BROWSER + "\n</head>", 1)
-        if "</head>" not in html:          # headless template fallback
-            html = _OVERFLOW_GUARD_CSS_BROWSER + html
-
-    # ── 2. Inject JS before </body> (idempotent) ────────────────────────
-    if "__tech_wrap_js__" not in html:
-        if "</body>" in html:
-            html = html.replace("</body>", _OVERFLOW_GUARD_JS + "\n</body>", 1)
-        else:
-            html = html + _OVERFLOW_GUARD_JS
-
-    # ── 3. Python-side regex: catch any plain-text tech dumps ────────────
-    # Pattern: a <div ...> whose ONLY content is a comma-separated word list
-    # (3+ items) with no child tags — the classic forgotten _render_tech_pills.
-    # We convert it to a flex-wrap pill row with neutral styling.
-    TECH_DIV = _re.compile(
-        r"(<div\s[^>]*>)"                       # opening div with attributes
-        r"\s*"
-        r"((?:[\w\s\+\#\.\-\/]+,){2,}"          # "Item, Item, Item," (3+ items)
-        r"[\w\s\+\#\.\-\/]+)"                    # final item (no trailing comma)
-        r"\s*"
-        r"(</div>)",                             # closing div
-        _re.IGNORECASE,
-    )
-
-    def _to_pills(m):
-        open_tag  = m.group(1)
-        tech_text = m.group(2).strip()
-        close_tag = m.group(3)
-        items = [t.strip() for t in tech_text.split(",") if t.strip()]
-        if len(items) < 3:
-            return m.group(0)   # too short — leave untouched
-        pill_style = (
-            "display:inline-block;background:#f3f4f6;color:#374151;"
-            "border:1px solid #e5e7eb;border-radius:4px;padding:2px 8px;"
-            "font-size:11px;font-weight:600;white-space:nowrap;line-height:1.7;"
-            "margin:2px 3px 2px 0;"
-        )
-        pills = "".join(f"<span style='{pill_style}'>{item}</span>" for item in items)
-        wrap_style = (
-            "display:flex;flex-wrap:wrap;align-items:center;"
-            "gap:4px 5px;margin:3px 0 5px;overflow-wrap:break-word;max-width:100%;"
-        )
-        # Preserve existing div styles, add flex-wrap container style
-        open_styled = _re.sub(
-            r"style=['\"]([^'\"]*)['\"]",
-            lambda sm: f"style='{sm.group(1)};{wrap_style}'",
-            open_tag,
-        )
-        if open_styled == open_tag:          # div had no style attr — add one
-            open_styled = open_tag[:-1] + f" style='{wrap_style}'>"
-        return open_styled + pills + close_tag
-
-    html = TECH_DIV.sub(_to_pills, html)
-
-    return html
-
-
-
-def prepare_html_for_pdf(html):
-    """
-    Strips browser-only content that breaks xhtml2pdf's CSS parser:
-      - The __overflow_guard__ <style> block (contains attribute selectors,
-        pseudo-elements, flex, overflow-x — all unsupported by xhtml2pdf)
-      - The __tech_wrap_js__ <script> block (JS is ignored by xhtml2pdf
-        but the regex patterns inside confuse the XML parser)
-
-    The xhtml2pdf-safe _OVERFLOW_GUARD_CSS (basic word-wrap only) was
-    already baked into the HTML by _sanitize_html_overflow, so PDF output
-    still gets basic overflow protection without crashing the parser.
-
-    Usage in main.py:
-        from resume_builder import prepare_html_for_pdf
-        safe_html = prepare_html_for_pdf(st.session_state["generated_html"])
-        pisa.CreatePDF(safe_html, dest=pdf_io)
-    """
-    import re as _re
-
-    # Remove the browser-only overflow guard style block
-    html = _re.sub(
-        r'<style\s+id="__overflow_guard__"[^>]*>.*?</style>',
-        '',
-        html,
-        flags=_re.DOTALL,
-    )
-
-    # Remove the JS guardian script block
-    html = _re.sub(
-        r'<script\s+id="__tech_wrap_js__"[^>]*>.*?</script>',
-        '',
-        html,
-        flags=_re.DOTALL,
-    )
-
-    # Inject the xhtml2pdf-safe CSS instead (basic word-wrap only)
-    if "__overflow_guard__" not in html:
-        html = html.replace("</head>", _OVERFLOW_GUARD_CSS + "\n</head>", 1)
-
-    return html
 
 
 def render_resume(template_name, session_state, profile_img_html=""):
     """
     Render a resume from a named template.
-
-    Calls the appropriate template function, then runs _sanitize_html_overflow()
-    on the result.  This means ALL templates — current and any added in the
-    future — automatically get:
-      • flex-wrap on every tech/skill pill row
-      • overflow-x:hidden on the whole document
-      • a JS runtime guardian that converts any forgotten plain-text tech dumps
-        into wrapped pills at render time
 
     Args:
         template_name (str): One of the keys in RESUME_TEMPLATES.
@@ -3833,10 +3638,9 @@ def render_resume(template_name, session_state, profile_img_html=""):
         profile_img_html (str): Optional HTML <img> string for profile photo.
 
     Returns:
-        str: Full, sanitised HTML string for the resume.
+        str: Full HTML string for the resume.
     """
     fn = RESUME_TEMPLATES.get(template_name)
     if fn is None:
         fn = render_template_default
-    raw_html = fn(session_state, profile_img_html)
-    return _sanitize_html_overflow(raw_html)
+    return fn(session_state, profile_img_html)
