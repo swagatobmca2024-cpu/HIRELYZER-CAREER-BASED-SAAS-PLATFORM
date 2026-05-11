@@ -6605,7 +6605,6 @@ from cover_letter import (
     COVER_LETTER_TEMPLATES, render_cover_letter,
     generate_cover_letter_from_resume_builder,
 )
-from resume_docx_builder import build_resume_docx, build_cover_letter_docx
 
 from collections import Counter as _Counter
 
@@ -7082,14 +7081,6 @@ score_skills_section.__module__     = __name__
 import streamlit as st
 import time
 
-# ── @st.fragment: wraps the entire input form so only this section re-renders
-# on widget interactions. Full-page rerun only happens on st.rerun() calls
-# (template select, generate, clear). This eliminates the scroll-jump flash.
-@st.fragment
-def _render_resume_form_fragment():
-    """All form inputs + template selector inside a fragment for partial reruns."""
-    import time as _time_frag
-
 # Tab setup (assuming this is within a tab2 context)
 with tab2:
     st.session_state.active_tab = "Resume Builder"
@@ -7373,8 +7364,9 @@ with tab2:
                     unsafe_allow_html=True,
                 )
                 if st.button("✓" if _is_sel else "Select", key=f"tpl_btn_{_tname}", use_container_width=True):
-                    st.session_state["selected_template_name"] = _tname
-                    st.rerun()
+                    if st.session_state["selected_template_name"] != _tname:
+                        st.session_state["selected_template_name"] = _tname
+                        st.rerun()
 
     selected_template = st.session_state["selected_template_name"]
 
@@ -8119,17 +8111,22 @@ with tab2:
         _sec_hdr("👤", "Personal Information")
         col1, col2 = st.columns(2)
         with col1:
-            st.session_state.name = st.text_input("👤 Full Name", value=st.session_state.name, placeholder="e.g., Arjun Sharma", key=f"name_input_{fk}")
-            st.session_state.phone = st.text_input("📞 Phone Number", value=st.session_state.phone, placeholder="e.g., +91 98765 43210", key=f"phone_input_{fk}")
-            st.session_state.location = st.text_input("📍 Location", value=st.session_state.location, placeholder="e.g., Kolkata, West Bengal", key=f"loc_input_{fk}")
+            # FIX: Do NOT assign back to session_state inside the form.
+            # Streamlit batches form widgets — writing to session_state here
+            # triggers an immediate rerun on every keystroke, defeating the form.
+            # Instead, just render the widget with `value=` for pre-fill.
+            # Values are committed to session_state only when submitted=True below.
+            st.text_input("👤 Full Name", value=st.session_state.name, placeholder="e.g., Arjun Sharma", key=f"name_input_{fk}")
+            st.text_input("📞 Phone Number", value=st.session_state.phone, placeholder="e.g., +91 98765 43210", key=f"phone_input_{fk}")
+            st.text_input("📍 Location", value=st.session_state.location, placeholder="e.g., Kolkata, West Bengal", key=f"loc_input_{fk}")
         with col2:
-            st.session_state.email = st.text_input("📧 Email", value=st.session_state.email, placeholder="e.g., arjun@gmail.com", key=f"email_input_{fk}")
-            st.session_state.linkedin = st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, placeholder="e.g., linkedin.com/in/arjun", key=f"ln_input_{fk}")
-            st.session_state.portfolio = st.text_input("🌐 Portfolio", value=st.session_state.portfolio, placeholder="e.g., arjun.dev or github.com/arjun", key=f"port_input_{fk}")
-            st.session_state.job_title = st.text_input("💼 Job Title / Target Role", value=st.session_state.job_title, placeholder="e.g., Full Stack Developer", key=f"job_input_{fk}")
+            st.text_input("📧 Email", value=st.session_state.email, placeholder="e.g., arjun@gmail.com", key=f"email_input_{fk}")
+            st.text_input("🔗 LinkedIn", value=st.session_state.linkedin, placeholder="e.g., linkedin.com/in/arjun", key=f"ln_input_{fk}")
+            st.text_input("🌐 Portfolio", value=st.session_state.portfolio, placeholder="e.g., arjun.dev or github.com/arjun", key=f"port_input_{fk}")
+            st.text_input("💼 Job Title / Target Role", value=st.session_state.job_title, placeholder="e.g., Full Stack Developer", key=f"job_input_{fk}")
 
         _sec_hdr("📝", "Professional Summary")
-        st.session_state.summary = st.text_area(
+        st.text_area(
             "Summary",
             value=st.session_state.summary,
             placeholder="Write 3–5 sentences about your career goals, key strengths, and what makes you stand out. E.g., 'Results-driven software engineer with 3+ years building scalable web apps...'",
@@ -8139,7 +8136,7 @@ with tab2:
         _hint("Aim for 80–200 characters. Recruiters read this first — make it count.")
 
         _sec_hdr("🛠️", "Skills, Languages, Interests & Soft Skills")
-        st.session_state.skills = st.text_area(
+        st.text_area(
             "Technical Skills (comma-separated)",
             value=st.session_state.skills,
             placeholder="e.g., Python, React, Node.js, PostgreSQL, Docker, AWS",
@@ -8147,32 +8144,34 @@ with tab2:
             key=f"skills_input_{fk}",
         )
         _hint("List 5+ skills for best score. Separate each with a comma.")
-        _tag_chips(st.session_state.skills, "Preview:")
+        # FIX: _tag_chips now reads from the widget key directly (live value),
+        # not from session_state.skills which lags by one submit cycle.
+        _tag_chips(st.session_state.get(f"skills_input_{fk}", st.session_state.skills), "Preview:")
 
-        st.session_state.languages = st.text_area(
+        st.text_area(
             "Languages (comma-separated)",
             value=st.session_state.languages,
             placeholder="e.g., English, Bengali, Hindi",
             height=60,
             key=f"lang_input_{fk}",
         )
-        _tag_chips(st.session_state.languages, "Preview:")
-        st.session_state.interests = st.text_area(
+        _tag_chips(st.session_state.get(f"lang_input_{fk}", st.session_state.languages), "Preview:")
+        st.text_area(
             "Interests / Hobbies (comma-separated)",
             value=st.session_state.interests,
             placeholder="e.g., Open Source, Machine Learning, Chess, Blogging",
             height=60,
             key=f"int_input_{fk}",
         )
-        _tag_chips(st.session_state.interests, "Preview:")
-        st.session_state.Softskills = st.text_area(
+        _tag_chips(st.session_state.get(f"int_input_{fk}", st.session_state.interests), "Preview:")
+        st.text_area(
             "Soft Skills (comma-separated)",
             value=st.session_state.Softskills,
             placeholder="e.g., Leadership, Communication, Problem Solving, Teamwork",
             height=60,
             key=f"soft_input_{fk}",
         )
-        _tag_chips(st.session_state.Softskills, "Preview:")
+        _tag_chips(st.session_state.get(f"soft_input_{fk}", st.session_state.Softskills), "Preview:")
 
         _sec_hdr("🧱", "Work Experience", badge=f"{len(st.session_state.experience_entries)} entr{'y' if len(st.session_state.experience_entries)==1 else 'ies'}")
         for idx, exp in enumerate(st.session_state.experience_entries):
@@ -8181,10 +8180,14 @@ with tab2:
             _display = f"{_entry_label} @ {_entry_company}" if _entry_company else _entry_label
             with st.expander(f"🏢 {_display}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Entry #{idx+1}</div>", unsafe_allow_html=True)
-                exp["title"] = st.text_input("Job Title", value=exp.get("title", ""), placeholder="e.g., Software Engineer", key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["company"] = st.text_input("Company", value=exp.get("company", ""), placeholder="e.g., Infosys, TCS, Google", key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["duration"] = st.text_input("Duration", value=exp.get("duration", ""), placeholder="e.g., Jun 2022 – Present", key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
-                exp["description"] = st.text_area("Description", value=exp.get("description", ""), placeholder="• Developed REST APIs using Node.js that reduced response time by 35%\n• Led a team of 4 engineers to deliver the project 2 weeks ahead of schedule", height=100, key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                # FIX: Do not assign back to exp dict here — that mutates session_state
+                # inside the form, causing a rerun on every keystroke.
+                # Widget keys are unique and Streamlit persists their values automatically.
+                # _sync_entries() in the sidebar and the submit handler below read them.
+                st.text_input("Job Title", value=exp.get("title", ""), placeholder="e.g., Software Engineer", key=f"title_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                st.text_input("Company", value=exp.get("company", ""), placeholder="e.g., Infosys, TCS, Google", key=f"company_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                st.text_input("Duration", value=exp.get("duration", ""), placeholder="e.g., Jun 2022 – Present", key=f"duration_{idx}_{len(st.session_state.experience_entries)}_{fk}")
+                st.text_area("Description", value=exp.get("description", ""), placeholder="• Developed REST APIs using Node.js that reduced response time by 35%\n• Led a team of 4 engineers to deliver the project 2 weeks ahead of schedule", height=100, key=f"description_{idx}_{len(st.session_state.experience_entries)}_{fk}")
                 _hint("Use bullet points starting with action verbs. Include metrics where possible.")
 
         _sec_hdr("🎓", "Education", badge=f"{len(st.session_state.education_entries)} entr{'y' if len(st.session_state.education_entries)==1 else 'ies'}")
@@ -8194,41 +8197,42 @@ with tab2:
             _edu_display = f"{_edu_label} — {_edu_inst}" if _edu_inst else _edu_label
             with st.expander(f"🏫 {_edu_display}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Entry #{idx+1}</div>", unsafe_allow_html=True)
-                edu["degree"] = st.text_input("Degree / Qualification", value=edu.get("degree", ""), placeholder="e.g., B.Tech in Computer Science", key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["institution"] = st.text_input("Institution", value=edu.get("institution", ""), placeholder="e.g., Jadavpur University", key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["year"] = st.text_input("Year / Duration", value=edu.get("year", ""), placeholder="e.g., 2019 – 2023", key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
-                edu["details"] = st.text_area("Academic Details", value=edu.get("details", ""), placeholder="e.g., CGPA: 8.7/10 | Relevant: Data Structures, OS, DBMS | Dean's List 2022", height=80, key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                st.text_input("Degree / Qualification", value=edu.get("degree", ""), placeholder="e.g., B.Tech in Computer Science", key=f"degree_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                st.text_input("Institution", value=edu.get("institution", ""), placeholder="e.g., Jadavpur University", key=f"institution_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                st.text_input("Year / Duration", value=edu.get("year", ""), placeholder="e.g., 2019 – 2023", key=f"edu_year_{idx}_{len(st.session_state.education_entries)}_{fk}")
+                st.text_area("Academic Details", value=edu.get("details", ""), placeholder="e.g., CGPA: 8.7/10 | Relevant: Data Structures, OS, DBMS | Dean's List 2022", height=80, key=f"edu_details_{idx}_{len(st.session_state.education_entries)}_{fk}")
 
         _sec_hdr("🚀", "Projects", badge=f"{len(st.session_state.project_entries)} entr{'y' if len(st.session_state.project_entries)==1 else 'ies'}")
         for idx, proj in enumerate(st.session_state.project_entries):
             _proj_label = proj.get("title", "") or f"Project #{idx+1}"
             with st.expander(f"📌 {_proj_label}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Project #{idx+1}</div>", unsafe_allow_html=True)
-                proj["title"] = st.text_input("Project Title", value=proj.get("title", ""), placeholder="e.g., AI Resume Builder", key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["tech"] = st.text_input("Tech Stack", value=proj.get("tech", ""), placeholder="e.g., Python, Streamlit, OpenAI API, PostgreSQL", key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["duration"] = st.text_input("Duration", value=proj.get("duration", ""), placeholder="e.g., Jan 2024 – Mar 2024  (or  2 months)", key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
-                proj["description"] = st.text_area("Description", value=proj.get("description", ""), placeholder="• Built a full-stack resume builder with AI-powered cover letter generation\n• Reduced resume creation time by 70% compared to manual methods", height=100, key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                st.text_input("Project Title", value=proj.get("title", ""), placeholder="e.g., AI Resume Builder", key=f"proj_title_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                st.text_input("Tech Stack", value=proj.get("tech", ""), placeholder="e.g., Python, Streamlit, OpenAI API, PostgreSQL", key=f"proj_tech_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                st.text_input("Duration", value=proj.get("duration", ""), placeholder="e.g., Jan 2024 – Mar 2024  (or  2 months)", key=f"proj_duration_{idx}_{len(st.session_state.project_entries)}_{fk}")
+                st.text_area("Description", value=proj.get("description", ""), placeholder="• Built a full-stack resume builder with AI-powered cover letter generation\n• Reduced resume creation time by 70% compared to manual methods", height=100, key=f"proj_desc_{idx}_{len(st.session_state.project_entries)}_{fk}")
                 _hint("Describe the problem solved, your role, and the impact or outcome.")
 
         _sec_hdr("🔗", "Project Links")
-        project_links_input = st.text_area(
+        st.text_area(
             "Enter one project link per line:",
             value="\n".join(st.session_state.project_links),
             placeholder="https://github.com/yourname/project1\nhttps://yourproject.netlify.app",
             height=80,
             key=f"proj_links_input_{fk}",
         )
-        st.session_state.project_links = [link.strip() for link in project_links_input.splitlines() if link.strip()]
+        # FIX: Do NOT write session_state.project_links here — that's a mutation
+        # inside the form. It will be committed on submit below.
 
         _sec_hdr("🏅", "Certificates", badge=f"{len(st.session_state.certificate_links)} entr{'y' if len(st.session_state.certificate_links)==1 else 'ies'}")
         for idx, cert in enumerate(st.session_state.certificate_links):
             _cert_label = cert.get("name", "") or f"Certificate #{idx+1}"
             with st.expander(f"🎖️ {_cert_label}", expanded=True):
                 st.markdown(f"<div class='entry-card-label'>Certificate #{idx+1}</div>", unsafe_allow_html=True)
-                cert["name"] = st.text_input("Certificate Name", value=cert.get("name", ""), placeholder="e.g., AWS Certified Solutions Architect", key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["link"] = st.text_input("Verification Link", value=cert.get("link", ""), placeholder="e.g., https://credly.com/badges/...", key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["duration"] = st.text_input("Issued Date", value=cert.get("duration", ""), placeholder="e.g., March 2024", key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
-                cert["description"] = st.text_area("Description", value=cert.get("description", ""), placeholder="e.g., Demonstrates expertise in designing distributed systems on AWS. Covers EC2, S3, RDS, and networking.", height=80, key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                st.text_input("Certificate Name", value=cert.get("name", ""), placeholder="e.g., AWS Certified Solutions Architect", key=f"cert_name_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                st.text_input("Verification Link", value=cert.get("link", ""), placeholder="e.g., https://credly.com/badges/...", key=f"cert_link_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                st.text_input("Issued Date", value=cert.get("duration", ""), placeholder="e.g., March 2024", key=f"cert_duration_{idx}_{len(st.session_state.certificate_links)}_{fk}")
+                st.text_area("Description", value=cert.get("description", ""), placeholder="e.g., Demonstrates expertise in designing distributed systems on AWS. Covers EC2, S3, RDS, and networking.", height=80, key=f"cert_description_{idx}_{len(st.session_state.certificate_links)}_{fk}")
 
         st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
         btn_col1, btn_col2 = st.columns([1, 1])
@@ -8247,6 +8251,52 @@ with tab2:
         if submitted:
             st.session_state["_resume_generated_msg"] = True
             st.session_state["_resume_generating"] = True
+            # ── Commit all form widget values to session_state on submit ──────
+            # This is the ONLY place we write widget values back — not during typing.
+            ss = st.session_state
+            ss.name      = ss.get(f"name_input_{fk}",    ss.name)
+            ss.email     = ss.get(f"email_input_{fk}",   ss.email)
+            ss.phone     = ss.get(f"phone_input_{fk}",   ss.phone)
+            ss.location  = ss.get(f"loc_input_{fk}",     ss.location)
+            ss.linkedin  = ss.get(f"ln_input_{fk}",      ss.linkedin)
+            ss.portfolio = ss.get(f"port_input_{fk}",    ss.portfolio)
+            ss.job_title = ss.get(f"job_input_{fk}",     ss.job_title)
+            ss.summary   = ss.get(f"summary_input_{fk}", ss.summary)
+            ss.skills    = ss.get(f"skills_input_{fk}",  ss.skills)
+            ss.languages = ss.get(f"lang_input_{fk}",    ss.languages)
+            ss.interests = ss.get(f"int_input_{fk}",     ss.interests)
+            ss.Softskills = ss.get(f"soft_input_{fk}",   ss.Softskills)
+            # Project links
+            _pl_raw = ss.get(f"proj_links_input_{fk}", "")
+            ss.project_links = [lnk.strip() for lnk in _pl_raw.splitlines() if lnk.strip()]
+            # Sync experience entry dicts
+            _n_exp = len(ss.experience_entries)
+            for _i, _e in enumerate(ss.experience_entries):
+                _e["title"]       = ss.get(f"title_{_i}_{_n_exp}_{fk}",       _e.get("title", ""))
+                _e["company"]     = ss.get(f"company_{_i}_{_n_exp}_{fk}",     _e.get("company", ""))
+                _e["duration"]    = ss.get(f"duration_{_i}_{_n_exp}_{fk}",    _e.get("duration", ""))
+                _e["description"] = ss.get(f"description_{_i}_{_n_exp}_{fk}", _e.get("description", ""))
+            # Sync education entry dicts
+            _n_edu = len(ss.education_entries)
+            for _i, _e in enumerate(ss.education_entries):
+                _e["degree"]      = ss.get(f"degree_{_i}_{_n_edu}_{fk}",      _e.get("degree", ""))
+                _e["institution"] = ss.get(f"institution_{_i}_{_n_edu}_{fk}", _e.get("institution", ""))
+                _e["year"]        = ss.get(f"edu_year_{_i}_{_n_edu}_{fk}",    _e.get("year", ""))
+                _e["details"]     = ss.get(f"edu_details_{_i}_{_n_edu}_{fk}", _e.get("details", ""))
+            # Sync project entry dicts
+            _n_proj = len(ss.project_entries)
+            for _i, _e in enumerate(ss.project_entries):
+                _e["title"]       = ss.get(f"proj_title_{_i}_{_n_proj}_{fk}",    _e.get("title", ""))
+                _e["tech"]        = ss.get(f"proj_tech_{_i}_{_n_proj}_{fk}",     _e.get("tech", ""))
+                _e["duration"]    = ss.get(f"proj_duration_{_i}_{_n_proj}_{fk}", _e.get("duration", ""))
+                _e["description"] = ss.get(f"proj_desc_{_i}_{_n_proj}_{fk}",     _e.get("description", ""))
+            # Sync certificate entry dicts
+            _n_cert = len(ss.certificate_links)
+            for _i, _e in enumerate(ss.certificate_links):
+                _e["name"]        = ss.get(f"cert_name_{_i}_{_n_cert}_{fk}",        _e.get("name", ""))
+                _e["link"]        = ss.get(f"cert_link_{_i}_{_n_cert}_{fk}",        _e.get("link", ""))
+                _e["duration"]    = ss.get(f"cert_duration_{_i}_{_n_cert}_{fk}",    _e.get("duration", ""))
+                _e["description"] = ss.get(f"cert_description_{_i}_{_n_cert}_{fk}", _e.get("description", ""))
 
         if clear_clicked:
             st.session_state["_confirm_clear"] = True
@@ -9142,7 +9192,6 @@ with tab2:
             # triggers an extra Streamlit rerun which causes visible page blinking.
             st.session_state["generated_html"] = html_content
             st.session_state["pdf_resume_bytes"] = None   # invalidate cache without extra rerun
-            st.session_state["docx_resume_bytes"] = None  # invalidate DOCX cache
             st.session_state["show_template_preview"] = False
         st.session_state.pop("_resume_generating", None)
 
@@ -9165,50 +9214,38 @@ with tab2:
             unsafe_allow_html=True
         )
 
-        # ── DOWNLOAD BUTTONS: HTML template + native A4 DOCX (no Sejda needed) ──
-        col1, col2, col3 = st.columns(3)
+        # Cache PDF bytes in session_state to avoid expensive recomputation on every rerun
+        if not st.session_state.get("pdf_resume_bytes"):
+            st.session_state["pdf_resume_bytes"] = html_to_pdf_bytes(
+                st.session_state["generated_html"]
+            ).read()
 
-        # Column 1: HTML template download
+        col1, spacer, col2 = st.columns([1, 0.15, 0.85])
+
+        # HTML Resume Download Button
         with col1:
             html_bytes = st.session_state["generated_html"].encode("utf-8")
+            html_file = BytesIO(html_bytes)
+
             st.download_button(
-                label="⬇️ Download HTML Template",
-                data=html_bytes,
-                file_name=f"{st.session_state.get('name','Resume').replace(' ', '_')}_Resume.html",
+                label="⬇️ Download as Template",
+                data=html_file,
+                file_name=f"{st.session_state['name'].replace(' ', '_')}_Resume.html",
                 mime="text/html",
-                key="download_resume_html",
-                use_container_width=True,
+                key="download_resume_html"
             )
-            st.caption("Open in browser → Print → Save as PDF")
 
-        # Column 2: Native A4 DOCX — built with python-docx, no external service
+        # Preview Template Button — smart toggle: spinner only when opening, instant when closing
         with col2:
-            if not st.session_state.get("docx_resume_bytes"):
-                with st.spinner("Building DOCX..."):
-                    st.session_state["docx_resume_bytes"] = build_resume_docx(
-                        st.session_state.get("selected_template_name", "Default (Professional)"),
-                        st.session_state,
-                    )
-            st.download_button(
-                label="⬇️ Download DOCX",
-                data=st.session_state["docx_resume_bytes"],
-                file_name=f"{st.session_state.get('name','Resume').replace(' ', '_')}_Resume.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                key="download_resume_docx",
-                use_container_width=True,
-            )
-            st.caption("Proper A4 Word document — edit in Word / Google Docs")
-
-        # Column 3: Preview toggle
-        with col3:
             is_previewing = st.session_state.get("show_template_preview", False)
-            if st.button("👁️ Preview Template", key="preview_template_btn",
-                         use_container_width=True):
+            if st.button("👁️ Preview Template", key="preview_template_btn"):
                 if not is_previewing:
+                    # Opening — show spinner since we're loading the iframe
                     with st.spinner("Loading template preview..."):
-                        time.sleep(1)
+                        time.sleep(2)
                         st.session_state["show_template_preview"] = True
                 else:
+                    # Closing — instant, no spinner
                     st.session_state["show_template_preview"] = False
 
         # Show/hide the template preview iframe
@@ -9224,6 +9261,16 @@ with tab2:
                 height=600,
                 scrolling=True,
             )
+
+        # PDF Resume Download Button — use cached bytes
+        pdf_resume_bytes = BytesIO(st.session_state["pdf_resume_bytes"])
+        
+        # ✅ Extra Help Note
+        st.markdown("""
+        ✅ After downloading your HTML resume, you can 
+        <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
+        convert it to PDF using Sejda's free online tool</a>.
+        """, unsafe_allow_html=True)
 
         # ==========================
         # 📩 Cover Letter Expander
@@ -9253,8 +9300,25 @@ with tab2:
             # ✅ Generate PDF from styled HTML
             pdf_file = html_to_pdf_bytes(styled_cover_letter)
 
+            # ✅ DOCX Generator (preserves line breaks)
+            def create_docx_from_text(text, filename="cover_letter.docx"):
+                from docx import Document
+                bio = BytesIO()
+                doc = Document()
+                doc.add_heading("Cover Letter", 0)
+
+                for line in text.split("\n"):
+                    if line.strip():
+                        doc.add_paragraph(line)
+                    else:
+                        doc.add_paragraph("")  # preserve empty lines
+
+                doc.save(bio)
+                bio.seek(0)
+                return bio
+
             # ==========================
-            # 📥 Cover Letter Download Buttons — native A4 DOCX + HTML (no Sejda)
+            # 📥 Cover Letter Download Buttons
             # ==========================
             st.markdown("""
             <div style="margin-top: 25px; margin-bottom: 15px;">
@@ -9262,35 +9326,31 @@ with tab2:
             </div>
             """, unsafe_allow_html=True)
 
-            col1, col2 = st.columns(2)
+            col1,col2 = st.columns(2)
             with col1:
-                # Native A4 DOCX via python-docx — proper formatting, no Sejda
-                cl_data_for_docx = st.session_state.get("cover_letter_data", {})
-                cl_tpl_for_docx  = st.session_state.get("cover_letter_template_name", "Professional / Corporate")
-                if not st.session_state.get("docx_coverletter_bytes"):
-                    st.session_state["docx_coverletter_bytes"] = build_cover_letter_docx(
-                        cl_tpl_for_docx, cl_data_for_docx
-                    )
                 st.download_button(
                     label="📥 Download Cover Letter (.docx)",
-                    data=st.session_state["docx_coverletter_bytes"],
-                    file_name=f"{st.session_state.get('name','CoverLetter').replace(' ', '_')}_Cover_Letter.docx",
+                    data=create_docx_from_text(st.session_state["cover_letter"]),
+                    file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="download_coverletter_docx",
-                    use_container_width=True,
+                    key="download_coverletter_docx"
                 )
-                st.caption("Proper A4 Word document")
-
+            
             with col2:
                 st.download_button(
-                    label="📥 Download Cover Letter (HTML)",
+                    label="📥 Download Cover Letter (Template)",
                     data=styled_cover_letter.encode("utf-8"),
-                    file_name=f"{st.session_state.get('name','CoverLetter').replace(' ', '_')}_Cover_Letter.html",
+                    file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.html",
                     mime="text/html",
-                    key="download_coverletter_html",
-                    use_container_width=True,
+                    key="download_coverletter_html"
                 )
-                st.caption("Open in browser → Print → Save as PDF")
+
+            # ✅ Helper note
+            st.markdown("""
+            ✅ If the HTML cover letter doesn't display properly, you can 
+            <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
+            convert it to PDF using Sejda's free online tool</a>.
+            """, unsafe_allow_html=True)
 
 import streamlit as st
 
