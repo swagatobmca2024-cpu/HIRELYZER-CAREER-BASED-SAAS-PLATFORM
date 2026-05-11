@@ -283,11 +283,33 @@ _WEIGHTS: dict[str, int] = {
 }
 
 _FREE_DOMAINS: frozenset[str] = frozenset({
+    # ── Major free providers ─────────────────────────────────────────────────
     "gmail.com","yahoo.com","hotmail.com","outlook.com","aol.com",
-    "icloud.com","mail.com","protonmail.com","yopmail.com","guerrillamail.com",
-    "tempmail.com","mailinator.com","trashmail.com","sharklasers.com",
-    "rediffmail.com","live.com","msn.com","yahoo.in","yahoo.co.in",
+    "icloud.com","mail.com","protonmail.com","live.com","msn.com",
     "rocketmail.com","zohomail.com","inbox.com","fastmail.com",
+    # ── India-specific free providers ────────────────────────────────────────
+    "rediffmail.com","yahoo.in","yahoo.co.in","sify.com","vsnl.net",
+    "dataone.in","airtelmail.in","bsnlnet.in",
+    # ── Classic disposable / throwaway domains ───────────────────────────────
+    "yopmail.com","guerrillamail.com","guerrillamailblock.com",
+    "tempmail.com","mailinator.com","trashmail.com","sharklasers.com",
+    "maildrop.cc","throwam.com","spamgourmet.com","dispostable.com",
+    "mailnesia.com","mailnull.com","spamspot.com","spam4.me",
+    "trashmail.at","trashmail.io","trashmail.me","trashmail.net",
+    # ── Modern temp-mail services (2023-2025 surge) ──────────────────────────
+    "temp-mail.org","tempinbox.com","tempr.email","temp-mail.io",
+    "inboxbear.com","disposablemail.com","throwawaymail.com",
+    "minutemail.com","emailondeck.com","armyspy.com","cuvox.de",
+    "dayrep.com","einrot.com","fleckens.hu","gustr.com","jourrapide.com",
+    "rhyta.com","superrito.com","teleworm.us","thetestdummy.com","tlipot.com",
+    "gufum.com","kakecorp.com","kzccv.com","mailsac.com","mailtothis.com",
+    "mfsa.ru","nwytg.com","ownpro.net","putthisinyourspamdatabase.com",
+    "rcpt.at","recode.me","spam.la","spam.su","spamfree24.org",
+    "tmailinator.com","vomoto.com","yuurok.com","zoemail.net",
+    # ── Guerrilla Mail aliases ───────────────────────────────────────────────
+    "grr.la","guerrillamailblock.com","spam4.me","yopmail.fr","cool.fr.nf",
+    "jetable.fr.nf","nospam.ze.tc","nomail.xl.cx","mega.zik.dj","speed.1s.fr",
+    "courriel.fr.nf","moncourrier.fr.nf","monemail.fr.nf","monmail.fr.nf",
 })
 
 _BRAND_DOMAINS: list[str] = [
@@ -1621,12 +1643,34 @@ def _probe_site_reachable(domain: str) -> dict:
     return out
 
 
-def _probe_typosquatting(domain: str) -> dict:
-    out = {"is_squatter": False, "closest_brand": None, "similarity": 0.0, "detail": ""}
+def _probe_typosquatting(domain: str, company: str = "") -> dict:
+    """
+    FIX v6 — Three-layer typosquatting detection:
+
+    Layer 1 (original): SequenceMatcher similarity vs hard-coded brand list.
+    Layer 2 (NEW): Company-name vs domain mismatch — if the job says "Company:
+      Infosys" but the website is "infosys-careers.net", that gap is flagged
+      regardless of whether either name is in _BRAND_DOMAINS.
+    Layer 3 (NEW): Suspicious domain-suffix keyword detection — domains ending in
+      "-jobs", "-careers", "-recruitment", "-hr", "-hiring" etc. attached to a
+      recognisable brand slug are near-certain impersonation even when similarity
+      is below 0.72.
+    """
+    out = {
+        "is_squatter":    False,
+        "closest_brand":  None,
+        "similarity":     0.0,
+        "mismatch_risk":  False,   # NEW: company name vs domain name diverge
+        "suffix_risk":    False,   # NEW: suspicious hiring-keyword suffix detected
+        "detail":         "",
+    }
     if not domain:
         return out
-    best, brand = 0.0, None
+
     d_sld = domain.split(".")[0]
+
+    # ── Layer 1: brand-list similarity (unchanged) ────────────────────────────
+    best, brand = 0.0, None
     for b in _BRAND_DOMAINS:
         b_sld = b.split(".")[0]
         sc = max(difflib.SequenceMatcher(None, d_sld, b_sld).ratio(),
@@ -1634,11 +1678,83 @@ def _probe_typosquatting(domain: str) -> dict:
         if sc > best:
             best, brand = sc, b
     out.update(similarity=round(best, 3), closest_brand=brand)
+
     if best >= 0.72 and domain != brand:
-        out.update(is_squatter=True,
-                   detail=f"'{domain}' is {int(best*100)}% similar to '{brand}' — possible impersonation")
-    else:
-        out["detail"] = f"No close brand match (best: {int(best*100)}% to {brand})"
+        out.update(
+            is_squatter=True,
+            detail=f"'{domain}' is {int(best*100)}% similar to '{brand}' — possible impersonation",
+        )
+        return out   # already flagged, no need for further layers
+
+    # ── Layer 2 (NEW): company name vs domain mismatch ────────────────────────
+    # Only run when a company name was extracted from the posting.
+    # Normalize both sides: lowercase, strip suffixes, strip punctuation.
+    if company and len(company.strip()) >= 3:
+        co_slug = re.sub(r"[^a-z0-9]", "", _CORP_SUFFIXES.sub("", company.lower()).strip())
+        # co_slug = "infosys" for "Infosys Technologies Pvt Ltd"
+        # Check if co_slug appears anywhere in the domain SLD
+        if co_slug and len(co_slug) >= 3:
+            # Domain SLD stripped of common hiring suffixes for comparison
+            _HIRING_SUFFIXES = re.compile(
+                r"(jobs?|careers?|recruitment|recruit|hiring|hr|apply|"
+                r"work|vacancy|vacancies|opening|talent|staffing|"
+                r"placement|joinus|joinourteam|team|official|india|"
+                r"infotech|technologies|services|solutions|group)$",
+                re.IGNORECASE,
+            )
+            d_stripped = _HIRING_SUFFIXES.sub("", d_sld.replace("-", "").replace("_", ""))
+
+            # Company name contains domain slug or domain slug contains company name
+            name_in_domain = co_slug in d_sld.replace("-", "").replace("_", "")
+            domain_in_name = d_stripped in co_slug
+
+            if not name_in_domain and not domain_in_name and len(d_stripped) >= 3:
+                # The stated company name and the domain share no meaningful token.
+                # This is a mismatch — company says "Tata Motors" but website is
+                # "globalrecruitmenthub.com". Flag it.
+                name_sim = difflib.SequenceMatcher(None, co_slug, d_stripped).ratio()
+                if name_sim < 0.40:   # very low similarity → real mismatch
+                    out.update(
+                        mismatch_risk=True,
+                        is_squatter=True,
+                        detail=(
+                            f"Company name '{company}' does not match domain '{domain}' "
+                            f"(name similarity {int(name_sim*100)}%) — "
+                            "stated company and website domain appear unrelated"
+                        ),
+                    )
+                    return out
+
+    # ── Layer 3 (NEW): suspicious hiring-suffix on a brand slug ──────────────
+    # Catches "infosys-jobs.net", "tcs-recruitment.in", "wipro-hiring.com"
+    # even when the full domain similarity falls below 0.72.
+    _SQUATTER_SUFFIXES = re.compile(
+        r"[-_]?(jobs?|careers?|recruitment|recruit|hiring|apply|hr|"
+        r"vacancy|opening|talent|placement|staffing)$",
+        re.IGNORECASE,
+    )
+    base_slug = _SQUATTER_SUFFIXES.sub("", d_sld)
+    if base_slug and base_slug != d_sld:
+        # Domain had a suspicious suffix — check if the base is a brand
+        for b in _BRAND_DOMAINS:
+            b_sld = b.split(".")[0]
+            sc2 = difflib.SequenceMatcher(None, base_slug.lower(), b_sld.lower()).ratio()
+            if sc2 >= 0.82:   # tighter threshold on stripped slug
+                out.update(
+                    suffix_risk=True,
+                    is_squatter=True,
+                    similarity=round(max(best, sc2), 3),
+                    closest_brand=b,
+                    detail=(
+                        f"'{domain}' appears to impersonate '{b}' — domain base "
+                        f"'{base_slug}' is {int(sc2*100)}% similar with suspicious "
+                        f"hiring suffix '{ d_sld[len(base_slug):]  }'"
+                    ),
+                )
+                return out
+
+    # ── No flag ───────────────────────────────────────────────────────────────
+    out["detail"] = f"No close brand match (best: {int(best*100)}% to {brand})"
     return out
 
 
@@ -2253,14 +2369,24 @@ def _check_wikipedia(company: str) -> dict:
 
 def _check_linkedin_existence(company: str) -> dict:
     """
-    Check if a LinkedIn company page exists for this company.
-    Method: HEAD request to linkedin.com/company/{slug} — 200=exists, 404=does not.
-    No login required for existence check.
+    FIX v6 — LinkedIn HEAD check with proper HTTP 999 bot-block handling.
 
-    LinkedIn slugs are typically: company name lowercased, spaces→hyphens.
-    We try 3 slug variants in parallel.
+    LinkedIn returns HTTP 999 when it detects a bot. Previously this was caught
+    by the generic `except urllib.error.HTTPError` and silently discarded, so
+    `found` stayed None — which the identity scorer treated as "inconclusive"
+    and never gave a negative signal even for obviously fake companies.
+
+    Now:
+      - HTTP 200/301/302 → found=True  (company page exists)
+      - HTTP 999         → found=None, bot_blocked=True  (LinkedIn blocked us —
+                           neutral, do NOT count as a denial against the company)
+      - HTTP 404         → found=False (page genuinely doesn't exist)
+      - Any other error  → found=None  (inconclusive)
+
+    This means real companies that get bot-blocked won't lose identity points,
+    and the scoring in _probe_company_domain counts LinkedIn correctly.
     """
-    out = {"found": None, "detail": ""}
+    out = {"found": None, "bot_blocked": False, "detail": ""}
     if not company or len(company.strip()) < 3:
         return out
 
@@ -2276,11 +2402,13 @@ def _check_linkedin_existence(company: str) -> dict:
         re.sub(r"[^a-z0-9]", "", name_clean.lower().replace(" ", "")),
     ])))
 
-    found_slug = None
+    found_slug   = None
+    bot_blocked  = False
+    not_found_ct = 0
     lock = threading.Lock()
 
     def _try_slug(slug):
-        nonlocal found_slug
+        nonlocal found_slug, bot_blocked, not_found_ct
         if not slug or len(slug) < 2:
             return
         try:
@@ -2303,9 +2431,15 @@ def _check_linkedin_existence(company: str) -> dict:
                         if found_slug is None:
                             found_slug = slug
         except urllib.error.HTTPError as e:
-            pass   # 404 = not found, 999 = LinkedIn bot block
+            if e.code == 999:
+                with lock:
+                    bot_blocked = True   # LinkedIn blocking us — neutral signal
+            elif e.code == 404:
+                with lock:
+                    not_found_ct += 1    # genuine 404 — page doesn't exist
+            # Other HTTP errors (403, 500 etc.) → treat as inconclusive
         except Exception:
-            pass
+            pass   # network timeout etc. → inconclusive
 
     threads = [threading.Thread(target=_try_slug, args=(s,), daemon=True) for s in slugs]
     for t in threads: t.start()
@@ -2314,12 +2448,29 @@ def _check_linkedin_existence(company: str) -> dict:
     if found_slug:
         out.update(
             found=True,
+            bot_blocked=False,
             detail=f"LinkedIn company page exists: linkedin.com/company/{found_slug} ✓",
+        )
+    elif bot_blocked:
+        # LinkedIn blocked our request — we cannot conclude either way.
+        # Mark found=None (not False) so the identity scorer stays neutral.
+        out.update(
+            found=None,
+            bot_blocked=True,
+            detail="LinkedIn check blocked by anti-bot filter (HTTP 999) — inconclusive",
+        )
+    elif not_found_ct >= len(slugs):
+        # Every slug returned 404 — genuinely not found
+        out.update(
+            found=False,
+            bot_blocked=False,
+            detail=f"No LinkedIn company page found for '{company}' (all slug variants returned 404)",
         )
     else:
         out.update(
-            found=False,
-            detail=f"No LinkedIn company page found for '{company}'",
+            found=None,
+            bot_blocked=False,
+            detail=f"LinkedIn check inconclusive for '{company}'",
         )
     return out
 
@@ -2493,7 +2644,11 @@ def _probe_company_domain(args: tuple) -> dict:
             confirmed += 1
             id_details.append(r.get("detail", ""))
         elif r.get("found") is False:
-            denied += 1
+            # FIX v6: LinkedIn bot_blocked (found=None, bot_blocked=True) must NOT
+            # count as a denial — it simply means we couldn't check, not that the
+            # company doesn't have a page. Only count genuine 404s as denials.
+            if not r.get("bot_blocked", False):
+                denied += 1
 
     out["identity_sources"] = confirmed
 
@@ -2757,7 +2912,11 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
 
     def _run(key, fn, arg):
         try:
-            r = fn(arg)
+            # typosquat now takes a (domain, company) tuple — unpack it
+            if isinstance(arg, tuple) and key == "typosquat":
+                r = fn(*arg)
+            else:
+                r = fn(arg)
         except Exception as ex:
             r = {"detail": f"Probe error: {ex}"}
         with lock:
@@ -2766,7 +2925,7 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
     tasks = [
         ("domain_age",     _probe_domain_age,      domain or ""),
         ("site_reach",     _probe_site_reachable,   domain or ""),
-        ("typosquat",      _probe_typosquatting,    domain or ""),
+        ("typosquat",      _probe_typosquatting,    (domain or "", company)),
         ("free_email",     _probe_free_email,       contact),
         ("mx_record",      _probe_mx_record,        contact),
         ("company_domain", _probe_company_domain,   (company, website)),
@@ -2774,7 +2933,7 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
     ]
     threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
     for t in threads: t.start()
-    for t in threads: t.join(timeout=_T_MCA + 4)
+    for t in threads: t.join(timeout=_T_MCA + 8)  # +8 for identity sub-threads inside company_domain
     return probes
 
 
@@ -2794,7 +2953,14 @@ def run_live_probes(job: dict) -> dict:
     return _run_live_probes_cached(domain or "", contact, company, website)
 
 
-def _probe_risk(probes: dict) -> tuple[int, list[str]]:
+def _probe_risk(probes: dict, job: dict | None = None) -> tuple[int, list[str]]:
+    """
+    FIX v6: accepts optional `job` dict to check for the no-contact-method
+    signal — a posting with no email, no website, AND no company name has zero
+    verifiable identity. Previously all MX/email/company probes returned
+    "NOT CHECKED" silently with no penalty, so scammers who omitted all contact
+    details sailed through the probe layer with 0 penalty.
+    """
     penalty, warnings = 0, []
     age      = probes.get("domain_age", {})
     da_status = age.get("status", "unknown")
@@ -2940,6 +3106,29 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         elif not spf.get("dmarc"):
             penalty += 8
             warnings.append(f"'{spf_dom}' has no DMARC record — anti-spoofing not configured")
+    # ── FIX v6: No verifiable contact method penalty ──────────────────────────
+    # If the job has no email, no website domain, AND no extractable company
+    # name, all three email/MX/company probes returned "NOT CHECKED" — meaning
+    # the probe layer silently gave 0 penalty to a totally anonymous posting.
+    # Apply a flat penalty so anonymous postings can't hide behind empty fields.
+    if job is not None:
+        _has_email   = bool(re.search(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}",
+                                      job.get("contact","") + " " + job.get("description","")))
+        _has_website = bool(job.get("website","").strip())
+        _has_company = bool(job.get("company","").strip())
+        if not _has_email and not _has_website and not _has_company:
+            penalty += 20
+            warnings.append(
+                "No email address, no website, and no company name found in this posting — "
+                "completely anonymous job posting with zero verifiable identity"
+            )
+        elif not _has_email and not _has_website:
+            penalty += 10
+            warnings.append(
+                "No contact email and no company website found — posting provides no "
+                "verifiable way to confirm the recruiter's identity"
+            )
+
     return min(penalty, 55), warnings
 
 
@@ -3099,7 +3288,9 @@ def _run_rules(job: dict) -> dict:
     if h: _add("unrealistic_benefits","Unrealistic Benefit Claims",
                 "Promised earnings or perks are statistically implausible.", h)
     h = _any(full, _VAGUE_PHRASES)
-    if len(h) >= 2:
+    # Raised threshold from 2→3 hits: many real Indian postings are genuinely brief.
+    # 3+ vague phrases together is a reliable signal; 2 triggers too many false positives.
+    if len(h) >= 3:
         _add("vague_description","Vague / Generic Description",
              "Real postings specify responsibilities. Vagueness may hide a non-existent role.", h)
     free_hits = [e for e in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", full)
@@ -3144,9 +3335,14 @@ def _run_rules(job: dict) -> dict:
     h = _any(full, _WFH_PHRASES)
     if h: _add("work_from_home_bait","WFH Bait — Data Entry / Form Filling",
                 "High-pay work-from-home roles with no skills required are almost always scams.", h)
+    # Missing salary is only a meaningful signal when COMBINED with other red flags.
+    # Many legitimate companies (especially Indian firms) routinely omit salary.
+    # Firing on salary alone causes false positives on clean postings.
+    # Only add this signal when at least 1 other rule signal has already fired.
     if not job.get("salary","").strip() or len(job.get("salary","").strip()) < 4:
-        _add("missing_salary","Salary Completely Absent",
-             "Hidden salary is commonly used to lure, then lowball candidates.")
+        if len(sigs) >= 1:   # only meaningful alongside other signals
+            _add("missing_salary","Salary Not Disclosed",
+                 "Salary absent alongside other risk signals — may be used to lure then lowball.")
     g_hits = _any(full, _GRAMMAR_PATTERNS)
     if len(g_hits) >= 2:
         _add("poor_grammar","Suspicious Grammar / Formatting",
@@ -3232,24 +3428,299 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _llm_prompt(job: dict, probe_warnings: list) -> str:
-    ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
+def _build_probe_context(probes: dict, warnings: list, rules_result: dict | None = None) -> str:
+    """
+    FIX v6 — Build a COMPLETE probe summary for the LLM, covering both
+    VERIFIED (positive) and WARNING (negative) findings.
+
+    v7 — Also accepts rules_result to append RULE ENGINE FINDINGS section,
+    so the LLM knows which signals the rule engine fired and with what evidence,
+    instead of re-deriving them independently from raw text.
+    """
+    lines = []
+
+    # ── Domain age ────────────────────────────────────────────────────────────
+    age = probes.get("domain_age", {})
+    da_status = age.get("status", "unknown")
+    if da_status == "established":
+        lines.append(
+            f"VERIFIED: Domain is {age.get('age_days')} days old "
+            f"(registered {age.get('registered', 'unknown')}) — well-established, "
+            "consistent with a real company."
+        )
+    elif da_status == "moderate":
+        lines.append(
+            f"CAUTION: Domain is {age.get('age_days')} days old (3–6 months) — "
+            "relatively new, verify through other channels."
+        )
+    elif da_status in ("young", "very_young"):
+        lines.append(
+            f"WARNING: Domain is only {age.get('age_days')} days old — "
+            "extremely new domain is a strong scam signal."
+        )
+
+    # Registrar
+    if age.get("registrar"):
+        lines.append(f"INFO: Domain registrar is '{age['registrar']}'.")
+    if age.get("privacy_proxy"):
+        lines.append("CAUTION: Domain WHOIS is privacy-protected.")
+
+    # ── Site reachability ─────────────────────────────────────────────────────
+    reach = probes.get("site_reach", {})
+    if reach.get("reachable") is True:
+        ssl_note = ""
+        if reach.get("ssl_valid") is True:
+            ssl_note = " with a valid SSL certificate"
+        elif reach.get("ssl_valid") is False:
+            ssl_note = " but SSL certificate is INVALID"
+        parked_note = " (domain appears PARKED — no real content)" if reach.get("is_parked") else ""
+        lines.append(f"VERIFIED: Company website is live{ssl_note}{parked_note}.")
+    elif reach.get("reachable") is False:
+        lines.append("WARNING: Company website is completely unreachable.")
+
+    # ── Typosquatting ─────────────────────────────────────────────────────────
+    typo = probes.get("typosquat", {})
+    if typo.get("is_squatter"):
+        lines.append(f"WARNING: {typo.get('detail', 'Domain may be impersonating a known brand.')} ")
+    elif typo.get("similarity", 0) < 0.72:
+        lines.append("VERIFIED: Domain does not impersonate any known brand.")
+
+    # ── Free email ────────────────────────────────────────────────────────────
+    free_email = probes.get("free_email", {})
+    if free_email.get("uses_free_domain"):
+        lines.append(
+            f"WARNING: Recruiter uses personal free email domain "
+            f"'{free_email.get('domain')}' — legitimate companies use corporate email."
+        )
+    elif free_email.get("emails_found"):
+        lines.append("VERIFIED: Contact email uses a corporate domain, not a free provider.")
+
+    # ── MX record ─────────────────────────────────────────────────────────────
+    mx = probes.get("mx_record", {})
+    mx_status = mx.get("status", "")
+    mx_dom = mx.get("domain", "")
+    if mx_status == "MX_FOUND":
+        flags = []
+        if mx.get("ghost_mx"):
+            flags.append("MX hostnames do not resolve — ghost MX (fake mail server)")
+        if mx.get("voip_risk"):
+            flags.append("routes through bulk/transactional mail service")
+        if mx.get("free_mx") and not mx.get("voip_risk"):
+            flags.append("uses free provider (Google/Outlook) for corporate domain")
+        if flags:
+            lines.append(f"CAUTION: '{mx_dom}' has MX records but — {' | '.join(flags)}.")
+        else:
+            lines.append(
+                f"VERIFIED: Corporate email domain '{mx_dom}' has valid, "
+                "functioning MX records — real mail infrastructure."
+            )
+    elif mx_status == "NO_MX":
+        lines.append(
+            f"WARNING: '{mx_dom}' has NO MX records — domain registered "
+            "for appearances only, not configured for real email."
+        )
+    elif mx_status == "DNS_FAIL":
+        lines.append(
+            f"WARNING: Email domain '{mx_dom}' does not exist in DNS — "
+            "completely fabricated."
+        )
+    elif mx_status == "FREE_DOMAIN":
+        lines.append(
+            "WARNING: Only free email domain(s) found — no corporate email domain to verify."
+        )
+    elif mx_status == "NO_EMAIL":
+        lines.append("INFO: No email address found in job posting — MX check skipped.")
+
+    # ── SPF / DMARC ───────────────────────────────────────────────────────────
+    spf = probes.get("spf_dmarc", {})
+    if spf.get("spf") and spf.get("dmarc"):
+        lines.append(
+            "VERIFIED: Domain has both SPF and DMARC records — properly "
+            "configured for legitimate corporate email use."
+        )
+    elif spf.get("spf") and not spf.get("dmarc"):
+        lines.append("CAUTION: Domain has SPF but no DMARC — partial email authentication.")
+    elif not spf.get("spf") and spf.get("dmarc") is False and mx_status == "MX_FOUND":
+        lines.append("WARNING: Domain has MX records but no SPF or DMARC — suspicious.")
+
+    # ── Company domain infrastructure ─────────────────────────────────────────
+    cd = probes.get("company_domain", {})
+    cd_domain = cd.get("domain", "")
+    if cd_domain:
+        infra_parts = []
+        if cd.get("domain_exists") is True:
+            infra_parts.append("DNS resolves")
+        if cd.get("website_live") is True:
+            infra_parts.append("HTTPS live")
+        if cd.get("has_mx") is True:
+            infra_parts.append("MX configured")
+        if cd.get("domain_matches_company") is True:
+            infra_parts.append("domain name matches company")
+        if len(infra_parts) >= 3:
+            lines.append(
+                f"VERIFIED: Company domain '{cd_domain}' passes infrastructure checks: "
+                + ", ".join(infra_parts) + "."
+            )
+        elif cd.get("domain_exists") is False:
+            lines.append(f"WARNING: Company domain '{cd_domain}' does not exist in DNS.")
+
+    # ── Identity sources ──────────────────────────────────────────────────────
+    confirmed = cd.get("identity_sources", 0)
+    cb = cd.get("clearbit", {})
+    wp = cd.get("wikipedia", {})
+    li = cd.get("linkedin", {})
+
+    id_lines = []
+    if cb.get("found") is True:
+        id_lines.append(f"Clearbit ✓ ({cb.get('detail', '')})")
+    elif cb.get("found") is False:
+        id_lines.append("Clearbit ✗ (not in global company index — may be small/regional)")
+
+    if wp.get("found") is True:
+        id_lines.append(f"Wikipedia ✓ ({wp.get('detail', '')})")
+    elif wp.get("found") is False:
+        id_lines.append("Wikipedia ✗ (no article — expected for small companies)")
+
+    if li.get("found") is True:
+        id_lines.append(f"LinkedIn ✓ ({li.get('detail', '')})")
+    elif li.get("found") is None:
+        id_lines.append("LinkedIn — inconclusive (bot-blocked)")
+    elif li.get("found") is False:
+        id_lines.append("LinkedIn ✗ (no company page found)")
+
+    if confirmed >= 2:
+        lines.append(
+            f"VERIFIED: Company confirmed by {confirmed} independent public "
+            f"databases. " + " | ".join(id_lines)
+        )
+    elif confirmed == 1:
+        lines.append(
+            f"PARTIAL: Company found in 1 public database (small/regional companies "
+            f"often absent from others). " + " | ".join(id_lines)
+        )
+    else:
+        # Not found in any — but only flag if infra is also weak
+        infra_clean = (
+            cd.get("domain_exists") is True
+            and cd.get("website_live") is True
+            and cd.get("has_mx") is True
+        )
+        if infra_clean:
+            lines.append(
+                "NOTE: Company not found in Clearbit/Wikipedia/LinkedIn — however "
+                "infrastructure checks pass, suggesting this is a real but small or "
+                "regional company not indexed by global databases. "
+                + " | ".join(id_lines)
+            )
+        else:
+            lines.append(
+                "WARNING: Company not found in any public database AND infrastructure "
+                "checks are weak — high likelihood of fake company. "
+                + " | ".join(id_lines)
+            )
+
+    # ── v7: Rule engine findings ──────────────────────────────────────────────
+    # Pass fired signals with their weights and matched evidence to the LLM so
+    # it reasons about confirmed pattern matches rather than re-reading raw text.
+    if rules_result and rules_result.get("signals"):
+        rule_lines = []
+        # Sort by weight descending so highest-impact signals appear first
+        sorted_signals = sorted(
+            rules_result["signals"].items(),
+            key=lambda x: _WEIGHTS.get(x[0], 0),
+            reverse=True,
+        )
+        for sig_key, sig_data in sorted_signals:
+            weight  = _WEIGHTS.get(sig_key, 0)
+            label   = sig_data.get("label", sig_key)
+            hits    = sig_data.get("hits", [])
+            evidence = f" — matched: {hits}" if hits else ""
+            severity = "CRITICAL RULE" if weight >= 18 else "RULE"
+            rule_lines.append(
+                f"{severity} FIRED (weight {weight}): {label}{evidence}"
+            )
+        if rule_lines:
+            lines.append(
+                "RULE ENGINE FINDINGS — these are confirmed pattern matches from "
+                "the automated rule engine:\n"
+                + "\n".join(f"    {rl}" for rl in rule_lines)
+            )
+        else:
+            lines.append("RULE ENGINE FINDINGS: No rule signals fired — posting text appears clean.")
+
+    return "\n".join(f"  - {l}" for l in lines) if lines else "  - No significant probe findings."
+
+
+def _llm_prompt(job: dict, probe_context: str) -> str:
+    """
+    FIX v6: probe_context is now a pre-built string from _build_probe_context()
+    containing both VERIFIED (positive) and WARNING (negative) probe findings.
+    Previously only received the raw `warnings` list which was empty when all
+    probes passed — causing the LLM to reason without any infrastructure evidence.
+    """
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
-Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
+Analyse the job posting below using the LIVE PROBE FINDINGS as ground truth — these are
+verified network checks that override your general assumptions about the company.
+
+CRITICAL SCORING RULES — you MUST follow these exactly:
+
+RULE 1 — INFRASTRUCTURE OVERRIDES EVERYTHING:
+If probe findings show ALL VERIFIED (established domain + live site + MX + SPF/DMARC + company confirmed):
+  → ai_risk_score MUST be 15–25. Hard ceiling of 30.
+  → verdict MUST be SAFE.
+  → company_legitimacy MUST be VERIFIED.
+  These ceilings are NON-NEGOTIABLE regardless of what the job text says.
+
+RULE 2 — MISSING INFORMATION IS NEUTRAL, NOT SUSPICIOUS:
+The following are NORMAL for legitimate Indian job postings. Do NOT penalise them:
+  - No salary mentioned (majority of Indian postings omit salary)
+  - No benefits listed (common for brief postings)
+  - No contact email shown (many use apply buttons)
+  - Generic job description (common for brief LinkedIn/Naukri reposts)
+  - Company not in Clearbit/Wikipedia (expected for regional companies)
+  ONLY penalise the PRESENCE of active scam signals — not the ABSENCE of details.
+
+RULE 3 — SMALL/REGIONAL COMPANIES:
+A company with verified DNS + HTTPS + MX + SPF/DMARC is a real company, even if:
+  - Not listed on Clearbit or Wikipedia
+  - Has a generic-sounding name
+  - Is not a well-known brand
+  Do NOT mark as UNVERIFIABLE when infrastructure probes PASS.
+
+RULE 4 — SCORE CALIBRATION:
+  All probes VERIFIED:           Score 10–25  (SAFE)
+  Mixed — some neutral/unknown:  Score 20–40  (SAFE or borderline SUSPICIOUS)
+  1–2 probe failures:            Score 35–55  (SUSPICIOUS)
+  3+ probe failures or rule fired weight≥18: Score 55–85+ (LIKELY_SCAM or DEFINITE_SCAM)
+
+RULE 5 — RED FLAGS MUST BE REAL:
+Only list in top_red_flags things that are ACTUALLY present in the job text.
+Do NOT invent red flags from missing information.
+"No salary" is NOT a red flag unless combined with 2+ other real scam signals.
+"Generic description" is NOT a red flag for a verified company.
+
+RULE 6 — SALARY ASSESSMENT WHEN NO SALARY IS PRESENT:
+If the Salary field above says "Not mentioned in this posting", your salary_assessment
+field MUST say exactly: "No salary information was provided in this posting."
+Do NOT write "Realistic for this role" or speculate about market rates.
+There is nothing to assess — state that clearly and nothing more.
+
+RULE ENGINE FINDINGS are pre-confirmed pattern matches — treat as ground truth.
+If a CRITICAL RULE FIRED (weight≥18), it must appear in your top_red_flags.
 
 JOB POSTING:
-Title: {job.get('title','N/A')}
-Company: {job.get('company','N/A')}
-Website: {job.get('website','N/A')}
-Location: {job.get('location','N/A')}
-Salary: {job.get('salary','N/A')}
-Description: {job.get('description','N/A')}
-Requirements: {job.get('requirements','N/A')}
-Benefits: {job.get('benefits','N/A')}
-Contact: {job.get('contact','N/A')}
+Title: {job.get('title','').strip() or 'Not specified'}
+Company: {job.get('company','').strip() or 'Not specified'}
+Website: {job.get('website','').strip() or 'Not specified'}
+Location: {job.get('location','').strip() or 'Not specified'}
+Salary: {job.get('salary','').strip() or 'Not mentioned in this posting'}
+Description: {job.get('description','').strip() or 'Not provided'}
+Requirements: {job.get('requirements','').strip() or 'Not provided'}
+Benefits: {job.get('benefits','').strip() or 'Not provided'}
+Contact: {job.get('contact','').strip() or 'Not provided'}
 
-LIVE PROBE FINDINGS:
-{ctx}
+LIVE PROBE FINDINGS (treat these as verified facts):
+{probe_context}
 
 Required JSON schema (all keys mandatory):
 {{
@@ -3258,13 +3729,14 @@ Required JSON schema (all keys mandatory):
   "company_legitimacy": "<VERIFIED|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
   "top_red_flags": ["<str>","<str>","<str>"],
   "positive_signals": ["<str>"],
-  "fake_company_evidence": "<detailed reasoning about company authenticity>",
+  "fake_company_evidence": "<detailed reasoning about company authenticity, referencing probe findings>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
   "salary_assessment": "<realistic or not for this role and location>",
   "recommended_action": "<specific advice for the job seeker>",
   "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
 }}"""
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3495,10 +3967,12 @@ def _render_score_strip(result: dict):
         f'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
         f'border-radius:8px;font-family:monospace;font-size:0.73rem;color:#6b7280;">'
         f'<span style="color:#8b949e;font-weight:600;">How your score was calculated: </span>'
-        f'(0.60 × AI&nbsp;<span style="color:{cfg["color"]}">{ai_s}</span>) + '
-        f'(0.25 × Rules&nbsp;<span style="color:#f59e0b">{rul_s}</span>) + '
-        f'(0.15 × Probes&nbsp;<span style="color:#38bdf8">{pen}</span>) '
-        f'= <span style="color:#8b949e;">{raw}</span>'
+        + (lambda w: (
+            f'({int(w[0]*100)}% × AI&nbsp;<span style="color:{cfg["color"]}">{ai_s}</span>) + '
+            f'({int(w[1]*100)}% × Rules&nbsp;<span style="color:#f59e0b">{rul_s}</span>) + '
+            f'({int(w[2]*100)}% × Probes&nbsp;<span style="color:#38bdf8">{pen}</span>) '
+        ))(result.get("weights", (0.60, 0.25, 0.15)))
+        + f'= <span style="color:#8b949e;">{raw}</span>'
         f'{floor_note}'
         f'</div>',
         unsafe_allow_html=True,
@@ -3687,7 +4161,12 @@ def _render_signal_cards(signals: dict):
     col_r.markdown(right_html or "<div></div>", unsafe_allow_html=True)
 
 
-def _render_ai_dive(llm: dict):
+def _render_ai_dive(llm: dict, job: dict | None = None):
+    """
+    FIX v6: accepts optional `job` dict so we can gate the salary_assessment
+    card — if no salary was in the original posting, suppress any hallucinated
+    "Realistic for this role" text and show a clear "not provided" message.
+    """
     if not llm:
         st.markdown('<p style="color:#6b7280;font-size:0.82rem;">AI analysis unavailable.</p>',
                     unsafe_allow_html=True)
@@ -3740,6 +4219,11 @@ def _render_ai_dive(llm: dict):
         unsafe_allow_html=True,
     )
 
+    # ── FIX v6: salary guard ─────────────────────────────────────────────────
+    # Determine whether the original posting had any salary info.
+    _job_salary = (job or {}).get("salary", "").strip()
+    _salary_present = bool(_job_salary) and _job_salary.upper() not in ("N/A", "NOT SPECIFIED", "NONE")
+
     for field, icon_path, title in [
         ("fake_company_evidence", I.GHOST,     "Company Legitimacy Analysis"),
         ("linguistic_analysis",   I.FILE_TEXT, "Linguistic Pattern Analysis"),
@@ -3747,6 +4231,11 @@ def _render_ai_dive(llm: dict):
         ("recommended_action",    I.SHIELD,    "Recommended Action"),
     ]:
         val = llm.get(field, "")
+
+        # Salary guard: override whatever the LLM said if no salary was in the posting
+        if field == "salary_assessment" and not _salary_present:
+            val = "No salary information was provided in this posting."
+
         if not val:
             continue
         st.markdown(
@@ -4346,7 +4835,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     prog.progress(30, text="Launching 5 live network probes (parallel)…")
                     probes = run_live_probes(job)
-                    penalty, warnings = _probe_risk(probes)
+                    penalty, warnings = _probe_risk(probes, job)
 
                     prog.progress(60, text="Sending to AI for deep analysis…")
 
@@ -4368,7 +4857,8 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     for attempt in range(2):
                         try:
-                            prompt = _llm_prompt(job, warnings)
+                            probe_context = _build_probe_context(probes, warnings, rules_result)
+                            prompt = _llm_prompt(job, probe_context)
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
@@ -4430,6 +4920,15 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     ai_confidence = int(llm_data.get("confidence", 70))
                     ai_confidence = max(0, min(100, ai_confidence))
 
+                    # Detect clean infrastructure — all key probes passed
+                    all_probes_clean = (
+                        penalty == 0
+                        and probe_coverage >= 0.60
+                        and probes.get("domain_age", {}).get("status")
+                            in ("established", "moderate", "old")
+                        and probes.get("site_reach", {}).get("reachable") is True
+                    )
+
                     if ai_failed:
                         # AI completely failed — redistribute its 60% to rules
                         w_ai, w_rule, w_probe = 0.00, 0.75, 0.25
@@ -4439,6 +4938,13 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     elif probe_coverage < 0.5:
                         # Less than half probes ran — boost AI, reduce probe weight
                         w_ai, w_rule, w_probe = 0.70, 0.25, 0.05
+                    elif all_probes_clean and rule_s <= 8:
+                        # ALL infrastructure probes clean + very low rule score.
+                        # LLM overpenalises for missing info (salary, benefits) on
+                        # clean postings — reduce AI weight so verified companies
+                        # stay in SAFE band. AI=42 x 0.45 = 18.9 = SAFE.
+                        # Without this: AI=42 x 0.60 = 25.2 = borderline SUSPICIOUS.
+                        w_ai, w_rule, w_probe = 0.45, 0.40, 0.15
                     else:
                         # Normal: standard 60/25/15
                         w_ai, w_rule, w_probe = 0.60, 0.25, 0.15
@@ -4501,7 +5007,11 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     sv_sev = _sev.get(sv, 0)
                     if av_sev > sv_sev:
                         next_threshold = _thresholds.get(av_sev, 100)
-                        final = av if blended >= next_threshold - 5 else sv
+                        # Use > (strictly greater) not >= so blended=20 with
+                        # threshold=25 (25-5=20) does NOT override. Prevents
+                        # clean postings at exactly the boundary from being
+                        # pushed up by LLM verdict alone.
+                        final = av if blended > next_threshold - 5 else sv
                     else:
                         final = sv
 
@@ -4512,6 +5022,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         "probes":         probes,    "probe_warnings": warnings,
                         "llm":            llm_data,  "job":            job,
                         "timestamp":      _now_ist(),
+                        "weights":        (w_ai, w_rule, w_probe),
                     }
                     prog.progress(100, text="Done.")
                     time.sleep(0.3)
@@ -4693,7 +5204,7 @@ def render_job_scam_detector_tab(call_llm_fn):
             f'</div>'
             for ic, label, val, col in [
                 (I.CPU,      "AI Engine",     "LLaMA 3.3-70B",   "#a78bfa"),
-                (I.GLOBE,    "Live Probes",   "6 checks",        "#38bdf8"),
+                (I.GLOBE,    "Live Probes",   "8 checks",        "#38bdf8"),
                 (I.LIST,     "Rule Signals",  "15 patterns",     "#f59e0b"),
                 (I.SHIELD,   "Hourly Limit",  f"{_SCAM_LIMIT} analyses", "#22c55e"),
             ]
@@ -4764,7 +5275,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         )
         _render_signal_cards(res["signals"])
     with t2:
-        _render_ai_dive(res.get("llm", {}))
+        _render_ai_dive(res.get("llm", {}), job=res.get("job", {}))
     with t3:
         _render_checklist(res)
 
