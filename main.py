@@ -6666,47 +6666,6 @@ def _sanitize_html_for_pdf(html_string):
         flags=_re.DOTALL | _re.IGNORECASE,
     )
 
-    # ── Inject PDF page-break rules ────────────────────────────────────────
-    # Prepend a <style> block with industry-standard page-break rules.
-    # Because templates use inline styles (no class names), we target the
-    # structural HTML elements that xhtml2pdf renders:
-    #   - <table> rows (sidebar two-column layouts)
-    #   - <h3>/<h4> section headings
-    #   - <p> and <li> for orphan/widow control
-    # For single-column templates, we also inject a PDF-only wrapper class
-    # around each top-level content block via string replacement on common
-    # section wrapper patterns so cards never split mid-entry.
-    PDF_PAGE_RULES = """<style>
-        /* ── Resume PDF Page-Break Rules (industry standard) ────────────────
-           Tested against xhtml2pdf 0.2.17 / ReportLab.
-
-           Rule 1: Section headings never orphaned at page bottom.
-                   h3/h4 used by all 21 templates as section titles.
-           Rule 2: Table rows in two-column (sidebar) layouts never split.
-                   td page-break-inside:avoid keeps left+right columns aligned.
-           Rule 3: Orphan/widow control — minimum 2 lines kept together
-                   at every page boundary for professional appearance.
-           Rule 4: List items (bullet points) never split across pages.
-           ──────────────────────────────────────────────────────────────── */
-
-        h3, h4         { page-break-after:  avoid; }
-        td             { page-break-inside: avoid; }
-        li             { page-break-inside: avoid; orphans: 2; widows: 2; }
-        p              { orphans: 2; widows: 2; }
-        blockquote     { page-break-inside: avoid; }
-    </style>"""
-
-    # Inject right after <head> if present, else prepend to document
-    import re as _re2
-    if _re2.search(r'<head[^>]*>', sanitized, _re2.IGNORECASE):
-        sanitized = _re2.sub(
-            r'(<head[^>]*>)',
-            r'\1' + PDF_PAGE_RULES,
-            sanitized, count=1, flags=_re2.IGNORECASE
-        )
-    else:
-        sanitized = PDF_PAGE_RULES + sanitized
-
     return sanitized
 
 
@@ -6739,42 +6698,6 @@ def html_to_pdf_bytes(html_string):
             table {
                 width: 100%;
                 border-collapse: collapse;
-            }
-
-            /* ── Industry-standard resume page-break rules ──────────────────
-               These ensure clean multi-page PDFs:
-               - Section headers never orphaned alone at page bottom
-               - Individual cards (project/exp/edu) never split mid-content
-               - Minimum 2 lines kept together at page boundaries (orphan/widow)
-               ──────────────────────────────────────────────────────────────── */
-
-            /* Never split an individual experience/project/education entry
-               across two pages — keeps each card as one readable unit */
-            .pdf-card {
-                page-break-inside: avoid;
-            }
-
-            /* Section heading must always stay with its first card —
-               prevents a lone "EXPERIENCE" heading at bottom of page */
-            .pdf-section-header {
-                page-break-after: avoid;
-            }
-
-            /* Fallback for templates that use h3/h4 as section titles */
-            h3, h4 {
-                page-break-after: avoid;
-            }
-
-            /* Prevent dangling single lines at top/bottom of pages */
-            p, li {
-                orphans: 2;
-                widows: 2;
-            }
-
-            /* Two-column sidebar: never break the table across pages
-               mid-row — the td cells reflow naturally instead */
-            td {
-                page-break-inside: avoid;
             }
         </style>
     </head>
@@ -9432,19 +9355,7 @@ with tab2:
 
         # HTML Resume Download Button
         with col1:
-            # Inject @page A4 hint so Sejda / any HTML→PDF tool
-            # automatically uses A4 portrait with clean margins —
-            # no manual configuration needed by the user.
-            A4_HINT = "<style>@page{size:A4 portrait;margin:15mm;}</style>"
-            raw_html = st.session_state["generated_html"]
-            if "<head>" in raw_html:
-                sejda_html = raw_html.replace("<head>", "<head>" + A4_HINT, 1)
-            elif "<html>" in raw_html:
-                sejda_html = raw_html.replace("<html>", "<html>" + A4_HINT, 1)
-            else:
-                sejda_html = A4_HINT + raw_html
-
-            html_bytes = sejda_html.encode("utf-8")
+            html_bytes = st.session_state["generated_html"].encode("utf-8")
             html_file = BytesIO(html_bytes)
 
             st.download_button(
@@ -9557,18 +9468,9 @@ with tab2:
                 )
             
             with col2:
-                # Inject @page A4 hint for Sejda
-                A4_HINT = "<style>@page{size:A4 portrait;margin:15mm;}</style>"
-                if "<head>" in styled_cover_letter:
-                    sejda_cl = styled_cover_letter.replace("<head>", "<head>" + A4_HINT, 1)
-                elif "<html>" in styled_cover_letter:
-                    sejda_cl = styled_cover_letter.replace("<html>", "<html>" + A4_HINT, 1)
-                else:
-                    sejda_cl = A4_HINT + styled_cover_letter
-
                 st.download_button(
                     label="📥 Download Cover Letter (Template)",
-                    data=sejda_cl.encode("utf-8"),
+                    data=styled_cover_letter.encode("utf-8"),
                     file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.html",
                     mime="text/html",
                     key="download_coverletter_html"
