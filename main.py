@@ -6514,10 +6514,148 @@ with tab1:
     elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
 
+def _sanitize_html_for_pdf(html_string):
+    """
+    Strip / replace CSS properties that xhtml2pdf (pisa) does not support.
+
+    xhtml2pdf uses a very limited CSS 2.1 subset and crashes with a
+    CSSParseError on any property it cannot parse — including all of the
+    modern layout primitives used by the resume templates for the browser
+    preview:  display:flex, flex-wrap, gap, align-items, justify-content,
+    flex-direction, flex-shrink, object-fit, object-position, letter-spacing,
+    text-transform (partial), border-radius on some elements, box-shadow,
+    background-clip, linear-gradient(), rgba() in some positions, etc.
+
+    Strategy:
+      1. Use regex to find every inline style="..." attribute.
+      2. Within each style block, strip individual property:value pairs that
+         are known to crash the parser, while keeping PDF-safe ones intact.
+      3. Replace display:flex → display:block  so containers still render.
+      4. Replace gap:... → margin-bottom on the container (best-effort).
+
+    This sanitisation is applied ONLY for PDF export — the browser preview
+    still uses the full modern CSS.
+    """
+    import re as _re
+
+    # Properties whose entire declaration should be dropped for PDF safety.
+    # Each entry is a regex that matches  "property-name:value"  (no semicolon).
+    STRIP_PROPS = [
+        r'flex-wrap\s*:[^;]*',
+        r'flex-direction\s*:[^;]*',
+        r'flex-shrink\s*:[^;]*',
+        r'flex-grow\s*:[^;]*',
+        r'flex\s*:[^;]*',           # shorthand — must come after flex-*
+        r'align-items\s*:[^;]*',
+        r'align-self\s*:[^;]*',
+        r'justify-content\s*:[^;]*',
+        r'justify-self\s*:[^;]*',
+        r'gap\s*:[^;]*',
+        r'row-gap\s*:[^;]*',
+        r'column-gap\s*:[^;]*',
+        r'grid[^:]*:[^;]*',         # any grid-* property
+        r'object-fit\s*:[^;]*',
+        r'object-position\s*:[^;]*',
+        r'box-shadow\s*:[^;]*',
+        r'text-shadow\s*:[^;]*',
+        r'background-clip\s*:[^;]*',
+        r'-webkit-[^:]*:[^;]*',     # any vendor prefix
+        r'-moz-[^:]*:[^;]*',
+        r'-ms-[^:]*:[^;]*',
+        r'transition\s*:[^;]*',
+        r'transform\s*:[^;]*',
+        r'animation[^:]*:[^;]*',
+        r'will-change\s*:[^;]*',
+        r'pointer-events\s*:[^;]*',
+        r'resize\s*:[^;]*',
+        r'cursor\s*:[^;]*',
+        r'overflow-x\s*:[^;]*',
+        r'overflow-y\s*:[^;]*',
+        r'overflow\s*:\s*(?!hidden)[^;]*',   # keep overflow:hidden, drop others
+        r'white-space\s*:[^;]*',
+        r'word-break\s*:[^;]*',
+        r'overflow-wrap\s*:[^;]*',
+        r'text-overflow\s*:[^;]*',
+    ]
+
+    # background: linear-gradient(...) crashes pisa — replace with a flat colour
+    GRADIENT_RE = _re.compile(
+        r'background\s*:\s*linear-gradient\([^)]*\)\s*(?:;|$)', _re.IGNORECASE
+    )
+
+    # display:flex → display:block  (pisa only knows block/inline/table/none)
+    FLEX_DISPLAY_RE = _re.compile(
+        r'display\s*:\s*flex\b', _re.IGNORECASE
+    )
+    INLINE_FLEX_RE = _re.compile(
+        r'display\s*:\s*inline-flex\b', _re.IGNORECASE
+    )
+
+    # Compile all strip patterns once
+    strip_re_list = [_re.compile(p, _re.IGNORECASE) for p in STRIP_PROPS]
+
+    def _clean_style(style_value):
+        """Clean a single style="..." value string."""
+        # Replace gradients with a neutral background
+        style_value = GRADIENT_RE.sub('background:#f5f5f5;', style_value)
+        # Replace flex displays
+        style_value = FLEX_DISPLAY_RE.sub('display:block', style_value)
+        style_value = INLINE_FLEX_RE.sub('display:inline-block', style_value)
+        # Strip unsupported properties
+        for pat in strip_re_list:
+            style_value = pat.sub('', style_value)
+        # Clean up leftover semicolons / whitespace
+        # e.g. ";;  ;" → ";"
+        style_value = _re.sub(r'\s*;\s*;+', ';', style_value)
+        style_value = _re.sub(r'^\s*;+', '', style_value)
+        style_value = style_value.strip().strip(';')
+        return style_value
+
+    # Match every  style="..."  or  style='...'  attribute in the HTML
+    def _replace_style_attr(m):
+        quote = m.group(1)           # ' or "
+        style_content = m.group(2)
+        cleaned = _clean_style(style_content)
+        if not cleaned.strip():
+            return ''                 # remove empty style attributes entirely
+        return f'style={quote}{cleaned}{quote}'
+
+    sanitized = _re.sub(
+        r'''style=(['"])(.*?)\1''',
+        _replace_style_attr,
+        html_string,
+        flags=_re.DOTALL | _re.IGNORECASE,
+    )
+
+    # Also strip any <style> blocks that contain flex/grid — pisa parses
+    # embedded <style> tags through its CSS engine and will also crash there.
+    def _clean_style_tag(m):
+        css_text = m.group(1)
+        css_text = GRADIENT_RE.sub('background:#f5f5f5;', css_text)
+        css_text = FLEX_DISPLAY_RE.sub('display:block', css_text)
+        css_text = INLINE_FLEX_RE.sub('display:inline-block', css_text)
+        for pat in strip_re_list:
+            css_text = pat.sub('', css_text)
+        return f'<style>{css_text}</style>'
+
+    sanitized = _re.sub(
+        r'<style[^>]*>(.*?)</style>',
+        _clean_style_tag,
+        sanitized,
+        flags=_re.DOTALL | _re.IGNORECASE,
+    )
+
+    return sanitized
+
+
 def html_to_pdf_bytes(html_string):
     # NOTE: Do NOT use f-string here. Template HTML contains CSS variables like
     # {C_PRIMARY} which Python re-evaluates as f-string placeholders → CSSParseError crash.
     # Use plain string + .replace() to safely inject html_string.
+
+    # Sanitise modern CSS that xhtml2pdf cannot parse before wrapping.
+    safe_html = _sanitize_html_for_pdf(html_string)
+
     wrapper = """
     <html>
     <head>
@@ -6575,7 +6713,7 @@ def html_to_pdf_bytes(html_string):
     </body>
     </html>
     """
-    styled_html = wrapper.replace("__HTML_CONTENT__", html_string)
+    styled_html = wrapper.replace("__HTML_CONTENT__", safe_html)
 
     pdf_io = BytesIO()
     pisa.CreatePDF(styled_html, dest=pdf_io)
@@ -9351,7 +9489,6 @@ with tab2:
             <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
             convert it to PDF using Sejda's free online tool</a>.
             """, unsafe_allow_html=True)
-
 import streamlit as st
 
 
