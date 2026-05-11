@@ -918,6 +918,7 @@ def render_template_executive(session_state, profile_img_html=""):
             f"padding:3px 10px;margin:3px 3px 3px 0;font-size:13px;font-weight:600;white-space:nowrap;'>{s.strip()}</span>"
             for s in items_str.split(',') if s.strip()
         )
+        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     # Fix image properly: extract just <img> tag, strip existing styles, apply contained fixed-size circle
     def _fix_img(html, size=96):
@@ -1250,7 +1251,8 @@ def render_template_corporate(session_state, profile_img_html=""):
                 f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;white-space:nowrap;'>{item.strip()}</span>")
 
     def badges(items_str, bg="#1d4ed8", color="#fff"):
-        return "".join(badge(s, bg, color) for s in items_str.split(',') if s.strip())
+        inner = "".join(badge(s, bg, color) for s in items_str.split(',') if s.strip())
+        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     exp_html = ""
     for exp in session_state.experience_entries:
