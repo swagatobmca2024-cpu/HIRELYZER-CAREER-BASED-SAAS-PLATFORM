@@ -6578,9 +6578,15 @@ def _sanitize_html_for_pdf(html_string):
         r'text-overflow\s*:[^;]*',
     ]
 
-    # background: linear-gradient(...) crashes pisa — replace with a flat colour
+    # background: linear-gradient(...) crashes pisa.
+    # Extract the FIRST colour argument and use it as a solid background so
+    # sidebar columns keep their intended colour instead of turning grey.
     GRADIENT_RE = _re.compile(
-        r'background\s*:\s*linear-gradient\([^)]*\)\s*(?:;|$)', _re.IGNORECASE
+        r'background\s*:\s*linear-gradient\(([^)]*)\)\s*(?:;|$)', _re.IGNORECASE
+    )
+    # Matches the first hex/rgb/named colour inside the gradient args
+    FIRST_COLOR_RE = _re.compile(
+        r'(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\))'
     )
 
     # display:flex → display:block  (pisa only knows block/inline/table/none)
@@ -6591,21 +6597,36 @@ def _sanitize_html_for_pdf(html_string):
         r'display\s*:\s*inline-flex\b', _re.IGNORECASE
     )
 
+    # Viewport / dynamic units that xhtml2pdf cannot resolve → blank space
+    # Strip the whole property when its value uses vh/vw/vmin/vmax
+    VIEWPORT_UNIT_RE = _re.compile(
+        r'[\w-]+\s*:[^;]*\d+v[hwmin][^;]*(?:;|$)', _re.IGNORECASE
+    )
+
     # Compile all strip patterns once
     strip_re_list = [_re.compile(p, _re.IGNORECASE) for p in STRIP_PROPS]
 
+    def _gradient_to_solid(m):
+        """Replace linear-gradient(...) with its first colour as a solid bg."""
+        args = m.group(1)
+        colour_m = FIRST_COLOR_RE.search(args)
+        colour = colour_m.group(0) if colour_m else '#f5f5f5'
+        return f'background:{colour};'
+
     def _clean_style(style_value):
         """Clean a single style="..." value string."""
-        # Replace gradients with a neutral background
-        style_value = GRADIENT_RE.sub('background:#f5f5f5;', style_value)
+        # Replace gradients with extracted first colour (preserves sidebar colour)
+        style_value = GRADIENT_RE.sub(_gradient_to_solid, style_value)
+        # Strip any property whose value contains a viewport unit (vh/vw/etc.)
+        # e.g. min-height:100vh causes blank pages; height:100vh same issue
+        style_value = VIEWPORT_UNIT_RE.sub('', style_value)
         # Replace flex displays
         style_value = FLEX_DISPLAY_RE.sub('display:block', style_value)
         style_value = INLINE_FLEX_RE.sub('display:inline-block', style_value)
         # Strip unsupported properties
         for pat in strip_re_list:
             style_value = pat.sub('', style_value)
-        # Clean up leftover semicolons / whitespace
-        # e.g. ";;  ;" → ";"
+        # Clean up leftover semicolons / whitespace e.g. ";;  ;" → ";"
         style_value = _re.sub(r'\s*;\s*;+', ';', style_value)
         style_value = _re.sub(r'^\s*;+', '', style_value)
         style_value = style_value.strip().strip(';')
@@ -6663,48 +6684,20 @@ def html_to_pdf_bytes(html_string):
         <style>
             @page {
                 size: A4 portrait;
-                margin-top: 15mm;
-                margin-bottom: 15mm;
-                margin-left: 15mm;
-                margin-right: 15mm;
+                margin: 0;
             }
-            body {
-                font-size: 14pt;
+            html, body {
+                margin: 0;
+                padding: 0;
+                font-size: 12pt;
                 font-family: "Segoe UI", "Helvetica", sans-serif;
                 line-height: 1.5;
                 color: #000;
-            }
-            h1, h2, h3 {
-                color: #2f4f6f;
+                background: #fff;
             }
             table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 15px;
-            }
-            td {
-                padding: 4px;
-                vertical-align: top;
-                border: 1px solid #ccc;
-            }
-            .section-title {
-                background-color: #e0e0e0;
-                font-weight: bold;
-                padding: 6px;
-                margin-top: 10px;
-            }
-            .box {
-                padding: 8px;
-                margin-top: 6px;
-                background-color: #f9f9f9;
-                border-left: 4px solid #999;
-            }
-            ul {
-                margin: 0.5em 0;
-                padding-left: 1.5em;
-            }
-            li {
-                margin-bottom: 5px;
             }
         </style>
     </head>
