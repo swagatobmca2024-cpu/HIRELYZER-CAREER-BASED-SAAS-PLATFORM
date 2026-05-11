@@ -3558,161 +3558,6 @@ def render_template_ice_blue(session_state, profile_img_html=""):
 </div></body></html>"""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# TEMPLATE 21 — Rose Gold (Single Column)
-# Sophisticated rose-pink palette. Fashion, marketing, HR, PR industries.
-# ─────────────────────────────────────────────────────────────────────────────
-def render_template_rose_gold(session_state, profile_img_html=""):
-    """Rose Gold — single-column, elegant pink-gold palette, fashion/marketing style."""
-    import re as _re21
-
-    C_HEAD  = "#881337"   # rose-900
-    C_BODY  = "#1c1917"   # stone-950
-    C_MUTED = "#9f1239"   # rose-800
-    C_ACC   = "#e11d48"   # rose-600
-    C_SOFT  = "#ffe4e6"   # rose-100
-
-    def _fix_img(html, size=88):
-        if not html: return ""
-        m = _re21.search(r'<img[^>]*>', html)
-        if not m: return ""
-        tag = _re21.sub(r"style=['\"][^'\"]*['\"]", "", m.group(0))
-        tag = tag.replace("<img ", f"<img style='width:{size}px;height:{size}px;"
-                          f"border-radius:50%;object-fit:cover;display:block;"
-                          f"margin:0 auto 10px;border:3px solid {C_ACC};' ")
-        return tag
-
-    def section(title, content):
-        return f"""
-        <div style='margin-bottom:24px;'>
-            <h2 style='font-size:11px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
-                color:{C_HEAD};margin-bottom:10px;padding-bottom:5px;
-                border-bottom:2px solid {C_ACC};'>{title}</h2>
-            {content}
-        </div>"""
-
-    def pills(s, bg="#ffe4e6", color="#881337", border="#fda4af"):
-        return "".join(
-            f"<span style='display:inline-block;background:{bg};color:{color};"
-            f"border:1px solid {border};border-radius:20px;padding:4px 14px;"
-            f"margin:4px 4px 4px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
-            for x in s.split(',') if x.strip())
-
-    contact_parts = []
-    for key in ['email','phone','location','linkedin','portfolio','github']:
-        val = session_state.get(key,'')
-        if val:
-            if key == 'email':
-                contact_parts.append(f"<a href='mailto:{val}' style='color:{C_ACC};text-decoration:none;'>{val}</a>")
-            elif key in ('linkedin','portfolio','github'):
-                href = val if val.startswith('http') else f"https://{val}"
-                contact_parts.append(f"<a href='{href}' target='_blank' style='color:{C_ACC};text-decoration:none;'>{val}</a>")
-            else:
-                contact_parts.append(f"<span style='color:#6b7280;'>{val}</span>")
-    contact_line = " &nbsp;&middot;&nbsp; ".join(contact_parts)
-
-    exp_html = ""
-    for exp in session_state.experience_entries:
-        if exp.get('company') or exp.get('title'):
-            desc = _fmt_desc(exp.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
-            exp_html += f"""
-            <div style='margin-bottom:18px;padding:12px 16px;background:{C_SOFT};border-radius:6px;'>
-                <div style='display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;'>
-                    <strong style='font-size:15px;color:{C_HEAD};'>{exp.get('company','')}</strong>
-                    <span style='font-size:12px;color:{C_ACC};font-weight:700;'>{exp.get('duration','')}</span>
-                </div>
-                <div style='font-size:13px;color:#9f1239;font-style:italic;margin:3px 0 8px;font-weight:600;'>{exp.get('title','')}</div>
-                {desc}
-            </div>"""
-
-    edu_html = ""
-    for edu in session_state.education_entries:
-        if edu.get('institution') or edu.get('degree'):
-            dv = edu.get('degree','')
-            if isinstance(dv, list): dv = ", ".join(dv)
-            edu_html += f"""
-            <div style='margin-bottom:12px;padding:10px 14px;background:{C_SOFT};border-radius:6px;'>
-                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
-                    <strong style='font-size:14px;color:{C_HEAD};'>{edu.get('institution','')}</strong>
-                    <span style='font-size:12px;color:{C_ACC};font-weight:700;'>{edu.get('year','')}</span>
-                </div>
-                <div style='font-size:13px;color:{C_MUTED};font-style:italic;margin-top:3px;'>{dv}</div>
-                <div style='font-size:12px;color:#9f1239;margin-top:2px;'>{edu.get('details','')}</div>
-            </div>"""
-
-    proj_html = ""
-    proj_links = getattr(session_state,'project_links',[]) or []
-    for idx, proj in enumerate(session_state.project_entries):
-        if proj.get('title'):
-            desc = _fmt_desc(proj.get('description',''), font_size='13px', color=C_BODY, line_height='1.7')
-            lnk_html = ""
-            if idx < len(proj_links) and proj_links[idx]:
-                lnk_html = (f"<div style='margin-top:4px;'><a href='{proj_links[idx]}' target='_blank' "
-                            f"style='font-size:12px;color:{C_ACC};font-weight:700;text-decoration:underline;'>&#128279; View Project</a></div>")
-            proj_html += f"""
-            <div style='margin-bottom:14px;padding:10px 16px;background:{C_SOFT};border-radius:6px;border-left:3px solid {C_ACC};'>
-                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
-                    <strong style='font-size:14px;color:{C_HEAD};'>{proj.get('title','')}</strong>
-                    <span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>
-                </div>
-                <div>{_render_tech_pills(proj.get('tech',''), pill_bg='#fff1f2', pill_color=C_ACC, pill_border=f'1px solid #fecdd3', font_size='11px')}</div>
-                {desc}{lnk_html}
-            </div>"""
-
-    all_links_html = ""
-    proj_links_all = getattr(session_state, 'project_links', []) or []
-    if proj_links_all:
-        all_links_html = "".join(
-            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' "
-            f"style='color:#881337;font-weight:700;font-size:13px;text-decoration:underline;'>"
-            f"&#128279; Project {i+1}: {lnk}</a></div>"
-            for i, lnk in enumerate(proj_links_all) if lnk)
-
-    cert_html = ""
-    for cert in session_state.certificate_links:
-        if cert.get('name'):
-            cert_html += f"""
-            <div style='margin-bottom:10px;padding:8px 14px;background:{C_SOFT};border-radius:6px;border-left:3px solid {C_ACC};'>
-                <div style='display:flex;justify-content:space-between;flex-wrap:wrap;'>
-                    {_cert_name_html(cert,f'font-size:14px;font-weight:700;color:{C_HEAD};text-decoration:none;')}
-                    <span style='font-size:12px;color:#6b7280;'>{cert.get('duration','')}</span>
-                </div>
-                <div style='font-size:12px;color:#6b7280;margin-top:2px;'>{_fmt_desc(cert.get('description',''), font_size='12px', color='#6b7280', line_height='1.65')}</div>
-            </div>"""
-
-    summary_html = _fmt_desc(session_state.get('summary',''), font_size='13px', color=C_BODY, line_height='1.75')
-    fixed_img = _fix_img(profile_img_html)
-    job_title_line = (f"<p style='font-size:15px;color:{C_ACC};font-weight:600;margin-top:5px;letter-spacing:0.5px;'>"
-                      f"{session_state.get('job_title','') or session_state.get('title','')}</p>") if session_state.get('job_title','') or session_state.get('title','') else ""
-
-    return f"""<!DOCTYPE html>
-<html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
-<style>
-  * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
-  a {{ color:{C_ACC}; }}
-</style></head><body>
-<div>
-  <div style='text-align:center;margin-bottom:10px;'>
-    {fixed_img}
-    <h1 style='font-size:30px;font-weight:800;color:{C_HEAD};letter-spacing:0.5px;'>{session_state.get('name','')}</h1>
-    {job_title_line}
-    <p style='font-size:12px;color:#6b7280;margin-top:8px;'>{contact_line}</p>
-  </div>
-  <hr style='border:none;border-top:2px solid {C_ACC};margin:16px 0 24px;'>
-  {section("Professional Summary", summary_html) if summary_html else ''}
-  {section("Work Experience", exp_html) if exp_html else ''}
-  {section("Education", edu_html) if edu_html else ''}
-  {section("Technical Skills", pills(session_state.get('skills',''))) if session_state.get('skills') else ''}
-  {section("Soft Skills", pills(session_state.get('Softskills',''),bg='#eff6ff',color='#1e40af',border='#93c5fd')) if session_state.get('Softskills') else ''}
-  {section("Languages", pills(session_state.get('languages',''),bg='#f0fdf4',color='#166534',border='#86efac')) if session_state.get('languages') else ''}
-  {section("Interests", pills(session_state.get('interests',''),bg='#fdf4ff',color='#6b21a8',border='#d8b4fe')) if session_state.get('interests') else ''}
-  {section("Projects", proj_html) if proj_html else ''}
-  {section("Project Links", all_links_html) if all_links_html else ''}
-  {section("Certifications", cert_html) if cert_html else ''}
-</div></body></html>"""
-
-
 # ── Resume template registry ──────────────────────────────────────────────────
 RESUME_TEMPLATES = {
     "Default (Professional)":           render_template_default,
@@ -3736,50 +3581,44 @@ RESUME_TEMPLATES = {
     "Soft Lavender (Single Column)":    render_template_soft_lavender,
     "Warm Sand (Single Column)":        render_template_warm_sand,
     "Ice Blue (Single Column)":         render_template_ice_blue,
-    "Rose Gold (Single Column)":        render_template_rose_gold,
 }
 
 
 _OVERFLOW_GUARD_CSS = """
 <style id="__overflow_guard__">
-/* ── Universal overflow guard injected by render_resume() ── */
-/* Prevents ALL future templates from having horizontal overflow,
-   text clipping, or tech-stack runoff, regardless of how they are
-   written. New templates get this for free — no manual fix needed. */
+body { word-wrap: break-word; }
+div { word-wrap: break-word; }
+td { word-wrap: break-word; }
+th { word-wrap: break-word; }
+table { width: 100%; }
+a { word-wrap: break-word; }
+</style>"""
+
+# xhtml2pdf-safe version — only properties that xhtml2pdf understands.
+# Used by prepare_html_for_pdf() to avoid CSSParseError on attribute
+# selectors, pseudo-elements, flex, overflow-x, overflow-wrap, !important.
+_OVERFLOW_GUARD_CSS_BROWSER = """
+<style id="__overflow_guard__">
 *, *::before, *::after { box-sizing: border-box; }
 html, body {
-    overflow-x: hidden !important;
-    max-width: 100% !important;
-    word-break: break-word !important;
-    overflow-wrap: break-word !important;
+    overflow-x: hidden;
+    max-width: 100%;
+    word-break: break-word;
+    overflow-wrap: break-word;
 }
-/* Every container must stay within its parent */
 div, section, article, aside, main, header, footer, nav {
-    max-width: 100% !important;
-    overflow-wrap: break-word !important;
-    word-break: break-word !important;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
-/* Flex rows must wrap — no single-line overflow */
 [style*="display:flex"], [style*="display: flex"] {
-    flex-wrap: wrap !important;
-    min-width: 0 !important;
+    flex-wrap: wrap;
+    min-width: 0;
 }
-/* Tech/skill pill rows: always wrap */
-span[style*="white-space:nowrap"] {
-    /* pills themselves stay on one word, but their container wraps */
-    flex-shrink: 0 !important;
-}
-/* Tables must not bust out of their container */
-table { width: 100% !important; table-layout: fixed !important; }
-td, th {
-    word-break: break-word !important;
-    overflow-wrap: break-word !important;
-}
-/* Links never overflow */
-a { word-break: break-all !important; }
-/* Catch any plain-text tech dump that a future template may add
-   inside a div with typical tech-stack colour/font patterns.
-   (The JS post-processor below handles runtime detection.) */
+span[style*="white-space:nowrap"] { flex-shrink: 0; }
+table { width: 100%; table-layout: fixed; }
+td, th { word-break: break-word; overflow-wrap: break-word; }
+a { word-break: break-all; }
 </style>"""
 
 _OVERFLOW_GUARD_JS = r"""
@@ -3875,9 +3714,9 @@ def _sanitize_html_overflow(html):
 
     # ── 1. Inject CSS into <head> (idempotent) ──────────────────────────
     if "__overflow_guard__" not in html:
-        html = html.replace("</head>", _OVERFLOW_GUARD_CSS + "\n</head>", 1)
+        html = html.replace("</head>", _OVERFLOW_GUARD_CSS_BROWSER + "\n</head>", 1)
         if "</head>" not in html:          # headless template fallback
-            html = _OVERFLOW_GUARD_CSS + html
+            html = _OVERFLOW_GUARD_CSS_BROWSER + html
 
     # ── 2. Inject JS before </body> (idempotent) ────────────────────────
     if "__tech_wrap_js__" not in html:
@@ -3929,6 +3768,49 @@ def _sanitize_html_overflow(html):
         return open_styled + pills + close_tag
 
     html = TECH_DIV.sub(_to_pills, html)
+
+    return html
+
+
+
+def prepare_html_for_pdf(html):
+    """
+    Strips browser-only content that breaks xhtml2pdf's CSS parser:
+      - The __overflow_guard__ <style> block (contains attribute selectors,
+        pseudo-elements, flex, overflow-x — all unsupported by xhtml2pdf)
+      - The __tech_wrap_js__ <script> block (JS is ignored by xhtml2pdf
+        but the regex patterns inside confuse the XML parser)
+
+    The xhtml2pdf-safe _OVERFLOW_GUARD_CSS (basic word-wrap only) was
+    already baked into the HTML by _sanitize_html_overflow, so PDF output
+    still gets basic overflow protection without crashing the parser.
+
+    Usage in main.py:
+        from resume_builder import prepare_html_for_pdf
+        safe_html = prepare_html_for_pdf(st.session_state["generated_html"])
+        pisa.CreatePDF(safe_html, dest=pdf_io)
+    """
+    import re as _re
+
+    # Remove the browser-only overflow guard style block
+    html = _re.sub(
+        r'<style\s+id="__overflow_guard__"[^>]*>.*?</style>',
+        '',
+        html,
+        flags=_re.DOTALL,
+    )
+
+    # Remove the JS guardian script block
+    html = _re.sub(
+        r'<script\s+id="__tech_wrap_js__"[^>]*>.*?</script>',
+        '',
+        html,
+        flags=_re.DOTALL,
+    )
+
+    # Inject the xhtml2pdf-safe CSS instead (basic word-wrap only)
+    if "__overflow_guard__" not in html:
+        html = html.replace("</head>", _OVERFLOW_GUARD_CSS + "\n</head>", 1)
 
     return html
 
