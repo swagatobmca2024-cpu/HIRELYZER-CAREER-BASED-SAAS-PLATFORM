@@ -323,9 +323,9 @@ def render_template_default(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Professional Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
@@ -519,9 +519,9 @@ def render_template_modern(session_state, profile_img_html=""):
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style>
 <title>{session_state.get('name', '')} - Resume</title>
 </head>
@@ -755,9 +755,9 @@ def render_template_sidebar(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
@@ -922,9 +922,9 @@ def render_template_classic(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
@@ -1098,9 +1098,9 @@ def render_template_executive(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Executive Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',Arial,sans-serif; color:#1a1a1a; background:#fff; line-height:1.6; }}</style>
 </head>
@@ -1255,9 +1255,9 @@ def render_template_timeline(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Timeline Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
 </head>
@@ -1418,9 +1418,9 @@ def render_template_corporate(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Corporate Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
@@ -1575,9 +1575,9 @@ def render_template_creative_green(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Creative Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#f0fdf4; }}</style>
 </head>
@@ -1729,9 +1729,9 @@ def render_template_terracotta(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Terracotta Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fafaf9; }}</style>
 </head>
@@ -1891,9 +1891,9 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
@@ -2087,9 +2087,9 @@ def render_template_slate_gray(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
@@ -2254,9 +2254,9 @@ def render_template_teal_impact(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
@@ -2430,9 +2430,9 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Resume</title>
 <style>
   * {{ box-sizing:border-box; margin:0; padding:0; }}
@@ -2596,9 +2596,9 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Resume</title>
 <style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
@@ -2750,9 +2750,9 @@ def render_template_forest_green(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <style>
-*{box-sizing:border-box;}
-body{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}
-div,span,p,li{max-width:100%;overflow-wrap:break-word;word-break:break-word;}
+*{{box-sizing:border-box;}}
+body{{overflow-x:hidden;word-break:break-word;overflow-wrap:break-word;}}
+div,span,p,li{{max-width:100%;overflow-wrap:break-word;word-break:break-word;}}
 </style><title>{session_state.get('name','')} - Resume</title></head>
 <body style="font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#1c1c1c;background:#fafff7;padding:36px 40px;">
   {fixed_img if fixed_img else ''}
@@ -3740,9 +3740,210 @@ RESUME_TEMPLATES = {
 }
 
 
+_OVERFLOW_GUARD_CSS = """
+<style id="__overflow_guard__">
+/* ── Universal overflow guard injected by render_resume() ── */
+/* Prevents ALL future templates from having horizontal overflow,
+   text clipping, or tech-stack runoff, regardless of how they are
+   written. New templates get this for free — no manual fix needed. */
+*, *::before, *::after { box-sizing: border-box; }
+html, body {
+    overflow-x: hidden !important;
+    max-width: 100% !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+}
+/* Every container must stay within its parent */
+div, section, article, aside, main, header, footer, nav {
+    max-width: 100% !important;
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
+}
+/* Flex rows must wrap — no single-line overflow */
+[style*="display:flex"], [style*="display: flex"] {
+    flex-wrap: wrap !important;
+    min-width: 0 !important;
+}
+/* Tech/skill pill rows: always wrap */
+span[style*="white-space:nowrap"] {
+    /* pills themselves stay on one word, but their container wraps */
+    flex-shrink: 0 !important;
+}
+/* Tables must not bust out of their container */
+table { width: 100% !important; table-layout: fixed !important; }
+td, th {
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+}
+/* Links never overflow */
+a { word-break: break-all !important; }
+/* Catch any plain-text tech dump that a future template may add
+   inside a div with typical tech-stack colour/font patterns.
+   (The JS post-processor below handles runtime detection.) */
+</style>"""
+
+_OVERFLOW_GUARD_JS = r"""
+<script id="__tech_wrap_js__">
+// ── Runtime tech-stack guardian ──────────────────────────────────────────
+// Scans the rendered DOM for any text node that looks like a comma-separated
+// tech list sitting inside a plain <div> (i.e. NOT already inside a flex
+// pill container).  Converts it automatically into wrapped pills.
+// This covers future templates that forget to call _render_tech_pills().
+(function() {
+  var TECH_PATTERN = /^[\w\s\+\#\.\-\/]+(,[\w\s\+\#\.\-\/]+){2,}$/;
+  var PILL_STYLE = [
+    "display:inline-block",
+    "background:#f3f4f6",
+    "color:#374151",
+    "border:1px solid #e5e7eb",
+    "border-radius:4px",
+    "padding:2px 8px",
+    "font-size:11px",
+    "font-weight:600",
+    "white-space:nowrap",
+    "line-height:1.7",
+    "margin:2px 3px 2px 0"
+  ].join(";");
+  var WRAP_STYLE = [
+    "display:flex",
+    "flex-wrap:wrap",
+    "align-items:center",
+    "gap:4px 5px",
+    "margin:3px 0 5px",
+    "overflow-wrap:break-word",
+    "max-width:100%"
+  ].join(";");
+
+  function isPillContainer(el) {
+    var s = (el.getAttribute("style") || "");
+    return s.indexOf("flex-wrap") !== -1 || s.indexOf("flex-wrap:wrap") !== -1;
+  }
+
+  function wrapTech(div) {
+    if (isPillContainer(div)) return;
+    var text = div.textContent || div.innerText || "";
+    // Strip common labels before testing
+    var cleaned = text.replace(/^(tech\s*stack\s*:|tech\s*:|stack\s*:|technologies\s*:)/i, "").trim();
+    if (!TECH_PATTERN.test(cleaned)) return;
+    // Looks like a tech list — convert to pills
+    var labelMatch = text.match(/^(tech\s*stack\s*:|tech\s*:|stack\s*:|technologies\s*:)/i);
+    var labelHtml = labelMatch
+      ? "<span style='font-size:11px;font-weight:700;color:inherit;white-space:nowrap;margin-right:6px;flex-shrink:0;'>" + labelMatch[0] + "</span>"
+      : "";
+    var items = cleaned.split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+    var pills = items.map(function(item) {
+      return "<span style='" + PILL_STYLE + "'>" + item + "</span>";
+    }).join("");
+    div.innerHTML = labelHtml + pills;
+    div.setAttribute("style", (div.getAttribute("style") || "") + ";" + WRAP_STYLE);
+  }
+
+  // Run after DOM is ready
+  function run() {
+    var divs = document.querySelectorAll("div");
+    for (var i = 0; i < divs.length; i++) {
+      // Only look at leaf divs (no child elements — pure text containers)
+      if (divs[i].children.length === 0) {
+        wrapTech(divs[i]);
+      }
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", run);
+  } else {
+    run();
+  }
+})();
+</script>"""
+
+
+def _sanitize_html_overflow(html):
+    import re as _re
+    """
+    Post-processes any resume HTML string to guarantee:
+      1. The universal overflow-guard <style> block is present in <head>.
+      2. The runtime JS tech-wrap guardian is present before </body>.
+      3. Any remaining raw tech-stack text (comma lists in plain divs)
+         is converted to flex-wrapped pills via a Python regex pass
+         BEFORE the HTML even reaches the browser.
+
+    This function is called by render_resume() on ALL templates — current
+    and future — so new templates are protected automatically.
+    """
+    import re as _re
+
+    # ── 1. Inject CSS into <head> (idempotent) ──────────────────────────
+    if "__overflow_guard__" not in html:
+        html = html.replace("</head>", _OVERFLOW_GUARD_CSS + "\n</head>", 1)
+        if "</head>" not in html:          # headless template fallback
+            html = _OVERFLOW_GUARD_CSS + html
+
+    # ── 2. Inject JS before </body> (idempotent) ────────────────────────
+    if "__tech_wrap_js__" not in html:
+        if "</body>" in html:
+            html = html.replace("</body>", _OVERFLOW_GUARD_JS + "\n</body>", 1)
+        else:
+            html = html + _OVERFLOW_GUARD_JS
+
+    # ── 3. Python-side regex: catch any plain-text tech dumps ────────────
+    # Pattern: a <div ...> whose ONLY content is a comma-separated word list
+    # (3+ items) with no child tags — the classic forgotten _render_tech_pills.
+    # We convert it to a flex-wrap pill row with neutral styling.
+    TECH_DIV = _re.compile(
+        r"(<div\s[^>]*>)"                       # opening div with attributes
+        r"\s*"
+        r"((?:[\w\s\+\#\.\-\/]+,){2,}"          # "Item, Item, Item," (3+ items)
+        r"[\w\s\+\#\.\-\/]+)"                    # final item (no trailing comma)
+        r"\s*"
+        r"(</div>)",                             # closing div
+        _re.IGNORECASE,
+    )
+
+    def _to_pills(m):
+        open_tag  = m.group(1)
+        tech_text = m.group(2).strip()
+        close_tag = m.group(3)
+        items = [t.strip() for t in tech_text.split(",") if t.strip()]
+        if len(items) < 3:
+            return m.group(0)   # too short — leave untouched
+        pill_style = (
+            "display:inline-block;background:#f3f4f6;color:#374151;"
+            "border:1px solid #e5e7eb;border-radius:4px;padding:2px 8px;"
+            "font-size:11px;font-weight:600;white-space:nowrap;line-height:1.7;"
+            "margin:2px 3px 2px 0;"
+        )
+        pills = "".join(f"<span style='{pill_style}'>{item}</span>" for item in items)
+        wrap_style = (
+            "display:flex;flex-wrap:wrap;align-items:center;"
+            "gap:4px 5px;margin:3px 0 5px;overflow-wrap:break-word;max-width:100%;"
+        )
+        # Preserve existing div styles, add flex-wrap container style
+        open_styled = _re.sub(
+            r"style=['\"]([^'\"]*)['\"]",
+            lambda sm: f"style='{sm.group(1)};{wrap_style}'",
+            open_tag,
+        )
+        if open_styled == open_tag:          # div had no style attr — add one
+            open_styled = open_tag[:-1] + f" style='{wrap_style}'>"
+        return open_styled + pills + close_tag
+
+    html = TECH_DIV.sub(_to_pills, html)
+
+    return html
+
+
 def render_resume(template_name, session_state, profile_img_html=""):
     """
     Render a resume from a named template.
+
+    Calls the appropriate template function, then runs _sanitize_html_overflow()
+    on the result.  This means ALL templates — current and any added in the
+    future — automatically get:
+      • flex-wrap on every tech/skill pill row
+      • overflow-x:hidden on the whole document
+      • a JS runtime guardian that converts any forgotten plain-text tech dumps
+        into wrapped pills at render time
 
     Args:
         template_name (str): One of the keys in RESUME_TEMPLATES.
@@ -3750,9 +3951,10 @@ def render_resume(template_name, session_state, profile_img_html=""):
         profile_img_html (str): Optional HTML <img> string for profile photo.
 
     Returns:
-        str: Full HTML string for the resume.
+        str: Full, sanitised HTML string for the resume.
     """
     fn = RESUME_TEMPLATES.get(template_name)
     if fn is None:
         fn = render_template_default
-    return fn(session_state, profile_img_html)
+    raw_html = fn(session_state, profile_img_html)
+    return _sanitize_html_overflow(raw_html)
