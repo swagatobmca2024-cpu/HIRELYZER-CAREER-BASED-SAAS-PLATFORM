@@ -662,6 +662,10 @@ Each paragraph should be 2-4 sentences.
         cover_letter_html = render_cover_letter(cover_letter_template, cl_data)
 
         st.session_state["cover_letter_html"] = cover_letter_html
+        # Store structured data so DOCX builder can recreate properly formatted A4 DOCX
+        st.session_state["cover_letter_data"] = cl_data
+        st.session_state["cover_letter_template_name"] = cover_letter_template
+        st.session_state["docx_coverletter_bytes"] = None  # invalidate DOCX cache
 
         # ✅ Show cover letter in an iframe so the full HTML template renders correctly
         # (st.markdown cannot render full <!DOCTYPE html> documents — it leaks raw tags)
