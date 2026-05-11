@@ -1106,8 +1106,12 @@ def render_template_timeline(session_state, profile_img_html=""):
         )
         return img_tag
 
-    def timeline_item(title, subtitle, date, body, accent="#0d9488", proj_link=""):
+    def timeline_item(title, subtitle, date, body, accent="#0d9488", proj_link="", tech_str=""):
         link_html = f"<div style='margin-top:5px;'><a href='{proj_link}' target='_blank' style='color:{accent};font-size:13px;font-weight:600;'>&#128279; View Project / GitHub</a></div>" if proj_link else ""
+        # Render tech stack as wrapping pills so long stacks never overflow
+        tech_html = ""
+        if tech_str and tech_str.strip():
+            tech_html = _tech_pills(tech_str, color=accent, bg='#fefce8', border='#fde68a', font_size='11px')
         return f"""
         <div style='display:flex;margin-bottom:24px;position:relative;'>
             <div style='flex-shrink:0;display:flex;flex-direction:column;align-items:center;margin-right:20px;'>
@@ -1120,6 +1124,7 @@ def render_template_timeline(session_state, profile_img_html=""):
                     <span style='font-size:12px;color:#64748b;background:#f1f5f9;padding:2px 10px;border-radius:10px;'>{date}</span>
                 </div>
                 <div style='font-size:14px;color:{accent};font-weight:600;margin-bottom:5px;'>{subtitle}</div>
+                {tech_html}
                 <div style='font-size:14px;color:#374151;line-height:1.7;'>{body}</div>
                 {link_html}
             </div>
@@ -1145,10 +1150,11 @@ def render_template_timeline(session_state, profile_img_html=""):
     proj_links_all = getattr(session_state, 'project_links', []) or []
     proj_items = "".join(
         timeline_item(
-            p.get('title',''), f"Stack: {p.get('tech','')}",  p.get('duration',''),
+            p.get('title',''), "",  p.get('duration',''),
             _fmt_desc(p.get('description',''), font_size='14px', color='#374151', line_height='1.75'),
             "#f59e0b",
-            proj_links_all[i] if i < len(proj_links_all) else ""
+            proj_links_all[i] if i < len(proj_links_all) else "",
+            tech_str=p.get('tech','')
         )
         for i, p in enumerate(session_state.project_entries) if p.get('title')
     )
