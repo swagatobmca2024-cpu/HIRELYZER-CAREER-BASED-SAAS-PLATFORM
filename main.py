@@ -16957,6 +16957,8 @@ Generate {num_questions} questions now:
                     """</script></body></html>"""
                 )
                 st.components.v1.html(_html_table, height=600, scrolling=False)
+with tab_scam:
+    render_job_scam_detector_tab(call_llm)
 if tab5:
 	with tab5:
 		# sqlite3 removed — using Supabase PostgreSQL via db_manager
@@ -17818,8 +17820,7 @@ if tab5:
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
 
-with tab_scam:
-    render_job_scam_detector_tab(call_llm)
+
 
 
 
