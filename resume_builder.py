@@ -119,40 +119,6 @@ def _cert_name_html(cert, link_style, span_style=""):
         return f"<span style='{span_style or link_style}'>{name}</span>"
 
 
-def _tech_pills(tech_str, color="#4b5563", bg="#f3f4f6", border="#d1d5db",
-                font_size="11px", pill_radius="4px", gap="4px 6px"):
-    """
-    Convert a comma-separated tech/stack string into flex-wrapped pill badges.
-    Prevents horizontal overflow in template previews.
-    Returns an empty string if tech_str is blank.
-    """
-    if not tech_str or not tech_str.strip():
-        return ""
-    pills_html = "".join(
-        "<span style='"
-        "display:inline-block;"
-        f"background:{bg};"
-        f"color:{color};"
-        f"border:1px solid {border};"
-        f"border-radius:{pill_radius};"
-        "padding:2px 8px;"
-        f"font-size:{font_size};"
-        "font-weight:600;"
-        "white-space:nowrap;"
-        f"'>{s.strip()}</span>"
-        for s in tech_str.split(',') if s.strip()
-    )
-    return (
-        "<div style='"
-        "display:flex;"
-        "flex-wrap:wrap;"
-        f"gap:{gap};"
-        "margin:4px 0 6px 0;"
-        "overflow:hidden;"
-        f"'>{pills_html}</div>"
-    )
-
-
 def render_template_default(session_state, profile_img_html=""):
     """Default professional template — compact sidebar layout, grey/dark colour scheme"""
     import re as _re_def
@@ -164,8 +130,7 @@ def render_template_default(session_state, profile_img_html=""):
                 f"border:1px solid rgba(255,255,255,0.3);'>{item.strip()}</span>")
 
     def _badges(items_str, bg="rgba(255,255,255,0.18)", color="#ffffff"):
-        inner = "".join(_badge(s, bg, color) for s in items_str.split(',') if s.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
+        return "".join(_badge(s, bg, color) for s in items_str.split(',') if s.strip())
 
     def _side_sec(title, body):
         return (f"<div style='margin-bottom:24px;'>"
@@ -286,7 +251,7 @@ def render_template_default(session_state, profile_img_html=""):
                 f"<strong style='font-size:14px;color:#1f2937;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"{_tech_pills(proj.get('tech',''), color='#4b5563', bg='#f8fafc', border='#e2e8f0')}"
+                f"<div style='font-size:12px;color:#4b5563;font-weight:600;margin-bottom:4px;'>{proj.get('tech','')}</div>"
                 f"<div style='font-size:13px;color:#374151;'>{desc}</div>"
                 f"{proj_link_html}</div>"
             )
@@ -297,7 +262,7 @@ def render_template_default(session_state, profile_img_html=""):
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Professional Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; overflow-x:hidden; }}</style>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
@@ -346,13 +311,12 @@ def render_template_modern(session_state, profile_img_html=""):
 
     # Helper: build a comma-separated tag list (ATS-safe plain spans)
     def _tag_list(items_str, bg="#eff6ff", color="#1e3a8a", border="#bfdbfe"):
-        inner = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};"
             f"border:1px solid {border};border-radius:4px;padding:4px 12px;"
-            f"margin:3px 4px 3px 0;font-size:13px;font-weight:600;white-space:nowrap;'>{s.strip()}</span>"
+            f"margin:3px 4px 3px 0;font-size:13px;font-weight:600;'>{s.strip()}</span>"
             for s in items_str.split(',') if s.strip()
         )
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     # Section header helper (left-aligned, underlined — ATS parses left-to-right)
     def _section(title, body):
@@ -438,7 +402,7 @@ def render_template_modern(session_state, profile_img_html=""):
                 f"<span style='font-size:13px;color:#374151;background:#e0e7ff;padding:2px 10px;"
                 f"border-radius:6px;font-weight:600;border:1px solid #c7d2fe;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"{_tech_pills(proj.get('tech',''), color='#374151', bg='#f8fafc', border='#e2e8f0')}"
+                f"<div style='font-size:13px;color:#374151;font-weight:600;margin-bottom:6px;'>Tech Stack: {proj.get('tech','')}</div>"
                 f"<div style='font-size:14px;color:#1f2937;'>{desc}</div>"
                 f"{proj_link_html}</div>"
             )
@@ -626,8 +590,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
                 f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;border:1px solid rgba(56,189,248,0.4);'>{item.strip()}</span>")
 
     def _badges_sb(items_str, bg="rgba(56,189,248,0.25)", color="#ffffff"):
-        inner = "".join(_badge_sb(s, bg, color) for s in items_str.split(',') if s.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
+        return "".join(_badge_sb(s, bg, color) for s in items_str.split(',') if s.strip())
 
     def _main_sec_sb(title, body):
         return (f"<div style='margin-bottom:26px;'>"
@@ -700,7 +663,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
                 f"<strong style='font-size:14px;color:#0c4a6e;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:12px;color:#64748b;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"{_tech_pills(proj.get('tech',''), color='#0284c7', bg='#f8fafc', border='#e2e8f0')}"
+                f"<div style='font-size:12px;color:#0284c7;font-weight:600;margin-bottom:4px;'>{proj.get('tech','')}</div>"
                 f"<div style='font-size:13px;color:#374151;'>{desc}</div>"
                 f"{proj_link_html}</div>"
             )
@@ -711,7 +674,7 @@ def render_template_sidebar(session_state, profile_img_html=""):
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; overflow-x:hidden; }}</style>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
@@ -750,12 +713,11 @@ def render_template_classic(session_state, profile_img_html=""):
     import re as _re
 
     def pills(items_str, color="#1e3a5f"):
-        inner = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:#f0f4f8;color:{color};border:1px solid #c7d2e0;"
-            f"border-radius:4px;padding:4px 12px;margin:4px 4px 4px 0;font-size:13px;font-weight:600;white-space:nowrap;'>{s.strip()}</span>"
+            f"border-radius:4px;padding:4px 12px;margin:4px 4px 4px 0;font-size:13px;font-weight:600;'>{s.strip()}</span>"
             for s in items_str.split(',') if s.strip()
         )
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     # Fix image: extract just the <img> tag, strip all styles, apply clean circle styles
     def _fix_img(html, size=88):
@@ -814,7 +776,7 @@ def render_template_classic(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:#1e3a5f;'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:#555;'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='#555', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:13px;color:#555;margin-bottom:4px;'><b>Tech:</b> {proj.get('tech','')}</div>
                 <div style='font-size:14px;color:#333;line-height:1.6;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -875,7 +837,7 @@ def render_template_classic(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Georgia',serif; color:#1a1a1a; background:#fff; padding:40px 60px; line-height:1.6; }}
   a {{ color:#1e3a5f; }}
 </style>
@@ -913,12 +875,11 @@ def render_template_executive(session_state, profile_img_html=""):
     import re as _re
 
     def tag_row(items_str, bg="#eef2ff", color="#3730a3"):
-        inner = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};border-radius:3px;"
-            f"padding:3px 10px;margin:3px 3px 3px 0;font-size:13px;font-weight:600;white-space:nowrap;'>{s.strip()}</span>"
+            f"padding:3px 10px;margin:3px 3px 3px 0;font-size:13px;font-weight:600;'>{s.strip()}</span>"
             for s in items_str.split(',') if s.strip()
         )
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     # Fix image properly: extract just <img> tag, strip existing styles, apply contained fixed-size circle
     def _fix_img(html, size=96):
@@ -960,7 +921,7 @@ def render_template_executive(session_state, profile_img_html=""):
                     <strong style='font-size:15px;'>{edu.get('institution','')}</strong>
                     <span style='font-size:13px;color:#777;'>{edu.get('year','')}</span>
                 </div>
-                <div style='font-size:14px;color:#3730a3;font-style:italic;font-weight:600;white-space:nowrap;'>{degree_val}</div>
+                <div style='font-size:14px;color:#3730a3;font-style:italic;font-weight:600;'>{degree_val}</div>
                 <div style='font-size:13px;color:#666;'>{edu.get('details','')}</div>
             </div>"""
 
@@ -971,14 +932,14 @@ def render_template_executive(session_state, profile_img_html=""):
             proj_links = getattr(session_state, 'project_links', []) or []
             proj_link_html = ""
             if idx < len(proj_links) and proj_links[idx]:
-                proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links[idx]}' target='_blank' style='color:#3730a3;font-size:13px;font-weight:600;white-space:nowrap;'>&#128279; View Project / GitHub</a></div>"
+                proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links[idx]}' target='_blank' style='color:#3730a3;font-size:13px;font-weight:600;'>&#128279; View Project / GitHub</a></div>"
             proj_html += f"""
             <div style='margin-bottom:14px;padding-left:16px;border-left:3px solid #3730a3;'>
                 <div style='display:flex;justify-content:space-between;'>
                     <strong style='font-size:15px;color:#1a1a1a;'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:#777;'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='#3730a3', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:13px;color:#3730a3;font-weight:600;'><b>Stack:</b> {proj.get('tech','')}</div>
                 <div style='font-size:14px;margin-top:4px;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -988,7 +949,7 @@ def render_template_executive(session_state, profile_img_html=""):
     proj_links_section = ""
     if proj_links_all:
         items = "".join(
-            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#3730a3;font-size:14px;font-weight:600;white-space:nowrap;'>&#128279; Project {i+1}: {lnk}</a></div>"
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#3730a3;font-size:14px;font-weight:600;'>&#128279; Project {i+1}: {lnk}</a></div>"
             for i, lnk in enumerate(proj_links_all)
         )
         proj_links_section = items
@@ -1046,7 +1007,7 @@ def render_template_executive(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Executive Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }} body {{ font-family:'Segoe UI',Arial,sans-serif; color:#1a1a1a; background:#fff; line-height:1.6; }}</style>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',Arial,sans-serif; color:#1a1a1a; background:#fff; line-height:1.6; }}</style>
 </head>
 <body>
 <div>
@@ -1056,7 +1017,7 @@ def render_template_executive(session_state, profile_img_html=""):
     <tr>
       <td style='vertical-align:middle;'>
         <h1 style='font-size:34px;font-weight:800;letter-spacing:-0.5px;'>{session_state.get('name','')}</h1>
-        <div style='font-size:17px;color:#c7d2fe;margin-top:6px;font-weight:600;white-space:nowrap;'>{job_title_val}</div>
+        <div style='font-size:17px;color:#c7d2fe;margin-top:6px;font-weight:600;'>{job_title_val}</div>
         <div style='font-size:13px;color:#a5b4fc;margin-top:10px;'>{contact_html}</div>
       </td>
       {'<td style="vertical-align:middle;text-align:right;width:110px;">' + fixed_img + '</td>' if fixed_img else ''}
@@ -1089,7 +1050,7 @@ def render_template_timeline(session_state, profile_img_html=""):
     def chips(items_str, bg="#fef3c7", color="#92400e"):
         return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};border-radius:20px;"
-            f"padding:4px 14px;margin:4px 4px 4px 0;font-size:13px;font-weight:600;white-space:nowrap;'>{s.strip()}</span>"
+            f"padding:4px 14px;margin:4px 4px 4px 0;font-size:13px;font-weight:600;'>{s.strip()}</span>"
             for s in items_str.split(',') if s.strip()
         )
 
@@ -1108,7 +1069,7 @@ def render_template_timeline(session_state, profile_img_html=""):
         return img_tag
 
     def timeline_item(title, subtitle, date, body, accent="#0d9488", proj_link=""):
-        link_html = f"<div style='margin-top:5px;'><a href='{proj_link}' target='_blank' style='color:{accent};font-size:13px;font-weight:600;white-space:nowrap;'>&#128279; View Project / GitHub</a></div>" if proj_link else ""
+        link_html = f"<div style='margin-top:5px;'><a href='{proj_link}' target='_blank' style='color:{accent};font-size:13px;font-weight:600;'>&#128279; View Project / GitHub</a></div>" if proj_link else ""
         return f"""
         <div style='display:flex;margin-bottom:24px;position:relative;'>
             <div style='flex-shrink:0;display:flex;flex-direction:column;align-items:center;margin-right:20px;'>
@@ -1157,7 +1118,7 @@ def render_template_timeline(session_state, profile_img_html=""):
     all_links_html = ""
     if proj_links_all:
         items = "".join(
-            f"<div style='margin-bottom:8px;'><a href='{lnk}' target='_blank' style='color:#0d9488;font-size:14px;font-weight:600;white-space:nowrap;'>&#128279; Project {i+1}: {lnk}</a></div>"
+            f"<div style='margin-bottom:8px;'><a href='{lnk}' target='_blank' style='color:#0d9488;font-size:14px;font-weight:600;'>&#128279; Project {i+1}: {lnk}</a></div>"
             for i, lnk in enumerate(proj_links_all)
         )
         all_links_html = items
@@ -1198,7 +1159,7 @@ def render_template_timeline(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Timeline Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; color:#1a1a1a; }}</style>
 </head>
 <body>
 <div>
@@ -1248,11 +1209,10 @@ def render_template_corporate(session_state, profile_img_html=""):
 
     def badge(item, bg="#1d4ed8", color="#fff"):
         return (f"<span style='display:inline-block;background:{bg};color:{color};border-radius:4px;"
-                f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;white-space:nowrap;'>{item.strip()}</span>")
+                f"padding:3px 10px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{item.strip()}</span>")
 
     def badges(items_str, bg="#1d4ed8", color="#fff"):
-        inner = "".join(badge(s, bg, color) for s in items_str.split(',') if s.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
+        return "".join(badge(s, bg, color) for s in items_str.split(',') if s.strip())
 
     exp_html = ""
     for exp in session_state.experience_entries:
@@ -1278,7 +1238,7 @@ def render_template_corporate(session_state, profile_img_html=""):
             <div style='margin-bottom:14px;border-left:3px solid #1d4ed8;padding-left:12px;'>
                 <strong style='font-size:14px;color:#1e3a8a;'>{edu.get('institution','')}</strong>
                 <span style='float:right;font-size:12px;color:#64748b;'>{edu.get('year','')}</span>
-                <div style='clear:both;font-size:13px;color:#3b82f6;font-style:italic;font-weight:600;white-space:nowrap;'>{degree_val}</div>
+                <div style='clear:both;font-size:13px;color:#3b82f6;font-style:italic;font-weight:600;'>{degree_val}</div>
                 <div style='font-size:12px;color:#6b7280;'>{edu.get('details','')}</div>
             </div>"""
 
@@ -1289,14 +1249,14 @@ def render_template_corporate(session_state, profile_img_html=""):
             desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#374151', line_height='1.75')
             proj_link_html = ""
             if idx < len(proj_links_all) and proj_links_all[idx]:
-                proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links_all[idx]}' target='_blank' style='color:#1d4ed8;font-size:12px;font-weight:600;white-space:nowrap;'>&#128279; View Project / GitHub</a></div>"
+                proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links_all[idx]}' target='_blank' style='color:#1d4ed8;font-size:12px;font-weight:600;'>&#128279; View Project / GitHub</a></div>"
             proj_html += f"""
             <div style='margin-bottom:14px;padding:12px 14px;background:#eff6ff;border-radius:6px;border-left:3px solid #1d4ed8;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>
                     <strong style='font-size:14px;color:#1e3a8a;'>{proj.get('title','')}</strong>
                     <span style='font-size:12px;color:#64748b;'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='#3b82f6', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:12px;color:#3b82f6;font-weight:600;margin-bottom:4px;'>{proj.get('tech','')}</div>
                 <div style='font-size:13px;color:#374151;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -1313,7 +1273,7 @@ def render_template_corporate(session_state, profile_img_html=""):
     all_links_html = ""
     if proj_links_all:
         items = "".join(
-            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#93c5fd;font-size:12px;font-weight:600;white-space:nowrap;'>&#128279; Project {i+1}</a></div>"
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#93c5fd;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
             for i, lnk in enumerate(proj_links_all)
         )
         all_links_html = items
@@ -1357,7 +1317,7 @@ def render_template_corporate(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Corporate Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; overflow-x:hidden; }}</style>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
@@ -1365,7 +1325,7 @@ def render_template_corporate(session_state, profile_img_html=""):
   <td style='width:300px;background:linear-gradient(180deg,#1e3a8a,#1d4ed8);color:white;padding:36px 24px;vertical-align:top;'>
     {'<div style="margin:0 auto 14px;text-align:center;">' + fixed_img + '</div>' if fixed_img else ''}
     <h1 style='font-size:21px;font-weight:800;color:#fff;text-align:center;margin-bottom:4px;'>{session_state.get('name','')}</h1>
-    <div style='font-size:13px;color:#93c5fd;text-align:center;margin-bottom:24px;font-weight:600;white-space:nowrap;'>{job_title_val}</div>
+    <div style='font-size:13px;color:#93c5fd;text-align:center;margin-bottom:24px;font-weight:600;'>{job_title_val}</div>
     {side_sec("Contact", contact_html)}
     {side_sec("Skills", badges(session_state.get('skills',''),'rgba(255,255,255,0.15)','#e0f2fe')) if session_state.get('skills') else ''}
     {side_sec("Soft Skills", badges(session_state.get('Softskills',''),'rgba(255,255,255,0.1)','#ddd6fe')) if session_state.get('Softskills') else ''}
@@ -1402,11 +1362,10 @@ def render_template_creative_green(session_state, profile_img_html=""):
 
     def pill(s, bg="#d1fae5", color="#065f46"):
         return (f"<span style='display:inline-block;background:{bg};color:{color};border-radius:20px;"
-                f"padding:4px 12px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;white-space:nowrap;'>{s.strip()}</span>")
+                f"padding:4px 12px;margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{s.strip()}</span>")
 
     def pills(items_str, bg="#d1fae5", color="#065f46"):
-        inner = "".join(pill(s, bg, color) for s in items_str.split(',') if s.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
+        return "".join(pill(s, bg, color) for s in items_str.split(',') if s.strip())
 
     exp_html = ""
     for exp in session_state.experience_entries:
@@ -1433,7 +1392,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
                     <strong style='font-size:14px;color:#064e3b;'>{edu.get('institution','')}</strong>
                     <span style='font-size:12px;color:#6b7280;'>{edu.get('year','')}</span>
                 </div>
-                <div style='font-size:13px;color:#059669;font-style:italic;font-weight:600;white-space:nowrap;'>{degree_val}</div>
+                <div style='font-size:13px;color:#059669;font-style:italic;font-weight:600;'>{degree_val}</div>
                 <div style='font-size:12px;color:#6b7280;'>{edu.get('details','')}</div>
             </div>"""
 
@@ -1444,14 +1403,14 @@ def render_template_creative_green(session_state, profile_img_html=""):
             desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#374151', line_height='1.75')
             proj_link_html = ""
             if idx < len(proj_links_all) and proj_links_all[idx]:
-                proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links_all[idx]}' target='_blank' style='color:#059669;font-size:12px;font-weight:600;white-space:nowrap;'>&#128279; View Project / GitHub</a></div>"
+                proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links_all[idx]}' target='_blank' style='color:#059669;font-size:12px;font-weight:600;'>&#128279; View Project / GitHub</a></div>"
             proj_html += f"""
             <div style='margin-bottom:14px;padding:12px;background:#fff;border:1px solid #a7f3d0;border-radius:8px;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>
                     <strong style='font-size:14px;color:#064e3b;'>{proj.get('title','')}</strong>
                     <span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='#059669', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:12px;color:#059669;font-weight:600;margin-bottom:4px;'>{proj.get('tech','')}</div>
                 <div style='font-size:13px;color:#374151;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -1488,7 +1447,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
     all_links_html = ""
     if proj_links_all:
         items = "".join(
-            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#059669;font-size:12px;font-weight:600;white-space:nowrap;'>&#128279; Project {i+1}</a></div>"
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#059669;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
             for i, lnk in enumerate(proj_links_all)
         )
         all_links_html = items
@@ -1510,7 +1469,7 @@ def render_template_creative_green(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Creative Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }} body {{ font-family:'Segoe UI',sans-serif; background:#f0fdf4; }}</style>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#f0fdf4; }}</style>
 </head>
 <body>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
@@ -1585,7 +1544,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
                     <strong style='font-size:14px;color:#292524;'>{edu.get('institution','')}</strong>
                     <span style='font-size:12px;color:#a8a29e;'>{edu.get('year','')}</span>
                 </div>
-                <div style='font-size:13px;color:#b45309;font-style:italic;font-weight:600;white-space:nowrap;'>{degree_val}</div>
+                <div style='font-size:13px;color:#b45309;font-style:italic;font-weight:600;'>{degree_val}</div>
                 <div style='font-size:12px;color:#78716c;'>{edu.get('details','')}</div>
             </div>"""
 
@@ -1596,14 +1555,14 @@ def render_template_terracotta(session_state, profile_img_html=""):
             desc = _fmt_desc(proj.get('description',''), font_size='13px', color='#374151', line_height='1.75')
             proj_link_html = ""
             if idx < len(proj_links_all) and proj_links_all[idx]:
-                proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links_all[idx]}' target='_blank' style='color:#b45309;font-size:12px;font-weight:600;white-space:nowrap;'>&#128279; View Project / GitHub</a></div>"
+                proj_link_html = f"<div style='margin-top:5px;'><a href='{proj_links_all[idx]}' target='_blank' style='color:#b45309;font-size:12px;font-weight:600;'>&#128279; View Project / GitHub</a></div>"
             proj_html += f"""
             <div style='margin-bottom:14px;padding:12px;background:#fafaf9;border-radius:6px;border:1px solid #d6d3d1;border-left:3px solid #d97706;'>
                 <div style='display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;'>
                     <strong style='font-size:14px;color:#292524;'>{proj.get('title','')}</strong>
                     <span style='font-size:12px;color:#a8a29e;'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='#b45309', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:12px;color:#b45309;font-weight:600;margin-bottom:4px;'>{proj.get('tech','')}</div>
                 <div style='font-size:13px;color:#44403c;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -1637,7 +1596,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
     all_links_html = ""
     if proj_links_all:
         items = "".join(
-            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#fde68a;font-size:12px;font-weight:600;white-space:nowrap;'>&#128279; Project {i+1}</a></div>"
+            f"<div style='margin-bottom:6px;'><a href='{lnk}' target='_blank' style='color:#fde68a;font-size:12px;font-weight:600;'>&#128279; Project {i+1}</a></div>"
             for i, lnk in enumerate(proj_links_all)
         )
         all_links_html = items
@@ -1659,7 +1618,7 @@ def render_template_terracotta(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Terracotta Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }} body {{ font-family:'Segoe UI',sans-serif; background:#fafaf9; }}</style>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fafaf9; }}</style>
 </head>
 <body>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
@@ -1707,12 +1666,10 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
     def _badge_np(item):
         return (f"<span style='display:inline-block;background:rgba(184,151,42,0.20);color:#f5e6b2;"
                 f"border:1px solid rgba(184,151,42,0.45);border-radius:4px;padding:3px 10px;"
-                f"margin:3px 3px 3px 0;font-size:12px;font-weight:600;white-space:nowrap;'>{item.strip()}</span>")
+                f"margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{item.strip()}</span>")
 
     def _badges_np(s):
-        inner = "".join(_badge_np(x) for x in s.split(',') if x.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
+        return "".join(_badge_np(x) for x in s.split(',') if x.strip())
 
     def _side_np(title, body):
         return (f"<div style='margin-bottom:22px;'>"
@@ -1809,7 +1766,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
                 f"<strong style='font-size:13px;color:#0d1b3e;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"{_tech_pills(proj.get('tech',''), color='#374151', bg='#f8fafc', border='#e2e8f0')}"
+                f"<div style='font-size:12px;color:#374151;font-weight:600;margin-bottom:3px;'>{proj.get('tech','')}</div>"
                 f"<div>{desc}</div>{pl}</div>"
             )
 
@@ -1818,7 +1775,7 @@ def render_template_navy_prestige(session_state, profile_img_html=""):
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; overflow-x:hidden; }}</style>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
@@ -1894,11 +1851,10 @@ def render_template_slate_gray(session_state, profile_img_html=""):
     # ── skill / tag pills ─────────────────────────────────────────────────────
     def pills(s, bg="#f1f5f9", color=None, border="#94a3b8"):
         _color = color if color else C_PRIMARY
-        inner = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:{bg};color:{_color};border:1px solid {border};"
-            f"border-radius:4px;padding:4px 12px;margin:4px 4px 4px 0;font-size:13px;font-weight:700;white-space:nowrap;'>{x.strip()}</span>"
+            f"border-radius:4px;padding:4px 12px;margin:4px 4px 4px 0;font-size:13px;font-weight:700;'>{x.strip()}</span>"
             for x in s.split(',') if x.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     # ── contact line ───────────────────────────────────────────────────────────
     def _contact_link(key, val):
@@ -1971,7 +1927,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:{C_PRIMARY};'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:{C_MUTED};font-weight:600;'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='{C_SECONDARY}', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:13px;color:{C_SECONDARY};font-weight:700;margin:4px 0;'>Tech Stack: {proj.get('tech','')}</div>
                 <div style='font-size:14px;color:{C_BODY};line-height:1.75;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -2011,7 +1967,7 @@ def render_template_slate_gray(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Segoe UI',Arial,sans-serif; color:{C_PRIMARY}; background:#ffffff; padding:40px 60px; line-height:1.6; }}
   a {{ color:{C_PRIMARY}; }}
 </style>
@@ -2066,8 +2022,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
                 f"margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{item.strip()}</span>")
 
     def _badges_ti(s):
-        inner = "".join(_badge_ti(x) for x in s.split(',') if x.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
+        return "".join(_badge_ti(x) for x in s.split(',') if x.strip())
 
     def _side_ti(title, body):
         return (f"<div style='margin-bottom:22px;'>"
@@ -2164,7 +2119,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
                 f"<strong style='font-size:13px;color:#0f4c4c;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"{_tech_pills(proj.get('tech',''), color='#374151', bg='#f8fafc', border='#e2e8f0')}"
+                f"<div style='font-size:12px;color:#374151;font-weight:600;margin-bottom:3px;'>{proj.get('tech','')}</div>"
                 f"<div>{desc}</div>{pl}</div>"
             )
 
@@ -2173,7 +2128,7 @@ def render_template_teal_impact(session_state, profile_img_html=""):
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; overflow-x:hidden; }}</style>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
@@ -2238,11 +2193,10 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
 
     # ── skill pills — Burgundy palette ────────────────────────────────────────
     def pills(s, bg="#fef2f2", color="#7f1d1d", border="#fecaca"):
-        inner = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};border:1px solid {border};"
-            f"border-radius:4px;padding:4px 12px;margin:4px 4px 4px 0;font-size:13px;font-weight:600;white-space:nowrap;'>{x.strip()}</span>"
+            f"border-radius:4px;padding:4px 12px;margin:4px 4px 4px 0;font-size:13px;font-weight:600;'>{x.strip()}</span>"
             for x in s.split(',') if x.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     # ── contact line — identical structure to Classic Clean ───────────────────
     def _contact_link(key, val):
@@ -2310,7 +2264,7 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:#7f1d1d;'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:#6b7280;'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='#6b7280', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:13px;color:#6b7280;margin-bottom:4px;'><b>Tech:</b> {proj.get('tech','')}</div>
                 <div style='font-size:14px;color:#1c1c1c;line-height:1.6;'>{desc}</div>
                 {proj_link_html}
             </div>"""
@@ -2346,7 +2300,7 @@ def render_template_burgundy_classic(session_state, profile_img_html=""):
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Georgia',serif; color:#1c1c1c; background:#fffafa; padding:40px 60px; line-height:1.6; }}
   a {{ color:#7f1d1d; }}
 </style>
@@ -2400,8 +2354,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
                 f"margin:3px 3px 3px 0;font-size:12px;font-weight:600;'>{item.strip()}</span>")
 
     def _badges_it(s):
-        inner = "".join(_badge_it(x) for x in s.split(',') if x.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
+        return "".join(_badge_it(x) for x in s.split(',') if x.strip())
 
     def _side_it(title, body):
         return (f"<div style='margin-bottom:22px;'>"
@@ -2498,7 +2451,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
                 f"<strong style='font-size:13px;color:#1e1b4b;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"{_tech_pills(proj.get('tech',''), color='#374151', bg='#f8fafc', border='#e2e8f0')}"
+                f"<div style='font-size:12px;color:#374151;font-weight:600;margin-bottom:3px;'>{proj.get('tech','')}</div>"
                 f"<div>{desc}</div>{pl}</div>"
             )
 
@@ -2507,7 +2460,7 @@ def render_template_indigo_tech(session_state, profile_img_html=""):
     html_content = f"""<!DOCTYPE html>
 <html lang='en'>
 <head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{session_state.get('name','')} - Resume</title>
-<style>* {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; overflow-x:hidden; }}</style>
+<style>* {{ box-sizing:border-box; margin:0; padding:0; }} body {{ font-family:'Segoe UI',sans-serif; background:#fff; }}</style>
 </head>
 <body>
 <table role='presentation' style='width:100%;min-height:100vh;border-collapse:collapse;table-layout:fixed;'>
@@ -2627,7 +2580,7 @@ def render_template_forest_green(session_state, profile_img_html=""):
                 f"<strong style='font-size:15px;color:#14532d;'>{proj.get('title','')}</strong>"
                 f"<span style='font-size:13px;color:#6b7280;'>{proj.get('duration','')}</span>"
                 f"</div>"
-                f"{_tech_pills(proj.get('tech',''), color='#374151', bg='#f8fafc', border='#e2e8f0')}"
+                f"<div style='font-size:13px;color:#374151;font-weight:600;margin-bottom:3px;'>Tech: {proj.get('tech','')}</div>"
                 f"<div>{desc}</div>{pl}</div>"
             )
 
@@ -2703,12 +2656,11 @@ def render_template_pure_white(session_state, profile_img_html=""):
         </div>"""
 
     def pills(s, bg="#f3f4f6", color="#111827", border="#d1d5db"):
-        inner = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};"
             f"border:1px solid {border};border-radius:3px;padding:3px 10px;"
-            f"margin:3px 3px 3px 0;font-size:13px;font-weight:600;white-space:nowrap;'>{x.strip()}</span>"
+            f"margin:3px 3px 3px 0;font-size:13px;font-weight:600;'>{x.strip()}</span>"
             for x in s.split(',') if x.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     contact_parts = []
     for key in ['email','phone','location','linkedin','portfolio','github']:
@@ -2767,7 +2719,7 @@ def render_template_pure_white(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:#111827;'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:#6b7280;'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='#6b7280', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:13px;color:#6b7280;margin:2px 0 4px;'>{proj.get('tech','')}</div>
                 {desc}{lnk_html}
             </div>"""
 
@@ -2800,7 +2752,7 @@ def render_template_pure_white(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Georgia',serif; color:#111827; background:#ffffff; padding:48px 64px; line-height:1.6; }}
   a {{ color:#111827; }}
 </style></head><body>
@@ -2856,12 +2808,11 @@ def render_template_midnight_black(session_state, profile_img_html=""):
         </div>"""
 
     def pills(s, bg="#111827", color="#f9fafb", border="#374151"):
-        inner = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};"
             f"border:1px solid {border};border-radius:3px;padding:4px 12px;"
-            f"margin:4px 4px 4px 0;font-size:13px;font-weight:600;white-space:nowrap;'>{x.strip()}</span>"
+            f"margin:4px 4px 4px 0;font-size:13px;font-weight:600;'>{x.strip()}</span>"
             for x in s.split(',') if x.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     contact_parts = []
     for key in ['email','phone','location','linkedin','portfolio','github']:
@@ -2920,7 +2871,7 @@ def render_template_midnight_black(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:{ACCENT};'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:#6b7280;'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='#6b7280', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:13px;color:#6b7280;margin:3px 0 5px;font-weight:600;'>{proj.get('tech','')}</div>
                 {desc}{lnk_html}
             </div>"""
 
@@ -2953,7 +2904,7 @@ def render_template_midnight_black(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:#111827; line-height:1.6; }}
   a {{ color:{ACCENT}; }}
 </style></head><body>
@@ -3011,12 +2962,11 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
         </div>"""
 
     def pills(s, bg="#ede9fe", color="#3730a3", border="#c4b5fd"):
-        inner = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};"
             f"border:1px solid {border};border-radius:20px;padding:4px 14px;"
-            f"margin:4px 4px 4px 0;font-size:13px;font-weight:600;white-space:nowrap;'>{x.strip()}</span>"
+            f"margin:4px 4px 4px 0;font-size:13px;font-weight:600;'>{x.strip()}</span>"
             for x in s.split(',') if x.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     contact_parts = []
     for key in ['email','phone','location','linkedin','portfolio','github']:
@@ -3080,7 +3030,7 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:{C_HEAD};'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:{C_MUTED};'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='{C_ACC}', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:13px;color:{C_ACC};font-weight:600;margin:3px 0 5px;'>{proj.get('tech','')}</div>
                 {desc}{lnk_html}
             </div>"""
 
@@ -3114,7 +3064,7 @@ def render_template_soft_lavender(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
   a {{ color:{C_HEAD}; }}
 </style></head><body>
@@ -3239,7 +3189,7 @@ def render_template_warm_sand(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:{C_HEAD};'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:{C_MUTED};'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='{C_ACC}', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:13px;color:{C_ACC};font-weight:600;margin:3px 0 5px;'>{proj.get('tech','')}</div>
                 {desc}{lnk_html}
             </div>"""
 
@@ -3273,7 +3223,7 @@ def render_template_warm_sand(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Georgia',serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
   a {{ color:{C_HEAD}; }}
 </style></head><body>
@@ -3332,12 +3282,11 @@ def render_template_ice_blue(session_state, profile_img_html=""):
         </div>"""
 
     def pills(s, bg="#e0f2fe", color="#0c4a6e", border="#7dd3fc"):
-        inner = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};"
             f"border:1px solid {border};border-radius:4px;padding:4px 12px;"
-            f"margin:4px 4px 4px 0;font-size:13px;font-weight:600;white-space:nowrap;'>{x.strip()}</span>"
+            f"margin:4px 4px 4px 0;font-size:13px;font-weight:600;'>{x.strip()}</span>"
             for x in s.split(',') if x.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     contact_parts = []
     for key in ['email','phone','location','linkedin','portfolio','github']:
@@ -3400,7 +3349,7 @@ def render_template_ice_blue(session_state, profile_img_html=""):
                     <strong style='font-size:15px;color:{C_HEAD};'>{proj.get('title','')}</strong>
                     <span style='font-size:13px;color:{C_MUTED};'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='{C_ACC}', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:13px;color:{C_ACC};font-weight:600;margin:3px 0 5px;'>{proj.get('tech','')}</div>
                 {desc}{lnk_html}
             </div>"""
 
@@ -3434,7 +3383,7 @@ def render_template_ice_blue(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
   a {{ color:{C_ACC}; }}
 </style></head><body>
@@ -3493,12 +3442,11 @@ def render_template_rose_gold(session_state, profile_img_html=""):
         </div>"""
 
     def pills(s, bg="#ffe4e6", color="#881337", border="#fda4af"):
-        inner = "".join(
+        return "".join(
             f"<span style='display:inline-block;background:{bg};color:{color};"
             f"border:1px solid {border};border-radius:20px;padding:4px 14px;"
-            f"margin:4px 4px 4px 0;font-size:12px;font-weight:600;white-space:nowrap;'>{x.strip()}</span>"
+            f"margin:4px 4px 4px 0;font-size:12px;font-weight:600;'>{x.strip()}</span>"
             for x in s.split(',') if x.strip())
-        return f"<div style='display:flex;flex-wrap:wrap;gap:3px 4px;overflow:hidden;'>{inner}</div>"
 
     contact_parts = []
     for key in ['email','phone','location','linkedin','portfolio','github']:
@@ -3557,7 +3505,7 @@ def render_template_rose_gold(session_state, profile_img_html=""):
                     <strong style='font-size:14px;color:{C_HEAD};'>{proj.get('title','')}</strong>
                     <span style='font-size:12px;color:#6b7280;'>{proj.get('duration','')}</span>
                 </div>
-                {_tech_pills(proj.get('tech',''), color='{C_ACC}', bg='#f8fafc', border='#e2e8f0')}
+                <div style='font-size:12px;color:{C_ACC};font-weight:600;margin:3px 0 5px;'>{proj.get('tech','')}</div>
                 {desc}{lnk_html}
             </div>"""
 
@@ -3590,7 +3538,7 @@ def render_template_rose_gold(session_state, profile_img_html=""):
     return f"""<!DOCTYPE html>
 <html lang='en'><head><meta charset='UTF-8'><title>{session_state.get('name','')} - Resume</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; overflow-wrap:break-word; word-break:break-word; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
   body {{ font-family:'Segoe UI',Arial,sans-serif; background:#ffffff; color:{C_BODY}; padding:44px 60px; line-height:1.6; }}
   a {{ color:{C_ACC}; }}
 </style></head><body>
