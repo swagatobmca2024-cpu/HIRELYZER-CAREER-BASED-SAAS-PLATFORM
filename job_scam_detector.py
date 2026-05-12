@@ -280,11 +280,6 @@ _WEIGHTS: dict[str, int] = {
     "invalid_phone":           10,   # phone present but not valid Indian format
     "invalid_pin":              8,   # PIN code present but invalid for claimed state
     "fake_govt_job":           20,   # impersonating railway/bank/defence recruitment
-    # ── v7 new signals ───────────────────────────────────────────────────────
-    "email_domain_mismatch":   14,   # contact email domain ≠ company name
-    "contact_website_mismatch":10,   # contact email domain ≠ provided website domain
-    "url_shortener":            8,   # bit.ly / tinyurl / similar in posting body
-    "telegram_whatsapp_link":  12,   # t.me / wa.me direct links in posting body
 }
 
 _FREE_DOMAINS: frozenset[str] = frozenset({
@@ -456,25 +451,6 @@ _INDIA_SCAM_PHRASES = [
     r"placement.*guarantee.*course",r"job.*guarantee.*after.*course",
     r"100%.*placement.*assured",r"job.*ready.*program.*fee",
 ]
-
-# ── v7: URL shortener + direct messenger link domains ────────────────────────
-_SHORTENER_DOMAINS: frozenset = frozenset({
-    "bit.ly", "tinyurl.com", "cutt.ly", "rb.gy", "gg.gg",
-    "shorturl.at", "is.gd", "tiny.cc", "ow.ly", "su.pr",
-    "buff.ly", "dlvr.it", "goo.gl", "qr.ae", "bc.vc",
-})
-# Patterns that match shortener URLs and direct messenger links in free text
-_SHORTENER_RE = re.compile(
-    r"https?://(bit\.ly|tinyurl\.com|cutt\.ly|rb\.gy|gg\.gg"
-    r"|shorturl\.at|is\.gd|tiny\.cc|ow\.ly|su\.pr"
-    r"|buff\.ly|dlvr\.it|goo\.gl|qr\.ae|bc\.vc)/\S+",
-    re.IGNORECASE,
-)
-# Direct WhatsApp / Telegram links — stronger signal than generic shortener
-_MESSENGER_LINK_RE = re.compile(
-    r"(https?://)?(wa\.me|t\.me|telegram\.me|api\.whatsapp\.com)/\S*",
-    re.IGNORECASE,
-)
 
 _INDIA_PHONE_PREFIXES_VOIP = re.compile(
     r"(140|141|142|143|144|145|146|147|148|149"  # Telemarketing prefixes
@@ -832,21 +808,48 @@ def _xco(text: str) -> str:
     """
     Extract company name — 6-strategy fallback, production grade.
 
-    Fixes over v5:
-    - Strategy 0: guard against email-domain false positives (productjobs@gmail → "")
-    - Strategy 2: suffix regex now anchored to single line only (no cross-line grabs)
-    - Strategy 3: "we at X" / "join X as" patterns added for paragraph-style postings
-    - Strategy 4: "at X" now skips if X looks like a verb phrase / location
-    - Strategy 5: standalone line now also rejects lines that are all-caps shout lines
-    - All extracted names normalised to Title Case before returning
+    BUG FIX v7:
+    - Strategy 5 was grabbing skills/requirements lines as company names
+      e.g. "Nowledge Of Llm Integration And Hybrid Ai Systems" (8 words, no suffix)
+      Fix: company names are max 5 words; reject lines with tech/skill keywords;
+      reject lines starting with section headers (Requirements, Skills, Experience)
+    - Strategy 3 "we at X" was missing Infosys/other well-known names in paragraphs
+    - Strategy 4 "at X" was not stripping "least/most/all" preposition artifacts
+    - Added Strategy 6: email domain extraction as last resort
+      (hr@infosys.com → "Infosys")
     """
     t = text or ""
 
+    # ── Section header keywords — lines starting with these are NEVER company names
+    _SECTION_HEADERS = re.compile(
+        r"^(requirements?|qualifications?|skills?|experience|responsibilities?|"
+        r"about\s+(the\s+)?role|job\s+description|what\s+you|who\s+you|"
+        r"we\s+are\s+looking|knowledge\s+of|proficiency|familiarity|"
+        r"understanding\s+of|exposure\s+to|good\s+to\s+have|must\s+have|"
+        r"nice\s+to\s+have|preferred|mandatory|key\s+skills?|"
+        r"technical\s+skills?|soft\s+skills?|tools?|technologies|"
+        r"nowledge|xperience|bility|trong)",
+        re.IGNORECASE,
+    )
+
+    # ── Tech/skill keywords — if line contains these it's a requirements line, not company
+    _SKILL_KEYWORDS = re.compile(
+        r"(python|java|javascript|react|node|angular|vue|django|flask|"
+        r"sql|mysql|postgresql|mongodb|aws|azure|gcp|docker|kubernetes|"
+        r"machine\s+learning|deep\s+learning|nlp|llm|gpt|bert|transformer|"
+        r"hybrid|integration|agile|scrum|jira|git|api|rest|graphql|"
+        r"excel|powerpoint|tableau|power\s+bi|sap|salesforce|"
+        r"communication|interpersonal|analytical|problem.solving|"
+        r"methodolog|framework|architecture|infrastructure|"
+        r"years?\s+of\s+exp|experience\s+in|knowledge\s+of|"
+        r"proficient\s+in|familiar\s+with|strong\s+in)",
+        re.IGNORECASE,
+    )
+
     def _co_clean(s: str) -> str:
         s = _clean(s)
-        # Reject if it's clearly a sentence fragment
-        if re.search(r"\b(are|is|we|our|this|has|have|will|the|a|an|"
-                     r"looking|seeking|hiring|currently|team|join)\b", s, re.I):
+        if re.search(r"(are|is|we|our|this|has|have|will|the|a|an|"
+                     r"looking|seeking|hiring|currently|team|join)", s, re.I):
             return ""
         return s.title() if s else ""
 
@@ -855,24 +858,31 @@ def _xco(text: str) -> str:
         "company", "organization", "organisation", "employer", "firm",
         "about us", "about the company", "about company",
         "about the organization", "hiring company", "client", "posted by",
+        "company name", "hiring for", "recruiter",
     ])
     if val:
-        # "Posted by" often includes "• 2nd" on LinkedIn — strip that
         val = re.split(r"\s*[•·|]\s*", val)[0]
         cleaned = _co_clean(val)
         if cleaned:
             return cleaned
 
     # Strategy 2: company suffix heuristic — SINGLE LINE only
-    # Extended pattern grabs compound suffixes like "Consulting Services", "Technologies Pvt Ltd"
+    # FIX: greedy suffix chain grabs full name e.g. "XYZ Technologies Pvt Ltd"
+    # FIX: _SKILL_KEYWORDS guard blocks "Hybrid AI Systems Integration"
+    _sfx = _CO_SUFFIXES.pattern
     _suffix_pat = (
-        r"([A-Za-z][A-Za-z0-9&\.\s\-]{1,40}?)\s+"
-        + _CO_SUFFIXES.pattern
-        + r"(?:\s+" + _CO_SUFFIXES.pattern + r")?"  # optional second suffix word
+        r"([A-Za-z][A-Za-z0-9&\.\-]{1,30}"
+        r"(?:\s+[A-Za-z][A-Za-z0-9&\.\-]{1,30}){0,3})"
+        r"\s+(?:" + _sfx + r")"
+        r"(?:\s+(?:" + _sfx + r"))*"
     )
     for line in t.split("\n"):
         line_clean = _clean(line)
         if not line_clean or len(line_clean) > 100:
+            continue
+        if _SECTION_HEADERS.search(line_clean):
+            continue
+        if _SKILL_KEYWORDS.search(line_clean):
             continue
         m = re.search(_suffix_pat, line_clean, re.IGNORECASE)
         if m:
@@ -881,15 +891,19 @@ def _xco(text: str) -> str:
                 prefix = m.group(1).strip()
                 if re.search(r"\b(we|our|this|the|a|an|is|are|has)\b", prefix, re.I):
                     continue
+                # Extra guard: reject if CANDIDATE itself has skill keywords
+                if _SKILL_KEYWORDS.search(candidate):
+                    continue
                 return candidate.title()
 
-    # Strategy 3: "we at X" / "join X as" / "roles at X" / "careers at X"
+
+    # Strategy 3: "we at X" / "join X as" / "roles at X"
     for pat in [
-        r"(?i)\bwe\s+at\s+([A-Za-z][A-Za-z0-9&\s\-]{1,40}?)(?:\s+are|\s+have|\s+offer|,|\.|$)",
-        r"(?i)\bjoin\s+([A-Za-z][A-Za-z0-9&\s\-]{1,40}?)\s+as\s+(?:a\s+|an\s+)?",
-        r"(?i)(?:roles?\s+at|positions?\s+at|careers?\s+at|apply\s+at|"
-        r"opportunities?\s+at|hiring\s+at|working\s+at|joining\s+us\s+at)\s+"
-        r"([A-Za-z][A-Za-z0-9&\.\s\-]{2,50}?)(?:\.|,|\n|$|\s+(?:is|are|was|for|and))",
+        r"(?i)we\s+at\s+([A-Za-z][A-Za-z0-9&\s\-]{1,40}?)(?:\s+are|\s+have|\s+offer|,|\.|$)",
+        r"(?i)join\s+([A-Za-z][A-Za-z0-9&\s\-]{1,40}?)\s+as\s+(?:a\s+|an\s+)?",
+        r"(?i)(?:roles?\s+at|positions?\s+at|careers?\s+at|apply\s+at|opportunities?\s+at|hiring\s+at|working\s+at)\s+([A-Za-z][A-Za-z0-9&\.\s\-]{2,50}?)(?:\.|,|\n|$|\s+(?:is|are|was|for|and))",
+        r"(?i)opening\s+(?:at|with|in)\s+([A-Za-z][A-Za-z0-9&\s\-]{2,40}?)(?:\.|,|\n|$)",
+        r"(?i)vacancy\s+(?:at|with|in)\s+([A-Za-z][A-Za-z0-9&\s\-]{2,40}?)(?:\.|,|\n|$)",
     ]:
         m = re.search(pat, t)
         if m:
@@ -899,20 +913,21 @@ def _xco(text: str) -> str:
                 if result:
                     return result
 
-    # Strategy 4: word(s) right after "at" in first 5 lines
-    # Remove email addresses first — prevents email-domain grabs (productjobs@ → "Salary")
-    first_chunk_no_email = re.sub(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", "", 
-                                   " ".join(t.split("\n")[:5]))
+    # Strategy 4: "at X" in first 5 lines
+    first_chunk_no_email = re.sub(
+        r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", "",
+        " ".join(t.split("\n")[:5])
+    )
     m2 = re.search(
-        r"\bat\s+([A-Za-z][A-Za-z0-9]{2,}(?:\s+[A-Za-z][A-Za-z0-9]{2,}){0,3})",
+        r"at\s+([A-Za-z][A-Za-z0-9]{2,}(?:\s+[A-Za-z][A-Za-z0-9]{2,}){0,3})",
         first_chunk_no_email, re.IGNORECASE,
     )
     if m2:
         candidate = _clean(m2.group(1))
-        # Reject locations, verbs, and field-label words
         if not re.search(
-            r"\b(bangalore|mumbai|delhi|chennai|hyderabad|pune|kolkata|"
-            r"remote|india|home|salary|ctc|location|contact|apply|least|most)\b",
+            r"(bangalore|mumbai|delhi|chennai|hyderabad|pune|kolkata|noida|"
+            r"gurgaon|remote|india|home|salary|ctc|location|contact|apply|"
+            r"least|most|all|present|least|the|our|your)",
             candidate, re.I,
         ):
             if 2 < len(candidate) < 50:
@@ -920,32 +935,62 @@ def _xco(text: str) -> str:
                 if result:
                     return result
 
-    # Strategy 5: second/third standalone non-empty line
+    # Strategy 5: standalone line — FIXED with strict guards
     lines = [_clean(l) for l in t.split("\n") if _clean(l)]
-    for line in lines[1:4]:
-        if not (2 < len(line) < 55):
+    for line in lines[1:5]:
+        # Word count guard — company names are 1-5 words max
+        word_count = len(line.split())
+        if word_count > 5 or word_count < 1:
+            continue
+        if not (2 < len(line) < 60):
+            continue
+        # Section header guard
+        if _SECTION_HEADERS.search(line):
+            continue
+        # Skill/tech keyword guard — FIX for "Nowledge Of Llm Integration..."
+        if _SKILL_KEYWORDS.search(line):
             continue
         if _ROLE_WORDS.search(line):
             continue
         if _HIRING_SHOUT.search(line):
             continue
         if line.isupper() and len(line.split()) <= 2:
-            continue  # e.g. "WFH ONLY"
-        # Reject WFH/earn/scam shout lines
-        if re.search(r"\b(work\s+from\s+home|earn\s+rs|earn\s+₹|no\s+experience|"
-                     r"data\s+entry|whatsapp\s+only|urgent|immediate)\b", line, re.I):
+            continue
+        if re.search(r"(work\s+from\s+home|earn|no\s+experience|"
+                     r"data\s+entry|whatsapp\s+only|urgent|immediate)", line, re.I):
             continue
         colon_pos = line.find(":")
         if 0 < colon_pos < 20:
             continue
-        # Must not look like a sentence, location, or email
         if re.search(r"\b(are|is|we|our|this|has|have|will|"
-                     r"bangalore|mumbai|delhi|hyderabad|chennai|pune|remote)\b",
-                     line, re.I):
+                     r"bangalore|mumbai|delhi|hyderabad|chennai|pune|"
+                     r"noida|gurgaon|remote|india|kolkata|ahmedabad|"
+                     r"lucknow|jaipur|surat|bhopal|indore|kochi|"
+                     r"chandigarh|vadodara|nagpur)\b", line, re.I):
+            continue
+        # Block standalone city/location lines (e.g. "Noida", "Noida / Remote")
+        if _KNOWN_CITIES.search(line) and len(line.split()) <= 3:
             continue
         if "@" in line or "http" in line:
             continue
+        # Must start with uppercase (company names do)
+        if not line[0].isupper():
+            continue
         return line.title()
+
+    # Strategy 6: extract company from corporate email domain (last resort)
+    # hr@infosys.com → "Infosys", careers@tatamotors.com → "Tatamotors"
+    corp_email = re.search(
+        r"[\w.+\-]+@([\w\-]+)\.(?:com|in|co\.in|net|org|io)",
+        t
+    )
+    if corp_email:
+        domain_name = corp_email.group(1).lower()
+        # Skip free email providers
+        _free = {"gmail","yahoo","hotmail","outlook","rediffmail",
+                 "ymail","icloud","protonmail","zohomail","aol","live"}
+        if domain_name not in _free and len(domain_name) > 2:
+            return domain_name.title()
 
     return ""
 
@@ -1003,33 +1048,77 @@ def _llm_extract_missing(raw: str, partial: dict, call_llm_fn) -> dict:
     important fields for scam detection. If regex got both, returns
     immediately with zero LLM cost.
 
-    Uses the same call_llm_fn already used for full analysis so:
-    - Same 100-key rotation + TPM rate limiting applies
-    - Same Supabase llm_cache (24hr TTL) — identical posting never hits API twice
-    - Same model: llama-3.3-70b-versatile (consistent with rest of app)
-    - temperature=0 for deterministic JSON output
+    FIX: Added explicit negative examples and post-validation to prevent
+    LLM from returning skills/requirements sentences as company name.
+    e.g. "Nowledge Of Llm Integration And Hybrid Ai Systems" was being
+    returned because prompt had no guard against it. Now:
+    - Prompt includes WRONG examples explicitly
+    - Post-validation rejects company names with skill/tech keywords
+    - Post-validation rejects company names > 6 words
+    - Post-validation rejects company names that are sentences
     """
-    # Only trigger if title or company is missing — the critical fields
     missing = [f for f in ("title", "company", "location", "salary")
                if not partial.get(f)]
     if "title" not in missing and "company" not in missing:
-        return partial   # regex got the important ones — skip LLM call entirely
+        return partial
 
-    prompt = f"""Extract specific fields from this job posting. Return ONLY a valid JSON object — no explanation, no markdown, no extra text.
+    prompt = f"""Extract specific fields from this job posting. Return ONLY a valid JSON object.
 
-Fields to extract: {', '.join(missing)}
+Fields needed: {', '.join(missing)}
 
-Rules:
-- "title": the exact job role/position being hired for (e.g. "Software Engineer", "Data Analyst")
-- "company": the hiring company name only, no extra words (e.g. "Infosys", "Zoho Corporation")
-- "location": city or work mode only (e.g. "Bangalore", "Remote", "Hybrid - Mumbai")
-- "salary": CTC or stipend exactly as written (e.g. "12-18 LPA", "₹50,000/month")
-- Use null for any field not clearly mentioned in the posting
+STRICT RULES:
+- "title": job role only. e.g. "Software Engineer", "Data Analyst", "LLM Engineer"
+  WRONG: "We are looking for a Software Engineer" (too long, contains sentence words)
+  WRONG: "Knowledge of Python and AWS" (this is a requirement, not a title)
+
+- "company": the HIRING COMPANY NAME only. Max 5 words. Must be a proper noun.
+  RIGHT: "Infosys", "Zoho Corporation", "Tata Consultancy Services"
+  WRONG: "Knowledge Of LLM Integration And Hybrid AI Systems" (this is a skill requirement)
+  WRONG: "Looking for candidates with experience" (this is a sentence)
+  WRONG: "Technologies Pvt Ltd" (incomplete — no company name)
+  If no clear company name exists in the posting, return null — do NOT guess from requirements.
+
+- "location": city or work mode only. e.g. "Bangalore", "Remote", "Hybrid - Mumbai"
+
+- "salary": CTC/stipend as written. e.g. "12-18 LPA", "₹50,000/month". null if not mentioned.
+
+- Return null for ANY field not clearly and explicitly stated.
 
 Job posting:
-{raw[:3000]}
+{raw[:2500]}
 
-JSON response:"""
+JSON:"""
+
+    # Post-validation guards for LLM-extracted company names
+    _COMPANY_SKILL_REJECT = re.compile(
+        r"(knowledge\s+of|integration|hybrid|machine\s+learning|deep\s+learning|"
+        r"proficiency|experience\s+in|years?\s+of|requirement|qualification|"
+        r"python|java|javascript|aws|azure|gcp|docker|kubernetes|"
+        r"communication|analytical|problem.solving|framework|architecture|"
+        r"llm|gpt|nlp|bert|transformer|api|rest|graphql|agile|scrum)",
+        re.IGNORECASE,
+    )
+
+    def _validate_company(val: str) -> bool:
+        """Return True if val looks like a real company name."""
+        if not val or val.lower() in ("null", "none", "n/a", "unknown", ""):
+            return False
+        # Too many words — company names are max 6 words
+        if len(val.split()) > 6:
+            return False
+        # Contains skill/tech keywords → requirements sentence, not company
+        if _COMPANY_SKILL_REJECT.search(val):
+            return False
+        # Starts with lowercase → likely a sentence fragment
+        if val[0].islower():
+            return False
+        # Contains sentence-like words
+        if re.search(r"(we|our|is|are|has|have|will|the|looking|seeking|"
+                     r"experience|knowledge|understanding|familiarity|"
+                     r"proficient|expert|strong|good|excellent)",
+                     val, re.IGNORECASE):
+            return False
+        return True
 
     try:
         response = call_llm_fn(
@@ -1038,20 +1127,25 @@ JSON response:"""
             model="llama-3.3-70b-versatile",
             temperature=0,
         )
-        # Strip markdown fences if model adds them
         clean = re.sub(r"```(?:json)?|```", "", response).strip()
-        # Extract JSON object even if model adds preamble
         m = re.search(r"\{.*\}", clean, re.DOTALL)
         if not m:
             return partial
         extracted = json.loads(m.group())
-        # Only fill fields that regex left empty — never overwrite regex results
+
         for field in missing:
             val = extracted.get(field)
-            if val and val != "null" and isinstance(val, str) and len(val.strip()) > 1:
-                partial[field] = val.strip()
+            if not val or val == "null" or not isinstance(val, str):
+                continue
+            val = val.strip()
+            if len(val) < 2:
+                continue
+            # Extra validation for company field
+            if field == "company" and not _validate_company(val):
+                continue   # reject bad LLM company extraction
+            partial[field] = val
     except Exception:
-        pass   # LLM failed or returned bad JSON — regex result still usable
+        pass
 
     return partial
 
@@ -1476,10 +1570,8 @@ def _probe_site_reachable(domain: str) -> dict:
             body_text  = body_bytes.decode("utf-8", errors="ignore")
             is_parked  = bool(_PARKING_PATTERNS.search(body_text))
 
-            # SSL validity + cert CN check (only for https)
-            ssl_valid  = None
-            cert_cn    = None
-            cert_mismatch = False
+            # SSL validity (only for https)
+            ssl_valid = None
             if scheme == "https":
                 try:
                     ctx = ssl.create_default_context()
@@ -1493,15 +1585,6 @@ def _probe_site_reachable(domain: str) -> dict:
                         )
                         days_left  = (not_after - datetime.utcnow()).days
                         ssl_valid  = True if days_left > 0 else False
-
-                        # BUILD 9 — Extract cert Common Name for company mismatch check
-                        # Subject is a tuple of tuples: ((('commonName', 'example.com'),),)
-                        subject = dict(x[0] for x in cert.get("subject", []))
-                        cert_cn = subject.get("commonName", "")
-                        # Strip wildcard prefix — *.example.com → example.com
-                        if cert_cn.startswith("*."):
-                            cert_cn = cert_cn[2:]
-
                 except ssl.SSLCertVerificationError:
                     ssl_valid = False
                 except Exception:
@@ -1516,8 +1599,6 @@ def _probe_site_reachable(domain: str) -> dict:
                 detail_parts.append("SSL certificate INVALID")
             elif ssl_valid is True:
                 detail_parts.append("SSL certificate valid")
-            if cert_cn:
-                detail_parts.append(f"cert CN: {cert_cn}")
 
             out.update(
                 reachable=True,
@@ -1525,7 +1606,6 @@ def _probe_site_reachable(domain: str) -> dict:
                 ssl_valid=ssl_valid,
                 is_parked=is_parked,
                 redirect_to=redirect_to,
-                cert_cn=cert_cn,
                 detail=" | ".join(detail_parts),
             )
             return out
@@ -1763,31 +1843,26 @@ def _probe_mx_record(contact: str) -> dict:
 
 def _dns_mx_lookup(domain: str) -> bool:
     """
-    MX record check via Cloudflare DNS-over-HTTPS (port 443 HTTPS).
-
-    FIX v6: replaced raw UDP socket (SOCK_DGRAM → 8.8.8.8:53) which is
-    blocked on Streamlit Cloud and silently returned False for every posting,
-    adding a spurious +15 probe penalty to all analyses.
-    Now uses the same Cloudflare DoH endpoint as _probe_mx_record() —
-    works identically on Cloud, Railway, Docker, and local dev.
-    Returns True if the domain has at least one MX record.
+    Raw DNS UDP query for MX records on port 53.
+    No HTTP. No API key. Works from any server environment.
+    Returns True if domain has at least one MX record.
     """
+    import struct
     try:
-        url = f"https://cloudflare-dns.com/dns-query?name={domain}&type=MX"
-        req = urllib.request.Request(
-            url,
-            headers={
-                "Accept": "application/dns-json",
-                "User-Agent": "ScamDetector/6.0",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode())
-        # Status 3 = NXDOMAIN — domain does not exist
-        if data.get("Status", -1) == 3:
-            return False
-        answers = data.get("Answer", [])
-        return any(a.get("type") == 15 for a in answers)  # type 15 = MX
+        tid      = b"\xaa\xbb"
+        flags    = b"\x01\x00"
+        counts   = b"\x00\x01\x00\x00\x00\x00\x00\x00"
+        parts    = domain.encode().split(b".")
+        qname    = b"".join(bytes([len(p)]) + p for p in parts) + b"\x00"
+        qtype_cl = b"\x00\x0f\x00\x01"          # MX, IN
+        packet   = tid + flags + counts + qname + qtype_cl
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(4)
+        s.sendto(packet, ("8.8.8.8", 53))
+        resp, _ = s.recvfrom(512)
+        s.close()
+        answer_count = struct.unpack(">H", resp[6:8])[0]
+        return answer_count > 0
     except Exception:
         return False
 
@@ -2228,16 +2303,7 @@ def _check_linkedin_existence(company: str) -> dict:
                         if found_slug is None:
                             found_slug = slug
         except urllib.error.HTTPError as e:
-            # 999 = LinkedIn bot-block (page may still exist) — treat as
-            # inconclusive, NOT as "company not found". We set a sentinel
-            # so the caller knows LinkedIn was unreachable rather than
-            # returning a false negative.
-            # FIX v6: previously 999 fell through to found=False,
-            # incorrectly adding to the "denied" count for small companies.
-            if e.code == 999:
-                with lock:
-                    if found_slug is None:
-                        found_slug = "__bot_blocked__"
+            pass   # 404 = not found, 999 = LinkedIn bot block
         except Exception:
             pass
 
@@ -2245,15 +2311,10 @@ def _check_linkedin_existence(company: str) -> dict:
     for t in threads: t.start()
     for t in threads: t.join(timeout=6)
 
-    if found_slug and found_slug != "__bot_blocked__":
+    if found_slug:
         out.update(
             found=True,
             detail=f"LinkedIn company page exists: linkedin.com/company/{found_slug} ✓",
-        )
-    elif found_slug == "__bot_blocked__":
-        out.update(
-            found=None,  # inconclusive — LinkedIn blocked the check, not proof of absence
-            detail=f"LinkedIn check blocked by bot-protection (HTTP 999) — inconclusive",
         )
     else:
         out.update(
@@ -2442,19 +2503,12 @@ def _probe_company_domain(args: tuple) -> dict:
     elif confirmed == 1:
         out["score"] = max(0, out["score"] - 8)
 
-    # If all tried identity sources deny → add suspicion ONLY when infrastructure
-    # also looks weak. A company with valid DNS + HTTPS + MX + SPF that isn't on
-    # Wikipedia/Clearbit is simply small/regional — not a scam.
+    # If all tried identity sources deny → add suspicion
     all_tried = sum(
         1 for k in ("clearbit", "wikipedia", "linkedin")
         if identity_results.get(k, {}).get("found") is not None
     )
-    infra_clean = (
-        out.get("domain_exists") is True
-        and out.get("website_live") is True
-        and out.get("has_mx") is True
-    )
-    if all_tried >= 2 and denied == all_tried and not infra_clean:
+    if all_tried >= 2 and denied == all_tried:
         out["score"] += 15
         out["scam_signals"].append(
             f"'{company}' not found in any public company database "
@@ -2683,128 +2737,6 @@ def _probe_mca(company: str) -> dict:
     return out
 
 
-def _probe_url_unroll(urls: list[str]) -> dict:
-    """
-    BUILD 9 — Shortened URL unrolling probe.
-    Follows redirect chains (max 3 hops) to find the real destination of
-    bit.ly / tinyurl / t.me / wa.me links found in the job posting.
-
-    Classifies the final destination:
-      FORM_COLLECTOR  — Google Forms, Typeform, Jotform, Tally etc. (personal data harvest)
-      PAYMENT_PAGE    — Razorpay, Paytm, PhonePe, Cashfree, Instamojo, PayU
-      MESSENGER_GROUP — Telegram group, WhatsApp group invite link
-      JOB_BOARD       — Naukri, LinkedIn, Indeed, Glassdoor, Shine, Monster
-      UNKNOWN         — Could not determine destination
-      ERROR           — Network failure / redirect loop
-
-    Returns dict with: destinations, classification, penalty_suggestion, detail
-    """
-    if not urls:
-        return {"classification": "SKIPPED", "detail": "No URLs to unroll", "penalty_suggestion": 0}
-
-    _FORM_HOSTS    = {"forms.gle", "docs.google.com", "typeform.com", "jotform.com",
-                      "tally.so", "surveymonkey.com", "forms.office.com", "zohoforms.com",
-                      "airtable.com", "notion.so", "paperform.co"}
-    _PAYMENT_HOSTS = {"razorpay.com", "paytm.com", "phonepe.com", "cashfree.com",
-                      "instamojo.com", "payu.in", "ccavenue.com", "billdesk.com",
-                      "stripe.com", "paypal.com"}
-    _MESSENGER     = {"t.me", "telegram.me", "telegram.org", "wa.me",
-                      "chat.whatsapp.com", "api.whatsapp.com"}
-    _JOB_BOARDS    = {"naukri.com", "linkedin.com", "indeed.com", "glassdoor.com",
-                      "shine.com", "monster.com", "foundit.in", "internshala.com",
-                      "freshersworld.com", "hirist.com", "apna.co", "workindia.in"}
-
-    def _classify_host(host: str) -> str:
-        h = host.lower().lstrip("www.")
-        for hosts, cls in [
-            (_FORM_HOSTS,    "FORM_COLLECTOR"),
-            (_PAYMENT_HOSTS, "PAYMENT_PAGE"),
-            (_MESSENGER,     "MESSENGER_GROUP"),
-            (_JOB_BOARDS,    "JOB_BOARD"),
-        ]:
-            if any(h == d or h.endswith("." + d) for d in hosts):
-                return cls
-        return "UNKNOWN"
-
-    def _unroll_one(url: str) -> tuple[str, str]:
-        """Follow redirects up to 3 hops, return (final_url, classification)."""
-        current = url
-        for _ in range(3):
-            try:
-                req = urllib.request.Request(
-                    current,
-                    method="HEAD",
-                    headers={"User-Agent": "Mozilla/5.0 ScamDetector/9.0"},
-                )
-                # Don't follow redirects automatically — we want each hop
-                with urllib.request.urlopen(req, timeout=4) as resp:
-                    # 200 — reached final destination
-                    parsed = urllib.parse.urlparse(resp.url)
-                    return resp.url, _classify_host(parsed.netloc)
-            except urllib.error.HTTPError as e:
-                if e.code in (301, 302, 303, 307, 308):
-                    loc = e.headers.get("Location", "")
-                    if not loc:
-                        break
-                    # Handle relative redirects
-                    if loc.startswith("/"):
-                        parsed = urllib.parse.urlparse(current)
-                        current = f"{parsed.scheme}://{parsed.netloc}{loc}"
-                    else:
-                        current = loc
-                else:
-                    break
-            except Exception:
-                break
-        parsed = urllib.parse.urlparse(current)
-        return current, _classify_host(parsed.netloc)
-
-    destinations = []
-    classifications = []
-
-    # Unroll up to 3 unique URLs in parallel
-    import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
-        futs = {ex.submit(_unroll_one, u): u for u in urls[:3]}
-        for fut in concurrent.futures.as_completed(futs, timeout=6):
-            try:
-                final_url, cls = fut.result()
-                destinations.append(final_url)
-                classifications.append(cls)
-            except Exception:
-                classifications.append("ERROR")
-
-    # Determine overall classification — worst case wins
-    _priority = ["PAYMENT_PAGE", "FORM_COLLECTOR", "MESSENGER_GROUP",
-                 "UNKNOWN", "JOB_BOARD", "ERROR", "SKIPPED"]
-    overall = min(classifications, key=lambda c: _priority.index(c)
-                  if c in _priority else 99) if classifications else "SKIPPED"
-
-    # Penalty suggestion per classification
-    _penalties = {
-        "PAYMENT_PAGE":    25,   # direct payment harvest — critical
-        "FORM_COLLECTOR":  18,   # personal data harvest via form
-        "MESSENGER_GROUP": 12,   # moving off-platform
-        "UNKNOWN":          5,   # can't verify destination
-        "JOB_BOARD":        0,   # legitimate
-        "ERROR":            3,
-        "SKIPPED":          0,
-    }
-
-    detail_parts = []
-    for url, cls in zip(destinations, classifications):
-        short = url[:70] + "…" if len(url) > 70 else url
-        detail_parts.append(f"{cls}: {short}")
-
-    return {
-        "classification":   overall,
-        "classifications":  classifications,
-        "destinations":     destinations,
-        "penalty_suggestion": _penalties.get(overall, 5),
-        "detail": " | ".join(detail_parts) if detail_parts else "Unroll failed",
-    }
-
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def _run_live_probes_cached(domain: str, contact: str, company: str, website: str) -> dict:
     """
@@ -2859,29 +2791,7 @@ def run_live_probes(job: dict) -> dict:
 
     # Delegate to cached version — identical (domain, contact, company, website)
     # combinations skip all network calls for 1 hour (st.cache_data TTL).
-    probes = _run_live_probes_cached(domain or "", contact, company, website)
-
-    # BUILD 9 — URL unrolling probe (not cached — URLs in description may vary)
-    # Collect all shortened/messenger URLs from the full job text
-    full_text = " ".join([
-        job.get("title", ""), job.get("description", ""),
-        job.get("requirements", ""), job.get("benefits", ""),
-        job.get("contact", ""),
-    ])
-    urls_to_unroll = []
-    # Messenger links first (higher priority)
-    for m in _MESSENGER_LINK_RE.finditer(full_text):
-        urls_to_unroll.append(m.group(0) if m.group(0).startswith("http") else "https://" + m.group(0))
-    # Shortener links
-    for m in _SHORTENER_RE.finditer(full_text):
-        urls_to_unroll.append(m.group(0))
-
-    if urls_to_unroll:
-        probes["url_unroll"] = _probe_url_unroll(list(dict.fromkeys(urls_to_unroll))[:3])
-    else:
-        probes["url_unroll"] = {"classification": "SKIPPED", "detail": "No shortened URLs found", "penalty_suggestion": 0}
-
-    return probes
+    return _run_live_probes_cached(domain or "", contact, company, website)
 
 
 def _probe_risk(probes: dict) -> tuple[int, list[str]]:
@@ -2919,54 +2829,10 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         if reach.get("is_parked"):
             penalty += 14
             warnings.append("Company website is a PARKED / placeholder domain")
-
-        # BUILD 9 — SSL cert CN vs company name mismatch
-        # A cert for "tcs-jobs-india.com" on a page claiming to be TCS is a
-        # critical impersonation signal. The cert CN is extracted in _probe_site_reachable.
-        cert_cn  = reach.get("cert_cn", "")
-        company  = probes.get("_company_name_hint", "")   # injected by orchestrator
-        if cert_cn and company and len(company) >= 3:
-            _, cn_sim = _fuzzy_name_match(company, cert_cn)
-            if cn_sim < 0.40:
-                penalty += 15
-                warnings.append(
-                    f"SSL certificate Common Name '{cert_cn}' does not match "
-                    f"claimed company '{company}' (similarity {cn_sim:.0%}) — "
-                    "possible impersonation: scammer obtained a cert for a lookalike domain"
-                )
     typo = probes.get("typosquat", {})
     if typo.get("is_squatter"):
         penalty += 20
         warnings.append(typo["detail"])
-
-    # BUILD 9 — URL unrolling penalty
-    unroll = probes.get("url_unroll", {})
-    unroll_cls = unroll.get("classification", "SKIPPED")
-    unroll_penalty = unroll.get("penalty_suggestion", 0)
-    if unroll_cls == "PAYMENT_PAGE":
-        penalty += unroll_penalty
-        warnings.append(
-            f"Shortened URL leads to a PAYMENT PAGE — '{unroll.get('detail','')}'. "
-            "Scammers use short links to hide direct payment collection from candidates."
-        )
-    elif unroll_cls == "FORM_COLLECTOR":
-        penalty += unroll_penalty
-        warnings.append(
-            f"Shortened URL leads to a DATA COLLECTION FORM — '{unroll.get('detail','')}'. "
-            "Personal data is being harvested via a form link hidden behind a short URL."
-        )
-    elif unroll_cls == "MESSENGER_GROUP":
-        penalty += unroll_penalty
-        warnings.append(
-            f"Link redirects to a WhatsApp/Telegram group — '{unroll.get('detail','')}'. "
-            "Moving recruitment off-platform removes all accountability and traceability."
-        )
-    elif unroll_cls == "UNKNOWN" and unroll_penalty > 0:
-        penalty += unroll_penalty
-        warnings.append(
-            f"Shortened URL destination could not be verified — '{unroll.get('detail','')}'. "
-            "Unknown redirect destination is suspicious in a recruitment context."
-        )
     if probes.get("free_email", {}).get("uses_free_domain"):
         penalty += 12
         dom = probes["free_email"].get("domain", "")
@@ -3359,77 +3225,6 @@ def _run_rules(job: dict) -> dict:
              f"PIN code(s) {invalid_pins[:2]} do not match any known Indian postal prefix.",
              invalid_pins[:2])
 
-    # ── v7 IMPROVEMENT 1: Email domain vs company name mismatch ──────────────
-    # Extract all email domains from the contact + description fields.
-    # Compare each against the company name using the existing fuzzy matcher.
-    # Also compare against the provided website domain.
-    emails_found = re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", full)
-    corp_emails  = [e for e in emails_found if e.lower() not in _FREE_DOMAINS]
-    company_name = job.get("company", "").strip()
-    website_raw  = job.get("website", "").strip()
-
-    if corp_emails and company_name and len(company_name) >= 3:
-        # Extract SLD from website URL if provided
-        website_sld = ""
-        if website_raw:
-            m_site = re.search(r"(?:https?://)?(?:www\.)?([^/\s]+)", website_raw)
-            if m_site:
-                parts = m_site.group(1).split(".")
-                website_sld = parts[-2] if len(parts) >= 2 else parts[0]
-
-        for email_domain in corp_emails[:3]:   # check up to 3 corporate emails
-            email_sld = email_domain.split(".")[0]
-
-            # Check 1 — email domain vs company name
-            _, sim = _fuzzy_name_match(company_name, email_sld)
-            if sim < 0.45:
-                _add(
-                    "email_domain_mismatch",
-                    "Contact Email Domain Doesn't Match Company",
-                    f"Email domain '{email_domain}' has very low similarity ({sim:.0%}) "
-                    f"to company name '{company_name}'. This is a primary impersonation "
-                    "pattern — scammers use lookalike domains to appear legitimate.",
-                    [email_domain],
-                )
-                break   # one fire per posting is enough
-
-            # Check 2 — email domain vs website domain (only if website provided)
-            if website_sld and email_sld.lower() != website_sld.lower():
-                _, site_sim = _fuzzy_name_match(email_sld, website_sld)
-                if site_sim < 0.50:
-                    _add(
-                        "contact_website_mismatch",
-                        "Contact Email Domain Differs from Website Domain",
-                        f"Website is '{website_raw}' but contact email uses "
-                        f"'{email_domain}' — a different domain. Legitimate companies "
-                        "use the same domain for their website and recruiter emails.",
-                        [email_domain, website_raw],
-                    )
-                    break
-
-    # ── v7 IMPROVEMENT 2: URL shortener detection ─────────────────────────────
-    shortener_hits = _SHORTENER_RE.findall(full)
-    messenger_hits = _MESSENGER_LINK_RE.findall(full)
-
-    if messenger_hits:
-        # wa.me / t.me direct links — stronger signal than generic shortener
-        links = [m[0] + m[1] for m in messenger_hits][:3]
-        _add(
-            "telegram_whatsapp_link",
-            "Direct WhatsApp / Telegram Links in Posting",
-            "wa.me and t.me links in job postings are used to move candidates off "
-            "official platforms into unmonitored private chats — a major red flag.",
-            links,
-        )
-    elif shortener_hits:
-        _add(
-            "url_shortener",
-            "Shortened URLs Detected",
-            "Shortened links (bit.ly, tinyurl etc.) hide the real destination. "
-            "Scammers use them to conceal phishing pages, payment forms, or Telegram groups.",
-            shortener_hits[:3],
-        )
-
     return {"signals": sigs, "rule_score": min(sum(_WEIGHTS.get(k,0) for k in sigs), 100)}
 
 
@@ -3437,268 +3232,10 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_probe_context(probes: dict, warnings: list, rules_result: dict | None = None) -> str:
-    """
-    FIX v6 — Build a COMPLETE probe summary for the LLM, covering both
-    VERIFIED (positive) and WARNING (negative) findings.
-
-    v7 — Also accepts rules_result to append RULE ENGINE FINDINGS section,
-    so the LLM knows which signals the rule engine fired and with what evidence,
-    instead of re-deriving them independently from raw text.
-    """
-    lines = []
-
-    # ── Domain age ────────────────────────────────────────────────────────────
-    age = probes.get("domain_age", {})
-    da_status = age.get("status", "unknown")
-    if da_status == "established":
-        lines.append(
-            f"VERIFIED: Domain is {age.get('age_days')} days old "
-            f"(registered {age.get('registered', 'unknown')}) — well-established, "
-            "consistent with a real company."
-        )
-    elif da_status == "moderate":
-        lines.append(
-            f"CAUTION: Domain is {age.get('age_days')} days old (3–6 months) — "
-            "relatively new, verify through other channels."
-        )
-    elif da_status in ("young", "very_young"):
-        lines.append(
-            f"WARNING: Domain is only {age.get('age_days')} days old — "
-            "extremely new domain is a strong scam signal."
-        )
-
-    # Registrar
-    if age.get("registrar"):
-        lines.append(f"INFO: Domain registrar is '{age['registrar']}'.")
-    if age.get("privacy_proxy"):
-        lines.append("CAUTION: Domain WHOIS is privacy-protected.")
-
-    # ── Site reachability ─────────────────────────────────────────────────────
-    reach = probes.get("site_reach", {})
-    if reach.get("reachable") is True:
-        ssl_note = ""
-        if reach.get("ssl_valid") is True:
-            ssl_note = " with a valid SSL certificate"
-        elif reach.get("ssl_valid") is False:
-            ssl_note = " but SSL certificate is INVALID"
-        parked_note = " (domain appears PARKED — no real content)" if reach.get("is_parked") else ""
-        lines.append(f"VERIFIED: Company website is live{ssl_note}{parked_note}.")
-    elif reach.get("reachable") is False:
-        lines.append("WARNING: Company website is completely unreachable.")
-
-    # ── Typosquatting ─────────────────────────────────────────────────────────
-    typo = probes.get("typosquat", {})
-    if typo.get("is_squatter"):
-        lines.append(f"WARNING: {typo.get('detail', 'Domain may be impersonating a known brand.')} ")
-    elif typo.get("similarity", 0) < 0.72:
-        lines.append("VERIFIED: Domain does not impersonate any known brand.")
-
-    # ── Free email ────────────────────────────────────────────────────────────
-    free_email = probes.get("free_email", {})
-    if free_email.get("uses_free_domain"):
-        lines.append(
-            f"WARNING: Recruiter uses personal free email domain "
-            f"'{free_email.get('domain')}' — legitimate companies use corporate email."
-        )
-    elif free_email.get("emails_found"):
-        lines.append("VERIFIED: Contact email uses a corporate domain, not a free provider.")
-
-    # ── MX record ─────────────────────────────────────────────────────────────
-    mx = probes.get("mx_record", {})
-    mx_status = mx.get("status", "")
-    mx_dom = mx.get("domain", "")
-    if mx_status == "MX_FOUND":
-        flags = []
-        if mx.get("ghost_mx"):
-            flags.append("MX hostnames do not resolve — ghost MX (fake mail server)")
-        if mx.get("voip_risk"):
-            flags.append("routes through bulk/transactional mail service")
-        if mx.get("free_mx") and not mx.get("voip_risk"):
-            flags.append("uses free provider (Google/Outlook) for corporate domain")
-        if flags:
-            lines.append(f"CAUTION: '{mx_dom}' has MX records but — {' | '.join(flags)}.")
-        else:
-            lines.append(
-                f"VERIFIED: Corporate email domain '{mx_dom}' has valid, "
-                "functioning MX records — real mail infrastructure."
-            )
-    elif mx_status == "NO_MX":
-        lines.append(
-            f"WARNING: '{mx_dom}' has NO MX records — domain registered "
-            "for appearances only, not configured for real email."
-        )
-    elif mx_status == "DNS_FAIL":
-        lines.append(
-            f"WARNING: Email domain '{mx_dom}' does not exist in DNS — "
-            "completely fabricated."
-        )
-    elif mx_status == "FREE_DOMAIN":
-        lines.append(
-            "WARNING: Only free email domain(s) found — no corporate email domain to verify."
-        )
-    elif mx_status == "NO_EMAIL":
-        lines.append("INFO: No email address found in job posting — MX check skipped.")
-
-    # ── SPF / DMARC ───────────────────────────────────────────────────────────
-    spf = probes.get("spf_dmarc", {})
-    if spf.get("spf") and spf.get("dmarc"):
-        lines.append(
-            "VERIFIED: Domain has both SPF and DMARC records — properly "
-            "configured for legitimate corporate email use."
-        )
-    elif spf.get("spf") and not spf.get("dmarc"):
-        lines.append("CAUTION: Domain has SPF but no DMARC — partial email authentication.")
-    elif not spf.get("spf") and spf.get("dmarc") is False and mx_status == "MX_FOUND":
-        lines.append("WARNING: Domain has MX records but no SPF or DMARC — suspicious.")
-
-    # ── Company domain infrastructure ─────────────────────────────────────────
-    cd = probes.get("company_domain", {})
-    cd_domain = cd.get("domain", "")
-    if cd_domain:
-        infra_parts = []
-        if cd.get("domain_exists") is True:
-            infra_parts.append("DNS resolves")
-        if cd.get("website_live") is True:
-            infra_parts.append("HTTPS live")
-        if cd.get("has_mx") is True:
-            infra_parts.append("MX configured")
-        if cd.get("domain_matches_company") is True:
-            infra_parts.append("domain name matches company")
-        if len(infra_parts) >= 3:
-            lines.append(
-                f"VERIFIED: Company domain '{cd_domain}' passes infrastructure checks: "
-                + ", ".join(infra_parts) + "."
-            )
-        elif cd.get("domain_exists") is False:
-            lines.append(f"WARNING: Company domain '{cd_domain}' does not exist in DNS.")
-
-    # ── Identity sources ──────────────────────────────────────────────────────
-    confirmed = cd.get("identity_sources", 0)
-    cb = cd.get("clearbit", {})
-    wp = cd.get("wikipedia", {})
-    li = cd.get("linkedin", {})
-
-    id_lines = []
-    if cb.get("found") is True:
-        id_lines.append(f"Clearbit ✓ ({cb.get('detail', '')})")
-    elif cb.get("found") is False:
-        id_lines.append("Clearbit ✗ (not in global company index — may be small/regional)")
-
-    if wp.get("found") is True:
-        id_lines.append(f"Wikipedia ✓ ({wp.get('detail', '')})")
-    elif wp.get("found") is False:
-        id_lines.append("Wikipedia ✗ (no article — expected for small companies)")
-
-    if li.get("found") is True:
-        id_lines.append(f"LinkedIn ✓ ({li.get('detail', '')})")
-    elif li.get("found") is None:
-        id_lines.append("LinkedIn — inconclusive (bot-blocked)")
-    elif li.get("found") is False:
-        id_lines.append("LinkedIn ✗ (no company page found)")
-
-    if confirmed >= 2:
-        lines.append(
-            f"VERIFIED: Company confirmed by {confirmed} independent public "
-            f"databases. " + " | ".join(id_lines)
-        )
-    elif confirmed == 1:
-        lines.append(
-            f"PARTIAL: Company found in 1 public database (small/regional companies "
-            f"often absent from others). " + " | ".join(id_lines)
-        )
-    else:
-        # Not found in any — but only flag if infra is also weak
-        infra_clean = (
-            cd.get("domain_exists") is True
-            and cd.get("website_live") is True
-            and cd.get("has_mx") is True
-        )
-        if infra_clean:
-            lines.append(
-                "NOTE: Company not found in Clearbit/Wikipedia/LinkedIn — however "
-                "infrastructure checks pass, suggesting this is a real but small or "
-                "regional company not indexed by global databases. "
-                + " | ".join(id_lines)
-            )
-        else:
-            lines.append(
-                "WARNING: Company not found in any public database AND infrastructure "
-                "checks are weak — high likelihood of fake company. "
-                + " | ".join(id_lines)
-            )
-
-    # ── BUILD 9: URL unrolling results ────────────────────────────────────────
-    unroll = probes.get("url_unroll", {})
-    unroll_cls = unroll.get("classification", "SKIPPED")
-    if unroll_cls == "PAYMENT_PAGE":
-        lines.append(
-            f"WARNING: Shortened URL resolves to a PAYMENT PAGE — "
-            f"{unroll.get('detail', '')}. Direct payment collection hidden behind short link."
-        )
-    elif unroll_cls == "FORM_COLLECTOR":
-        lines.append(
-            f"WARNING: Shortened URL resolves to a DATA COLLECTION FORM — "
-            f"{unroll.get('detail', '')}. Personal data harvested via hidden form link."
-        )
-    elif unroll_cls == "MESSENGER_GROUP":
-        lines.append(
-            f"WARNING: Link redirects to WhatsApp/Telegram group — "
-            f"{unroll.get('detail', '')}. Recruitment moved off-platform."
-        )
-    elif unroll_cls == "JOB_BOARD":
-        lines.append(
-            f"VERIFIED: Shortened URL resolves to a legitimate job board — "
-            f"{unroll.get('detail', '')}."
-        )
-    elif unroll_cls not in ("SKIPPED", "ERROR"):
-        lines.append(
-            f"CAUTION: Shortened URL destination unknown — {unroll.get('detail', '')}."
-        )
-
-    # ── v7: Rule engine findings ──────────────────────────────────────────────
-    # Pass fired signals with their weights and matched evidence to the LLM so
-    # it reasons about confirmed pattern matches rather than re-reading raw text.
-    if rules_result and rules_result.get("signals"):
-        rule_lines = []
-        # Sort by weight descending so highest-impact signals appear first
-        sorted_signals = sorted(
-            rules_result["signals"].items(),
-            key=lambda x: _WEIGHTS.get(x[0], 0),
-            reverse=True,
-        )
-        for sig_key, sig_data in sorted_signals:
-            weight  = _WEIGHTS.get(sig_key, 0)
-            label   = sig_data.get("label", sig_key)
-            hits    = sig_data.get("hits", [])
-            evidence = f" — matched: {hits}" if hits else ""
-            severity = "CRITICAL RULE" if weight >= 18 else "RULE"
-            rule_lines.append(
-                f"{severity} FIRED (weight {weight}): {label}{evidence}"
-            )
-        if rule_lines:
-            lines.append(
-                "RULE ENGINE FINDINGS — these are confirmed pattern matches from "
-                "the automated rule engine:\n"
-                + "\n".join(f"    {rl}" for rl in rule_lines)
-            )
-        else:
-            lines.append("RULE ENGINE FINDINGS: No rule signals fired — posting text appears clean.")
-
-    return "\n".join(f"  - {l}" for l in lines) if lines else "  - No significant probe findings."
-
-
-def _llm_prompt_reasoning(job: dict, probe_context: str) -> str:
-    """
-    BUILD 9 — PASS 1: Chain-of-thought reasoning prompt.
-    Ask the LLM to think step-by-step through every layer of evidence BEFORE
-    committing to a verdict. The reasoning text is then fed into Pass 2 so the
-    model reads its own logic before producing the final JSON.
-    This eliminates the ~15-20% rate of verdicts that contradict probe evidence.
-    """
+def _llm_prompt(job: dict, probe_warnings: list) -> str:
+    ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
-Your task is to REASON STEP BY STEP through the evidence below. Do NOT produce a verdict yet.
-Think out loud. Be specific. Reference the actual probe findings and rule signals in your reasoning.
+Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
 JOB POSTING:
 Title: {job.get('title','N/A')}
@@ -3711,99 +3248,8 @@ Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
 
-EVIDENCE (treat as verified ground truth):
-{probe_context}
-
-Reason through EACH of these dimensions in order:
-1. TEXT PATTERNS: What scam phrases, fee demands, urgency language, or MLM signals appear in the posting text?
-2. SALARY REALISM: Is the salary realistic for this role, location, and experience level in India?
-3. COMPANY LEGITIMACY: What does the probe evidence say about whether this company is real? Reference specific VERIFIED/WARNING lines.
-4. INFRASTRUCTURE: What do the domain age, MX records, SPF/DMARC, and SSL findings tell you? Are they consistent with a real company?
-5. RULE ENGINE: Which confirmed rule signals fired and what do they mean in context?
-6. CONTRADICTION CHECK: Does anything in the probe evidence contradict the text claims? (e.g. claims to be Infosys but domain is 5 days old)
-7. OVERALL ASSESSMENT: Weighing all evidence together, what is your assessment and why?
-
-Write your reasoning now:"""
-
-
-def _llm_prompt_verdict(job: dict, probe_context: str, reasoning: str) -> str:
-    """
-    BUILD 9 — PASS 2: Verdict prompt.
-    Feeds the Pass 1 chain-of-thought reasoning back as context, then asks
-    for the final structured JSON. The model reads its own reasoning before
-    committing — self-contradictions are caught before the JSON is produced.
-    """
-    return f"""You are a senior HR fraud investigator. You have already reasoned through the evidence.
-Now produce the final JSON verdict based on your reasoning below.
-
-YOUR REASONING:
-{reasoning}
-
-ORIGINAL EVIDENCE SUMMARY:
-{probe_context}
-
-IMPORTANT INSTRUCTIONS:
-- Your verdict MUST be consistent with your reasoning above. Do not contradict it.
-- If probe findings show VERIFIED signals (established domain, valid MX, SPF+DMARC, live website),
-  treat the company infrastructure as real even if not globally known.
-- Only flag company_legitimacy as LIKELY_FAKE or GHOST_COMPANY when infrastructure probes
-  show actual failures — not merely because the company is unknown.
-- If a CRITICAL RULE FIRED (weight ≥ 18), it MUST appear in top_red_flags.
-- Weight ai_risk_score against ALL evidence: text + probes + rules combined.
-
-JOB: {job.get('title','N/A')} at {job.get('company','N/A')}
-
-Return ONLY a valid JSON object — no markdown, no prose, no fences:
-{{
-  "ai_risk_score": <0-100, consistent with your reasoning>,
-  "verdict": "<SAFE|SUSPICIOUS|LIKELY_SCAM|DEFINITE_SCAM>",
-  "company_legitimacy": "<VERIFIED|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
-  "top_red_flags": ["<str>","<str>","<str>"],
-  "positive_signals": ["<str>"],
-  "fake_company_evidence": "<referencing specific probe findings from your reasoning>",
-  "linguistic_analysis": "<tone, urgency, grammar, fee language observations>",
-  "salary_assessment": "<realistic or not for this role and location>",
-  "recommended_action": "<specific advice for the job seeker>",
-  "similar_scam_type": "<known pattern name or Unknown>",
-  "confidence": <0-100>
-}}"""
-
-
-def _llm_prompt(job: dict, probe_context: str) -> str:
-    """
-    Legacy single-pass prompt — used as fallback if two-pass fails.
-    v9: primary path is now two-pass (_llm_prompt_reasoning → _llm_prompt_verdict).
-    """
-    return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
-Analyse the job posting below using the LIVE PROBE FINDINGS as ground truth — these are
-verified network checks that override your general assumptions about the company.
-
-IMPORTANT INSTRUCTIONS:
-- If probe findings show VERIFIED signals (established domain, valid MX, SPF+DMARC, live website),
-  treat the company infrastructure as real even if the company is not globally known.
-- Small regional companies are NOT indexed in Clearbit/Wikipedia/LinkedIn — absence from these
-  databases alone does NOT indicate a scam if infrastructure checks pass.
-- Only flag company_legitimacy as LIKELY_FAKE or GHOST_COMPANY when infrastructure probes
-  show actual failures (no DNS, no MX, fake domain), not merely because it is unknown.
-- Weight your ai_risk_score against the probe evidence: strong infrastructure = lower score,
-  failed infrastructure = higher score, regardless of company name recognition.
-- RULE ENGINE FINDINGS are pre-confirmed pattern matches — treat them as ground truth.
-  If a CRITICAL RULE FIRED (weight ≥ 18), it must appear in your top_red_flags.
-  Do not contradict confirmed rule findings without explicit counter-evidence in the probe data.
-
-JOB POSTING:
-Title: {job.get('title','N/A')}
-Company: {job.get('company','N/A')}
-Website: {job.get('website','N/A')}
-Location: {job.get('location','N/A')}
-Salary: {job.get('salary','N/A')}
-Description: {job.get('description','N/A')}
-Requirements: {job.get('requirements','N/A')}
-Benefits: {job.get('benefits','N/A')}
-Contact: {job.get('contact','N/A')}
-
-LIVE PROBE FINDINGS (treat these as verified facts):
-{probe_context}
+LIVE PROBE FINDINGS:
+{ctx}
 
 Required JSON schema (all keys mandatory):
 {{
@@ -3812,7 +3258,7 @@ Required JSON schema (all keys mandatory):
   "company_legitimacy": "<VERIFIED|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
   "top_red_flags": ["<str>","<str>","<str>"],
   "positive_signals": ["<str>"],
-  "fake_company_evidence": "<detailed reasoning about company authenticity, referencing probe findings>",
+  "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
   "salary_assessment": "<realistic or not for this role and location>",
   "recommended_action": "<specific advice for the job seeker>",
@@ -3918,66 +3364,6 @@ def _score_meaning(score: int, verdict: str) -> tuple[str, str]:
         return "Do NOT apply", "Critical scam patterns confirmed. Block the sender and report this listing."
 
 
-def _render_layer_consensus_html(result: dict) -> str:
-    """
-    BUILD 9 — Renders a 'How we decided' strip showing each layer's
-    independent verdict and the consensus outcome.
-    l1/l2/l3 verdicts are computed in the v8 consensus engine and stored
-    in the result dict — this simply surfaces them to the user.
-    """
-    _colors = {
-        "SAFE":          ("#22c55e", "rgba(34,197,94,0.12)"),
-        "SUSPICIOUS":    ("#f59e0b", "rgba(245,158,11,0.12)"),
-        "LIKELY_SCAM":   ("#ef4444", "rgba(239,68,68,0.12)"),
-        "DEFINITE_SCAM": ("#dc2626", "rgba(220,38,38,0.16)"),
-        "UNKNOWN":       ("#6b7280", "rgba(107,114,128,0.08)"),
-    }
-    _short = {
-        "SAFE": "SAFE", "SUSPICIOUS": "CAUTION",
-        "LIKELY_SCAM": "LIKELY SCAM", "DEFINITE_SCAM": "DEFINITE SCAM",
-    }
-
-    def _badge(label, verdict):
-        col, bg = _colors.get(verdict, _colors["UNKNOWN"])
-        short   = _short.get(verdict, verdict)
-        return (
-            f'<div style="flex:1;text-align:center;padding:8px 6px;'
-            f'border-radius:8px;background:{bg};border:1px solid {col}33;">'
-            f'<div style="font-size:0.58rem;color:#6b7280;text-transform:uppercase;'
-            f'letter-spacing:.6px;margin-bottom:3px;">{label}</div>'
-            f'<div style="font-size:0.68rem;font-weight:700;color:{col};">{short}</div>'
-            f'</div>'
-        )
-
-    l1 = result.get("l1_verdict", "UNKNOWN")
-    l2 = result.get("l2_verdict", "UNKNOWN")
-    l3 = result.get("l3_verdict", "UNKNOWN")
-    fn = result.get("final_verdict", "UNKNOWN")
-    fc, _ = _colors.get(fn, _colors["UNKNOWN"])
-
-    # Arrow between layers
-    arrow = (
-        '<div style="display:flex;align-items:center;padding:0 3px;">'
-        '<div style="color:#4b5563;font-size:0.8rem;">›</div></div>'
-    )
-
-    return (
-        '<div style="margin:10px 0 8px;">'
-        '<div style="font-size:0.6rem;color:#4b5563;text-transform:uppercase;'
-        'letter-spacing:.6px;margin-bottom:5px;">How we decided — each layer voted independently</div>'
-        '<div style="display:flex;align-items:center;gap:4px;">'
-        + _badge("📋 Rules", l1)
-        + arrow
-        + _badge("🌐 Probes", l2)
-        + arrow
-        + _badge("🤖 AI", l3)
-        + '<div style="display:flex;align-items:center;padding:0 6px;">'
-        f'<div style="color:{fc};font-size:1rem;font-weight:700;">→</div></div>'
-        + _badge("⚖ Consensus", fn)
-        + '</div></div>'
-    )
-
-
 def _render_verdict_banner(result: dict):
     v   = result["final_verdict"]
     cfg = _V.get(v, _V["UNKNOWN"])
@@ -4027,9 +3413,6 @@ def _render_verdict_banner(result: dict):
 
         # ── Gradient zone bar ──
         + zone_bar +
-
-        # ── BUILD 9: Per-layer verdict strip — shows how each layer voted ──
-        + _render_layer_consensus_html(result) +
 
         # ── What this score means inline explanation ──
         f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px;">'
@@ -4235,20 +3618,6 @@ def _render_probe_table(probes: dict):
         spf_badge = _badge("MISSING", "#dc2626", "rgba(220,38,38,0.12)")
     rows.append(_row(I.SHIELD, "SPF / DMARC", spf_badge, spf.get("detail", "")))
 
-    # ── URL unrolling row (BUILD 9) ───────────────────────────────────────────
-    unroll = probes.get("url_unroll", {})
-    unroll_cls = unroll.get("classification", "SKIPPED")
-    unroll_badge = {
-        "PAYMENT_PAGE":    _badge("PAYMENT PAGE ⚠", "#dc2626", "rgba(220,38,38,0.12)"),
-        "FORM_COLLECTOR":  _badge("FORM HARVEST ⚠",  "#dc2626", "rgba(220,38,38,0.12)"),
-        "MESSENGER_GROUP": _badge("MESSENGER LINK",   "#f59e0b", "rgba(245,158,11,0.12)"),
-        "JOB_BOARD":       _badge("LEGIT SITE ✓",     "#22c55e", "rgba(34,197,94,0.12)"),
-        "UNKNOWN":         _badge("UNVERIFIED",        "#f59e0b", "rgba(245,158,11,0.12)"),
-        "ERROR":           _badge("UNROLL FAILED",     "#6b7280", "rgba(107,114,128,0.12)"),
-        "SKIPPED":         _badge("NO SHORT URLS",     "#6b7280", "rgba(107,114,128,0.12)"),
-    }.get(unroll_cls, _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)"))
-    rows.append(_row(I.LINK, "URL Destination", unroll_badge, unroll.get("detail", "")))
-
     st.markdown(
         f'<div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;'
         f'overflow:hidden;margin-bottom:20px;">'
@@ -4396,21 +3765,6 @@ def _render_ai_dive(llm: dict):
         unsafe_allow_html=True,
     )
 
-    # BUILD 9 — Show chain-of-thought reasoning if two-pass was used
-    reasoning = llm.get("_reasoning", "")
-    if reasoning:
-        with st.expander("🧠 View AI step-by-step reasoning", expanded=False):
-            st.markdown(
-                f'<div style="background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.12);'
-                f'border-radius:9px;padding:14px;">'
-                f'<div style="font-size:0.66rem;color:#a78bfa;text-transform:uppercase;'
-                f'letter-spacing:.8px;margin-bottom:10px;font-weight:600;">'
-                f'AI Chain-of-Thought — Pass 1 reasoning before verdict</div>'
-                f'<div style="color:#9ca3af;font-size:0.8rem;line-height:1.7;'
-                f'white-space:pre-wrap;">{reasoning}</div></div>',
-                unsafe_allow_html=True,
-            )
-
 
 _CHECKLIST = [
     (I.SEARCH,      "Search company name + 'scam' or 'fraud' on Google",               True),
@@ -4426,144 +3780,25 @@ _CHECKLIST = [
 ]
 
 def _render_checklist(result: dict):
-    """
-    BUILD 9 — Dynamic personalised checklist.
-    Items are generated from fired rule signals and probe findings for THIS
-    specific posting — not a generic boilerplate list shown for every job.
-    Each item tells the user exactly what to verify and why it matters here.
-    """
-    fired   = set(result.get("signals", {}).keys())
-    probes  = result.get("probes", {})
-    verdict = result.get("final_verdict", "SAFE")
-    score   = result.get("blended_score", 0)
-
-    # Build personalised action items
-    items = []   # (icon, text, priority)
-
-    # ── Signal-driven items ───────────────────────────────────────────────────
-    if "upfront_payment" in fired:
-        items.append(("🚨", "Ask the recruiter IN WRITING why payment is required before joining. "
-                      "Legitimate companies NEVER charge candidates — not for registration, "
-                      "training kits, ID cards, or deposits.", "critical"))
-
-    if "fake_govt_job" in fired:
-        items.append(("🏛️", "Verify this vacancy on the OFFICIAL government portal "
-                      "(railway.gov.in, ssc.nic.in, ibps.in etc.). Government jobs are NEVER "
-                      "advertised through WhatsApp or asked to pay fees.", "critical"))
-
-    if "mlm_pyramid" in fired:
-        items.append(("📊", "Ask for a clear salary slip structure. If income depends on "
-                      "recruiting others or buying products, this is a pyramid scheme — illegal "
-                      "in India under the Prize Chits Act.", "critical"))
-
-    if "whatsapp_only_contact" in fired:
-        items.append(("📱", "Request an official company email address. If the recruiter "
-                      "refuses to communicate on a corporate email and insists on WhatsApp only, "
-                      "treat this as a confirmed red flag.", "high"))
-
-    if "email_domain_mismatch" in fired or "free_email_contact" in fired:
-        items.append(("📧", "Do not trust emails from Gmail / Yahoo / Hotmail claiming to be "
-                      "from a company. Search the company's official website and call their "
-                      "official HR number directly.", "high"))
-
-    if "telegram_whatsapp_link" in fired:
-        items.append(("🔗", "Do NOT click wa.me or t.me links from unknown recruiters. "
-                      "These redirect to unmonitored chats where scammers harvest your personal "
-                      "data without any platform oversight.", "high"))
-
-    if "personal_info_demand" in fired:
-        items.append(("🆔", "Never send Aadhaar, PAN, bank account, or passport details "
-                      "before a formal offer letter on company letterhead. Ask why this "
-                      "information is needed at this stage.", "high"))
-
-    if "too_good_salary" in fired:
-        items.append(("💰", "Cross-check this salary on Glassdoor, AmbitionBox, or Naukri "
-                      "for the same role and city. If it's 2× the market rate, ask why — "
-                      "inflated salary is the #1 hook used in job scams.", "high"))
-
-    if "india_scam_pattern" in fired:
-        items.append(("⚠️", "This posting matches known Indian job scam patterns "
-                      "(data entry, typing jobs, captcha work, home-based assembly). "
-                      "These rarely pay and often require upfront tool purchases.", "high"))
-
-    # ── Probe-driven items ────────────────────────────────────────────────────
-    age_status = probes.get("domain_age", {}).get("age_days", 9999)
-    if age_status < 180:
-        items.append(("📅", f"This company's domain is less than 6 months old "
-                      f"({age_status} days). Search the company name on MCA.gov.in "
-                      "to verify it's registered — new domains are a top scam signal.", "high"))
-
-    mx_status = probes.get("mx_record", {}).get("status", "")
-    if mx_status in ("NO_MX", "DNS_FAIL"):
-        items.append(("📮", "The company's email domain has no mail servers — it cannot "
-                      "actually send or receive email. Any 'offer letter' from this domain "
-                      "is forged.", "critical"))
-
-    if probes.get("site_reach", {}).get("is_parked"):
-        items.append(("🅿️", "The company website is a PARKED page with no real content. "
-                      "A real company has a working website — ask for their physical office "
-                      "address and verify it on Google Maps.", "high"))
-
-    if probes.get("typosquat", {}).get("is_squatter"):
-        closest = probes["typosquat"].get("closest_brand", "a known company")
-        items.append(("🎭", f"This domain closely mimics {closest}. Visit the REAL company's "
-                      "official website directly — never click links from the job posting.", "critical"))
-
-    reach = probes.get("site_reach", {})
-    cert_cn = reach.get("cert_cn", "")
-    company = result.get("job", {}).get("company", "")
-    if cert_cn and company and cert_cn.lower() not in company.lower():
-        items.append(("🔐", f"The SSL certificate on this website is issued for '{cert_cn}', "
-                      f"not '{company}'. This may be an impersonation site. "
-                      "Verify the company's real domain independently.", "high"))
-
-    # ── Always-present items ──────────────────────────────────────────────────
-    items.append(("🏢", "Verify the company on MCA.gov.in (for Indian companies) or LinkedIn. "
-                  "A real company has a registered CIN number and physical address.", "normal"))
-    items.append(("📞", "Call the company's OFFICIAL phone number (found on their website, "
-                  "not from the job posting) and confirm the vacancy exists.", "normal"))
-    items.append(("📄", "Never sign any document or pay any amount before receiving a formal "
-                  "offer letter on company letterhead with HR name, designation, and company seal.", "normal"))
-
-    # ── Render ────────────────────────────────────────────────────────────────
-    priority_colors = {
-        "critical": ("#dc2626", "rgba(220,38,38,0.08)", "rgba(220,38,38,0.25)"),
-        "high":     ("#f59e0b", "rgba(245,158,11,0.06)", "rgba(245,158,11,0.20)"),
-        "normal":   ("#38bdf8", "rgba(56,189,248,0.04)", "rgba(56,189,248,0.14)"),
-    }
-
     st.markdown(
         f'<div style="font-size:0.71rem;font-weight:600;color:#8b949e;text-transform:uppercase;'
         f'letter-spacing:1px;margin-bottom:10px;display:flex;align-items:center;gap:6px;">'
-        f'{_svg(I.LIST,11,"#6b7280")} Personalised Verification Checklist '
-        f'<span style="font-size:0.6rem;font-weight:400;color:#4b5563;">'
-        f'— {len(items)} items based on this posting</span></div>',
+        f'{_svg(I.LIST,11,"#6b7280")} Manual Verification Checklist</div>',
         unsafe_allow_html=True,
     )
-
-    for i, (icon, text, priority) in enumerate(items):
-        col, bg, border = priority_colors.get(priority, priority_colors["normal"])
-        st.markdown(
-            f'<div style="margin-bottom:6px;padding:9px 12px;border-radius:8px;'
-            f'background:{bg};border:1px solid {border};display:flex;gap:8px;">'
-            f'<span style="flex-shrink:0;font-size:0.85rem;">{icon}</span>'
-            f'<span style="font-size:0.79rem;color:#c9d1d9;line-height:1.5;">{text}</span>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    # Summary note
-    critical_count = sum(1 for _, _, p in items if p == "critical")
-    if critical_count > 0:
-        st.markdown(
-            f'<div style="margin-top:10px;padding:10px 14px;background:rgba(220,38,38,0.06);'
-            f'border:1px solid rgba(220,38,38,0.2);border-radius:8px;'
-            f'color:#fca5a5;font-size:0.78rem;line-height:1.5;">'
-            f'⚠️ <b>{critical_count} critical item{"s" if critical_count>1 else ""}</b> '
-            f'flagged above. Do not proceed until these are resolved. '
-            f'No legitimate employer will pressure you to bypass these checks.</div>',
-            unsafe_allow_html=True,
-        )
+    for idx, (icon_path, text, default) in enumerate(_CHECKLIST):
+        # FIX v5: removed id(result) suffix — it changed every run, creating
+        # hundreds of orphaned session_state keys and breaking checkbox state.
+        st.checkbox(text, value=default, key=f"jsd_c_{idx}")
+    st.markdown(
+        f'<div style="margin-top:13px;padding:11px 15px;background:rgba(56,189,248,0.05);'
+        f'border:1px solid rgba(56,189,248,0.14);border-radius:8px;color:#7dd3fc;'
+        f'font-size:0.8rem;line-height:1.6;display:flex;gap:7px;align-items:flex-start;">'
+        f'{_svg(I.INFO,12,"#38bdf8")}'
+        f'<span>If 3 or more items fail this checklist AND the AI score exceeds 40, '
+        f'walk away. No legitimate employer requires upfront payment.</span></div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _add_to_history(result: dict):
@@ -5111,18 +4346,9 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     prog.progress(30, text="Launching 5 live network probes (parallel)…")
                     probes = run_live_probes(job)
-                    # BUILD 9 — inject company name so _probe_risk can check cert CN
-                    probes["_company_name_hint"] = job.get("company", "")
                     penalty, warnings = _probe_risk(probes)
 
                     prog.progress(60, text="Sending to AI for deep analysis…")
-
-                    # ── Build full probe context (positive + negative + rule signals) ──
-                    # FIX v6: replaces bare `warnings` list (negatives only) with
-                    # _build_probe_context() which surfaces both VERIFIED and WARNING
-                    # signals so the LLM reasons with the complete infrastructure picture.
-                    # v7: also passes rules_result so LLM sees confirmed rule matches.
-                    probe_context = _build_probe_context(probes, warnings, rules_result)
 
                     # ── LLM call with retry + structured output enforcement ────────
                     # Retry logic: attempt 1 = normal, attempt 2 = stricter prompt
@@ -5140,107 +4366,42 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     llm_parse_ok  = False
                     ai_failed     = False
 
-                    # ── v7 IMPROVEMENT 4: LLM response cache ──────────────────────
-                    # Hash the full prompt (job fields + probe context + rule signals).
-                    # Same posting pasted twice in the same session hits cache instantly
-                    # — zero API cost, zero latency. Cache lives in session_state so it
-                    # resets on page refresh (acceptable; probes would re-run anyway).
-                    import hashlib as _hl
-                    _cache_input = json.dumps(job, sort_keys=True) + probe_context
-                    _cache_key   = "llm_cache_" + _hl.sha256(_cache_input.encode()).hexdigest()[:16]
-
-                    if _cache_key in st.session_state:
-                        llm_data     = st.session_state[_cache_key]
-                        llm_parse_ok = True
-                    else:
-                        # ── BUILD 9: Two-pass LLM ─────────────────────────────
-                        # Pass 1: chain-of-thought reasoning (no JSON, no verdict)
-                        # Pass 2: verdict JSON using Pass 1 reasoning as context
-                        # Fallback: single-pass if Pass 1 fails or times out
-                        reasoning_text = ""
+                    for attempt in range(2):
                         try:
-                            prog.progress(63, text="AI reasoning through evidence…")
-                            reasoning_text = call_llm_fn(
-                                _llm_prompt_reasoning(job, probe_context),
+                            prompt = _llm_prompt(job, warnings)
+                            if attempt == 1:
+                                # Stricter retry prompt — force JSON only
+                                prompt += (
+                                    "\n\nCRITICAL: Your previous response could not be "
+                                    "parsed as JSON. Return ONLY a raw JSON object — "
+                                    "no markdown, no explanation, no preamble. "
+                                    f"Schema required: {json.dumps(_LLM_SCHEMA)}"
+                                )
+                            llm_raw = call_llm_fn(
+                                prompt,
                                 st.session_state,
                                 model="llama-3.3-70b-versatile",
                                 temperature=0,
-                            ) or ""
-                        except Exception:
-                            reasoning_text = ""   # fall through to single-pass
-
-                        for attempt in range(2):
-                            try:
-                                prog.progress(75, text="AI producing verdict…")
-                                if reasoning_text:
-                                    # Pass 2 — grounded verdict using reasoning
-                                    prompt = _llm_prompt_verdict(
-                                        job, probe_context, reasoning_text
-                                    )
-                                else:
-                                    # Fallback — single-pass with full instructions
-                                    prompt = _llm_prompt(job, probe_context)
-
-                                if attempt == 1:
-                                    prompt += (
-                                        "\n\nCRITICAL: Return ONLY a raw JSON object — "
-                                        "no markdown, no explanation, no preamble. "
-                                        f"Schema required: {json.dumps(_LLM_SCHEMA)}"
-                                    )
-                                llm_raw = call_llm_fn(
-                                    prompt,
-                                    st.session_state,
-                                    model="llama-3.3-70b-versatile",
-                                    temperature=0,
-                                )
-                                clean = re.sub(r"```(?:json)?|```", "", llm_raw or "").strip()
-                                m     = re.search(r"\{.*\}", clean, re.DOTALL)
-                                if m:
-                                    candidate = json.loads(m.group())
-                                    required  = {"ai_risk_score", "verdict"}
-                                    if required.issubset(candidate.keys()):
-                                        llm_data     = candidate
-                                        llm_parse_ok = True
-                                        # Store reasoning alongside result for UI display
-                                        llm_data["_reasoning"] = reasoning_text
-                                        st.session_state[_cache_key] = llm_data
-                                        break
-                            except Exception as _llm_err:
-                                if attempt == 1:
-                                    ai_failed = True
+                            )
+                            # Parse: strip markdown fences, extract first JSON object
+                            clean = re.sub(r"```(?:json)?|```", "", llm_raw or "").strip()
+                            m     = re.search(r"\{.*\}", clean, re.DOTALL)
+                            if m:
+                                candidate = json.loads(m.group())
+                                # Schema validation — must have these keys
+                                required = {"ai_risk_score", "verdict"}
+                                if required.issubset(candidate.keys()):
+                                    llm_data      = candidate
+                                    llm_parse_ok  = True
+                                    break
+                        except Exception as _llm_err:
+                            if attempt == 1:
+                                ai_failed = True   # both attempts failed
 
                     # If both attempts failed, AI score falls back to rule score
                     # but we flag it so the UI can show a warning
                     if not llm_parse_ok:
                         ai_failed = True
-
-                    # ── FIX v6: Post-LLM company_legitimacy correction ────────────
-                    # The LLM may return LIKELY_FAKE or GHOST_COMPANY even when
-                    # infrastructure probes show the company is real (established
-                    # domain, live HTTPS, valid MX, SPF+DMARC). Cap the field
-                    # at UNVERIFIABLE when hard infrastructure evidence is positive.
-                    cd_post   = probes.get("company_domain", {})
-                    spf_post  = probes.get("spf_dmarc", {})
-                    age_post  = probes.get("domain_age", {})
-                    infra_strong = (
-                        cd_post.get("domain_exists") is True
-                        and cd_post.get("website_live") is True
-                        and cd_post.get("has_mx") is True
-                        and age_post.get("status") in ("established", "moderate")
-                    )
-                    if infra_strong:
-                        llm_legitimacy = llm_data.get("company_legitimacy", "UNVERIFIABLE")
-                        if llm_legitimacy in ("LIKELY_FAKE", "GHOST_COMPANY"):
-                            llm_data["company_legitimacy"] = "UNVERIFIABLE"
-                            # Also note this correction in positive_signals
-                            pos = llm_data.get("positive_signals", [])
-                            pos.append(
-                                "Infrastructure probes confirm real domain: "
-                                f"established domain ({age_post.get('age_days')} days), "
-                                "live HTTPS, valid MX — company legitimacy upgraded "
-                                "from AI assumption to UNVERIFIABLE (real but small/regional)."
-                            )
-                            llm_data["positive_signals"] = pos
 
                     prog.progress(90, text="Blending scores…")
                     ai_s   = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
@@ -5258,12 +4419,11 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     # Count how many probes actually returned meaningful data
                     probes_ran = sum(
                         1 for k, v in probes.items()
-                        if isinstance(v, dict)
-                        and v.get("detail") and "No domain" not in v.get("detail","")
+                        if v.get("detail") and "No domain" not in v.get("detail","")
                         and "skipped" not in str(v.get("status",""))
                         and "Probe error" not in v.get("detail","")
                     )
-                    probes_total = sum(1 for v in probes.values() if isinstance(v, dict))
+                    probes_total = len(probes)
                     probe_coverage = probes_ran / max(probes_total, 1)
 
                     # AI confidence from LLM response (0-100, default 70 if not provided)
@@ -5285,225 +4445,65 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     blended = int(w_ai * ai_s + w_rule * rule_s + w_probe * penalty)
 
-                    # ── v7 IMPROVEMENT 3: Signal co-occurrence amplifier ───────────
-                    # Certain signal combinations are near-certain scams even if each
-                    # individual signal scores moderately. Apply a multiplier to the
-                    # rule_score component when dangerous combos co-fire, then reblend.
-                    fired = set(rules_result["signals"].keys())
-                    co_multiplier = 1.0
+                    # Hard floor only from HIGH-weight signals (>=18 pts each).
+                    critical_signals = [k for k, s in rules_result["signals"].items()
+                                        if _WEIGHTS.get(k, 0) >= 18]
+                    critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
+                    blended = max(blended, critical_weight)
 
-                    # Combo A: fee demand + free/suspicious email + young domain
-                    if ("upfront_payment" in fired and
-                        "free_email_contact" in fired and
-                        probes.get("domain_age", {}).get("status") in ("young", "very_young")):
-                        co_multiplier = max(co_multiplier, 1.35)
+                    # Probe penalty floor: only if penalty is itself significant (>= 20)
+                    if penalty >= 20:
+                        blended = max(blended, penalty)
 
-                    # Combo B: WhatsApp only + no company info + personal data demand
-                    if ("whatsapp_only_contact" in fired and
-                        "no_company_info" in fired and
-                        "personal_info_demand" in fired):
-                        co_multiplier = max(co_multiplier, 1.30)
+                    # ── HARD PROBE OVERRIDE (Improvement 4) ───────────────────────
+                    # If multiple critical network probes fire together, force the
+                    # verdict to DEFINITE_SCAM regardless of the LLM score.
+                    # These combos are near-impossible for legitimate companies.
+                    mx_status   = probes.get("mx_record", {}).get("status", "")
+                    domain_fail = not probes.get("company_domain", {}).get("domain_exists", True)
+                    young_days  = probes.get("domain_age", {}).get("age_days") or 999
+                    is_squatter = probes.get("typosquat", {}).get("is_squatter", False)
+                    is_parked   = probes.get("site_reach", {}).get("is_parked", False)
 
-                    # Combo C: fake govt job + upfront payment (near-certain scam)
-                    if "fake_govt_job" in fired and "upfront_payment" in fired:
-                        co_multiplier = max(co_multiplier, 1.40)
-
-                    # Combo D: MLM + unrealistic benefits + urgency
-                    if ("mlm_pyramid" in fired and
-                        "unrealistic_benefits" in fired and
-                        "urgency_pressure" in fired):
-                        co_multiplier = max(co_multiplier, 1.25)
-
-                    # Combo E: email mismatch + free email + no company info
-                    if ("email_domain_mismatch" in fired and
-                        "free_email_contact" in fired and
-                        "no_company_info" in fired):
-                        co_multiplier = max(co_multiplier, 1.30)
-
-                    # Combo F: messenger link + personal info demand + urgency
-                    if ("telegram_whatsapp_link" in fired and
-                        "personal_info_demand" in fired and
-                        "urgency_pressure" in fired):
-                        co_multiplier = max(co_multiplier, 1.25)
-
-                    # Combo G: url resolves to payment page + any rule signal
-                    unroll_post = probes.get("url_unroll", {})
-                    if (unroll_post.get("classification") == "PAYMENT_PAGE" and
-                        len(fired) >= 1):
-                        co_multiplier = max(co_multiplier, 1.40)
-
-                    # Combo H: url resolves to form collector + personal info demand
-                    if (unroll_post.get("classification") == "FORM_COLLECTOR" and
-                        "personal_info_demand" in fired):
-                        co_multiplier = max(co_multiplier, 1.30)
-
-                    if co_multiplier > 1.0:
-                        # Re-blend with amplified rule score (cap rule at 100)
-                        amplified_rule = min(rule_s * co_multiplier, 100)
-                        blended = int(w_ai * ai_s + w_rule * amplified_rule + w_probe * penalty)
-
-                    # ═══════════════════════════════════════════════════════════
-                    # v8 MULTI-LAYER CONSENSUS VERDICT ENGINE
-                    # ═══════════════════════════════════════════════════════════
-                    #
-                    # Core principle: NO single layer can declare SAFE when other
-                    # layers disagree. A real website does NOT cancel scam text.
-                    # Fee demands do NOT cancel because domain is old.
-                    # All layers vote independently; the final verdict is their
-                    # CONSENSUS — the most severe verdict that ≥2 layers agree on,
-                    # or the highest individual verdict when all disagree.
-                    #
-                    # Layers:
-                    #   L1 — Rule engine (text patterns)
-                    #   L2 — Network probes (infrastructure)
-                    #   L3 — AI deep-dive (LLM reasoning)
-                    #
-                    # Each layer produces its own independent verdict (SAFE /
-                    # SUSPICIOUS / LIKELY_SCAM / DEFINITE_SCAM) before any
-                    # blending. The blended score is then FLOORED to the consensus.
-                    # ═══════════════════════════════════════════════════════════
-
-                    _SEV = {"SAFE": 0, "SUSPICIOUS": 1, "LIKELY_SCAM": 2, "DEFINITE_SCAM": 3}
-                    _LAB = {0: "SAFE", 1: "SUSPICIOUS", 2: "LIKELY_SCAM", 3: "DEFINITE_SCAM"}
-
-                    def _score_to_verdict(s: int) -> str:
-                        return ("DEFINITE_SCAM" if s >= 75 else
-                                "LIKELY_SCAM"   if s >= 50 else
-                                "SUSPICIOUS"    if s >= 25 else "SAFE")
-
-                    # ── Layer 1 verdict: rule engine ──────────────────────────
-                    # Raw rule score → verdict, PLUS:
-                    # Any single critical signal (weight ≥ 18) alone = SUSPICIOUS min
-                    # Two or more critical signals = LIKELY_SCAM min
-                    critical_signals = {k for k in fired if _WEIGHTS.get(k, 0) >= 18}
-                    high_signals     = {k for k in fired if 10 <= _WEIGHTS.get(k, 0) < 18}
-
-                    l1_score = rule_s
-                    if len(critical_signals) >= 2:
-                        l1_score = max(l1_score, 55)   # 2 critical = LIKELY_SCAM floor
-                    elif len(critical_signals) == 1:
-                        l1_score = max(l1_score, 28)   # 1 critical = SUSPICIOUS floor
-                    if len(high_signals) >= 3:
-                        l1_score = max(l1_score, 28)   # 3 high signals = SUSPICIOUS floor
-
-                    l1_verdict = _score_to_verdict(l1_score)
-
-                    # ── Layer 2 verdict: network probes ───────────────────────
-                    # Probe penalty → verdict, PLUS hard probe failure combos
-                    mx_status    = probes.get("mx_record", {}).get("status", "")
-                    domain_fail  = not probes.get("company_domain", {}).get("domain_exists", True)
-                    young_days   = probes.get("domain_age", {}).get("age_days") or 999
-                    is_squatter  = probes.get("typosquat", {}).get("is_squatter", False)
-                    is_parked    = probes.get("site_reach", {}).get("is_parked", False)
-                    ghost_mx     = probes.get("mx_record", {}).get("ghost_mx", False)
-
-                    probe_fail_count = sum([
+                    critical_probe_count = sum([
                         mx_status in ("NO_MX", "DNS_FAIL"),
-                        ghost_mx,
                         domain_fail,
                         young_days < 90,
                         is_squatter,
                         is_parked,
                     ])
+                    if critical_probe_count >= 3:
+                        # 3+ critical network failures = confirmed infrastructure scam
+                        blended = max(blended, 80)
+                    elif critical_probe_count == 2 and mx_status in ("NO_MX", "DNS_FAIL"):
+                        # NO_MX/DNS_FAIL + any other critical = force LIKELY_SCAM floor
+                        blended = max(blended, 55)
 
-                    l2_score = penalty   # probe penalty already 0-55
-                    if probe_fail_count >= 3:
-                        l2_score = max(l2_score, 80)
-                    elif probe_fail_count == 2:
-                        l2_score = max(l2_score, 52)
-                    elif probe_fail_count == 1:
-                        l2_score = max(l2_score, 28)
-
-                    # Positive trust: clean infra in BORDERLINE zone ONLY
-                    # CRITICAL RULE: positive infra NEVER reduces score when
-                    # L1 (rule engine) says SUSPICIOUS or worse. A valid website
-                    # does NOT override scam text patterns.
-                    cd_trust  = probes.get("company_domain", {})
-                    spf_trust = probes.get("spf_dmarc", {})
-                    age_trust = probes.get("domain_age", {})
-                    mca_trust = cd_trust.get("mca", {})
-
-                    trust_reduction = 0
-                    if cd_trust.get("identity_sources", 0) >= 2:
-                        trust_reduction += 8
-                    elif cd_trust.get("identity_sources", 0) == 1:
-                        trust_reduction += 3
-                    if age_trust.get("status") == "established":
-                        trust_reduction += 4
-                    if spf_trust.get("spf") and spf_trust.get("dmarc"):
-                        trust_reduction += 3
-                    if cd_trust.get("domain_exists") and cd_trust.get("website_live"):
-                        trust_reduction += 2
-                    if mca_trust.get("found") is True:
-                        trust_reduction += 6
-
-                    # Trust reduction BLOCKED when:
-                    # (a) L1 rule verdict is SUSPICIOUS or worse
-                    # (b) Any critical rule signal fired (fee, fake govt, MLM, etc.)
-                    # (c) L2 score itself is already in scam range (>= 50)
-                    rules_say_suspicious = _SEV.get(l1_verdict, 0) >= 1
-                    if (not rules_say_suspicious and
-                        not critical_signals and
-                        l2_score < 50 and
-                        trust_reduction > 0):
-                        l2_score = max(l2_score - trust_reduction, 0)
-
-                    l2_verdict = _score_to_verdict(l2_score)
-
-                    # ── Layer 3 verdict: AI ───────────────────────────────────
-                    l3_raw     = llm_data.get("verdict", "SUSPICIOUS")
-                    l3_verdict = l3_raw if l3_raw in _SEV else "SUSPICIOUS"
-                    # AI score also feeds l3 independently
-                    l3_score   = ai_s
-
-                    # ── Consensus engine ──────────────────────────────────────
-                    # Rule: take the verdict that at least 2 of 3 layers agree on.
-                    # If all 3 differ, take the MEDIAN (middle severity).
-                    # SAFETY OVERRIDE: if ANY layer says DEFINITE_SCAM and another
-                    # says LIKELY_SCAM → final = DEFINITE_SCAM.
-                    # SAFETY OVERRIDE: if ANY layer says LIKELY_SCAM and rule engine
-                    # also says SUSPICIOUS or worse → final = LIKELY_SCAM minimum.
-                    verdicts = [l1_verdict, l2_verdict, l3_verdict]
-                    sev_vals = [_SEV[v] for v in verdicts]
-
-                    from collections import Counter
-                    counts = Counter(verdicts)
-                    majority = [v for v, c in counts.items() if c >= 2]
-
-                    if majority:
-                        # Two or more layers agree — use that verdict
-                        consensus_sev = max(_SEV[v] for v in majority)
-                    else:
-                        # All three differ — use the median severity
-                        consensus_sev = sorted(sev_vals)[1]
-
-                    # Safety overrides — prevent any layer from masking obvious scams
-                    max_sev = max(sev_vals)
-                    min_sev = min(sev_vals)
-
-                    # Override 1: if any layer says DEFINITE_SCAM (3) and another ≥ LIKELY_SCAM (2)
-                    if max_sev == 3 and sum(1 for s in sev_vals if s >= 2) >= 2:
-                        consensus_sev = 3
-
-                    # Override 2: if rule engine says LIKELY_SCAM or worse → final ≥ LIKELY_SCAM
-                    if _SEV[l1_verdict] >= 2:
-                        consensus_sev = max(consensus_sev, 2)
-
-                    # Override 3: critical rule signal (weight≥18) fired → final ≥ SUSPICIOUS
-                    if critical_signals:
-                        consensus_sev = max(consensus_sev, 1)
-
-                    # Override 4: co-occurrence combos already amplified rule_s above —
-                    # ensure blended score reflects consensus severity minimum
-                    consensus_floor = {0: 0, 1: 25, 2: 50, 3: 75}[consensus_sev]
-
-                    # ── Final blended score ───────────────────────────────────
-                    # Recompute blend from layer scores (not raw components)
-                    blended = int(w_ai * l3_score + w_rule * l1_score + w_probe * l2_score)
-                    blended = max(blended, consensus_floor)
                     blended = min(blended, 100)
 
-                    final = _LAB[consensus_sev]
+                    # Verdict from blended score
+                    _sev = {"SAFE": 0, "SUSPICIOUS": 1, "LIKELY_SCAM": 2, "DEFINITE_SCAM": 3}
+                    sv   = ("DEFINITE_SCAM" if blended >= 75 else
+                            "LIKELY_SCAM"   if blended >= 50 else
+                            "SUSPICIOUS"    if blended >= 25 else "SAFE")
+
+                    # AI verdict override — only allowed within 5 points of next band.
+                    # FIX: old logic let LLM upgrade verdict at any score, causing
+                    # score=19 to show SUSPICIOUS (yellow) because LLM returned
+                    # "SUSPICIOUS". The blended score already incorporates AI score
+                    # at 60% weight — double-counting LLM verdict creates false warnings.
+                    # Now: LLM can only push verdict up if blended is close to the next
+                    # threshold (within 5 pts). Score 19 → next threshold 25 → 25-5=20,
+                    # 19 < 20 → override blocked → correctly stays SAFE (green).
+                    _thresholds = {1: 25, 2: 50, 3: 75}
+                    av    = llm_data.get("verdict", sv)
+                    av_sev = _sev.get(av, 0)
+                    sv_sev = _sev.get(sv, 0)
+                    if av_sev > sv_sev:
+                        next_threshold = _thresholds.get(av_sev, 100)
+                        final = av if blended >= next_threshold - 5 else sv
+                    else:
+                        final = sv
 
                     res = {
                         "blended_score":  blended,   "rule_score":     rule_s,
@@ -5512,11 +4512,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         "probes":         probes,    "probe_warnings": warnings,
                         "llm":            llm_data,  "job":            job,
                         "timestamp":      _now_ist(),
-                        # v8 per-layer verdicts — for UI display and debugging
-                        "l1_score":       l1_score,   "l1_verdict": l1_verdict,
-                        "l2_score":       l2_score,   "l2_verdict": l2_verdict,
-                        "l3_score":       l3_score,   "l3_verdict": l3_verdict,
-                        "consensus_sev":  consensus_sev,
                     }
                     prog.progress(100, text="Done.")
                     time.sleep(0.3)
