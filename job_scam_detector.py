@@ -1059,7 +1059,10 @@ def _llm_extract_missing(raw: str, partial: dict, call_llm_fn) -> dict:
     """
     missing = [f for f in ("title", "company", "location", "salary")
                if not partial.get(f)]
-    if "title" not in missing and "company" not in missing:
+    # FIX: Previously exited early when title+company were found, skipping salary.
+    # Now fires whenever ANY field is missing — salary especially is poorly
+    # captured by regex in free-form postings.
+    if not missing:
         return partial
 
     prompt = f"""Extract specific fields from this job posting. Return ONLY a valid JSON object.
@@ -1152,35 +1155,46 @@ JSON:"""
 
 def auto_extract(raw: str, call_llm_fn=None) -> dict:
     """
-    BUG FIX v5: requirements and benefits are NO LONGER set to the full raw text.
+    BUG FIX v6: LLM-FIRST extraction order.
 
-    Previously all three (description/requirements/benefits) = raw, which meant
-    _run_rules saw every phrase 3-6x in the joined full-text, massively inflating
-    rule scores and making prescan useless.
+    Previously: regex ran first → LLM only filled fields regex left blank.
+    Problem:    regex is brittle on free-form postings. If regex grabbed a
+                wrong/vague value (e.g. salary = ""), LLM was never consulted
+                even though it would do better.
 
-    Now:
+    Now (v6):
+      1. If call_llm_fn is supplied, ask LLM to extract ALL four key fields
+         first. LLM sees the full raw text and is better at understanding
+         free-form language.
+      2. Regex then fills any fields the LLM left null (fast, zero-cost).
+      3. Non-key fields (website, contact) are always regex-only (LLM not
+         needed for structured patterns like URLs and emails).
+
+    requirements and benefits remain empty (v5 fix still applies):
       - description = raw  (full text for rule engine to read once)
       - requirements = ""  (rules will not double-count)
       - benefits     = ""  (rules will not double-count)
-
-    LLM FALLBACK: if call_llm_fn is supplied and regex left title or company
-    blank, _llm_extract_missing fires one LLaMA 3.3 call to fill the gaps.
-    Uses the same llm_manager cache — identical postings hit cache, not API.
     """
+    # ── Step 1: LLM extraction (primary) ─────────────────────────────────────
+    # Start with an empty partial so LLM gets a clean shot at everything.
+    llm_partial: dict = {
+        "title": "", "company": "", "location": "", "salary": "",
+    }
+    if call_llm_fn is not None:
+        llm_partial = _llm_extract_missing(raw, llm_partial, call_llm_fn)
+
+    # ── Step 2: Regex fills any fields LLM left blank (fallback) ─────────────
     partial = {
-        "title":        _xt(raw),
-        "company":      _xco(raw),
-        "website":      _xu(raw),
-        "location":     _xloc(raw),
-        "salary":       _xs(raw),
-        "contact":      _xc(raw),
+        "title":        llm_partial.get("title")    or _xt(raw),
+        "company":      llm_partial.get("company")  or _xco(raw),
+        "website":      _xu(raw),                         # always regex
+        "location":     llm_partial.get("location") or _xloc(raw),
+        "salary":       llm_partial.get("salary")   or _xs(raw),
+        "contact":      _xc(raw),                         # always regex
         "description":  raw,
         "requirements": "",
         "benefits":     "",
     }
-    # LLM fills only what regex missed — skipped entirely if all key fields found
-    if call_llm_fn is not None:
-        partial = _llm_extract_missing(raw, partial, call_llm_fn)
     return partial
 
 
@@ -2944,6 +2958,270 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# CROSS-SIGNAL EVALUATOR
+# Detects combinations of probe + rule findings that individually might score
+# low but together are near-proof of a scam.  Returns a structured dict so
+# the caller can apply a deterministic score floor AND surface a clear reason
+# to the user — not a silent bump.
+#
+# Return schema:
+#   {
+#     "floor":   int,          # minimum blended score that must be enforced
+#     "verdict": str | None,   # forced verdict override, or None
+#     "reasons": list[str],    # human-readable explanations for the UI
+#     "combo_name": str,       # short label e.g. "GHOST_INFRA" for UI badge
+#   }
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Each rule is a tuple:
+#   (combo_name, floor, forced_verdict, reason_template, condition_fn)
+# condition_fn receives (probe_flags, rule_keys) and returns bool.
+#
+# probe_flags keys (all bool):
+#   mx_dead        — NO_MX or DNS_FAIL
+#   mx_ghost       — MX_FOUND but ghost MX records
+#   domain_young   — age_days < 90
+#   domain_very_young — age_days < 30
+#   site_dead      — reachable is False
+#   site_parked    — is_parked is True
+#   is_squatter    — typosquat fired
+#   free_email     — uses_free_domain
+#   company_fake   — cd_score >= 50 (not in any company DB)
+#   company_weak   — cd_score >= 20
+#   no_spf_dmarc   — both SPF and DMARC absent when MX present
+#
+# rule_keys: set of signal keys that fired in _run_rules
+
+_CROSS_SIGNAL_RULES: list[tuple] = [
+    # ── GHOST INFRASTRUCTURE ─────────────────────────────────────────────────
+    # Dead mail + fake company DB + young domain: all three together mean
+    # this domain was created purely for this scam campaign.
+    (
+        "GHOST_INFRA",
+        82,
+        "DEFINITE_SCAM",
+        "Ghost infrastructure detected: no working mail server, company not in any "
+        "public registry, and domain registered less than 90 days ago. "
+        "This combination is a hallmark of purpose-built scam infrastructure.",
+        lambda pf, rk: pf["mx_dead"] and pf["company_fake"] and pf["domain_young"],
+    ),
+    # ── DEAD DOMAIN + IDENTITY VOID ──────────────────────────────────────────
+    # No MX AND no company anywhere AND rule engine found no company info.
+    # The LLM may be fooled by polished text but these facts are binary.
+    (
+        "IDENTITY_VOID",
+        78,
+        "DEFINITE_SCAM",
+        "Identity void: mail server does not exist, company cannot be found in any "
+        "database, and the posting itself contains no verifiable company identity. "
+        "There is no legitimate entity behind this posting.",
+        lambda pf, rk: pf["mx_dead"] and pf["company_fake"] and "no_company_info" in rk,
+    ),
+    # ── TYPOSQUAT + DEAD MAIL ─────────────────────────────────────────────────
+    # Squatting on a real brand domain + no real mail infrastructure =
+    # impersonation scam.
+    (
+        "BRAND_IMPERSONATION",
+        80,
+        "DEFINITE_SCAM",
+        "Brand impersonation: the domain mimics a well-known company's name but has "
+        "no working mail server. This is the classic impersonation-scam pattern — "
+        "victims believe they are applying to the real company.",
+        lambda pf, rk: pf["is_squatter"] and pf["mx_dead"],
+    ),
+    # ── TYPOSQUAT + YOUNG + PARKED/DEAD SITE ─────────────────────────────────
+    (
+        "BRAND_SQUATTER",
+        75,
+        "DEFINITE_SCAM",
+        "Squatter domain: typosquatting a known brand with a domain under 90 days old "
+        "and a non-functional website. Created purely to deceive job seekers.",
+        lambda pf, rk: pf["is_squatter"] and pf["domain_young"] and (pf["site_dead"] or pf["site_parked"]),
+    ),
+    # ── VERY NEW DOMAIN + UPFRONT PAYMENT ────────────────────────────────────
+    # Brand new domain + asking for money = advance-fee scam.
+    (
+        "ADVANCE_FEE",
+        85,
+        "DEFINITE_SCAM",
+        "Advance-fee scam pattern: domain is less than 30 days old and the posting "
+        "asks for upfront payment. Scam domains are routinely created days before a "
+        "fee-collection campaign launches and discarded after.",
+        lambda pf, rk: pf["domain_very_young"] and "upfront_payment" in rk,
+    ),
+    # ── NO EMAIL INFRA + UPFRONT PAYMENT ─────────────────────────────────────
+    (
+        "FEE_NO_INFRA",
+        80,
+        "DEFINITE_SCAM",
+        "Fee scam with no real infrastructure: the posting demands upfront payment "
+        "but the company has no working mail server. Legitimate employers never "
+        "charge fees, and the absence of mail infrastructure confirms this is not "
+        "a real business.",
+        lambda pf, rk: pf["mx_dead"] and "upfront_payment" in rk,
+    ),
+    # ── MLM + FAKE COMPANY ───────────────────────────────────────────────────
+    (
+        "PYRAMID_GHOST",
+        75,
+        "DEFINITE_SCAM",
+        "MLM/pyramid scheme with no verifiable company: multi-level recruitment "
+        "language detected and the company does not appear in any public registry. "
+        "Ghost pyramid schemes routinely create disposable company identities.",
+        lambda pf, rk: "mlm_pyramid" in rk and pf["company_fake"],
+    ),
+    # ── GHOST MX + NO SPF/DMARC + YOUNG ─────────────────────────────────────
+    # MX records exist but point nowhere, AND no authentication records,
+    # AND domain is new. Full email-spoofing infrastructure pattern.
+    (
+        "EMAIL_SPOOF_INFRA",
+        72,
+        "LIKELY_SCAM",
+        "Email spoofing infrastructure: MX records point to non-existent mail hosts, "
+        "no SPF or DMARC records, and domain is under 90 days old. This setup is "
+        "designed for sending convincing-looking fake offer letters.",
+        lambda pf, rk: pf["mx_ghost"] and pf["no_spf_dmarc"] and pf["domain_young"],
+    ),
+    # ── PARKED SITE + DEAD MAIL + COMPANY NOT FOUND ──────────────────────────
+    (
+        "SHELL_PRESENCE",
+        68,
+        "LIKELY_SCAM",
+        "Shell presence: website is a parked placeholder, mail server is non-functional, "
+        "and the company is absent from public registries. The domain exists solely to "
+        "appear credible in a job posting.",
+        lambda pf, rk: pf["site_parked"] and pf["mx_dead"] and pf["company_weak"],
+    ),
+    # ── FREE EMAIL + NO COMPANY + PERSONAL INFO DEMAND ───────────────────────
+    # Recruiter has no corporate identity but immediately asks for documents.
+    (
+        "DATA_HARVEST",
+        65,
+        "LIKELY_SCAM",
+        "Data harvesting pattern: recruiter uses a personal email address, no "
+        "verifiable company identity, and the posting requests personal documents "
+        "at application stage. Classic pattern for ID/document theft.",
+        lambda pf, rk: (
+            pf["free_email"]
+            and "no_company_info" in rk
+            and "personal_info_demand" in rk
+        ),
+    ),
+    # ── WHATSAPP-ONLY + YOUNG DOMAIN + UPFRONT PAYMENT ───────────────────────
+    (
+        "WHATSAPP_FEE",
+        78,
+        "DEFINITE_SCAM",
+        "WhatsApp advance-fee scam: contact is WhatsApp/Telegram only with no "
+        "verifiable URL, domain is under 90 days old, and upfront payment is "
+        "requested. All three together are diagnostic of an advance-fee scam.",
+        lambda pf, rk: (
+            "whatsapp_only_contact" in rk
+            and pf["domain_young"]
+            and "upfront_payment" in rk
+        ),
+    ),
+    # ── FAKE GOVT + ANY PROBE FAILURE ────────────────────────────────────────
+    (
+        "FAKE_GOVT_PROBE",
+        82,
+        "DEFINITE_SCAM",
+        "Fake government job with failed infrastructure check: the posting impersonates "
+        "a government/PSU/railway recruiter and at least one network probe confirms "
+        "the domain is not a real government entity.",
+        lambda pf, rk: (
+            "fake_govt_job" in rk
+            and (pf["mx_dead"] or pf["domain_young"] or pf["company_fake"])
+        ),
+    ),
+]
+
+
+def _evaluate_probe_cross_signals(
+    probes: dict,
+    rule_signals: dict,
+    penalty: int,
+) -> dict:
+    """
+    Cross-validate probe results against rule-engine signals to detect
+    combinations that individually score low but together confirm a scam.
+
+    Args:
+        probes:       raw probe dict from run_live_probes()
+        rule_signals: signals dict from _run_rules()["signals"]
+        penalty:      probe penalty already computed by _probe_risk()
+
+    Returns a dict with keys: floor, verdict, reasons, combo_name.
+    floor=0 and verdict=None means no override needed.
+    """
+    # ── Build probe flag dict ────────────────────────────────────────────────
+    mx        = probes.get("mx_record", {})
+    mx_status = mx.get("status", "")
+    age       = probes.get("domain_age", {})
+    age_days  = age.get("age_days") or 999
+    reach     = probes.get("site_reach", {})
+    typo      = probes.get("typosquat", {})
+    fe        = probes.get("free_email", {})
+    cd        = probes.get("company_domain", {})
+    spf       = probes.get("spf_dmarc", {})
+
+    pf = {
+        "mx_dead":         mx_status in ("NO_MX", "DNS_FAIL"),
+        "mx_ghost":        mx_status == "MX_FOUND" and mx.get("ghost_mx", False),
+        "domain_young":    age_days < 90,
+        "domain_very_young": age_days < 30,
+        "site_dead":       reach.get("reachable") is False,
+        "site_parked":     reach.get("is_parked", False),
+        "is_squatter":     typo.get("is_squatter", False),
+        "free_email":      fe.get("uses_free_domain", False),
+        "company_fake":    cd.get("score", 0) >= 50,
+        "company_weak":    cd.get("score", 0) >= 20,
+        "no_spf_dmarc":    (
+            mx_status == "MX_FOUND"
+            and not spf.get("spf")
+            and not spf.get("dmarc")
+        ),
+    }
+    rk = set(rule_signals.keys())
+
+    # ── Evaluate all rules, collect every match ───────────────────────────────
+    # We collect ALL matches (not just the first) so the UI can list every
+    # combo that fired. The highest floor and most severe verdict win.
+    _sev = {"SAFE": 0, "SUSPICIOUS": 1, "LIKELY_SCAM": 2, "DEFINITE_SCAM": 3}
+
+    best_floor   = 0
+    best_verdict = None
+    best_sev     = 0
+    reasons      = []
+    combo_names  = []
+
+    for combo_name, floor, forced_verdict, reason, condition in _CROSS_SIGNAL_RULES:
+        try:
+            if not condition(pf, rk):
+                continue
+        except Exception:
+            continue   # never crash on a bad condition lambda
+
+        reasons.append(reason)
+        combo_names.append(combo_name)
+
+        if floor > best_floor:
+            best_floor = floor
+
+        sv = _sev.get(forced_verdict, 0)
+        if sv > best_sev:
+            best_sev     = sv
+            best_verdict = forced_verdict
+
+    return {
+        "floor":      best_floor,
+        "verdict":    best_verdict,
+        "reasons":    reasons,
+        "combo_name": " + ".join(combo_names) if combo_names else "",
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # RULE ENGINE
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -3234,6 +3512,12 @@ def _run_rules(job: dict) -> dict:
 
 def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
+
+    # Build salary line — empty/short salary gets a clear sentinel so the LLM
+    # never invents a salary assessment for a posting that has none.
+    salary_raw = (job.get("salary") or "").strip()
+    salary_line = salary_raw if len(salary_raw) >= 3 else "NOT MENTIONED IN POSTING"
+
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
@@ -3242,7 +3526,7 @@ Title: {job.get('title','N/A')}
 Company: {job.get('company','N/A')}
 Website: {job.get('website','N/A')}
 Location: {job.get('location','N/A')}
-Salary: {job.get('salary','N/A')}
+Salary: {salary_line}
 Description: {job.get('description','N/A')}
 Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
@@ -3250,6 +3534,12 @@ Contact: {job.get('contact','N/A')}
 
 LIVE PROBE FINDINGS:
 {ctx}
+
+CRITICAL SALARY RULE:
+- If Salary above says "NOT MENTIONED IN POSTING", you MUST set salary_assessment to exactly:
+  "Salary not disclosed in this posting. Cannot assess whether it is realistic."
+  Do NOT invent, estimate, or comment on salary figures that do not appear in the posting.
+  Do NOT say salary is suspicious, unrealistic, or anything evaluative when no salary is given.
 
 Required JSON schema (all keys mandatory):
 {{
@@ -3260,7 +3550,7 @@ Required JSON schema (all keys mandatory):
   "positive_signals": ["<str>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<realistic or not for this role and location>",
+  "salary_assessment": "<If salary is NOT MENTIONED IN POSTING write exactly: Salary not disclosed in this posting. Cannot assess whether it is realistic. | Otherwise: is the stated salary realistic for this role and location?>",
   "recommended_action": "<specific advice for the job seeker>",
   "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
@@ -3687,11 +3977,44 @@ def _render_signal_cards(signals: dict):
     col_r.markdown(right_html or "<div></div>", unsafe_allow_html=True)
 
 
-def _render_ai_dive(llm: dict):
+def _render_ai_dive(llm: dict, cross: dict | None = None):
     if not llm:
         st.markdown('<p style="color:#6b7280;font-size:0.82rem;">AI analysis unavailable.</p>',
                     unsafe_allow_html=True)
         return
+
+    # ── Cross-signal combo banner — rendered before all other AI content ──────
+    # Shows which named combo(s) fired and why, so users understand the verdict
+    # is NOT the LLM's opinion but a deterministic infrastructure finding.
+    if cross and cross.get("reasons"):
+        combo_label = cross.get("combo_name", "COMBO")
+        reasons_html = "".join(
+            f'<div style="background:rgba(220,38,38,0.06);border-left:3px solid #dc2626;'
+            f'padding:8px 12px;border-radius:0 6px 6px 0;margin-bottom:6px;'
+            f'color:#fca5a5;font-size:0.79rem;line-height:1.55;">'
+            f'{_esc(r)}</div>'
+            for r in cross["reasons"]
+        )
+        st.markdown(
+            f'<div style="background:rgba(220,38,38,0.07);border:1px solid rgba(220,38,38,0.3);'
+            f'border-radius:10px;padding:14px 16px;margin-bottom:14px;">'
+            f'<div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;">'
+            f'{_svg(I.SKULL, 14, "#dc2626", 2)}'
+            f'<span style="font-size:0.72rem;font-weight:700;color:#dc2626;'
+            f'text-transform:uppercase;letter-spacing:1px;">Cross-Signal Detection</span>'
+            f'<span style="margin-left:auto;background:rgba(220,38,38,0.15);color:#dc2626;'
+            f'font-size:0.62rem;font-weight:700;padding:2px 8px;border-radius:999px;'
+            f'letter-spacing:0.5px;">{_esc(combo_label)}</span>'
+            f'</div>'
+            f'<div style="font-size:0.74rem;color:#9ca3af;margin-bottom:8px;line-height:1.5;">'
+            f'The following verdict-overriding pattern(s) were detected by cross-validating '
+            f'network probe findings against rule signals. These are deterministic — '
+            f'the LLM score does not affect them.</div>'
+            f'{reasons_html}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    ci, cc = _CB.get(cl, _CB["UNVERIFIABLE"])
 
     cl     = llm.get("company_legitimacy", "UNVERIFIABLE")
     ci, cc = _CB.get(cl, _CB["UNVERIFIABLE"])
@@ -4455,29 +4778,16 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     if penalty >= 20:
                         blended = max(blended, penalty)
 
-                    # ── HARD PROBE OVERRIDE (Improvement 4) ───────────────────────
-                    # If multiple critical network probes fire together, force the
-                    # verdict to DEFINITE_SCAM regardless of the LLM score.
-                    # These combos are near-impossible for legitimate companies.
-                    mx_status   = probes.get("mx_record", {}).get("status", "")
-                    domain_fail = not probes.get("company_domain", {}).get("domain_exists", True)
-                    young_days  = probes.get("domain_age", {}).get("age_days") or 999
-                    is_squatter = probes.get("typosquat", {}).get("is_squatter", False)
-                    is_parked   = probes.get("site_reach", {}).get("is_parked", False)
-
-                    critical_probe_count = sum([
-                        mx_status in ("NO_MX", "DNS_FAIL"),
-                        domain_fail,
-                        young_days < 90,
-                        is_squatter,
-                        is_parked,
-                    ])
-                    if critical_probe_count >= 3:
-                        # 3+ critical network failures = confirmed infrastructure scam
-                        blended = max(blended, 80)
-                    elif critical_probe_count == 2 and mx_status in ("NO_MX", "DNS_FAIL"):
-                        # NO_MX/DNS_FAIL + any other critical = force LIKELY_SCAM floor
-                        blended = max(blended, 55)
+                    # ── CROSS-SIGNAL EVALUATION ───────────────────────────────────
+                    # Named combo rules: probe findings × rule signals.
+                    # Each matched combo enforces a deterministic score floor and
+                    # a forced verdict that the LLM cannot dilute.
+                    # Results are stored in `res` so _render_ai_dive can show why.
+                    cross = _evaluate_probe_cross_signals(
+                        probes, rules_result["signals"], penalty
+                    )
+                    if cross["floor"] > 0:
+                        blended = max(blended, cross["floor"])
 
                     blended = min(blended, 100)
 
@@ -4486,6 +4796,15 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     sv   = ("DEFINITE_SCAM" if blended >= 75 else
                             "LIKELY_SCAM"   if blended >= 50 else
                             "SUSPICIOUS"    if blended >= 25 else "SAFE")
+
+                    # Cross-signal verdict override — highest priority, bypasses
+                    # both the blended score threshold and the LLM verdict.
+                    # Only fires when a named combo rule explicitly sets a verdict.
+                    if cross["verdict"] is not None:
+                        cross_sev = _sev.get(cross["verdict"], 0)
+                        sv_sev_now = _sev.get(sv, 0)
+                        if cross_sev > sv_sev_now:
+                            sv = cross["verdict"]
 
                     # AI verdict override — only allowed within 5 points of next band.
                     # FIX: old logic let LLM upgrade verdict at any score, causing
@@ -4512,6 +4831,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         "probes":         probes,    "probe_warnings": warnings,
                         "llm":            llm_data,  "job":            job,
                         "timestamp":      _now_ist(),
+                        "cross":          cross,     # cross-signal combo findings
                     }
                     prog.progress(100, text="Done.")
                     time.sleep(0.3)
@@ -4764,7 +5084,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         )
         _render_signal_cards(res["signals"])
     with t2:
-        _render_ai_dive(res.get("llm", {}))
+        _render_ai_dive(res.get("llm", {}), cross=res.get("cross"))
     with t3:
         _render_checklist(res)
 
