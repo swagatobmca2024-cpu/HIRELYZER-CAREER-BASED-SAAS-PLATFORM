@@ -4014,7 +4014,6 @@ def _render_ai_dive(llm: dict, cross: dict | None = None):
             f'</div>',
             unsafe_allow_html=True,
         )
-    ci, cc = _CB.get(cl, _CB["UNVERIFIABLE"])
 
     cl     = llm.get("company_legitimacy", "UNVERIFIABLE")
     ci, cc = _CB.get(cl, _CB["UNVERIFIABLE"])
