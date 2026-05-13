@@ -5071,7 +5071,7 @@ if uploaded_files and job_description and weights_valid:
             doc_check.close()
         except Exception:
             num_pages = 1
-        format_data = check_resume_format(full_text, num_pages, pdf_path=file_path)
+        format_data = check_resume_format(full_text, num_pages, pdf_path=file_path, session=st.session_state)
 
         # FIX: detect domains on the main thread BEFORE spawning parallel threads.
         # This prevents both threads from simultaneously reading/writing st.session_state
