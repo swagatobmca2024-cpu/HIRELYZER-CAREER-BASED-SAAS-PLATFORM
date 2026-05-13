@@ -3691,14 +3691,11 @@ def _build_probe_context(probes: dict, warnings: list, rules_result: dict | None
 def _llm_prompt_reasoning(job: dict, probe_context: str) -> str:
     """
     BUILD 9 — PASS 1: Chain-of-thought reasoning prompt.
-    Ask the LLM to think step-by-step through every layer of evidence BEFORE
-    committing to a verdict. The reasoning text is then fed into Pass 2 so the
-    model reads its own logic before producing the final JSON.
-    This eliminates the ~15-20% rate of verdicts that contradict probe evidence.
+    Uses plain, simple language so the reasoning output is readable by users.
     """
-    return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
-Your task is to REASON STEP BY STEP through the evidence below. Do NOT produce a verdict yet.
-Think out loud. Be specific. Reference the actual probe findings and rule signals in your reasoning.
+    return f"""You are a job scam detection expert helping everyday job seekers in India stay safe.
+Look at the job posting below and think through it step by step. Write in simple, clear English — avoid technical jargon.
+Do NOT give a final verdict yet — just think out loud.
 
 JOB POSTING:
 Title: {job.get('title','N/A')}
@@ -3711,19 +3708,19 @@ Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
 
-EVIDENCE (treat as verified ground truth):
+WHAT OUR CHECKS FOUND (treat these as facts):
 {probe_context}
 
-Reason through EACH of these dimensions in order:
-1. TEXT PATTERNS: What scam phrases, fee demands, urgency language, or MLM signals appear in the posting text?
-2. SALARY REALISM: Is the salary realistic for this role, location, and experience level in India?
-3. COMPANY LEGITIMACY: What does the probe evidence say about whether this company is real? Reference specific VERIFIED/WARNING lines.
-4. INFRASTRUCTURE: What do the domain age, MX records, SPF/DMARC, and SSL findings tell you? Are they consistent with a real company?
-5. RULE ENGINE: Which confirmed rule signals fired and what do they mean in context?
-6. CONTRADICTION CHECK: Does anything in the probe evidence contradict the text claims? (e.g. claims to be Infosys but domain is 5 days old)
-7. OVERALL ASSESSMENT: Weighing all evidence together, what is your assessment and why?
+Go through each of these one by one. Keep your language simple and direct — imagine explaining to someone with no technical background:
 
-Write your reasoning now:"""
+1. WHAT THE JOB TEXT SAYS: Does the job description look genuine? Any suspicious phrases, fee demands, vague role description, or pressure language?
+2. SALARY: Is the salary mentioned? If yes, does it seem realistic for this kind of job in India? If no, note that it's missing.
+3. IS THE COMPANY REAL: Based on what our checks found above, does this look like a real company? A real website, proper email setup, and company records are good signs.
+4. ANYTHING SUSPICIOUS IN THE CHECKS: Did any of our network checks find problems — like a brand new website, missing email setup, or the company not found anywhere?
+5. DOES ANYTHING NOT ADD UP: Does the company name match the website? Does the contact email match the company? Any mismatch?
+6. OVERALL FEELING: Putting it all together, what does this look like — safe, needs caution, or a likely scam?
+
+Write your thoughts now in simple language:"""
 
 
 def _llm_prompt_verdict(job: dict, probe_context: str, reasoning: str) -> str:
@@ -3966,14 +3963,14 @@ def _render_layer_consensus_html(result: dict) -> str:
         '<div style="font-size:0.6rem;color:#4b5563;text-transform:uppercase;'
         'letter-spacing:.6px;margin-bottom:5px;">How we decided — each layer voted independently</div>'
         '<div style="display:flex;align-items:center;gap:4px;">'
-        + _badge("📋 Rules", l1)
+        + _badge("Rules", l1)
         + arrow
-        + _badge("🌐 Probes", l2)
+        + _badge("Probes", l2)
         + arrow
-        + _badge("🤖 AI", l3)
+        + _badge("AI", l3)
         + '<div style="display:flex;align-items:center;padding:0 6px;">'
         f'<div style="color:{fc};font-size:1rem;font-weight:700;">→</div></div>'
-        + _badge("⚖ Consensus", fn)
+        + _badge("Verdict", fn)
         + '</div></div>'
     )
 
@@ -4320,7 +4317,7 @@ def _render_signal_cards(signals: dict):
     col_r.markdown(right_html or "<div></div>", unsafe_allow_html=True)
 
 
-def _render_ai_dive(llm: dict):
+def _render_ai_dive(llm: dict, probes: dict | None = None):
     if not llm:
         st.markdown('<p style="color:#6b7280;font-size:0.82rem;">AI analysis unavailable.</p>',
                     unsafe_allow_html=True)
@@ -4346,7 +4343,7 @@ def _render_ai_dive(llm: dict):
         unsafe_allow_html=True,
     )
 
-    # Batch red flags and positive signals into one markdown each
+    # Red flags and positive signals
     fc1, fc2 = st.columns(2)
     flags_html = "".join(
         f'<div style="background:rgba(239,68,68,0.05);border-left:2px solid #ef4444;'
@@ -4373,6 +4370,7 @@ def _render_ai_dive(llm: dict):
         unsafe_allow_html=True,
     )
 
+    # ── Detail cards ─────────────────────────────────────────────────────────
     for field, icon_path, title in [
         ("fake_company_evidence", I.GHOST,     "Company Legitimacy Analysis"),
         ("linguistic_analysis",   I.FILE_TEXT, "Linguistic Pattern Analysis"),
@@ -4380,8 +4378,49 @@ def _render_ai_dive(llm: dict):
         ("recommended_action",    I.SHIELD,    "Recommended Action"),
     ]:
         val = llm.get(field, "")
+
+        # Treat LLM string non-answers as empty — model sometimes returns "None",
+        # "N/A", "Not applicable" etc. for clean postings instead of a real sentence
+        _NULL_STRINGS = {"none", "n/a", "not applicable", "not available",
+                         "no information", "unknown", "null", "-", "—"}
+        if str(val).strip().lower() in _NULL_STRINGS:
+            val = ""
+
+        # FIX — Company Legitimacy Analysis: if LLM returned nothing,
+        # build a plain-English summary from probe results instead of hiding it
+        if not val and field == "fake_company_evidence":
+            if probes:
+                cd  = probes.get("company_domain", {})
+                age = probes.get("domain_age", {})
+                spf = probes.get("spf_dmarc", {})
+                confirmed = cd.get("identity_sources", 0)
+                age_days  = age.get("age_days")
+                parts = []
+                if age.get("status") in ("established", "old"):
+                    parts.append(f"The company's domain has been active for {age_days} days — consistent with a real, long-standing company.")
+                if cd.get("website_live"):
+                    parts.append("Their website is live and reachable with a valid security certificate.")
+                if cd.get("has_mx"):
+                    parts.append("They have a properly configured corporate email system.")
+                if spf.get("spf") and spf.get("dmarc"):
+                    parts.append("Email security records (SPF and DMARC) are in place — a sign of a professionally managed domain.")
+                if confirmed >= 2:
+                    parts.append(f"The company was independently verified in {confirmed} public databases.")
+                elif confirmed == 1:
+                    parts.append("The company was found in one public database — likely a real but smaller organisation.")
+                else:
+                    parts.append("The company was not found in major public databases, which is common for small or regional companies.")
+                val = " ".join(parts) if parts else "Probe checks did not return enough data to assess company legitimacy."
+            else:
+                val = "Company legitimacy assessment was not available for this posting."
+
+        # FIX — Salary: if absent, show a soft informational note instead of blank
+        if not val and field == "salary_assessment":
+            val = "Salary was not mentioned in this job posting. This is common for many legitimate jobs — ask about compensation before sharing personal details or attending an interview."
+
         if not val:
             continue
+
         st.markdown(
             f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
             f'border-radius:9px;padding:14px;margin-bottom:10px;">'
@@ -4398,16 +4437,19 @@ def _render_ai_dive(llm: dict):
         unsafe_allow_html=True,
     )
 
-    # BUILD 9 — Show chain-of-thought reasoning if two-pass was used
+    # FIX — Reasoning expander: SVG icon instead of emoji, plain-English header
     reasoning = llm.get("_reasoning", "")
     if reasoning:
-        with st.expander("🧠 View AI step-by-step reasoning", expanded=False):
+        with st.expander(
+            "View how the AI reasoned through this posting",
+            expanded=False,
+        ):
             st.markdown(
                 f'<div style="background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.12);'
                 f'border-radius:9px;padding:14px;">'
-                f'<div style="font-size:0.66rem;color:#a78bfa;text-transform:uppercase;'
-                f'letter-spacing:.8px;margin-bottom:10px;font-weight:600;">'
-                f'AI Chain-of-Thought — Pass 1 reasoning before verdict</div>'
+                f'<div style="display:flex;align-items:center;gap:6px;font-size:0.66rem;color:#a78bfa;'
+                f'text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;font-weight:600;">'
+                f'{_svg(I.CPU,11,"#a78bfa")} Step-by-step analysis</div>'
                 f'<div style="color:#9ca3af;font-size:0.8rem;line-height:1.7;'
                 f'white-space:pre-wrap;">{reasoning}</div></div>',
                 unsafe_allow_html=True,
@@ -4444,87 +4486,87 @@ def _render_checklist(result: dict):
 
     # ── Signal-driven items ───────────────────────────────────────────────────
     if "upfront_payment" in fired:
-        items.append(("🚨", "Ask the recruiter IN WRITING why payment is required before joining. "
+        items.append((I.ALERT, "Ask the recruiter IN WRITING why payment is required before joining. "
                       "Legitimate companies NEVER charge candidates — not for registration, "
                       "training kits, ID cards, or deposits.", "critical"))
 
     if "fake_govt_job" in fired:
-        items.append(("🏛️", "Verify this vacancy on the OFFICIAL government portal "
+        items.append((I.BUILDING, "Verify this vacancy on the OFFICIAL government portal "
                       "(railway.gov.in, ssc.nic.in, ibps.in etc.). Government jobs are NEVER "
                       "advertised through WhatsApp or asked to pay fees.", "critical"))
 
     if "mlm_pyramid" in fired:
-        items.append(("📊", "Ask for a clear salary slip structure. If income depends on "
+        items.append((I.LIST, "Ask for a clear salary slip structure. If income depends on "
                       "recruiting others or buying products, this is a pyramid scheme — illegal "
                       "in India under the Prize Chits Act.", "critical"))
 
     if "whatsapp_only_contact" in fired:
-        items.append(("📱", "Request an official company email address. If the recruiter "
+        items.append((I.PHONE, "Request an official company email address. If the recruiter "
                       "refuses to communicate on a corporate email and insists on WhatsApp only, "
                       "treat this as a confirmed red flag.", "high"))
 
     if "email_domain_mismatch" in fired or "free_email_contact" in fired:
-        items.append(("📧", "Do not trust emails from Gmail / Yahoo / Hotmail claiming to be "
+        items.append((I.MAIL, "Do not trust emails from Gmail / Yahoo / Hotmail claiming to be "
                       "from a company. Search the company's official website and call their "
                       "official HR number directly.", "high"))
 
     if "telegram_whatsapp_link" in fired:
-        items.append(("🔗", "Do NOT click wa.me or t.me links from unknown recruiters. "
+        items.append((I.LINK, "Do NOT click wa.me or t.me links from unknown recruiters. "
                       "These redirect to unmonitored chats where scammers harvest your personal "
                       "data without any platform oversight.", "high"))
 
     if "personal_info_demand" in fired:
-        items.append(("🆔", "Never send Aadhaar, PAN, bank account, or passport details "
+        items.append((I.ID_CARD, "Never send Aadhaar, PAN, bank account, or passport details "
                       "before a formal offer letter on company letterhead. Ask why this "
                       "information is needed at this stage.", "high"))
 
     if "too_good_salary" in fired:
-        items.append(("💰", "Cross-check this salary on Glassdoor, AmbitionBox, or Naukri "
+        items.append((I.DOLLAR, "Cross-check this salary on Glassdoor, AmbitionBox, or Naukri "
                       "for the same role and city. If it's 2× the market rate, ask why — "
                       "inflated salary is the #1 hook used in job scams.", "high"))
 
     if "india_scam_pattern" in fired:
-        items.append(("⚠️", "This posting matches known Indian job scam patterns "
+        items.append((I.ALERT, "This posting matches known Indian job scam patterns "
                       "(data entry, typing jobs, captcha work, home-based assembly). "
                       "These rarely pay and often require upfront tool purchases.", "high"))
 
     # ── Probe-driven items ────────────────────────────────────────────────────
     age_status = probes.get("domain_age", {}).get("age_days", 9999)
     if age_status < 180:
-        items.append(("📅", f"This company's domain is less than 6 months old "
+        items.append((I.CALENDAR, f"This company's domain is less than 6 months old "
                       f"({age_status} days). Search the company name on MCA.gov.in "
                       "to verify it's registered — new domains are a top scam signal.", "high"))
 
     mx_status = probes.get("mx_record", {}).get("status", "")
     if mx_status in ("NO_MX", "DNS_FAIL"):
-        items.append(("📮", "The company's email domain has no mail servers — it cannot "
+        items.append((I.MAIL, "The company's email domain has no mail servers — it cannot "
                       "actually send or receive email. Any 'offer letter' from this domain "
                       "is forged.", "critical"))
 
     if probes.get("site_reach", {}).get("is_parked"):
-        items.append(("🅿️", "The company website is a PARKED page with no real content. "
+        items.append((I.BUILDING, "The company website is a PARKED page with no real content. "
                       "A real company has a working website — ask for their physical office "
                       "address and verify it on Google Maps.", "high"))
 
     if probes.get("typosquat", {}).get("is_squatter"):
         closest = probes["typosquat"].get("closest_brand", "a known company")
-        items.append(("🎭", f"This domain closely mimics {closest}. Visit the REAL company's "
+        items.append((I.EYE, f"This domain closely mimics {closest}. Visit the REAL company's "
                       "official website directly — never click links from the job posting.", "critical"))
 
     reach = probes.get("site_reach", {})
     cert_cn = reach.get("cert_cn", "")
     company = result.get("job", {}).get("company", "")
     if cert_cn and company and cert_cn.lower() not in company.lower():
-        items.append(("🔐", f"The SSL certificate on this website is issued for '{cert_cn}', "
+        items.append((I.SHIELD, f"The SSL certificate on this website is issued for '{cert_cn}', "
                       f"not '{company}'. This may be an impersonation site. "
                       "Verify the company's real domain independently.", "high"))
 
     # ── Always-present items ──────────────────────────────────────────────────
-    items.append(("🏢", "Verify the company on MCA.gov.in (for Indian companies) or LinkedIn. "
+    items.append((I.BUILDING, "Verify the company on MCA.gov.in (for Indian companies) or LinkedIn. "
                   "A real company has a registered CIN number and physical address.", "normal"))
-    items.append(("📞", "Call the company's OFFICIAL phone number (found on their website, "
+    items.append((I.PHONE, "Call the company's OFFICIAL phone number (found on their website, "
                   "not from the job posting) and confirm the vacancy exists.", "normal"))
-    items.append(("📄", "Never sign any document or pay any amount before receiving a formal "
+    items.append((I.FILE_TEXT, "Never sign any document or pay any amount before receiving a formal "
                   "offer letter on company letterhead with HR name, designation, and company seal.", "normal"))
 
     # ── Render ────────────────────────────────────────────────────────────────
@@ -4543,12 +4585,12 @@ def _render_checklist(result: dict):
         unsafe_allow_html=True,
     )
 
-    for i, (icon, text, priority) in enumerate(items):
+    for i, (icon_path, text, priority) in enumerate(items):
         col, bg, border = priority_colors.get(priority, priority_colors["normal"])
         st.markdown(
             f'<div style="margin-bottom:6px;padding:9px 12px;border-radius:8px;'
-            f'background:{bg};border:1px solid {border};display:flex;gap:8px;">'
-            f'<span style="flex-shrink:0;font-size:0.85rem;">{icon}</span>'
+            f'background:{bg};border:1px solid {border};display:flex;gap:8px;align-items:flex-start;">'
+            f'<span style="flex-shrink:0;margin-top:1px;">{_svg(icon_path,13,col)}</span>'
             f'<span style="font-size:0.79rem;color:#c9d1d9;line-height:1.5;">{text}</span>'
             f'</div>',
             unsafe_allow_html=True,
@@ -4560,10 +4602,11 @@ def _render_checklist(result: dict):
         st.markdown(
             f'<div style="margin-top:10px;padding:10px 14px;background:rgba(220,38,38,0.06);'
             f'border:1px solid rgba(220,38,38,0.2);border-radius:8px;'
-            f'color:#fca5a5;font-size:0.78rem;line-height:1.5;">'
-            f'⚠️ <b>{critical_count} critical item{"s" if critical_count>1 else ""}</b> '
-            f'flagged above. Do not proceed until these are resolved. '
-            f'No legitimate employer will pressure you to bypass these checks.</div>',
+            f'color:#fca5a5;font-size:0.78rem;line-height:1.5;display:flex;gap:8px;align-items:flex-start;">'
+            f'{_svg(I.ALERT,13,"#ef4444")}'
+            f'<span><b>{critical_count} critical item{"s" if critical_count>1 else ""} flagged above.</b> '
+            f'Do not proceed until these are resolved. '
+            f'No legitimate employer will pressure you to bypass these checks.</span></div>',
             unsafe_allow_html=True,
         )
 
@@ -5794,7 +5837,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         )
         _render_signal_cards(res["signals"])
     with t2:
-        _render_ai_dive(res.get("llm", {}))
+        _render_ai_dive(res.get("llm", {}), probes=res.get("probes", {}))
     with t3:
         _render_checklist(res)
 
