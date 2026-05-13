@@ -3234,6 +3234,16 @@ def _run_rules(job: dict) -> dict:
 
 def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
+    salary_raw = (job.get("salary") or "").strip()
+    salary_display = salary_raw if salary_raw else "N/A"
+    salary_instruction = (
+        "The salary was NOT provided in this job posting. "
+        "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
+        "do NOT guess, infer, or comment on whether it is realistic."
+        if not salary_raw else
+        "Assess whether the stated salary is realistic for this role and location. "
+        "If it seems unrealistically high, flag it as a potential scam signal."
+    )
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
@@ -3242,7 +3252,7 @@ Title: {job.get('title','N/A')}
 Company: {job.get('company','N/A')}
 Website: {job.get('website','N/A')}
 Location: {job.get('location','N/A')}
-Salary: {job.get('salary','N/A')}
+Salary: {salary_display}
 Description: {job.get('description','N/A')}
 Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
@@ -3250,6 +3260,9 @@ Contact: {job.get('contact','N/A')}
 
 LIVE PROBE FINDINGS:
 {ctx}
+
+SALARY ASSESSMENT RULE (mandatory):
+{salary_instruction}
 
 Required JSON schema (all keys mandatory):
 {{
@@ -3260,7 +3273,7 @@ Required JSON schema (all keys mandatory):
   "positive_signals": ["<str>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<realistic or not for this role and location>",
+  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
   "recommended_action": "<specific advice for the job seeker>",
   "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
@@ -3749,6 +3762,31 @@ def _render_ai_dive(llm: dict):
         val = llm.get(field, "")
         if not val:
             continue
+
+        # ── Special handling: salary was not given in the posting ────────────
+        if field == "salary_assessment" and (
+            not val.strip()
+            or val.strip().upper() == "NOT_PROVIDED"
+            or "not provided" in val.lower()
+            or "not mentioned" in val.lower()
+            or "no salary" in val.lower()
+        ):
+            st.markdown(
+                f'<div style="background:rgba(107,114,128,0.06);border:1px solid rgba(107,114,128,0.18);'
+                f'border-radius:9px;padding:14px;margin-bottom:10px;">'
+                f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
+                f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
+                f'{_svg(I.DOLLAR_OFF,11,"#6b7280")}Salary Reality Check</div>'
+                f'<div style="display:flex;align-items:center;gap:8px;color:#9ca3af;font-size:0.83rem;">'
+                f'{_svg(I.ALERT_CIRCLE,13,"#f59e0b")}'
+                f'<span><strong style="color:#f59e0b;">Salary not disclosed</strong> — '
+                f'this posting does not mention any salary, CTC, or compensation. '
+                f'No realistic assessment can be made. Consider asking the recruiter '
+                f'for a clear salary range before proceeding.</span></div></div>',
+                unsafe_allow_html=True,
+            )
+            continue
+
         st.markdown(
             f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
             f'border-radius:9px;padding:14px;margin-bottom:10px;">'
