@@ -514,7 +514,10 @@ EDUCATION: Degree, Major | Institution | Graduation Year | CGPA/Percentage
 
   CGPA/SGPA/Percentage: preserve exactly as written, character for character.
   Also accept: "Marks: 456/500", "First Class", "Distinction", "Pass" as valid score formats.
-  Include honors, distinctions, or relevant coursework if mentioned.
+  ⚠️ BULLET DETAILS RULE: Include ALL bullet points or sub-items written under each education entry —
+  not just CGPA. This includes honors, distinctions, coursework, achievements, extracurriculars,
+  awards, scholarships, club activities, or any other detail the candidate wrote beneath the degree.
+  Render each as a bullet point (•) indented below the degree line.
 CERTIFICATIONS: • Name | Issuing Body | MMM YYYY
 
 ATS FORMATTING:
@@ -784,7 +787,7 @@ LAYOUT RECOGNITION RULES (apply before extracting any field):
        "SGPA - 7.4 (1st Sem)" is a valid SGPA score — NEVER drop it, NEVER treat dash as a separator meaning absence of score.
     NEVER convert SGPA to CGPA. NEVER convert GPA to CGPA. NEVER convert percentage to CGPA.
     NEVER produce duplicate labels like "CGPA: 7.0 GPA". Use "" if no score present.
-- "education[].bullets" = honors, distinctions, relevant coursework, or industrial training if mentioned. Use [] if none.
+- "education[].bullets" = ALL bullet points, sub-items, or indented details written under this education entry in the original resume. This includes (but is NOT limited to): honors, distinctions, relevant coursework, industrial training, achievements, extracurriculars, notable projects, awards, scholarships, club memberships, or any other detail the candidate listed as a bullet/sub-point beneath this degree. Do NOT limit to just cgpa — capture everything written there. Rewrite each bullet with a strong action-oriented phrase if it is vague; preserve factual content exactly. Use [] ONLY if there are genuinely zero bullet points/sub-items under this education entry in the original resume.
 
 ── CERTIFICATIONS ──
 - "certifications[].name" = exact certification name as written.
