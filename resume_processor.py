@@ -821,99 +821,69 @@ def _detect_multicolumn_pdf(pdf_path: str) -> bool:
         return False
 
 
-def check_resume_format(text: str, num_pages: int = 1, pdf_path: str = None) -> dict:
+def check_resume_format(text: str, num_pages: int = 1, pdf_path: str = None, session=None) -> dict:
     """
-    Evaluates a resume against industry-standard ATS formatting rules.
+    Hybrid ATS format checker:
+      • Regex  — fast, deterministic checks for email, phone, URLs, word count,
+                 employment dates, encoding, page count, multi-column layout.
+      • LLM    — intelligent checks for section presence, action verb quality,
+                 quantified achievements, buzzword stuffing, and ATS red flags.
+                 The LLM reads the actual resume content so it never misses a section
+                 due to an unusual heading like "Internship Experience" or "Tech Stack".
 
     Scoring model (100 pts total, deduction-based):
-      Section presence       — up to −42 pts  (critical ATS sections)
-      Contact completeness   — up to −8  pts
-      Resume length          — up to −14 pts
-      Action verb quality    — up to −8  pts
-      Quantified achievements— up to −8  pts
-      ATS red flags          — up to −14 pts  (multi-column, dates, objective)
-      Bonus credits          — up to +4  pts  (certifications, portfolio)
+      Contact completeness   — up to −21 pts  (regex)
+      Resume length/pages    — up to −14 pts  (regex)
+      ATS structural flags   — up to −7  pts  (regex: multi-column, encoding, dates)
+      LLM-assessed content   — up to −58 pts  (sections, verbs, achievements, flags)
+      Bonus credits          — up to +4  pts  (certifications, portfolio — LLM)
 
     Returns a dict compatible with all existing callers (same keys as v1).
     """
-    issues  = []
-    passes  = []
+    try:
+        import streamlit as _st
+        _session = session or getattr(_st, "session_state", None)
+    except Exception:
+        _session = session
+
+    issues     = []
+    passes     = []
     deductions = 0
     bonuses    = 0
 
     text_lower = text.lower() if text else ""
 
     # ══════════════════════════════════════════════════════════════════════
-    # 1. CRITICAL SECTION PRESENCE  (max −42 pts)
-    #    Weights reflect real ATS auto-reject risk, not equal treatment.
+    # PART A — REGEX CHECKS  (fast, always run, no LLM needed)
     # ══════════════════════════════════════════════════════════════════════
-    section_checks = {
-        # (label, detected, deduction_if_missing)
-        "Contact / Email": (
-            bool(re.search(r'[\w.+-]+@[\w.-]+\.[a-z]{2,}', text or "")),
-            15,   # ATS hard-rejects without contact info
-        ),
-        "Phone Number": (
-            bool(re.search(r'(\+?\d[\d\s\-\(\)]{7,}\d)', text or "")),
-            6,
-        ),
-        "Experience": (
-            any(w in text_lower for w in [
-                "experience", "employment", "work history", "career",
-                "professional experience", "work experience",
-                "positions held", "relevant experience", "professional background",
-            ]),
-            12,   # Core content section — high ATS weight
-        ),
-        "Education": (
-            any(w in text_lower for w in [
-                "education", "university", "college", "degree",
-                "bachelor", "master", "b.tech", "b.sc", "m.sc",
-                "mca", "bca", "phd", "diploma", "high school",
-                "graduated", "pursuing",
-            ]),
-            4,
-        ),
-        "Skills": (
-            any(w in text_lower for w in [
-                "skills", "technologies", "tech stack",
-                "competencies", "proficiencies", "tools",
-                "technical skills", "core competencies",
-            ]),
-            3,
-        ),
-        "Summary / Profile": (
-            any(w in text_lower for w in [
-                "summary", "objective", "profile",
-                "about me", "overview", "professional summary",
-                "career objective", "personal statement",
-            ]),
-            2,
-        ),
-    }
 
-    for section_name, (present, penalty) in section_checks.items():
-        if present:
-            passes.append(f"Section present: {section_name}")
-        else:
-            issues.append(
-                f"Missing section: '{section_name}' — "
-                f"ATS {'will likely reject' if penalty >= 10 else 'may penalise'} without it"
-            )
-            deductions += penalty
+    # A1. Contact / Email  (−15 if missing)
+    has_email = bool(re.search(r'[\w.+-]+@[\w.-]+\.[a-z]{2,}', text or ""))
+    if has_email:
+        passes.append("Section present: Contact / Email")
+    else:
+        issues.append("Missing section: 'Contact / Email' — ATS will likely reject without it")
+        deductions += 15
 
-    # ══════════════════════════════════════════════════════════════════════
-    # 2. CONTACT COMPLETENESS  (max −8 pts)
-    # ══════════════════════════════════════════════════════════════════════
+    # A2. Phone number  (−6 if missing)
+    has_phone = bool(re.search(r'(\+?\d[\d\s\-\(\)]{7,}\d)', text or ""))
+    if has_phone:
+        passes.append("Section present: Phone Number")
+    else:
+        issues.append("Missing section: 'Phone Number' — ATS will likely reject without it")
+        deductions += 6
+
+    # A3. LinkedIn URL  (−5 if missing)
     if re.search(r'linkedin\.com/in/[\w\-]+', text_lower):
         passes.append("LinkedIn profile URL detected")
     else:
         issues.append("No LinkedIn URL — recruiters expect it; many ATS rank it as a signal")
         deductions += 5
 
+    # A4. GitHub / Portfolio  (−3 if missing, +1 bonus if present)
     if re.search(r'github\.com/[\w\-]+', text_lower):
         passes.append("GitHub profile URL detected")
-        bonuses += 1   # bonus: shows technical proof of work
+        bonuses += 1
     elif re.search(r'(portfolio|behance\.net|dribbble\.com|leetcode\.com|kaggle\.com)', text_lower):
         passes.append("Portfolio / professional profile URL detected")
         bonuses += 1
@@ -921,12 +891,8 @@ def check_resume_format(text: str, num_pages: int = 1, pdf_path: str = None) -> 
         issues.append("No GitHub or portfolio URL — especially important for technical roles")
         deductions += 3
 
-    # ══════════════════════════════════════════════════════════════════════
-    # 3. RESUME LENGTH  (max −14 pts)
-    #    Sweet spot: 400–900 words for most roles.
-    # ══════════════════════════════════════════════════════════════════════
+    # A5. Word count / length  (−2 to −12)
     word_count = len(text.split()) if text else 0
-
     if word_count < 150:
         issues.append(
             f"Resume critically short ({word_count} words) — "
@@ -954,6 +920,7 @@ def check_resume_format(text: str, num_pages: int = 1, pdf_path: str = None) -> 
     else:
         passes.append(f"Optimal length ({word_count} words — within 400–1,000 word sweet spot)")
 
+    # A6. Page count  (−4 if > 2 pages)
     if num_pages > 2:
         issues.append(
             f"Resume is {num_pages} pages — "
@@ -965,116 +932,7 @@ def check_resume_format(text: str, num_pages: int = 1, pdf_path: str = None) -> 
     else:
         passes.append("Page count ideal (1 page — strong for early-career candidates)")
 
-    # ══════════════════════════════════════════════════════════════════════
-    # 4. ACTION VERB QUALITY  (max −8 pts)
-    #    Expanded to 54 verbs across all common resume categories.
-    # ══════════════════════════════════════════════════════════════════════
-    strong_verbs = [
-        # Engineering / technical
-        "architected", "engineered", "designed", "deployed", "optimized", "automated",
-        "built", "launched", "developed", "implemented", "integrated", "configured",
-        "migrated", "refactored", "debugged", "benchmarked", "containerized", "scaled",
-        "maintained", "upgraded", "tested", "validated",
-        # Leadership / management
-        "led", "managed", "directed", "oversaw", "supervised", "coordinated",
-        "spearheaded", "mentored", "trained", "guided", "facilitated",
-        # Business / impact
-        "reduced", "increased", "improved", "accelerated", "streamlined", "transformed",
-        "negotiated", "established", "executed", "delivered", "created",
-        "resolved", "analyzed", "collaborated", "authored", "published",
-        # Data / research
-        "researched", "evaluated", "identified", "modelled", "forecasted",
-        "presented", "reported", "drafted",
-    ]
-    found_verbs = [v for v in strong_verbs if re.search(rf'\b{v}\b', text_lower)]
-    verb_count = len(found_verbs)
-
-    if verb_count == 0:
-        issues.append(
-            "No strong action verbs found — ATS and recruiters expect bullet points "
-            "starting with verbs like 'Engineered', 'Led', 'Optimized'"
-        )
-        deductions += 8
-    elif verb_count < 3:
-        issues.append(
-            f"Weak action verb usage ({verb_count} found) — "
-            "aim for 5+ distinct strong verbs across experience bullet points"
-        )
-        deductions += 5
-    elif verb_count < 5:
-        issues.append(
-            f"Limited action verb variety ({verb_count} found) — "
-            "diversify verbs to better demonstrate range of contributions"
-        )
-        deductions += 2
-    else:
-        passes.append(f"Strong action verb usage ({verb_count} distinct verbs detected)")
-
-    # ══════════════════════════════════════════════════════════════════════
-    # 5. QUANTIFIED ACHIEVEMENTS  (max −8 pts)
-    #    Broader pattern set captures $, %, x, K, M, large numbers, etc.
-    # ══════════════════════════════════════════════════════════════════════
-    quant_patterns = []
-
-    # Percentage metrics: 35%, 2.5 percent
-    quant_patterns += re.findall(
-        r'\b\d+[\.,]?\d*\s*(%|percent)\b', text_lower
-    )
-    # Multiplier / scale: 10x, 3 times
-    quant_patterns += re.findall(
-        r'\b\d+[\.,]?\d*\s*(x|times)\b', text_lower
-    )
-    # Counts with units: 10K users, 500 clients, 3 projects, 50 hours
-    quant_patterns += re.findall(
-        r'\b\d+[,.]?\d*\s*(k|m)?\s*(users|clients|customers|projects|tickets|'
-        r'requests|transactions|queries|hrs|hours|days|weeks|months|years|'
-        r'engineers|developers|members|students|candidates|submissions)\b',
-        text_lower
-    )
-    # Technical metrics: 200ms, 50GB, 1TB
-    quant_patterns += re.findall(
-        r'\b\d+[\.,]?\d*\s*(ms|gb|tb|mb|rpm|rps|qps|wpm|tps)\b', text_lower
-    )
-    # Dollar amounts: $50K, $1.2M, $500
-    quant_patterns += re.findall(
-        r'\$\s*\d+[\d,.]*\s*[kKmMbB]?\b', text_lower
-    )
-    # Large bare numbers (10,000+) — likely meaningful scale references
-    quant_patterns += re.findall(
-        r'\b\d{1,3}[,]\d{3}\b', text_lower
-    )
-    # Qualitative scale indicators
-    quant_patterns += re.findall(
-        r'\b(doubled|tripled|halved|10x|100x)\b', text_lower
-    )
-    # "3+ years" style
-    quant_patterns += re.findall(
-        r'\b\d+\+\s*(years|yrs|months)\b', text_lower
-    )
-
-    metric_count = len(quant_patterns)
-    if metric_count == 0:
-        issues.append(
-            "No quantified achievements detected — add measurable impact "
-            "(e.g., 'reduced latency by 35%', 'served 10K users', 'saved $50K annually')"
-        )
-        deductions += 8
-    elif metric_count < 3:
-        issues.append(
-            f"Few quantified achievements ({metric_count} found) — "
-            "aim for 4+ metrics across your experience to demonstrate concrete impact"
-        )
-        deductions += 4
-    else:
-        passes.append(f"Quantified achievements present ({metric_count} metrics detected)")
-
-    # ══════════════════════════════════════════════════════════════════════
-    # 6. ATS RED FLAGS  (max −14 pts)
-    # ══════════════════════════════════════════════════════════════════════
-
-    # 6a. Multi-column layout detection
-    #     Priority: use real PDF block coordinates if pdf_path available,
-    #     fall back to tab-character heuristic for plain-text paths.
+    # A7. Multi-column layout  (−7 if detected)
     multicolumn_detected = False
     if pdf_path:
         try:
@@ -1082,12 +940,7 @@ def check_resume_format(text: str, num_pages: int = 1, pdf_path: str = None) -> 
         except Exception:
             multicolumn_detected = False
     if not multicolumn_detected and text:
-        # Fallback heuristic: heavy tab usage OR many pipe characters
-        multicolumn_detected = (
-            text.count('\t') > 8 or
-            text.count('|') > 12
-        )
-
+        multicolumn_detected = (text.count('\t') > 8 or text.count('|') > 12)
     if multicolumn_detected:
         issues.append(
             "Multi-column or table layout detected — "
@@ -1098,15 +951,7 @@ def check_resume_format(text: str, num_pages: int = 1, pdf_path: str = None) -> 
     else:
         passes.append("Single-column layout detected — ATS-safe structure")
 
-    # 6b. Outdated 'Objective' section
-    if "objective" in text_lower and "summary" not in text_lower and "professional summary" not in text_lower:
-        issues.append(
-            "Uses 'Objective' section — this is outdated; "
-            "replace with a modern 'Professional Summary' (2–3 targeted sentences)"
-        )
-        deductions += 3
-
-    # 6c. Employment dates
+    # A8. Employment dates  (−5 if missing)
     has_dates = bool(re.search(r'\b(19|20)\d{2}\b', text or ""))
     if not has_dates:
         issues.append(
@@ -1118,7 +963,16 @@ def check_resume_format(text: str, num_pages: int = 1, pdf_path: str = None) -> 
     else:
         passes.append("Employment dates detected — ATS can parse your timeline")
 
-    # 6d. Special characters / encoding issues that confuse ATS parsers
+    # A9. Consistent Month-Year dates  (+1 bonus)
+    month_year_dates = re.findall(
+        r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(19|20)\d{2}\b',
+        text_lower
+    )
+    if len(month_year_dates) >= 2:
+        passes.append("Consistent Month-Year date format detected — preferred by ATS parsers")
+        bonuses += 1
+
+    # A10. Non-ASCII encoding  (−3 if high density)
     if text:
         special_char_count = len(re.findall(r'[^\x00-\x7F]', text))
         ratio = special_char_count / max(len(text), 1)
@@ -1131,71 +985,298 @@ def check_resume_format(text: str, num_pages: int = 1, pdf_path: str = None) -> 
         else:
             passes.append("Character encoding looks ATS-safe (low non-ASCII density)")
 
-    # 6e. Excessive repetition of buzzwords (keyword stuffing signal)
-    buzzwords = ["synergy", "passionate", "hardworking", "go-getter", "think outside the box",
-                 "detail-oriented", "team player", "results-driven", "dynamic", "proactive"]
-    stuffed = [bw for bw in buzzwords if text_lower.count(bw) >= 2]
-    if len(stuffed) >= 2:
-        issues.append(
-            f"Possible keyword stuffing detected ({', '.join(stuffed)}) — "
-            "overused buzzwords reduce credibility; replace with concrete examples"
-        )
-        deductions += 2
-
     # ══════════════════════════════════════════════════════════════════════
-    # 7. BONUS CREDITS  (up to +4 pts)
-    #    Reward genuine ATS positive signals.
+    # PART B — LLM CHECKS  (intelligent content analysis)
+    # Covers: section presence, action verbs, quantified achievements,
+    #         buzzword stuffing, ATS red flags — all in ONE LLM call.
+    # Falls back to keyword heuristics if LLM is unavailable.
     # ══════════════════════════════════════════════════════════════════════
 
-    # Certifications section
-    if any(w in text_lower for w in [
-        "certification", "certified", "certificate", "aws certified",
-        "google certified", "microsoft certified", "pmp", "cpa",
-        "cissp", "ceh", "comptia", "coursera", "udemy", "edx",
-    ]):
-        passes.append("Certifications / credentials detected — strong ATS positive signal")
-        bonuses += 1
+    # Metric counters — populated by LLM or fallback
+    verb_count   = 0
+    metric_count = 0
 
-    # Projects section
-    if any(w in text_lower for w in [
-        "projects", "personal projects", "side projects",
-        "open source", "github.com", "hackathon",
-    ]):
-        passes.append("Projects section detected — demonstrates initiative beyond job roles")
-        bonuses += 1
+    llm_prompt = f"""You are a senior ATS (Applicant Tracking System) specialist with 15+ years of experience evaluating resumes for enterprise hiring systems.
 
-    # Consistent date format (month year)
-    month_year_dates = re.findall(
-        r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(19|20)\d{2}\b',
-        text_lower
-    )
-    if len(month_year_dates) >= 2:
-        passes.append("Consistent Month-Year date format detected — preferred by ATS parsers")
-        bonuses += 1
+Analyze the resume text below and return a structured JSON evaluation. Read the CONTENT carefully — do not rely on exact heading names. A resume with an "Internship" section HAS work experience. A resume with "Tech Stack" HAS a skills section. A resume that opens with a professional paragraph HAS a summary.
+
+════════════════════════════════════════════════════
+EVALUATION CRITERIA
+════════════════════════════════════════════════════
+
+1. SECTION PRESENCE — Determine if each section EXISTS based on content, not heading names:
+   - Experience: ANY work, internship, apprenticeship, freelance, contract, or volunteer role with company/org name and dates
+   - Education: ANY degree, diploma, school, college, university, certification program, or board exam
+   - Skills: ANY list of technical skills, tools, languages, frameworks, platforms, or competencies
+   - Summary / Profile: A professional summary paragraph OR objective statement OR career profile at the top
+
+2. ACTION VERBS — Count distinct strong action verbs used (Developed, Led, Engineered, Reduced, Implemented, etc.)
+   Strong = past-tense active verbs that show ownership. Weak = "responsible for", "helped", "worked on".
+
+3. QUANTIFIED ACHIEVEMENTS — Count distinct metrics/numbers that show impact:
+   Examples: "reduced latency by 30%", "served 10K users", "cut costs by $5K", "3 projects delivered"
+   Do NOT count CGPA/grades, dates, phone numbers, or years of experience as achievements.
+
+4. ATS RED FLAGS — identify any of these issues:
+   - Uses "Objective" heading instead of "Summary" (outdated format)
+   - Excessive buzzwords repeated 2+ times: passionate, hardworking, synergy, go-getter, results-driven, team player, dynamic, proactive, detail-oriented
+   - No quantified impact anywhere in the resume
+
+5. BONUS SIGNALS — identify any of these positive signals:
+   - Has a certifications or credentials section (not just a skill listed as "certified in X")
+   - Has a projects section with described project work
+
+════════════════════════════════════════════════════
+RETURN ONLY THIS EXACT JSON — NO PREAMBLE, NO MARKDOWN FENCES:
+{{
+  "sections": {{
+    "Experience": true_or_false,
+    "Education": true_or_false,
+    "Skills": true_or_false,
+    "Summary / Profile": true_or_false
+  }},
+  "verb_count": integer,
+  "metric_count": integer,
+  "red_flags": {{
+    "uses_objective_not_summary": true_or_false,
+    "buzzword_stuffing": true_or_false,
+    "buzzwords_found": ["word1", "word2"],
+    "no_quantified_achievements": true_or_false
+  }},
+  "bonuses": {{
+    "has_certifications": true_or_false,
+    "has_projects": true_or_false
+  }}
+}}
+
+RESUME TEXT:
+\"\"\"{text[:4000]}\"\"\"
+"""
+
+    # Penalties for LLM-assessed items (mirrors original scoring weights)
+    _SECTION_PENALTIES = {
+        "Experience":       12,
+        "Education":        4,
+        "Skills":           3,
+        "Summary / Profile": 2,
+    }
+
+    llm_ok = False
+    try:
+        _raw = call_llm(llm_prompt, session=_session)
+        _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+        if _raw and not any(_raw.strip().startswith(p) for p in _ERROR_PREFIXES):
+            # Strip markdown fences if LLM added them
+            _clean = re.sub(r'^```(?:json)?\s*', '', _raw.strip(), flags=re.IGNORECASE)
+            _clean = re.sub(r'\s*```$', '', _clean).strip()
+            _j = json.loads(_clean)
+
+            # ── Section presence ──────────────────────────────────────────
+            for sec_name, penalty in _SECTION_PENALTIES.items():
+                present = bool(_j.get("sections", {}).get(sec_name, False))
+                if present:
+                    passes.append(f"Section present: {sec_name}")
+                else:
+                    issues.append(
+                        f"Missing section: '{sec_name}' — "
+                        f"ATS {'will likely reject' if penalty >= 10 else 'may penalise'} without it"
+                    )
+                    deductions += penalty
+
+            # ── Action verbs ──────────────────────────────────────────────
+            verb_count = int(_j.get("verb_count", 0))
+            if verb_count == 0:
+                issues.append(
+                    "No strong action verbs found — ATS and recruiters expect bullet points "
+                    "starting with verbs like 'Engineered', 'Led', 'Optimized'"
+                )
+                deductions += 8
+            elif verb_count < 3:
+                issues.append(
+                    f"Weak action verb usage ({verb_count} found) — "
+                    "aim for 5+ distinct strong verbs across experience bullet points"
+                )
+                deductions += 5
+            elif verb_count < 5:
+                issues.append(
+                    f"Limited action verb variety ({verb_count} found) — "
+                    "diversify verbs to better demonstrate range of contributions"
+                )
+                deductions += 2
+            else:
+                passes.append(f"Strong action verb usage ({verb_count} distinct verbs detected)")
+
+            # ── Quantified achievements ───────────────────────────────────
+            metric_count = int(_j.get("metric_count", 0))
+            if metric_count == 0:
+                issues.append(
+                    "No quantified achievements detected — add measurable impact "
+                    "(e.g., 'reduced latency by 35%', 'served 10K users', 'saved $50K annually')"
+                )
+                deductions += 8
+            elif metric_count < 3:
+                issues.append(
+                    f"Few quantified achievements ({metric_count} found) — "
+                    "aim for 4+ metrics across your experience to demonstrate concrete impact"
+                )
+                deductions += 4
+            else:
+                passes.append(f"Quantified achievements present ({metric_count} metrics detected)")
+
+            # ── Red flags ─────────────────────────────────────────────────
+            _flags = _j.get("red_flags", {})
+            if _flags.get("uses_objective_not_summary"):
+                issues.append(
+                    "Uses 'Objective' section — this is outdated; "
+                    "replace with a modern 'Professional Summary' (2–3 targeted sentences)"
+                )
+                deductions += 3
+            if _flags.get("buzzword_stuffing"):
+                _bw = ", ".join(_flags.get("buzzwords_found", []))
+                issues.append(
+                    f"Possible keyword stuffing detected ({_bw}) — "
+                    "overused buzzwords reduce credibility; replace with concrete examples"
+                )
+                deductions += 2
+
+            # ── Bonus signals ─────────────────────────────────────────────
+            _bon = _j.get("bonuses", {})
+            if _bon.get("has_certifications"):
+                passes.append("Certifications / credentials detected — strong ATS positive signal")
+                bonuses += 1
+            if _bon.get("has_projects"):
+                passes.append("Projects section detected — demonstrates initiative beyond job roles")
+                bonuses += 1
+
+            llm_ok = True
+    except Exception:
+        llm_ok = False
+
+    # ── Fallback: keyword heuristics if LLM unavailable ──────────────────
+    if not llm_ok:
+        _SECTION_KEYWORDS = {
+            "Experience": [
+                "experience", "employment", "work history", "career",
+                "professional experience", "work experience", "positions held",
+                "relevant experience", "professional background",
+                "internship", "intern", "industrial training", "apprenticeship",
+                "trainee", "placement", "freelance", "volunteer",
+            ],
+            "Education": [
+                "education", "university", "college", "degree",
+                "bachelor", "master", "b.tech", "b.sc", "m.sc",
+                "mca", "bca", "phd", "diploma", "high school",
+                "graduated", "pursuing", "b.e", "m.tech",
+                "cbse", "icse", "hsc", "ssc", "12th", "10th",
+            ],
+            "Skills": [
+                "skills", "technologies", "tech stack", "competencies",
+                "proficiencies", "tools", "technical skills", "core competencies",
+                "expertise", "technical proficiency", "programming languages",
+                "languages & tools", "frameworks", "key skills", "skillset",
+            ],
+            "Summary / Profile": [
+                "summary", "objective", "profile", "about me", "overview",
+                "professional summary", "career objective", "personal statement",
+                "professional profile", "executive summary", "career summary",
+            ],
+        }
+        _SECTION_PENALTIES = {"Experience": 12, "Education": 4, "Skills": 3, "Summary / Profile": 2}
+        for sec_name, penalty in _SECTION_PENALTIES.items():
+            present = any(w in text_lower for w in _SECTION_KEYWORDS.get(sec_name, []))
+            if not present and sec_name == "Summary / Profile":
+                # Implicit summary: resume opens with 2+ sentences before the first section
+                _top = (text or "")[:400].strip()
+                present = len(re.findall(r'[.!?]', _top)) >= 2
+            if present:
+                passes.append(f"Section present: {sec_name}")
+            else:
+                issues.append(
+                    f"Missing section: '{sec_name}' — "
+                    f"ATS {'will likely reject' if penalty >= 10 else 'may penalise'} without it"
+                )
+                deductions += penalty
+
+        # Keyword-based verb and metric fallback
+        strong_verbs = [
+            "architected", "engineered", "designed", "deployed", "optimized", "automated",
+            "built", "launched", "developed", "implemented", "integrated", "configured",
+            "migrated", "refactored", "debugged", "scaled", "maintained", "upgraded",
+            "tested", "validated", "led", "managed", "directed", "oversaw", "supervised",
+            "coordinated", "spearheaded", "mentored", "trained", "guided", "facilitated",
+            "reduced", "increased", "improved", "accelerated", "streamlined", "transformed",
+            "negotiated", "established", "executed", "delivered", "created",
+            "resolved", "analyzed", "collaborated", "authored", "published",
+            "researched", "evaluated", "identified", "forecasted", "presented",
+        ]
+        found_verbs = [v for v in strong_verbs if re.search(rf'\b{v}\b', text_lower)]
+        verb_count = len(found_verbs)
+        if verb_count == 0:
+            issues.append(
+                "No strong action verbs found — ATS and recruiters expect bullet points "
+                "starting with verbs like 'Engineered', 'Led', 'Optimized'"
+            )
+            deductions += 8
+        elif verb_count < 3:
+            issues.append(f"Weak action verb usage ({verb_count} found) — aim for 5+ distinct strong verbs")
+            deductions += 5
+        elif verb_count < 5:
+            issues.append(f"Limited action verb variety ({verb_count} found) — diversify verbs")
+            deductions += 2
+        else:
+            passes.append(f"Strong action verb usage ({verb_count} distinct verbs detected)")
+
+        _quant = []
+        _quant += re.findall(r'\b\d+[\.,]?\d*\s*(%|percent)\b', text_lower)
+        _quant += re.findall(r'\b\d+[,.]?\d*\s*(k|m)?\s*(users|clients|customers|projects|tickets|requests|transactions)\b', text_lower)
+        _quant += re.findall(r'\$\s*\d+[\d,.]*\s*[kKmMbB]?\b', text_lower)
+        _quant += re.findall(r'\b(doubled|tripled|halved)\b', text_lower)
+        metric_count = len(_quant)
+        if metric_count == 0:
+            issues.append(
+                "No quantified achievements detected — add measurable impact "
+                "(e.g., 'reduced latency by 35%', 'served 10K users', 'saved $50K annually')"
+            )
+            deductions += 8
+        elif metric_count < 3:
+            issues.append(f"Few quantified achievements ({metric_count} found) — aim for 4+ metrics")
+            deductions += 4
+        else:
+            passes.append(f"Quantified achievements present ({metric_count} metrics detected)")
+
+        if any(w in text_lower for w in [
+            "certification", "certified", "certificate", "aws certified",
+            "google certified", "microsoft certified", "pmp", "cissp", "comptia", "coursera", "udemy", "edx",
+        ]):
+            passes.append("Certifications / credentials detected — strong ATS positive signal")
+            bonuses += 1
+        if any(w in text_lower for w in ["projects", "personal projects", "open source", "hackathon"]):
+            passes.append("Projects section detected — demonstrates initiative beyond job roles")
+            bonuses += 1
+        if "objective" in text_lower and "summary" not in text_lower:
+            issues.append(
+                "Uses 'Objective' section — this is outdated; "
+                "replace with a modern 'Professional Summary'"
+            )
+            deductions += 3
 
     # ══════════════════════════════════════════════════════════════════════
-    # 8. FINAL SCORE CALCULATION
+    # FINAL SCORE CALCULATION
     # ══════════════════════════════════════════════════════════════════════
     raw_score = max(0, min(100, 100 - deductions + bonuses))
 
     if raw_score >= 90:
-        letter_grade = "A+"
-        label = "ATS-Optimized"
+        letter_grade, label = "A+", "ATS-Optimized"
     elif raw_score >= 80:
-        letter_grade = "A"
-        label = "Excellent Format"
+        letter_grade, label = "A", "Excellent Format"
     elif raw_score >= 70:
-        letter_grade = "B+"
-        label = "Good Format"
+        letter_grade, label = "B+", "Good Format"
     elif raw_score >= 60:
-        letter_grade = "B"
-        label = "Acceptable"
+        letter_grade, label = "B", "Acceptable"
     elif raw_score >= 45:
-        letter_grade = "C"
-        label = "Needs Work"
+        letter_grade, label = "C", "Needs Work"
     else:
-        letter_grade = "D"
-        label = "Poor — Major Issues"
+        letter_grade, label = "D", "Poor — Major Issues"
 
     return {
         "format_score":  raw_score,
@@ -1204,12 +1285,12 @@ def check_resume_format(text: str, num_pages: int = 1, pdf_path: str = None) -> 
         "issues":        issues,
         "passes":        passes,
         "word_count":    word_count,
-        # Extended breakdown (available to callers that want sub-scores)
         "deductions":    deductions,
         "bonuses":       bonuses,
         "verb_count":    verb_count,
         "metric_count":  metric_count,
         "multicolumn":   multicolumn_detected,
+        "llm_assessed":  llm_ok,   # callers can check if LLM was used
     }
 
 # Detect bias in resume
