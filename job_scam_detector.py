@@ -123,6 +123,7 @@ def _get_rate_limit_fns():
 
 _SCAM_FEATURE   = "scam_detector"
 _SCAM_LIMIT     = 3   # analyses per hour — mirrors USAGE_LIMITS in user_login.py
+_MAX_PASTE_CHARS = 10_000  # hard cap on paste length (real postings: 1500-4000 chars)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1040,56 +1041,24 @@ def _xloc(text: str) -> str:
     return ""
 
 
-def _llm_extract_missing(raw: str, partial: dict, call_llm_fn) -> dict:
+def _llm_extract_fields(raw: str, call_llm_fn) -> dict:
     """
-    Use LLaMA 3.3 70B to fill only the fields regex left blank.
+    LLM-FIRST extraction layer (v6).
 
-    Only fires when title OR company is still empty — the two most
-    important fields for scam detection. If regex got both, returns
-    immediately with zero LLM cost.
+    Calls LLaMA 3.3-70B to extract ALL structured fields from the raw posting in
+    one shot.  Returns a dict with keys: title, company, location, salary, website,
+    contact.  Any field the LLM is not confident about is returned as "" so the
+    regex fallback layer can fill it.
 
-    FIX: Added explicit negative examples and post-validation to prevent
-    LLM from returning skills/requirements sentences as company name.
-    e.g. "Nowledge Of Llm Integration And Hybrid Ai Systems" was being
-    returned because prompt had no guard against it. Now:
-    - Prompt includes WRONG examples explicitly
-    - Post-validation rejects company names with skill/tech keywords
-    - Post-validation rejects company names > 6 words
-    - Post-validation rejects company names that are sentences
+    Design notes
+    ─────────────
+    • PRIMARY extraction layer — runs before regex.
+    • Results are cached in st.session_state keyed by hash(raw[:3000]) so the
+      LLM is NOT called again on every keystroke re-render; only when text changes.
+    • Post-validation rejects hallucinated company names (skill sentences, etc.)
+    • On any exception returns {} so auto_extract falls through to pure regex.
     """
-    missing = [f for f in ("title", "company", "location", "salary")
-               if not partial.get(f)]
-    if "title" not in missing and "company" not in missing:
-        return partial
 
-    prompt = f"""Extract specific fields from this job posting. Return ONLY a valid JSON object.
-
-Fields needed: {', '.join(missing)}
-
-STRICT RULES:
-- "title": job role only. e.g. "Software Engineer", "Data Analyst", "LLM Engineer"
-  WRONG: "We are looking for a Software Engineer" (too long, contains sentence words)
-  WRONG: "Knowledge of Python and AWS" (this is a requirement, not a title)
-
-- "company": the HIRING COMPANY NAME only. Max 5 words. Must be a proper noun.
-  RIGHT: "Infosys", "Zoho Corporation", "Tata Consultancy Services"
-  WRONG: "Knowledge Of LLM Integration And Hybrid AI Systems" (this is a skill requirement)
-  WRONG: "Looking for candidates with experience" (this is a sentence)
-  WRONG: "Technologies Pvt Ltd" (incomplete — no company name)
-  If no clear company name exists in the posting, return null — do NOT guess from requirements.
-
-- "location": city or work mode only. e.g. "Bangalore", "Remote", "Hybrid - Mumbai"
-
-- "salary": CTC/stipend as written. e.g. "12-18 LPA", "₹50,000/month". null if not mentioned.
-
-- Return null for ANY field not clearly and explicitly stated.
-
-Job posting:
-{raw[:2500]}
-
-JSON:"""
-
-    # Post-validation guards for LLM-extracted company names
     _COMPANY_SKILL_REJECT = re.compile(
         r"(knowledge\s+of|integration|hybrid|machine\s+learning|deep\s+learning|"
         r"proficiency|experience\s+in|years?\s+of|requirement|qualification|"
@@ -1100,25 +1069,61 @@ JSON:"""
     )
 
     def _validate_company(val: str) -> bool:
-        """Return True if val looks like a real company name."""
         if not val or val.lower() in ("null", "none", "n/a", "unknown", ""):
             return False
-        # Too many words — company names are max 6 words
         if len(val.split()) > 6:
             return False
-        # Contains skill/tech keywords → requirements sentence, not company
         if _COMPANY_SKILL_REJECT.search(val):
             return False
-        # Starts with lowercase → likely a sentence fragment
         if val[0].islower():
             return False
-        # Contains sentence-like words
-        if re.search(r"(we|our|is|are|has|have|will|the|looking|seeking|"
+        if re.search(r"(we|our|is|are|has|have|will|the|looking|seeking|"
                      r"experience|knowledge|understanding|familiarity|"
-                     r"proficient|expert|strong|good|excellent)",
+                     r"proficient|expert|strong|good|excellent)",
                      val, re.IGNORECASE):
             return False
         return True
+
+    # ── Hash-based session cache ───────────────────────────────────────────────
+    import hashlib as _hl
+    cache_key = "jsd_llm_extract_" + _hl.md5(raw[:3000].encode()).hexdigest()
+    cached = st.session_state.get(cache_key)
+    if cached is not None:
+        return cached
+
+    prompt = f"""You are a job-posting parser. Extract structured fields from the posting below.
+Return ONLY a valid JSON object — no markdown fences, no preamble.
+
+Fields to extract (return null for any field not clearly present):
+
+{{
+  "title":   "<job role / position name only — e.g. 'Software Engineer', 'Data Analyst'>",
+  "company": "<hiring company name only — proper noun, max 5 words — e.g. 'Infosys', 'Zoho Corporation'>",
+  "location":"<city or work-mode only — e.g. 'Bangalore', 'Remote', 'Hybrid - Mumbai'>",
+  "salary":  "<CTC or stipend as written — e.g. '12-18 LPA', '₹50,000/month'>",
+  "website": "<company/apply URL if present — e.g. 'https://careers.example.com'>",
+  "contact": "<email and/or phone if present>"
+}}
+
+STRICT RULES:
+- "title": the job role only. Strip sentence words.
+  BAD: "We are looking for a Software Engineer"  → GOOD: "Software Engineer"
+  BAD: "Knowledge of Python and AWS"             → this is a requirement, return null
+
+- "company": must be a proper noun company name. Do NOT return skill or requirement sentences.
+  BAD: "Knowledge Of LLM Integration And Hybrid AI Systems"
+  BAD: "Looking for candidates with experience"
+  BAD: "Technologies Pvt Ltd"  (incomplete — missing real name)
+  If genuinely unclear, return null.
+
+- "salary": copy the salary/CTC/stipend text verbatim. null if not mentioned.
+
+- Return null (not empty string) for any field you are not confident about.
+
+Job posting:
+{raw[:3000]}
+
+JSON:"""
 
     try:
         response = call_llm_fn(
@@ -1130,59 +1135,75 @@ JSON:"""
         clean = re.sub(r"```(?:json)?|```", "", response).strip()
         m = re.search(r"\{.*\}", clean, re.DOTALL)
         if not m:
-            return partial
+            st.session_state[cache_key] = {}
+            return {}
         extracted = json.loads(m.group())
 
-        for field in missing:
+        result: dict = {}
+        for field in ("title", "company", "location", "salary", "website", "contact"):
             val = extracted.get(field)
-            if not val or val == "null" or not isinstance(val, str):
+            if not val or val in ("null", "none", "n/a", "unknown") or not isinstance(val, str):
+                result[field] = ""
                 continue
             val = val.strip()
             if len(val) < 2:
+                result[field] = ""
                 continue
-            # Extra validation for company field
             if field == "company" and not _validate_company(val):
-                continue   # reject bad LLM company extraction
-            partial[field] = val
-    except Exception:
-        pass
+                result[field] = ""
+                continue
+            result[field] = val
 
-    return partial
+        st.session_state[cache_key] = result
+        return result
+    except Exception:
+        st.session_state[cache_key] = {}
+        return {}
 
 
 def auto_extract(raw: str, call_llm_fn=None) -> dict:
     """
-    BUG FIX v5: requirements and benefits are NO LONGER set to the full raw text.
+    LLM-FIRST extraction pipeline (v6).
 
-    Previously all three (description/requirements/benefits) = raw, which meant
-    _run_rules saw every phrase 3-6x in the joined full-text, massively inflating
-    rule scores and making prescan useless.
+    Layer 1 — LLM  (primary, when call_llm_fn supplied):
+        _llm_extract_fields() calls LLaMA 3.3-70B to extract all fields at once.
+        Results are hash-cached in session_state — re-renders on every keystroke
+        do NOT re-call the LLM; only genuinely changed text triggers a new call.
 
-    Now:
-      - description = raw  (full text for rule engine to read once)
-      - requirements = ""  (rules will not double-count)
-      - benefits     = ""  (rules will not double-count)
+    Layer 2 — Regex  (fallback / gap-fill):
+        Each field the LLM returned "" for is filled by its regex extractor
+        (_xt, _xco, _xloc, _xs, _xu, _xc).  Regex also handles the case where
+        call_llm_fn is None (e.g. prescan in _quick_prescan, unit tests).
 
-    LLM FALLBACK: if call_llm_fn is supplied and regex left title or company
-    blank, _llm_extract_missing fires one LLaMA 3.3 call to fill the gaps.
-    Uses the same llm_manager cache — identical postings hit cache, not API.
+    Fixed fields (never overridden):
+        - description  = raw   (full text; rule engine reads it once)
+        - requirements = ""    (prevents triple-counting in _run_rules)
+        - benefits     = ""    (same reason)
     """
-    partial = {
-        "title":        _xt(raw),
-        "company":      _xco(raw),
-        "website":      _xu(raw),
-        "location":     _xloc(raw),
-        "salary":       _xs(raw),
-        "contact":      _xc(raw),
-        "description":  raw,
-        "requirements": "",
-        "benefits":     "",
-    }
-    # LLM fills only what regex missed — skipped entirely if all key fields found
-    if call_llm_fn is not None:
-        partial = _llm_extract_missing(raw, partial, call_llm_fn)
-    return partial
+    # ── Layer 1: LLM extraction ────────────────────────────────────────────────
+    llm: dict = {}
+    if call_llm_fn is not None and raw and len(raw.strip()) >= 40:
+        llm = _llm_extract_fields(raw, call_llm_fn)
 
+    # ── Layer 2: Regex fills any gap the LLM left empty ───────────────────────
+    title    = llm.get("title")    or _xt(raw)
+    company  = llm.get("company")  or _xco(raw)
+    website  = llm.get("website")  or _xu(raw)
+    location = llm.get("location") or _xloc(raw)
+    salary   = llm.get("salary")   or _xs(raw)
+    contact  = llm.get("contact")  or _xc(raw)
+
+    return {
+        "title":        title,
+        "company":      company,
+        "website":      website,
+        "location":     location,
+        "salary":       salary,
+        "contact":      contact,
+        "description":  raw,
+        "requirements": "",   # intentionally empty — prevents _run_rules triple-count
+        "benefits":     "",   # intentionally empty — same reason
+    }
 
 # ─────────────────────────────────────────────────────────────────────────────
 # LIVE NETWORK PROBES
@@ -1621,24 +1642,114 @@ def _probe_site_reachable(domain: str) -> dict:
     return out
 
 
+# ── Homoglyph normalisation map for typosquat detection ─────────────────────
+_HOMOGLYPH_MAP: dict[str, str] = {
+    "0": "o", "O": "o",
+    "1": "l", "I": "i", "|": "i",
+    "@": "a", "3": "e", "5": "s",
+    "$": "s", "7": "t", "4": "a",
+    "8": "b", "6": "g",
+}
+
+def _typo_normalise(s: str) -> str:
+    """Lowercase, strip separators, apply homoglyph substitutions."""
+    s = re.sub(r"[-_.]", "", s.lower())
+    return "".join(_HOMOGLYPH_MAP.get(c, c) for c in s)
+
+def _levenshtein(s1: str, s2: str) -> int:
+    """Pure-Python edit distance (no external deps)."""
+    if len(s1) < len(s2):
+        return _levenshtein(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    prev = list(range(len(s2) + 1))
+    for c1 in s1:
+        curr = [prev[0] + 1]
+        for j, c2 in enumerate(s2):
+            curr.append(min(prev[j + 1] + 1, curr[j] + 1, prev[j] + (c1 != c2)))
+        prev = curr
+    return prev[-1]
+
+
 def _probe_typosquatting(domain: str) -> dict:
+    """
+    Typosquat detection v2  (replaces SequenceMatcher / 72% threshold).
+
+    Two complementary checks on normalised SLDs:
+
+    1. Levenshtein edit distance ≤ 2 on homoglyph-normalised SLDs.
+       Catches: netlfix, nettflix, netfl1x, g00gle, inf0sys, w1pro …
+       Skips brands with SLD < 4 chars (tcs, ril …) — too short, too noisy.
+
+    2. Brand-keyword prefix/suffix containment.
+       Catches: infosys-careers.com, wipro-jobs.in, careers.infosys.net …
+       Requires ≥ 2 extra chars beyond the brand token (avoids "infosyss").
+
+    Root cause of the old false positives (netomi, netsol, netapp):
+       SequenceMatcher was run on FULL domains including .com suffix, inflating
+       scores: "netomi.com" vs "netflix.com" = 76% (above 72% threshold) even
+       though SLD-only score is only 61%. Switching to Levenshtein on SLD-only
+       + homoglyph normalisation eliminates these false positives entirely.
+    """
     out = {"is_squatter": False, "closest_brand": None, "similarity": 0.0, "detail": ""}
     if not domain:
         return out
-    best, brand = 0.0, None
-    d_sld = domain.split(".")[0]
+
+    d_sld      = domain.split(".")[0]
+    d_norm     = _typo_normalise(d_sld)
+
+    best_lev_dist:  int         = 999
+    best_lev_brand: str | None  = None
+    prefix_brand:   str | None  = None
+
     for b in _BRAND_DOMAINS:
-        b_sld = b.split(".")[0]
-        sc = max(difflib.SequenceMatcher(None, d_sld, b_sld).ratio(),
-                 difflib.SequenceMatcher(None, domain, b).ratio())
-        if sc > best:
-            best, brand = sc, b
-    out.update(similarity=round(best, 3), closest_brand=brand)
-    if best >= 0.72 and domain != brand:
-        out.update(is_squatter=True,
-                   detail=f"'{domain}' is {int(best*100)}% similar to '{brand}' — possible impersonation")
+        b_sld  = b.split(".")[0]
+        b_norm = _typo_normalise(b_sld)
+
+        # Skip very short brand SLDs — too prone to coincidental matches
+        if len(b_sld) < 4:
+            continue
+
+        # ── Check 1: Levenshtein on normalised SLDs ───────────────────────
+        if d_norm != b_norm:          # exact match = the real domain, skip
+            dist = _levenshtein(d_norm, b_norm)
+            if dist < best_lev_dist:
+                best_lev_dist, best_lev_brand = dist, b
+
+        # ── Check 2: brand keyword embedded in domain ─────────────────────
+        # e.g. "infosys-careers.com" contains "infosys"
+        if b_norm in d_norm and d_norm != b_norm:
+            extra = d_norm.replace(b_norm, "")
+            if len(extra) >= 2:       # at least 2 extra chars to avoid "infosyss"
+                prefix_brand = b
+
+    is_lev_squatter    = (best_lev_dist <= 2 and best_lev_brand is not None
+                          and d_norm != _typo_normalise(best_lev_brand.split(".")[0]))
+    is_prefix_squatter = prefix_brand is not None
+    is_squatter        = is_lev_squatter or is_prefix_squatter
+
+    # Compute a 0-1 similarity figure for the UI progress bar
+    if best_lev_brand:
+        b_sld_len = max(len(_typo_normalise(best_lev_brand.split(".")[0])), 1)
+        similarity = round(1.0 - best_lev_dist / b_sld_len, 3)
     else:
-        out["detail"] = f"No close brand match (best: {int(best*100)}% to {brand})"
+        similarity = 0.0
+
+    closest = best_lev_brand or prefix_brand
+    out.update(similarity=max(0.0, similarity), closest_brand=closest)
+
+    if is_squatter:
+        if is_lev_squatter:
+            detail = (f"'{domain}' is a likely typosquat of '{best_lev_brand}' "
+                      f"(edit distance {best_lev_dist} after homoglyph normalisation)")
+        else:
+            detail = (f"'{domain}' contains brand keyword "
+                      f"'{prefix_brand.split('.')[0]}' — possible impersonation of {prefix_brand}")
+        out.update(is_squatter=True, detail=detail)
+    else:
+        out["detail"] = (f"No typosquat detected (closest: {closest}, "
+                         f"edit distance {best_lev_dist})"
+                         if closest else "No close brand match found")
     return out
 
 
@@ -3074,8 +3185,8 @@ def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
         # Flag only if salary is more than 2× the ceiling — clear scam territory
         return lpa_val > effective_max * 2.0
     else:
-        # No band match — fall back to old blunt rule but with tighter range
-        # Only flag truly impossible numbers (>₹5Cr / >500 LPA)
+        # No band match — only flag truly impossible numbers (>₹5Cr / >500 LPA).
+        # Do NOT flag normal salaries just because the role isn't in the band table.
         return lpa_val > 500.0
 
 def _run_rules(job: dict) -> dict:
@@ -3092,7 +3203,7 @@ def _run_rules(job: dict) -> dict:
     h = _any(full, _MLM_PHRASES)
     if h: _add("mlm_pyramid","MLM / Pyramid Scheme Indicators",
                 "Language suggests a recruitment-based commission model, not a real job.", h)
-    if _salary_outlier(job.get("salary","") + " " + job.get("description",""), job):
+    if _salary_outlier(job.get("salary", ""), job):
         _add("too_good_salary","Unrealistically High Salary",
              "Offered compensation is far above verified market rates for this role and city.")
     h = _any(full, _UNREALISTIC_PHRASES)
@@ -3234,6 +3345,16 @@ def _run_rules(job: dict) -> dict:
 
 def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
+    salary_raw = (job.get("salary") or "").strip()
+    salary_display = salary_raw if salary_raw else "N/A"
+    salary_instruction = (
+        "The salary was NOT provided in this job posting. "
+        "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
+        "do NOT guess, infer, or comment on whether it is realistic."
+        if not salary_raw else
+        "Assess whether the stated salary is realistic for this role and location. "
+        "If it seems unrealistically high, flag it as a potential scam signal."
+    )
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
@@ -3242,14 +3363,17 @@ Title: {job.get('title','N/A')}
 Company: {job.get('company','N/A')}
 Website: {job.get('website','N/A')}
 Location: {job.get('location','N/A')}
-Salary: {job.get('salary','N/A')}
-Description: {job.get('description','N/A')}
+Salary: {salary_display}
+Description: {job.get('description','N/A')[:8000]}
 Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
 
 LIVE PROBE FINDINGS:
 {ctx}
+
+SALARY ASSESSMENT RULE (mandatory):
+{salary_instruction}
 
 Required JSON schema (all keys mandatory):
 {{
@@ -3260,7 +3384,7 @@ Required JSON schema (all keys mandatory):
   "positive_signals": ["<str>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<realistic or not for this role and location>",
+  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
   "recommended_action": "<specific advice for the job seeker>",
   "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
@@ -3749,6 +3873,31 @@ def _render_ai_dive(llm: dict):
         val = llm.get(field, "")
         if not val:
             continue
+
+        # ── Special handling: salary was not given in the posting ────────────
+        if field == "salary_assessment" and (
+            not val.strip()
+            or val.strip().upper() == "NOT_PROVIDED"
+            or "not provided" in val.lower()
+            or "not mentioned" in val.lower()
+            or "no salary" in val.lower()
+        ):
+            st.markdown(
+                f'<div style="background:rgba(107,114,128,0.06);border:1px solid rgba(107,114,128,0.18);'
+                f'border-radius:9px;padding:14px;margin-bottom:10px;">'
+                f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
+                f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
+                f'{_svg(I.DOLLAR_OFF,11,"#6b7280")}Salary Reality Check</div>'
+                f'<div style="display:flex;align-items:center;gap:8px;color:#9ca3af;font-size:0.83rem;">'
+                f'{_svg(I.ALERT_CIRCLE,13,"#f59e0b")}'
+                f'<span><strong style="color:#f59e0b;">Salary not disclosed</strong> — '
+                f'this posting does not mention any salary, CTC, or compensation. '
+                f'No realistic assessment can be made. Consider asking the recruiter '
+                f'for a clear salary range before proceeding.</span></div></div>',
+                unsafe_allow_html=True,
+            )
+            continue
+
         st.markdown(
             f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
             f'border-radius:9px;padding:14px;margin-bottom:10px;">'
@@ -4177,12 +4326,36 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         raw = st.text_area(
             "PASTE THE FULL JOB DESCRIPTION",
             height=230, key="jsd_raw",
+            max_chars=_MAX_PASTE_CHARS,
             placeholder=(
                 "Paste the complete job posting here — company name, website, "
                 "salary, requirements, benefits, contact details...\n\n"
                 "All fields are auto-detected as you type."
             ),
         )
+
+        # ── Live character counter ─────────────────────────────────────────
+        char_count = len(raw or "")
+        char_pct   = char_count / _MAX_PASTE_CHARS
+        if char_count > 0:
+            if char_pct < 0.75:
+                bar_color, label_color = "#22c55e", "#6b7280"
+            elif char_pct < 0.95:
+                bar_color, label_color = "#f59e0b", "#f59e0b"
+            else:
+                bar_color, label_color = "#ef4444", "#ef4444"
+            st.markdown(
+                f'''<div style="display:flex;align-items:center;gap:8px;margin:-6px 0 6px;">
+                <div style="flex:1;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;">
+                  <div style="width:{min(char_pct*100,100):.1f}%;height:100%;
+                       background:{bar_color};border-radius:2px;transition:width .2s;"></div>
+                </div>
+                <span style="font-size:0.68rem;color:{label_color};white-space:nowrap;
+                     font-variant-numeric:tabular-nums;">
+                  {char_count:,} / {_MAX_PASTE_CHARS:,}
+                </span></div>''',
+                unsafe_allow_html=True,
+            )
 
         extracted = auto_extract(raw or "", call_llm_fn=call_llm_fn)
 
