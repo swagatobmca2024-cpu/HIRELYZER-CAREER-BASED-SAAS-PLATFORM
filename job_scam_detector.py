@@ -1027,7 +1027,7 @@ Rules:
 - Use null for any field not clearly mentioned in the posting
 
 Job posting:
-{raw[:3000]}
+{raw[:5000]}
 
 JSON response:"""
 
@@ -4002,6 +4002,8 @@ def _render_verdict_banner(result: dict):
         '</div>'
     )
 
+    layer_consensus_html = _render_layer_consensus_html(result)
+
     st.markdown(
         f'<div style="padding:24px 28px;border-radius:14px;background:{cfg["bg"]};'
         f'border:1.5px solid {cfg["border"]};margin-bottom:16px;">'
@@ -4026,13 +4028,13 @@ def _render_verdict_banner(result: dict):
         f'</div></div>'
 
         # ── Gradient zone bar ──
-        + zone_bar +
+        + zone_bar
 
-        # ── BUILD 9: Per-layer verdict strip — shows how each layer voted ──
-        + _render_layer_consensus_html(result) +
+        # ── BUILD 9: Per-layer verdict strip ──
+        + layer_consensus_html
 
         # ── What this score means inline explanation ──
-        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px;">'
+        + f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px;">'
         + "".join([
             f'<div style="padding:7px 10px;border-radius:8px;text-align:center;'
             f'background:{bg};border:1px solid {bc};">'
@@ -4939,14 +4941,34 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
     job: dict = {}
 
     if mode == "Paste Full Job Description":
+        _MAX_PASTE = 5000
         raw = st.text_area(
             "PASTE THE FULL JOB DESCRIPTION",
             height=230, key="jsd_raw",
+            max_chars=_MAX_PASTE,
             placeholder=(
                 "Paste the complete job posting here — company name, website, "
                 "salary, requirements, benefits, contact details...\n\n"
                 "All fields are auto-detected as you type."
             ),
+        )
+        # Live character counter
+        _used = len(raw or "")
+        _pct  = _used / _MAX_PASTE
+        _counter_color = (
+            "#ef4444" if _pct >= 0.95 else
+            "#f59e0b" if _pct >= 0.80 else
+            "#6b7280"
+        )
+        st.markdown(
+            f'<div style="text-align:right;font-size:0.69rem;'
+            f'color:{_counter_color};margin-top:-8px;margin-bottom:4px;">'
+            f'{_used:,} / {_MAX_PASTE:,} characters'
+            + (' — limit reached' if _used >= _MAX_PASTE else
+               ' — almost full' if _pct >= 0.95 else
+               ' — getting long, trim if possible' if _pct >= 0.80 else '')
+            + '</div>',
+            unsafe_allow_html=True,
         )
 
         extracted = auto_extract(raw or "", call_llm_fn=call_llm_fn)
@@ -5015,10 +5037,13 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         job["salary"]   = e.text_input("Salary Offered",  placeholder="e.g., 8-12 LPA",           key="jsd_sa")
         job["contact"]  = f.text_input("Contact Email",   placeholder="e.g., hr@acme.com",        key="jsd_ct")
         job["description"]  = st.text_area("Job Description",  height=120, key="jsd_d",
+                                            max_chars=3000,
                                             placeholder="Describe the role and responsibilities...")
         job["requirements"] = st.text_area("Requirements",     height=80,  key="jsd_r",
+                                            max_chars=1500,
                                             placeholder="Skills, experience, qualifications...")
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
+                                            max_chars=1000,
                                             placeholder="What the employer offers...")
 
     # Use only meaningful fields for "is there any input" check — not description
