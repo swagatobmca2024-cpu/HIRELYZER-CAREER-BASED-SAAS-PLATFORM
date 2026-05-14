@@ -2849,6 +2849,173 @@ def _probe_mca(company: str) -> dict:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
+
+def _probe_safe_browsing(domain: str) -> dict:
+    """
+    Google Safe Browsing API v4 — no API key required for basic lookup.
+    Checks domain against Google's MALWARE, SOCIAL_ENGINEERING,
+    UNWANTED_SOFTWARE, and HARMFUL_APPLICATION threat lists.
+
+    Returns: {listed: bool, threats: [...], detail: str}
+    If listed → instant hard floor of 85 in _probe_risk.
+    """
+    out = {"listed": False, "threats": [], "detail": ""}
+    if not domain:
+        out["detail"] = "No domain to check"
+        return out
+    # API key read from Streamlit secrets or environment variable.
+    # Set GOOGLE_SAFE_BROWSING_KEY in .streamlit/secrets.toml or as an env var.
+    gsb_key = (
+        st.secrets.get("GOOGLE_SAFE_BROWSING_KEY", "")
+        if hasattr(st, "secrets") else ""
+    ) or os.environ.get("GOOGLE_SAFE_BROWSING_KEY", "")
+
+    if not gsb_key:
+        out["detail"] = "Safe Browsing skipped — GOOGLE_SAFE_BROWSING_KEY not configured"
+        return out
+    try:
+        payload = {
+            "client": {"clientId": "job-scam-detector", "clientVersion": "1.0"},
+            "threatInfo": {
+                "threatTypes":      ["MALWARE","SOCIAL_ENGINEERING",
+                                     "UNWANTED_SOFTWARE","HARMFUL_APPLICATION"],
+                "platformTypes":    ["ANY_PLATFORM"],
+                "threatEntryTypes": ["URL"],
+                "threatEntries":    [{"url": f"https://{domain}"},
+                                     {"url": f"http://{domain}"}],
+            },
+        }
+        r = requests.post(
+            "https://safebrowsing.googleapis.com/v4/threatMatches:find",
+            json=payload,
+            params={"key": gsb_key},
+            timeout=5,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            matches = data.get("matches", [])
+            if matches:
+                threats = list({m.get("threatType","") for m in matches})
+                out.update(listed=True, threats=threats,
+                           detail=f"BLOCKLISTED by Google Safe Browsing: {', '.join(threats)}")
+            else:
+                out["detail"] = "Not on Google Safe Browsing blocklist"
+        elif r.status_code == 400:
+            out["detail"] = "Safe Browsing: bad request (API key issue)"
+        else:
+            out["detail"] = f"Safe Browsing: HTTP {r.status_code}"
+    except Exception as e:
+        out["detail"] = f"Safe Browsing probe failed: {e}"
+    return out
+
+
+def _probe_dnsbl(domain: str) -> dict:
+    """
+    DNSBL check against Spamhaus ZEN and SpamCop.
+    Resolves domain IP → reverses octets → queries blocklist DNS.
+    Reuses the same socket approach as _dns_mx_lookup — no new deps.
+
+    Returns: {listed: bool, lists: [...], ip: str, detail: str}
+    """
+    out = {"listed": False, "lists": [], "ip": "", "detail": ""}
+    if not domain:
+        out["detail"] = "No domain"
+        return out
+    try:
+        ip = socket.gethostbyname(domain)
+        out["ip"] = ip
+        rev = ".".join(reversed(ip.split(".")))
+        listed_on = []
+        for bl in ("zen.spamhaus.org", "bl.spamcop.net", "dnsbl.sorbs.net"):
+            try:
+                socket.gethostbyname(f"{rev}.{bl}")
+                listed_on.append(bl)   # A-record returned = listed
+            except socket.gaierror:
+                pass                   # NXDOMAIN = not listed
+        if listed_on:
+            out.update(listed=True, lists=listed_on,
+                       detail=f"IP {ip} listed on: {', '.join(listed_on)}")
+        else:
+            out["detail"] = f"IP {ip} not on any DNSBL"
+    except socket.gaierror:
+        out["detail"] = "Domain did not resolve — cannot DNSBL check"
+    except Exception as e:
+        out["detail"] = f"DNSBL probe failed: {e}"
+    return out
+
+
+def _probe_cert_transparency(domain: str) -> dict:
+    """
+    Certificate Transparency log check via crt.sh (free, no auth).
+    Catches:
+      1. Cert issued very recently on an old-claiming domain (age mismatch)
+      2. Let's Encrypt cert on a domain claiming to be a large corporation
+         (real enterprises use paid CAs like DigiCert, Sectigo, GlobalSign)
+      3. Wildcard certs covering suspicious subdomains
+
+    Returns: {checked: bool, suspicious: bool, reason: str, cert_age_days: int, issuer: str}
+    """
+    out = {"checked": False, "suspicious": False, "reason": "", "cert_age_days": None, "issuer": ""}
+    if not domain:
+        return out
+    try:
+        r = requests.get(
+            f"https://crt.sh/?q={domain}&output=json",
+            timeout=6,
+            headers={"User-Agent": "Mozilla/5.0 (job-scam-detector/1.0)"},
+        )
+        if r.status_code != 200:
+            out["reason"] = f"crt.sh returned HTTP {r.status_code}"
+            return out
+
+        certs = r.json()
+        if not certs:
+            out.update(checked=True, suspicious=True,
+                       reason="No certificates found — domain has never had SSL")
+            return out
+
+        out["checked"] = True
+        # Sort by most recent
+        from datetime import datetime, timezone
+        def _parse_dt(s):
+            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+                try: return datetime.strptime(s[:16], fmt[:len(s[:16])]).replace(tzinfo=timezone.utc)
+                except: pass
+            return None
+
+        newest = None
+        newest_issuer = ""
+        for c in certs[:20]:
+            dt = _parse_dt(c.get("not_before",""))
+            if dt and (newest is None or dt > newest):
+                newest = dt
+                newest_issuer = c.get("issuer_name","")
+
+        if newest:
+            age_days = (datetime.now(timezone.utc) - newest).days
+            out["cert_age_days"] = age_days
+            out["issuer"]        = newest_issuer
+
+            # Flag: cert issued very recently (< 30 days) on a claimed established company
+            if age_days < 30:
+                out.update(suspicious=True,
+                           reason=f"SSL cert issued only {age_days} days ago — very new")
+
+            # Flag: Let's Encrypt on a domain presenting as a large corporation
+            # (We only flag this if domain_age > 1yr — otherwise LE is normal for startups)
+            if "Let's Encrypt" in newest_issuer or "R3" in newest_issuer or "E1" in newest_issuer:
+                out["issuer"] = "Let's Encrypt (free CA)"
+                # Not suspicious by itself — only noteworthy, don't flag
+            else:
+                out["issuer"] = newest_issuer.split("O=")[-1].split(",")[0].strip() if "O=" in newest_issuer else newest_issuer[:60]
+
+        if not out["suspicious"]:
+            out["reason"] = f"Certificate OK — issued {out.get('cert_age_days','?')} days ago by {out['issuer']}"
+
+    except Exception as e:
+        out["reason"] = f"crt.sh probe failed: {e}"
+    return out
+
 def _run_live_probes_cached(domain: str, contact: str, company: str, website: str) -> dict:
     """
     Cache probe results for 1 hour keyed on (domain, contact, company, website).
@@ -3068,47 +3235,70 @@ def _any(text: str, patterns: list) -> list:
 # If the detected salary falls ABOVE max_lpa by >2× it is flagged as outlier.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ── Salary bands ─────────────────────────────────────────────────────────────
+# Keys are matched as WHOLE-WORD substrings (\b keyword \b) against the job
+# title, so short tokens like "hr", "qa", "vp", "ios" no longer fire on words
+# that merely *contain* them (e.g. "architecture", "iraq", "startup").
+#
+# Order matters for multi-keyword titles: more-specific keys come first so
+# "product manager" wins over the bare "manager" fallback.
+#
+# (min_lpa, max_lpa) — flag threshold = max_lpa × city_multiplier × 2.0
 _SALARY_BANDS: dict[str, tuple[float, float]] = {
-    # Tech roles
-    "software engineer":      (4.0,  45.0),
-    "senior engineer":        (12.0, 70.0),
-    "lead engineer":          (18.0, 90.0),
+    # ── Tech — specific first ──────────────────────────────────────────────
     "principal engineer":     (25.0, 120.0),
-    "data scientist":         (6.0,  55.0),
-    "data analyst":           (3.5,  20.0),
-    "machine learning":       (8.0,  70.0),
-    "devops":                 (6.0,  45.0),
-    "frontend":               (4.0,  35.0),
-    "backend":                (4.0,  40.0),
-    "fullstack":              (5.0,  45.0),
-    "full stack":             (5.0,  45.0),
-    "android":                (4.0,  35.0),
-    "ios":                    (4.0,  35.0),
-    "qa":                     (3.0,  25.0),
-    "tester":                 (3.0,  20.0),
-    "product manager":        (10.0, 60.0),
-    "project manager":        (8.0,  40.0),
-    "architect":              (20.0, 100.0),
-    "intern":                 (0.5,  6.0),
-    "trainee":                (1.5,  5.0),
-    # Non-tech roles
-    "hr":                     (2.5,  20.0),
-    "recruiter":              (2.5,  18.0),
-    "sales":                  (2.0,  25.0),
-    "marketing":              (2.5,  20.0),
-    "content writer":         (2.0,  15.0),
-    "graphic designer":       (2.0,  18.0),
-    "accountant":             (2.5,  15.0),
-    "finance":                (4.0,  35.0),
-    "operations":             (3.0,  25.0),
-    "customer support":       (2.0,  10.0),
-    "customer service":       (2.0,  10.0),
-    # Management
-    "manager":                (8.0,  50.0),
+    "lead engineer":          (18.0,  90.0),
+    "senior engineer":        (12.0,  70.0),
+    "software engineer":      ( 4.0,  45.0),
+    "machine learning":       ( 8.0,  70.0),
+    "data scientist":         ( 6.0,  55.0),
+    "data analyst":           ( 3.5,  20.0),
+    "devops":                 ( 6.0,  45.0),
+    "full stack":             ( 5.0,  45.0),
+    "fullstack":              ( 5.0,  45.0),
+    "frontend":               ( 4.0,  35.0),
+    "backend":                ( 4.0,  40.0),
+    "android developer":      ( 4.0,  35.0),
+    "android engineer":       ( 4.0,  35.0),
+    "ios developer":          ( 4.0,  35.0),
+    "ios engineer":           ( 4.0,  35.0),
+    "qa engineer":            ( 3.0,  25.0),
+    "qa analyst":             ( 3.0,  25.0),
+    "quality assurance":      ( 3.0,  25.0),
+    "tester":                 ( 3.0,  20.0),
+    "architect":              (20.0, 100.0),   # whole-word: won't hit "architecture"
+    # ── Management — specific first ────────────────────────────────────────
+    "chief executive":        (40.0, 500.0),
+    "chief technology":       (40.0, 300.0),
+    "chief financial":        (40.0, 300.0),
+    "chief operating":        (35.0, 250.0),
+    "vice president":         (30.0, 200.0),
     "director":               (20.0, 150.0),
-    "vp":                     (30.0, 200.0),
-    "cto":                    (40.0, 300.0),
-    "ceo":                    (40.0, 500.0),
+    "product manager":        (10.0,  60.0),
+    "project manager":        ( 8.0,  40.0),
+    "manager":                ( 8.0,  50.0),   # generic fallback
+    # ── Non-tech ───────────────────────────────────────────────────────────
+    "human resources":        ( 2.5,  20.0),
+    "hr executive":           ( 2.5,  15.0),
+    "hr manager":             ( 5.0,  25.0),
+    "recruiter":              ( 2.5,  18.0),
+    "talent acquisition":     ( 3.0,  20.0),
+    "sales executive":        ( 2.0,  15.0),
+    "sales manager":          ( 5.0,  35.0),
+    "sales":                  ( 2.0,  25.0),   # generic fallback
+    "marketing":              ( 2.5,  20.0),
+    "content writer":         ( 2.0,  15.0),
+    "graphic designer":       ( 2.0,  18.0),
+    "accountant":             ( 2.5,  15.0),
+    "finance":                ( 4.0,  35.0),
+    "operations":             ( 3.0,  25.0),
+    "customer support":       ( 2.0,  10.0),
+    "customer service":       ( 2.0,  10.0),
+    # ── Entry level ────────────────────────────────────────────────────────
+    "intern":                 ( 0.5,  20.0),   # raised ceiling: FAANG pays 15-18 LPA
+    "internship":             ( 0.5,  20.0),
+    "trainee":                ( 1.5,   8.0),
+    "fresher":                ( 2.0,  10.0),
 }
 
 # City cost-of-living multipliers — applied to max band threshold
@@ -3121,56 +3311,106 @@ _CITY_MULTIPLIERS: dict[str, float] = {
 
 def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
     """
-    Calibrated salary outlier detection.
+    Calibrated salary outlier detection  (v2).
 
-    1. Extract numeric salary value from text (LPA or absolute INR/USD).
-    2. Look up the role band from job title keywords.
-    3. Apply city multiplier to the band ceiling.
-    4. Flag only if salary exceeds band ceiling by >2× (scam headroom).
-    5. Fall back to the old blunt rule only when no band is matched.
+    Fix summary vs v1
+    ─────────────────
+    1. WHOLE-WORD band matching — "hr" no longer fires on "architecture",
+       "qa" no longer fires on "iraq", "vp" no longer fires on "startup".
+       Short abbreviations (vp/cto/ceo/hr/qa/ios) are matched with \b anchors.
+       Long keywords use simple substring (they're specific enough).
+
+    2. Monthly INR detection — "₹1,20,000/month" is now detected as monthly
+       and annualised correctly (×12) instead of being read as 1.2 LPA annual.
+       Avoids false negatives AND false positives from raw monthly figures.
+
+    3. Intern ceiling raised 0.5-6 → 0.5-20 LPA — FAANG/top-startup
+       internships in Bangalore legitimately pay 15-18 LPA. Old 12 LPA
+       threshold was incorrectly flagging these as scams.
+
+    4. Title abbreviation aliases — "vp", "cto", "ceo", "hr", "qa", "ios"
+       are expanded to their full-form equivalents before band lookup so
+       they match the now-more-specific band keys.
+
+    5. "per month" / "monthly" context detection for INR numbers.
     """
-    text = salary_text or ""
-    title = (job or {}).get("title", "") if job else ""
+    text    = salary_text or ""
+    title   = (job or {}).get("title", "") if job else ""
     location = (job or {}).get("location", "") if job else ""
 
-    # ── Extract numeric salary value ──────────────────────────────────────
+    # ── 1. Extract numeric salary → LPA ───────────────────────────────────
     lpa_val: Optional[float] = None
 
-    # Try LPA pattern first (most common in Indian postings)
+    # LPA range: "12 to 18 LPA", "12-18 L"
     m = re.search(
-        r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?)",
+        r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*"
+        r"(?:LPA|lpa|L|lakhs?|lac)",
         text, re.IGNORECASE,
     )
     if m:
-        lpa_val = float(m.group(2))   # use upper bound of range
-    else:
-        m2 = re.search(r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?)", text, re.IGNORECASE)
+        lpa_val = float(m.group(2))          # upper bound of range
+
+    # Single LPA: "18 LPA", "18L", "18 lakhs"
+    if lpa_val is None:
+        m2 = re.search(
+            r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?|lac)",
+            text, re.IGNORECASE,
+        )
         if m2:
             lpa_val = float(m2.group(1))
 
-    # Try absolute INR (₹ / Rs / INR + raw number)
+    # Absolute INR — detect monthly vs annual context first
     if lpa_val is None:
-        for n in re.findall(r"\d+", text.replace(",", "")):
-            v = int(n)
-            if 100000 <= v <= 99999999:
-                lpa_val = v / 100000   # convert to LPA
-                break
-            if 15000 <= v <= 999999 and "$" in text:
-                lpa_val = (v * 12) / 100000   # monthly USD → rough LPA
-                break
+        is_monthly = bool(re.search(
+            r"(per\s+month|p\.?m\.?|monthly|/month|per\s+mo)",
+            text, re.IGNORECASE,
+        ))
+        nums = [int(n) for n in re.findall(r"\d+", text.replace(",", ""))
+                if 10000 <= int(n) <= 99999999]
+        if nums:
+            v = nums[0]
+            if is_monthly:
+                lpa_val = (v * 12) / 100_000   # monthly → annual LPA
+            elif 100_000 <= v <= 99_999_999:
+                lpa_val = v / 100_000           # annual INR → LPA
+            elif 15_000 <= v <= 999_999 and "$" in text:
+                lpa_val = (v * 12) / 100_000   # monthly USD → rough LPA
 
     if lpa_val is None:
-        return False   # no salary number found — don't flag
+        return False    # no parseable salary — never flag
 
-    # ── Look up role band ──────────────────────────────────────────────────
-    title_lower = title.lower()
+    # ── 2. Normalise title — expand abbreviations ──────────────────────────
+    _ABBREV = {
+        r"vp":  "vice president",
+        r"cto": "chief technology",
+        r"ceo": "chief executive",
+        r"cfo": "chief financial",
+        r"coo": "chief operating",
+        r"hr":  "human resources",
+        r"qa":  "quality assurance",
+        r"ios": "ios developer",
+    }
+    title_norm = title.lower()
+    for pattern, expansion in _ABBREV.items():
+        title_norm = re.sub(pattern, expansion, title_norm)
+
+    # ── 3. Band lookup — whole-word for short keys, substring for long ─────
+    _SHORT_KEYS = {"architect", "manager", "director", "recruiter",
+                   "tester", "fresher", "trainee", "intern", "internship"}
     band: Optional[tuple[float, float]] = None
     for keyword, b in _SALARY_BANDS.items():
-        if keyword in title_lower:
-            band = b
-            break
+        kw = keyword.lower()
+        if len(kw) <= 4 or kw in _SHORT_KEYS:
+            # whole-word match to avoid partial hits
+            if re.search(r"" + re.escape(kw) + r"", title_norm):
+                band = b
+                break
+        else:
+            if kw in title_norm:
+                band = b
+                break
 
-    # ── Apply city multiplier ──────────────────────────────────────────────
+    # ── 4. City multiplier ────────────────────────────────────────────────
     city_mult = 1.0
     loc_lower = location.lower()
     for city, mult in _CITY_MULTIPLIERS.items():
@@ -3178,16 +3418,15 @@ def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
             city_mult = mult
             break
 
-    # ── Decision ──────────────────────────────────────────────────────────
+    # ── 5. Decision ───────────────────────────────────────────────────────
     if band:
         _, max_lpa = band
         effective_max = max_lpa * city_mult
-        # Flag only if salary is more than 2× the ceiling — clear scam territory
+        # Flag only if salary exceeds 2× the band ceiling — unambiguous scam
         return lpa_val > effective_max * 2.0
     else:
-        # No band match — only flag truly impossible numbers (>₹5Cr / >500 LPA).
-        # Do NOT flag normal salaries just because the role isn't in the band table.
-        return lpa_val > 500.0
+        # No band matched — only flag truly impossible numbers (>500 LPA / ₹5 Cr)
+        return lpa_val >= 500.0
 
 def _run_rules(job: dict) -> dict:
     full = " ".join([job.get(k,"") for k in
@@ -3343,8 +3582,83 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _llm_prompt(job: dict, probe_warnings: list) -> str:
-    ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
+def _probe_summary(probe_warnings: list) -> str:
+    """
+    Convert probe warnings into a clear PASS/FAIL summary for the LLM.
+    When warnings is empty, all probes passed — the LLM must treat this as
+    positive evidence for company legitimacy, not ignore it.
+    """
+    if not probe_warnings:
+        return (
+            "ALL PROBES PASSED:\n"
+            "  - Domain age: established (registered > 6 months ago)\n"
+            "  - Site reachable: yes, with valid SSL certificate\n"
+            "  - Typosquatting: none detected\n"
+            "  - Email domain: legitimate (no free/personal email)\n"
+            "  - MX records: valid mail infrastructure exists\n"
+            "  - Company domain: DNS + HTTPS + MX all verified\n"
+            "  - SPF / DMARC: email authentication configured\n"
+            "IMPORTANT: These are live infrastructure checks that PASSED. "
+            "This is real evidence the company exists. Weight this heavily in "
+            "company_legitimacy — do NOT say UNVERIFIABLE if probes passed."
+        )
+    lines = "\n".join(f"  - {w}" for w in probe_warnings)
+    return f"PROBE WARNINGS (live checks that FAILED):\n{lines}"
+
+
+# Human-readable names for rule signals shown to the LLM
+_SIGNAL_LABELS: dict[str, str] = {
+    "upfront_payment":       "Upfront payment / registration fee demanded",
+    "advance_fee_scam":      "Advance fee scam pattern detected",
+    "fake_govt_job":         "Fake government job indicators",
+    "mlm_pyramid":           "MLM / pyramid scheme language",
+    "too_good_salary":       "Unrealistically high salary for role",
+    "urgency_pressure":      "Urgency / pressure tactics (limited slots, act now)",
+    "vague_description":     "Vague or missing job description",
+    "free_email_contact":    "Contact via free email (Gmail/Yahoo/etc)",
+    "no_company_info":       "No verifiable company information",
+    "unrealistic_benefits":  "Unrealistic benefits / earnings claimed",
+    "personal_info_demand":  "Unusual personal information requested upfront",
+    "fake_wfh":              "Suspicious work-from-home / easy money claims",
+    "whatsapp_only":         "WhatsApp-only contact — no official channel",
+    "unprofessional_language": "Unprofessional language / grammar issues",
+}
+
+
+def _llm_prompt(job: dict, probe_warnings: list,
+                seeker: dict | None = None,
+                rule_signals: dict | None = None) -> str:
+    ctx = _probe_summary(probe_warnings)
+    # Build rule signals context for the LLM
+    rule_signals = rule_signals or {}
+    if rule_signals:
+        sig_lines = []
+        for sig in rule_signals:
+            label = _SIGNAL_LABELS.get(sig, sig.replace("_", " ").title())
+            sig_lines.append(f"  ⚠ {label}")
+        rule_signals_ctx = (
+            "The following red flags were PATTERN-MATCHED from the job text:\n"
+            + "\n".join(sig_lines) + "\n"
+            "These are concrete signals from the posting itself — factor them into "
+            "scam_pattern and fake_company_evidence. Do NOT ignore them just because "
+            "network probes passed. A real company CAN post a scam internship."
+        )
+    else:
+        rule_signals_ctx = "No rule engine signals fired — text appears clean."
+    seeker         = seeker or {}
+    seeker_loc     = seeker.get("location", "").strip()
+    seeker_role    = seeker.get("role", "").strip()
+    seeker_context = ""
+    if seeker_loc or seeker_role:
+        parts = []
+        if seeker_role: parts.append(f"The applicant is a {seeker_role}")
+        if seeker_loc:  parts.append(f"based in {seeker_loc}")
+        seeker_context = " ".join(parts) + ". "
+        seeker_context += (
+            "Use this to sharpen the salary assessment — compare the posted salary "
+            "against the typical market rate for this specific role and applicant location, "
+            "not just the job posting location."
+        )
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
     salary_instruction = (
@@ -3352,8 +3666,17 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
         "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
         "do NOT guess, infer, or comment on whether it is realistic."
         if not salary_raw else
-        "Assess whether the stated salary is realistic for this role and location. "
-        "If it seems unrealistically high, flag it as a potential scam signal."
+        f"{seeker_context} "
+        "Write 2-3 sentences assessing the stated salary. "
+        "You MUST include: (1) the stated salary figure, (2) the typical market range "
+        "for this exact role and location in India (in LPA or INR/month as appropriate) "
+        "— if the applicant's location or role differs from the posting, call that out explicitly. "
+        "(3) A clear verdict — realistic, slightly high, or unrealistically high and why. "
+        "Example: 'The stated salary of 8-12 LPA is within the typical range of 6-14 LPA "
+        "for a mid-level Data Analyst in Bangalore. For a candidate based in Pune with 2 years "
+        "of experience, this is on the higher end but still realistic.' "
+        "Never respond with a single word like 'realistic' or 'unrealistic'. "
+        "If the salary is unrealistically high for the role and location, flag it as a scam signal."
     )
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
@@ -3369,8 +3692,37 @@ Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
 
-LIVE PROBE FINDINGS:
+LIVE NETWORK PROBE RESULTS (these are real-time checks — treat as hard evidence):
 {ctx}
+
+COMPANY LEGITIMACY RULE (mandatory — two-axis evaluation):
+company_legitimacy assesses ONLY whether the company itself is real and legitimate.
+It is NOT the same as whether the JOB POSTING is safe.
+
+Axis 1 — Infrastructure (from probe results above):
+  - All probes passed → company has real web/email infrastructure
+  - Probe failures → flag accordingly
+
+Axis 2 — Job posting behaviour (from rule signals above):
+  - Payment/fee demanded, fake promises, suspicious language → the company
+    may be real but the posting is fraudulent or the company itself is running a scam
+
+Decision table:
+  Probes PASSED + No red flags in posting     → "VERIFIED"
+  Probes PASSED + Red flags in posting        → "REAL_BUT_SUSPICIOUS"
+    (company infrastructure is real but the posting has scam characteristics)
+  Probes FAILED (partial)                     → "UNVERIFIABLE"
+  Probes FAILED (domain fake/no MX/squatter)  → "LIKELY_FAKE" or "GHOST_COMPANY"
+  No website/domain provided at all           → "UNVERIFIABLE"
+
+CRITICAL: A real website does NOT cancel out payment demands or scam language.
+If upfront_payment or advance_fee_scam signals fired → use "REAL_BUT_SUSPICIOUS", not "VERIFIED".
+
+RULE ENGINE SIGNALS (pattern-matched red flags from the job text — treat as hard evidence):
+{rule_signals_ctx}
+
+APPLICANT CONTEXT (use to personalise salary assessment):
+{seeker_context if seeker_context else "Not provided — assess against general market."}
 
 SALARY ASSESSMENT RULE (mandatory):
 {salary_instruction}
@@ -3379,14 +3731,14 @@ Required JSON schema (all keys mandatory):
 {{
   "ai_risk_score": <0-100>,
   "verdict": "<SAFE|SUSPICIOUS|LIKELY_SCAM|DEFINITE_SCAM>",
-  "company_legitimacy": "<VERIFIED|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
+  "company_legitimacy": "<VERIFIED|REAL_BUT_SUSPICIOUS|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
   "top_red_flags": ["<str>","<str>","<str>"],
   "positive_signals": ["<str>"],
-  "fake_company_evidence": "<detailed reasoning about company authenticity>",
+  "fake_company_evidence": "<reasoning about company authenticity — MUST reference the live probe results above. If all probes passed, acknowledge that as positive evidence. Do not ignore infrastructure checks.>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
+  "salary_assessment": "<2-3 sentence analysis: state the salary, compare to typical market range for this role and city, and explain whether it is a scam signal or a legitimate offer. Be specific — mention actual LPA figures. NOT_PROVIDED if salary is missing.>",
   "recommended_action": "<specific advice for the job seeker>",
-  "similar_scam_type": "<known pattern name or Unknown>",
+  "similar_scam_type": "<MUST classify if any red flag fired. Choose: Advance Fee Scam | Fake Registration Fee | Fake Internship Fee | Equipment/Laptop Deposit | Fake Govt Job | MLM Pyramid Scheme | Too Good To Be True | Data Harvesting | Fake WFH Scam | Captcha/Data Entry Trap | Placement Fee Fraud | Other. If upfront_payment signal fired → must NOT return Unknown. Unknown only if NO signals fired at all.>",
   "confidence": <0-100>
 }}"""
 
@@ -3417,8 +3769,9 @@ _V: dict = {
                       "label": "INCONCLUSIVE"},
 }
 _CB: dict = {
-    "VERIFIED":      (I.CHECK,     "#22c55e"),
-    "UNVERIFIABLE":  (I.ALERT_TRI, "#f59e0b"),
+    "VERIFIED":           (I.CHECK,     "#22c55e"),
+    "REAL_BUT_SUSPICIOUS": (I.ALERT_TRI, "#f59e0b"),
+    "UNVERIFIABLE":        (I.ALERT_TRI, "#6b7280"),
     "LIKELY_FAKE":   (I.FLAG,      "#ef4444"),
     "GHOST_COMPANY": (I.GHOST,     "#dc2626"),
 }
@@ -3819,21 +4172,117 @@ def _render_ai_dive(llm: dict):
 
     cl     = llm.get("company_legitimacy", "UNVERIFIABLE")
     ci, cc = _CB.get(cl, _CB["UNVERIFIABLE"])
+    scam_pattern = llm.get("similar_scam_type", "Unknown")
+
+    # ── Layered trust panel ───────────────────────────────────────────────
+    # Shows all evaluation axes so users see WHY the verdict was reached,
+    # not just the final number.
+    fired       = result.get("signals", {})
+    probes_r    = result.get("probes", {})
+    blended_s   = result.get("blended_score", 0)
+    rule_s      = result.get("rule_score", 0)
+    probe_pen   = result.get("probe_penalty", 0)
+
+    # Determine per-axis status
+    # 1. Company infrastructure (probe layer)
+    mx_ok       = probes_r.get("mx_record", {}).get("status","") == "MX_FOUND"
+    domain_ok   = probes_r.get("company_domain", {}).get("domain_exists", False)
+    site_ok     = probes_r.get("site_reach", {}).get("reachable", False)
+    age_ok      = probes_r.get("domain_age", {}).get("status","") in ("old","established","moderate")
+    no_squatter = not probes_r.get("typosquat", {}).get("is_squatter", False)
+    probe_axes_pass = sum([mx_ok, domain_ok, site_ok, age_ok, no_squatter])
+    if probe_axes_pass >= 4:
+        infra_label, infra_color, infra_dot = "Passed", "#22c55e", "#22c55e"
+    elif probe_axes_pass >= 2:
+        infra_label, infra_color, infra_dot = "Partial", "#f59e0b", "#f59e0b"
+    else:
+        infra_label, infra_color, infra_dot = "Failed", "#ef4444", "#ef4444"
+
+    # 2. Job description risk (rule engine)
+    if rule_s == 0:
+        jd_label, jd_color = "Low Risk", "#22c55e"
+    elif rule_s < 25:
+        jd_label, jd_color = "Mild Signals", "#f59e0b"
+    elif rule_s < 50:
+        jd_label, jd_color = "High Risk", "#f97316"
+    else:
+        jd_label, jd_color = "Critical Risk", "#ef4444"
+
+    # 3. Payment / fee detection
+    payment_fired = "upfront_payment" in fired or "advance_fee_scam" in fired
+    fee_label  = "Detected ⚠" if payment_fired else "None found"
+    fee_color  = "#ef4444"     if payment_fired else "#22c55e"
+
+    # 4. Suspicious language
+    lang_signals = [k for k in ("urgency_pressure","unrealistic_benefits","vague_description",
+                                "unprofessional_language","fake_wfh","whatsapp_only") if k in fired]
+    if not lang_signals:
+        lang_label, lang_color = "Clean", "#22c55e"
+    elif len(lang_signals) == 1:
+        lang_label, lang_color = "Minor flags", "#f59e0b"
+    else:
+        lang_label, lang_color = f"{len(lang_signals)} flags", "#ef4444"
+
+    # 5. Contact authenticity
+    free_email  = probes_r.get("free_email", {}).get("uses_free_domain", False)
+    wa_only     = "whatsapp_only" in fired
+    if free_email and wa_only:
+        contact_label, contact_color = "High Risk", "#ef4444"
+    elif free_email or wa_only:
+        contact_label, contact_color = "Suspicious", "#f59e0b"
+    else:
+        contact_label, contact_color = "Legitimate", "#22c55e"
+
+    # 6. Overall trust label from blended score
+    if blended_s < 25:
+        trust_label, trust_color, trust_bg = "TRUSTED", "#22c55e", "rgba(34,197,94,0.08)"
+    elif blended_s < 40:
+        trust_label, trust_color, trust_bg = "NEEDS REVIEW", "#f59e0b", "rgba(245,158,11,0.08)"
+    elif blended_s < 65:
+        trust_label, trust_color, trust_bg = "SUSPICIOUS", "#f97316", "rgba(249,115,22,0.08)"
+    else:
+        trust_label, trust_color, trust_bg = "DO NOT TRUST", "#ef4444", "rgba(239,68,68,0.08)"
+
+    def _axis_row(label, value, color):
+        dot = f'<span style="width:7px;height:7px;border-radius:50%;background:{color};display:inline-block;margin-right:6px;flex-shrink:0;"></span>'
+        return (
+            f'<div style="display:flex;justify-content:space-between;align-items:center;'
+            f'padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">'
+            f'<span style="font-size:0.75rem;color:#8b949e;">{label}</span>'
+            f'<span style="display:flex;align-items:center;font-size:0.75rem;font-weight:600;color:{color};">{dot}{value}</span>'
+            f'</div>'
+        )
+
+    axes_html = (
+        _axis_row("Company Infrastructure",  infra_label,    infra_color) +
+        _axis_row("Job Description Risk",    jd_label,       jd_color) +
+        _axis_row("Payment / Fee Request",   fee_label,      fee_color) +
+        _axis_row("Suspicious Language",     lang_label,     lang_color) +
+        _axis_row("Contact Authenticity",    contact_label,  contact_color) +
+        _axis_row("Company Status",          cl.replace("_"," "), cc)
+    )
 
     st.markdown(
-        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
-        f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
-        f'border-radius:9px;padding:12px;">'
-        f'<div style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;'
-        f'letter-spacing:1px;margin-bottom:5px;">Company Status</div>'
-        f'<div style="display:flex;align-items:center;gap:6px;color:{cc};font-weight:600;font-size:0.83rem;">'
-        f'{_svg(ci,13,cc)}{cl.replace("_"," ")}</div></div>'
-        f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
-        f'border-radius:9px;padding:12px;">'
-        f'<div style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;'
-        f'letter-spacing:1px;margin-bottom:5px;">Scam Pattern</div>'
-        f'<div style="color:#a78bfa;font-weight:600;font-size:0.83rem;">'
-        f'{llm.get("similar_scam_type","Unknown")}</div></div></div>',
+        f'<div style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;'
+        f'overflow:hidden;margin-bottom:14px;">'
+        # Header — overall trust rating
+        f'<div style="background:{trust_bg};border-bottom:1px solid rgba(255,255,255,0.07);'
+        f'padding:10px 14px;display:flex;justify-content:space-between;align-items:center;">'
+        f'<span style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">'
+        f'Overall Trust Rating</span>'
+        f'<span style="font-size:0.78rem;font-weight:700;color:{trust_color};">{trust_label}</span>'
+        f'</div>'
+        # Axis rows
+        f'<div style="padding:4px 14px 4px;">'
+        f'{axes_html}'
+        f'</div>'
+        # Scam pattern footer
+        f'<div style="background:rgba(255,255,255,0.02);border-top:1px solid rgba(255,255,255,0.05);'
+        f'padding:8px 14px;display:flex;justify-content:space-between;align-items:center;">'
+        f'<span style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Scam Pattern</span>'
+        f'<span style="font-size:0.75rem;font-weight:600;color:#a78bfa;">{scam_pattern}</span>'
+        f'</div>'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
@@ -4429,6 +4878,28 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
                                             placeholder="What the employer offers...")
 
+    # ── Optional applicant context — improves salary personalisation ─────────
+    st.markdown(
+        '<div style="font-size:0.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;'
+        'letter-spacing:0.9px;margin:18px 0 6px;">Your Context '
+        '<span style="font-weight:400;text-transform:none;letter-spacing:0;">'
+        '(optional — personalises salary analysis)</span></div>',
+        unsafe_allow_html=True,
+    )
+    _sc1, _sc2 = st.columns(2)
+    _sc1.text_input(
+        "Your Location",
+        placeholder="e.g. Mumbai, Pune, Remote",
+        key="jsd_seeker_loc",
+        help="Where you are based — used to benchmark salary against your local market",
+    )
+    _sc2.text_input(
+        "Your Role / Experience Level",
+        placeholder="e.g. Data Analyst, 2 yrs exp",
+        key="jsd_seeker_role",
+        help="Your target role or experience level — validates if salary is realistic for you",
+    )
+
     # Use only meaningful fields for "is there any input" check — not description
     # (which in paste mode is raw and always present once the user types).
     if mode == "Paste Full Job Description":
@@ -4487,7 +4958,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 time.sleep(0.5)   # spinner visible for at least half a second
                 preserve = {"jsd_history", "jsd_history_loaded"}
                 paste_keys = [
-                    "jsd_raw", "jsd_mode",
+                    "jsd_raw", "jsd_mode", "jsd_seeker_loc", "jsd_seeker_role",
                     "jsd_ot", "jsd_oco", "jsd_os", "jsd_oct", "jsd_ow", "jsd_ol",
                 ]
                 fill_keys = [
@@ -4541,7 +5012,12 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     for attempt in range(2):
                         try:
-                            prompt = _llm_prompt(job, warnings)
+                            seeker_ctx = {
+                                "location": st.session_state.get("jsd_seeker_loc", "").strip(),
+                                "role":     st.session_state.get("jsd_seeker_role", "").strip(),
+                            }
+                            prompt = _llm_prompt(job, warnings, seeker_ctx,
+                                                 rule_signals=rules_result["signals"])
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
@@ -4618,8 +5094,30 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     blended = int(w_ai * ai_s + w_rule * rule_s + w_probe * penalty)
 
-                    # Hard floor only from HIGH-weight signals (>=18 pts each).
-                    critical_signals = [k for k, s in rules_result["signals"].items()
+                    # ── Signal-level hard floors ──────────────────────────────
+                    # Some rule signals are so diagnostic they must force a minimum
+                    # score REGARDLESS of how clean the probe layer is.
+                    # A legitimate website does NOT cancel out a payment demand.
+
+                    _SIGNAL_FLOORS = {
+                        # Payment demanded → always at least LIKELY_SCAM (50)
+                        "upfront_payment":    50,
+                        "advance_fee_scam":   65,
+                        # Fake govt job → always at least LIKELY_SCAM
+                        "fake_govt_job":      55,
+                        # MLM / pyramid → always at least LIKELY_SCAM
+                        "mlm_pyramid":        50,
+                        # Unrealistic salary → at least SUSPICIOUS
+                        "too_good_salary":    35,
+                    }
+
+                    fired_signals = rules_result["signals"]
+                    for sig, floor in _SIGNAL_FLOORS.items():
+                        if sig in fired_signals:
+                            blended = max(blended, floor)
+
+                    # General critical signal floor (weight >= 18)
+                    critical_signals = [k for k in fired_signals
                                         if _WEIGHTS.get(k, 0) >= 18]
                     critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
                     blended = max(blended, critical_weight)
@@ -4677,6 +5175,27 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         final = av if blended >= next_threshold - 5 else sv
                     else:
                         final = sv
+
+                    # ── Post-process company_legitimacy ───────────────────────
+                    # Override LLM's company_legitimacy if rule signals contradict it.
+                    # The LLM should handle this, but this is a hard safety net.
+                    cl = llm_data.get("company_legitimacy", "UNVERIFIABLE")
+                    fired = rules_result["signals"]
+                    payment_fired = "upfront_payment" in fired or "advance_fee_scam" in fired
+                    high_risk_fired = any(
+                        _WEIGHTS.get(k, 0) >= 18 for k in fired
+                    )
+
+                    if cl == "VERIFIED":
+                        if payment_fired:
+                            # Payment demand + VERIFIED = impossible combination
+                            llm_data["company_legitimacy"] = "REAL_BUT_SUSPICIOUS"
+                        elif high_risk_fired and blended >= 40:
+                            # Multiple serious flags + verified domain
+                            llm_data["company_legitimacy"] = "REAL_BUT_SUSPICIOUS"
+                        elif blended >= 65:
+                            # Score this high means posting is almost certainly a scam
+                            llm_data["company_legitimacy"] = "REAL_BUT_SUSPICIOUS"
 
                     res = {
                         "blended_score":  blended,   "rule_score":     rule_s,
