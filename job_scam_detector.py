@@ -333,20 +333,12 @@ _PAY_PHRASES = [
     r"processing fee",r"joining fee",r"membership fee",r"buy.*starter kit",
     r"purchase.*materials",r"invest.*joining",r"small.*investment",
     r"courier.*charge",r"background.*check.*fee",r"verification.*charge",
-    # Common Indian scam variants
+    # NEW — common Indian scam variants
     r"pay.*before.*joining",r"deposit.*refund.*after",r"id.*card.*fee",
     r"uniform.*charge",r"laptop.*deposit",r"tool.*kit.*purchase",
     r"sim.*card.*fee",r"scanner.*fee",r"biometric.*fee",
     r"police.*verification.*fee",r"insurance.*premium.*joining",
     r"token.*amount",r"earnest.*money",r"caution.*deposit",
-    # Internship / one-time fee variants (frequently missed)
-    r"one.time.*fee",r"internship.*fee",r"one.time.*internship",
-    r"return.*laptop",r"return.*company.*laptop",r"laptop.*return.*policy",
-    r"refundable.*laptop",r"laptop.*deposit.*refund",
-    r"application.*fee",r"offer.*letter.*fee",r"appointment.*fee",
-    r"document.*fee",r"stamp.*paper.*fee",r"agreement.*fee",
-    r"pay.*to.*confirm",r"payment.*confirm.*offer",r"confirm.*seat.*pay",
-    r"pay.*to.*proceed",r"amount.*to.*get.*offer",
 ]
 _MLM_PHRASES = [
     r"unlimited earning",r"be your own boss",r"passive income",
@@ -1679,116 +1671,56 @@ def _levenshtein(s1: str, s2: str) -> int:
     return prev[-1]
 
 
-def _probe_typosquatting(domain: str, company: str = "") -> dict:
+def _probe_typosquatting(domain: str) -> dict:
     """
-    Typosquat detection v3 — merged best of v51 + company-awareness patch.
+    Typosquat detection v2  (replaces SequenceMatcher / 72% threshold).
 
-    Three complementary checks, in priority order:
+    Two complementary checks on normalised SLDs:
 
-    1. COMPANY-AWARE CHECK:
-       Resolves the claimed company's real canonical domain via Clearbit
-       (free API) or DNS guessing, then checks edit distance on homoglyph-
-       normalised SLDs. Eliminates false positives like "netomi" vs "netflix"
-       because we only flag when the submitted domain is suspiciously close
-       to the company it *claims* to be.
+    1. Levenshtein edit distance ≤ 2 on homoglyph-normalised SLDs.
+       Catches: netlfix, nettflix, netfl1x, g00gle, inf0sys, w1pro …
+       Skips brands with SLD < 4 chars (tcs, ril …) — too short, too noisy.
 
-    2. LEVENSHTEIN ON BRAND LIST (v51):
-       Edit distance ≤ 2 on homoglyph-normalised SLDs against _BRAND_DOMAINS.
-       Skips brand SLDs < 4 chars (tcs, ril …) — too short, too noisy.
-       Catches: netlfix, nettflix, netfl1x, g00gle, inf0sys, w1pr0 …
-       Also catches brand-keyword containment: infosys-careers.com, wipro-jobs.in
+    2. Brand-keyword prefix/suffix containment.
+       Catches: infosys-careers.com, wipro-jobs.in, careers.infosys.net …
+       Requires ≥ 2 extra chars beyond the brand token (avoids "infosyss").
 
-    3. SEQUENCEMATCHER FALLBACK at raised threshold 0.85 (was 0.72 in v1).
-       Last resort — only fires when company unknown AND Clearbit/DNS fail
-       AND Levenshtein found nothing.
+    Root cause of the old false positives (netomi, netsol, netapp):
+       SequenceMatcher was run on FULL domains including .com suffix, inflating
+       scores: "netomi.com" vs "netflix.com" = 76% (above 72% threshold) even
+       though SLD-only score is only 61%. Switching to Levenshtein on SLD-only
+       + homoglyph normalisation eliminates these false positives entirely.
     """
     out = {"is_squatter": False, "closest_brand": None, "similarity": 0.0, "detail": ""}
     if not domain:
         return out
 
-    d_sld  = domain.split(".")[0]
-    d_norm = _typo_normalise(d_sld)
+    d_sld      = domain.split(".")[0]
+    d_norm     = _typo_normalise(d_sld)
 
-    # ── Check 1: Company-aware — compare against the CLAIMED company's real domain ──
-    # Only runs when the job posting has an extractable company name.
-    # Priority: Clearbit (globally recognised) → DNS slug guessing (regional/unknown)
-    if company:
-        canonical_domain = ""
-        cb = _check_clearbit(company)
-        canonical_domain = cb.get("domain", "")
-        if not canonical_domain:
-            guessed, _ = _probe_domain_candidates(company)
-            canonical_domain = guessed
-
-        if canonical_domain:
-            c_sld  = canonical_domain.split(".")[0]
-            c_norm = _typo_normalise(c_sld)
-
-            # Exact normalised match → submitted domain IS the real domain → safe
-            if d_norm == c_norm:
-                out.update(
-                    similarity=1.0,
-                    closest_brand=canonical_domain,
-                    detail=f"'{domain}' matches canonical domain '{canonical_domain}' — legitimate ✓",
-                )
-                return out
-
-            edit_dist  = _levenshtein(d_norm, c_norm)
-            max_len    = max(len(d_norm), len(c_norm), 1)
-            similarity = round(1.0 - edit_dist / max_len, 3)
-            out.update(similarity=similarity, closest_brand=canonical_domain)
-
-            if edit_dist <= 2:
-                out.update(
-                    is_squatter=True,
-                    detail=(
-                        f"'{domain}' is only {edit_dist} char(s) from '{canonical_domain}' "
-                        f"after homoglyph normalisation — likely impersonating {company}"
-                    ),
-                )
-                return out
-
-            # Brand-keyword containment against canonical domain
-            if c_norm in d_norm and len(d_norm.replace(c_norm, "")) >= 2:
-                out.update(
-                    is_squatter=True,
-                    detail=(
-                        f"'{domain}' embeds brand keyword '{c_sld}' from '{canonical_domain}' "
-                        f"— likely impersonating {company}"
-                    ),
-                )
-                return out
-
-            # Edit distance ≥ 3 and no containment → different company, not a typosquat
-            out["detail"] = (
-                f"'{domain}' vs canonical '{canonical_domain}' — "
-                f"edit distance {edit_dist} (≥3), not a typosquat"
-            )
-            return out  # don't fall through when we have a canonical domain
-
-    # ── Check 2: Levenshtein on hardcoded brand list (v51) ───────────────────
-    # Runs when: no company provided, OR Clearbit + DNS both failed.
-    best_lev_dist:  int        = 999
-    best_lev_brand: str | None = None
-    prefix_brand:   str | None = None
+    best_lev_dist:  int         = 999
+    best_lev_brand: str | None  = None
+    prefix_brand:   str | None  = None
 
     for b in _BRAND_DOMAINS:
         b_sld  = b.split(".")[0]
         b_norm = _typo_normalise(b_sld)
 
+        # Skip very short brand SLDs — too prone to coincidental matches
         if len(b_sld) < 4:
             continue
 
-        # Check 2a: Levenshtein on normalised SLDs
-        if d_norm != b_norm:
+        # ── Check 1: Levenshtein on normalised SLDs ───────────────────────
+        if d_norm != b_norm:          # exact match = the real domain, skip
             dist = _levenshtein(d_norm, b_norm)
             if dist < best_lev_dist:
                 best_lev_dist, best_lev_brand = dist, b
 
-        # Check 2b: brand keyword embedded in submitted domain
+        # ── Check 2: brand keyword embedded in domain ─────────────────────
+        # e.g. "infosys-careers.com" contains "infosys"
         if b_norm in d_norm and d_norm != b_norm:
             extra = d_norm.replace(b_norm, "")
-            if len(extra) >= 2:
+            if len(extra) >= 2:       # at least 2 extra chars to avoid "infosyss"
                 prefix_brand = b
 
     is_lev_squatter    = (best_lev_dist <= 2 and best_lev_brand is not None
@@ -1796,8 +1728,9 @@ def _probe_typosquatting(domain: str, company: str = "") -> dict:
     is_prefix_squatter = prefix_brand is not None
     is_squatter        = is_lev_squatter or is_prefix_squatter
 
+    # Compute a 0-1 similarity figure for the UI progress bar
     if best_lev_brand:
-        b_sld_len  = max(len(_typo_normalise(best_lev_brand.split(".")[0])), 1)
+        b_sld_len = max(len(_typo_normalise(best_lev_brand.split(".")[0])), 1)
         similarity = round(1.0 - best_lev_dist / b_sld_len, 3)
     else:
         similarity = 0.0
@@ -1807,41 +1740,16 @@ def _probe_typosquatting(domain: str, company: str = "") -> dict:
 
     if is_squatter:
         if is_lev_squatter:
-            detail = (
-                f"'{domain}' is a likely typosquat of '{best_lev_brand}' "
-                f"(edit distance {best_lev_dist} after homoglyph normalisation)"
-            )
+            detail = (f"'{domain}' is a likely typosquat of '{best_lev_brand}' "
+                      f"(edit distance {best_lev_dist} after homoglyph normalisation)")
         else:
-            detail = (
-                f"'{domain}' contains brand keyword '{prefix_brand.split('.')[0]}' "
-                f"— possible impersonation of {prefix_brand}"
-            )
+            detail = (f"'{domain}' contains brand keyword "
+                      f"'{prefix_brand.split('.')[0]}' — possible impersonation of {prefix_brand}")
         out.update(is_squatter=True, detail=detail)
-        return out
-
-    # ── Check 3: SequenceMatcher fallback at raised threshold 0.85 ───────────
-    best_sm, best_sm_brand = 0.0, None
-    for b in _BRAND_DOMAINS:
-        b_sld = b.split(".")[0]
-        sc = max(
-            difflib.SequenceMatcher(None, d_sld, b_sld).ratio(),
-            difflib.SequenceMatcher(None, domain, b).ratio(),
-        )
-        if sc > best_sm:
-            best_sm, best_sm_brand = sc, b
-
-    if best_sm >= 0.85 and domain not in _BRAND_DOMAINS:
-        out.update(
-            is_squatter=True,
-            similarity=round(best_sm, 3),
-            closest_brand=best_sm_brand,
-            detail=f"'{domain}' is {int(best_sm * 100)}% similar to '{best_sm_brand}' — possible impersonation",
-        )
     else:
-        out["detail"] = (
-            f"No typosquat detected (closest: {closest}, edit distance {best_lev_dist})"
-            if closest else "No close brand match found"
-        )
+        out["detail"] = (f"No typosquat detected (closest: {closest}, "
+                         f"edit distance {best_lev_dist})"
+                         if closest else "No close brand match found")
     return out
 
 
@@ -2969,7 +2877,7 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
     tasks = [
         ("domain_age",     _probe_domain_age,      domain or ""),
         ("site_reach",     _probe_site_reachable,   domain or ""),
-        ("typosquat",      lambda d: _probe_typosquatting(d, company), domain or ""),
+        ("typosquat",      _probe_typosquatting,    domain or ""),
         ("free_email",     _probe_free_email,       contact),
         ("mx_record",      _probe_mx_record,        contact),
         ("company_domain", _probe_company_domain,   (company, website)),
@@ -3160,94 +3068,48 @@ def _any(text: str, patterns: list) -> list:
 # If the detected salary falls ABOVE max_lpa by >2× it is flagged as outlier.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Salary bands ─────────────────────────────────────────────────────────────
-# Keys are matched as WHOLE-WORD substrings (\b keyword \b) against the job
-# title, so short tokens like "hr", "qa", "vp", "ios" no longer fire on words
-# that merely *contain* them (e.g. "architecture", "iraq", "startup").
-#
-# Order matters for multi-keyword titles: more-specific keys come first so
-# "product manager" wins over the bare "manager" fallback.
-#
-# (min_lpa, max_lpa) — flag threshold = max_lpa × city_multiplier × 2.0
-# Salary bands by experience tier (LPA).
-# Format: keyword → {exp_years_floor: (min_lpa, max_lpa)}
-# Tiers: 0=fresher/0-1yr, 2=junior 2-4yr, 5=mid 5-7yr, 8=senior 8+yr
-# _salary_outlier() picks the tier closest to the candidate's experience.
-_SALARY_BANDS: dict[str, dict[int, tuple[float, float]]] = {
-    # ── Tech — specific first ──────────────────────────────────────────────
-    "principal engineer":  {0: (25.0, 60.0), 2: (30.0, 80.0),  5: (40.0, 120.0), 8: (60.0, 200.0)},
-    "lead engineer":       {0: (18.0, 40.0), 2: (22.0, 55.0),  5: (30.0,  90.0), 8: (45.0, 130.0)},
-    "senior engineer":     {0: (12.0, 25.0), 2: (15.0, 35.0),  5: (20.0,  70.0), 8: (35.0, 100.0)},
-    "software engineer":   {0: ( 4.0, 10.0), 2: ( 8.0, 20.0),  5: (15.0,  45.0), 8: (25.0,  80.0)},
-    "machine learning":    {0: ( 6.0, 15.0), 2: (10.0, 25.0),  5: (18.0,  70.0), 8: (30.0, 120.0)},
-    "data scientist":      {0: ( 5.0, 12.0), 2: ( 9.0, 22.0),  5: (16.0,  55.0), 8: (28.0,  90.0)},
-    "data analyst":        {0: ( 3.0,  8.0), 2: ( 5.0, 14.0),  5: ( 9.0,  22.0), 8: (15.0,  35.0)},
-    "devops":              {0: ( 5.0, 12.0), 2: ( 8.0, 20.0),  5: (14.0,  45.0), 8: (22.0,  70.0)},
-    "full stack":          {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (12.0,  45.0), 8: (22.0,  70.0)},
-    "fullstack":           {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (12.0,  45.0), 8: (22.0,  70.0)},
-    "frontend":            {0: ( 3.5,  9.0), 2: ( 6.0, 16.0),  5: (10.0,  35.0), 8: (18.0,  55.0)},
-    "backend":             {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (12.0,  40.0), 8: (20.0,  65.0)},
-    "android developer":   {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (10.0,  35.0), 8: (18.0,  55.0)},
-    "android engineer":    {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (10.0,  35.0), 8: (18.0,  55.0)},
-    "ios developer":       {0: ( 4.0, 10.0), 2: ( 7.0, 16.0),  5: (11.0,  35.0), 8: (18.0,  55.0)},
-    "ios engineer":        {0: ( 4.0, 10.0), 2: ( 7.0, 16.0),  5: (11.0,  35.0), 8: (18.0,  55.0)},
-    "qa engineer":         {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  38.0)},
-    "qa analyst":          {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  38.0)},
-    "quality assurance":   {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  38.0)},
-    "tester":              {0: ( 2.5,  6.0), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  30.0)},
-    "architect":           {0: (18.0, 40.0), 2: (25.0, 60.0),  5: (35.0, 100.0), 8: (50.0, 160.0)},
-    "cybersecurity":       {0: ( 5.0, 12.0), 2: ( 9.0, 22.0),  5: (16.0,  50.0), 8: (28.0,  90.0)},
-    "cloud engineer":      {0: ( 5.0, 12.0), 2: ( 8.0, 20.0),  5: (14.0,  45.0), 8: (24.0,  75.0)},
-    "site reliability":    {0: ( 6.0, 14.0), 2: (10.0, 24.0),  5: (16.0,  55.0), 8: (28.0,  90.0)},
-    "blockchain":          {0: ( 6.0, 15.0), 2: (10.0, 25.0),  5: (18.0,  60.0), 8: (30.0, 100.0)},
-    "embedded":            {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (10.0,  30.0), 8: (18.0,  50.0)},
-    # ── Management ─────────────────────────────────────────────────────────
-    "chief executive":     {0: (40.0,120.0), 2: (60.0,180.0),  5: (80.0, 300.0), 8: (100.0,500.0)},
-    "chief technology":    {0: (35.0,100.0), 2: (50.0,150.0),  5: (70.0, 250.0), 8: ( 90.0,400.0)},
-    "chief financial":     {0: (35.0,100.0), 2: (50.0,150.0),  5: (70.0, 250.0), 8: ( 90.0,400.0)},
-    "chief operating":     {0: (30.0, 90.0), 2: (45.0,130.0),  5: (60.0, 220.0), 8: ( 80.0,350.0)},
-    "vice president":      {0: (25.0, 70.0), 2: (35.0,100.0),  5: (50.0, 180.0), 8: ( 70.0,300.0)},
-    "director":            {0: (18.0, 50.0), 2: (25.0, 75.0),  5: (35.0, 150.0), 8: ( 50.0,250.0)},
-    "product manager":     {0: ( 8.0, 18.0), 2: (12.0, 28.0),  5: (20.0,  60.0), 8: ( 35.0,100.0)},
-    "project manager":     {0: ( 6.0, 14.0), 2: ( 9.0, 20.0),  5: (14.0,  40.0), 8: ( 22.0, 65.0)},
-    "manager":             {0: ( 6.0, 14.0), 2: ( 8.0, 22.0),  5: (14.0,  50.0), 8: ( 22.0, 80.0)},
-    # ── Non-tech ───────────────────────────────────────────────────────────
-    "human resources":     {0: ( 2.0,  6.0), 2: ( 3.5, 10.0),  5: ( 6.0,  20.0), 8: ( 10.0, 35.0)},
-    "hr executive":        {0: ( 2.0,  5.5), 2: ( 3.0,  9.0),  5: ( 5.0,  15.0), 8: (  8.0, 25.0)},
-    "hr manager":          {0: ( 4.0, 10.0), 2: ( 6.0, 15.0),  5: ( 9.0,  25.0), 8: ( 14.0, 40.0)},
-    "recruiter":           {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  18.0), 8: ( 10.0, 28.0)},
-    "talent acquisition":  {0: ( 2.5,  6.0), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: ( 11.0, 30.0)},
-    "sales executive":     {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  15.0), 8: (  8.0, 25.0)},
-    "sales manager":       {0: ( 4.0, 10.0), 2: ( 6.0, 15.0),  5: ( 9.0,  30.0), 8: ( 14.0, 50.0)},
-    "sales":               {0: ( 1.8,  6.0), 2: ( 3.0, 10.0),  5: ( 5.0,  20.0), 8: (  8.0, 35.0)},
-    "marketing":           {0: ( 2.0,  6.0), 2: ( 3.5, 10.0),  5: ( 6.0,  20.0), 8: ( 10.0, 40.0)},
-    "content writer":      {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  15.0), 8: (  8.0, 22.0)},
-    "graphic designer":    {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  16.0), 8: (  8.0, 25.0)},
-    "accountant":          {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  15.0), 8: ( 10.0, 25.0)},
-    "finance":             {0: ( 3.5,  9.0), 2: ( 5.5, 15.0),  5: ( 9.0,  30.0), 8: ( 16.0, 60.0)},
-    "operations":          {0: ( 2.5,  6.5), 2: ( 4.0, 10.0),  5: ( 7.0,  22.0), 8: ( 12.0, 40.0)},
-    "customer support":    {0: ( 1.8,  4.5), 2: ( 2.5,  7.0),  5: ( 4.0,  12.0), 8: (  6.0, 18.0)},
-    "customer service":    {0: ( 1.8,  4.5), 2: ( 2.5,  7.0),  5: ( 4.0,  12.0), 8: (  6.0, 18.0)},
-    "business analyst":    {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (10.0,  30.0), 8: ( 16.0, 50.0)},
-    "scrum master":        {0: ( 5.0, 12.0), 2: ( 8.0, 18.0),  5: (13.0,  35.0), 8: ( 20.0, 55.0)},
-    # ── Entry level ────────────────────────────────────────────────────────
-    "intern":              {0: ( 0.5,  8.0), 2: ( 1.0, 20.0),  5: ( 2.0,  20.0), 8: ( 2.0,  20.0)},
-    "internship":          {0: ( 0.5,  8.0), 2: ( 1.0, 20.0),  5: ( 2.0,  20.0), 8: ( 2.0,  20.0)},
-    "trainee":             {0: ( 1.5,  5.0), 2: ( 2.0,  8.0),  5: ( 3.0,   8.0), 8: ( 3.0,   8.0)},
-    "fresher":             {0: ( 2.0,  7.0), 2: ( 2.0,  7.0),  5: ( 2.0,   7.0), 8: ( 2.0,   7.0)},
+_SALARY_BANDS: dict[str, tuple[float, float]] = {
+    # Tech roles
+    "software engineer":      (4.0,  45.0),
+    "senior engineer":        (12.0, 70.0),
+    "lead engineer":          (18.0, 90.0),
+    "principal engineer":     (25.0, 120.0),
+    "data scientist":         (6.0,  55.0),
+    "data analyst":           (3.5,  20.0),
+    "machine learning":       (8.0,  70.0),
+    "devops":                 (6.0,  45.0),
+    "frontend":               (4.0,  35.0),
+    "backend":                (4.0,  40.0),
+    "fullstack":              (5.0,  45.0),
+    "full stack":             (5.0,  45.0),
+    "android":                (4.0,  35.0),
+    "ios":                    (4.0,  35.0),
+    "qa":                     (3.0,  25.0),
+    "tester":                 (3.0,  20.0),
+    "product manager":        (10.0, 60.0),
+    "project manager":        (8.0,  40.0),
+    "architect":              (20.0, 100.0),
+    "intern":                 (0.5,  6.0),
+    "trainee":                (1.5,  5.0),
+    # Non-tech roles
+    "hr":                     (2.5,  20.0),
+    "recruiter":              (2.5,  18.0),
+    "sales":                  (2.0,  25.0),
+    "marketing":              (2.5,  20.0),
+    "content writer":         (2.0,  15.0),
+    "graphic designer":       (2.0,  18.0),
+    "accountant":             (2.5,  15.0),
+    "finance":                (4.0,  35.0),
+    "operations":             (3.0,  25.0),
+    "customer support":       (2.0,  10.0),
+    "customer service":       (2.0,  10.0),
+    # Management
+    "manager":                (8.0,  50.0),
+    "director":               (20.0, 150.0),
+    "vp":                     (30.0, 200.0),
+    "cto":                    (40.0, 300.0),
+    "ceo":                    (40.0, 500.0),
 }
-
-def _get_band_for_exp(role_key: str, exp_years: float) -> Optional[tuple[float, float]]:
-    """
-    Pick the right (min, max) LPA tier from _SALARY_BANDS for a given experience level.
-    Chooses the highest tier floor that is <= exp_years.
-    e.g. exp=3 → picks tier 2; exp=7 → picks tier 5; exp=0 → picks tier 0.
-    """
-    tiers = _SALARY_BANDS.get(role_key)
-    if not tiers:
-        return None
-    best_floor = max(f for f in tiers if f <= exp_years) if any(f <= exp_years for f in tiers) else min(tiers)
-    return tiers[best_floor]
 
 # City cost-of-living multipliers — applied to max band threshold
 _CITY_MULTIPLIERS: dict[str, float] = {
@@ -3259,132 +3121,56 @@ _CITY_MULTIPLIERS: dict[str, float] = {
 
 def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
     """
-    Calibrated salary outlier detection  (v2).
+    Calibrated salary outlier detection.
 
-    Fix summary vs v1
-    ─────────────────
-    1. WHOLE-WORD band matching — "hr" no longer fires on "architecture",
-       "qa" no longer fires on "iraq", "vp" no longer fires on "startup".
-       Short abbreviations (vp/cto/ceo/hr/qa/ios) are matched with \b anchors.
-       Long keywords use simple substring (they're specific enough).
-
-    2. Monthly INR detection — "₹1,20,000/month" is now detected as monthly
-       and annualised correctly (×12) instead of being read as 1.2 LPA annual.
-       Avoids false negatives AND false positives from raw monthly figures.
-
-    3. Intern ceiling raised 0.5-6 → 0.5-20 LPA — FAANG/top-startup
-       internships in Bangalore legitimately pay 15-18 LPA. Old 12 LPA
-       threshold was incorrectly flagging these as scams.
-
-    4. Title abbreviation aliases — "vp", "cto", "ceo", "hr", "qa", "ios"
-       are expanded to their full-form equivalents before band lookup so
-       they match the now-more-specific band keys.
-
-    5. "per month" / "monthly" context detection for INR numbers.
+    1. Extract numeric salary value from text (LPA or absolute INR/USD).
+    2. Look up the role band from job title keywords.
+    3. Apply city multiplier to the band ceiling.
+    4. Flag only if salary exceeds band ceiling by >2× (scam headroom).
+    5. Fall back to the old blunt rule only when no band is matched.
     """
-    text    = salary_text or ""
-    title   = (job or {}).get("title", "") if job else ""
+    text = salary_text or ""
+    title = (job or {}).get("title", "") if job else ""
     location = (job or {}).get("location", "") if job else ""
 
-    # ── 1. Extract numeric salary → LPA ───────────────────────────────────
+    # ── Extract numeric salary value ──────────────────────────────────────
     lpa_val: Optional[float] = None
 
-    # LPA range: "12 to 18 LPA", "12-18 L"
+    # Try LPA pattern first (most common in Indian postings)
     m = re.search(
-        r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*"
-        r"(?:LPA|lpa|L|lakhs?|lac)",
+        r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?)",
         text, re.IGNORECASE,
     )
     if m:
-        lpa_val = float(m.group(2))          # upper bound of range
-
-    # Single LPA: "18 LPA", "18L", "18 lakhs"
-    if lpa_val is None:
-        m2 = re.search(
-            r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?|lac)",
-            text, re.IGNORECASE,
-        )
+        lpa_val = float(m.group(2))   # use upper bound of range
+    else:
+        m2 = re.search(r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?)", text, re.IGNORECASE)
         if m2:
             lpa_val = float(m2.group(1))
 
-    # Absolute INR — detect monthly vs annual context first
+    # Try absolute INR (₹ / Rs / INR + raw number)
     if lpa_val is None:
-        is_monthly = bool(re.search(
-            r"(per\s+month|p\.?m\.?|monthly|/month|per\s+mo)",
-            text, re.IGNORECASE,
-        ))
-        nums = [int(n) for n in re.findall(r"\d+", text.replace(",", ""))
-                if 10000 <= int(n) <= 99999999]
-        if nums:
-            v = nums[0]
-            if is_monthly:
-                lpa_val = (v * 12) / 100_000   # monthly → annual LPA
-            elif 100_000 <= v <= 99_999_999:
-                lpa_val = v / 100_000           # annual INR → LPA
-            elif 15_000 <= v <= 999_999 and "$" in text:
-                lpa_val = (v * 12) / 100_000   # monthly USD → rough LPA
+        for n in re.findall(r"\d+", text.replace(",", "")):
+            v = int(n)
+            if 100000 <= v <= 99999999:
+                lpa_val = v / 100000   # convert to LPA
+                break
+            if 15000 <= v <= 999999 and "$" in text:
+                lpa_val = (v * 12) / 100000   # monthly USD → rough LPA
+                break
 
     if lpa_val is None:
-        return False    # no parseable salary — never flag
+        return False   # no salary number found — don't flag
 
-    # ── 2. Normalise title — expand abbreviations ──────────────────────────
-    _ABBREV = {
-        r"vp":  "vice president",
-        r"cto": "chief technology",
-        r"ceo": "chief executive",
-        r"cfo": "chief financial",
-        r"coo": "chief operating",
-        r"hr":  "human resources",
-        r"qa":  "quality assurance",
-        r"ios": "ios developer",
-    }
-    title_norm = title.lower()
-    for pattern, expansion in _ABBREV.items():
-        title_norm = re.sub(pattern, expansion, title_norm)
-
-    # ── 3. Extract experience years ────────────────────────────────────────
-    # Priority: seeker_role field → job requirements text → job title keywords
-    seeker_info = (job or {}).get("seeker_role", "") if job else ""
-    exp_years   = 0.0  # default: fresher/unknown
-
-    for _src in [seeker_info, (job or {}).get("requirements", ""), title]:
-        _src = (_src or "").lower()
-        _m = re.search(
-            r"(\d+)\s*(?:\+|to|-\s*\d+)?\s*(?:years?|yrs?)\s*(?:of\s+)?(?:exp|experience)?",
-            _src,
-        )
-        if _m:
-            exp_years = float(_m.group(1))
+    # ── Look up role band ──────────────────────────────────────────────────
+    title_lower = title.lower()
+    band: Optional[tuple[float, float]] = None
+    for keyword, b in _SALARY_BANDS.items():
+        if keyword in title_lower:
+            band = b
             break
 
-    if exp_years == 0.0:
-        _src_all = (seeker_info + " " + title).lower()
-        if any(w in _src_all for w in ("principal", "staff", "distinguished")):
-            exp_years = 10.0
-        elif any(w in _src_all for w in ("senior", "sr.", "lead", "architect")):
-            exp_years = 6.0
-        elif any(w in _src_all for w in ("mid", "middle", "associate")):
-            exp_years = 3.0
-        # junior/fresher/intern stays at 0.0
-
-    # ── 4. Band lookup — tiered by experience, whole-word for short keys ──
-    _SHORT_KEYS = {"architect", "manager", "director", "recruiter",
-                   "tester", "fresher", "trainee", "intern", "internship"}
-    matched_key: Optional[str] = None
-    for keyword in _SALARY_BANDS:
-        kw = keyword.lower()
-        if len(kw) <= 4 or kw in _SHORT_KEYS:
-            if re.search(r"\b" + re.escape(kw) + r"\b", title_norm):
-                matched_key = keyword
-                break
-        else:
-            if kw in title_norm:
-                matched_key = keyword
-                break
-
-    band = _get_band_for_exp(matched_key, exp_years) if matched_key else None
-
-    # ── 5. City multiplier ────────────────────────────────────────────────
+    # ── Apply city multiplier ──────────────────────────────────────────────
     city_mult = 1.0
     loc_lower = location.lower()
     for city, mult in _CITY_MULTIPLIERS.items():
@@ -3392,15 +3178,17 @@ def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
             city_mult = mult
             break
 
-    # ── 6. Decision ───────────────────────────────────────────────────────
+    # ── Decision ──────────────────────────────────────────────────────────
     if band:
         _, max_lpa = band
         effective_max = max_lpa * city_mult
-        # Flag only if salary exceeds 2x the experience-adjusted band ceiling
+        # Flag only if salary is more than 2× the ceiling — clear scam territory
         return lpa_val > effective_max * 2.0
     else:
-        # No band matched — only flag truly impossible numbers (>500 LPA / Rs.5Cr)
+        # No band match — only flag truly impossible numbers (>₹5Cr / >500 LPA).
+        # Do NOT flag normal salaries just because the role isn't in the band table.
         return lpa_val > 500.0
+
 def _run_rules(job: dict) -> dict:
     full = " ".join([job.get(k,"") for k in
                      ("title","description","requirements","benefits","contact","salary")])
@@ -3555,57 +3343,8 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _probe_summary(probe_warnings: list) -> str:
-    """
-    Convert probe warnings into a clear PASS/FAIL summary for the LLM.
-    When warnings is empty, all probes passed — the LLM must treat this as
-    positive evidence for company legitimacy, not ignore it.
-    """
-    if not probe_warnings:
-        return (
-            "ALL PROBES PASSED:\n"
-            "  - Domain age: established (registered > 6 months ago)\n"
-            "  - Site reachable: yes, with valid SSL certificate\n"
-            "  - Typosquatting: none detected\n"
-            "  - Email domain: legitimate (no free/personal email)\n"
-            "  - MX records: valid mail infrastructure exists\n"
-            "  - Company domain: DNS + HTTPS + MX all verified\n"
-            "  - SPF / DMARC: email authentication configured\n"
-            "IMPORTANT: These are live infrastructure checks that PASSED. "
-            "This is real evidence the company exists. Weight this heavily in "
-            "company_legitimacy — do NOT say UNVERIFIABLE if probes passed."
-        )
-    lines = "\n".join(f"  - {w}" for w in probe_warnings)
-    return f"PROBE WARNINGS (live checks that FAILED):\n{lines}"
-
-
-def _fmt_rule_signals(signals: dict | None) -> str:
-    """Format fired rule signals for LLM prompt injection."""
-    if not signals:
-        return "  - None fired"
-    lines = []
-    for key, sig in signals.items():
-        w = _WEIGHTS.get(key, 0)
-        lines.append(f"  - [{w:>2}pts] {sig.get('label', key)}: {sig.get('detail', '')[:120]}")
-    return "\n".join(lines)
-
-
-def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None, rule_signals: dict | None = None) -> str:
-    ctx = _probe_summary(probe_warnings)
-    seeker         = seeker or {}
-    seeker_loc     = seeker.get("location", "").strip()
-    seeker_role    = seeker.get("role", "").strip()
-    seeker_context = ""
-    if seeker_loc or seeker_role:
-        parts = []
-        if seeker_role: parts.append(f"The applicant is a {seeker_role}")
-        if seeker_loc:  parts.append(f"based in {seeker_loc}")
-        seeker_context = " ".join(parts) + ". "
-        seeker_context += (
-            "Use this to sharpen the salary assessment — compare the posted salary "
-            "against the typical market rate for this specific role and applicant location, "
-            "not just the job posting location."
-        )
+def _llm_prompt(job: dict, probe_warnings: list) -> str:
+    ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
     salary_instruction = (
@@ -3613,20 +3352,8 @@ def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None, rul
         "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
         "do NOT guess, infer, or comment on whether it is realistic."
         if not salary_raw else
-        f"{seeker_context} "
-        "Write 2-3 sentences assessing the stated salary. "
-        "You MUST include: "
-        "(1) the stated salary figure, "
-        "(2) the typical market range for this exact role and experience level in India "
-        "(in LPA) — break it down by experience tier: fresher 0-1yr, junior 2-4yr, "
-        "mid-level 5-7yr, senior 8+yr. State which tier applies here and what range that tier commands. "
-        "(3) If the applicant's experience or location differs from the posting, call that out explicitly. "
-        "(4) A clear verdict — realistic, slightly high, or unrealistically high — with a reason. "
-        "Example: 'The stated salary of 45 LPA for a Software Engineer with 2 years of experience "
-        "is far above the typical junior-tier range of 8-20 LPA in Bangalore. "
-        "This is unrealistically high and is a strong scam signal.' "
-        "Never respond with a single word like 'realistic' or 'unrealistic'. "
-        "If the salary is unrealistically high for the tier and location, flag it as a scam signal."
+        "Assess whether the stated salary is realistic for this role and location. "
+        "If it seems unrealistically high, flag it as a potential scam signal."
     )
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
@@ -3642,32 +3369,8 @@ Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
 
-LIVE NETWORK PROBE RESULTS (these are real-time checks — treat as hard evidence):
+LIVE PROBE FINDINGS:
 {ctx}
-
-RULE ENGINE SIGNALS FIRED (deterministic pattern matches — treat as hard evidence):
-{_fmt_rule_signals(rule_signals)}
-
-COMPANY LEGITIMACY RULE (mandatory):
-Use the probe results above as PRIMARY evidence for company_legitimacy.
-- If ALL PROBES PASSED → set company_legitimacy to "VERIFIED" or at minimum acknowledge
-  the infrastructure evidence. Do NOT say "UNVERIFIABLE" when probes confirmed the domain,
-  SSL, MX records, and company identity checks all passed.
-- If probes flagged specific failures → reflect those in company_legitimacy and fake_company_evidence.
-- "UNVERIFIABLE" should only be used when probes could NOT run (no website/domain provided).
-
-APPLICANT CONTEXT (use to personalise salary assessment):
-{seeker_context if seeker_context else "Not provided — assess against general market."}
-
-CRITICAL SIGNAL OVERRIDE (mandatory):
-If the rule engine detected ANY of these signals, you MUST reflect them in
-your ai_risk_score even if the company website looks legitimate.
-A real company NEVER asks candidates for fees, deposits, or payments.
-Signals that OVERRIDE a clean website: upfront_payment, india_scam_pattern,
-fake_govt_job, mlm_pyramid. If these fired, minimum ai_risk_score = 55.
-A legitimate domain does NOT cancel out a payment demand — it only means
-the scammer bought a real domain. Weight content signals above network probes
-when they conflict.
 
 SALARY ASSESSMENT RULE (mandatory):
 {salary_instruction}
@@ -3679,11 +3382,11 @@ Required JSON schema (all keys mandatory):
   "company_legitimacy": "<VERIFIED|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
   "top_red_flags": ["<str>","<str>","<str>"],
   "positive_signals": ["<str>"],
-  "fake_company_evidence": "<reasoning about company authenticity — MUST reference the live probe results above. If all probes passed, acknowledge that as positive evidence. Do not ignore infrastructure checks.>",
+  "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<2-3 sentence analysis: state the salary, compare to typical market range for this role and city, and explain whether it is a scam signal or a legitimate offer. Be specific — mention actual LPA figures. NOT_PROVIDED if salary is missing.>",
+  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
   "recommended_action": "<specific advice for the job seeker>",
-  "similar_scam_type": "<Pick exactly ONE of: Registration Fee Scam | Internship Fee Scam | Laptop Return Scam | Data Entry / WFH Scam | MLM / Network Marketing | Fake Govt Job | Fake MNC Impersonation | Advance Fee Fraud | Phishing / Data Harvest | Too Good Salary Bait | Urgency Pressure Scam | Unknown. Do NOT invent new categories.>",
+  "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
 }}"""
 
@@ -4191,30 +3894,6 @@ def _render_ai_dive(llm: dict):
                 f'this posting does not mention any salary, CTC, or compensation. '
                 f'No realistic assessment can be made. Consider asking the recruiter '
                 f'for a clear salary range before proceeding.</span></div></div>',
-                unsafe_allow_html=True,
-            )
-            continue
-
-        # ── Salary Reality Check: colour-coded badge + detailed text ────────
-        if field == "salary_assessment":
-            _v_lower = val.lower()
-            if any(w in _v_lower for w in ("unrealistically", "unrealistic", "scam", "too high", "inflated")):
-                badge_color, badge_bg, badge_label = "#ef4444", "rgba(239,68,68,0.12)", "⚠ Unrealistic"
-            elif any(w in _v_lower for w in ("slightly high", "above average", "higher than")):
-                badge_color, badge_bg, badge_label = "#f59e0b", "rgba(245,158,11,0.12)", "△ Slightly High"
-            else:
-                badge_color, badge_bg, badge_label = "#22c55e", "rgba(34,197,94,0.12)", "✓ Realistic"
-            st.markdown(
-                f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
-                f'border-radius:9px;padding:14px;margin-bottom:10px;">'
-                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
-                f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
-                f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;">'
-                f'{_svg(I.DOLLAR,11,"#6b7280")}Salary Reality Check</div>'
-                f'<span style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:5px;'
-                f'background:{badge_bg};color:{badge_color};border:1px solid {badge_color}44;">'
-                f'{badge_label}</span></div>'
-                f'<div style="color:#c9d1d9;font-size:0.83rem;line-height:1.65;">{val}</div></div>',
                 unsafe_allow_html=True,
             )
             continue
@@ -4750,28 +4429,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
                                             placeholder="What the employer offers...")
 
-    # ── Optional applicant context — improves salary personalisation ─────────
-    st.markdown(
-        '<div style="font-size:0.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;'
-        'letter-spacing:0.9px;margin:18px 0 6px;">Your Context '
-        '<span style="font-weight:400;text-transform:none;letter-spacing:0;">'
-        '(optional — personalises salary analysis)</span></div>',
-        unsafe_allow_html=True,
-    )
-    _sc1, _sc2 = st.columns(2)
-    _sc1.text_input(
-        "Your Location",
-        placeholder="e.g. Mumbai, Pune, Remote",
-        key="jsd_seeker_loc",
-        help="Where you are based — used to benchmark salary against your local market",
-    )
-    _sc2.text_input(
-        "Your Role / Experience Level",
-        placeholder="e.g. Data Analyst, 2 yrs exp",
-        key="jsd_seeker_role",
-        help="Your target role or experience level — validates if salary is realistic for you",
-    )
-
     # Use only meaningful fields for "is there any input" check — not description
     # (which in paste mode is raw and always present once the user types).
     if mode == "Paste Full Job Description":
@@ -4830,7 +4487,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 time.sleep(0.5)   # spinner visible for at least half a second
                 preserve = {"jsd_history", "jsd_history_loaded"}
                 paste_keys = [
-                    "jsd_raw", "jsd_mode", "jsd_seeker_loc", "jsd_seeker_role",
+                    "jsd_raw", "jsd_mode",
                     "jsd_ot", "jsd_oco", "jsd_os", "jsd_oct", "jsd_ow", "jsd_ol",
                 ]
                 fill_keys = [
@@ -4884,11 +4541,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     for attempt in range(2):
                         try:
-                            seeker_ctx = {
-                                "location": st.session_state.get("jsd_seeker_loc", "").strip(),
-                                "role":     st.session_state.get("jsd_seeker_role", "").strip(),
-                            }
-                            prompt = _llm_prompt(job, warnings, seeker_ctx, rules_result.get("signals", {}))
+                            prompt = _llm_prompt(job, warnings)
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
@@ -4965,11 +4618,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     blended = int(w_ai * ai_s + w_rule * rule_s + w_probe * penalty)
 
-                    # ── SIGNAL COMBINATION FLOORS ─────────────────────────────
-                    # Hard floor from HIGH-weight signals (>=18 pts each).
-                    # A single critical signal like upfront_payment (25) should
-                    # NEVER let blended drop below its raw weight just because
-                    # the LLM was impressed by the website.
+                    # Hard floor only from HIGH-weight signals (>=18 pts each).
                     critical_signals = [k for k, s in rules_result["signals"].items()
                                         if _WEIGHTS.get(k, 0) >= 18]
                     critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
@@ -4978,29 +4627,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     # Probe penalty floor: only if penalty is itself significant (>= 20)
                     if penalty >= 20:
                         blended = max(blended, penalty)
-
-                    # ── MULTI-SIGNAL COMBINATION FLOOR ────────────────────────
-                    # Rule score alone above 30 means multiple real signals fired.
-                    # A clean website cannot explain away payment demands + urgency.
-                    # Floor: blended can never be more than 15 pts below rule_score
-                    # when rule_score >= 30 (i.e. 2+ meaningful signals fired).
-                    if rule_s >= 30:
-                        blended = max(blended, rule_s - 15)
-
-                    # ── UPFRONT PAYMENT IS NEVER SAFE ─────────────────────────
-                    # If ANY payment-related signal fired, minimum verdict = SUSPICIOUS.
-                    # A legitimate company with a real website does NOT ask for fees.
-                    payment_signals = {"upfront_payment", "india_scam_pattern", "fake_govt_job"}
-                    if any(k in rules_result["signals"] for k in payment_signals):
-                        blended = max(blended, 30)   # floor at SUSPICIOUS minimum
-
-                    # ── CAP the probe clean-site AI drag ──────────────────────
-                    # When rule_score is high but AI score is low (LLM was fooled
-                    # by legitimate-looking website), prevent AI from dominating.
-                    # If rule_score >= 40 and AI score is suspiciously low (<= 25),
-                    # treat AI score as untrustworthy — re-blend with more rule weight.
-                    if rule_s >= 40 and ai_s <= 25:
-                        blended = max(blended, int(0.35 * ai_s + 0.50 * rule_s + 0.15 * penalty))
 
                     # ── HARD PROBE OVERRIDE (Improvement 4) ───────────────────────
                     # If multiple critical network probes fire together, force the
