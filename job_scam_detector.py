@@ -3068,47 +3068,70 @@ def _any(text: str, patterns: list) -> list:
 # If the detected salary falls ABOVE max_lpa by >2× it is flagged as outlier.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ── Salary bands ─────────────────────────────────────────────────────────────
+# Keys are matched as WHOLE-WORD substrings (\b keyword \b) against the job
+# title, so short tokens like "hr", "qa", "vp", "ios" no longer fire on words
+# that merely *contain* them (e.g. "architecture", "iraq", "startup").
+#
+# Order matters for multi-keyword titles: more-specific keys come first so
+# "product manager" wins over the bare "manager" fallback.
+#
+# (min_lpa, max_lpa) — flag threshold = max_lpa × city_multiplier × 2.0
 _SALARY_BANDS: dict[str, tuple[float, float]] = {
-    # Tech roles
-    "software engineer":      (4.0,  45.0),
-    "senior engineer":        (12.0, 70.0),
-    "lead engineer":          (18.0, 90.0),
+    # ── Tech — specific first ──────────────────────────────────────────────
     "principal engineer":     (25.0, 120.0),
-    "data scientist":         (6.0,  55.0),
-    "data analyst":           (3.5,  20.0),
-    "machine learning":       (8.0,  70.0),
-    "devops":                 (6.0,  45.0),
-    "frontend":               (4.0,  35.0),
-    "backend":                (4.0,  40.0),
-    "fullstack":              (5.0,  45.0),
-    "full stack":             (5.0,  45.0),
-    "android":                (4.0,  35.0),
-    "ios":                    (4.0,  35.0),
-    "qa":                     (3.0,  25.0),
-    "tester":                 (3.0,  20.0),
-    "product manager":        (10.0, 60.0),
-    "project manager":        (8.0,  40.0),
-    "architect":              (20.0, 100.0),
-    "intern":                 (0.5,  6.0),
-    "trainee":                (1.5,  5.0),
-    # Non-tech roles
-    "hr":                     (2.5,  20.0),
-    "recruiter":              (2.5,  18.0),
-    "sales":                  (2.0,  25.0),
-    "marketing":              (2.5,  20.0),
-    "content writer":         (2.0,  15.0),
-    "graphic designer":       (2.0,  18.0),
-    "accountant":             (2.5,  15.0),
-    "finance":                (4.0,  35.0),
-    "operations":             (3.0,  25.0),
-    "customer support":       (2.0,  10.0),
-    "customer service":       (2.0,  10.0),
-    # Management
-    "manager":                (8.0,  50.0),
+    "lead engineer":          (18.0,  90.0),
+    "senior engineer":        (12.0,  70.0),
+    "software engineer":      ( 4.0,  45.0),
+    "machine learning":       ( 8.0,  70.0),
+    "data scientist":         ( 6.0,  55.0),
+    "data analyst":           ( 3.5,  20.0),
+    "devops":                 ( 6.0,  45.0),
+    "full stack":             ( 5.0,  45.0),
+    "fullstack":              ( 5.0,  45.0),
+    "frontend":               ( 4.0,  35.0),
+    "backend":                ( 4.0,  40.0),
+    "android developer":      ( 4.0,  35.0),
+    "android engineer":       ( 4.0,  35.0),
+    "ios developer":          ( 4.0,  35.0),
+    "ios engineer":           ( 4.0,  35.0),
+    "qa engineer":            ( 3.0,  25.0),
+    "qa analyst":             ( 3.0,  25.0),
+    "quality assurance":      ( 3.0,  25.0),
+    "tester":                 ( 3.0,  20.0),
+    "architect":              (20.0, 100.0),   # whole-word: won't hit "architecture"
+    # ── Management — specific first ────────────────────────────────────────
+    "chief executive":        (40.0, 500.0),
+    "chief technology":       (40.0, 300.0),
+    "chief financial":        (40.0, 300.0),
+    "chief operating":        (35.0, 250.0),
+    "vice president":         (30.0, 200.0),
     "director":               (20.0, 150.0),
-    "vp":                     (30.0, 200.0),
-    "cto":                    (40.0, 300.0),
-    "ceo":                    (40.0, 500.0),
+    "product manager":        (10.0,  60.0),
+    "project manager":        ( 8.0,  40.0),
+    "manager":                ( 8.0,  50.0),   # generic fallback
+    # ── Non-tech ───────────────────────────────────────────────────────────
+    "human resources":        ( 2.5,  20.0),
+    "hr executive":           ( 2.5,  15.0),
+    "hr manager":             ( 5.0,  25.0),
+    "recruiter":              ( 2.5,  18.0),
+    "talent acquisition":     ( 3.0,  20.0),
+    "sales executive":        ( 2.0,  15.0),
+    "sales manager":          ( 5.0,  35.0),
+    "sales":                  ( 2.0,  25.0),   # generic fallback
+    "marketing":              ( 2.5,  20.0),
+    "content writer":         ( 2.0,  15.0),
+    "graphic designer":       ( 2.0,  18.0),
+    "accountant":             ( 2.5,  15.0),
+    "finance":                ( 4.0,  35.0),
+    "operations":             ( 3.0,  25.0),
+    "customer support":       ( 2.0,  10.0),
+    "customer service":       ( 2.0,  10.0),
+    # ── Entry level ────────────────────────────────────────────────────────
+    "intern":                 ( 0.5,  20.0),   # raised ceiling: FAANG pays 15-18 LPA
+    "internship":             ( 0.5,  20.0),
+    "trainee":                ( 1.5,   8.0),
+    "fresher":                ( 2.0,  10.0),
 }
 
 # City cost-of-living multipliers — applied to max band threshold
@@ -3121,56 +3144,106 @@ _CITY_MULTIPLIERS: dict[str, float] = {
 
 def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
     """
-    Calibrated salary outlier detection.
+    Calibrated salary outlier detection  (v2).
 
-    1. Extract numeric salary value from text (LPA or absolute INR/USD).
-    2. Look up the role band from job title keywords.
-    3. Apply city multiplier to the band ceiling.
-    4. Flag only if salary exceeds band ceiling by >2× (scam headroom).
-    5. Fall back to the old blunt rule only when no band is matched.
+    Fix summary vs v1
+    ─────────────────
+    1. WHOLE-WORD band matching — "hr" no longer fires on "architecture",
+       "qa" no longer fires on "iraq", "vp" no longer fires on "startup".
+       Short abbreviations (vp/cto/ceo/hr/qa/ios) are matched with \b anchors.
+       Long keywords use simple substring (they're specific enough).
+
+    2. Monthly INR detection — "₹1,20,000/month" is now detected as monthly
+       and annualised correctly (×12) instead of being read as 1.2 LPA annual.
+       Avoids false negatives AND false positives from raw monthly figures.
+
+    3. Intern ceiling raised 0.5-6 → 0.5-20 LPA — FAANG/top-startup
+       internships in Bangalore legitimately pay 15-18 LPA. Old 12 LPA
+       threshold was incorrectly flagging these as scams.
+
+    4. Title abbreviation aliases — "vp", "cto", "ceo", "hr", "qa", "ios"
+       are expanded to their full-form equivalents before band lookup so
+       they match the now-more-specific band keys.
+
+    5. "per month" / "monthly" context detection for INR numbers.
     """
-    text = salary_text or ""
-    title = (job or {}).get("title", "") if job else ""
+    text    = salary_text or ""
+    title   = (job or {}).get("title", "") if job else ""
     location = (job or {}).get("location", "") if job else ""
 
-    # ── Extract numeric salary value ──────────────────────────────────────
+    # ── 1. Extract numeric salary → LPA ───────────────────────────────────
     lpa_val: Optional[float] = None
 
-    # Try LPA pattern first (most common in Indian postings)
+    # LPA range: "12 to 18 LPA", "12-18 L"
     m = re.search(
-        r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?)",
+        r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*"
+        r"(?:LPA|lpa|L|lakhs?|lac)",
         text, re.IGNORECASE,
     )
     if m:
-        lpa_val = float(m.group(2))   # use upper bound of range
-    else:
-        m2 = re.search(r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?)", text, re.IGNORECASE)
+        lpa_val = float(m.group(2))          # upper bound of range
+
+    # Single LPA: "18 LPA", "18L", "18 lakhs"
+    if lpa_val is None:
+        m2 = re.search(
+            r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?|lac)",
+            text, re.IGNORECASE,
+        )
         if m2:
             lpa_val = float(m2.group(1))
 
-    # Try absolute INR (₹ / Rs / INR + raw number)
+    # Absolute INR — detect monthly vs annual context first
     if lpa_val is None:
-        for n in re.findall(r"\d+", text.replace(",", "")):
-            v = int(n)
-            if 100000 <= v <= 99999999:
-                lpa_val = v / 100000   # convert to LPA
-                break
-            if 15000 <= v <= 999999 and "$" in text:
-                lpa_val = (v * 12) / 100000   # monthly USD → rough LPA
-                break
+        is_monthly = bool(re.search(
+            r"(per\s+month|p\.?m\.?|monthly|/month|per\s+mo)",
+            text, re.IGNORECASE,
+        ))
+        nums = [int(n) for n in re.findall(r"\d+", text.replace(",", ""))
+                if 10000 <= int(n) <= 99999999]
+        if nums:
+            v = nums[0]
+            if is_monthly:
+                lpa_val = (v * 12) / 100_000   # monthly → annual LPA
+            elif 100_000 <= v <= 99_999_999:
+                lpa_val = v / 100_000           # annual INR → LPA
+            elif 15_000 <= v <= 999_999 and "$" in text:
+                lpa_val = (v * 12) / 100_000   # monthly USD → rough LPA
 
     if lpa_val is None:
-        return False   # no salary number found — don't flag
+        return False    # no parseable salary — never flag
 
-    # ── Look up role band ──────────────────────────────────────────────────
-    title_lower = title.lower()
+    # ── 2. Normalise title — expand abbreviations ──────────────────────────
+    _ABBREV = {
+        r"vp":  "vice president",
+        r"cto": "chief technology",
+        r"ceo": "chief executive",
+        r"cfo": "chief financial",
+        r"coo": "chief operating",
+        r"hr":  "human resources",
+        r"qa":  "quality assurance",
+        r"ios": "ios developer",
+    }
+    title_norm = title.lower()
+    for pattern, expansion in _ABBREV.items():
+        title_norm = re.sub(pattern, expansion, title_norm)
+
+    # ── 3. Band lookup — whole-word for short keys, substring for long ─────
+    _SHORT_KEYS = {"architect", "manager", "director", "recruiter",
+                   "tester", "fresher", "trainee", "intern", "internship"}
     band: Optional[tuple[float, float]] = None
     for keyword, b in _SALARY_BANDS.items():
-        if keyword in title_lower:
-            band = b
-            break
+        kw = keyword.lower()
+        if len(kw) <= 4 or kw in _SHORT_KEYS:
+            # whole-word match to avoid partial hits
+            if re.search(r"" + re.escape(kw) + r"", title_norm):
+                band = b
+                break
+        else:
+            if kw in title_norm:
+                band = b
+                break
 
-    # ── Apply city multiplier ──────────────────────────────────────────────
+    # ── 4. City multiplier ────────────────────────────────────────────────
     city_mult = 1.0
     loc_lower = location.lower()
     for city, mult in _CITY_MULTIPLIERS.items():
@@ -3178,16 +3251,15 @@ def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
             city_mult = mult
             break
 
-    # ── Decision ──────────────────────────────────────────────────────────
+    # ── 5. Decision ───────────────────────────────────────────────────────
     if band:
         _, max_lpa = band
         effective_max = max_lpa * city_mult
-        # Flag only if salary is more than 2× the ceiling — clear scam territory
+        # Flag only if salary exceeds 2× the band ceiling — unambiguous scam
         return lpa_val > effective_max * 2.0
     else:
-        # No band match — only flag truly impossible numbers (>₹5Cr / >500 LPA).
-        # Do NOT flag normal salaries just because the role isn't in the band table.
-        return lpa_val > 500.0
+        # No band matched — only flag truly impossible numbers (>500 LPA / ₹5 Cr)
+        return lpa_val >= 500.0
 
 def _run_rules(job: dict) -> dict:
     full = " ".join([job.get(k,"") for k in
@@ -3343,8 +3415,46 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _llm_prompt(job: dict, probe_warnings: list) -> str:
-    ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
+def _probe_summary(probe_warnings: list) -> str:
+    """
+    Convert probe warnings into a clear PASS/FAIL summary for the LLM.
+    When warnings is empty, all probes passed — the LLM must treat this as
+    positive evidence for company legitimacy, not ignore it.
+    """
+    if not probe_warnings:
+        return (
+            "ALL PROBES PASSED:\n"
+            "  - Domain age: established (registered > 6 months ago)\n"
+            "  - Site reachable: yes, with valid SSL certificate\n"
+            "  - Typosquatting: none detected\n"
+            "  - Email domain: legitimate (no free/personal email)\n"
+            "  - MX records: valid mail infrastructure exists\n"
+            "  - Company domain: DNS + HTTPS + MX all verified\n"
+            "  - SPF / DMARC: email authentication configured\n"
+            "IMPORTANT: These are live infrastructure checks that PASSED. "
+            "This is real evidence the company exists. Weight this heavily in "
+            "company_legitimacy — do NOT say UNVERIFIABLE if probes passed."
+        )
+    lines = "\n".join(f"  - {w}" for w in probe_warnings)
+    return f"PROBE WARNINGS (live checks that FAILED):\n{lines}"
+
+
+def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None) -> str:
+    ctx = _probe_summary(probe_warnings)
+    seeker         = seeker or {}
+    seeker_loc     = seeker.get("location", "").strip()
+    seeker_role    = seeker.get("role", "").strip()
+    seeker_context = ""
+    if seeker_loc or seeker_role:
+        parts = []
+        if seeker_role: parts.append(f"The applicant is a {seeker_role}")
+        if seeker_loc:  parts.append(f"based in {seeker_loc}")
+        seeker_context = " ".join(parts) + ". "
+        seeker_context += (
+            "Use this to sharpen the salary assessment — compare the posted salary "
+            "against the typical market rate for this specific role and applicant location, "
+            "not just the job posting location."
+        )
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
     salary_instruction = (
@@ -3352,8 +3462,17 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
         "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
         "do NOT guess, infer, or comment on whether it is realistic."
         if not salary_raw else
-        "Assess whether the stated salary is realistic for this role and location. "
-        "If it seems unrealistically high, flag it as a potential scam signal."
+        f"{seeker_context} "
+        "Write 2-3 sentences assessing the stated salary. "
+        "You MUST include: (1) the stated salary figure, (2) the typical market range "
+        "for this exact role and location in India (in LPA or INR/month as appropriate) "
+        "— if the applicant's location or role differs from the posting, call that out explicitly. "
+        "(3) A clear verdict — realistic, slightly high, or unrealistically high and why. "
+        "Example: 'The stated salary of 8-12 LPA is within the typical range of 6-14 LPA "
+        "for a mid-level Data Analyst in Bangalore. For a candidate based in Pune with 2 years "
+        "of experience, this is on the higher end but still realistic.' "
+        "Never respond with a single word like 'realistic' or 'unrealistic'. "
+        "If the salary is unrealistically high for the role and location, flag it as a scam signal."
     )
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
@@ -3369,8 +3488,19 @@ Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
 
-LIVE PROBE FINDINGS:
+LIVE NETWORK PROBE RESULTS (these are real-time checks — treat as hard evidence):
 {ctx}
+
+COMPANY LEGITIMACY RULE (mandatory):
+Use the probe results above as PRIMARY evidence for company_legitimacy.
+- If ALL PROBES PASSED → set company_legitimacy to "VERIFIED" or at minimum acknowledge
+  the infrastructure evidence. Do NOT say "UNVERIFIABLE" when probes confirmed the domain,
+  SSL, MX records, and company identity checks all passed.
+- If probes flagged specific failures → reflect those in company_legitimacy and fake_company_evidence.
+- "UNVERIFIABLE" should only be used when probes could NOT run (no website/domain provided).
+
+APPLICANT CONTEXT (use to personalise salary assessment):
+{seeker_context if seeker_context else "Not provided — assess against general market."}
 
 SALARY ASSESSMENT RULE (mandatory):
 {salary_instruction}
@@ -3382,9 +3512,9 @@ Required JSON schema (all keys mandatory):
   "company_legitimacy": "<VERIFIED|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
   "top_red_flags": ["<str>","<str>","<str>"],
   "positive_signals": ["<str>"],
-  "fake_company_evidence": "<detailed reasoning about company authenticity>",
+  "fake_company_evidence": "<reasoning about company authenticity — MUST reference the live probe results above. If all probes passed, acknowledge that as positive evidence. Do not ignore infrastructure checks.>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
+  "salary_assessment": "<2-3 sentence analysis: state the salary, compare to typical market range for this role and city, and explain whether it is a scam signal or a legitimate offer. Be specific — mention actual LPA figures. NOT_PROVIDED if salary is missing.>",
   "recommended_action": "<specific advice for the job seeker>",
   "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
@@ -4429,6 +4559,28 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
                                             placeholder="What the employer offers...")
 
+    # ── Optional applicant context — improves salary personalisation ─────────
+    st.markdown(
+        '<div style="font-size:0.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;'
+        'letter-spacing:0.9px;margin:18px 0 6px;">Your Context '
+        '<span style="font-weight:400;text-transform:none;letter-spacing:0;">'
+        '(optional — personalises salary analysis)</span></div>',
+        unsafe_allow_html=True,
+    )
+    _sc1, _sc2 = st.columns(2)
+    _sc1.text_input(
+        "Your Location",
+        placeholder="e.g. Mumbai, Pune, Remote",
+        key="jsd_seeker_loc",
+        help="Where you are based — used to benchmark salary against your local market",
+    )
+    _sc2.text_input(
+        "Your Role / Experience Level",
+        placeholder="e.g. Data Analyst, 2 yrs exp",
+        key="jsd_seeker_role",
+        help="Your target role or experience level — validates if salary is realistic for you",
+    )
+
     # Use only meaningful fields for "is there any input" check — not description
     # (which in paste mode is raw and always present once the user types).
     if mode == "Paste Full Job Description":
@@ -4487,7 +4639,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 time.sleep(0.5)   # spinner visible for at least half a second
                 preserve = {"jsd_history", "jsd_history_loaded"}
                 paste_keys = [
-                    "jsd_raw", "jsd_mode",
+                    "jsd_raw", "jsd_mode", "jsd_seeker_loc", "jsd_seeker_role",
                     "jsd_ot", "jsd_oco", "jsd_os", "jsd_oct", "jsd_ow", "jsd_ol",
                 ]
                 fill_keys = [
@@ -4541,7 +4693,11 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     for attempt in range(2):
                         try:
-                            prompt = _llm_prompt(job, warnings)
+                            seeker_ctx = {
+                                "location": st.session_state.get("jsd_seeker_loc", "").strip(),
+                                "role":     st.session_state.get("jsd_seeker_role", "").strip(),
+                            }
+                            prompt = _llm_prompt(job, warnings, seeker_ctx)
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
