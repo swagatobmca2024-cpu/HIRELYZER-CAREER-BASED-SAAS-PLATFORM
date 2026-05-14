@@ -3113,7 +3113,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         warnings.append(typo["detail"])
     if probes.get("free_email", {}).get("uses_free_domain"):
         penalty += 12
-        dom = probes["free_email"].get("domain", "")
+        dom = probes.get("free_email", {}).get("domain", "")
         warnings.append(f"Recruiter uses personal email domain: {dom}")
     mx = probes.get("mx_record", {})
     mx_status = mx.get("status", "")
@@ -3842,9 +3842,9 @@ def _score_meaning(score: int, verdict: str) -> tuple[str, str]:
 
 
 def _render_verdict_banner(result: dict):
-    v   = result["final_verdict"]
+    v   = result.get("final_verdict", "UNKNOWN")
     cfg = _V.get(v, _V["UNKNOWN"])
-    s   = result["blended_score"]
+    s   = result.get("blended_score", 0)
     headline, meaning = _score_meaning(s, v)
 
     # Score zone markers on the bar — 4 coloured segments
@@ -3917,7 +3917,7 @@ def _render_verdict_banner(result: dict):
 
 
 def _render_score_strip(result: dict):
-    cfg = _V.get(result["final_verdict"], _V["UNKNOWN"])
+    cfg = _V.get(result.get("final_verdict", "UNKNOWN"), _V["UNKNOWN"])
 
     def _card(icon_path, label, val, color, sub="", tooltip=""):
         tip_html = (
@@ -3937,30 +3937,30 @@ def _render_score_strip(result: dict):
         )
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(_card(I.CPU,   "AI Score",      result["ai_score"],
+    c1.markdown(_card(I.CPU,   "AI Score",      result.get("ai_score", 0),
                       cfg["color"], "LLM analysis",
                       "AI's 0–100 risk read of the full text"),
                 unsafe_allow_html=True)
-    c2.markdown(_card(I.LIST,  "Rule Score",    result["rule_score"],
+    c2.markdown(_card(I.LIST,  "Rule Score",    result.get("rule_score", 0),
                       "#f59e0b", "15 pattern signals",
                       "Sum of weights for matched red-flag phrases"),
                 unsafe_allow_html=True)
-    c3.markdown(_card(I.GLOBE, "Probe Penalty", result["probe_penalty"],
+    c3.markdown(_card(I.GLOBE, "Probe Penalty", result.get("probe_penalty", 0),
                       "#38bdf8", "5 live network checks",
                       "Added for young domain, free email, bad MCA etc."),
                 unsafe_allow_html=True)
-    c4.markdown(_card(I.ZAP,   "Flags Fired",   len(result["signals"]),
+    c4.markdown(_card(I.ZAP,   "Flags Fired",   len(result.get("signals", {})),
                       "#a78bfa", "rule signals triggered",
                       "How many of 15 pattern rules matched"),
                 unsafe_allow_html=True)
 
     # Formula explainer — shows users exactly how the number was built
     # FIX v5 BUG 8: all three (comment, code, HTML) now agree on 60/25/15.
-    ai_s  = result["ai_score"]
-    rul_s = result["rule_score"]
-    pen   = result["probe_penalty"]
+    ai_s  = result.get("ai_score", 0)
+    rul_s = result.get("rule_score", 0)
+    pen   = result.get("probe_penalty", 0)
     raw   = round(0.60*ai_s + 0.25*rul_s + 0.15*pen, 1)
-    final_blended = result["blended_score"]
+    final_blended = result.get("blended_score", 0)
     floor_note = (
         f' → floored to <span style="color:#ef4444;font-weight:700;">{final_blended}</span>'
         f'&nbsp;<span style="color:#4b5563;font-size:0.66rem;">(critical signal/probe floor applied)</span>'
@@ -4164,7 +4164,7 @@ def _render_signal_cards(signals: dict):
     col_r.markdown(right_html or "<div></div>", unsafe_allow_html=True)
 
 
-def _render_ai_dive(llm: dict):
+def _render_ai_dive(llm: dict, result: dict | None = None):
     if not llm:
         st.markdown('<p style="color:#6b7280;font-size:0.82rem;">AI analysis unavailable.</p>',
                     unsafe_allow_html=True)
@@ -4177,6 +4177,7 @@ def _render_ai_dive(llm: dict):
     # ── Layered trust panel ───────────────────────────────────────────────
     # Shows all evaluation axes so users see WHY the verdict was reached,
     # not just the final number.
+    result      = result or {}
     fired       = result.get("signals", {})
     probes_r    = result.get("probes", {})
     blended_s   = result.get("blended_score", 0)
@@ -4405,9 +4406,9 @@ def _add_to_history(result: dict):
         "id":      None,   # filled in after DB save — used for soft-delete
         "title":   result["job"].get("title", "Untitled"),
         "company": result["job"].get("company", "Unknown"),
-        "score":   result["blended_score"],
-        "verdict": result["final_verdict"],
-        "time":    result["timestamp"],
+        "score":   result.get("blended_score", 0),
+        "verdict": result.get("final_verdict", "UNKNOWN"),
+        "time":    result.get("timestamp", ""),
     }
 
     # ── Persist to Supabase and get back the new row id ───────────────────
@@ -5445,18 +5446,18 @@ def render_job_scam_detector_tab(call_llm_fn):
     _render_verdict_banner(res)
     _render_score_strip(res)
     st.markdown("<br>", unsafe_allow_html=True)
-    _render_probe_table(res["probes"])
+    _render_probe_table(res.get("probes", {}))
 
     t1, t2, t3 = st.tabs(["Detected Signals", "AI Deep Dive", "Safety Checklist"])
     with t1:
         st.markdown(
             f'<p style="color:#8b949e;font-size:0.79rem;margin-bottom:12px;">'
-            f'{len(res["signals"])} rule-based signal(s) fired.</p>',
+            f'{len(res.get("signals", {}))} rule-based signal(s) fired.</p>',
             unsafe_allow_html=True,
         )
-        _render_signal_cards(res["signals"])
+        _render_signal_cards(res.get("signals", {}))
     with t2:
-        _render_ai_dive(res.get("llm", {}))
+        _render_ai_dive(res.get("llm", {}), result=res)
     with t3:
         _render_checklist(res)
 
