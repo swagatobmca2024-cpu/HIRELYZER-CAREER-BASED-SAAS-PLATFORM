@@ -3979,13 +3979,19 @@ def _field_row(icon_path: str, label: str, value: str, is_url: bool = False) -> 
     if not value:
         val_html = '<span style="color:#4b5563;font-style:italic;">Not detected</span>'
     elif is_url:
+        # Ensure URL has a scheme — bare "www.innovateloop.in" becomes a relative
+        # path in the browser and redirects to the Streamlit app itself.
+        import re as _re
+        _href = value
+        if _href and not _re.match(r"^https?://", _href, _re.IGNORECASE):
+            _href = "https://" + _href.lstrip("/")
         # Long URLs: truncate display text but keep full href; force word-break
         _display = value if len(value) <= 55 else value[:52] + "…"
         val_html = (
-            f'<a href="{_esc(value)}" target="_blank" rel="noopener noreferrer" '
+            f'<a href="{_esc(_href)}" target="_blank" rel="noopener noreferrer" '
             f'style="color:#58a6ff;text-decoration:none;word-break:break-all;'
             f'overflow-wrap:anywhere;display:block;max-width:100%;" '
-            f'title="{_esc(value)}">{_esc(_display)}</a>'
+            f'title="{_esc(_href)}">{_esc(_display)}</a>'
         )
     else:
         val_html = (
@@ -4386,7 +4392,7 @@ def _render_signal_cards(signals: dict):
     col_r.markdown(right_html or "<div></div>", unsafe_allow_html=True)
 
 
-def _render_ai_dive(llm: dict):
+def _render_ai_dive(llm: dict, probes: dict | None = None):
     if not llm:
         st.markdown('<p style="color:#6b7280;font-size:0.82rem;">AI analysis unavailable.</p>',
                     unsafe_allow_html=True)
@@ -4424,7 +4430,7 @@ def _render_ai_dive(llm: dict):
     # Build positive signals from ACTUAL probe results — not LLM free text.
     # LLM was inventing "Legitimate email domain" even when no email was provided.
     _probe_positives = []
-    _pr = probes  # probes dict is available in this scope
+    _pr = probes or {}  # passed in from call site
     _da = _pr.get("domain_age", {})
     _sr = _pr.get("site_reach", {})
     _fe = _pr.get("free_email", {})
@@ -5660,7 +5666,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         )
         _render_signal_cards(res["signals"])
     with t2:
-        _render_ai_dive(res.get("llm", {}))
+        _render_ai_dive(res.get("llm", {}), res.get("probes", {}))
     with t3:
         _render_checklist(res)
 
