@@ -3057,6 +3057,30 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         penalty += 12
         dom = probes["free_email"].get("domain", "")
         warnings.append(f"Recruiter uses personal email domain: {dom}")
+    else:
+        # ── Email domain vs company domain cross-check ─────────────────────
+        # If a corporate email exists, its domain should match the company website.
+        # hr@tcs-careers-india.com when website=tcs.com is a strong scam signal.
+        _fe2      = probes.get("free_email", {})
+        _emails   = _fe2.get("emails_found", [])
+        _cd2      = probes.get("company_domain", {})
+        _web_dom  = (_cd2.get("domain") or "").lower().replace("www.", "")
+        if _emails and _web_dom and len(_web_dom) > 4:
+            for _em in _emails:
+                _email_dom = _em.split("@")[-1].lower()
+                # Email domain must contain or match the website SLD
+                _web_sld  = _web_dom.split(".")[0]
+                _email_sld = _email_dom.split(".")[0]
+                if (_email_dom != _web_dom
+                        and _web_sld not in _email_dom
+                        and _email_sld not in _web_dom):
+                    penalty += 14
+                    warnings.append(
+                        f"Email domain '{_email_dom}' does not match company website "
+                        f"'{_web_dom}' — legitimate companies use matching email and "
+                        f"website domains. This mismatch is a common impersonation tactic."
+                    )
+                    break   # flag once
     mx = probes.get("mx_record", {})
     mx_status = mx.get("status", "")
     mx_dom = mx.get("domain", "")
@@ -3597,9 +3621,19 @@ def _run_rules(job: dict) -> dict:
     h = _any(full, _WFH_PHRASES)
     if h: _add("work_from_home_bait","WFH Bait — Data Entry / Form Filling",
                 "High-pay work-from-home roles with no skills required are almost always scams.", h)
-    if not job.get("salary","").strip() or len(job.get("salary","").strip()) < 4:
-        _add("missing_salary","Salary Completely Absent",
-             "Hidden salary is commonly used to lure, then lowball candidates.")
+    _sal_txt = (job.get("salary") or "").strip().lower()
+    _HIDDEN_SAL = [
+        "competitive", "as per industry", "negotiable", "as per norms",
+        "best in industry", "market rate", "will be discussed", "to be discussed",
+        "based on experience", "not disclosed", "not mentioned", "undisclosed",
+        "as per company norms", "hike on current", "as per profile",
+    ]
+    _sal_hidden = any(p in _sal_txt for p in _HIDDEN_SAL)
+    if not _sal_txt or len(_sal_txt) < 4 or _sal_hidden:
+        _detail = ("Salary listed as vague placeholder — used to lure then lowball."
+                   if _sal_hidden else
+                   "Hidden salary is commonly used to lure, then lowball candidates.")
+        _add("missing_salary", "Salary Absent or Hidden", _detail)
     g_hits = _any(full, _GRAMMAR_PATTERNS)
     if len(g_hits) >= 2:
         _add("poor_grammar","Suspicious Grammar / Formatting",
@@ -3685,26 +3719,58 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _probe_summary(probe_warnings: list) -> str:
+def _probe_summary(probe_warnings: list, probes: dict | None = None) -> str:
     """
-    Convert probe warnings into a clear PASS/FAIL summary for the LLM.
-    When warnings is empty, all probes passed — the LLM must treat this as
-    positive evidence for company legitimacy, not ignore it.
+    Build a dynamic PASS/FAIL probe summary from actual probe results.
+    Only lists checks that were actually run and actually passed.
+    Never claims email/MX are legitimate if no email was provided.
     """
+    probes = probes or {}
     if not probe_warnings:
-        return (
-            "ALL PROBES PASSED:\n"
-            "  - Domain age: established (registered > 6 months ago)\n"
-            "  - Site reachable: yes, with valid SSL certificate\n"
-            "  - Typosquatting: none detected\n"
-            "  - Email domain: legitimate (no free/personal email)\n"
-            "  - MX records: valid mail infrastructure exists\n"
-            "  - Company domain: DNS + HTTPS + MX all verified\n"
-            "  - SPF / DMARC: email authentication configured\n"
-            "IMPORTANT: These are live infrastructure checks that PASSED. "
-            "This is real evidence the company exists. Weight this heavily in "
-            "company_legitimacy — do NOT say UNVERIFIABLE if probes passed."
-        )
+        # Build dynamic pass list from actual probe data
+        _pass_lines = []
+        _da = probes.get("domain_age", {})
+        if _da.get("age_days", 0) > 180:
+            _pass_lines.append(
+                f"Domain age: established ({_da.get('age_days',0)} days old)"
+            )
+        _sr = probes.get("site_reach", {})
+        if _sr.get("reachable"):
+            _ssl = "with valid SSL" if _sr.get("ssl_valid") else "no SSL"
+            _pass_lines.append(f"Site reachable: yes, {_ssl}")
+        _ty = probes.get("typosquat", {})
+        if not _ty.get("is_squatter"):
+            _pass_lines.append("Typosquatting: none detected")
+        _fe = probes.get("free_email", {})
+        _fe_detail = (_fe.get("detail") or "").lower()
+        _no_email  = "no email" in _fe_detail or not _fe_detail
+        if not _no_email and not _fe.get("uses_free_domain"):
+            _pass_lines.append("Email domain: legitimate (company domain email)")
+        _mx = probes.get("mx_record", {})
+        if not _no_email and _mx.get("status") == "MX_FOUND":
+            _pass_lines.append("MX records: valid mail infrastructure exists")
+        _cd = probes.get("company_domain", {})
+        if _cd.get("verified"):
+            _srcs = _cd.get("identity_sources", 0)
+            _pass_lines.append(
+                f"Company domain: verified ({_srcs} source(s) confirmed)"
+            )
+        _spf = probes.get("spf_dmarc", {})
+        if _spf.get("has_spf") and _spf.get("has_dmarc"):
+            _pass_lines.append("SPF + DMARC: email authentication fully configured")
+        elif _spf.get("has_spf"):
+            _pass_lines.append("SPF: configured (DMARC not set)")
+
+        if _pass_lines:
+            lines = "\n".join(f"  - {l}" for l in _pass_lines)
+            return (
+                f"PROBES PASSED (live infrastructure checks):\n{lines}\n"
+                "IMPORTANT: These are real-time checks that confirm the company "
+                "has a legitimate online infrastructure. Weight this as positive "
+                "evidence — do NOT say UNVERIFIABLE if probes passed."
+            )
+        else:
+            return "PROBE RESULTS: No meaningful probe data available — assess from content only."
     lines = "\n".join(f"  - {w}" for w in probe_warnings)
     return f"PROBE WARNINGS (live checks that FAILED):\n{lines}"
 
@@ -3720,8 +3786,8 @@ def _fmt_rule_signals(signals: dict | None) -> str:
     return "\n".join(lines)
 
 
-def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None, rule_signals: dict | None = None) -> str:
-    ctx = _probe_summary(probe_warnings)
+def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None, rule_signals: dict | None = None, probes: dict | None = None) -> str:
+    ctx = _probe_summary(probe_warnings, probes)
     seeker         = seeker or {}
     seeker_loc     = seeker.get("location", "").strip()
     seeker_role    = seeker.get("role", "").strip()
@@ -5208,7 +5274,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                                 "location": st.session_state.get("jsd_seeker_loc", "").strip(),
                                 "role":     st.session_state.get("jsd_seeker_role", "").strip(),
                             }
-                            prompt = _llm_prompt(job, warnings, seeker_ctx, rules_result.get("signals", {}))
+                            prompt = _llm_prompt(job, warnings, seeker_ctx, rules_result.get("signals", {}), probes)
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
