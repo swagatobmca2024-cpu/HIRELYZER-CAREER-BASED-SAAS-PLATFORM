@@ -3270,6 +3270,74 @@ _SALARY_BANDS: dict[str, dict[int, tuple[float, float]]] = {
     "internship":          {0: ( 0.5,  8.0), 2: ( 1.0, 20.0),  5: ( 2.0,  20.0), 8: ( 2.0,  20.0)},
     "trainee":             {0: ( 1.5,  5.0), 2: ( 2.0,  8.0),  5: ( 3.0,   8.0), 8: ( 3.0,   8.0)},
     "fresher":             {0: ( 2.0,  7.0), 2: ( 2.0,  7.0),  5: ( 2.0,   7.0), 8: ( 2.0,   7.0)},
+    # ── Language / Framework (common Indian job titles) ──────────────────
+    "python":              {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (14.0,  42.0), 8: (22.0,  75.0)},
+    "java":                {0: ( 3.5,  9.0), 2: ( 6.5, 17.0),  5: (13.0,  40.0), 8: (20.0,  70.0)},
+    "react":               {0: ( 3.5,  9.0), 2: ( 6.0, 16.0),  5: (11.0,  35.0), 8: (18.0,  58.0)},
+    "angular":             {0: ( 3.5,  9.0), 2: ( 6.0, 16.0),  5: (11.0,  35.0), 8: (18.0,  58.0)},
+    "node":                {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (12.0,  38.0), 8: (20.0,  65.0)},
+    "flutter":             {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (11.0,  33.0), 8: (18.0,  55.0)},
+    "django":              {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (13.0,  40.0), 8: (20.0,  65.0)},
+    ".net":                {0: ( 3.5,  9.0), 2: ( 6.0, 16.0),  5: (11.0,  35.0), 8: (18.0,  58.0)},
+    "golang":              {0: ( 5.0, 12.0), 2: ( 9.0, 22.0),  5: (16.0,  48.0), 8: (26.0,  80.0)},
+    "rust":                {0: ( 6.0, 14.0), 2: (10.0, 24.0),  5: (18.0,  55.0), 8: (28.0,  90.0)},
+    # ── Design ─────────────────────────────────────────────────────────────────
+    "ui ux":               {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  40.0)},
+    "ui/ux":               {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  40.0)},
+    "ux designer":         {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  40.0)},
+    "ui designer":         {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  40.0)},
+    "product designer":    {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (12.0,  35.0), 8: (20.0,  60.0)},
+    "video editor":        {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  16.0), 8: ( 8.0,  25.0)},
+    "motion designer":     {0: ( 2.5,  6.0), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  32.0)},
+    # ── Infrastructure / Network ────────────────────────────────────────────────
+    "network engineer":    {0: ( 3.0,  8.0), 2: ( 5.0, 13.0),  5: ( 9.0,  28.0), 8: (15.0,  45.0)},
+    "system administrator":{0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  22.0), 8: (13.0,  35.0)},
+    "database administrator":{0:(3.0,  8.0), 2: ( 5.5, 14.0),  5: (10.0,  28.0), 8: (16.0,  45.0)},
+    "dba":                 {0: ( 3.0,  8.0), 2: ( 5.5, 14.0),  5: (10.0,  28.0), 8: (16.0,  45.0)},
+    "data engineer":       {0: ( 5.0, 12.0), 2: ( 8.0, 20.0),  5: (15.0,  45.0), 8: (25.0,  75.0)},
+    "etl":                 {0: ( 4.0, 10.0), 2: ( 6.5, 16.0),  5: (12.0,  35.0), 8: (18.0,  55.0)},
+    # ── Digital Marketing ───────────────────────────────────────────────────────
+    "digital marketing":   {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  18.0), 8: (10.0,  30.0)},
+    "seo":                 {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  15.0), 8: ( 8.0,  22.0)},
+    "social media":        {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  14.0), 8: ( 8.0,  20.0)},
+    "performance market":  {0: ( 2.5,  6.0), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  32.0)},
+    "growth hacker":       {0: ( 3.0,  7.0), 2: ( 5.0, 12.0),  5: ( 9.0,  25.0), 8: (15.0,  40.0)},
+    # ── Finance / Accounts ──────────────────────────────────────────────────────
+    "chartered accountant":{0: ( 6.0, 14.0), 2: ( 9.0, 20.0),  5: (15.0,  40.0), 8: (25.0,  80.0)},
+    "financial analyst":   {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (10.0,  28.0), 8: (16.0,  50.0)},
+    "investment banker":   {0: ( 8.0, 20.0), 2: (14.0, 35.0),  5: (25.0,  80.0), 8: (40.0, 150.0)},
+    "tax":                 {0: ( 2.5,  7.0), 2: ( 4.0, 11.0),  5: ( 7.0,  20.0), 8: (12.0,  35.0)},
+    "audit":               {0: ( 2.5,  7.0), 2: ( 4.0, 11.0),  5: ( 7.0,  20.0), 8: (12.0,  35.0)},
+    # ── Core Engineering (non-IT) ───────────────────────────────────────────────
+    "mechanical engineer": {0: ( 2.5,  6.5), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  35.0)},
+    "civil engineer":      {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  18.0), 8: (10.0,  30.0)},
+    "electrical engineer": {0: ( 2.5,  6.5), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  35.0)},
+    "chemical engineer":   {0: ( 2.5,  6.5), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  35.0)},
+    "production engineer": {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  18.0), 8: (10.0,  28.0)},
+    # ── Healthcare / Education ──────────────────────────────────────────────────
+    "pharmacist":          {0: ( 2.5,  6.0), 2: ( 4.0,  9.0),  5: ( 6.0,  16.0), 8: (10.0,  25.0)},
+    "nurse":               {0: ( 2.0,  5.0), 2: ( 3.5,  8.0),  5: ( 5.5,  14.0), 8: ( 9.0,  20.0)},
+    "doctor":              {0: ( 6.0, 15.0), 2: (10.0, 25.0),  5: (18.0,  60.0), 8: (30.0, 150.0)},
+    "teacher":             {0: ( 1.8,  5.0), 2: ( 2.5,  7.0),  5: ( 4.0,  12.0), 8: ( 6.0,  18.0)},
+    "professor":           {0: ( 5.0, 12.0), 2: ( 7.0, 16.0),  5: (10.0,  25.0), 8: (15.0,  40.0)},
+    # ── Supply Chain / Logistics ────────────────────────────────────────────────
+    "supply chain":        {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  45.0)},
+    "logistics":           {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  18.0), 8: (10.0,  30.0)},
+    "warehouse":           {0: ( 1.5,  4.0), 2: ( 2.5,  6.0),  5: ( 4.0,  10.0), 8: ( 6.0,  16.0)},
+    "procurement":         {0: ( 2.5,  7.0), 2: ( 4.0, 11.0),  5: ( 7.0,  22.0), 8: (12.0,  38.0)},
+    # ── Data / AI extras ───────────────────────────────────────────────────────
+    "data entry":          {0: ( 1.2,  3.5), 2: ( 1.5,  4.5),  5: ( 2.0,   6.0), 8: ( 3.0,   8.0)},
+    "artificial intelligence":{0:(6.0,15.0), 2:(10.0, 25.0),   5: (18.0,  70.0), 8: (30.0, 120.0)},
+    "generative ai":       {0: ( 7.0, 18.0), 2:(12.0, 30.0),   5: (22.0,  80.0), 8: (35.0, 140.0)},
+    "prompt engineer":     {0: ( 4.0, 12.0), 2: ( 8.0, 20.0),  5: (15.0,  45.0), 8: (22.0,  70.0)},
+    "power bi":            {0: ( 3.0,  8.0), 2: ( 5.0, 13.0),  5: ( 9.0,  25.0), 8: (14.0,  40.0)},
+    "tableau":             {0: ( 3.0,  8.0), 2: ( 5.0, 13.0),  5: ( 9.0,  25.0), 8: (14.0,  40.0)},
+    # ── Legal / Admin ──────────────────────────────────────────────────────────
+    "legal":               {0: ( 3.0,  8.0), 2: ( 5.0, 14.0),  5: (10.0,  30.0), 8: (18.0,  60.0)},
+    "lawyer":              {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (14.0,  40.0), 8: (22.0,  80.0)},
+    "compliance":          {0: ( 3.0,  8.0), 2: ( 5.0, 13.0),  5: ( 9.0,  25.0), 8: (14.0,  42.0)},
+    "administrative":      {0: ( 1.8,  4.5), 2: ( 2.5,  6.5),  5: ( 4.0,  12.0), 8: ( 6.0,  18.0)},
+    "receptionist":        {0: ( 1.5,  3.5), 2: ( 2.0,  5.0),  5: ( 3.0,   8.0), 8: ( 4.0,  10.0)},
 }
 
 def _get_band_for_exp(role_key: str, exp_years: float) -> Optional[tuple[float, float]]:
@@ -3669,6 +3737,35 @@ def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None, rul
         )
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
+
+    # ── Convert salary_raw to LPA so LLM never does unit maths ───────────
+    # ₹18,500/month confuses LLM which compares 18500 > 8.0 and calls it high.
+    # We compute the LPA equivalent here and inject it explicitly.
+    def _salary_to_lpa(text: str) -> Optional[float]:
+        if not text: return None
+        # LPA range: "12-18 LPA"
+        m = re.search(r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?|lac)",
+                      text, re.IGNORECASE)
+        if m: return (float(m.group(1)) + float(m.group(2))) / 2
+        # Single LPA
+        m = re.search(r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?|lac)", text, re.IGNORECASE)
+        if m: return float(m.group(1))
+        # Monthly INR: ₹18,500/month or 18,500 per month
+        is_monthly = bool(re.search(r"per\s+month|p\.?m\.?|monthly|/month", text, re.IGNORECASE))
+        nums = [int(n.replace(",","")) for n in re.findall(r"[\d,]+", text)
+                if 1000 <= int(n.replace(",","")) <= 99_999_999]
+        if nums:
+            v = nums[0]
+            if is_monthly:
+                return round((v * 12) / 100_000, 2)
+            elif v >= 100_000:
+                return round(v / 100_000, 2)
+        return None
+
+    _salary_lpa = _salary_to_lpa(salary_raw)
+    _salary_lpa_str = (f"{_salary_lpa:.1f} LPA (converted from '{salary_raw}')"
+                       if _salary_lpa else salary_raw)
+
     # ── Compute actual salary band to ground the LLM ─────────────────────
     # Without this, the LLM hallucinates market ranges (e.g. "20-30 LPA for intern").
     # We compute the real band from _SALARY_BANDS and inject the numbers directly.
@@ -3700,6 +3797,9 @@ def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None, rul
         elif any(w in _all_txt for w in ("mid", "associate")):       _exp_yrs = 3.0
 
     _band_context = ""
+    _band_matched = False
+    if _matched_band_key:
+        _band_matched = True
     if _matched_band_key:
         _b = _get_band_for_exp(_matched_band_key, _exp_yrs)
         if _b:
@@ -3719,6 +3819,19 @@ def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None, rul
                 + f": {_adj_min}–{_adj_max} LPA. "
                 f"You MUST use these numbers. Do NOT invent different ranges."
             )
+    else:
+        # No hardcoded band — tell LLM to use its knowledge but be explicit
+        _tier_label2 = ("fresher (0-1yr)" if _exp_yrs < 2 else
+                        "junior (2-4yr)"  if _exp_yrs < 5 else
+                        "mid-level (5-7yr)" if _exp_yrs < 8 else "senior (8+yr)")
+        _loc2 = job.get("location") or "India"
+        _band_context = (
+            f"No hardcoded band available for this role. "
+            f"Use your own knowledge of the Indian job market to estimate the "
+            f"typical LPA range for a {_tier_label2} {job.get('title','professional')} "
+            f"in {_loc2}. Be specific — give an actual LPA range, not vague language. "
+            f"Clearly state that this is an estimate based on general market knowledge."
+        )
 
     salary_instruction = (
         "The salary was NOT provided in this job posting. "
@@ -3726,16 +3839,21 @@ def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None, rul
         "do NOT guess, infer, or comment on whether it is realistic."
         if not salary_raw else
         f"{_band_context} {seeker_context} "
-        "Write 2-3 sentences assessing the stated salary. "
-        "You MUST: "
-        "(1) State the salary figure from the posting, "
-        "(2) Use the GROUND TRUTH band numbers above — do not substitute your own estimates. "
-        "If no band is provided, use your knowledge but acknowledge uncertainty. "
-        "(3) Name the experience tier that applies and compare clearly. "
-        "(4) Give a verdict: realistic / slightly above market / unrealistically high. "
-        "If the salary is below market for the role, note that too (could signal underpaying scam). "
+        f"STATED SALARY: '{salary_raw}' = {_salary_lpa_str}. "
+        "IMPORTANT: Always work in LPA. The conversion above is already done for you — "
+        "do NOT re-interpret the raw figure. Compare the LPA value against the GROUND TRUTH band. "
+        "Write 2-3 clear sentences: "
+        "(1) State the salary as both its original form AND its LPA equivalent, "
+        "(2) Compare that LPA value directly against the GROUND TRUTH band range — "
+        "say whether it falls inside, above, or below the range, "
+        "(3) Give a verdict: realistic / slightly above market / unrealistically high / below market. "
+        "Example of correct reasoning: "
+        "'The stated salary of ₹18,500/month (≈2.2 LPA) falls within the typical "
+        "fresher-tier range of 0.5–7.2 LPA for an intern in Kolkata. This is realistic.' "
+        "Example of WRONG reasoning (never do this): "
+        "'18,500 is higher than 0.5–8.0 LPA' — this confuses monthly INR with annual LPA. "
         "Never reply with a single word. "
-        "If unrealistically high for the tier, flag it as a scam signal."
+        "If LPA value is above 2× the band max, flag it as a scam signal."
     )
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
@@ -3787,7 +3905,7 @@ Required JSON schema (all keys mandatory):
   "verdict": "<SAFE|SUSPICIOUS|LIKELY_SCAM|DEFINITE_SCAM>",
   "company_legitimacy": "<VERIFIED|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
   "top_red_flags": ["<str>","<str>","<str>"],
-  "positive_signals": ["<str>"],
+  "positive_signals": ["<content-level positive signals ONLY — e.g. clear job description, specific role requirements, named interviewer, company registration mentioned. Do NOT list network/probe signals here like SSL, domain age, email domain, MX records — those are shown separately in the probe table. Max 3 items.>"],
   "fake_company_evidence": "<reasoning about company authenticity — MUST reference the live probe results above. If all probes passed, acknowledge that as positive evidence. Do not ignore infrastructure checks.>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
   "salary_assessment": "<2-3 sentence analysis: state the salary, compare to typical market range for this role and city, and explain whether it is a scam signal or a legitimate offer. Be specific — mention actual LPA figures. NOT_PROVIDED if salary is missing.>",
@@ -4019,29 +4137,51 @@ def _render_score_strip(result: dict):
                       "How many of 15 pattern rules matched"),
                 unsafe_allow_html=True)
 
-    # Formula explainer — shows users exactly how the number was built
-    # FIX v5 BUG 8: all three (comment, code, HTML) now agree on 60/25/15.
+    # Formula explainer — uses actual weights that were applied to this analysis.
+    # Weights vary: 45/40/15 normal, 35/45/20 low-confidence AI, 0/80/20 AI failed.
     ai_s  = result["ai_score"]
     rul_s = result["rule_score"]
     pen   = result["probe_penalty"]
-    raw   = round(0.60*ai_s + 0.25*rul_s + 0.15*pen, 1)
+    ai_conf = result.get("ai_confidence", 80)
+    ai_fail = result.get("ai_failed", False)
+    # Reconstruct which weights were actually used (mirrors blending logic)
+    if ai_fail:
+        _wa, _wr, _wp = 0.00, 0.80, 0.20
+        _wlabel = "AI failed — rule-only blend"
+    elif ai_conf < 50:
+        _wa, _wr, _wp = 0.35, 0.45, 0.20
+        _wlabel = "low-confidence AI blend"
+    else:
+        _wa, _wr, _wp = 0.45, 0.40, 0.15
+        _wlabel = "standard blend"
+    raw   = round(_wa*ai_s + _wr*rul_s + _wp*pen, 1)
     final_blended = result["blended_score"]
-    floor_note = (
-        f' → floored to <span style="color:#ef4444;font-weight:700;">{final_blended}</span>'
-        f'&nbsp;<span style="color:#4b5563;font-size:0.66rem;">(critical signal/probe floor applied)</span>'
-        if int(raw) != final_blended else
-        f' = <span style="color:#c9d1d9;font-weight:700;">{final_blended}</span>'
-    )
+    _floors_applied = []
+    _active_keys = set(result.get("signals", {}).keys())
+    if "upfront_payment" in _active_keys:
+        _floors_applied.append("payment floor")
+    if rul_s >= 25:
+        _floors_applied.append("rule-score floor")
+    if int(raw) != final_blended:
+        _floor_reasons = ", ".join(_floors_applied) if _floors_applied else "floor"
+        floor_note = (
+            f' → floored to <span style="color:#ef4444;font-weight:700;">{final_blended}</span>'
+            f'&nbsp;<span style="color:#4b5563;font-size:0.66rem;">({_floor_reasons} applied)</span>'
+        )
+    else:
+        floor_note = f' = <span style="color:#c9d1d9;font-weight:700;">{final_blended}</span>'
+    _wa_pct = int(_wa*100); _wr_pct = int(_wr*100); _wp_pct = int(_wp*100)
     st.markdown(
         f'<div style="margin-top:10px;padding:10px 16px;'
         f'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
         f'border-radius:8px;font-family:monospace;font-size:0.73rem;color:#6b7280;">'
         f'<span style="color:#8b949e;font-weight:600;">How your score was calculated: </span>'
-        f'(0.60 × AI&nbsp;<span style="color:{cfg["color"]}">{ai_s}</span>) + '
-        f'(0.25 × Rules&nbsp;<span style="color:#f59e0b">{rul_s}</span>) + '
-        f'(0.15 × Probes&nbsp;<span style="color:#38bdf8">{pen}</span>) '
+        f'({_wa_pct}% × AI&nbsp;<span style="color:{cfg["color"]}">{ai_s}</span>) + '
+        f'({_wr_pct}% × Rules&nbsp;<span style="color:#f59e0b">{rul_s}</span>) + '
+        f'({_wp_pct}% × Probes&nbsp;<span style="color:#38bdf8">{pen}</span>) '
         f'= <span style="color:#8b949e;">{raw}</span>'
         f'{floor_note}'
+        f'&nbsp;<span style="color:#374151;font-size:0.65rem;">· {_wlabel}</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -4281,11 +4421,46 @@ def _render_ai_dive(llm: dict):
         for f in llm.get("top_red_flags",[])[:5]
     ) or '<div style="color:#6b7280;font-size:0.79rem;font-style:italic;">None identified.</div>'
 
+    # Build positive signals from ACTUAL probe results — not LLM free text.
+    # LLM was inventing "Legitimate email domain" even when no email was provided.
+    _probe_positives = []
+    _pr = probes  # probes dict is available in this scope
+    _da = _pr.get("domain_age", {})
+    _sr = _pr.get("site_reach", {})
+    _fe = _pr.get("free_email", {})
+    _mx = _pr.get("mx_record", {})
+    _cd = _pr.get("company_domain", {})
+    _ci = _pr.get("company_identity", {})
+    _sd = _pr.get("spf_dmarc", {})
+    _fe_detail = (_fe.get("detail") or "").lower()
+    _no_email  = "no email" in _fe_detail or not _fe_detail
+
+    if _da.get("age_days", 0) > 180:
+        _probe_positives.append("Domain age: established")
+    if _sr.get("reachable") and _sr.get("ssl_valid"):
+        _probe_positives.append("Site reachable with valid SSL certificate")
+    if not _no_email and not _fe.get("uses_free_domain"):
+        _probe_positives.append("Email domain: legitimate")
+    if not _no_email and _mx.get("status") == "MX_FOUND":
+        _probe_positives.append("MX records: valid mail infrastructure exists")
+    if _cd.get("verified"):
+        _probe_positives.append("Company domain: verified")
+    if _sd.get("has_spf") and _sd.get("has_dmarc"):
+        _probe_positives.append("SPF + DMARC configured")
+    elif _sd.get("has_spf"):
+        _probe_positives.append("SPF record configured")
+
+    # Also include any non-probe positive signals the LLM found in content
+    _llm_pos = [p for p in llm.get("positive_signals", [])
+                if not any(w in p.lower() for w in
+                           ("email", "mx", "mail", "domain", "ssl", "dmarc", "spf", "reachable"))]
+    _all_positives = _probe_positives + _llm_pos
+
     pos_html = "".join(
         f'<div style="background:rgba(34,197,94,0.05);border-left:2px solid #22c55e;'
         f'padding:7px 11px;border-radius:0 6px 6px 0;margin-bottom:5px;'
         f'color:#86efac;font-size:0.79rem;">{p}</div>'
-        for p in llm.get("positive_signals",[])[:5]
+        for p in _all_positives[:6]
     ) or '<div style="color:#6b7280;font-size:0.79rem;font-style:italic;">No positive signals identified.</div>'
 
     fc1.markdown(
