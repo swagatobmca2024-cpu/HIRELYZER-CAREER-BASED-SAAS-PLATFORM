@@ -3074,7 +3074,13 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         warnings.append(f"Recruiter uses personal email domain: {dom}")
     mx = probes.get("mx_record", {})
     mx_status = mx.get("status", "")
-    mx_dom = mx.get("domain", "")
+    # BUG FIX (Probe Bug 2): mx.get("domain") is None/empty when no corporate
+    # email was provided (probe never set a domain). Warning messages like
+    # "Corporate email domain '' has NO MX records" showed a blank domain.
+    # Fall back to the free_email domain or a generic label.
+    mx_dom = (mx.get("domain") or
+              probes.get("free_email", {}).get("domain") or
+              "the contact email domain")
     if mx_status == "NO_MX":
         penalty += 22   # strongest MX signal — domain exists but has no mail servers
         warnings.append(
@@ -3121,7 +3127,10 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
             "godaddy",   "name.com", "rebel.com", "eranet",
         }
         reg_lower = age["registrar"].lower()
-        if any(s in reg_lower for s in _SUSPICIOUS_REGISTRARS) and age.get("status") == "young":
+        # BUG FIX (Probe Bug 1): old code only fired for status=="young" (31-90 days).
+        # "very_young" (0-30 days) and "moderate" (91-180 days) domains with suspicious
+        # registrars were never penalised even though both are < 6 months old.
+        if any(s in reg_lower for s in _SUSPICIOUS_REGISTRARS) and da_status in ("very_young", "young", "moderate"):
             penalty += 8
             warnings.append(
                 f"Domain registered with '{age['registrar']}' and is less than "
@@ -3459,7 +3468,11 @@ def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
     }
     title_norm = title.lower()
     for pattern, expansion in _ABBREV.items():
-        title_norm = re.sub(pattern, expansion, title_norm)
+        # BUG FIX (Salary Bug 1): must use word-boundary anchors.
+        # Without them "hr" expands inside "architecture"/"share",
+        # "qa" fires inside "squad", "vp" fires inside "develop",
+        # "ios" fires inside "previous" — corrupting band lookup.
+        title_norm = re.sub(r"\b" + pattern + r"\b", expansion, title_norm)
 
     # ── 3. Extract experience years ────────────────────────────────────────
     # Priority: seeker_role field → job requirements text → job title keywords
@@ -4181,15 +4194,21 @@ def _render_score_strip(result: dict):
     ai_s  = result["ai_score"]
     rul_s = result["rule_score"]
     pen   = result["probe_penalty"]
-    ai_conf = result.get("ai_confidence", 80)
-    ai_fail = result.get("ai_failed", False)
-    # Reconstruct which weights were actually used (mirrors blending logic)
+    ai_conf       = result.get("ai_confidence", 80)
+    ai_fail       = result.get("ai_failed", False)
+    probe_cov     = result.get("probe_coverage", 1.0)  # BUG FIX (Score Bug 1)
+    # Reconstruct which weights were actually used — must mirror all 4 branches in blending.
+    # Old code only handled 3 branches and always showed "standard blend" for the
+    # probe_coverage < 0.5 case (60/35/05 weights).
     if ai_fail:
         _wa, _wr, _wp = 0.00, 0.80, 0.20
         _wlabel = "AI failed — rule-only blend"
     elif ai_conf < 50:
         _wa, _wr, _wp = 0.35, 0.45, 0.20
         _wlabel = "low-confidence AI blend"
+    elif probe_cov < 0.5:
+        _wa, _wr, _wp = 0.60, 0.35, 0.05
+        _wlabel = "few probes ran — AI-weighted blend"
     else:
         _wa, _wr, _wp = 0.45, 0.40, 0.15
         _wlabel = "standard blend"
@@ -5309,7 +5328,9 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         ai_failed = True
 
                     prog.progress(90, text="Blending scores…")
-                    ai_s   = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
+                    # BUG FIX (AI Bug 3): int() truncates floats (72.9 → 72).
+                    # Use round() so LLM float scores are correctly converted.
+                    ai_s   = int(round(float(llm_data.get("ai_risk_score", rules_result["rule_score"]))))
                     rule_s = rules_result["rule_score"]
 
                     # Clamp AI score to valid range (guard against hallucinated values)
@@ -5428,7 +5449,12 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     # verdict to DEFINITE_SCAM regardless of the LLM score.
                     # These combos are near-impossible for legitimate companies.
                     mx_status   = probes.get("mx_record", {}).get("status", "")
-                    domain_fail = not probes.get("company_domain", {}).get("domain_exists", True)
+                    # BUG FIX (Score Bug 2): old default was True — so when the probe
+                    # could not run (domain_exists=None), it was treated as domain exists.
+                    # Correct default is None; "not None" = True but only when probe actually
+                    # confirmed absence (domain_exists=False).
+                    _cd_exists = probes.get("company_domain", {}).get("domain_exists")  # None | True | False
+                    domain_fail = (_cd_exists is False)  # only count as fail when probe explicitly confirmed
                     young_days  = probes.get("domain_age", {}).get("age_days") or 999
                     is_squatter = probes.get("typosquat", {}).get("is_squatter", False)
                     is_parked   = probes.get("site_reach", {}).get("is_parked", False)
@@ -5484,8 +5510,11 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         # above but never stored here. _render_score_strip read them
                         # with .get() defaults (80, False) so the blend label always
                         # showed "standard blend" even when AI failed or had low confidence.
-                        "ai_confidence":  ai_confidence,
-                        "ai_failed":      ai_failed,
+                        "ai_confidence":   ai_confidence,
+                        "ai_failed":       ai_failed,
+                        # BUG FIX (Score Bug 1): store probe_coverage so _render_score_strip
+                        # can reconstruct the actual blend branch (4 branches, not 3).
+                        "probe_coverage":  probe_coverage,
                     }
                     prog.progress(100, text="Done.")
                     time.sleep(0.3)
