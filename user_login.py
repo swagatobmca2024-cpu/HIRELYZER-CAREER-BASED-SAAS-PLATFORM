@@ -62,7 +62,11 @@ def _conn():
             try:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
-                conn.rollback()
+                # Only rollback if the connection is in a dirty/aborted state.
+                # Unconditional rollback was issuing a ROLLBACK on clean connections
+                # and could interfere with autocommit transitions in create_user_table.
+                if conn.status != psycopg2.extensions.STATUS_READY:
+                    conn.rollback()
             except Exception:
                 need_reconnect = True
                 try:
@@ -288,7 +292,16 @@ def create_user_table():
         try:
             conn.autocommit = False
         except Exception:
-            pass
+            # Connection is truly broken — can't restore autocommit state.
+            # Nuke it so _conn() forces a fresh reconnect on the next call
+            # instead of handing out a permanently broken connection that
+            # raises "set table cannot be used inside a transaction" on
+            # every subsequent operation.
+            try:
+                conn.close()
+            except Exception:
+                pass
+            _user_conn_holder["conn"] = None
         st.error(f"Error creating tables: {e}")
 
 
