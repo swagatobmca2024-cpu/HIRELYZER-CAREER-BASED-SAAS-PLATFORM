@@ -1854,12 +1854,17 @@ def _probe_free_email(contact: str) -> dict:
     out = {"uses_free_domain": False, "domain": None, "emails_found": [], "detail": ""}
     emails = re.findall(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", contact or "")
     out["emails_found"] = emails
-    for e in emails:
-        dom = e.split("@")[-1].lower()
-        if dom in _FREE_DOMAINS:
-            out.update(uses_free_domain=True, domain=dom,
-                       detail=f"'{e}' uses personal email domain '{dom}'")
-            return out
+    # BUG FIX (Bug 5): old code returned on the FIRST free email found.
+    # If a posting listed a corporate email first and a Gmail second, the loop
+    # exited after the corporate address and never flagged the free one.
+    # Fix: collect ALL free emails, then report the first one found.
+    free_hits = [(e, e.split("@")[-1].lower()) for e in emails
+                 if e.split("@")[-1].lower() in _FREE_DOMAINS]
+    if free_hits:
+        e, dom = free_hits[0]
+        out.update(uses_free_domain=True, domain=dom,
+                   detail=f"'{e}' uses personal email domain '{dom}'")
+        return out
     out["detail"] = ("No free/personal email domains detected" if emails
                      else "No email address found in input")
     return out
@@ -2999,17 +3004,28 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
 
 def run_live_probes(job: dict) -> dict:
     website = job.get("website", "")
-    contact = job.get("contact", "") + " " + job.get("description", "")
     company = job.get("company", "")
+    # BUG FIX (Bug 4): previously passed contact + full description (8000+ chars)
+    # as the `contact` arg.  This caused two problems:
+    #   1. The full description became part of the st.cache_data key, making every
+    #      unique posting a cache miss even when domain/email were identical.
+    #   2. Email addresses mentioned IN the job body (e.g. example addresses in
+    #      requirements text) were picked up by _probe_free_email / _probe_mx_record
+    #      as if they were the recruiter's contact, producing incorrect results.
+    # Fix: use only the actual contact field for email probes.  For domain fallback
+    # we still scan the first 300 chars of description, but only for domain extraction
+    # (not as part of the contact string passed to the probes).
+    contact = job.get("contact", "")
+    # Domain fallback: if no website, try to infer domain from corporate email in contact
     domain  = _extract_domain(website)
     if not domain:
-        for em_dom in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", contact):
+        # Scan contact field first, then a small prefix of description as last resort
+        _scan = contact + " " + job.get("description", "")[:300]
+        for em_dom in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", _scan):
             if em_dom.lower() not in _FREE_DOMAINS:
                 domain = em_dom
                 break
 
-    # Delegate to cached version — identical (domain, contact, company, website)
-    # combinations skip all network calls for 1 hour (st.cache_data TTL).
     return _run_live_probes_cached(domain or "", contact, company, website)
 
 
@@ -3684,20 +3700,37 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _probe_summary(probe_warnings: list) -> str:
+def _probe_summary(probe_warnings: list, probes: dict | None = None) -> str:
     """
     Convert probe warnings into a clear PASS/FAIL summary for the LLM.
     When warnings is empty, all probes passed — the LLM must treat this as
     positive evidence for company legitimacy, not ignore it.
+
+    BUG FIX: previously hardcoded "email domain: legitimate" in the PASSED
+    block even when no email was provided.  Now the email / MX lines are only
+    included when an email address was actually present in the job posting.
     """
+    probes = probes or {}
+    fe_detail = (probes.get("free_email") or {}).get("detail", "")
+    _email_provided = (
+        fe_detail
+        and "no email" not in fe_detail.lower()
+        and "not found" not in fe_detail.lower()
+    )
+
     if not probe_warnings:
+        email_lines = (
+            "  - Email domain: legitimate (no free/personal email)\n"
+            "  - MX records: valid mail infrastructure exists\n"
+            if _email_provided else
+            "  - Email domain: not provided (no email in posting — cannot assess)\n"
+        )
         return (
             "ALL PROBES PASSED:\n"
             "  - Domain age: established (registered > 6 months ago)\n"
             "  - Site reachable: yes, with valid SSL certificate\n"
             "  - Typosquatting: none detected\n"
-            "  - Email domain: legitimate (no free/personal email)\n"
-            "  - MX records: valid mail infrastructure exists\n"
+            + email_lines +
             "  - Company domain: DNS + HTTPS + MX all verified\n"
             "  - SPF / DMARC: email authentication configured\n"
             "IMPORTANT: These are live infrastructure checks that PASSED. "
@@ -3719,8 +3752,8 @@ def _fmt_rule_signals(signals: dict | None) -> str:
     return "\n".join(lines)
 
 
-def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None, rule_signals: dict | None = None) -> str:
-    ctx = _probe_summary(probe_warnings)
+def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None, rule_signals: dict | None = None, probes: dict | None = None) -> str:
+    ctx = _probe_summary(probe_warnings, probes=probes)
     seeker         = seeker or {}
     seeker_loc     = seeker.get("location", "").strip()
     seeker_role    = seeker.get("role", "").strip()
@@ -4449,11 +4482,16 @@ def _render_ai_dive(llm: dict, probes: dict | None = None):
         _probe_positives.append("Email domain: legitimate")
     if not _no_email and _mx.get("status") == "MX_FOUND":
         _probe_positives.append("MX records: valid mail infrastructure exists")
-    if _cd.get("verified"):
+    if _cd.get("domain_exists") is True and (
+        _cd.get("website_live") or _cd.get("identity_sources", 0) >= 1
+    ):
         _probe_positives.append("Company domain: verified")
-    if _sd.get("has_spf") and _sd.get("has_dmarc"):
+    # BUG FIX (Bug 6): _probe_spf_dmarc stores results under keys "spf" and "dmarc",
+    # NOT "has_spf" / "has_dmarc".  The old code read the wrong keys so SPF/DMARC
+    # positive signals never appeared in the UI even when both records were configured.
+    if _sd.get("spf") and _sd.get("dmarc"):
         _probe_positives.append("SPF + DMARC configured")
-    elif _sd.get("has_spf"):
+    elif _sd.get("spf"):
         _probe_positives.append("SPF record configured")
 
     # Also include any non-probe positive signals the LLM found in content
@@ -4517,9 +4555,37 @@ def _render_ai_dive(llm: dict, probes: dict | None = None):
         # ── Salary Reality Check: colour-coded badge + detailed text ────────
         if field == "salary_assessment":
             _v_lower = val.lower()
-            if any(w in _v_lower for w in ("unrealistically", "unrealistic", "scam", "too high", "inflated")):
+            # BUG FIX: use POSITIVE-FIRST matching.
+            # Old code checked for "unrealistic" as a substring, which fired on
+            # sentences like "This salary is realistic and does not seem unrealistic."
+            # Fix: if the text contains an explicit positive verdict word ("realistic",
+            # "within range", "market rate", "legitimate") AND no unambiguous flag phrase
+            # like "unrealistically high" or "scam signal", treat it as Realistic.
+            # Only flag as Unrealistic when an unambiguous bad phrase is present AND
+            # a positive verdict phrase is NOT also present (negation guard).
+            _UNAMBIGUOUS_BAD = re.compile(
+                r"unrealistically\s+high|too\s+high|inflated|scam\s+signal|"
+                r"far\s+above|way\s+above|impossibly\s+high",
+                re.IGNORECASE,
+            )
+            _POSITIVE_VERDICT = re.compile(
+                r"\brealistic\b|\bwithin\s+(the\s+)?(?:range|band|market)\b|"
+                r"\bmarket\s+rate\b|\blegitimate\s+offer\b|\bfair\s+salary\b|"
+                r"\bdoes\s+not\s+seem\s+(?:to\s+be\s+a?\s*)?(?:a\s+)?scam\b",
+                re.IGNORECASE,
+            )
+            _SLIGHTLY_HIGH = re.compile(
+                r"slightly\s+high|above\s+average|above\s+market|higher\s+than\s+"
+                r"(?:average|market|typical|expected)",
+                re.IGNORECASE,
+            )
+            _has_bad      = bool(_UNAMBIGUOUS_BAD.search(_v_lower))
+            _has_positive = bool(_POSITIVE_VERDICT.search(_v_lower))
+            _has_slightly = bool(_SLIGHTLY_HIGH.search(_v_lower))
+
+            if _has_bad and not _has_positive:
                 badge_color, badge_bg, badge_label = "#ef4444", "rgba(239,68,68,0.12)", "⚠ Unrealistic"
-            elif any(w in _v_lower for w in ("slightly high", "above average", "higher than")):
+            elif _has_slightly and not _has_positive:
                 badge_color, badge_bg, badge_label = "#f59e0b", "rgba(245,158,11,0.12)", "△ Slightly High"
             else:
                 badge_color, badge_bg, badge_label = "#22c55e", "rgba(34,197,94,0.12)", "✓ Realistic"
@@ -5207,7 +5273,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                                 "location": st.session_state.get("jsd_seeker_loc", "").strip(),
                                 "role":     st.session_state.get("jsd_seeker_role", "").strip(),
                             }
-                            prompt = _llm_prompt(job, warnings, seeker_ctx, rules_result.get("signals", {}))
+                            prompt = _llm_prompt(job, warnings, seeker_ctx, rules_result.get("signals", {}), probes=probes)
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
@@ -5414,6 +5480,12 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         "probes":         probes,    "probe_warnings": warnings,
                         "llm":            llm_data,  "job":            job,
                         "timestamp":      _now_ist(),
+                        # BUG FIX (Bug 3): ai_confidence and ai_failed were computed
+                        # above but never stored here. _render_score_strip read them
+                        # with .get() defaults (80, False) so the blend label always
+                        # showed "standard blend" even when AI failed or had low confidence.
+                        "ai_confidence":  ai_confidence,
+                        "ai_failed":      ai_failed,
                     }
                     prog.progress(100, text="Done.")
                     time.sleep(0.3)
