@@ -249,6 +249,7 @@ _SIG_ICON: dict[str, str] = {
     "work_from_home_bait":     I.HOME,
     "missing_salary":          I.DOLLAR_OFF,
     "poor_grammar":            I.FILE_TEXT,
+    "generic_template":        I.COPY,
     "whatsapp_only_contact":   I.PHONE,
 }
 
@@ -258,27 +259,33 @@ _SIG_ICON: dict[str, str] = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 _WEIGHTS: dict[str, int] = {
-    "upfront_payment":         25,
-    "advance_fee_scam":        22,   # added — was missing from weights
-    "mlm_pyramid":             20,
-    "too_good_salary":         18,
-    "vague_description":       14,
-    "free_email_contact":      12,
-    "urgency_pressure":        12,
-    "whatsapp_only":                  20,
-    "no_company_info":         11,
-    "req_paradox":             10,
-    "personal_info_demand":     9,
-    "unrealistic_benefits":     7,
-    "location_mismatch":        7,
-    "poor_grammar":             6,
-    "work_from_home_bait":      5,
-    "missing_salary":           4,
-    "india_scam_pattern":      16,   # data entry, typing, captcha, fake govt jobs
-    "invalid_gstin":           18,   # GST number present but fails format check
-    "invalid_phone":           10,   # phone present but not valid Indian format
-    "invalid_pin":              8,   # PIN code present but invalid for claimed state
-    "fake_govt_job":           20,   # impersonating railway/bank/defence recruitment
+    # ── Near-certain scam signals (40+ pts) ──────────────────────────────────
+    # No legitimate employer ever asks candidates for money. Period.
+    "upfront_payment":         40,   # was 25 — payment demand = near-certain scam
+    "fake_govt_job":           35,   # was 20 — impersonating PSU/railway/bank
+    # ── Strong scam signals (20-30 pts) ──────────────────────────────────────
+    "mlm_pyramid":             25,   # was 20
+    "too_good_salary":         22,   # was 18
+    "india_scam_pattern":      22,   # was 16 — data-entry / WFH / captcha scams
+    "invalid_gstin":           20,   # was 18 — fake GST number
+    "whatsapp_only_contact":   18,   # was 15
+    "vague_description":       16,   # was 14
+    # ── Moderate signals (10-18 pts) ─────────────────────────────────────────
+    "free_email_contact":      13,   # was 12
+    "urgency_pressure":        13,   # was 12
+    "no_company_info":         12,   # was 11
+    "req_paradox":             11,   # was 10
+    "personal_info_demand":    11,   # was 9
+    "work_from_home_bait":     11,   # was 5 — WFH bait is a very common scam
+    "invalid_phone":           10,   # unchanged
+    # ── Supporting signals (4-9 pts) ─────────────────────────────────────────
+    # Low individually but meaningful when stacked with stronger signals
+    "unrealistic_benefits":     8,   # was 7
+    "location_mismatch":        8,   # was 7
+    "invalid_pin":              8,   # unchanged
+    "poor_grammar":             7,   # was 6
+    "generic_template":         6,   # was 4 — stacks meaningfully
+    "missing_salary":           4,   # unchanged — common in legit postings too
 }
 
 _FREE_DOMAINS: frozenset[str] = frozenset({
@@ -331,12 +338,20 @@ _PAY_PHRASES = [
     r"processing fee",r"joining fee",r"membership fee",r"buy.*starter kit",
     r"purchase.*materials",r"invest.*joining",r"small.*investment",
     r"courier.*charge",r"background.*check.*fee",r"verification.*charge",
-    # NEW — common Indian scam variants
+    # Common Indian scam variants
     r"pay.*before.*joining",r"deposit.*refund.*after",r"id.*card.*fee",
     r"uniform.*charge",r"laptop.*deposit",r"tool.*kit.*purchase",
     r"sim.*card.*fee",r"scanner.*fee",r"biometric.*fee",
     r"police.*verification.*fee",r"insurance.*premium.*joining",
     r"token.*amount",r"earnest.*money",r"caution.*deposit",
+    # Internship / one-time fee variants (frequently missed)
+    r"one.time.*fee",r"internship.*fee",r"one.time.*internship",
+    r"return.*laptop",r"return.*company.*laptop",r"laptop.*return.*policy",
+    r"refundable.*laptop",r"laptop.*deposit.*refund",
+    r"application.*fee",r"offer.*letter.*fee",r"appointment.*fee",
+    r"document.*fee",r"stamp.*paper.*fee",r"agreement.*fee",
+    r"pay.*to.*confirm",r"payment.*confirm.*offer",r"confirm.*seat.*pay",
+    r"pay.*to.*proceed",r"amount.*to.*get.*offer",
 ]
 _MLM_PHRASES = [
     r"unlimited earning",r"be your own boss",r"passive income",
@@ -1669,56 +1684,116 @@ def _levenshtein(s1: str, s2: str) -> int:
     return prev[-1]
 
 
-def _probe_typosquatting(domain: str) -> dict:
+def _probe_typosquatting(domain: str, company: str = "") -> dict:
     """
-    Typosquat detection v2  (replaces SequenceMatcher / 72% threshold).
+    Typosquat detection v3 — merged best of v51 + company-awareness patch.
 
-    Two complementary checks on normalised SLDs:
+    Three complementary checks, in priority order:
 
-    1. Levenshtein edit distance ≤ 2 on homoglyph-normalised SLDs.
-       Catches: netlfix, nettflix, netfl1x, g00gle, inf0sys, w1pro …
-       Skips brands with SLD < 4 chars (tcs, ril …) — too short, too noisy.
+    1. COMPANY-AWARE CHECK:
+       Resolves the claimed company's real canonical domain via Clearbit
+       (free API) or DNS guessing, then checks edit distance on homoglyph-
+       normalised SLDs. Eliminates false positives like "netomi" vs "netflix"
+       because we only flag when the submitted domain is suspiciously close
+       to the company it *claims* to be.
 
-    2. Brand-keyword prefix/suffix containment.
-       Catches: infosys-careers.com, wipro-jobs.in, careers.infosys.net …
-       Requires ≥ 2 extra chars beyond the brand token (avoids "infosyss").
+    2. LEVENSHTEIN ON BRAND LIST (v51):
+       Edit distance ≤ 2 on homoglyph-normalised SLDs against _BRAND_DOMAINS.
+       Skips brand SLDs < 4 chars (tcs, ril …) — too short, too noisy.
+       Catches: netlfix, nettflix, netfl1x, g00gle, inf0sys, w1pr0 …
+       Also catches brand-keyword containment: infosys-careers.com, wipro-jobs.in
 
-    Root cause of the old false positives (netomi, netsol, netapp):
-       SequenceMatcher was run on FULL domains including .com suffix, inflating
-       scores: "netomi.com" vs "netflix.com" = 76% (above 72% threshold) even
-       though SLD-only score is only 61%. Switching to Levenshtein on SLD-only
-       + homoglyph normalisation eliminates these false positives entirely.
+    3. SEQUENCEMATCHER FALLBACK at raised threshold 0.85 (was 0.72 in v1).
+       Last resort — only fires when company unknown AND Clearbit/DNS fail
+       AND Levenshtein found nothing.
     """
     out = {"is_squatter": False, "closest_brand": None, "similarity": 0.0, "detail": ""}
     if not domain:
         return out
 
-    d_sld      = domain.split(".")[0]
-    d_norm     = _typo_normalise(d_sld)
+    d_sld  = domain.split(".")[0]
+    d_norm = _typo_normalise(d_sld)
 
-    best_lev_dist:  int         = 999
-    best_lev_brand: str | None  = None
-    prefix_brand:   str | None  = None
+    # ── Check 1: Company-aware — compare against the CLAIMED company's real domain ──
+    # Only runs when the job posting has an extractable company name.
+    # Priority: Clearbit (globally recognised) → DNS slug guessing (regional/unknown)
+    if company:
+        canonical_domain = ""
+        cb = _check_clearbit(company)
+        canonical_domain = cb.get("domain", "")
+        if not canonical_domain:
+            guessed, _ = _probe_domain_candidates(company)
+            canonical_domain = guessed
+
+        if canonical_domain:
+            c_sld  = canonical_domain.split(".")[0]
+            c_norm = _typo_normalise(c_sld)
+
+            # Exact normalised match → submitted domain IS the real domain → safe
+            if d_norm == c_norm:
+                out.update(
+                    similarity=1.0,
+                    closest_brand=canonical_domain,
+                    detail=f"'{domain}' matches canonical domain '{canonical_domain}' — legitimate ✓",
+                )
+                return out
+
+            edit_dist  = _levenshtein(d_norm, c_norm)
+            max_len    = max(len(d_norm), len(c_norm), 1)
+            similarity = round(1.0 - edit_dist / max_len, 3)
+            out.update(similarity=similarity, closest_brand=canonical_domain)
+
+            if edit_dist <= 2:
+                out.update(
+                    is_squatter=True,
+                    detail=(
+                        f"'{domain}' is only {edit_dist} char(s) from '{canonical_domain}' "
+                        f"after homoglyph normalisation — likely impersonating {company}"
+                    ),
+                )
+                return out
+
+            # Brand-keyword containment against canonical domain
+            if c_norm in d_norm and len(d_norm.replace(c_norm, "")) >= 2:
+                out.update(
+                    is_squatter=True,
+                    detail=(
+                        f"'{domain}' embeds brand keyword '{c_sld}' from '{canonical_domain}' "
+                        f"— likely impersonating {company}"
+                    ),
+                )
+                return out
+
+            # Edit distance ≥ 3 and no containment → different company, not a typosquat
+            out["detail"] = (
+                f"'{domain}' vs canonical '{canonical_domain}' — "
+                f"edit distance {edit_dist} (≥3), not a typosquat"
+            )
+            return out  # don't fall through when we have a canonical domain
+
+    # ── Check 2: Levenshtein on hardcoded brand list (v51) ───────────────────
+    # Runs when: no company provided, OR Clearbit + DNS both failed.
+    best_lev_dist:  int        = 999
+    best_lev_brand: str | None = None
+    prefix_brand:   str | None = None
 
     for b in _BRAND_DOMAINS:
         b_sld  = b.split(".")[0]
         b_norm = _typo_normalise(b_sld)
 
-        # Skip very short brand SLDs — too prone to coincidental matches
         if len(b_sld) < 4:
             continue
 
-        # ── Check 1: Levenshtein on normalised SLDs ───────────────────────
-        if d_norm != b_norm:          # exact match = the real domain, skip
+        # Check 2a: Levenshtein on normalised SLDs
+        if d_norm != b_norm:
             dist = _levenshtein(d_norm, b_norm)
             if dist < best_lev_dist:
                 best_lev_dist, best_lev_brand = dist, b
 
-        # ── Check 2: brand keyword embedded in domain ─────────────────────
-        # e.g. "infosys-careers.com" contains "infosys"
+        # Check 2b: brand keyword embedded in submitted domain
         if b_norm in d_norm and d_norm != b_norm:
             extra = d_norm.replace(b_norm, "")
-            if len(extra) >= 2:       # at least 2 extra chars to avoid "infosyss"
+            if len(extra) >= 2:
                 prefix_brand = b
 
     is_lev_squatter    = (best_lev_dist <= 2 and best_lev_brand is not None
@@ -1726,9 +1801,8 @@ def _probe_typosquatting(domain: str) -> dict:
     is_prefix_squatter = prefix_brand is not None
     is_squatter        = is_lev_squatter or is_prefix_squatter
 
-    # Compute a 0-1 similarity figure for the UI progress bar
     if best_lev_brand:
-        b_sld_len = max(len(_typo_normalise(best_lev_brand.split(".")[0])), 1)
+        b_sld_len  = max(len(_typo_normalise(best_lev_brand.split(".")[0])), 1)
         similarity = round(1.0 - best_lev_dist / b_sld_len, 3)
     else:
         similarity = 0.0
@@ -1738,16 +1812,41 @@ def _probe_typosquatting(domain: str) -> dict:
 
     if is_squatter:
         if is_lev_squatter:
-            detail = (f"'{domain}' is a likely typosquat of '{best_lev_brand}' "
-                      f"(edit distance {best_lev_dist} after homoglyph normalisation)")
+            detail = (
+                f"'{domain}' is a likely typosquat of '{best_lev_brand}' "
+                f"(edit distance {best_lev_dist} after homoglyph normalisation)"
+            )
         else:
-            detail = (f"'{domain}' contains brand keyword "
-                      f"'{prefix_brand.split('.')[0]}' — possible impersonation of {prefix_brand}")
+            detail = (
+                f"'{domain}' contains brand keyword '{prefix_brand.split('.')[0]}' "
+                f"— possible impersonation of {prefix_brand}"
+            )
         out.update(is_squatter=True, detail=detail)
+        return out
+
+    # ── Check 3: SequenceMatcher fallback at raised threshold 0.85 ───────────
+    best_sm, best_sm_brand = 0.0, None
+    for b in _BRAND_DOMAINS:
+        b_sld = b.split(".")[0]
+        sc = max(
+            difflib.SequenceMatcher(None, d_sld, b_sld).ratio(),
+            difflib.SequenceMatcher(None, domain, b).ratio(),
+        )
+        if sc > best_sm:
+            best_sm, best_sm_brand = sc, b
+
+    if best_sm >= 0.85 and domain not in _BRAND_DOMAINS:
+        out.update(
+            is_squatter=True,
+            similarity=round(best_sm, 3),
+            closest_brand=best_sm_brand,
+            detail=f"'{domain}' is {int(best_sm * 100)}% similar to '{best_sm_brand}' — possible impersonation",
+        )
     else:
-        out["detail"] = (f"No typosquat detected (closest: {closest}, "
-                         f"edit distance {best_lev_dist})"
-                         if closest else "No close brand match found")
+        out["detail"] = (
+            f"No typosquat detected (closest: {closest}, edit distance {best_lev_dist})"
+            if closest else "No close brand match found"
+        )
     return out
 
 
@@ -2847,173 +2946,6 @@ def _probe_mca(company: str) -> dict:
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-
-def _probe_safe_browsing(domain: str) -> dict:
-    """
-    Google Safe Browsing API v4 — no API key required for basic lookup.
-    Checks domain against Google's MALWARE, SOCIAL_ENGINEERING,
-    UNWANTED_SOFTWARE, and HARMFUL_APPLICATION threat lists.
-
-    Returns: {listed: bool, threats: [...], detail: str}
-    If listed → instant hard floor of 85 in _probe_risk.
-    """
-    out = {"listed": False, "threats": [], "detail": ""}
-    if not domain:
-        out["detail"] = "No domain to check"
-        return out
-    # API key read from Streamlit secrets or environment variable.
-    # Set GOOGLE_SAFE_BROWSING_KEY in .streamlit/secrets.toml or as an env var.
-    gsb_key = (
-        st.secrets.get("GOOGLE_SAFE_BROWSING_KEY", "")
-        if hasattr(st, "secrets") else ""
-    ) or os.environ.get("GOOGLE_SAFE_BROWSING_KEY", "")
-
-    if not gsb_key:
-        out["detail"] = "Safe Browsing skipped — GOOGLE_SAFE_BROWSING_KEY not configured"
-        return out
-    try:
-        payload = {
-            "client": {"clientId": "job-scam-detector", "clientVersion": "1.0"},
-            "threatInfo": {
-                "threatTypes":      ["MALWARE","SOCIAL_ENGINEERING",
-                                     "UNWANTED_SOFTWARE","HARMFUL_APPLICATION"],
-                "platformTypes":    ["ANY_PLATFORM"],
-                "threatEntryTypes": ["URL"],
-                "threatEntries":    [{"url": f"https://{domain}"},
-                                     {"url": f"http://{domain}"}],
-            },
-        }
-        r = requests.post(
-            "https://safebrowsing.googleapis.com/v4/threatMatches:find",
-            json=payload,
-            params={"key": gsb_key},
-            timeout=5,
-        )
-        if r.status_code == 200:
-            data = r.json()
-            matches = data.get("matches", [])
-            if matches:
-                threats = list({m.get("threatType","") for m in matches})
-                out.update(listed=True, threats=threats,
-                           detail=f"BLOCKLISTED by Google Safe Browsing: {', '.join(threats)}")
-            else:
-                out["detail"] = "Not on Google Safe Browsing blocklist"
-        elif r.status_code == 400:
-            out["detail"] = "Safe Browsing: bad request (API key issue)"
-        else:
-            out["detail"] = f"Safe Browsing: HTTP {r.status_code}"
-    except Exception as e:
-        out["detail"] = f"Safe Browsing probe failed: {e}"
-    return out
-
-
-def _probe_dnsbl(domain: str) -> dict:
-    """
-    DNSBL check against Spamhaus ZEN and SpamCop.
-    Resolves domain IP → reverses octets → queries blocklist DNS.
-    Reuses the same socket approach as _dns_mx_lookup — no new deps.
-
-    Returns: {listed: bool, lists: [...], ip: str, detail: str}
-    """
-    out = {"listed": False, "lists": [], "ip": "", "detail": ""}
-    if not domain:
-        out["detail"] = "No domain"
-        return out
-    try:
-        ip = socket.gethostbyname(domain)
-        out["ip"] = ip
-        rev = ".".join(reversed(ip.split(".")))
-        listed_on = []
-        for bl in ("zen.spamhaus.org", "bl.spamcop.net", "dnsbl.sorbs.net"):
-            try:
-                socket.gethostbyname(f"{rev}.{bl}")
-                listed_on.append(bl)   # A-record returned = listed
-            except socket.gaierror:
-                pass                   # NXDOMAIN = not listed
-        if listed_on:
-            out.update(listed=True, lists=listed_on,
-                       detail=f"IP {ip} listed on: {', '.join(listed_on)}")
-        else:
-            out["detail"] = f"IP {ip} not on any DNSBL"
-    except socket.gaierror:
-        out["detail"] = "Domain did not resolve — cannot DNSBL check"
-    except Exception as e:
-        out["detail"] = f"DNSBL probe failed: {e}"
-    return out
-
-
-def _probe_cert_transparency(domain: str) -> dict:
-    """
-    Certificate Transparency log check via crt.sh (free, no auth).
-    Catches:
-      1. Cert issued very recently on an old-claiming domain (age mismatch)
-      2. Let's Encrypt cert on a domain claiming to be a large corporation
-         (real enterprises use paid CAs like DigiCert, Sectigo, GlobalSign)
-      3. Wildcard certs covering suspicious subdomains
-
-    Returns: {checked: bool, suspicious: bool, reason: str, cert_age_days: int, issuer: str}
-    """
-    out = {"checked": False, "suspicious": False, "reason": "", "cert_age_days": None, "issuer": ""}
-    if not domain:
-        return out
-    try:
-        r = requests.get(
-            f"https://crt.sh/?q={domain}&output=json",
-            timeout=6,
-            headers={"User-Agent": "Mozilla/5.0 (job-scam-detector/1.0)"},
-        )
-        if r.status_code != 200:
-            out["reason"] = f"crt.sh returned HTTP {r.status_code}"
-            return out
-
-        certs = r.json()
-        if not certs:
-            out.update(checked=True, suspicious=True,
-                       reason="No certificates found — domain has never had SSL")
-            return out
-
-        out["checked"] = True
-        # Sort by most recent
-        from datetime import datetime, timezone
-        def _parse_dt(s):
-            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
-                try: return datetime.strptime(s[:16], fmt[:len(s[:16])]).replace(tzinfo=timezone.utc)
-                except: pass
-            return None
-
-        newest = None
-        newest_issuer = ""
-        for c in certs[:20]:
-            dt = _parse_dt(c.get("not_before",""))
-            if dt and (newest is None or dt > newest):
-                newest = dt
-                newest_issuer = c.get("issuer_name","")
-
-        if newest:
-            age_days = (datetime.now(timezone.utc) - newest).days
-            out["cert_age_days"] = age_days
-            out["issuer"]        = newest_issuer
-
-            # Flag: cert issued very recently (< 30 days) on a claimed established company
-            if age_days < 30:
-                out.update(suspicious=True,
-                           reason=f"SSL cert issued only {age_days} days ago — very new")
-
-            # Flag: Let's Encrypt on a domain presenting as a large corporation
-            # (We only flag this if domain_age > 1yr — otherwise LE is normal for startups)
-            if "Let's Encrypt" in newest_issuer or "R3" in newest_issuer or "E1" in newest_issuer:
-                out["issuer"] = "Let's Encrypt (free CA)"
-                # Not suspicious by itself — only noteworthy, don't flag
-            else:
-                out["issuer"] = newest_issuer.split("O=")[-1].split(",")[0].strip() if "O=" in newest_issuer else newest_issuer[:60]
-
-        if not out["suspicious"]:
-            out["reason"] = f"Certificate OK — issued {out.get('cert_age_days','?')} days ago by {out['issuer']}"
-
-    except Exception as e:
-        out["reason"] = f"crt.sh probe failed: {e}"
-    return out
-
 def _run_live_probes_cached(domain: str, contact: str, company: str, website: str) -> dict:
     """
     Cache probe results for 1 hour keyed on (domain, contact, company, website).
@@ -3021,16 +2953,13 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
     Cache is per-server-process — cleared on app restart (acceptable for Streamlit Cloud).
     """
     probes: dict = {
-        "domain_age":        {"status": "skipped", "detail": "No domain provided"},
-        "site_reach":        {"reachable": None,   "detail": "No domain provided"},
-        "typosquat":         {"is_squatter": False, "detail": "No domain provided"},
-        "free_email":        {"uses_free_domain": False, "detail": ""},
-        "mx_record":         {"status": "NO_EMAIL", "detail": ""},
-        "company_domain":    {"domain_exists": None, "detail": ""},
-        "spf_dmarc":         {"spf": None, "dmarc": None, "detail": "", "score": 0},
-        "safe_browsing":     {"listed": False, "threats": [], "detail": "Not checked"},
-        "dnsbl":             {"listed": False, "lists": [], "ip": "", "detail": "Not checked"},
-        "cert_transparency": {"checked": False, "suspicious": False, "reason": "", "cert_age_days": None, "issuer": ""},
+        "domain_age":     {"status": "skipped", "detail": "No domain provided"},
+        "site_reach":     {"reachable": None,   "detail": "No domain provided"},
+        "typosquat":      {"is_squatter": False, "detail": "No domain provided"},
+        "free_email":     {"uses_free_domain": False, "detail": ""},
+        "mx_record":      {"status": "NO_EMAIL", "detail": ""},
+        "company_domain": {"domain_exists": None, "detail": ""},
+        "spf_dmarc":      {"spf": None, "dmarc": None, "detail": "", "score": 0},
     }
     lock = threading.Lock()
 
@@ -3042,49 +2971,45 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         with lock:
             probes[key] = r
 
+    # Per-probe timeouts — fast probes don't wait for slow ones (MCA can be 12s)
+    _PROBE_TIMEOUTS = {
+        "domain_age":     _T_RDAP + 3,    # 9s  — RDAP varies by registrar
+        "site_reach":     _T_REACH + 2,   # 7s  — HTTP HEAD request
+        "typosquat":      _T_RDAP + 2,    # 8s  — may call Clearbit + DNS
+        "free_email":     4,               # 4s  — pure string match, near-instant
+        "mx_record":      8,               # 8s  — DNS lookup
+        "company_domain": _T_MCA + 4,     # 14s — MCA/Zaubacorp can be slow
+        "spf_dmarc":      8,               # 8s  — DNS lookup
+    }
     tasks = [
-        ("domain_age",        _probe_domain_age,         domain or ""),
-        ("site_reach",        _probe_site_reachable,      domain or ""),
-        ("typosquat",         _probe_typosquatting,       domain or ""),
-        ("free_email",        _probe_free_email,          contact),
-        ("mx_record",         _probe_mx_record,           contact),
-        ("company_domain",    _probe_company_domain,      (company, website)),
-        ("spf_dmarc",         _probe_spf_dmarc,           domain or ""),
-        ("safe_browsing",     _probe_safe_browsing,       domain or ""),
-        ("dnsbl",             _probe_dnsbl,               domain or ""),
-        ("cert_transparency", _probe_cert_transparency,   domain or ""),
+        ("domain_age",     _probe_domain_age,      domain or ""),
+        ("site_reach",     _probe_site_reachable,   domain or ""),
+        ("typosquat",      lambda d: _probe_typosquatting(d, company), domain or ""),
+        ("free_email",     _probe_free_email,       contact),
+        ("mx_record",      _probe_mx_record,        contact),
+        ("company_domain", _probe_company_domain,   (company, website)),
+        ("spf_dmarc",      _probe_spf_dmarc,        domain or ""),
     ]
-    threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
-    for t in threads: t.start()
-    for t in threads: t.join(timeout=_T_MCA + 4)
+    threads = [(k, threading.Thread(target=_run, args=(k, fn, arg), daemon=True))
+               for k, fn, arg in tasks]
+    for _, t in threads: t.start()
+    for k, t in threads: t.join(timeout=_PROBE_TIMEOUTS.get(k, 14))
     return probes
 
 
 def run_live_probes(job: dict) -> dict:
-    website     = job.get("website", "")
-    contact     = job.get("contact", "").strip()   # ONLY explicit contact field
-    company     = job.get("company", "")
-    description = job.get("description", "")
-
-    # Domain: from website first, then from CONTACT email only (not description)
-    domain = _extract_domain(website)
-    if not domain and contact:
+    website = job.get("website", "")
+    contact = job.get("contact", "") + " " + job.get("description", "")
+    company = job.get("company", "")
+    domain  = _extract_domain(website)
+    if not domain:
         for em_dom in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", contact):
             if em_dom.lower() not in _FREE_DOMAINS:
                 domain = em_dom
                 break
 
-    # Last resort domain: scan description for corporate email domains
-    # but ONLY for domain-age/site/typosquat probes — NOT for free_email or MX
-    # (those probes should only fire when an explicit contact email was given)
-    if not domain:
-        for em_dom in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", description):
-            if em_dom.lower() not in _FREE_DOMAINS:
-                domain = em_dom
-                break
-
-    # contact_for_email_probes = ONLY the explicit contact field
-    # This prevents description text from falsely triggering email/MX probes
+    # Delegate to cached version — identical (domain, contact, company, website)
+    # combinations skip all network calls for 1 hour (st.cache_data TTL).
     return _run_live_probes_cached(domain or "", contact, company, website)
 
 
@@ -3129,7 +3054,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         warnings.append(typo["detail"])
     if probes.get("free_email", {}).get("uses_free_domain"):
         penalty += 12
-        dom = probes.get("free_email", {}).get("domain", "")
+        dom = probes["free_email"].get("domain", "")
         warnings.append(f"Recruiter uses personal email domain: {dom}")
     mx = probes.get("mx_record", {})
     mx_status = mx.get("status", "")
@@ -3234,33 +3159,34 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         elif not spf.get("dmarc"):
             penalty += 8
             warnings.append(f"'{spf_dom}' has no DMARC record — anti-spoofing not configured")
-    # ── Google Safe Browsing ────────────────────────────────────────────────
-    gsb = probes.get("safe_browsing", {})
-    if gsb.get("listed"):
-        penalty += 60
-        warnings.append(gsb.get("detail", "Domain on Google Safe Browsing blocklist"))
-
-    # ── DNSBL / Spamhaus ───────────────────────────────────────────────────
-    dbl = probes.get("dnsbl", {})
-    if dbl.get("listed"):
-        penalty += 30
-        warnings.append(dbl.get("detail", "IP on spam/phishing blocklist"))
-
-    # ── Certificate Transparency ────────────────────────────────────────────
-    ct = probes.get("cert_transparency", {})
-    if ct.get("suspicious"):
-        penalty += 15
-        warnings.append(ct.get("reason", "SSL certificate anomaly detected"))
-
-    return min(penalty, 75), warnings  # raised cap — GSB alone = 60
+    return min(penalty, 55), warnings
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RULE ENGINE
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Pre-compiled pattern cache — compiled once at first use per list
+_COMPILED_PATTERNS: dict[int, list] = {}
+
+def _compile(patterns: list) -> list:
+    """Compile a pattern list once and cache by list id."""
+    key = id(patterns)
+    if key not in _COMPILED_PATTERNS:
+        compiled = []
+        for p in patterns:
+            try:
+                compiled.append(re.compile(p, re.IGNORECASE))
+            except re.error:
+                pass  # skip malformed patterns silently
+        _COMPILED_PATTERNS[key] = compiled
+    return _COMPILED_PATTERNS[key]
+
 def _any(text: str, patterns: list) -> list:
-    return [p for p in patterns if re.search(p, text, re.IGNORECASE)]
+    """Match pre-compiled patterns against text. Returns list of matched raw pattern strings."""
+    compiled = _compile(patterns)
+    raw      = patterns  # keep raw strings for hit reporting
+    return [raw[i] for i, cp in enumerate(compiled) if cp.search(text)]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SALARY CALIBRATION — role × city bands (INR per annum, LPA)
@@ -3278,285 +3204,153 @@ def _any(text: str, patterns: list) -> list:
 # "product manager" wins over the bare "manager" fallback.
 #
 # (min_lpa, max_lpa) — flag threshold = max_lpa × city_multiplier × 2.0
-
-# ── USD exchange rate (static fallback — update periodically) ─────────────
-_USD_TO_INR = 83.5    # approx as of 2025 — good enough for scam detection
-_GBP_TO_INR = 106.0
-_EUR_TO_INR = 90.0
-
-def _normalise_salary_to_lpa(salary_text: str) -> tuple[float | None, str]:
-    """
-    Convert any salary format to LPA (Lakhs Per Annum) for consistent comparison.
-
-    Handles:
-      - "12-18 LPA" / "12L" / "12 lakhs"          → 18.0 LPA (upper bound)
-      - "₹45,000/month" / "45k pm"                 → 5.4 LPA
-      - "₹8,00,000 per annum" / "800000 CTC"       → 8.0 LPA
-      - "$2000/month" / "USD 2000 per month"        → ~2.0 LPA
-      - "$25,000/year" / "25k USD annual"           → ~2.1 LPA
-      - "£30,000 per annum"                         → ~3.2 LPA
-      - "50k" (ambiguous — assumes INR/month)       → ~6.0 LPA
-
-    Returns: (lpa_value, human_readable_conversion_note)
-    """
-    import re
-    text = (salary_text or "").strip()
-    if not text:
-        return None, ""
-
-    def _clean_num(s: str) -> float | None:
-        """Strip commas, currency symbols, convert k→000."""
-        s = re.sub(r"[₹$£€,\s]", "", s)
-        s = re.sub(r"(?i)k$", "000", s)
-        try: return float(s)
-        except: return None
-
-    is_monthly = bool(re.search(
-        r"(?i)(per\s+month|p\.?m\.?|/month|monthly|per\s+mo\b|pm\b)", text))
-    is_annual  = bool(re.search(
-        r"(?i)(per\s+annum|per\s+year|/year|annual|p\.?a\.?|CTC|ctc)", text))
-    is_usd = bool(re.search(r"(?i)(\$|USD|usd|dollar)", text))
-    is_gbp = bool(re.search(r"(?i)(£|GBP|gbp|pound)", text))
-    is_eur = bool(re.search(r"(?i)(€|EUR|eur|euro)", text))
-
-    # ── LPA / Lakh patterns (native) ────────────────────────────────────────
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*"
-                  r"(?:LPA|lpa|L\b|lakhs?|lac|lacs)", text, re.IGNORECASE)
-    if m:
-        lo, hi = float(m.group(1)), float(m.group(2))
-        return hi, f"{lo}–{hi} LPA range → using upper bound {hi} LPA"
-
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L\b|lakhs?|lac|lacs)", text, re.IGNORECASE)
-    if m:
-        v = float(m.group(1))
-        return v, f"{v} LPA (as stated)"
-
-    # ── Foreign currency ────────────────────────────────────────────────────
-    if is_usd or is_gbp or is_eur:
-        rate = _USD_TO_INR if is_usd else (_GBP_TO_INR if is_gbp else _EUR_TO_INR)
-        sym  = "$" if is_usd else ("£" if is_gbp else "€")
-        curr = "USD" if is_usd else ("GBP" if is_gbp else "EUR")
-        m = re.search(r"(\d[\d,]*(?:\.\d+)?k?)", text)
-        if m:
-            v = _clean_num(m.group(1))
-            if v:
-                inr = v * rate
-                if is_monthly or (not is_annual and v < 5000):
-                    lpa = round((inr * 12) / 100_000, 2)
-                    return lpa, (f"{sym}{v:,.0f}/month × 12 × ₹{rate:.0f}/{curr} "
-                                 f"= ₹{inr*12:,.0f}/yr ≈ {lpa} LPA")
-                else:
-                    lpa = round(inr / 100_000, 2)
-                    return lpa, (f"{sym}{v:,.0f}/yr × ₹{rate:.0f}/{curr} "
-                                 f"= ₹{inr:,.0f}/yr ≈ {lpa} LPA")
-
-    # ── INR absolute ────────────────────────────────────────────────────────
-    m = re.search(r"(\d[\d,]*(?:\.\d+)?k?)", text)
-    if m:
-        v = _clean_num(m.group(1))
-        if v and v >= 1000:
-            if is_monthly or (not is_annual and 5_000 <= v <= 2_00_000):
-                lpa = round((v * 12) / 100_000, 2)
-                return lpa, f"₹{v:,.0f}/month × 12 = ₹{v*12:,.0f}/yr ≈ {lpa} LPA"
-            elif v >= 1_00_000:
-                lpa = round(v / 100_000, 2)
-                return lpa, f"₹{v:,.0f}/yr ÷ 1,00,000 = {lpa} LPA"
-
-    return None, ""
-
-_SALARY_BANDS: dict[str, tuple[float, float]] = {
-    # ── C-Suite ────────────────────────────────────────────────────────────
-    "chief executive":          (40.0, 500.0),
-    "chief technology":         (40.0, 300.0),
-    "chief financial":          (40.0, 300.0),
-    "chief operating":          (35.0, 250.0),
-    "chief product":            (35.0, 250.0),
-    "chief marketing":          (30.0, 200.0),
-    "chief data":               (35.0, 250.0),
-    "chief information":        (35.0, 250.0),
-    "chief people":             (25.0, 150.0),
-    # ── VP / Director ──────────────────────────────────────────────────────
-    "vice president":           (30.0, 200.0),
-    "vp engineering":           (35.0, 220.0),
-    "vp product":               (30.0, 180.0),
-    "director of engineering":  (28.0, 180.0),
-    "director of product":      (25.0, 160.0),
-    "director":                 (20.0, 150.0),
-    # ── Engineering seniority ──────────────────────────────────────────────
-    "distinguished engineer":   (50.0, 300.0),
-    "staff engineer":           (30.0, 150.0),
-    "principal engineer":       (25.0, 120.0),
-    "lead engineer":            (18.0,  90.0),
-    "senior software engineer": (12.0,  70.0),
-    "senior engineer":          (12.0,  70.0),
-    "software engineer":        ( 4.0,  45.0),
-    "junior software engineer": ( 3.0,  18.0),
-    "junior engineer":          ( 3.0,  18.0),
-    "associate engineer":       ( 3.0,  15.0),
-    # ── AI / ML / Data ─────────────────────────────────────────────────────
-    "machine learning engineer":( 8.0,  80.0),
-    "machine learning":         ( 8.0,  70.0),
-    "ai engineer":              ( 8.0,  80.0),
-    "llm engineer":             (10.0,  90.0),
-    "nlp engineer":             ( 8.0,  70.0),
-    "computer vision":          ( 8.0,  70.0),
-    "deep learning":            ( 8.0,  75.0),
-    "research scientist":       (10.0,  90.0),
-    "research engineer":        (10.0,  80.0),
-    "lead data scientist":      (18.0, 100.0),
-    "senior data scientist":    (12.0,  80.0),
-    "data scientist":           ( 6.0,  55.0),
-    "senior data engineer":     (12.0,  70.0),
-    "data engineer":            ( 6.0,  50.0),
-    "senior data analyst":      ( 7.0,  35.0),
-    "data analyst":             ( 3.5,  20.0),
-    "research analyst":         ( 4.0,  22.0),
-    "business analyst":         ( 4.0,  25.0),
-    # ── Cloud / Infra / Security ───────────────────────────────────────────
-    "site reliability":         ( 8.0,  60.0),
-    "platform engineer":        ( 7.0,  55.0),
-    "cloud architect":          (20.0, 100.0),
-    "solutions architect":      (18.0,  90.0),
-    "enterprise architect":     (25.0, 130.0),
-    "technical architect":      (22.0, 110.0),
-    "architect":                (20.0, 100.0),
-    "devops engineer":          ( 6.0,  50.0),
-    "devops":                   ( 6.0,  45.0),
-    "cloud engineer":           ( 6.0,  50.0),
-    "network engineer":         ( 4.0,  30.0),
-    "security engineer":        ( 7.0,  55.0),
-    "cybersecurity":            ( 6.0,  50.0),
-    "penetration tester":       ( 6.0,  45.0),
-    "information security":     ( 6.0,  50.0),
-    "database administrator":   ( 4.0,  30.0),
-    "system administrator":     ( 3.0,  20.0),
-    "embedded engineer":        ( 4.0,  35.0),
-    "firmware engineer":        ( 5.0,  40.0),
-    # ── Web / Mobile ───────────────────────────────────────────────────────
-    "full stack":               ( 5.0,  45.0),
-    "fullstack":                ( 5.0,  45.0),
-    "frontend developer":       ( 4.0,  35.0),
-    "frontend engineer":        ( 4.0,  38.0),
-    "frontend":                 ( 4.0,  35.0),
-    "backend developer":        ( 4.0,  40.0),
-    "backend engineer":         ( 4.0,  42.0),
-    "backend":                  ( 4.0,  40.0),
-    "react developer":          ( 4.0,  40.0),
-    "react native":             ( 5.0,  42.0),
-    "node developer":           ( 4.0,  38.0),
-    "python developer":         ( 4.0,  40.0),
-    "java developer":           ( 4.0,  40.0),
-    "golang developer":         ( 6.0,  50.0),
-    "rust developer":           ( 8.0,  60.0),
-    "android developer":        ( 4.0,  38.0),
-    "android engineer":         ( 4.0,  38.0),
-    "ios developer":            ( 4.0,  38.0),
-    "ios engineer":             ( 4.0,  38.0),
-    "mobile developer":         ( 4.0,  38.0),
-    "flutter developer":        ( 4.0,  38.0),
-    # ── QA / Testing ───────────────────────────────────────────────────────
-    "qa lead":                  ( 8.0,  35.0),
-    "qa engineer":              ( 3.0,  25.0),
-    "qa analyst":               ( 3.0,  22.0),
-    "quality assurance":        ( 3.0,  25.0),
-    "automation engineer":      ( 5.0,  35.0),
-    "test engineer":            ( 3.0,  22.0),
-    "tester":                   ( 3.0,  20.0),
-    # ── Product / Design / PM ──────────────────────────────────────────────
-    "senior product manager":   (18.0,  90.0),
-    "product manager":          (10.0,  60.0),
-    "product owner":            ( 8.0,  50.0),
-    "program manager":          (10.0,  55.0),
-    "project manager":          ( 8.0,  40.0),
-    "scrum master":             ( 6.0,  35.0),
-    "agile coach":              ( 8.0,  40.0),
-    "ux researcher":            ( 5.0,  30.0),
-    "ux designer":              ( 4.0,  30.0),
-    "ui designer":              ( 3.0,  25.0),
-    "ui ux":                    ( 3.5,  28.0),
-    "product designer":         ( 5.0,  35.0),
-    "graphic designer":         ( 2.0,  18.0),
-    "visual designer":          ( 2.5,  20.0),
-    "motion designer":          ( 3.0,  22.0),
-    "video editor":             ( 2.0,  15.0),
-    "manager":                  ( 8.0,  50.0),
-    # ── HR / People ────────────────────────────────────────────────────────
-    "hr business partner":      ( 6.0,  30.0),
-    "hr manager":               ( 5.0,  25.0),
-    "hr executive":             ( 2.5,  15.0),
-    "human resources":          ( 2.5,  20.0),
-    "talent acquisition":       ( 3.0,  20.0),
-    "technical recruiter":      ( 4.0,  22.0),
-    "recruiter":                ( 2.5,  18.0),
-    "payroll":                  ( 2.5,  15.0),
-    # ── Sales / BD ─────────────────────────────────────────────────────────
-    "business development":     ( 4.0,  35.0),
-    "sales manager":            ( 5.0,  35.0),
-    "sales executive":          ( 2.0,  15.0),
-    "account manager":          ( 4.0,  25.0),
-    "account executive":        ( 3.0,  20.0),
-    "key account":              ( 5.0,  30.0),
-    "pre sales":                ( 5.0,  30.0),
-    "inside sales":             ( 2.5,  18.0),
-    "sales":                    ( 2.0,  25.0),
-    # ── Marketing ──────────────────────────────────────────────────────────
-    "performance marketer":     ( 4.0,  28.0),
-    "growth hacker":            ( 4.0,  30.0),
-    "digital marketing":        ( 2.5,  20.0),
-    "seo specialist":           ( 2.0,  15.0),
-    "social media":             ( 2.0,  12.0),
-    "content strategist":       ( 3.0,  20.0),
-    "content writer":           ( 2.0,  15.0),
-    "copywriter":               ( 2.5,  18.0),
-    "brand manager":            ( 6.0,  35.0),
-    "marketing manager":        ( 6.0,  35.0),
-    "marketing":                ( 2.5,  20.0),
-    # ── Finance / Accounting ───────────────────────────────────────────────
-    "financial analyst":        ( 4.0,  25.0),
-    "financial controller":     (10.0,  45.0),
-    "investment analyst":       ( 5.0,  35.0),
-    "chartered accountant":     ( 5.0,  30.0),
-    "cost accountant":          ( 3.0,  18.0),
-    "accountant":               ( 2.5,  15.0),
-    "finance":                  ( 4.0,  35.0),
-    "tax consultant":           ( 3.0,  20.0),
-    "audit":                    ( 3.0,  20.0),
-    # ── Operations / Logistics ─────────────────────────────────────────────
-    "supply chain":             ( 4.0,  30.0),
-    "logistics":                ( 2.5,  18.0),
-    "warehouse":                ( 1.8,  10.0),
-    "operations manager":       ( 6.0,  35.0),
-    "operations":               ( 3.0,  25.0),
-    # ── Customer / Support ─────────────────────────────────────────────────
-    "customer success":         ( 3.0,  18.0),
-    "customer support":         ( 2.0,  10.0),
-    "customer service":         ( 2.0,  10.0),
-    "technical support":        ( 2.5,  15.0),
-    "help desk":                ( 2.0,  12.0),
-    "call centre":              ( 1.8,   8.0),
-    "call center":              ( 1.8,   8.0),
-    # ── Legal / Compliance ─────────────────────────────────────────────────
-    "legal counsel":            ( 8.0,  50.0),
-    "compliance officer":       ( 5.0,  30.0),
-    "legal":                    ( 4.0,  30.0),
-    # ── Teaching / Research ────────────────────────────────────────────────
-    "professor":                ( 6.0,  40.0),
-    "assistant professor":      ( 5.0,  25.0),
-    "lecturer":                 ( 3.0,  18.0),
-    "teacher":                  ( 2.0,  12.0),
-    # ── Healthcare ─────────────────────────────────────────────────────────
-    "pharmacist":               ( 3.0,  15.0),
-    "nurse":                    ( 2.5,  12.0),
-    "doctor":                   ( 8.0,  80.0),
-    "physician":                ( 8.0,  80.0),
-    # ── Entry level (always last) ───────────────────────────────────────────
-    "intern":                   ( 0.5,  20.0),
-    "internship":               ( 0.5,  20.0),
-    "trainee":                  ( 1.5,   8.0),
-    "fresher":                  ( 2.0,  10.0),
-    "apprentice":               ( 1.0,   6.0),
-    "associate":                ( 3.0,  18.0),
+# Salary bands by experience tier (LPA).
+# Format: keyword → {exp_years_floor: (min_lpa, max_lpa)}
+# Tiers: 0=fresher/0-1yr, 2=junior 2-4yr, 5=mid 5-7yr, 8=senior 8+yr
+# _salary_outlier() picks the tier closest to the candidate's experience.
+_SALARY_BANDS: dict[str, dict[int, tuple[float, float]]] = {
+    # ── Tech — specific first ──────────────────────────────────────────────
+    "principal engineer":  {0: (25.0, 60.0), 2: (30.0, 80.0),  5: (40.0, 120.0), 8: (60.0, 200.0)},
+    "lead engineer":       {0: (18.0, 40.0), 2: (22.0, 55.0),  5: (30.0,  90.0), 8: (45.0, 130.0)},
+    "senior engineer":     {0: (12.0, 25.0), 2: (15.0, 35.0),  5: (20.0,  70.0), 8: (35.0, 100.0)},
+    "software engineer":   {0: ( 4.0, 10.0), 2: ( 8.0, 20.0),  5: (15.0,  45.0), 8: (25.0,  80.0)},
+    "machine learning":    {0: ( 6.0, 15.0), 2: (10.0, 25.0),  5: (18.0,  70.0), 8: (30.0, 120.0)},
+    "data scientist":      {0: ( 5.0, 12.0), 2: ( 9.0, 22.0),  5: (16.0,  55.0), 8: (28.0,  90.0)},
+    "data analyst":        {0: ( 3.0,  8.0), 2: ( 5.0, 14.0),  5: ( 9.0,  22.0), 8: (15.0,  35.0)},
+    "devops":              {0: ( 5.0, 12.0), 2: ( 8.0, 20.0),  5: (14.0,  45.0), 8: (22.0,  70.0)},
+    "full stack":          {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (12.0,  45.0), 8: (22.0,  70.0)},
+    "fullstack":           {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (12.0,  45.0), 8: (22.0,  70.0)},
+    "frontend":            {0: ( 3.5,  9.0), 2: ( 6.0, 16.0),  5: (10.0,  35.0), 8: (18.0,  55.0)},
+    "backend":             {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (12.0,  40.0), 8: (20.0,  65.0)},
+    "android developer":   {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (10.0,  35.0), 8: (18.0,  55.0)},
+    "android engineer":    {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (10.0,  35.0), 8: (18.0,  55.0)},
+    "ios developer":       {0: ( 4.0, 10.0), 2: ( 7.0, 16.0),  5: (11.0,  35.0), 8: (18.0,  55.0)},
+    "ios engineer":        {0: ( 4.0, 10.0), 2: ( 7.0, 16.0),  5: (11.0,  35.0), 8: (18.0,  55.0)},
+    "qa engineer":         {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  38.0)},
+    "qa analyst":          {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  38.0)},
+    "quality assurance":   {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  38.0)},
+    "tester":              {0: ( 2.5,  6.0), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  30.0)},
+    "architect":           {0: (18.0, 40.0), 2: (25.0, 60.0),  5: (35.0, 100.0), 8: (50.0, 160.0)},
+    "cybersecurity":       {0: ( 5.0, 12.0), 2: ( 9.0, 22.0),  5: (16.0,  50.0), 8: (28.0,  90.0)},
+    "cloud engineer":      {0: ( 5.0, 12.0), 2: ( 8.0, 20.0),  5: (14.0,  45.0), 8: (24.0,  75.0)},
+    "site reliability":    {0: ( 6.0, 14.0), 2: (10.0, 24.0),  5: (16.0,  55.0), 8: (28.0,  90.0)},
+    "blockchain":          {0: ( 6.0, 15.0), 2: (10.0, 25.0),  5: (18.0,  60.0), 8: (30.0, 100.0)},
+    "embedded":            {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (10.0,  30.0), 8: (18.0,  50.0)},
+    # ── Management ─────────────────────────────────────────────────────────
+    "chief executive":     {0: (40.0,120.0), 2: (60.0,180.0),  5: (80.0, 300.0), 8: (100.0,500.0)},
+    "chief technology":    {0: (35.0,100.0), 2: (50.0,150.0),  5: (70.0, 250.0), 8: ( 90.0,400.0)},
+    "chief financial":     {0: (35.0,100.0), 2: (50.0,150.0),  5: (70.0, 250.0), 8: ( 90.0,400.0)},
+    "chief operating":     {0: (30.0, 90.0), 2: (45.0,130.0),  5: (60.0, 220.0), 8: ( 80.0,350.0)},
+    "vice president":      {0: (25.0, 70.0), 2: (35.0,100.0),  5: (50.0, 180.0), 8: ( 70.0,300.0)},
+    "director":            {0: (18.0, 50.0), 2: (25.0, 75.0),  5: (35.0, 150.0), 8: ( 50.0,250.0)},
+    "product manager":     {0: ( 8.0, 18.0), 2: (12.0, 28.0),  5: (20.0,  60.0), 8: ( 35.0,100.0)},
+    "project manager":     {0: ( 6.0, 14.0), 2: ( 9.0, 20.0),  5: (14.0,  40.0), 8: ( 22.0, 65.0)},
+    "manager":             {0: ( 6.0, 14.0), 2: ( 8.0, 22.0),  5: (14.0,  50.0), 8: ( 22.0, 80.0)},
+    # ── Non-tech ───────────────────────────────────────────────────────────
+    "human resources":     {0: ( 2.0,  6.0), 2: ( 3.5, 10.0),  5: ( 6.0,  20.0), 8: ( 10.0, 35.0)},
+    "hr executive":        {0: ( 2.0,  5.5), 2: ( 3.0,  9.0),  5: ( 5.0,  15.0), 8: (  8.0, 25.0)},
+    "hr manager":          {0: ( 4.0, 10.0), 2: ( 6.0, 15.0),  5: ( 9.0,  25.0), 8: ( 14.0, 40.0)},
+    "recruiter":           {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  18.0), 8: ( 10.0, 28.0)},
+    "talent acquisition":  {0: ( 2.5,  6.0), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: ( 11.0, 30.0)},
+    "sales executive":     {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  15.0), 8: (  8.0, 25.0)},
+    "sales manager":       {0: ( 4.0, 10.0), 2: ( 6.0, 15.0),  5: ( 9.0,  30.0), 8: ( 14.0, 50.0)},
+    "sales":               {0: ( 1.8,  6.0), 2: ( 3.0, 10.0),  5: ( 5.0,  20.0), 8: (  8.0, 35.0)},
+    "marketing":           {0: ( 2.0,  6.0), 2: ( 3.5, 10.0),  5: ( 6.0,  20.0), 8: ( 10.0, 40.0)},
+    "content writer":      {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  15.0), 8: (  8.0, 22.0)},
+    "graphic designer":    {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  16.0), 8: (  8.0, 25.0)},
+    "accountant":          {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  15.0), 8: ( 10.0, 25.0)},
+    "finance":             {0: ( 3.5,  9.0), 2: ( 5.5, 15.0),  5: ( 9.0,  30.0), 8: ( 16.0, 60.0)},
+    "operations":          {0: ( 2.5,  6.5), 2: ( 4.0, 10.0),  5: ( 7.0,  22.0), 8: ( 12.0, 40.0)},
+    "customer support":    {0: ( 1.8,  4.5), 2: ( 2.5,  7.0),  5: ( 4.0,  12.0), 8: (  6.0, 18.0)},
+    "customer service":    {0: ( 1.8,  4.5), 2: ( 2.5,  7.0),  5: ( 4.0,  12.0), 8: (  6.0, 18.0)},
+    "business analyst":    {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (10.0,  30.0), 8: ( 16.0, 50.0)},
+    "scrum master":        {0: ( 5.0, 12.0), 2: ( 8.0, 18.0),  5: (13.0,  35.0), 8: ( 20.0, 55.0)},
+    # ── Entry level ────────────────────────────────────────────────────────
+    "intern":              {0: ( 0.5,  8.0), 2: ( 1.0, 20.0),  5: ( 2.0,  20.0), 8: ( 2.0,  20.0)},
+    "internship":          {0: ( 0.5,  8.0), 2: ( 1.0, 20.0),  5: ( 2.0,  20.0), 8: ( 2.0,  20.0)},
+    "trainee":             {0: ( 1.5,  5.0), 2: ( 2.0,  8.0),  5: ( 3.0,   8.0), 8: ( 3.0,   8.0)},
+    "fresher":             {0: ( 2.0,  7.0), 2: ( 2.0,  7.0),  5: ( 2.0,   7.0), 8: ( 2.0,   7.0)},
+    # ── Language / Framework (common Indian job titles) ──────────────────
+    "python":              {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (14.0,  42.0), 8: (22.0,  75.0)},
+    "java":                {0: ( 3.5,  9.0), 2: ( 6.5, 17.0),  5: (13.0,  40.0), 8: (20.0,  70.0)},
+    "react":               {0: ( 3.5,  9.0), 2: ( 6.0, 16.0),  5: (11.0,  35.0), 8: (18.0,  58.0)},
+    "angular":             {0: ( 3.5,  9.0), 2: ( 6.0, 16.0),  5: (11.0,  35.0), 8: (18.0,  58.0)},
+    "node":                {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (12.0,  38.0), 8: (20.0,  65.0)},
+    "flutter":             {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (11.0,  33.0), 8: (18.0,  55.0)},
+    "django":              {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (13.0,  40.0), 8: (20.0,  65.0)},
+    ".net":                {0: ( 3.5,  9.0), 2: ( 6.0, 16.0),  5: (11.0,  35.0), 8: (18.0,  58.0)},
+    "golang":              {0: ( 5.0, 12.0), 2: ( 9.0, 22.0),  5: (16.0,  48.0), 8: (26.0,  80.0)},
+    "rust":                {0: ( 6.0, 14.0), 2: (10.0, 24.0),  5: (18.0,  55.0), 8: (28.0,  90.0)},
+    # ── Design ─────────────────────────────────────────────────────────────────
+    "ui ux":               {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  40.0)},
+    "ui/ux":               {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  40.0)},
+    "ux designer":         {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  40.0)},
+    "ui designer":         {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  40.0)},
+    "product designer":    {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (12.0,  35.0), 8: (20.0,  60.0)},
+    "video editor":        {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  16.0), 8: ( 8.0,  25.0)},
+    "motion designer":     {0: ( 2.5,  6.0), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  32.0)},
+    # ── Infrastructure / Network ────────────────────────────────────────────────
+    "network engineer":    {0: ( 3.0,  8.0), 2: ( 5.0, 13.0),  5: ( 9.0,  28.0), 8: (15.0,  45.0)},
+    "system administrator":{0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  22.0), 8: (13.0,  35.0)},
+    "database administrator":{0:(3.0,  8.0), 2: ( 5.5, 14.0),  5: (10.0,  28.0), 8: (16.0,  45.0)},
+    "dba":                 {0: ( 3.0,  8.0), 2: ( 5.5, 14.0),  5: (10.0,  28.0), 8: (16.0,  45.0)},
+    "data engineer":       {0: ( 5.0, 12.0), 2: ( 8.0, 20.0),  5: (15.0,  45.0), 8: (25.0,  75.0)},
+    "etl":                 {0: ( 4.0, 10.0), 2: ( 6.5, 16.0),  5: (12.0,  35.0), 8: (18.0,  55.0)},
+    # ── Digital Marketing ───────────────────────────────────────────────────────
+    "digital marketing":   {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  18.0), 8: (10.0,  30.0)},
+    "seo":                 {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  15.0), 8: ( 8.0,  22.0)},
+    "social media":        {0: ( 1.8,  5.0), 2: ( 3.0,  8.0),  5: ( 5.0,  14.0), 8: ( 8.0,  20.0)},
+    "performance market":  {0: ( 2.5,  6.0), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  32.0)},
+    "growth hacker":       {0: ( 3.0,  7.0), 2: ( 5.0, 12.0),  5: ( 9.0,  25.0), 8: (15.0,  40.0)},
+    # ── Finance / Accounts ──────────────────────────────────────────────────────
+    "chartered accountant":{0: ( 6.0, 14.0), 2: ( 9.0, 20.0),  5: (15.0,  40.0), 8: (25.0,  80.0)},
+    "financial analyst":   {0: ( 3.5,  9.0), 2: ( 6.0, 15.0),  5: (10.0,  28.0), 8: (16.0,  50.0)},
+    "investment banker":   {0: ( 8.0, 20.0), 2: (14.0, 35.0),  5: (25.0,  80.0), 8: (40.0, 150.0)},
+    "tax":                 {0: ( 2.5,  7.0), 2: ( 4.0, 11.0),  5: ( 7.0,  20.0), 8: (12.0,  35.0)},
+    "audit":               {0: ( 2.5,  7.0), 2: ( 4.0, 11.0),  5: ( 7.0,  20.0), 8: (12.0,  35.0)},
+    # ── Core Engineering (non-IT) ───────────────────────────────────────────────
+    "mechanical engineer": {0: ( 2.5,  6.5), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  35.0)},
+    "civil engineer":      {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  18.0), 8: (10.0,  30.0)},
+    "electrical engineer": {0: ( 2.5,  6.5), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  35.0)},
+    "chemical engineer":   {0: ( 2.5,  6.5), 2: ( 4.0, 10.0),  5: ( 7.0,  20.0), 8: (12.0,  35.0)},
+    "production engineer": {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  18.0), 8: (10.0,  28.0)},
+    # ── Healthcare / Education ──────────────────────────────────────────────────
+    "pharmacist":          {0: ( 2.5,  6.0), 2: ( 4.0,  9.0),  5: ( 6.0,  16.0), 8: (10.0,  25.0)},
+    "nurse":               {0: ( 2.0,  5.0), 2: ( 3.5,  8.0),  5: ( 5.5,  14.0), 8: ( 9.0,  20.0)},
+    "doctor":              {0: ( 6.0, 15.0), 2: (10.0, 25.0),  5: (18.0,  60.0), 8: (30.0, 150.0)},
+    "teacher":             {0: ( 1.8,  5.0), 2: ( 2.5,  7.0),  5: ( 4.0,  12.0), 8: ( 6.0,  18.0)},
+    "professor":           {0: ( 5.0, 12.0), 2: ( 7.0, 16.0),  5: (10.0,  25.0), 8: (15.0,  40.0)},
+    # ── Supply Chain / Logistics ────────────────────────────────────────────────
+    "supply chain":        {0: ( 2.5,  7.0), 2: ( 4.5, 12.0),  5: ( 8.0,  25.0), 8: (14.0,  45.0)},
+    "logistics":           {0: ( 2.0,  5.5), 2: ( 3.5,  9.0),  5: ( 6.0,  18.0), 8: (10.0,  30.0)},
+    "warehouse":           {0: ( 1.5,  4.0), 2: ( 2.5,  6.0),  5: ( 4.0,  10.0), 8: ( 6.0,  16.0)},
+    "procurement":         {0: ( 2.5,  7.0), 2: ( 4.0, 11.0),  5: ( 7.0,  22.0), 8: (12.0,  38.0)},
+    # ── Data / AI extras ───────────────────────────────────────────────────────
+    "data entry":          {0: ( 1.2,  3.5), 2: ( 1.5,  4.5),  5: ( 2.0,   6.0), 8: ( 3.0,   8.0)},
+    "artificial intelligence":{0:(6.0,15.0), 2:(10.0, 25.0),   5: (18.0,  70.0), 8: (30.0, 120.0)},
+    "generative ai":       {0: ( 7.0, 18.0), 2:(12.0, 30.0),   5: (22.0,  80.0), 8: (35.0, 140.0)},
+    "prompt engineer":     {0: ( 4.0, 12.0), 2: ( 8.0, 20.0),  5: (15.0,  45.0), 8: (22.0,  70.0)},
+    "power bi":            {0: ( 3.0,  8.0), 2: ( 5.0, 13.0),  5: ( 9.0,  25.0), 8: (14.0,  40.0)},
+    "tableau":             {0: ( 3.0,  8.0), 2: ( 5.0, 13.0),  5: ( 9.0,  25.0), 8: (14.0,  40.0)},
+    # ── Legal / Admin ──────────────────────────────────────────────────────────
+    "legal":               {0: ( 3.0,  8.0), 2: ( 5.0, 14.0),  5: (10.0,  30.0), 8: (18.0,  60.0)},
+    "lawyer":              {0: ( 4.0, 10.0), 2: ( 7.0, 18.0),  5: (14.0,  40.0), 8: (22.0,  80.0)},
+    "compliance":          {0: ( 3.0,  8.0), 2: ( 5.0, 13.0),  5: ( 9.0,  25.0), 8: (14.0,  42.0)},
+    "administrative":      {0: ( 1.8,  4.5), 2: ( 2.5,  6.5),  5: ( 4.0,  12.0), 8: ( 6.0,  18.0)},
+    "receptionist":        {0: ( 1.5,  3.5), 2: ( 2.0,  5.0),  5: ( 3.0,   8.0), 8: ( 4.0,  10.0)},
 }
+
+def _get_band_for_exp(role_key: str, exp_years: float) -> Optional[tuple[float, float]]:
+    """
+    Pick the right (min, max) LPA tier from _SALARY_BANDS for a given experience level.
+    Chooses the highest tier floor that is <= exp_years.
+    e.g. exp=3 → picks tier 2; exp=7 → picks tier 5; exp=0 → picks tier 0.
+    """
+    tiers = _SALARY_BANDS.get(role_key)
+    if not tiers:
+        return None
+    best_floor = max(f for f in tiers if f <= exp_years) if any(f <= exp_years for f in tiers) else min(tiers)
+    return tiers[best_floor]
 
 # City cost-of-living multipliers — applied to max band threshold
 _CITY_MULTIPLIERS: dict[str, float] = {
@@ -3596,44 +3390,104 @@ def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
     location = (job or {}).get("location", "") if job else ""
 
     # ── 1. Extract numeric salary → LPA ───────────────────────────────────
-    # ── 1. Extract numeric salary → LPA (via unified normaliser) ─────────
-    lpa_val, _conv_note = _normalise_salary_to_lpa(text)
+    lpa_val: Optional[float] = None
+
+    # LPA range: "12 to 18 LPA", "12-18 L"
+    m = re.search(
+        r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*"
+        r"(?:LPA|lpa|L|lakhs?|lac)",
+        text, re.IGNORECASE,
+    )
+    if m:
+        lpa_val = float(m.group(2))          # upper bound of range
+
+    # Single LPA: "18 LPA", "18L", "18 lakhs"
+    if lpa_val is None:
+        m2 = re.search(
+            r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?|lac)",
+            text, re.IGNORECASE,
+        )
+        if m2:
+            lpa_val = float(m2.group(1))
+
+    # Absolute INR — detect monthly vs annual context first
+    if lpa_val is None:
+        is_monthly = bool(re.search(
+            r"(per\s+month|p\.?m\.?|monthly|/month|per\s+mo)",
+            text, re.IGNORECASE,
+        ))
+        nums = [int(n) for n in re.findall(r"\d+", text.replace(",", ""))
+                if 10000 <= int(n) <= 99999999]
+        if nums:
+            v = nums[0]
+            if is_monthly:
+                lpa_val = (v * 12) / 100_000   # monthly → annual LPA
+            elif 100_000 <= v <= 99_999_999:
+                lpa_val = v / 100_000           # annual INR → LPA
+            elif 15_000 <= v <= 999_999 and "$" in text:
+                lpa_val = (v * 12) / 100_000   # monthly USD → rough LPA
 
     if lpa_val is None:
         return False    # no parseable salary — never flag
 
     # ── 2. Normalise title — expand abbreviations ──────────────────────────
     _ABBREV = {
-        r"vp":  "vice president",
-        r"cto": "chief technology",
-        r"ceo": "chief executive",
-        r"cfo": "chief financial",
-        r"coo": "chief operating",
-        r"hr":  "human resources",
-        r"qa":  "quality assurance",
-        r"ios": "ios developer",
+        r"vp":  "vice president",
+        r"cto": "chief technology",
+        r"ceo": "chief executive",
+        r"cfo": "chief financial",
+        r"coo": "chief operating",
+        r"hr":  "human resources",
+        r"qa":  "quality assurance",
+        r"ios": "ios developer",
     }
     title_norm = title.lower()
     for pattern, expansion in _ABBREV.items():
         title_norm = re.sub(pattern, expansion, title_norm)
 
-    # ── 3. Band lookup — whole-word for short keys, substring for long ─────
+    # ── 3. Extract experience years ────────────────────────────────────────
+    # Priority: seeker_role field → job requirements text → job title keywords
+    seeker_info = st.session_state.get("jsd_seeker_role", "") if job else ""
+    exp_years   = 0.0  # default: fresher/unknown
+
+    for _src in [seeker_info, (job or {}).get("requirements", ""), title]:
+        _src = (_src or "").lower()
+        _m = re.search(
+            r"(\d+)\s*(?:\+|to|-\s*\d+)?\s*(?:years?|yrs?)\s*(?:of\s+)?(?:exp|experience)?",
+            _src,
+        )
+        if _m:
+            exp_years = float(_m.group(1))
+            break
+
+    if exp_years == 0.0:
+        _src_all = (seeker_info + " " + title).lower()
+        if any(w in _src_all for w in ("principal", "staff", "distinguished")):
+            exp_years = 10.0
+        elif any(w in _src_all for w in ("senior", "sr.", "lead", "architect")):
+            exp_years = 6.0
+        elif any(w in _src_all for w in ("mid", "middle", "associate")):
+            exp_years = 3.0
+        # junior/fresher/intern stays at 0.0
+
+    # ── 4. Band lookup — tiered by experience, whole-word for short keys ──
     _SHORT_KEYS = {"architect", "manager", "director", "recruiter",
                    "tester", "fresher", "trainee", "intern", "internship"}
-    band: Optional[tuple[float, float]] = None
-    for keyword, b in _SALARY_BANDS.items():
+    matched_key: Optional[str] = None
+    for keyword in _SALARY_BANDS:
         kw = keyword.lower()
         if len(kw) <= 4 or kw in _SHORT_KEYS:
-            # whole-word match to avoid partial hits
-            if re.search(r"" + re.escape(kw) + r"", title_norm):
-                band = b
+            if re.search(r"\b" + re.escape(kw) + r"\b", title_norm):
+                matched_key = keyword
                 break
         else:
             if kw in title_norm:
-                band = b
+                matched_key = keyword
                 break
 
-    # ── 4. City multiplier ────────────────────────────────────────────────
+    band = _get_band_for_exp(matched_key, exp_years) if matched_key else None
+
+    # ── 5. City multiplier ────────────────────────────────────────────────
     city_mult = 1.0
     loc_lower = location.lower()
     for city, mult in _CITY_MULTIPLIERS.items():
@@ -3641,16 +3495,15 @@ def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
             city_mult = mult
             break
 
-    # ── 5. Decision ───────────────────────────────────────────────────────
+    # ── 6. Decision ───────────────────────────────────────────────────────
     if band:
         _, max_lpa = band
         effective_max = max_lpa * city_mult
-        # Flag only if salary exceeds 2× the band ceiling — unambiguous scam
+        # Flag only if salary exceeds 2x the experience-adjusted band ceiling
         return lpa_val > effective_max * 2.0
     else:
-        # No band matched — only flag truly impossible numbers (>500 LPA / ₹5 Cr)
-        return lpa_val >= 500.0
-
+        # No band matched — only flag truly impossible numbers (>500 LPA / Rs.5Cr)
+        return lpa_val > 500.0
 def _run_rules(job: dict) -> dict:
     full = " ".join([job.get(k,"") for k in
                      ("title","description","requirements","benefits","contact","salary")])
@@ -3658,6 +3511,29 @@ def _run_rules(job: dict) -> dict:
 
     def _add(k, label, detail, hits=None):
         sigs[k] = {"label": label, "detail": detail, "hits": (hits or [])[:3]}
+
+    # ── Google Forms / Docs / Drive as company website ─────────────────────────
+    # These are free platforms — no legitimate company uses a Google Form as its
+    # official career page. Flag before probes run (probes would check Google's
+    # infra and return clean results, masking the real signal).
+    _website = (job.get("website") or "").lower()
+    _SUSPICIOUS_HOSTING = [
+        "docs.google.com/forms", "forms.gle", "forms.google",
+        "docs.google.com/spreadsheets", "docs.google.com/document",
+        "drive.google.com", "sites.google.com",
+        "bit.ly", "tinyurl.com", "t.co", "ow.ly", "shorturl",  # URL shorteners
+        "typeform.com", "jotform.com", "surveymonkey.com",       # form platforms
+        "wixsite.com", "weebly.com", "yolasite.com",             # free website builders
+        "blogspot.com", "wordpress.com",                          # free blogs
+    ]
+    if any(h in _website for h in _SUSPICIOUS_HOSTING):
+        _matched_host = next(h for h in _SUSPICIOUS_HOSTING if h in _website)
+        _add("upfront_payment" if "google.com/forms" in _website else "no_company_info",
+             "Suspicious Application Platform",
+             f"Application link points to '{_matched_host}' — legitimate companies "
+             f"use their own careers portal, not free form/hosting platforms. "
+             f"This is a strong scam indicator.",
+             [_matched_host])
 
     h = _any(full, _PAY_PHRASES)
     if h: _add("upfront_payment","Upfront Payment Demanded",
@@ -3691,12 +3567,15 @@ def _run_rules(job: dict) -> dict:
     if (bad_name and bad_site) or (bad_site and no_addr):
         _add("no_company_info","No Verifiable Company Identity",
              "Legitimate companies provide verifiable name, website and physical address.")
+    _paradox_txt = job.get("requirements","") + " " + job.get("description","")
+    _paradox_hits = []
     for fp, ep in _PARADOX_PATTERNS:
-        txt = job.get("requirements","") + " " + job.get("description","")
-        if re.search(fp, txt, re.IGNORECASE) and re.search(ep, txt, re.IGNORECASE):
-            _add("req_paradox","Requirement Contradiction",
-                 "Asking for senior experience under a fresher posting is a bait tactic.")
-            break
+        if re.search(fp, _paradox_txt, re.IGNORECASE) and re.search(ep, _paradox_txt, re.IGNORECASE):
+            _paradox_hits.append(fp)
+    if _paradox_hits:
+        _add("req_paradox","Requirement Contradiction",
+             "Asking for senior experience in a fresher/entry-level posting is a bait tactic.",
+             _paradox_hits)
     # ── Job board source trust multiplier ────────────────────────────────────
     # Postings from verified job boards carry implicit trust — lower score.
     # WhatsApp/Telegram-only contact with no verifiable URL is a red flag.
@@ -3817,9 +3696,10 @@ def _probe_summary(probe_warnings: list) -> str:
             "  - Domain age: established (registered > 6 months ago)\n"
             "  - Site reachable: yes, with valid SSL certificate\n"
             "  - Typosquatting: none detected\n"
+            "  - Email domain: legitimate (no free/personal email)\n"
+            "  - MX records: valid mail infrastructure exists\n"
             "  - Company domain: DNS + HTTPS + MX all verified\n"
             "  - SPF / DMARC: email authentication configured\n"
-            "  - Email/MX: checked only if contact email was explicitly provided\n"
             "IMPORTANT: These are live infrastructure checks that PASSED. "
             "This is real evidence the company exists. Weight this heavily in "
             "company_legitimacy — do NOT say UNVERIFIABLE if probes passed."
@@ -3828,45 +3708,19 @@ def _probe_summary(probe_warnings: list) -> str:
     return f"PROBE WARNINGS (live checks that FAILED):\n{lines}"
 
 
-# Human-readable names for rule signals shown to the LLM
-_SIGNAL_LABELS: dict[str, str] = {
-    "upfront_payment":       "Upfront payment / registration fee demanded",
-    "advance_fee_scam":      "Advance fee scam pattern detected",
-    "fake_govt_job":         "Fake government job indicators",
-    "mlm_pyramid":           "MLM / pyramid scheme language",
-    "too_good_salary":       "Unrealistically high salary for role",
-    "urgency_pressure":      "Urgency / pressure tactics (limited slots, act now)",
-    "vague_description":     "Vague or missing job description",
-    "free_email_contact":    "Contact via free email (Gmail/Yahoo/etc)",
-    "no_company_info":       "No verifiable company information",
-    "unrealistic_benefits":  "Unrealistic benefits / earnings claimed",
-    "personal_info_demand":  "Unusual personal information requested upfront",
-    "fake_wfh":              "Suspicious work-from-home / easy money claims",
-    "whatsapp_only":         "WhatsApp-only contact — no official channel",
-    "unprofessional_language": "Unprofessional language / grammar issues",
-}
+def _fmt_rule_signals(signals: dict | None) -> str:
+    """Format fired rule signals for LLM prompt injection."""
+    if not signals:
+        return "  - None fired"
+    lines = []
+    for key, sig in signals.items():
+        w = _WEIGHTS.get(key, 0)
+        lines.append(f"  - [{w:>2}pts] {sig.get('label', key)}: {sig.get('detail', '')[:120]}")
+    return "\n".join(lines)
 
 
-def _llm_prompt(job: dict, probe_warnings: list,
-                seeker: dict | None = None,
-                rule_signals: dict | None = None) -> str:
+def _llm_prompt(job: dict, probe_warnings: list, seeker: dict | None = None, rule_signals: dict | None = None) -> str:
     ctx = _probe_summary(probe_warnings)
-    # Build rule signals context for the LLM
-    rule_signals = rule_signals or {}
-    if rule_signals:
-        sig_lines = []
-        for sig in rule_signals:
-            label = _SIGNAL_LABELS.get(sig, sig.replace("_", " ").title())
-            sig_lines.append(f"  ⚠ {label}")
-        rule_signals_ctx = (
-            "The following red flags were PATTERN-MATCHED from the job text:\n"
-            + "\n".join(sig_lines) + "\n"
-            "These are concrete signals from the posting itself — factor them into "
-            "scam_pattern and fake_company_evidence. Do NOT ignore them just because "
-            "network probes passed. A real company CAN post a scam internship."
-        )
-    else:
-        rule_signals_ctx = "No rule engine signals fired — text appears clean."
     seeker         = seeker or {}
     seeker_loc     = seeker.get("location", "").strip()
     seeker_role    = seeker.get("role", "").strip()
@@ -3883,34 +3737,123 @@ def _llm_prompt(job: dict, probe_warnings: list,
         )
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
-    # ── Pre-compute normalised salary for LLM ────────────────────────────
-    raw_salary   = job.get("salary", "")
-    _lpa_norm, _lpa_note = _normalise_salary_to_lpa(raw_salary)
-    salary_norm_ctx = ""
-    if _lpa_norm is not None and _lpa_note:
-        salary_norm_ctx = (
-            f"Salary normalised for your reference: {_lpa_note} "
-            f"(use {_lpa_norm} LPA as the basis for your assessment). "
-        )
-    elif _lpa_norm is not None:
-        salary_norm_ctx = f"Salary normalised: approximately {_lpa_norm} LPA. "
 
-        salary_instruction = (
+    # ── Convert salary_raw to LPA so LLM never does unit maths ───────────
+    # ₹18,500/month confuses LLM which compares 18500 > 8.0 and calls it high.
+    # We compute the LPA equivalent here and inject it explicitly.
+    def _salary_to_lpa(text: str) -> Optional[float]:
+        if not text: return None
+        # LPA range: "12-18 LPA"
+        m = re.search(r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?|lac)",
+                      text, re.IGNORECASE)
+        if m: return (float(m.group(1)) + float(m.group(2))) / 2
+        # Single LPA
+        m = re.search(r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?|lac)", text, re.IGNORECASE)
+        if m: return float(m.group(1))
+        # Monthly INR: ₹18,500/month or 18,500 per month
+        is_monthly = bool(re.search(r"per\s+month|p\.?m\.?|monthly|/month", text, re.IGNORECASE))
+        nums = [int(n.replace(",","")) for n in re.findall(r"[\d,]+", text)
+                if 1000 <= int(n.replace(",","")) <= 99_999_999]
+        if nums:
+            v = nums[0]
+            if is_monthly:
+                return round((v * 12) / 100_000, 2)
+            elif v >= 100_000:
+                return round(v / 100_000, 2)
+        return None
+
+    _salary_lpa = _salary_to_lpa(salary_raw)
+    _salary_lpa_str = (f"{_salary_lpa:.1f} LPA (converted from '{salary_raw}')"
+                       if _salary_lpa else salary_raw)
+
+    # ── Compute actual salary band to ground the LLM ─────────────────────
+    # Without this, the LLM hallucinates market ranges (e.g. "20-30 LPA for intern").
+    # We compute the real band from _SALARY_BANDS and inject the numbers directly.
+    _title_for_band = (job.get("title") or "").lower()
+    for _abbr, _exp in {"vp": "vice president", "cto": "chief technology",
+                         "ceo": "chief executive", "cfo": "chief financial",
+                         "hr": "human resources", "qa": "quality assurance"}.items():
+        _title_for_band = re.sub(_abbr, _exp, _title_for_band)
+    _SHORT_KEYS_PROMPT = {"architect", "manager", "director", "recruiter",
+                          "tester", "fresher", "trainee", "intern", "internship"}
+    _matched_band_key: str | None = None
+    for _kw in _SALARY_BANDS:
+        _kw_l = _kw.lower()
+        if len(_kw_l) <= 4 or _kw_l in _SHORT_KEYS_PROMPT:
+            if re.search(r"\b" + re.escape(_kw_l) + r"\b", _title_for_band):
+                _matched_band_key = _kw; break
+        elif _kw_l in _title_for_band:
+            _matched_band_key = _kw; break
+
+    # Determine experience years from seeker info
+    _exp_yrs = 0.0
+    for _src in [seeker_role, job.get("requirements", ""), job.get("title", "")]:
+        _m = re.search(r"(\d+)\s*(?:\+|to|-\s*\d+)?\s*(?:years?|yrs?)", (_src or "").lower())
+        if _m:
+            _exp_yrs = float(_m.group(1)); break
+    if _exp_yrs == 0.0:
+        _all_txt = (seeker_role + " " + (job.get("title") or "")).lower()
+        if any(w in _all_txt for w in ("senior", "lead", "sr.")):   _exp_yrs = 6.0
+        elif any(w in _all_txt for w in ("mid", "associate")):       _exp_yrs = 3.0
+
+    _band_context = ""
+    _band_matched = False
+    if _matched_band_key:
+        _band_matched = True
+    if _matched_band_key:
+        _b = _get_band_for_exp(_matched_band_key, _exp_yrs)
+        if _b:
+            _tier_label = ("fresher (0-1yr)" if _exp_yrs < 2 else
+                           "junior (2-4yr)"  if _exp_yrs < 5 else
+                           "mid-level (5-7yr)" if _exp_yrs < 8 else "senior (8+yr)")
+            _city_mult = 1.0
+            for _city, _mult in _CITY_MULTIPLIERS.items():
+                if _city in (job.get("location") or "").lower():
+                    _city_mult = _mult; break
+            _adj_min = round(_b[0] * _city_mult, 1)
+            _adj_max = round(_b[1] * _city_mult, 1)
+            _band_context = (
+                f"GROUND TRUTH — Real market band for '{_matched_band_key}' "
+                f"at {_tier_label} tier"
+                + (f" in {job.get('location','India')}" if job.get('location') else " in India")
+                + f": {_adj_min}–{_adj_max} LPA. "
+                f"You MUST use these numbers. Do NOT invent different ranges."
+            )
+    else:
+        # No hardcoded band — tell LLM to use its knowledge but be explicit
+        _tier_label2 = ("fresher (0-1yr)" if _exp_yrs < 2 else
+                        "junior (2-4yr)"  if _exp_yrs < 5 else
+                        "mid-level (5-7yr)" if _exp_yrs < 8 else "senior (8+yr)")
+        _loc2 = job.get("location") or "India"
+        _band_context = (
+            f"No hardcoded band available for this role. "
+            f"Use your own knowledge of the Indian job market to estimate the "
+            f"typical LPA range for a {_tier_label2} {job.get('title','professional')} "
+            f"in {_loc2}. Be specific — give an actual LPA range, not vague language. "
+            f"Clearly state that this is an estimate based on general market knowledge."
+        )
+
+    salary_instruction = (
         "The salary was NOT provided in this job posting. "
         "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
         "do NOT guess, infer, or comment on whether it is realistic."
         if not salary_raw else
-        f"{salary_norm_ctx}{seeker_context} "
-        "Write 2-3 sentences assessing the stated salary. "
-        "You MUST include: (1) the stated salary figure, (2) the typical market range "
-        "for this exact role and location in India (in LPA or INR/month as appropriate) "
-        "— if the applicant's location or role differs from the posting, call that out explicitly. "
-        "(3) A clear verdict — realistic, slightly high, or unrealistically high and why. "
-        "Example: 'The stated salary of 8-12 LPA is within the typical range of 6-14 LPA "
-        "for a mid-level Data Analyst in Bangalore. For a candidate based in Pune with 2 years "
-        "of experience, this is on the higher end but still realistic.' "
-        "Never respond with a single word like 'realistic' or 'unrealistic'. "
-        "If the salary is unrealistically high for the role and location, flag it as a scam signal."
+        f"{_band_context} {seeker_context} "
+        f"STATED SALARY: '{salary_raw}' = {_salary_lpa_str}. "
+        "IMPORTANT: Always work in LPA. The conversion above is already done for you — "
+        "do NOT re-interpret the raw figure. Compare the LPA value against the GROUND TRUTH band. "
+        "Write 2-3 clear sentences: "
+        "(1) State the salary as both its original form AND its LPA equivalent, "
+        "(2) Compare that LPA value directly against the GROUND TRUTH band range — "
+        "say whether it falls inside, above, or below the range, "
+        "(3) Give a verdict: realistic / slightly above market / unrealistically high / below market. "
+        "Example of correct reasoning: "
+        "'The stated salary of ₹18,500/month (≈2.2 LPA) falls within the typical "
+        "fresher-tier range of 0.5–7.2 LPA for an intern in Kolkata. This is realistic.' "
+        "Example of WRONG reasoning (never do this): "
+        "'18,500 is higher than 0.5–8.0 LPA' — this confuses monthly INR with annual LPA. "
+        "Never reply with a single word. "
+        "If LPA value is above 2× the band max, flag it as a scam signal."
     )
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
@@ -3929,34 +3872,29 @@ Contact: {job.get('contact','N/A')}
 LIVE NETWORK PROBE RESULTS (these are real-time checks — treat as hard evidence):
 {ctx}
 
-COMPANY LEGITIMACY RULE (mandatory — two-axis evaluation):
-company_legitimacy assesses ONLY whether the company itself is real and legitimate.
-It is NOT the same as whether the JOB POSTING is safe.
+RULE ENGINE SIGNALS FIRED (deterministic pattern matches — treat as hard evidence):
+{_fmt_rule_signals(rule_signals)}
 
-Axis 1 — Infrastructure (from probe results above):
-  - All probes passed → company has real web/email infrastructure
-  - Probe failures → flag accordingly
-
-Axis 2 — Job posting behaviour (from rule signals above):
-  - Payment/fee demanded, fake promises, suspicious language → the company
-    may be real but the posting is fraudulent or the company itself is running a scam
-
-Decision table:
-  Probes PASSED + No red flags in posting     → "VERIFIED"
-  Probes PASSED + Red flags in posting        → "REAL_BUT_SUSPICIOUS"
-    (company infrastructure is real but the posting has scam characteristics)
-  Probes FAILED (partial)                     → "UNVERIFIABLE"
-  Probes FAILED (domain fake/no MX/squatter)  → "LIKELY_FAKE" or "GHOST_COMPANY"
-  No website/domain provided at all           → "UNVERIFIABLE"
-
-CRITICAL: A real website does NOT cancel out payment demands or scam language.
-If upfront_payment or advance_fee_scam signals fired → use "REAL_BUT_SUSPICIOUS", not "VERIFIED".
-
-RULE ENGINE SIGNALS (pattern-matched red flags from the job text — treat as hard evidence):
-{rule_signals_ctx}
+COMPANY LEGITIMACY RULE (mandatory):
+Use the probe results above as PRIMARY evidence for company_legitimacy.
+- If ALL PROBES PASSED → set company_legitimacy to "VERIFIED" or at minimum acknowledge
+  the infrastructure evidence. Do NOT say "UNVERIFIABLE" when probes confirmed the domain,
+  SSL, MX records, and company identity checks all passed.
+- If probes flagged specific failures → reflect those in company_legitimacy and fake_company_evidence.
+- "UNVERIFIABLE" should only be used when probes could NOT run (no website/domain provided).
 
 APPLICANT CONTEXT (use to personalise salary assessment):
 {seeker_context if seeker_context else "Not provided — assess against general market."}
+
+CRITICAL SIGNAL OVERRIDE (mandatory):
+If the rule engine detected ANY of these signals, you MUST reflect them in
+your ai_risk_score even if the company website looks legitimate.
+A real company NEVER asks candidates for fees, deposits, or payments.
+Signals that OVERRIDE a clean website: upfront_payment, india_scam_pattern,
+fake_govt_job, mlm_pyramid. If these fired, minimum ai_risk_score = 55.
+A legitimate domain does NOT cancel out a payment demand — it only means
+the scammer bought a real domain. Weight content signals above network probes
+when they conflict.
 
 SALARY ASSESSMENT RULE (mandatory):
 {salary_instruction}
@@ -3965,18 +3903,14 @@ Required JSON schema (all keys mandatory):
 {{
   "ai_risk_score": <0-100>,
   "verdict": "<SAFE|SUSPICIOUS|LIKELY_SCAM|DEFINITE_SCAM>",
-  "company_legitimacy": "<VERIFIED|REAL_BUT_SUSPICIOUS|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
+  "company_legitimacy": "<VERIFIED|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
   "top_red_flags": ["<str>","<str>","<str>"],
-  "positive_signals": ["<str>"],
+  "positive_signals": ["<content-level positive signals ONLY — e.g. clear job description, specific role requirements, named interviewer, company registration mentioned. Do NOT list network/probe signals here like SSL, domain age, email domain, MX records — those are shown separately in the probe table. Max 3 items.>"],
   "fake_company_evidence": "<reasoning about company authenticity — MUST reference the live probe results above. If all probes passed, acknowledge that as positive evidence. Do not ignore infrastructure checks.>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
   "salary_assessment": "<2-3 sentence analysis: state the salary, compare to typical market range for this role and city, and explain whether it is a scam signal or a legitimate offer. Be specific — mention actual LPA figures. NOT_PROVIDED if salary is missing.>",
   "recommended_action": "<specific advice for the job seeker>",
-  "ai_risk_score": "<integer 0-100 — your overall scam risk assessment>",
-  "confidence": "<integer 0-100 — your confidence in this assessment>",
-  "top_red_flags": ["<most critical red flag>", "<second>", "<third>"],
-  "positive_signals": ["<genuine positive signal>", "<second if any>"],
-    "similar_scam_type": "<MUST classify if any red flag fired. Choose: Advance Fee Scam | Fake Registration Fee | Fake Internship Fee | Equipment/Laptop Deposit | Fake Govt Job | MLM Pyramid Scheme | Too Good To Be True | Data Harvesting | Fake WFH Scam | Captcha/Data Entry Trap | Placement Fee Fraud | Other. If upfront_payment signal fired → must NOT return Unknown. Unknown only if NO signals fired at all.>",
+  "similar_scam_type": "<Pick exactly ONE of: Registration Fee Scam | Internship Fee Scam | Laptop Return Scam | Data Entry / WFH Scam | MLM / Network Marketing | Fake Govt Job | Fake MNC Impersonation | Advance Fee Fraud | Phishing / Data Harvest | Too Good Salary Bait | Urgency Pressure Scam | Unknown. Do NOT invent new categories.>",
   "confidence": <0-100>
 }}"""
 
@@ -4007,9 +3941,8 @@ _V: dict = {
                       "label": "INCONCLUSIVE"},
 }
 _CB: dict = {
-    "VERIFIED":           (I.CHECK,     "#22c55e"),
-    "REAL_BUT_SUSPICIOUS": (I.ALERT_TRI, "#f59e0b"),
-    "UNVERIFIABLE":        (I.ALERT_TRI, "#6b7280"),
+    "VERIFIED":      (I.CHECK,     "#22c55e"),
+    "UNVERIFIABLE":  (I.ALERT_TRI, "#f59e0b"),
     "LIKELY_FAKE":   (I.FLAG,      "#ef4444"),
     "GHOST_COMPANY": (I.GHOST,     "#dc2626"),
 }
@@ -4042,20 +3975,32 @@ def _pill(icon_path: str, text: str, color: str) -> str:
         f'{_svg(icon_path,10,color)}{text}</span>'
     )
 
-def _field_row(icon_path: str, label: str, value: str) -> str:
-    val_html = (
-        f'<span style="color:#c9d1d9;">{_esc(value)}</span>'
-        if value else
-        '<span style="color:#4b5563;font-style:italic;">Not detected</span>'
-    )
+def _field_row(icon_path: str, label: str, value: str, is_url: bool = False) -> str:
+    if not value:
+        val_html = '<span style="color:#4b5563;font-style:italic;">Not detected</span>'
+    elif is_url:
+        # Long URLs: truncate display text but keep full href; force word-break
+        _display = value if len(value) <= 55 else value[:52] + "…"
+        val_html = (
+            f'<a href="{_esc(value)}" target="_blank" rel="noopener noreferrer" '
+            f'style="color:#58a6ff;text-decoration:none;word-break:break-all;'
+            f'overflow-wrap:anywhere;display:block;max-width:100%;" '
+            f'title="{_esc(value)}">{_esc(_display)}</a>'
+        )
+    else:
+        val_html = (
+            f'<span style="color:#c9d1d9;word-break:break-word;'
+            f'overflow-wrap:anywhere;">{_esc(value)}</span>'
+        )
     return (
         f'<div style="display:flex;align-items:flex-start;gap:9px;padding:7px 0;'
         f'border-bottom:1px solid rgba(255,255,255,0.04);">'
         f'<div style="margin-top:1px;flex-shrink:0;">{_svg(icon_path,11,"#6b7280")}</div>'
-        f'<div style="flex:1;">'
+        f'<div style="flex:1;min-width:0;">'
         f'<div style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;'
         f'letter-spacing:0.8px;margin-bottom:2px;">{label}</div>'
-        f'<div style="font-size:0.81rem;line-height:1.4;">{val_html}</div>'
+        f'<div style="font-size:0.81rem;line-height:1.4;word-break:break-word;'
+        f'overflow-wrap:anywhere;">{val_html}</div>'
         f'</div></div>'
     )
 
@@ -4080,9 +4025,9 @@ def _score_meaning(score: int, verdict: str) -> tuple[str, str]:
 
 
 def _render_verdict_banner(result: dict):
-    v   = result.get("final_verdict", "UNKNOWN")
+    v   = result["final_verdict"]
     cfg = _V.get(v, _V["UNKNOWN"])
-    s   = result.get("blended_score", 0)
+    s   = result["blended_score"]
     headline, meaning = _score_meaning(s, v)
 
     # Score zone markers on the bar — 4 coloured segments
@@ -4155,7 +4100,7 @@ def _render_verdict_banner(result: dict):
 
 
 def _render_score_strip(result: dict):
-    cfg = _V.get(result.get("final_verdict", "UNKNOWN"), _V["UNKNOWN"])
+    cfg = _V.get(result["final_verdict"], _V["UNKNOWN"])
 
     def _card(icon_path, label, val, color, sub="", tooltip=""):
         tip_html = (
@@ -4175,46 +4120,68 @@ def _render_score_strip(result: dict):
         )
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(_card(I.CPU,   "AI Score",      result.get("ai_score", 0),
+    c1.markdown(_card(I.CPU,   "AI Score",      result["ai_score"],
                       cfg["color"], "LLM analysis",
                       "AI's 0–100 risk read of the full text"),
                 unsafe_allow_html=True)
-    c2.markdown(_card(I.LIST,  "Rule Score",    result.get("rule_score", 0),
+    c2.markdown(_card(I.LIST,  "Rule Score",    result["rule_score"],
                       "#f59e0b", "15 pattern signals",
                       "Sum of weights for matched red-flag phrases"),
                 unsafe_allow_html=True)
-    c3.markdown(_card(I.GLOBE, "Probe Penalty", result.get("probe_penalty", 0),
+    c3.markdown(_card(I.GLOBE, "Probe Penalty", result["probe_penalty"],
                       "#38bdf8", "5 live network checks",
                       "Added for young domain, free email, bad MCA etc."),
                 unsafe_allow_html=True)
-    c4.markdown(_card(I.ZAP,   "Flags Fired",   len(result.get("signals", {})),
+    c4.markdown(_card(I.ZAP,   "Flags Fired",   len(result["signals"]),
                       "#a78bfa", "rule signals triggered",
                       "How many of 15 pattern rules matched"),
                 unsafe_allow_html=True)
 
-    # Formula explainer — shows users exactly how the number was built
-    # FIX v5 BUG 8: all three (comment, code, HTML) now agree on 60/25/15.
-    ai_s  = result.get("ai_score", 0)
-    rul_s = result.get("rule_score", 0)
-    pen   = result.get("probe_penalty", 0)
-    raw   = round(0.50*ai_s + 0.35*rul_s + 0.15*pen, 1)
-    final_blended = result.get("blended_score", 0)
-    floor_note = (
-        f' → floored to <span style="color:#ef4444;font-weight:700;">{final_blended}</span>'
-        f'&nbsp;<span style="color:#4b5563;font-size:0.66rem;">(critical signal/probe floor applied)</span>'
-        if int(raw) != final_blended else
-        f' = <span style="color:#c9d1d9;font-weight:700;">{final_blended}</span>'
-    )
+    # Formula explainer — uses actual weights that were applied to this analysis.
+    # Weights vary: 45/40/15 normal, 35/45/20 low-confidence AI, 0/80/20 AI failed.
+    ai_s  = result["ai_score"]
+    rul_s = result["rule_score"]
+    pen   = result["probe_penalty"]
+    ai_conf = result.get("ai_confidence", 80)
+    ai_fail = result.get("ai_failed", False)
+    # Reconstruct which weights were actually used (mirrors blending logic)
+    if ai_fail:
+        _wa, _wr, _wp = 0.00, 0.80, 0.20
+        _wlabel = "AI failed — rule-only blend"
+    elif ai_conf < 50:
+        _wa, _wr, _wp = 0.35, 0.45, 0.20
+        _wlabel = "low-confidence AI blend"
+    else:
+        _wa, _wr, _wp = 0.45, 0.40, 0.15
+        _wlabel = "standard blend"
+    raw   = round(_wa*ai_s + _wr*rul_s + _wp*pen, 1)
+    final_blended = result["blended_score"]
+    _floors_applied = []
+    _active_keys = set(result.get("signals", {}).keys())
+    if "upfront_payment" in _active_keys:
+        _floors_applied.append("payment floor")
+    if rul_s >= 25:
+        _floors_applied.append("rule-score floor")
+    if int(raw) != final_blended:
+        _floor_reasons = ", ".join(_floors_applied) if _floors_applied else "floor"
+        floor_note = (
+            f' → floored to <span style="color:#ef4444;font-weight:700;">{final_blended}</span>'
+            f'&nbsp;<span style="color:#4b5563;font-size:0.66rem;">({_floor_reasons} applied)</span>'
+        )
+    else:
+        floor_note = f' = <span style="color:#c9d1d9;font-weight:700;">{final_blended}</span>'
+    _wa_pct = int(_wa*100); _wr_pct = int(_wr*100); _wp_pct = int(_wp*100)
     st.markdown(
         f'<div style="margin-top:10px;padding:10px 16px;'
         f'background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
         f'border-radius:8px;font-family:monospace;font-size:0.73rem;color:#6b7280;">'
         f'<span style="color:#8b949e;font-weight:600;">How your score was calculated: </span>'
-        f'(0.50 × AI&nbsp;<span style="color:{cfg["color"]}">{ai_s}</span>) + '
-        f'(0.35 × Rules&nbsp;<span style="color:#f59e0b">{rul_s}</span>) + '
-        f'(0.15 × Probes&nbsp;<span style="color:#38bdf8">{pen}</span>) '
+        f'({_wa_pct}% × AI&nbsp;<span style="color:{cfg["color"]}">{ai_s}</span>) + '
+        f'({_wr_pct}% × Rules&nbsp;<span style="color:#f59e0b">{rul_s}</span>) + '
+        f'({_wp_pct}% × Probes&nbsp;<span style="color:#38bdf8">{pen}</span>) '
         f'= <span style="color:#8b949e;">{raw}</span>'
         f'{floor_note}'
+        f'&nbsp;<span style="color:#374151;font-size:0.65rem;">· {_wlabel}</span>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -4256,32 +4223,42 @@ def _render_probe_table(probes: dict):
            _badge("CLEAR","#22c55e","rgba(34,197,94,0.12)"))
     rows.append(_row(I.COPY, "Typosquatting", b, t.get("detail","")))
 
-    fe       = probes.get("free_email", {})
-    fe_found = bool(fe.get("emails_found", []))
-    if fe.get("uses_free_domain"):
-        fe_b = _badge("FREE EMAIL",    "#dc2626", "rgba(220,38,38,0.12)")
-    elif fe_found:
-        fe_b = _badge("CLEAR",         "#22c55e", "rgba(34,197,94,0.12)")
+    fe    = probes.get("free_email", {})
+    fe_detail = fe.get("detail", "")
+    _no_email = (fe_detail == "No email address found in input"
+                 or "no email" in fe_detail.lower()
+                 or not fe_detail)
+    if _no_email:
+        b = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
+        fe_detail = "No email address provided — cannot check email domain"
+    elif fe.get("uses_free_domain"):
+        b = _badge("FREE EMAIL", "#dc2626", "rgba(220,38,38,0.12)")
     else:
-        fe_b = _badge("NOT PROVIDED",  "#6b7280", "rgba(107,114,128,0.12)")
-    rows.append(_row(I.MAIL, "Email Domain", fe_b, fe.get("detail", "")))
+        b = _badge("CLEAR", "#22c55e", "rgba(34,197,94,0.12)")
+    rows.append(_row(I.MAIL, "Email Domain", b, fe_detail))
 
     mx    = probes.get("mx_record", {})
     mx_st = mx.get("status", "")
-    if mx_st == "MX_FOUND":
-        mx_b = (_badge("VOIP/BULK",    "#f59e0b", "rgba(245,158,11,0.12)") if mx.get("voip_risk")
-                else _badge("MX OK",   "#22c55e", "rgba(34,197,94,0.12)"))
+    if mx_st in ("NO_EMAIL", "") or _no_email:
+        mx_b      = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
+        mx_detail = "No email address provided — cannot verify mail infrastructure"
+    elif mx_st == "MX_FOUND":
+        mx_b      = (_badge("VOIP/BULK", "#f59e0b", "rgba(245,158,11,0.12)") if mx.get("voip_risk")
+                     else _badge("MX OK", "#22c55e", "rgba(34,197,94,0.12)"))
+        mx_detail = mx.get("detail", "")
     elif mx_st == "NO_MX":
-        mx_b = _badge("NO MX RECORDS", "#dc2626", "rgba(220,38,38,0.12)")
+        mx_b      = _badge("NO MX RECORDS", "#dc2626", "rgba(220,38,38,0.12)")
+        mx_detail = mx.get("detail", "")
     elif mx_st == "DNS_FAIL":
-        mx_b = _badge("DOMAIN FAKE",   "#dc2626", "rgba(220,38,38,0.12)")
+        mx_b      = _badge("DOMAIN FAKE", "#dc2626", "rgba(220,38,38,0.12)")
+        mx_detail = mx.get("detail", "")
     elif mx_st == "FREE_DOMAIN":
-        mx_b = _badge("FREE EMAIL",    "#f59e0b", "rgba(245,158,11,0.12)")
-    elif mx_st == "NO_EMAIL":
-        mx_b = _badge("NOT PROVIDED",  "#6b7280", "rgba(107,114,128,0.12)")
+        mx_b      = _badge("FREE EMAIL", "#f59e0b", "rgba(245,158,11,0.12)")
+        mx_detail = mx.get("detail", "")
     else:
-        mx_b = _badge("NOT CHECKED",   "#6b7280", "rgba(107,114,128,0.12)")
-    rows.append(_row(I.SERVER, "MX / Mail Server", mx_b, mx.get("detail", "")))
+        mx_b      = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
+        mx_detail = mx.get("detail", "No email address found — cannot verify mail infrastructure")
+    rows.append(_row(I.SERVER, "MX / Mail Server", mx_b, mx_detail))
 
     cd        = probes.get("company_domain", {})
     cd_score  = cd.get("score", 0)
@@ -4339,23 +4316,6 @@ def _render_probe_table(probes: dict):
     else:
         spf_badge = _badge("MISSING", "#dc2626", "rgba(220,38,38,0.12)")
     rows.append(_row(I.SHIELD, "SPF / DMARC", spf_badge, spf.get("detail", "")))
-
-    # ── Google Safe Browsing ───────────────────────────────────────────────
-    gsb = probes.get("safe_browsing", {})
-    if gsb.get("detail") and gsb.get("detail") not in ("Not checked", ""):
-        gsb_b = (_badge("BLOCKLISTED", "#dc2626", "rgba(220,38,38,0.12)") if gsb.get("listed")
-                 else _badge("CLEAN",      "#22c55e", "rgba(34,197,94,0.12)"))
-        rows.append(_row(I.SHIELD, "Safe Browsing", gsb_b, gsb.get("detail", "")))
-    dbl = probes.get("dnsbl", {})
-    if dbl.get("ip"):
-        dbl_b = (_badge("BLACKLISTED", "#dc2626", "rgba(220,38,38,0.12)") if dbl.get("listed")
-                 else _badge("CLEAN",      "#22c55e", "rgba(34,197,94,0.12)"))
-        rows.append(_row(I.GLOBE, "IP Reputation (DNSBL)", dbl_b, dbl.get("detail", "")))
-    ct = probes.get("cert_transparency", {})
-    if ct.get("checked"):
-        ct_b = (_badge("SUSPICIOUS", "#f59e0b", "rgba(245,158,11,0.12)") if ct.get("suspicious")
-                else _badge("CERT OK",   "#22c55e", "rgba(34,197,94,0.12)"))
-        rows.append(_row(I.LOCK, "SSL Certificate (CT)", ct_b, ct.get("reason", "")))
 
     st.markdown(
         f'<div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;'
@@ -4426,7 +4386,9 @@ def _render_signal_cards(signals: dict):
     col_r.markdown(right_html or "<div></div>", unsafe_allow_html=True)
 
 
-def _render_ai_dive(llm: dict, result: dict | None = None):
+def _render_ai_dive(llm: dict, probes: dict | None = None):
+    if probes is None:
+        probes = {}
     if not llm:
         st.markdown('<p style="color:#6b7280;font-size:0.82rem;">AI analysis unavailable.</p>',
                     unsafe_allow_html=True)
@@ -4434,155 +4396,21 @@ def _render_ai_dive(llm: dict, result: dict | None = None):
 
     cl     = llm.get("company_legitimacy", "UNVERIFIABLE")
     ci, cc = _CB.get(cl, _CB["UNVERIFIABLE"])
-    scam_pattern = llm.get("similar_scam_type", "Unknown")
-
-    # ── Layered trust panel ───────────────────────────────────────────────
-    # Shows all evaluation axes so users see WHY the verdict was reached,
-    # not just the final number.
-    result      = result or {}
-    fired       = result.get("signals", {})
-    probes_r    = result.get("probes", {})
-    blended_s   = result.get("blended_score", 0)
-    rule_s      = result.get("rule_score", 0)
-    probe_pen   = result.get("probe_penalty", 0)
-
-    # ── Axis computation — all axes derive from the SAME blended_score
-    # so the panel never contradicts the overall verdict.
-    #
-    # Key principle: use blended_score (post-floor) as the anchor.
-    # Raw rule_s and fired signals give per-axis detail, but if blended
-    # is high the axes must reflect that — not show green while header is red.
-
-    # ── Signal floor constants (must match orchestrator) ──────────────────
-    _FLOORS = {
-        "upfront_payment":    65,
-        "fake_govt_job":      50,
-        "mlm_pyramid":        50,
-        "india_scam_pattern": 40,
-        "too_good_salary":    35,
-        "invalid_gstin":      35,
-    }
-    _HIGH_WEIGHT_KEYS = {
-        "upfront_payment","advance_fee_scam","fake_govt_job","mlm_pyramid",
-        "too_good_salary","free_email_contact","personal_info_demand",
-    }
-
-    # Which floors actually fired?
-    active_floors = {k: v for k, v in _FLOORS.items() if k in fired}
-    floor_score   = max(active_floors.values()) if active_floors else 0
-    # Effective JD risk = max(raw rule score, any active floor)
-    effective_jd  = max(rule_s, floor_score)
-
-    # 1. Company infrastructure (probe layer)
-    mx_ok       = probes_r.get("mx_record", {}).get("status","") == "MX_FOUND"
-    domain_ok   = probes_r.get("company_domain", {}).get("domain_exists", False)
-    site_ok     = probes_r.get("site_reach", {}).get("reachable", False)
-    age_ok      = probes_r.get("domain_age", {}).get("status","") in ("old","established","moderate")
-    no_squatter = not probes_r.get("typosquat", {}).get("is_squatter", False)
-    probe_axes_pass = sum([mx_ok, domain_ok, site_ok, age_ok, no_squatter])
-    if probe_axes_pass >= 4:
-        infra_label, infra_color = "Passed", "#22c55e"
-    elif probe_axes_pass >= 2:
-        infra_label, infra_color = "Partial", "#f59e0b"
-    else:
-        infra_label, infra_color = "Failed", "#ef4444"
-
-    # 2. Job description risk — use effective_jd (includes floors)
-    if effective_jd == 0:
-        jd_label, jd_color = "Low Risk", "#22c55e"
-    elif effective_jd < 25:
-        jd_label, jd_color = "Mild Signals", "#f59e0b"
-    elif effective_jd < 50:
-        jd_label, jd_color = "High Risk", "#f97316"
-    else:
-        jd_label, jd_color = "Critical Risk", "#ef4444"
-
-    # 3. Payment / fee detection — check signals AND blended floor
-    payment_fired = "upfront_payment" in fired or "advance_fee_scam" in fired
-    # Also flag if blended was pushed above 45 by a floor (fee might not be labelled)
-    fee_implied   = blended_s >= 45 and floor_score >= 45 and not payment_fired
-    if payment_fired:
-        fee_label, fee_color = "Detected ⚠", "#ef4444"
-    elif fee_implied:
-        fee_label, fee_color = "Possible ⚠", "#f97316"
-    else:
-        fee_label, fee_color = "None found", "#22c55e"
-
-    # 4. Suspicious language — signals + blended context
-    lang_signals = [k for k in ("urgency_pressure","unrealistic_benefits","vague_description",
-                                "unprofessional_language","fake_wfh","whatsapp_only",
-                                "mlm_pyramid","fake_govt_job","india_scam_pattern") if k in fired]
-    if not lang_signals and blended_s < 35:
-        lang_label, lang_color = "Clean", "#22c55e"
-    elif not lang_signals and blended_s >= 35:
-        # Blended is elevated but no lang signals — other signals drove it
-        lang_label, lang_color = "Review advised", "#f59e0b"
-    elif len(lang_signals) == 1:
-        lang_label, lang_color = "Minor flags", "#f59e0b"
-    else:
-        lang_label, lang_color = f"{len(lang_signals)} flags", "#ef4444"
-
-    # 5. Contact authenticity
-    free_email = probes_r.get("free_email", {}).get("uses_free_domain", False)
-    wa_only    = "whatsapp_only" in fired
-    if free_email and wa_only:
-        contact_label, contact_color = "High Risk", "#ef4444"
-    elif free_email or wa_only:
-        contact_label, contact_color = "Suspicious", "#f59e0b"
-    else:
-        contact_label, contact_color = "Legitimate", "#22c55e"
-
-    # 6. Overall trust label — derived from blended_score (single source of truth)
-    final_v = result.get("final_verdict", "UNKNOWN")
-    if final_v == "SAFE" or blended_s < 25:
-        trust_label, trust_color, trust_bg = "TRUSTED", "#22c55e", "rgba(34,197,94,0.08)"
-    elif final_v == "SUSPICIOUS" or blended_s < 50:
-        trust_label, trust_color, trust_bg = "SUSPICIOUS", "#f97316", "rgba(249,115,22,0.08)"
-    elif final_v == "LIKELY_SCAM" or blended_s < 75:
-        trust_label, trust_color, trust_bg = "LIKELY SCAM", "#ef4444", "rgba(239,68,68,0.08)"
-    else:
-        trust_label, trust_color, trust_bg = "DO NOT TRUST", "#dc2626", "rgba(220,38,38,0.10)"
-
-    def _axis_row(label, value, color):
-        dot = f'<span style="width:7px;height:7px;border-radius:50%;background:{color};display:inline-block;margin-right:6px;flex-shrink:0;"></span>'
-        return (
-            f'<div style="display:flex;justify-content:space-between;align-items:center;'
-            f'padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">'
-            f'<span style="font-size:0.75rem;color:#8b949e;">{label}</span>'
-            f'<span style="display:flex;align-items:center;font-size:0.75rem;font-weight:600;color:{color};">{dot}{value}</span>'
-            f'</div>'
-        )
-
-    axes_html = (
-        _axis_row("Company Infrastructure",  infra_label,    infra_color) +
-        _axis_row("Job Description Risk",    jd_label,       jd_color) +
-        _axis_row("Payment / Fee Request",   fee_label,      fee_color) +
-        _axis_row("Suspicious Language",     lang_label,     lang_color) +
-        _axis_row("Contact Authenticity",    contact_label,  contact_color) +
-        _axis_row("Company Status",          cl.replace("_"," "), cc)
-    )
 
     st.markdown(
-        f'<div style="border:1px solid rgba(255,255,255,0.07);border-radius:10px;'
-        f'overflow:hidden;margin-bottom:14px;">'
-        # Header — overall trust rating
-        f'<div style="background:{trust_bg};border-bottom:1px solid rgba(255,255,255,0.07);'
-        f'padding:10px 14px;display:flex;justify-content:space-between;align-items:center;">'
-        f'<span style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">'
-        f'Overall Trust Rating</span>'
-        f'<span style="font-size:0.78rem;font-weight:700;color:{trust_color};">{trust_label}</span>'
-        f'</div>'
-        # Axis rows
-        f'<div style="padding:4px 14px 4px;">'
-        f'{axes_html}'
-        f'</div>'
-        # Scam pattern footer
-        f'<div style="background:rgba(255,255,255,0.02);border-top:1px solid rgba(255,255,255,0.05);'
-        f'padding:8px 14px;display:flex;justify-content:space-between;align-items:center;">'
-        f'<span style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Scam Pattern</span>'
-        f'<span style="font-size:0.75rem;font-weight:600;color:#a78bfa;">{scam_pattern}</span>'
-        f'</div>'
-        f'</div>',
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
+        f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
+        f'border-radius:9px;padding:12px;">'
+        f'<div style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;'
+        f'letter-spacing:1px;margin-bottom:5px;">Company Status</div>'
+        f'<div style="display:flex;align-items:center;gap:6px;color:{cc};font-weight:600;font-size:0.83rem;">'
+        f'{_svg(ci,13,cc)}{cl.replace("_"," ")}</div></div>'
+        f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
+        f'border-radius:9px;padding:12px;">'
+        f'<div style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;'
+        f'letter-spacing:1px;margin-bottom:5px;">Scam Pattern</div>'
+        f'<div style="color:#a78bfa;font-weight:600;font-size:0.83rem;">'
+        f'{llm.get("similar_scam_type","Unknown")}</div></div></div>',
         unsafe_allow_html=True,
     )
 
@@ -4595,11 +4423,46 @@ def _render_ai_dive(llm: dict, result: dict | None = None):
         for f in llm.get("top_red_flags",[])[:5]
     ) or '<div style="color:#6b7280;font-size:0.79rem;font-style:italic;">None identified.</div>'
 
+    # Build positive signals from ACTUAL probe results — not LLM free text.
+    # LLM was inventing "Legitimate email domain" even when no email was provided.
+    _probe_positives = []
+    _pr = probes  # passed in as parameter from render_job_scam_detector_tab
+    _da = _pr.get("domain_age", {})
+    _sr = _pr.get("site_reach", {})
+    _fe = _pr.get("free_email", {})
+    _mx = _pr.get("mx_record", {})
+    _cd = _pr.get("company_domain", {})
+    _ci = _pr.get("company_identity", {})
+    _sd = _pr.get("spf_dmarc", {})
+    _fe_detail = (_fe.get("detail") or "").lower()
+    _no_email  = "no email" in _fe_detail or not _fe_detail
+
+    if _da.get("age_days", 0) > 180:
+        _probe_positives.append("Domain age: established")
+    if _sr.get("reachable") and _sr.get("ssl_valid"):
+        _probe_positives.append("Site reachable with valid SSL certificate")
+    if not _no_email and not _fe.get("uses_free_domain"):
+        _probe_positives.append("Email domain: legitimate")
+    if not _no_email and _mx.get("status") == "MX_FOUND":
+        _probe_positives.append("MX records: valid mail infrastructure exists")
+    if _cd.get("verified"):
+        _probe_positives.append("Company domain: verified")
+    if _sd.get("has_spf") and _sd.get("has_dmarc"):
+        _probe_positives.append("SPF + DMARC configured")
+    elif _sd.get("has_spf"):
+        _probe_positives.append("SPF record configured")
+
+    # Also include any non-probe positive signals the LLM found in content
+    _llm_pos = [p for p in llm.get("positive_signals", [])
+                if not any(w in p.lower() for w in
+                           ("email", "mx", "mail", "domain", "ssl", "dmarc", "spf", "reachable"))]
+    _all_positives = _probe_positives + _llm_pos
+
     pos_html = "".join(
         f'<div style="background:rgba(34,197,94,0.05);border-left:2px solid #22c55e;'
         f'padding:7px 11px;border-radius:0 6px 6px 0;margin-bottom:5px;'
         f'color:#86efac;font-size:0.79rem;">{p}</div>'
-        for p in llm.get("positive_signals",[])[:5]
+        for p in _all_positives[:6]
     ) or '<div style="color:#6b7280;font-size:0.79rem;font-style:italic;">No positive signals identified.</div>'
 
     fc1.markdown(
@@ -4643,6 +4506,30 @@ def _render_ai_dive(llm: dict, result: dict | None = None):
                 f'this posting does not mention any salary, CTC, or compensation. '
                 f'No realistic assessment can be made. Consider asking the recruiter '
                 f'for a clear salary range before proceeding.</span></div></div>',
+                unsafe_allow_html=True,
+            )
+            continue
+
+        # ── Salary Reality Check: colour-coded badge + detailed text ────────
+        if field == "salary_assessment":
+            _v_lower = val.lower()
+            if any(w in _v_lower for w in ("unrealistically", "unrealistic", "scam", "too high", "inflated")):
+                badge_color, badge_bg, badge_label = "#ef4444", "rgba(239,68,68,0.12)", "⚠ Unrealistic"
+            elif any(w in _v_lower for w in ("slightly high", "above average", "higher than")):
+                badge_color, badge_bg, badge_label = "#f59e0b", "rgba(245,158,11,0.12)", "△ Slightly High"
+            else:
+                badge_color, badge_bg, badge_label = "#22c55e", "rgba(34,197,94,0.12)", "✓ Realistic"
+            st.markdown(
+                f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
+                f'border-radius:9px;padding:14px;margin-bottom:10px;">'
+                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+                f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
+                f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;">'
+                f'{_svg(I.DOLLAR,11,"#6b7280")}Salary Reality Check</div>'
+                f'<span style="font-size:0.72rem;font-weight:700;padding:2px 9px;border-radius:5px;'
+                f'background:{badge_bg};color:{badge_color};border:1px solid {badge_color}44;">'
+                f'{badge_label}</span></div>'
+                f'<div style="color:#c9d1d9;font-size:0.83rem;line-height:1.65;">{val}</div></div>',
                 unsafe_allow_html=True,
             )
             continue
@@ -4705,9 +4592,9 @@ def _add_to_history(result: dict):
         "id":      None,   # filled in after DB save — used for soft-delete
         "title":   result["job"].get("title", "Untitled"),
         "company": result["job"].get("company", "Unknown"),
-        "score":   result.get("blended_score", 0),
-        "verdict": result.get("final_verdict", "UNKNOWN"),
-        "time":    result.get("timestamp", ""),
+        "score":   result["blended_score"],
+        "verdict": result["final_verdict"],
+        "time":    result["timestamp"],
     }
 
     # ── Persist to Supabase and get back the new row id ───────────────────
@@ -5118,13 +5005,9 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             fields_html = (
                 _field_row(I.ZAP,      "Job Title",  extracted["title"])
                 + _field_row(I.BUILDING, "Company",    extracted["company"])
-                + _field_row(I.GLOBE,    "Website",    extracted["website"])
+                + _field_row(I.GLOBE,    "Website",    extracted["website"], is_url=True)
                 + _field_row(I.MAP_PIN,  "Location",   extracted["location"])
-                + (lambda: (
-                    lambda sal, lpa, note:
-                        _field_row(I.DOLLAR, "Salary",
-                            f"{sal}  ·  ≈ {lpa} LPA" if lpa and "LPA" not in sal.upper() else sal)
-                )(extracted["salary"], *_normalise_salary_to_lpa(extracted["salary"])))()
+                + _field_row(I.DOLLAR,   "Salary",     extracted["salary"])
                 + _field_row(I.MAIL,     "Contact",    extracted["contact"])
             )
             st.markdown(
@@ -5320,8 +5203,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                                 "location": st.session_state.get("jsd_seeker_loc", "").strip(),
                                 "role":     st.session_state.get("jsd_seeker_role", "").strip(),
                             }
-                            prompt = _llm_prompt(job, warnings, seeker_ctx,
-                                                 rule_signals=rules_result["signals"])
+                            prompt = _llm_prompt(job, warnings, seeker_ctx, rules_result.get("signals", {}))
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
@@ -5357,11 +5239,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         ai_failed = True
 
                     prog.progress(90, text="Blending scores…")
-                    _raw_ai = llm_data.get("ai_risk_score", rules_result["rule_score"])
-                    try:
-                        ai_s = max(0, min(100, int(float(str(_raw_ai).strip()))))
-                    except (ValueError, TypeError):
-                        ai_s = rules_result["rule_score"]  # fall back to rule score
+                    ai_s   = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
                     rule_s = rules_result["rule_score"]
 
                     # Clamp AI score to valid range (guard against hallucinated values)
@@ -5384,75 +5262,96 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     probe_coverage = probes_ran / max(probes_total, 1)
 
                     # AI confidence from LLM response (0-100, default 70 if not provided)
-                    _raw_conf = llm_data.get("confidence", 70)
-                    try:
-                        ai_confidence = max(0, min(100, int(float(str(_raw_conf).strip()))))
-                    except (ValueError, TypeError):
-                        ai_confidence = 70
+                    ai_confidence = int(llm_data.get("confidence", 70))
                     ai_confidence = max(0, min(100, ai_confidence))
 
                     if ai_failed:
-                        # AI completely failed — redistribute its 60% to rules
-                        w_ai, w_rule, w_probe = 0.00, 0.75, 0.25
+                        # AI completely failed — redistribute its weight to rules
+                        w_ai, w_rule, w_probe = 0.00, 0.80, 0.20
                     elif ai_confidence < 50:
                         # AI unsure — reduce its weight, boost rules
-                        w_ai, w_rule, w_probe = 0.40, 0.40, 0.20
+                        w_ai, w_rule, w_probe = 0.35, 0.45, 0.20
                     elif probe_coverage < 0.5:
                         # Less than half probes ran — boost AI, reduce probe weight
-                        w_ai, w_rule, w_probe = 0.70, 0.25, 0.05
+                        w_ai, w_rule, w_probe = 0.60, 0.35, 0.05
                     else:
-                        # Normal: AI=50% Rules=35% Probes=15%
-                        # Rules increased — deterministic signals (fees, fake patterns)
-                        # are more reliable than LLM which can be softened by clean probes
-                        w_ai, w_rule, w_probe = 0.50, 0.35, 0.15
+                        # Normal: 45% AI / 40% rules / 15% probes
+                        # Rules raised from 25%→40%, AI lowered from 60%→45%
+                        # because content signals (payment demand, urgency, WFH bait)
+                        # are deterministic and should not be overridden by AI reasoning
+                        w_ai, w_rule, w_probe = 0.45, 0.40, 0.15
 
                     blended = int(w_ai * ai_s + w_rule * rule_s + w_probe * penalty)
 
-                    # ── Signal-level hard floors ──────────────────────────────
-                    # Some rule signals are so diagnostic they must force a minimum
-                    # score REGARDLESS of how clean the probe layer is.
-                    # A legitimate website does NOT cancel out a payment demand.
+                    # ── CLEAN PROBE CEILING ────────────────────────────────────
+                    # A legitimate website/domain cannot suppress a high rule score.
+                    # If rule_score is high but probes are all clean (penalty < 10),
+                    # prevent probe/AI clean-site drag from pulling blended too far down.
+                    # Ceiling: blended can never be more than 20 pts below rule_score.
+                    if rule_s >= 20:
+                        blended = max(blended, rule_s - 20)
 
-                    _SIGNAL_FLOORS = {
-                        # Payment / fee demanded → LIKELY_SCAM minimum
-                        "upfront_payment":       65,
-                        # Fake govt job → LIKELY_SCAM minimum
-                        "fake_govt_job":         50,
-                        # MLM / pyramid → LIKELY_SCAM minimum
-                        "mlm_pyramid":           50,
-                        # India scam pattern → SUSPICIOUS minimum
-                        "india_scam_pattern":    40,
-                        # Unrealistic salary → SUSPICIOUS minimum
-                        "too_good_salary":       35,
-                        # Invalid GSTIN → SUSPICIOUS minimum
-                        "invalid_gstin":         35,
-                        # WhatsApp-only → at least SUSPICIOUS
-                        "whatsapp_only":         25,
-                    }
-
-                    fired_signals = rules_result["signals"]
-                    active_floors = [floor for sig, floor in _SIGNAL_FLOORS.items()
-                                     if sig in fired_signals]
-                    if active_floors:
-                        top_floor = max(active_floors)
-                        # Multiple critical signals compound: 2+ floors → +15 bonus
-                        compound_bonus = 15 if len(active_floors) >= 2 else 0
-                        blended = max(blended, top_floor + compound_bonus)
-
-                    # General critical signal floor (weight >= 18)
-                    critical_signals = [k for k in fired_signals
-                                        if _WEIGHTS.get(k, 0) >= 18]
+                    # ── SIGNAL COMBINATION FLOORS ─────────────────────────────
+                    # Hard floor from HIGH-weight signals (>=18 pts each).
+                    # A single critical signal like upfront_payment (25) should
+                    # NEVER let blended drop below its raw weight just because
+                    # the LLM was impressed by the website.
+                    # Exclude payment/govt signals — they have dedicated stronger floors below.
+                    _PAYMENT_SIGNAL_KEYS = {"upfront_payment", "fake_govt_job", "india_scam_pattern"}
+                    critical_signals = [k for k, s in rules_result["signals"].items()
+                                        if _WEIGHTS.get(k, 0) >= 18
+                                        and k not in _PAYMENT_SIGNAL_KEYS]
                     critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
-                    blended = max(blended, critical_weight)
+                    if critical_weight > 0:
+                        blended = max(blended, critical_weight)
 
-                    # Probe penalty floor: probe layer alone can force minimum verdicts
-                    # Without this, completely fake domain = still SAFE (max 11 pts)
-                    if penalty >= 40:
-                        blended = max(blended, 50)   # serious probe failures → LIKELY_SCAM min
-                    elif penalty >= 25:
-                        blended = max(blended, 25)   # moderate probe failures → SUSPICIOUS min
-                    elif penalty >= 15:
-                        blended = max(blended, 15)   # minor probe issues → register something
+                    # Probe penalty floor: only if penalty is itself significant (>= 20)
+                    if penalty >= 20:
+                        blended = max(blended, penalty)
+
+                    # ── MULTI-SIGNAL COMBINATION FLOOR ────────────────────────
+                    # Rule score above 25 means at least one meaningful signal fired.
+                    # A clean website cannot explain away content-level scam signals.
+                    # Floor tiers based on rule_score severity:
+                    #   rule >= 50 → blended cannot be more than 10 pts below rule
+                    #   rule >= 35 → blended cannot be more than 15 pts below rule
+                    #   rule >= 25 → blended cannot be more than 20 pts below rule
+                    if rule_s >= 50:
+                        blended = max(blended, rule_s - 10)
+                    elif rule_s >= 35:
+                        blended = max(blended, rule_s - 15)
+                    elif rule_s >= 25:
+                        blended = max(blended, rule_s - 20)
+
+                    # ── UPFRONT PAYMENT IS NEVER SAFE ─────────────────────────
+                    # A legitimate company NEVER asks candidates for money.
+                    # upfront_payment alone = floor 50 (LIKELY_SCAM).
+                    # upfront_payment + any other signal = floor 65 (LIKELY_SCAM strong).
+                    active_keys = set(rules_result["signals"].keys())
+                    if "upfront_payment" in active_keys:
+                        other_signals = active_keys - {"upfront_payment"}
+                        if other_signals:
+                            blended = max(blended, 65)  # payment + anything else = LIKELY_SCAM
+                        else:
+                            blended = max(blended, 50)  # payment alone = LIKELY_SCAM floor
+                    elif any(k in active_keys for k in ("fake_govt_job", "india_scam_pattern")):
+                        blended = max(blended, 40)  # these alone = SUSPICIOUS+
+
+                    # ── SIGNAL STACKING MULTIPLIER ────────────────────────────
+                    # 3+ signals fired together = strong pattern evidence.
+                    # Each signal beyond 2 adds a 3pt stacking bonus (max +15).
+                    n_signals = len(active_keys)
+                    if n_signals >= 3:
+                        stack_bonus = min((n_signals - 2) * 3, 15)
+                        blended = min(blended + stack_bonus, 100)
+
+                    # ── CAP the probe clean-site AI drag ──────────────────────
+                    # When rule_score is high but AI score is low (LLM was fooled
+                    # by legitimate-looking website), prevent AI from dominating.
+                    # If rule_score >= 40 and AI score is suspiciously low (<= 25),
+                    # treat AI score as untrustworthy — re-blend with more rule weight.
+                    if rule_s >= 40 and ai_s <= 25:
+                        blended = max(blended, int(0.35 * ai_s + 0.50 * rule_s + 0.15 * penalty))
 
                     # ── HARD PROBE OVERRIDE (Improvement 4) ───────────────────────
                     # If multiple critical network probes fire together, force the
@@ -5503,27 +5402,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         final = av if blended >= next_threshold - 5 else sv
                     else:
                         final = sv
-
-                    # ── Post-process company_legitimacy ───────────────────────
-                    # Override LLM's company_legitimacy if rule signals contradict it.
-                    # The LLM should handle this, but this is a hard safety net.
-                    cl = llm_data.get("company_legitimacy", "UNVERIFIABLE")
-                    fired = rules_result["signals"]
-                    payment_fired = "upfront_payment" in fired or "advance_fee_scam" in fired
-                    high_risk_fired = any(
-                        _WEIGHTS.get(k, 0) >= 18 for k in fired
-                    )
-
-                    if cl == "VERIFIED":
-                        if payment_fired:
-                            # Payment demand + VERIFIED = impossible combination
-                            llm_data["company_legitimacy"] = "REAL_BUT_SUSPICIOUS"
-                        elif high_risk_fired and blended >= 40:
-                            # Multiple serious flags + verified domain
-                            llm_data["company_legitimacy"] = "REAL_BUT_SUSPICIOUS"
-                        elif blended >= 65:
-                            # Score this high means posting is almost certainly a scam
-                            llm_data["company_legitimacy"] = "REAL_BUT_SUSPICIOUS"
 
                     res = {
                         "blended_score":  blended,   "rule_score":     rule_s,
@@ -5644,9 +5522,8 @@ def _save_feedback(result: dict, rating: str):
                 rating,
             ),
         )
-    except Exception as _top_err:
-        st.error(f"⚠ Unexpected error — please try again. ({type(_top_err).__name__}: {_top_err})")
-        import traceback; st.code(traceback.format_exc(), language="text")  # non-fatal
+    except Exception:
+        pass  # non-fatal
 
 
 def render_job_scam_detector_tab(call_llm_fn):
@@ -5774,18 +5651,18 @@ def render_job_scam_detector_tab(call_llm_fn):
     _render_verdict_banner(res)
     _render_score_strip(res)
     st.markdown("<br>", unsafe_allow_html=True)
-    _render_probe_table(res.get("probes", {}))
+    _render_probe_table(res["probes"])
 
     t1, t2, t3 = st.tabs(["Detected Signals", "AI Deep Dive", "Safety Checklist"])
     with t1:
         st.markdown(
             f'<p style="color:#8b949e;font-size:0.79rem;margin-bottom:12px;">'
-            f'{len(res.get("signals", {}))} rule-based signal(s) fired.</p>',
+            f'{len(res["signals"])} rule-based signal(s) fired.</p>',
             unsafe_allow_html=True,
         )
-        _render_signal_cards(res.get("signals", {}))
+        _render_signal_cards(res["signals"])
     with t2:
-        _render_ai_dive(res.get("llm", {}), result=res)
+        _render_ai_dive(res.get("llm", {}), res.get("probes", {}))
     with t3:
         _render_checklist(res)
 
