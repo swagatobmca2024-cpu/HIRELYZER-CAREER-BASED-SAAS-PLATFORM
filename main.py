@@ -215,6 +215,7 @@ if not st.session_state.get("authenticated"):
     if _token:
         _ok, _result = verify_login_token(_token)
         if _ok:
+            _cached_hero_stats.clear()  # force live metrics on next render
             log_user_action(st.session_state.username, "login")
             # Clear the token from the URL so a refresh doesn't re-trigger
             st.query_params.clear()
@@ -1868,6 +1869,7 @@ if not st.session_state.get("authenticated", False):
                                         success, saved_key = verify_user(_input, pwd.strip())
                                         if success:
                                             st.session_state.authenticated = True
+                                            _cached_hero_stats.clear()  # force live metrics on next render
                                             log_user_action(st.session_state.username, "login")
                                             notify("login", "success", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-2px;margin-right:5px;"><path d="M9 12l2 2 4-4" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="#6ee7b7" stroke-width="1.6"/></svg> Login successful. Welcome back!')
                                             time.sleep(1.5)
@@ -2235,6 +2237,7 @@ if not st.session_state.get("authenticated", False):
                                 with st.spinner(""):
                                     success, message = complete_registration(otp_input.strip())
                                     if success:
+                                        _cached_hero_stats.clear()  # force live metrics on next render
                                         log_user_action(cached_username, "register")
                                         notify("register", "success", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-2px;margin-right:5px;"><path d="M9 12l2 2 4-4" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="#6ee7b7" stroke-width="1.6"/></svg> Registration complete. You can now log in to your account.', duration=8.0)
                                         time.sleep(0.5)
