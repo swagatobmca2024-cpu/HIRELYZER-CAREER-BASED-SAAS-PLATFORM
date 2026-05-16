@@ -284,26 +284,11 @@ _WEIGHTS: dict[str, int] = {
 }
 
 _FREE_DOMAINS: frozenset[str] = frozenset({
-    # Major free providers
     "gmail.com","yahoo.com","hotmail.com","outlook.com","aol.com",
     "icloud.com","mail.com","protonmail.com","yopmail.com","guerrillamail.com",
     "tempmail.com","mailinator.com","trashmail.com","sharklasers.com",
     "rediffmail.com","live.com","msn.com","yahoo.in","yahoo.co.in",
     "rocketmail.com","zohomail.com","inbox.com","fastmail.com",
-    # GAP FIX: disposable / temp-mail domains common in Indian scams
-    "temp-mail.org","temp-mail.io","dispostable.com","throwam.com",
-    "maildrop.cc","fakeinbox.com","mailnull.com","spamgourmet.com",
-    "guerrillamailblock.com","grr.la","spam4.me","trashmail.me",
-    "trashmail.net","trashmail.org","spamherelots.com","mailnesia.com",
-    "spamthisplease.com","binkmail.com","suremail.info","mailexpire.com",
-    "tempinbox.com","filzmail.com","spamfree24.org","mailscrap.com",
-    "throwam.com","spammotel.com","spam.la","reallymymail.com",
-    "discardmail.com","discardmail.de","spamtrap.ro","spamoff.de",
-    "kurzepost.de","objectmail.com","pfui.re","put2.net","rmqkr.net",
-    # Indian regional free mail
-    "rediffmail.com","sify.com","indiatimes.com","in.com",
-    # Other commonly used free domains
-    "tutanota.com","cock.li","airmail.cc","protonmail.ch",
 })
 
 _BRAND_DOMAINS: list[str] = [
@@ -1686,125 +1671,85 @@ def _levenshtein(s1: str, s2: str) -> int:
     return prev[-1]
 
 
-def _probe_typosquatting(domain: str, company: str = "", contact: str = "") -> dict:
+def _probe_typosquatting(domain: str) -> dict:
     """
-    Typosquat detection v3.
+    Typosquat detection v2  (replaces SequenceMatcher / 72% threshold).
 
-    Three checks (all use Levenshtein + homoglyph normalisation + brand containment):
+    Two complementary checks on normalised SLDs:
 
-    1. Website domain SLD vs _BRAND_DOMAINS          (original)
-    2. Company name field vs _BRAND_DOMAINS           (GAP FIX — catches "lnfosys")
-    3. Contact email domain vs _BRAND_DOMAINS         (GAP FIX — catches hr@inf0sys.com)
+    1. Levenshtein edit distance ≤ 2 on homoglyph-normalised SLDs.
+       Catches: netlfix, nettflix, netfl1x, g00gle, inf0sys, w1pro …
+       Skips brands with SLD < 4 chars (tcs, ril …) — too short, too noisy.
 
-    Each check is independent; any hit sets is_squatter=True.
+    2. Brand-keyword prefix/suffix containment.
+       Catches: infosys-careers.com, wipro-jobs.in, careers.infosys.net …
+       Requires ≥ 2 extra chars beyond the brand token (avoids "infosyss").
+
+    Root cause of the old false positives (netomi, netsol, netapp):
+       SequenceMatcher was run on FULL domains including .com suffix, inflating
+       scores: "netomi.com" vs "netflix.com" = 76% (above 72% threshold) even
+       though SLD-only score is only 61%. Switching to Levenshtein on SLD-only
+       + homoglyph normalisation eliminates these false positives entirely.
     """
-    out = {
-        "is_squatter":    False,
-        "closest_brand":  None,
-        "similarity":     0.0,
-        "detail":         "",
-        "company_squats": [],   # which check(s) fired
-    }
+    out = {"is_squatter": False, "closest_brand": None, "similarity": 0.0, "detail": ""}
+    if not domain:
+        return out
 
-    def _check_against_brands(token: str, label: str) -> list[str]:
-        """
-        Run Levenshtein + containment check on a single normalised token.
-        Returns list of detail strings for any hits found.
-        """
-        if not token or len(token) < 3:
-            return []
-        t_norm = _typo_normalise(token)
-        hits = []
+    d_sld      = domain.split(".")[0]
+    d_norm     = _typo_normalise(d_sld)
 
-        best_lev_dist  = 999
-        best_lev_brand = None
-        prefix_brand   = None
+    best_lev_dist:  int         = 999
+    best_lev_brand: str | None  = None
+    prefix_brand:   str | None  = None
 
-        for b in _BRAND_DOMAINS:
-            b_sld  = b.split(".")[0]
-            b_norm = _typo_normalise(b_sld)
-            if len(b_sld) < 4:
-                continue
-            # Skip if token IS the real brand (exact match after normalisation)
-            if t_norm == b_norm:
-                return []   # this IS the brand — not a squatter
+    for b in _BRAND_DOMAINS:
+        b_sld  = b.split(".")[0]
+        b_norm = _typo_normalise(b_sld)
 
-            dist = _levenshtein(t_norm, b_norm)
+        # Skip very short brand SLDs — too prone to coincidental matches
+        if len(b_sld) < 4:
+            continue
+
+        # ── Check 1: Levenshtein on normalised SLDs ───────────────────────
+        if d_norm != b_norm:          # exact match = the real domain, skip
+            dist = _levenshtein(d_norm, b_norm)
             if dist < best_lev_dist:
                 best_lev_dist, best_lev_brand = dist, b
 
-            # Containment: brand keyword embedded in token with extra chars
-            if b_norm in t_norm:
-                extra = t_norm.replace(b_norm, "")
-                if len(extra) >= 2:
-                    prefix_brand = b
+        # ── Check 2: brand keyword embedded in domain ─────────────────────
+        # e.g. "infosys-careers.com" contains "infosys"
+        if b_norm in d_norm and d_norm != b_norm:
+            extra = d_norm.replace(b_norm, "")
+            if len(extra) >= 2:       # at least 2 extra chars to avoid "infosyss"
+                prefix_brand = b
 
-        if best_lev_dist <= 2 and best_lev_brand:
-            b_sld_len  = max(len(_typo_normalise(best_lev_brand.split(".")[0])), 1)
-            similarity = round(1.0 - best_lev_dist / b_sld_len, 3)
-            hits.append(
-                f"{label} '{token}' is a likely typosquat of "
-                f"'{best_lev_brand}' (edit distance {best_lev_dist} "
-                f"after homoglyph normalisation, similarity {similarity:.0%})"
-            )
-            out["similarity"] = max(out["similarity"], similarity)
-            out["closest_brand"] = best_lev_brand
+    is_lev_squatter    = (best_lev_dist <= 2 and best_lev_brand is not None
+                          and d_norm != _typo_normalise(best_lev_brand.split(".")[0]))
+    is_prefix_squatter = prefix_brand is not None
+    is_squatter        = is_lev_squatter or is_prefix_squatter
 
-        if prefix_brand:
-            hits.append(
-                f"{label} '{token}' contains brand keyword "
-                f"'{prefix_brand.split('.')[0]}' — possible impersonation of {prefix_brand}"
-            )
-            out["closest_brand"] = out["closest_brand"] or prefix_brand
-
-        return hits
-
-    all_hits: list[str] = []
-
-    # ── Check 1: website domain SLD ──────────────────────────────────────────
-    if domain:
-        d_sld = domain.split(".")[0]
-        hits  = _check_against_brands(d_sld, "Website domain")
-        all_hits.extend(hits)
-
-    # ── Check 2: company name field (GAP FIX) ────────────────────────────────
-    if company:
-        # Normalise company name to its core slug (strip Pvt Ltd etc.)
-        co_slug = _normalize_company(company)
-        if co_slug:
-            hits = _check_against_brands(co_slug, "Company name")
-            all_hits.extend(hits)
-        # Also check first word raw (catches "lnfosys" where normalize strips too much)
-        first_word = re.sub(r"[^a-z0-9]", "", company.lower().split()[0]) if company.split() else ""
-        if first_word and first_word != co_slug:
-            hits = _check_against_brands(first_word, "Company name")
-            # Deduplicate — don't add same brand twice
-            for h in hits:
-                if h not in all_hits:
-                    all_hits.append(h)
-
-    # ── Check 3: contact email domain (GAP FIX) ──────────────────────────────
-    if contact:
-        emails = re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", contact)
-        seen_email_domains: set[str] = set()
-        for em_domain in emails:
-            em_sld = em_domain.split(".")[0].lower()
-            if em_sld in seen_email_domains or em_domain.lower() in _FREE_DOMAINS:
-                continue
-            seen_email_domains.add(em_sld)
-            hits = _check_against_brands(em_sld, f"Contact email domain (@{em_domain})")
-            all_hits.extend(hits)
-
-    if all_hits:
-        out["is_squatter"]    = True
-        out["company_squats"] = all_hits
-        out["detail"]         = " | ".join(all_hits[:3])   # cap at 3 for UI width
+    # Compute a 0-1 similarity figure for the UI progress bar
+    if best_lev_brand:
+        b_sld_len = max(len(_typo_normalise(best_lev_brand.split(".")[0])), 1)
+        similarity = round(1.0 - best_lev_dist / b_sld_len, 3)
     else:
-        closest = out.get("closest_brand")
-        out["detail"] = (
-            f"No typosquat detected (closest brand: {closest})"
-            if closest else "No typosquat signals detected"
-        )
+        similarity = 0.0
+
+    closest = best_lev_brand or prefix_brand
+    out.update(similarity=max(0.0, similarity), closest_brand=closest)
+
+    if is_squatter:
+        if is_lev_squatter:
+            detail = (f"'{domain}' is a likely typosquat of '{best_lev_brand}' "
+                      f"(edit distance {best_lev_dist} after homoglyph normalisation)")
+        else:
+            detail = (f"'{domain}' contains brand keyword "
+                      f"'{prefix_brand.split('.')[0]}' — possible impersonation of {prefix_brand}")
+        out.update(is_squatter=True, detail=detail)
+    else:
+        out["detail"] = (f"No typosquat detected (closest: {closest}, "
+                         f"edit distance {best_lev_dist})"
+                         if closest else "No close brand match found")
     return out
 
 
@@ -2117,36 +2062,7 @@ def _probe_spf_dmarc(domain: str) -> dict:
     return out
 
 
-# ── GAP FIX: BIMI record check ────────────────────────────────────────────────
-def _probe_bimi(domain: str) -> dict:
-    """
-    Check for a BIMI (Brand Indicators for Message Identification) TXT record.
-    Only verified companies with DMARC enforcement can publish BIMI — it is a
-    strong positive legitimacy signal (reduces overall penalty).
-    """
-    out = {"has_bimi": False, "detail": ""}
-    if not domain:
-        return out
-    try:
-        url = f"https://cloudflare-dns.com/dns-query?name=default._bimi.{domain}&type=TXT"
-        req = urllib.request.Request(
-            url,
-            headers={"Accept": "application/dns-json", "User-Agent": "ScamDetector/4.0"},
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode())
-        answers = [
-            a["data"].strip('"')
-            for a in data.get("Answer", [])
-            if a.get("type") == 16
-        ]
-        bimi = [r for r in answers if r.lower().startswith("v=bimi1")]
-        if bimi:
-            out["has_bimi"] = True
-            out["detail"]   = f"BIMI record found — brand verified ✓"
-    except Exception:
-        out["detail"] = "BIMI lookup failed"
-    return out
+# ── Company name intelligence ─────────────────────────────────────────────────
 # Noise suffixes stripped before matching — prevents "Innovateloop Solutions"
 # failing to match "innovateloop" because "solutions" shifts the slug.
 _CORP_SUFFIXES = re.compile(
@@ -2518,7 +2434,7 @@ def _check_linkedin_existence(company: str) -> dict:
         )
     return out
 
-def _probe_company_domain(company: str, website: str) -> dict:
+def _probe_company_domain(args: tuple) -> dict:
     """
     Production-grade company identity verification — multi-source, parallel.
 
@@ -2537,6 +2453,7 @@ def _probe_company_domain(company: str, website: str) -> dict:
 
     Score range: 0 = fully verified, 75+ = likely fake company
     """
+    company, website = args
     out = {
         "domain_exists":          None,
         "website_live":           None,
@@ -2658,10 +2575,10 @@ def _probe_company_domain(company: str, website: str) -> dict:
                     f"Domain '{domain}' does not match '{company}' "
                     f"(similarity {score:.0%})"
                 )
-                out["score"] += 20
+                out["score"] += 10
                 out["scam_signals"].append(
                     f"Domain '{domain}' has low name similarity to '{company}' "
-                    f"({score:.0%}) — website does not belong to this company"
+                    f"({score:.0%}) — suspicious mismatch"
                 )
     else:
         out["score"] += 15   # no domain at all — mild penalty
@@ -2690,27 +2607,6 @@ def _probe_company_domain(company: str, website: str) -> dict:
             denied += 1
 
     out["identity_sources"] = confirmed
-
-    # ── GAP FIX: Clearbit domain mismatch ────────────────────────────────────
-    # If Clearbit knows the real domain for this company AND the user gave a
-    # different website, that's a strong impersonation signal.
-    cb_result = identity_results.get("clearbit", {})
-    cb_known_domain = (cb_result.get("domain") or "").lower().strip()
-    if cb_known_domain and website:
-        provided_domain = _extract_domain(website) or ""
-        provided_sld = provided_domain.split(".")[0].lower()
-        cb_sld       = cb_known_domain.split(".")[0].lower()
-        # Only flag if both SLDs are non-trivially different
-        if provided_sld and cb_sld and provided_sld != cb_sld:
-            # Give benefit of the doubt for regional sub-brands (wipro.in vs wipro.com)
-            _, sim = _fuzzy_name_match(provided_sld, cb_sld)
-            if sim < 0.80:
-                out["score"] += 20
-                out["scam_signals"].insert(0,
-                    f"Clearbit confirms '{company}' operates at '{cb_known_domain}' — "
-                    f"but the given website '{provided_domain}' is DIFFERENT. "
-                    f"This posting may be impersonating the real company."
-                )
 
     # If 2+ identity sources confirm → strong legitimacy signal, reduce score
     if confirmed >= 2:
@@ -2967,14 +2863,12 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         "mx_record":      {"status": "NO_EMAIL", "detail": ""},
         "company_domain": {"domain_exists": None, "detail": ""},
         "spf_dmarc":      {"spf": None, "dmarc": None, "detail": "", "score": 0},
-        "bimi":           {"has_bimi": False, "detail": ""},
     }
     lock = threading.Lock()
 
     def _run(key, fn, arg):
         try:
-            # Tuple args → unpack as positional arguments
-            r = fn(*arg) if isinstance(arg, tuple) else fn(arg)
+            r = fn(arg)
         except Exception as ex:
             r = {"detail": f"Probe error: {ex}"}
         with lock:
@@ -2983,12 +2877,11 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
     tasks = [
         ("domain_age",     _probe_domain_age,      domain or ""),
         ("site_reach",     _probe_site_reachable,   domain or ""),
-        ("typosquat",      _probe_typosquatting,    (domain or "", company, contact)),
+        ("typosquat",      _probe_typosquatting,    domain or ""),
         ("free_email",     _probe_free_email,       contact),
         ("mx_record",      _probe_mx_record,        contact),
         ("company_domain", _probe_company_domain,   (company, website)),
         ("spf_dmarc",      _probe_spf_dmarc,        domain or ""),
-        ("bimi",           _probe_bimi,             domain or ""),
     ]
     threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
     for t in threads: t.start()
@@ -3047,28 +2940,10 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         if reach.get("is_parked"):
             penalty += 14
             warnings.append("Company website is a PARKED / placeholder domain")
-        # GAP FIX: redirect to a different domain is a scam signal
-        redirect_to = reach.get("redirect_to") or ""
-        if redirect_to:
-            import urllib.parse as _up
-            orig_host = probes.get("site_reach", {}).get("detail", "")
-            redir_host = _up.urlparse(redirect_to).netloc.lower().lstrip("www.")
-            # Extract the SLD of both for comparison
-            orig_sld = (probes.get("domain_age", {}).get("detail", "") or "").split()[0]
-            if redir_host and redir_host not in (orig_sld or ""):
-                penalty += 10
-                warnings.append(
-                    f"Company website redirects to a DIFFERENT domain ({redir_host[:50]}) — "
-                    "parked or hijacked domain used to appear legitimate"
-                )
     typo = probes.get("typosquat", {})
     if typo.get("is_squatter"):
         penalty += 20
-        # Surface each individual hit (website / company name / email domain)
-        hits = typo.get("company_squats") or [typo.get("detail", "Typosquat detected")]
-        for h in hits[:3]:
-            if h:
-                warnings.append(h)
+        warnings.append(typo["detail"])
     if probes.get("free_email", {}).get("uses_free_domain"):
         penalty += 12
         dom = probes["free_email"].get("domain", "")
@@ -3176,13 +3051,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         elif not spf.get("dmarc"):
             penalty += 8
             warnings.append(f"'{spf_dom}' has no DMARC record — anti-spoofing not configured")
-    # ── GAP FIX: BIMI — strong legitimacy signal → reduce penalty ────────────
-    bimi = probes.get("bimi", {})
-    if bimi.get("has_bimi"):
-        penalty = max(0, penalty - 8)
-        # Don't add a warning — BIMI is positive; it shows in the probe table
-
-    return min(penalty, 55), warnings
+    return min(penalty, 75), warnings
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3199,230 +3068,139 @@ def _any(text: str, patterns: list) -> list:
 # If the detected salary falls ABOVE max_lpa by >2× it is flagged as outlier.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── GAP FIX: tiered salary bands {keyword: (fresher_max, mid_max, senior_max)}
-# Fresher = 0-2 yrs, Mid = 3-7 yrs, Senior = 8+ yrs
-# Outlier threshold = tier_max × city_mult × 2.0
-_SALARY_BANDS: dict[str, tuple[float, float, float]] = {
-    # Tech roles          fresher  mid    senior
-    "software engineer":  (8.0,   25.0,  55.0),
-    "senior engineer":    (14.0,  30.0,  70.0),
-    "lead engineer":      (20.0,  40.0,  90.0),
-    "principal engineer": (28.0,  55.0,  120.0),
-    "data scientist":     (8.0,   22.0,  60.0),
-    "data analyst":       (5.0,   12.0,  25.0),
-    "machine learning":   (10.0,  28.0,  75.0),
-    "ai engineer":        (10.0,  30.0,  80.0),
-    "devops":             (7.0,   20.0,  50.0),
-    "sre":                (8.0,   22.0,  55.0),
-    "cloud":              (7.0,   22.0,  55.0),
-    "frontend":           (5.0,   18.0,  40.0),
-    "backend":            (5.0,   20.0,  45.0),
-    "fullstack":          (6.0,   22.0,  50.0),
-    "full stack":         (6.0,   22.0,  50.0),
-    "android":            (5.0,   18.0,  40.0),
-    "ios":                (5.0,   18.0,  40.0),
-    "mobile":             (5.0,   18.0,  40.0),
-    "qa":                 (4.0,   12.0,  28.0),
-    "tester":             (3.5,   10.0,  22.0),
-    "product manager":    (12.0,  28.0,  65.0),
-    "project manager":    (8.0,   20.0,  45.0),
-    "architect":          (22.0,  45.0,  110.0),
-    "security":           (8.0,   22.0,  60.0),
-    "blockchain":         (8.0,   25.0,  65.0),
-    "intern":             (0.5,   2.0,   6.0),
-    "trainee":            (1.5,   3.0,   6.0),
+_SALARY_BANDS: dict[str, tuple[float, float]] = {
+    # Tech roles
+    "software engineer":      (4.0,  45.0),
+    "senior engineer":        (12.0, 70.0),
+    "lead engineer":          (18.0, 90.0),
+    "principal engineer":     (25.0, 120.0),
+    "data scientist":         (6.0,  55.0),
+    "data analyst":           (3.5,  20.0),
+    "machine learning":       (8.0,  70.0),
+    "devops":                 (6.0,  45.0),
+    "frontend":               (4.0,  35.0),
+    "backend":                (4.0,  40.0),
+    "fullstack":              (5.0,  45.0),
+    "full stack":             (5.0,  45.0),
+    "android":                (4.0,  35.0),
+    "ios":                    (4.0,  35.0),
+    "qa":                     (3.0,  25.0),
+    "tester":                 (3.0,  20.0),
+    "product manager":        (10.0, 60.0),
+    "project manager":        (8.0,  40.0),
+    "architect":              (20.0, 100.0),
+    "intern":                 (0.5,  6.0),
+    "trainee":                (1.5,  5.0),
     # Non-tech roles
-    "hr":                 (3.0,   10.0,  25.0),
-    "recruiter":          (3.0,   9.0,   20.0),
-    "sales":              (2.5,   10.0,  30.0),
-    "marketing":          (3.0,   10.0,  25.0),
-    "content writer":     (2.5,   7.0,   18.0),
-    "graphic designer":   (2.5,   8.0,   20.0),
-    "accountant":         (3.0,   8.0,   18.0),
-    "finance":            (5.0,   15.0,  40.0),
-    "operations":         (3.5,   12.0,  28.0),
-    "customer support":   (2.5,   6.0,   12.0),
-    "customer service":   (2.5,   6.0,   12.0),
-    "business analyst":   (5.0,   15.0,  35.0),
-    "supply chain":       (4.0,   14.0,  30.0),
-    "logistics":          (3.0,   10.0,  22.0),
+    "hr":                     (2.5,  20.0),
+    "recruiter":              (2.5,  18.0),
+    "sales":                  (2.0,  25.0),
+    "marketing":              (2.5,  20.0),
+    "content writer":         (2.0,  15.0),
+    "graphic designer":       (2.0,  18.0),
+    "accountant":             (2.5,  15.0),
+    "finance":                (4.0,  35.0),
+    "operations":             (3.0,  25.0),
+    "customer support":       (2.0,  10.0),
+    "customer service":       (2.0,  10.0),
     # Management
-    "manager":            (10.0,  22.0,  55.0),
-    "director":           (25.0,  60.0,  160.0),
-    "vp":                 (35.0,  80.0,  220.0),
-    "cto":                (45.0,  120.0, 320.0),
-    "ceo":                (45.0,  150.0, 550.0),
+    "manager":                (8.0,  50.0),
+    "director":               (20.0, 150.0),
+    "vp":                     (30.0, 200.0),
+    "cto":                    (40.0, 300.0),
+    "ceo":                    (40.0, 500.0),
 }
 
-# ── GAP FIX: expanded city multipliers (+15 Tier-2/3 cities) ─────────────────
+# City cost-of-living multipliers — applied to max band threshold
 _CITY_MULTIPLIERS: dict[str, float] = {
-    # Tier 1 metro
-    "bangalore": 1.3,  "bengaluru": 1.3,
-    "mumbai":    1.25, "delhi":     1.2,
-    "gurgaon":   1.2,  "gurugram":  1.2,
-    "hyderabad": 1.15, "pune":      1.1,
-    "chennai":   1.1,  "noida":     1.15,
-    # Tier 2
-    "kolkata":   0.9,  "jaipur":    0.85,
-    "ahmedabad": 0.9,  "indore":    0.85,
-    "kochi":     0.88, "cochin":    0.88,
-    "coimbatore":0.82, "surat":     0.82,
-    "nagpur":    0.82, "vizag":     0.82,
-    "visakhapatnam": 0.82,
-    "bhubaneswar":   0.83,
-    "chandigarh":    0.88,
-    "lucknow":   0.82, "patna":     0.78,
-    # Tier 3 / remote
-    "thiruvananthapuram": 0.82, "trivandrum": 0.82,
-    "mangalore": 0.80, "mangaluru": 0.80,
-    "mysore":    0.80, "mysuru":    0.80,
-    "vadodara":  0.82, "baroda":    0.82,
-    "nashik":    0.80, "agra":      0.78,
-    "remote":    1.0,  "hybrid":    1.0,
+    "bangalore": 1.3, "bengaluru": 1.3,
+    "mumbai": 1.25, "delhi": 1.2, "gurgaon": 1.2, "gurugram": 1.2,
+    "hyderabad": 1.15, "pune": 1.1, "chennai": 1.1, "noida": 1.15,
+    "kolkata": 0.9, "jaipur": 0.85, "ahmedabad": 0.9, "indore": 0.85,
 }
-
 
 def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
     """
     Calibrated salary outlier detection.
 
-    GAP FIXES applied:
-    1. Tiered bands (fresher/mid/senior) picked from years_experience.
-    2. All matching keywords scored — highest ceiling wins (no first-match break).
-    3. USD/GBP monthly salary parsed and converted to LPA equivalent.
-    4. Stipend monthly cap for intern/trainee roles.
-    5. Candidate user_location blended with job location for city multiplier.
+    1. Extract numeric salary value from text (LPA or absolute INR/USD).
+    2. Look up the role band from job title keywords.
+    3. Apply city multiplier to the band ceiling.
+    4. Flag only if salary exceeds band ceiling by >2× (scam headroom).
+    5. Fall back to the old blunt rule only when no band is matched.
     """
-    text  = salary_text or ""
-    _job  = job or {}
-    title = _job.get("title", "").lower()
-    job_location  = _job.get("location", "").lower()
-    user_location = _job.get("user_location", "").lower()
+    text = salary_text or ""
+    title = (job or {}).get("title", "") if job else ""
+    location = (job or {}).get("location", "") if job else ""
 
-    # ── 1. Extract numeric salary value ──────────────────────────────────────
+    # ── Extract numeric salary value ──────────────────────────────────────
     lpa_val: Optional[float] = None
 
-    # LPA range (e.g. "8-12 LPA", "5 to 10 L")
+    # Try LPA pattern first (most common in Indian postings)
     m = re.search(
-        r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L\b|lakhs?)",
+        r"(\d+(?:\.\d+)?)\s*(?:to|-)\s*(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?)",
         text, re.IGNORECASE,
     )
     if m:
-        lpa_val = float(m.group(2))   # upper bound
+        lpa_val = float(m.group(2))   # use upper bound of range
     else:
-        m2 = re.search(r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L\b|lakhs?)", text, re.IGNORECASE)
+        m2 = re.search(r"(\d+(?:\.\d+)?)\s*(?:LPA|lpa|L|lakhs?)", text, re.IGNORECASE)
         if m2:
             lpa_val = float(m2.group(1))
 
-    # ── GAP FIX: USD/GBP monthly → LPA (approx exchange rates) ──────────────
-    if lpa_val is None:
-        # "$X,000/month" or "$X000 per month"
-        m_usd = re.search(
-            r"\$\s*(\d[\d,]*)\s*(?:/\s*month|per\s*month|monthly|p\.m\.?)",
-            text, re.IGNORECASE,
-        )
-        if m_usd:
-            monthly_usd = float(m_usd.group(1).replace(",", ""))
-            lpa_val = (monthly_usd * 12 * 84) / 100_000   # ~84 INR/USD → LPA
-        else:
-            # "$X,000/year"
-            m_usd_yr = re.search(r"\$\s*(\d[\d,]+)\s*(?:/\s*year|per\s*annum|p\.a\.?)", text, re.IGNORECASE)
-            if m_usd_yr:
-                annual_usd = float(m_usd_yr.group(1).replace(",", ""))
-                lpa_val = (annual_usd * 84) / 100_000
-            else:
-                # "£X,000/month"
-                m_gbp = re.search(r"£\s*(\d[\d,]*)\s*(?:/\s*month|per\s*month)", text, re.IGNORECASE)
-                if m_gbp:
-                    monthly_gbp = float(m_gbp.group(1).replace(",", ""))
-                    lpa_val = (monthly_gbp * 12 * 107) / 100_000   # ~107 INR/GBP
-
-    # Absolute INR fallback
+    # Try absolute INR (₹ / Rs / INR + raw number)
     if lpa_val is None:
         for n in re.findall(r"\d+", text.replace(",", "")):
             v = int(n)
-            if 100_000 <= v <= 99_999_999:
-                lpa_val = v / 100_000
+            if 100000 <= v <= 99999999:
+                lpa_val = v / 100000   # convert to LPA
+                break
+            if 15000 <= v <= 999999 and "$" in text:
+                lpa_val = (v * 12) / 100000   # monthly USD → rough LPA
                 break
 
     if lpa_val is None:
-        return False
+        return False   # no salary number found — don't flag
 
-    # ── GAP FIX: stipend monthly cap for intern/trainee ───────────────────────
-    is_internship = any(kw in title for kw in ("intern", "trainee", "apprentice"))
-    if is_internship:
-        # Monthly stipend pattern (₹15,000/month)
-        m_stip = re.search(
-            r"(?:₹|rs\.?|inr)?\s*(\d[\d,]*)\s*(?:/\s*month|per\s*month|monthly|p\.m\.?)",
-            text, re.IGNORECASE,
-        )
-        if m_stip:
-            monthly_stip = float(m_stip.group(1).replace(",", ""))
-            # Flag if monthly stipend > ₹25,000 (scam ceiling for internships)
-            return monthly_stip > 25_000
-        # Annualised: flag if > 3 LPA for internship
-        return lpa_val > 3.0
+    # ── Look up role band ──────────────────────────────────────────────────
+    title_lower = title.lower()
+    band: Optional[tuple[float, float]] = None
+    for keyword, b in _SALARY_BANDS.items():
+        if keyword in title_lower:
+            band = b
+            break
 
-    # ── 2. Experience tier from candidate context ─────────────────────────────
-    yrs_raw = str(_job.get("years_experience", "") or "").strip()
-    try:
-        yrs = float(re.search(r"\d+(?:\.\d+)?", yrs_raw).group()) if yrs_raw else None
-    except (AttributeError, ValueError):
-        yrs = None
+    # ── Apply city multiplier ──────────────────────────────────────────────
+    city_mult = 1.0
+    loc_lower = location.lower()
+    for city, mult in _CITY_MULTIPLIERS.items():
+        if city in loc_lower:
+            city_mult = mult
+            break
 
-    def _tier(y: Optional[float]) -> int:
-        if y is None: return 1   # unknown → mid
-        if y <= 2:    return 0   # fresher
-        if y <= 7:    return 1   # mid
-        return 2                 # senior
-
-    tier = _tier(yrs)
-
-    # ── 3. Best-matching band (all keywords, take highest ceiling) ────────────
-    best_max: Optional[float] = None
-    for keyword, (f_max, m_max, s_max) in _SALARY_BANDS.items():
-        if keyword in title:
-            tier_max = (f_max, m_max, s_max)[tier]
-            if best_max is None or tier_max > best_max:
-                best_max = tier_max
-
-    # ── 4. City multiplier — blend job location + user location ──────────────
-    def _city_mult(loc: str) -> float:
-        for city, mult in _CITY_MULTIPLIERS.items():
-            if city in loc:
-                return mult
-        return 1.0
-
-    job_mult  = _city_mult(job_location)
-    user_mult = _city_mult(user_location)
-    # Weight job location 70%, user location 30%
-    city_mult = 0.7 * job_mult + 0.3 * user_mult
-
-    # ── 5. Decision ──────────────────────────────────────────────────────────
-    if best_max is not None:
-        effective_max = best_max * city_mult
+    # ── Decision ──────────────────────────────────────────────────────────
+    if band:
+        _, max_lpa = band
+        effective_max = max_lpa * city_mult
+        # Flag only if salary is more than 2× the ceiling — clear scam territory
         return lpa_val > effective_max * 2.0
     else:
+        # No band match — only flag truly impossible numbers (>₹5Cr / >500 LPA).
+        # Do NOT flag normal salaries just because the role isn't in the band table.
         return lpa_val > 500.0
 
 def _run_rules(job: dict) -> dict:
-    # GAP FIX: field-specific scanning prevents contact/salary field values
-    # from poisoning patterns meant only for the job description.
-    desc_req  = " ".join([job.get(k,"") for k in ("description","requirements")])
-    full      = " ".join([job.get(k,"") for k in
-                          ("title","description","requirements","benefits","salary")])
-    # Contact scanned separately — only personal-info and free-email patterns
-    contact_f = job.get("contact","")
-    full_incl_contact = full + " " + contact_f
+    full = " ".join([job.get(k,"") for k in
+                     ("title","description","requirements","benefits","contact","salary")])
     sigs: dict = {}
 
     def _add(k, label, detail, hits=None):
         sigs[k] = {"label": label, "detail": detail, "hits": (hits or [])[:3]}
 
-    h = _any(full, _PAY_PHRASES)          # payment demands → full desc
+    h = _any(full, _PAY_PHRASES)
     if h: _add("upfront_payment","Upfront Payment Demanded",
                 "Legitimate employers never ask you to pay before or during hiring.", h)
-    h = _any(full, _MLM_PHRASES)           # MLM signals → full desc
+    h = _any(full, _MLM_PHRASES)
     if h: _add("mlm_pyramid","MLM / Pyramid Scheme Indicators",
                 "Language suggests a recruitment-based commission model, not a real job.", h)
     if _salary_outlier(job.get("salary", ""), job):
@@ -3435,13 +3213,12 @@ def _run_rules(job: dict) -> dict:
     if len(h) >= 2:
         _add("vague_description","Vague / Generic Description",
              "Real postings specify responsibilities. Vagueness may hide a non-existent role.", h)
-    # GAP FIX: free email scanned from contact field only (not whole blob)
-    free_hits = [e for e in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", contact_f)
+    free_hits = [e for e in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", full)
                  if e.lower() in _FREE_DOMAINS]
     if free_hits:
         _add("free_email_contact","Personal / Free Email Used",
              "Corporate recruiters use company domain emails, not Gmail/Yahoo/Hotmail.", free_hits)
-    h = _any(full, _URGENCY_PHRASES)       # urgency → full desc (not contact)
+    h = _any(full, _URGENCY_PHRASES)
     if h: _add("urgency_pressure","Artificial Urgency / Pressure Tactics",
                 "Creating panic prevents candidates from properly researching the company.", h)
     bad_name = not job.get("company","").strip() or \
@@ -3458,15 +3235,18 @@ def _run_rules(job: dict) -> dict:
             _add("req_paradox","Requirement Contradiction",
                  "Asking for senior experience under a fresher posting is a bait tactic.")
             break
+    # ── Job board source trust multiplier ────────────────────────────────────
+    # Postings from verified job boards carry implicit trust — lower score.
+    # WhatsApp/Telegram-only contact with no verifiable URL is a red flag.
     source_hits = _any(full, _PLATFORM_TRUST)
-    wa_hits     = _any(full_incl_contact, _URGENCY_PHRASES_WA)
+    wa_hits     = _any(full, _URGENCY_PHRASES_WA)
     has_url     = bool(re.search(r"https?://[^\s]{8,}", full))
     if wa_hits and not source_hits and not has_url:
         _add("whatsapp_only_contact", "WhatsApp / Telegram Only — No Verifiable URL",
              "Legitimate companies post on official portals. WhatsApp-only jobs are a major red flag.",
              wa_hits)
-    # GAP FIX: personal info demand scanned in desc only, not contact field
-    h = _any(desc_req, _PERSONAL_PHRASES)
+
+    h = _any(full, _PERSONAL_PHRASES)
     if h: _add("personal_info_demand","Premature Personal Info Request",
                 "Requesting Aadhaar/PAN/passport at application stage is a major red flag.", h)
     h = _any(full, _LOCATION_CLUES)
@@ -3568,37 +3348,47 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
 
-    # ── Candidate context (optional — may be empty strings) ───────────────────
-    user_location    = (job.get("user_location") or "").strip()
-    current_role     = (job.get("current_role") or "").strip()
-    years_exp        = (job.get("years_experience") or "").strip()
+    # Candidate context for personalised salary analysis
+    candidate_location  = (job.get("candidate_location") or "").strip()
+    candidate_role      = (job.get("candidate_role") or "").strip()
+    candidate_exp_years = (job.get("candidate_exp_years") or "").strip()
 
-    candidate_ctx = ""
-    if any([user_location, current_role, years_exp]):
-        candidate_ctx = (
-            "\nCANDIDATE CONTEXT (use this to personalise the salary assessment):\n"
-            + (f"  Candidate's current location: {user_location}\n" if user_location else "")
-            + (f"  Candidate's current role: {current_role}\n" if current_role else "")
-            + (f"  Years of experience: {years_exp}\n" if years_exp else "")
-        )
+    candidate_ctx_lines = []
+    if candidate_location:
+        candidate_ctx_lines.append(f"Candidate's current location: {candidate_location}")
+    if candidate_role:
+        candidate_ctx_lines.append(f"Candidate's current job role: {candidate_role}")
+    if candidate_exp_years:
+        candidate_ctx_lines.append(f"Candidate's years of experience: {candidate_exp_years}")
+    candidate_ctx = ("\n".join(candidate_ctx_lines)) if candidate_ctx_lines else "Not provided."
 
     if not salary_raw:
         salary_instruction = (
-            "The salary was NOT provided in this job posting.\n"
-            "For salary_assessment set verdict to \"NOT_PROVIDED\".\n"
-            "Still populate market_range, skill_alignment, experience_evaluation, and "
-            "location_adjustment based on the job title, location, and candidate context — "
-            "these help the candidate benchmark the role even without a stated salary."
+            "The salary was NOT provided in this job posting. "
+            "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
+            "do NOT guess, infer, or comment on whether it is realistic."
         )
     else:
         salary_instruction = (
-            "Perform a DETAILED salary assessment covering ALL four sub-fields below.\n"
-            "Use Indian market data (LPA / monthly INR) as the primary benchmark; "
-            "add USD/GBP equivalents only for international roles.\n"
-            "If the salary appears >2× the realistic ceiling, flag it as a scam signal."
+            f"Provide a DETAILED, STRUCTURED salary assessment for the stated salary ({salary_display}). "
+            f"Your salary_assessment must be a single paragraph covering ALL of the following dimensions:\n"
+            f"1. MARKET RANGE — State the typical market salary range for this role and location "
+            f"   (e.g., '8–14 LPA for a mid-level Data Scientist in Bangalore in 2024').\n"
+            f"2. ALIGNMENT WITH ROLE — Does the offered salary match the stated role's seniority, "
+            f"   skill requirements, and responsibilities?\n"
+            f"3. EXPERIENCE-BASED EVALUATION — Use the candidate's experience level "
+            f"   ({candidate_exp_years if candidate_exp_years else 'unknown years'}) to evaluate fit. "
+            f"   Is this salary appropriate for their stage?\n"
+            f"4. LOCATION-BASED DIFFERENCES — How does the job's location ({job.get('location','N/A')}) "
+            f"   and the candidate's location ({candidate_location if candidate_location else 'unknown'}) "
+            f"   affect compensation expectations? Account for cost-of-living and regional pay bands.\n"
+            f"5. SCAM SIGNAL — Is this salary suspiciously high (possible lure) or suspiciously low "
+            f"   (possible exploitation)? State clearly: REALISTIC, SLIGHTLY_HIGH, INFLATED (scam risk), "
+            f"   or BELOW_MARKET.\n"
+            f"Write in plain English, 4–6 sentences. Do NOT use bullet points inside the JSON string."
         )
 
-    return f"""You are a senior HR fraud investigator and compensation analyst specialising in Indian and global employment markets.
+    return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
 JOB POSTING:
@@ -3611,7 +3401,10 @@ Description: {job.get('description','N/A')[:8000]}
 Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
+
+CANDIDATE CONTEXT (for personalised salary analysis):
 {candidate_ctx}
+
 LIVE PROBE FINDINGS:
 {ctx}
 
@@ -3627,14 +3420,7 @@ Required JSON schema (all keys mandatory):
   "positive_signals": ["<str>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": {{
-    "verdict": "<NOT_PROVIDED|REALISTIC|SLIGHTLY_HIGH|UNREALISTIC|SCAM_LEVEL>",
-    "market_range": "<e.g. '8-14 LPA for mid-level Data Scientist in Bangalore' — state the realistic band>",
-    "skill_alignment": "<does the stated salary match the skills/experience demanded in the JD? explain>",
-    "experience_evaluation": "<how does the salary compare given the candidate's stated experience, or the JD's required experience>",
-    "location_adjustment": "<cost-of-living and demand adjustments for the job location vs candidate location if provided>",
-    "summary": "<2-3 sentence plain-English verdict integrating all four factors above>"
-  }},
+  "salary_assessment": "<NOT_PROVIDED if salary missing, else detailed structured assessment per the rules above>",
   "recommended_action": "<specific advice for the job seeker>",
   "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
@@ -4124,124 +3910,26 @@ def _render_ai_dive(llm: dict):
         if not val:
             continue
 
-        # ── Special handling: salary_assessment is now a dict ───────────────────
-        if field == "salary_assessment":
-            # Support both old string format (legacy) and new dict format
-            if isinstance(val, str):
-                # Legacy / fallback — plain string from old model responses
-                if (
-                    not val.strip()
-                    or val.strip().upper() == "NOT_PROVIDED"
-                    or "not provided" in val.lower()
-                    or "not mentioned" in val.lower()
-                    or "no salary" in val.lower()
-                ):
-                    st.markdown(
-                        f'<div style="background:rgba(107,114,128,0.06);border:1px solid rgba(107,114,128,0.18);'
-                        f'border-radius:9px;padding:14px;margin-bottom:10px;">'
-                        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
-                        f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
-                        f'{_svg(I.DOLLAR_OFF,11,"#6b7280")}Salary Reality Check</div>'
-                        f'<div style="display:flex;align-items:center;gap:8px;color:#9ca3af;font-size:0.83rem;">'
-                        f'{_svg(I.ALERT_CIRCLE,13,"#f59e0b")}'
-                        f'<span><strong style="color:#f59e0b;">Salary not disclosed</strong> — '
-                        f'this posting does not mention any salary, CTC, or compensation. '
-                        f'No realistic assessment can be made. Consider asking the recruiter '
-                        f'for a clear salary range before proceeding.</span></div></div>',
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.markdown(
-                        f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
-                        f'border-radius:9px;padding:14px;margin-bottom:10px;">'
-                        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
-                        f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
-                        f'{_svg(I.DOLLAR,11,"#6b7280")}Salary Reality Check</div>'
-                        f'<div style="color:#c9d1d9;font-size:0.83rem;line-height:1.65;">{_esc(val)}</div></div>',
-                        unsafe_allow_html=True,
-                    )
-                continue
-
-            # ── New dict format ────────────────────────────────────────────────
-            if not isinstance(val, dict):
-                continue
-
-            sa_verdict   = (val.get("verdict") or "").strip().upper()
-            sa_market    = val.get("market_range", "")
-            sa_skill     = val.get("skill_alignment", "")
-            sa_exp       = val.get("experience_evaluation", "")
-            sa_loc       = val.get("location_adjustment", "")
-            sa_summary   = val.get("summary", "")
-
-            # Colour-code the verdict chip
-            _VERDICT_CHIP: dict[str, tuple[str, str, str]] = {
-                "NOT_PROVIDED":   ("#6b7280", "rgba(107,114,128,0.10)", "Salary Not Disclosed"),
-                "REALISTIC":      ("#22c55e", "rgba(34,197,94,0.10)",   "Realistic"),
-                "SLIGHTLY_HIGH":  ("#f59e0b", "rgba(245,158,11,0.10)",  "Slightly High"),
-                "UNREALISTIC":    ("#ef4444", "rgba(239,68,68,0.10)",   "Unrealistic"),
-                "SCAM_LEVEL":     ("#dc2626", "rgba(220,38,38,0.13)",   "Scam-Level — Red Flag"),
-            }
-            vc_color, vc_bg, vc_label = _VERDICT_CHIP.get(
-                sa_verdict,
-                ("#8b949e", "rgba(139,148,158,0.10)", sa_verdict or "Unknown"),
-            )
-
-            # Build sub-section rows
-            def _sa_row(icon_path: str, label: str, text: str) -> str:
-                if not text:
-                    return ""
-                return (
-                    f'<div style="display:flex;gap:10px;padding:9px 0;'
-                    f'border-bottom:1px solid rgba(255,255,255,0.05);">'
-                    f'<div style="flex-shrink:0;width:22px;padding-top:1px;">'
-                    f'{_svg(icon_path,13,"#6b7280")}</div>'
-                    f'<div>'
-                    f'<div style="font-size:0.65rem;font-weight:600;color:#6b7280;'
-                    f'text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px;">'
-                    f'{_esc(label)}</div>'
-                    f'<div style="color:#c9d1d9;font-size:0.82rem;line-height:1.6;">'
-                    f'{_esc(text)}</div>'
-                    f'</div></div>'
-                )
-
-            rows_html = (
-                _sa_row(I.TRENDING_UP, "Market Salary Range",         sa_market)
-                + _sa_row(I.LAYERS,    "Skill Alignment",              sa_skill)
-                + _sa_row(I.AWARD,     "Experience-Based Evaluation",  sa_exp)
-                + _sa_row(I.MAP_PIN,   "Location Adjustment",          sa_loc)
-            )
-
-            not_provided = sa_verdict == "NOT_PROVIDED"
-            header_icon  = I.DOLLAR_OFF if not_provided else I.DOLLAR
-
+        # ── Special handling: salary was not given in the posting ────────────
+        if field == "salary_assessment" and (
+            not val.strip()
+            or val.strip().upper() == "NOT_PROVIDED"
+            or "not provided" in val.lower()
+            or "not mentioned" in val.lower()
+            or "no salary" in val.lower()
+        ):
             st.markdown(
-                f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);'
+                f'<div style="background:rgba(107,114,128,0.06);border:1px solid rgba(107,114,128,0.18);'
                 f'border-radius:9px;padding:14px;margin-bottom:10px;">'
-
-                # ── Header row ────────────────────────────────────────────────
-                f'<div style="display:flex;align-items:center;justify-content:space-between;'
-                f'margin-bottom:10px;">'
-                f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;'
-                f'font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;">'
-                f'{_svg(header_icon,11,"#6b7280")}Salary Reality Check</div>'
-                # Verdict chip
-                f'<span style="font-size:0.72rem;font-weight:700;color:{vc_color};'
-                f'background:{vc_bg};border:1px solid {vc_color}33;'
-                f'padding:3px 10px;border-radius:20px;">{_esc(vc_label)}</span>'
-                f'</div>'
-
-                # ── Summary (top-level plain-English verdict) ─────────────────
-                + (
-                    f'<div style="color:#c9d1d9;font-size:0.84rem;line-height:1.65;'
-                    f'padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.06);'
-                    f'margin-bottom:4px;">{_esc(sa_summary)}</div>'
-                    if sa_summary else ""
-                )
-
-                # ── Four detail rows ──────────────────────────────────────────
-                + rows_html
-
-                + f'</div>',
+                f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
+                f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
+                f'{_svg(I.DOLLAR_OFF,11,"#6b7280")}Salary Reality Check</div>'
+                f'<div style="display:flex;align-items:center;gap:8px;color:#9ca3af;font-size:0.83rem;">'
+                f'{_svg(I.ALERT_CIRCLE,13,"#f59e0b")}'
+                f'<span><strong style="color:#f59e0b;">Salary not disclosed</strong> — '
+                f'this posting does not mention any salary, CTC, or compensation. '
+                f'No realistic assessment can be made. Consider asking the recruiter '
+                f'for a clear salary range before proceeding.</span></div></div>',
                 unsafe_allow_html=True,
             )
             continue
@@ -4505,15 +4193,15 @@ def _quick_prescan(raw: str) -> dict | None:
     }
     rules = _run_rules(prescan_job)
     score = rules["rule_score"]
-    # Calibrated thresholds — a single low-weight signal (e.g. missing_salary=4)
-    # must NOT trigger a SUSPICIOUS banner. Only meaningful rule hits qualify.
-    if score == 0:
+    # Calibrated thresholds — aligned exactly with the full-analysis blended bands
+    # so the quick pre-scan banner and the final verdict can never disagree.
+    # Full bands: <25=SAFE, 25-49=SUSPICIOUS, 50-74=LIKELY_SCAM, >=75=DEFINITE_SCAM
+    # A single low-weight signal (e.g. missing_salary=4) stays SAFE — correct.
+    if score < 25:
         verdict = "SAFE"
-    elif score < 15:
-        verdict = "SAFE"        # low-weight noise signals — not a meaningful warning
-    elif score < 30:
+    elif score < 50:
         verdict = "SUSPICIOUS"
-    elif score < 55:
+    elif score < 75:
         verdict = "LIKELY_SCAM"
     else:
         verdict = "DEFINITE_SCAM"
@@ -4723,23 +4411,43 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 + _field_row(I.MAIL,     "Contact",    extracted["contact"])
             )
 
-            # ── Candidate context layer (only shown when at least one field filled) ──
-            uloc   = st.session_state.get("jsd_uloc",  "")
-            crole  = st.session_state.get("jsd_crole", "")
-            yexp   = st.session_state.get("jsd_yexp",  "")
-            candidate_layer_html = ""
-            if any([uloc, crole, yexp]):
-                candidate_layer_html = (
-                    f'<div style="border-top:1px solid rgba(255,255,255,0.06);'
-                    f'margin-top:6px;padding-top:10px;">'
+            # ── Your Profile layer — shown only when ≥1 candidate field filled ─
+            cand_loc  = st.session_state.get("jsd_cand_loc", "").strip()
+            cand_role = st.session_state.get("jsd_cand_role", "").strip()
+            cand_exp  = st.session_state.get("jsd_cand_exp", "").strip()
+
+            def _profile_row(icon_path: str, label: str, value: str) -> str:
+                val_html = (
+                    f'<span style="color:#c4b5fd;">{_esc(value)}</span>'
+                    if value else
+                    '<span style="color:#4b5563;font-style:italic;">Not provided</span>'
+                )
+                return (
+                    f'<div style="display:flex;align-items:flex-start;gap:9px;padding:6px 0;'
+                    f'border-bottom:1px solid rgba(167,139,250,0.08);">'
+                    f'<div style="margin-top:1px;flex-shrink:0;">{_svg(icon_path,11,"#a78bfa")}</div>'
+                    f'<div style="flex:1;">'
+                    f'<div style="font-size:0.66rem;color:#7c6faa;text-transform:uppercase;'
+                    f'letter-spacing:0.8px;margin-bottom:2px;">{label}</div>'
+                    f'<div style="font-size:0.81rem;line-height:1.4;">{val_html}</div>'
+                    f'</div></div>'
+                )
+
+            profile_html = ""
+            if cand_loc or cand_role or cand_exp:
+                profile_rows = (
+                    _profile_row(I.MAP_PIN,      "Your Location",       cand_loc)
+                    + _profile_row(I.ID_CARD,    "Current Role",        cand_role)
+                    + _profile_row(I.TRENDING_UP,"Years of Experience", cand_exp)
+                )
+                profile_html = (
+                    f'<div style="margin-top:10px;padding-top:10px;'
+                    f'border-top:1px solid rgba(167,139,250,0.18);">'
                     f'<div style="font-size:0.66rem;font-weight:600;color:#a78bfa;'
                     f'text-transform:uppercase;letter-spacing:0.9px;margin-bottom:4px;'
                     f'display:flex;align-items:center;gap:5px;">'
-                    f'{_svg(I.AWARD,9,"#a78bfa")} Your Profile</div>'
-                    + _field_row(I.MAP_PIN,      "Your Location",       uloc)
-                    + _field_row(I.ID_CARD,      "Current Role",        crole)
-                    + _field_row(I.TRENDING_UP,  "Years of Experience", yexp)
-                    + f'</div>'
+                    f'{_svg(I.AWARD,10,"#a78bfa")} Your Profile</div>'
+                    f'{profile_rows}</div>'
                 )
 
             st.markdown(
@@ -4748,9 +4456,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 f'<div style="font-size:0.69rem;font-weight:600;color:#8b949e;text-transform:uppercase;'
                 f'letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">'
                 f'{_svg(I.ZAP,10,"#a78bfa")} Auto-Detected Fields</div>'
-                f'{fields_html}'
-                f'{candidate_layer_html}'
-                f'</div>',
+                f'{fields_html}{profile_html}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -4767,39 +4473,49 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 oc1.text_input("Website",  value=extracted["website"],  key="jsd_ow")
                 oc2.text_input("Location", value=extracted["location"], key="jsd_ol")
 
-            # ── Candidate context — improves salary accuracy ───────────────────
-            st.markdown(
-                f'<div style="font-size:0.71rem;font-weight:600;color:#8b949e;'
-                f'text-transform:uppercase;letter-spacing:1px;margin:14px 0 6px;'
-                f'display:flex;align-items:center;gap:6px;">'
-                f'{_svg(I.AWARD,10,"#a78bfa")} Your Profile '
-                f'<span style="font-weight:400;color:#6b7280;font-size:0.68rem;'
-                f'text-transform:none;letter-spacing:0;">'
-                f'(optional — improves salary assessment accuracy)</span></div>',
-                unsafe_allow_html=True,
-            )
-            cp1, cp2, cp3 = st.columns(3)
-            cp1.text_input("Your Location",       placeholder="e.g., Bangalore, India",  key="jsd_uloc")
-            cp2.text_input("Your Current Role",   placeholder="e.g., Data Analyst",      key="jsd_crole")
-            cp3.text_input("Years of Experience", placeholder="e.g., 3",                 key="jsd_yexp")
+                # ── Candidate context — for personalised salary analysis ──────
+                st.markdown(
+                    '<div style="margin:10px 0 6px;font-size:0.69rem;font-weight:600;'
+                    'color:#a78bfa;text-transform:uppercase;letter-spacing:0.8px;">'
+                    '&#9670; Your Profile '
+                    '<span style="color:#6b7280;font-weight:400;font-size:0.65rem;">'
+                    '(optional — improves salary analysis accuracy)</span></div>',
+                    unsafe_allow_html=True,
+                )
+                cc1, cc2 = st.columns(2)
+                cc1.text_input(
+                    "Your Current Location",
+                    placeholder="e.g., Bangalore, Mumbai, Delhi",
+                    key="jsd_cand_loc",
+                )
+                cc2.text_input(
+                    "Your Current Job Role",
+                    placeholder="e.g., Data Analyst, Backend Developer",
+                    key="jsd_cand_role",
+                )
+                st.text_input(
+                    "Years of Experience",
+                    placeholder="e.g., 2, 5, 10+",
+                    key="jsd_cand_exp",
+                )
 
         # FIX v5 BUG 6: Build job from session_state override keys if they exist
         # (populated by the expander above). Falls back to auto_extract values if
         # the override expander was never opened.
         job = {
-            "title":            st.session_state.get("jsd_ot",    extracted.get("title", "")),
-            "company":          st.session_state.get("jsd_oco",   extracted.get("company", "")),
-            "website":          st.session_state.get("jsd_ow",    extracted.get("website", "")),
-            "location":         st.session_state.get("jsd_ol",    extracted.get("location", "")),
-            "salary":           st.session_state.get("jsd_os",    extracted.get("salary", "")),
-            "contact":          st.session_state.get("jsd_oct",   extracted.get("contact", "")),
-            "description":      raw or "",
-            "requirements":     "",   # FIX v5 BUG 3: keep empty — description has everything
-            "benefits":         "",   # FIX v5 BUG 3: keep empty — description has everything
-            # ── Candidate context (salary personalisation) ─────────────────
-            "user_location":    st.session_state.get("jsd_uloc",  ""),
-            "current_role":     st.session_state.get("jsd_crole", ""),
-            "years_experience": st.session_state.get("jsd_yexp",  ""),
+            "title":        st.session_state.get("jsd_ot",  extracted.get("title", "")),
+            "company":      st.session_state.get("jsd_oco", extracted.get("company", "")),
+            "website":      st.session_state.get("jsd_ow",  extracted.get("website", "")),
+            "location":     st.session_state.get("jsd_ol",  extracted.get("location", "")),
+            "salary":       st.session_state.get("jsd_os",  extracted.get("salary", "")),
+            "contact":      st.session_state.get("jsd_oct", extracted.get("contact", "")),
+            "description":  raw or "",
+            "requirements": "",   # FIX v5 BUG 3: keep empty — description has everything
+            "benefits":     "",   # FIX v5 BUG 3: keep empty — description has everything
+            # Candidate context — used by LLM for personalised salary analysis
+            "candidate_location":  st.session_state.get("jsd_cand_loc", ""),
+            "candidate_role":      st.session_state.get("jsd_cand_role", ""),
+            "candidate_exp_years": st.session_state.get("jsd_cand_exp", ""),
         }
 
     else:
@@ -4819,21 +4535,31 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
                                             placeholder="What the employer offers...")
 
-        # ── Candidate context — improves salary accuracy ───────────────────────
+        # ── Candidate context — for personalised salary analysis ──────────────
         st.markdown(
-            f'<div style="font-size:0.71rem;font-weight:600;color:#8b949e;'
-            f'text-transform:uppercase;letter-spacing:1px;margin:14px 0 6px;'
-            f'display:flex;align-items:center;gap:6px;">'
-            f'{_svg(I.AWARD,10,"#a78bfa")} Your Profile '
-            f'<span style="font-weight:400;color:#6b7280;font-size:0.68rem;'
-            f'text-transform:none;letter-spacing:0;">'
-            f'(optional — improves salary assessment accuracy)</span></div>',
+            '<div style="margin:10px 0 6px;font-size:0.69rem;font-weight:600;'
+            'color:#a78bfa;text-transform:uppercase;letter-spacing:0.8px;">'
+            '&#9670; Your Profile '
+            '<span style="color:#6b7280;font-weight:400;font-size:0.65rem;">'
+            '(optional — improves salary analysis accuracy)</span></div>',
             unsafe_allow_html=True,
         )
-        mp1, mp2, mp3 = st.columns(3)
-        job["user_location"]    = mp1.text_input("Your Location",       placeholder="e.g., Bangalore, India",  key="jsd_m_uloc")
-        job["current_role"]     = mp2.text_input("Your Current Role",   placeholder="e.g., Data Analyst",      key="jsd_m_crole")
-        job["years_experience"] = mp3.text_input("Years of Experience", placeholder="e.g., 3",                 key="jsd_m_yexp")
+        fc1, fc2 = st.columns(2)
+        job["candidate_location"]  = fc1.text_input(
+            "Your Current Location",
+            placeholder="e.g., Bangalore, Mumbai, Delhi",
+            key="jsd_cand_loc",
+        )
+        job["candidate_role"]      = fc2.text_input(
+            "Your Current Job Role",
+            placeholder="e.g., Data Analyst, Backend Developer",
+            key="jsd_cand_role",
+        )
+        job["candidate_exp_years"] = st.text_input(
+            "Years of Experience",
+            placeholder="e.g., 2, 5, 10+",
+            key="jsd_cand_exp",
+        )
 
     # Use only meaningful fields for "is there any input" check — not description
     # (which in paste mode is raw and always present once the user types).
@@ -4895,12 +4621,12 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 paste_keys = [
                     "jsd_raw", "jsd_mode",
                     "jsd_ot", "jsd_oco", "jsd_os", "jsd_oct", "jsd_ow", "jsd_ol",
-                    "jsd_uloc", "jsd_crole", "jsd_yexp",
+                    "jsd_cand_loc", "jsd_cand_role", "jsd_cand_exp",
                 ]
                 fill_keys = [
                     "jsd_t", "jsd_co", "jsd_w", "jsd_l",
                     "jsd_sa", "jsd_ct", "jsd_d", "jsd_r", "jsd_b",
-                    "jsd_m_uloc", "jsd_m_crole", "jsd_m_yexp",
+                    "jsd_cand_loc", "jsd_cand_role", "jsd_cand_exp",
                 ]
                 for k in paste_keys + fill_keys:
                     st.session_state.pop(k, None)
@@ -5032,8 +4758,10 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
                     blended = max(blended, critical_weight)
 
-                    # Probe penalty floor: only if penalty is itself significant (>= 20)
-                    if penalty >= 20:
+                    # Probe penalty floor: only if penalty is itself significant (>= 25).
+                    # Cap raised to 75 above, so this now correctly pushes into
+                    # DEFINITE_SCAM territory when all infra probes fail.
+                    if penalty >= 25:
                         blended = max(blended, penalty)
 
                     # ── HARD PROBE OVERRIDE (Improvement 4) ───────────────────────
@@ -5059,20 +4787,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     elif critical_probe_count == 2 and mx_status in ("NO_MX", "DNS_FAIL"):
                         # NO_MX/DNS_FAIL + any other critical = force LIKELY_SCAM floor
                         blended = max(blended, 55)
-
-                    # ── GAP FIX: salary_assessment.verdict → additional score boost ──
-                    # The LLM salary verdict was rendered in UI but never affected scoring.
-                    sa = llm_data.get("salary_assessment", {})
-                    if isinstance(sa, dict):
-                        sa_v = (sa.get("verdict") or "").strip().upper()
-                        _SA_PENALTY = {
-                            "SCAM_LEVEL":   25,
-                            "UNREALISTIC":  15,
-                            "SLIGHTLY_HIGH": 5,
-                        }
-                        sa_penalty = _SA_PENALTY.get(sa_v, 0)
-                        if sa_penalty:
-                            blended = min(100, blended + sa_penalty)
 
                     blended = min(blended, 100)
 
