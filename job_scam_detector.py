@@ -3329,8 +3329,9 @@ def _run_rules(job: dict) -> dict:
     if h: _add("work_from_home_bait","WFH Bait — Data Entry / Form Filling",
                 "High-pay work-from-home roles with no skills required are almost always scams.", h)
     if not job.get("salary","").strip() or len(job.get("salary","").strip()) < 4:
-        _add("missing_salary","Salary Completely Absent",
-             "Hidden salary is commonly used to lure, then lowball candidates.")
+        _add("missing_salary","Salary Not Disclosed",
+             "Salary is not mentioned. Many Indian companies share this only after interviews — "
+             "this is a transparency note, not necessarily a scam signal.")
     g_hits = _any(full, _GRAMMAR_PATTERNS)
     if len(g_hits) >= 2:
         _add("poor_grammar","Suspicious Grammar / Formatting",
@@ -4646,9 +4647,30 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         e, f = st.columns(2)
         job["salary"]   = e.text_input("Salary Offered",  placeholder="e.g., 8-12 LPA",           key="jsd_sa", max_chars=80)
         job["contact"]  = f.text_input("Contact Email",   placeholder="e.g., hr@acme.com",        key="jsd_ct", max_chars=120)
-        # Text areas: combined budget of 10,000 chars (description 6000, requirements 2500, benefits 1500)
+        # Text areas: combined budget of 10,000 chars (description 10000, requirements 2500, benefits 1500)
         job["description"]  = st.text_area("Job Description",  height=120, key="jsd_d",  max_chars=10000,
                                             placeholder="Describe the role and responsibilities...")
+        # ── Styled char meter for Job Description (matches paste mode) ──────────
+        _jd_count = len(st.session_state.get("jsd_d", "") or "")
+        _jd_pct   = _jd_count / 10000
+        if _jd_count > 0:
+            if _jd_pct < 0.75:
+                _jd_bar, _jd_lbl = "#22c55e", "#6b7280"
+            elif _jd_pct < 0.95:
+                _jd_bar, _jd_lbl = "#f59e0b", "#f59e0b"
+            else:
+                _jd_bar, _jd_lbl = "#ef4444", "#ef4444"
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:8px;margin:-6px 0 6px;">'
+                f'<div style="flex:1;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;">'
+                f'<div style="width:{min(_jd_pct*100,100):.1f}%;height:100%;'
+                f'background:{_jd_bar};border-radius:2px;transition:width .2s;"></div>'
+                f'</div>'
+                f'<span style="font-size:0.68rem;color:{_jd_lbl};white-space:nowrap;'
+                f'font-variant-numeric:tabular-nums;">'
+                f'{_jd_count:,} / 10,000</span></div>',
+                unsafe_allow_html=True,
+            )
         job["requirements"] = st.text_area("Requirements",     height=80,  key="jsd_r",  max_chars=2500,
                                             placeholder="Skills, experience, qualifications...")
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",  max_chars=1500,
@@ -5214,6 +5236,45 @@ def render_job_scam_detector_tab(call_llm_fn):
 
     _render_verdict_banner(res)
     _render_score_strip(res)
+
+    # ── New-company advisory — shown only when domain is young AND company
+    #    is not found in any identity source. Score is NOT affected.
+    _probes       = res.get("probes", {})
+    _age_days     = (_probes.get("domain_age") or {}).get("age_days") or 999
+    _cd            = (_probes.get("company_domain") or {})
+    _clearbit_found = _cd.get("clearbit_found", False)
+    _wiki_found     = _cd.get("wiki_found",     False)
+    _li_found       = _cd.get("linkedin_found", False)
+    _no_identity    = not (_clearbit_found or _wiki_found or _li_found)
+    _young_domain   = _age_days < 180
+    _final_verdict  = res.get("final_verdict", "SAFE")
+
+    if _young_domain and _no_identity and _final_verdict in ("SAFE", "SUSPICIOUS"):
+        _age_str = f"{_age_days} days old" if _age_days < 999 else "age unknown"
+        st.markdown(
+            f'<div style="display:flex;align-items:flex-start;gap:10px;'
+            f'padding:11px 15px;margin:10px 0 4px;'
+            f'background:rgba(56,189,248,0.06);'
+            f'border:1px solid rgba(56,189,248,0.18);'
+            f'border-left:3px solid #38bdf8;'
+            f'border-radius:8px;">'
+            f'<div style="font-size:1rem;margin-top:1px;">&#128270;</div>'
+            f'<div style="flex:1;">'
+            f'<div style="font-size:0.74rem;font-weight:600;color:#7dd3fc;'
+            f'text-transform:uppercase;letter-spacing:0.7px;margin-bottom:4px;">'
+            f'New / Unverified Company — Advisory</div>'
+            f'<div style="font-size:0.79rem;color:#94a3b8;line-height:1.55;">'
+            f'This company\'s domain is <strong style="color:#7dd3fc;">{_age_str}</strong> '
+            f'and was not found in Clearbit, Wikipedia, or LinkedIn. '
+            f'This is common for genuine startups and new businesses — '
+            f'<strong style="color:#e2e8f0;">it does not affect the scam score.</strong> '
+            f'As a precaution: verify the company on MCA21 / ROC, check if the founders '
+            f'are reachable on LinkedIn, and avoid sharing personal documents until you '
+            f'have confirmed the company\'s registration details independently.'
+            f'</div></div></div>',
+            unsafe_allow_html=True,
+        )
+
     st.markdown("<br>", unsafe_allow_html=True)
     _render_probe_table(res["probes"])
 
