@@ -3051,7 +3051,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         elif not spf.get("dmarc"):
             penalty += 8
             warnings.append(f"'{spf_dom}' has no DMARC record — anti-spoofing not configured")
-    return min(penalty, 75), warnings
+    return min(penalty, 55), warnings
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3347,47 +3347,14 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
-
-    # Candidate context for personalised salary analysis
-    candidate_location  = (job.get("candidate_location") or "").strip()
-    candidate_role      = (job.get("candidate_role") or "").strip()
-    candidate_exp_years = (job.get("candidate_exp_years") or "").strip()
-
-    candidate_ctx_lines = []
-    if candidate_location:
-        candidate_ctx_lines.append(f"Candidate's current location: {candidate_location}")
-    if candidate_role:
-        candidate_ctx_lines.append(f"Candidate's current job role: {candidate_role}")
-    if candidate_exp_years:
-        candidate_ctx_lines.append(f"Candidate's years of experience: {candidate_exp_years}")
-    candidate_ctx = ("\n".join(candidate_ctx_lines)) if candidate_ctx_lines else "Not provided."
-
-    if not salary_raw:
-        salary_instruction = (
-            "The salary was NOT provided in this job posting. "
-            "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
-            "do NOT guess, infer, or comment on whether it is realistic."
-        )
-    else:
-        salary_instruction = (
-            f"Provide a DETAILED, STRUCTURED salary assessment for the stated salary ({salary_display}). "
-            f"Your salary_assessment must be a single paragraph covering ALL of the following dimensions:\n"
-            f"1. MARKET RANGE — State the typical market salary range for this role and location "
-            f"   (e.g., '8–14 LPA for a mid-level Data Scientist in Bangalore in 2024').\n"
-            f"2. ALIGNMENT WITH ROLE — Does the offered salary match the stated role's seniority, "
-            f"   skill requirements, and responsibilities?\n"
-            f"3. EXPERIENCE-BASED EVALUATION — Use the candidate's experience level "
-            f"   ({candidate_exp_years if candidate_exp_years else 'unknown years'}) to evaluate fit. "
-            f"   Is this salary appropriate for their stage?\n"
-            f"4. LOCATION-BASED DIFFERENCES — How does the job's location ({job.get('location','N/A')}) "
-            f"   and the candidate's location ({candidate_location if candidate_location else 'unknown'}) "
-            f"   affect compensation expectations? Account for cost-of-living and regional pay bands.\n"
-            f"5. SCAM SIGNAL — Is this salary suspiciously high (possible lure) or suspiciously low "
-            f"   (possible exploitation)? State clearly: REALISTIC, SLIGHTLY_HIGH, INFLATED (scam risk), "
-            f"   or BELOW_MARKET.\n"
-            f"Write in plain English, 4–6 sentences. Do NOT use bullet points inside the JSON string."
-        )
-
+    salary_instruction = (
+        "The salary was NOT provided in this job posting. "
+        "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
+        "do NOT guess, infer, or comment on whether it is realistic."
+        if not salary_raw else
+        "Assess whether the stated salary is realistic for this role and location. "
+        "If it seems unrealistically high, flag it as a potential scam signal."
+    )
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
@@ -3401,9 +3368,6 @@ Description: {job.get('description','N/A')[:8000]}
 Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
-
-CANDIDATE CONTEXT (for personalised salary analysis):
-{candidate_ctx}
 
 LIVE PROBE FINDINGS:
 {ctx}
@@ -3420,7 +3384,7 @@ Required JSON schema (all keys mandatory):
   "positive_signals": ["<str>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<NOT_PROVIDED if salary missing, else detailed structured assessment per the rules above>",
+  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
   "recommended_action": "<specific advice for the job seeker>",
   "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
@@ -4193,15 +4157,15 @@ def _quick_prescan(raw: str) -> dict | None:
     }
     rules = _run_rules(prescan_job)
     score = rules["rule_score"]
-    # Calibrated thresholds — aligned exactly with the full-analysis blended bands
-    # so the quick pre-scan banner and the final verdict can never disagree.
-    # Full bands: <25=SAFE, 25-49=SUSPICIOUS, 50-74=LIKELY_SCAM, >=75=DEFINITE_SCAM
-    # A single low-weight signal (e.g. missing_salary=4) stays SAFE — correct.
-    if score < 25:
+    # Calibrated thresholds — a single low-weight signal (e.g. missing_salary=4)
+    # must NOT trigger a SUSPICIOUS banner. Only meaningful rule hits qualify.
+    if score == 0:
         verdict = "SAFE"
-    elif score < 50:
+    elif score < 15:
+        verdict = "SAFE"        # low-weight noise signals — not a meaningful warning
+    elif score < 30:
         verdict = "SUSPICIOUS"
-    elif score < 75:
+    elif score < 55:
         verdict = "LIKELY_SCAM"
     else:
         verdict = "DEFINITE_SCAM"
@@ -4410,53 +4374,13 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 + _field_row(I.DOLLAR,   "Salary",     extracted["salary"])
                 + _field_row(I.MAIL,     "Contact",    extracted["contact"])
             )
-
-            # ── Your Profile layer — shown only when ≥1 candidate field filled ─
-            cand_loc  = st.session_state.get("jsd_cand_loc", "").strip()
-            cand_role = st.session_state.get("jsd_cand_role", "").strip()
-            cand_exp  = st.session_state.get("jsd_cand_exp", "").strip()
-
-            def _profile_row(icon_path: str, label: str, value: str) -> str:
-                val_html = (
-                    f'<span style="color:#c4b5fd;">{_esc(value)}</span>'
-                    if value else
-                    '<span style="color:#4b5563;font-style:italic;">Not provided</span>'
-                )
-                return (
-                    f'<div style="display:flex;align-items:flex-start;gap:9px;padding:6px 0;'
-                    f'border-bottom:1px solid rgba(167,139,250,0.08);">'
-                    f'<div style="margin-top:1px;flex-shrink:0;">{_svg(icon_path,11,"#a78bfa")}</div>'
-                    f'<div style="flex:1;">'
-                    f'<div style="font-size:0.66rem;color:#7c6faa;text-transform:uppercase;'
-                    f'letter-spacing:0.8px;margin-bottom:2px;">{label}</div>'
-                    f'<div style="font-size:0.81rem;line-height:1.4;">{val_html}</div>'
-                    f'</div></div>'
-                )
-
-            profile_html = ""
-            if cand_loc or cand_role or cand_exp:
-                profile_rows = (
-                    _profile_row(I.MAP_PIN,      "Your Location",       cand_loc)
-                    + _profile_row(I.ID_CARD,    "Current Role",        cand_role)
-                    + _profile_row(I.TRENDING_UP,"Years of Experience", cand_exp)
-                )
-                profile_html = (
-                    f'<div style="margin-top:10px;padding-top:10px;'
-                    f'border-top:1px solid rgba(167,139,250,0.18);">'
-                    f'<div style="font-size:0.66rem;font-weight:600;color:#a78bfa;'
-                    f'text-transform:uppercase;letter-spacing:0.9px;margin-bottom:4px;'
-                    f'display:flex;align-items:center;gap:5px;">'
-                    f'{_svg(I.AWARD,10,"#a78bfa")} Your Profile</div>'
-                    f'{profile_rows}</div>'
-                )
-
             st.markdown(
                 f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);'
                 f'border-radius:10px;padding:14px 16px;margin-top:8px;">'
                 f'<div style="font-size:0.69rem;font-weight:600;color:#8b949e;text-transform:uppercase;'
                 f'letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">'
                 f'{_svg(I.ZAP,10,"#a78bfa")} Auto-Detected Fields</div>'
-                f'{fields_html}{profile_html}</div>',
+                f'{fields_html}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -4473,32 +4397,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 oc1.text_input("Website",  value=extracted["website"],  key="jsd_ow")
                 oc2.text_input("Location", value=extracted["location"], key="jsd_ol")
 
-                # ── Candidate context — for personalised salary analysis ──────
-                st.markdown(
-                    '<div style="margin:10px 0 6px;font-size:0.69rem;font-weight:600;'
-                    'color:#a78bfa;text-transform:uppercase;letter-spacing:0.8px;">'
-                    '&#9670; Your Profile '
-                    '<span style="color:#6b7280;font-weight:400;font-size:0.65rem;">'
-                    '(optional — improves salary analysis accuracy)</span></div>',
-                    unsafe_allow_html=True,
-                )
-                cc1, cc2 = st.columns(2)
-                cc1.text_input(
-                    "Your Current Location",
-                    placeholder="e.g., Bangalore, Mumbai, Delhi",
-                    key="jsd_cand_loc",
-                )
-                cc2.text_input(
-                    "Your Current Job Role",
-                    placeholder="e.g., Data Analyst, Backend Developer",
-                    key="jsd_cand_role",
-                )
-                st.text_input(
-                    "Years of Experience",
-                    placeholder="e.g., 2, 5, 10+",
-                    key="jsd_cand_exp",
-                )
-
         # FIX v5 BUG 6: Build job from session_state override keys if they exist
         # (populated by the expander above). Falls back to auto_extract values if
         # the override expander was never opened.
@@ -4512,10 +4410,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             "description":  raw or "",
             "requirements": "",   # FIX v5 BUG 3: keep empty — description has everything
             "benefits":     "",   # FIX v5 BUG 3: keep empty — description has everything
-            # Candidate context — used by LLM for personalised salary analysis
-            "candidate_location":  st.session_state.get("jsd_cand_loc", ""),
-            "candidate_role":      st.session_state.get("jsd_cand_role", ""),
-            "candidate_exp_years": st.session_state.get("jsd_cand_exp", ""),
         }
 
     else:
@@ -4534,32 +4428,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                                             placeholder="Skills, experience, qualifications...")
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
                                             placeholder="What the employer offers...")
-
-        # ── Candidate context — for personalised salary analysis ──────────────
-        st.markdown(
-            '<div style="margin:10px 0 6px;font-size:0.69rem;font-weight:600;'
-            'color:#a78bfa;text-transform:uppercase;letter-spacing:0.8px;">'
-            '&#9670; Your Profile '
-            '<span style="color:#6b7280;font-weight:400;font-size:0.65rem;">'
-            '(optional — improves salary analysis accuracy)</span></div>',
-            unsafe_allow_html=True,
-        )
-        fc1, fc2 = st.columns(2)
-        job["candidate_location"]  = fc1.text_input(
-            "Your Current Location",
-            placeholder="e.g., Bangalore, Mumbai, Delhi",
-            key="jsd_cand_loc",
-        )
-        job["candidate_role"]      = fc2.text_input(
-            "Your Current Job Role",
-            placeholder="e.g., Data Analyst, Backend Developer",
-            key="jsd_cand_role",
-        )
-        job["candidate_exp_years"] = st.text_input(
-            "Years of Experience",
-            placeholder="e.g., 2, 5, 10+",
-            key="jsd_cand_exp",
-        )
 
     # Use only meaningful fields for "is there any input" check — not description
     # (which in paste mode is raw and always present once the user types).
@@ -4621,12 +4489,10 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 paste_keys = [
                     "jsd_raw", "jsd_mode",
                     "jsd_ot", "jsd_oco", "jsd_os", "jsd_oct", "jsd_ow", "jsd_ol",
-                    "jsd_cand_loc", "jsd_cand_role", "jsd_cand_exp",
                 ]
                 fill_keys = [
                     "jsd_t", "jsd_co", "jsd_w", "jsd_l",
                     "jsd_sa", "jsd_ct", "jsd_d", "jsd_r", "jsd_b",
-                    "jsd_cand_loc", "jsd_cand_role", "jsd_cand_exp",
                 ]
                 for k in paste_keys + fill_keys:
                     st.session_state.pop(k, None)
@@ -4758,10 +4624,8 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
                     blended = max(blended, critical_weight)
 
-                    # Probe penalty floor: only if penalty is itself significant (>= 25).
-                    # Cap raised to 75 above, so this now correctly pushes into
-                    # DEFINITE_SCAM territory when all infra probes fail.
-                    if penalty >= 25:
+                    # Probe penalty floor: only if penalty is itself significant (>= 20)
+                    if penalty >= 20:
                         blended = max(blended, penalty)
 
                     # ── HARD PROBE OVERRIDE (Improvement 4) ───────────────────────
