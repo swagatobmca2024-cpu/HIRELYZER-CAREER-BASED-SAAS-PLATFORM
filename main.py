@@ -215,7 +215,7 @@ if not st.session_state.get("authenticated"):
     if _token:
         _ok, _result = verify_login_token(_token)
         if _ok:
-            _cached_hero_stats.clear()  # force live metrics on next render
+            _cached_hero_stats.clear()
             log_user_action(st.session_state.username, "login")
             # Clear the token from the URL so a refresh doesn't re-trigger
             st.query_params.clear()
@@ -258,12 +258,14 @@ def render_notification(tab):
     if notif["type"] and time.time() < notif["expires"]:
         bg, border, color = _styles.get(notif["type"], _styles["info"])
         st.markdown(
-            f"""<div style='min-height:48px; display:flex; align-items:center;'>
-                <div style='width:100%; padding:8px 14px; border-radius:8px;
+            f"""<div style='height:48px; overflow:hidden; display:flex; align-items:center;'>
+                <div style='width:100%; padding:6px 14px; border-radius:8px;
                             background:{bg}; border:1px solid {border};
-                            color:{color}; font-size:0.85rem; font-weight:500;
-                            font-family:-apple-system,sans-serif; line-height:1.4;
-                            white-space:normal; word-wrap:break-word; overflow:visible;'>
+                            color:{color}; font-size:0.83rem; font-weight:500;
+                            font-family:-apple-system,sans-serif; line-height:1.35;
+                            word-wrap:break-word; overflow:hidden;
+                            display:-webkit-box; -webkit-line-clamp:2;
+                            -webkit-box-orient:vertical;'>
                     {notif["text"]}
                 </div>
             </div>""",
@@ -275,11 +277,6 @@ def render_notification(tab):
 
 
 def mask_email(email: str) -> str:
-    """
-    Mask an email address for display.
-    'swagato_bmca2024@msit.edu.in' → 'sw***@msit.edu.in'
-    Industry-standard: show first 2 chars of local part, mask the rest.
-    """
     try:
         local, domain = email.rsplit("@", 1)
         visible = local[:2] if len(local) >= 2 else local[:1]
@@ -1778,8 +1775,10 @@ if not st.session_state.get("authenticated", False):
             if st.session_state.reset_stage == "none":
 
                 # ── Show token error if magic link was invalid ──
+                # Route through notify() so it uses the reserved slot — no layout shift
                 if st.session_state.get("_token_error"):
-                    st.error(st.session_state.pop("_token_error"))
+                    _tok_err = st.session_state.pop("_token_error")
+                    notify("login", "error", _tok_err)
 
                 # ── Pending magic link state ──
                 if st.session_state.get("_magic_link_pending"):
@@ -1855,21 +1854,11 @@ if not st.session_state.get("authenticated", False):
                                     notify("login", "error", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/><line x1="12" y1="8" x2="12" y2="12" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16" r="1" fill="#fca5a5"/></svg> ' + _lock_msg)
                                     st.rerun()
                                 else:
-                                    st.markdown("""
-                                    <div class="hly-spinner-wrap">
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                            <rect x="5" y="11" width="14" height="10" rx="2" stroke="#4f8cff" stroke-width="1.6" fill="rgba(79,140,255,0.10)"/>
-                                            <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#4f8cff" stroke-width="1.6" stroke-linecap="round"/>
-                                            <circle cx="12" cy="16" r="1.2" fill="#4f8cff"/>
-                                        </svg>
-                                        Verifying your credentials, please wait...
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    with st.spinner(""):
+                                    with st.spinner("Verifying your credentials, please wait..."):
                                         success, saved_key = verify_user(_input, pwd.strip())
                                         if success:
                                             st.session_state.authenticated = True
-                                            _cached_hero_stats.clear()  # force live metrics on next render
+                                            _cached_hero_stats.clear()
                                             log_user_action(st.session_state.username, "login")
                                             notify("login", "success", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-2px;margin-right:5px;"><path d="M9 12l2 2 4-4" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="#6ee7b7" stroke-width="1.6"/></svg> Login successful. Welcome back!')
                                             time.sleep(1.5)
@@ -1907,15 +1896,7 @@ if not st.session_state.get("authenticated", False):
                         if email_input.strip():
                             _email_exists = get_user_by_email(email_input.strip())
                             if _email_exists:
-                                st.markdown("""
-                                <div class="hly-spinner-wrap">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#38bdf8" stroke-width="1.6" fill="rgba(56,189,248,0.10)"/>
-                                        <path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
-                                    </svg>
-                                    Sending a verification code to your email address...
-                                </div>""", unsafe_allow_html=True)
-                                with st.spinner(""):
+                                with st.spinner("Sending a verification code to your email..."):
                                     otp = generate_otp()
                                     success = send_email_otp(email_input.strip(), otp)
                                     if success:
@@ -1956,19 +1937,17 @@ if not st.session_state.get("authenticated", False):
                 # Persistent "OTP sent" info banner — shown on first arrival, cleared after first action
                 if st.session_state.pop("_fp_otp_just_sent", False):
                     st.markdown(
-                        f"""<div style='display:flex;align-items:flex-start;gap:10px;padding:10px 14px;
+                        f"""<div style='display:flex;align-items:center;gap:10px;padding:10px 14px;
                             border-radius:8px;background:rgba(52,211,153,0.10);
                             border:1px solid rgba(52,211,153,0.28);color:#6ee7b7;
                             font-size:0.85rem;font-weight:500;font-family:-apple-system,sans-serif;
-                            margin-bottom:4px;overflow:hidden;box-sizing:border-box;'>
-                            <svg style="flex-shrink:0;margin-top:2px;" width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            margin-bottom:4px;'>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"
                                       stroke="#6ee7b7" stroke-width="1.6" fill="rgba(52,211,153,0.10)"/>
                                 <path d="M2 8l10 7 10-7" stroke="#6ee7b7" stroke-width="1.6" stroke-linecap="round"/>
                             </svg>
-                            <span style="min-width:0;word-break:break-word;overflow-wrap:break-word;">
-                            ✔ Verification code sent to <strong style="margin-left:4px;">{mask_email(st.session_state.reset_email)}</strong>. Please check your inbox.
-                            </span>
+                            <span style="min-width:0;word-break:break-word;overflow-wrap:break-word;">✔ Verification code sent to <strong style="margin-left:4px;">{mask_email(st.session_state.reset_email)}</strong>. Please check your inbox.</span>
                         </div>""",
                         unsafe_allow_html=True
                     )
@@ -1989,15 +1968,7 @@ if not st.session_state.get("authenticated", False):
                     col1, col2 = st.columns(2)
                     with col1:
                         if st.button("Resend OTP", key="resend_otp_btn", use_container_width=True):
-                            st.markdown("""
-                            <div class="hly-spinner-wrap">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#38bdf8" stroke-width="1.6" fill="rgba(56,189,248,0.10)"/>
-                                    <path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
-                                </svg>
-                                Resending verification code to your email...
-                            </div>""", unsafe_allow_html=True)
-                            with st.spinner(""):
+                            with st.spinner("Resending verification code to your email..."):
                                 otp = generate_otp()
                                 success = send_email_otp(st.session_state.reset_email, otp)
                                 if success:
@@ -2028,44 +1999,18 @@ if not st.session_state.get("authenticated", False):
                         if st.button("Verify OTP", key="verify_otp_btn", use_container_width=True):
                             current_elapsed = time.time() - st.session_state.reset_otp_time
                             if current_elapsed >= 180:
-                                st.markdown("""
-                                <div class="hly-spinner-wrap">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/>
-                                        <line x1="12" y1="8" x2="12" y2="12" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
-                                        <circle cx="12" cy="16" r="1" fill="#fca5a5"/>
-                                    </svg>
-                                    Checking verification code expiry...
-                                </div>""", unsafe_allow_html=True)
-                                with st.spinner(""):
+                                with st.spinner("Checking verification code expiry..."):
                                     notify("login", "error", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/><line x1="12" y1="8" x2="12" y2="12" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16" r="1" fill="#fca5a5"/></svg> Verification code has expired. Please request a new one.', duration=8.0)
                                     time.sleep(0.6)
                                 st.rerun()
                             elif otp_input.strip() == st.session_state.reset_otp:
-                                st.markdown("""
-                                <div class="hly-spinner-wrap">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M9 12l2 2 4-4" stroke="#34d399" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                        <circle cx="12" cy="12" r="9" stroke="#34d399" stroke-width="1.6"/>
-                                    </svg>
-                                    Code verified. Taking you to password reset...
-                                </div>""", unsafe_allow_html=True)
-                                with st.spinner(""):
+                                with st.spinner("Code verified. Taking you to password reset..."):
                                     st.session_state.reset_stage = "reset_password"
                                     notify("login", "success", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-2px;margin-right:5px;"><path d="M9 12l2 2 4-4" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="#6ee7b7" stroke-width="1.6"/></svg> Verification code accepted. Set your new password below.', duration=8.0)
                                     time.sleep(0.8)
                                 st.rerun()
                             else:
-                                st.markdown("""
-                                <div class="hly-spinner-wrap">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/>
-                                        <line x1="15" y1="9" x2="9" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
-                                        <line x1="9" y1="9" x2="15" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
-                                    </svg>
-                                    Checking verification code...
-                                </div>""", unsafe_allow_html=True)
-                                with st.spinner(""):
+                                with st.spinner("Checking verification code..."):
                                     notify("login", "error", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/><line x1="15" y1="9" x2="9" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/><line x1="9" y1="9" x2="15" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/></svg> Invalid verification code. Please check and try again.', duration=8.0)
                                     time.sleep(0.6)
                                 st.rerun()
@@ -2095,16 +2040,7 @@ if not st.session_state.get("authenticated", False):
                 if st.button("Reset Password", key="reset_password_btn", use_container_width=True):
                     if new_password.strip() and confirm_password.strip():
                         if new_password == confirm_password:
-                            st.markdown("""
-                            <div class="hly-spinner-wrap">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <rect x="5" y="11" width="14" height="10" rx="2" stroke="#4f8cff" stroke-width="1.6" fill="rgba(79,140,255,0.10)"/>
-                                    <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="#4f8cff" stroke-width="1.6" stroke-linecap="round"/>
-                                    <circle cx="12" cy="16" r="1.2" fill="#4f8cff"/>
-                                </svg>
-                                Saving your new password securely...
-                            </div>""", unsafe_allow_html=True)
-                            with st.spinner(""):
+                            with st.spinner("Setting your new password..."):
                                 success = update_password_by_email(st.session_state.reset_email, new_password)
                                 if success:
                                     log_user_action(st.session_state.reset_email, "password_reset")
@@ -2142,19 +2078,17 @@ if not st.session_state.get("authenticated", False):
                 # Persistent "OTP sent" info banner — shown on first arrival, cleared after first render
                 if st.session_state.pop("_reg_otp_just_sent", False):
                     st.markdown(
-                        f"""<div style='display:flex;align-items:flex-start;gap:10px;padding:10px 14px;
+                        f"""<div style='display:flex;align-items:center;gap:10px;padding:10px 14px;
                             border-radius:8px;background:rgba(52,211,153,0.10);
                             border:1px solid rgba(52,211,153,0.28);color:#6ee7b7;
                             font-size:0.85rem;font-weight:500;font-family:-apple-system,sans-serif;
-                            margin-bottom:4px;overflow:hidden;box-sizing:border-box;'>
-                            <svg style="flex-shrink:0;margin-top:2px;" width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            margin-bottom:4px;'>
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"
                                       stroke="#6ee7b7" stroke-width="1.6" fill="rgba(52,211,153,0.10)"/>
                                 <path d="M2 8l10 7 10-7" stroke="#6ee7b7" stroke-width="1.6" stroke-linecap="round"/>
                             </svg>
-                            <span style="min-width:0;word-break:break-word;overflow-wrap:break-word;">
-                            ✔ Verification code sent to <strong style="margin-left:4px;">{mask_email(st.session_state.pending_registration['email'])}</strong>. Please check your inbox.
-                            </span>
+                            <span style="min-width:0;word-break:break-word;overflow-wrap:break-word;">✔ Verification code sent to <strong style="margin-left:4px;">{mask_email(st.session_state.pending_registration['email'])}</strong>. Please check your inbox.</span>
                         </div>""",
                         unsafe_allow_html=True
                     )
@@ -2176,15 +2110,7 @@ if not st.session_state.get("authenticated", False):
                     with col1:
                         if st.button("Resend OTP", key="reg_resend_expired_btn", use_container_width=True):
                             pending = st.session_state.pending_registration
-                            st.markdown("""
-                            <div class="hly-spinner-wrap">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#38bdf8" stroke-width="1.6" fill="rgba(56,189,248,0.10)"/>
-                                    <path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
-                                </svg>
-                                Sending a new verification code to your email...
-                            </div>""", unsafe_allow_html=True)
-                            with st.spinner(""):
+                            with st.spinner("Sending a new verification code to your email..."):
                                 success, message = add_user(pending['username'], pending['password'], pending['email'])
                                 if success:
                                     notify("register", "success", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-2px;margin-right:5px;"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#6ee7b7" stroke-width="1.6"/><path d="M2 8l10 7 10-7" stroke="#6ee7b7" stroke-width="1.6" stroke-linecap="round"/></svg> New verification code sent. Please check your inbox.', duration=8.0)
@@ -2212,32 +2138,15 @@ if not st.session_state.get("authenticated", False):
                             cached_username = st.session_state.pending_registration['username']
                             current_elapsed = (datetime.now(st.session_state.pending_registration['timestamp'].tzinfo) - st.session_state.pending_registration['timestamp']).total_seconds()
                             if current_elapsed >= 180:
-                                st.markdown("""
-                                <div class="hly-spinner-wrap">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/>
-                                        <line x1="12" y1="8" x2="12" y2="12" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
-                                        <circle cx="12" cy="16" r="1" fill="#fca5a5"/>
-                                    </svg>
-                                    Checking verification code expiry...
-                                </div>""", unsafe_allow_html=True)
-                                with st.spinner(""):
+                                with st.spinner("Checking verification code expiry..."):
                                     notify("register", "error", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/><line x1="12" y1="8" x2="12" y2="12" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16" r="1" fill="#fca5a5"/></svg> Verification code has expired. Please request a new one.', duration=8.0)
                                     time.sleep(0.6)
                                 st.rerun()
                             else:
-                                st.markdown("""
-                                <div class="hly-spinner-wrap">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M9 12l2 2 4-4" stroke="#34d399" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                                        <circle cx="12" cy="12" r="9" stroke="#34d399" stroke-width="1.6"/>
-                                    </svg>
-                                    Verifying your code and completing registration...
-                                </div>""", unsafe_allow_html=True)
-                                with st.spinner(""):
+                                with st.spinner("Verifying your code and completing registration..."):
                                     success, message = complete_registration(otp_input.strip())
                                     if success:
-                                        _cached_hero_stats.clear()  # force live metrics on next render
+                                        _cached_hero_stats.clear()
                                         log_user_action(cached_username, "register")
                                         notify("register", "success", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-2px;margin-right:5px;"><path d="M9 12l2 2 4-4" stroke="#6ee7b7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="#6ee7b7" stroke-width="1.6"/></svg> Registration complete. You can now log in to your account.', duration=8.0)
                                         time.sleep(0.5)
@@ -2249,15 +2158,7 @@ if not st.session_state.get("authenticated", False):
                     with col2:
                         if st.button("Resend", key="resend_reg_otp_btn", use_container_width=True):
                             pending = st.session_state.pending_registration
-                            st.markdown("""
-                            <div class="hly-spinner-wrap">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#38bdf8" stroke-width="1.6" fill="rgba(56,189,248,0.10)"/>
-                                    <path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
-                                </svg>
-                                Resending verification code to your email...
-                            </div>""", unsafe_allow_html=True)
-                            with st.spinner(""):
+                            with st.spinner("Resending verification code to your email..."):
                                 success, message = add_user(pending['username'], pending['password'], pending['email'])
                                 if success:
                                     st.session_state["_reg_otp_just_sent"] = True
@@ -2469,16 +2370,7 @@ if not st.session_state.get("authenticated", False):
                             notify("register", "error", '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:-2px;margin-right:5px;"><circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/><line x1="15" y1="9" x2="9" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/><line x1="9" y1="9" x2="15" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/></svg> This username is already taken. Please choose a different one.')
                             st.rerun()
                         else:
-                            st.markdown("""
-                            <div class="hly-spinner-wrap">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#38bdf8" stroke-width="1.6" fill="rgba(56,189,248,0.10)"/>
-                                    <path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
-                                </svg>
-                                Creating your account and sending a verification code...
-                            </div>
-                            """, unsafe_allow_html=True)
-                            with st.spinner(""):
+                            with st.spinner("Creating your account and sending a verification code..."):
                                 success, message = add_user(new_user.strip(), new_pass.strip(), new_email.strip())
                                 if success:
                                     # Persistent flag so the OTP screen shows a "sent" banner reliably
