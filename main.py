@@ -275,71 +275,123 @@ def render_notification(tab):
 
 def display_timer(remaining_seconds, expired=False, key_suffix=""):
     """
-    Display a server-synced timer with glassmorphism styling.
-    Uses pure st.markdown (no iframe/components.v1.html) to prevent page shifting.
-    Server-side validation ensures OTP expiry is accurately enforced.
-
-    Args:
-        remaining_seconds: Time remaining in seconds (server-calculated)
-        expired: Whether the timer has expired
-        key_suffix: Unique suffix for the timer component (unused, kept for API compat)
+    Display a LIVE countdown timer using inline <script> inside st.markdown.
+    No iframe (components.v1.html), no layout shift.
+    Server-side remaining_seconds is the authoritative start value;
+    the JS ticks it down client-side for smooth UX only.
+    Server re-validates OTP expiry on every button action.
     """
-    minutes = remaining_seconds // 60
-    seconds = remaining_seconds % 60
+    tid = f"hly-timer-{key_suffix}"
 
     if expired or remaining_seconds <= 0:
         st.markdown(
-            """<div style="background:linear-gradient(135deg,rgba(251,113,133,0.15) 0%,rgba(251,113,133,0.06) 100%);"""
-            """border:1px solid rgba(251,113,133,0.30);border-radius:12px;padding:12px 20px;"""
-            """margin:14px 0;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px;">"""
-            """<svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">"""
-            """<circle cx="12" cy="12" r="10" stroke="#fca5a5" stroke-width="1.8"/>"""
-            """<line x1="15" y1="9" x2="9" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>"""
-            """<line x1="9" y1="9" x2="15" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>"""
-            """</svg>"""
-            """<span style="color:#fca5a5;font-size:0.9rem;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">OTP Expired</span>"""
-            """</div>""",
-            unsafe_allow_html=True
-        )
-    else:
-        # Pure markdown timer — no iframe, no layout shift
-        # Server validates on action; this is display-only
-        pct = max(0, min(100, int(remaining_seconds / 180 * 100)))
-        if remaining_seconds <= 30:
-            bar_color = "#fca5a5"
-            text_color = "#fca5a5"
-            border_color = "rgba(251,113,133,0.35)"
-            bg = "linear-gradient(135deg,rgba(251,113,133,0.12) 0%,rgba(251,113,133,0.05) 100%)"
-        elif remaining_seconds <= 60:
-            bar_color = "#fde68a"
-            text_color = "#fde68a"
-            border_color = "rgba(251,191,36,0.35)"
-            bg = "linear-gradient(135deg,rgba(251,191,36,0.12) 0%,rgba(251,191,36,0.05) 100%)"
-        else:
-            bar_color = "#6ee7b7"
-            text_color = "#6ee7b7"
-            border_color = "rgba(52,211,153,0.30)"
-            bg = "linear-gradient(135deg,rgba(52,211,153,0.10) 0%,rgba(52,211,153,0.04) 100%)"
-
-        st.markdown(
-            f"""<div style="background:{bg};border:1px solid {border_color};border-radius:12px;"""
-            f"""padding:12px 20px;margin:14px 0;">"""
-            f"""<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">"""
-            f"""<div style="display:flex;align-items:center;gap:7px;">"""
-            f"""<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">"""
-            f"""<circle cx="12" cy="12" r="10" stroke="{text_color}" stroke-width="1.8"/>"""
-            f"""<polyline points="12 6 12 12 16 14" stroke="{text_color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>"""
+            f"""<div id="{tid}" style="display:flex;align-items:center;justify-content:center;gap:8px;"""
+            f"""background:linear-gradient(135deg,rgba(251,113,133,0.15) 0%,rgba(251,113,133,0.06) 100%);"""
+            f"""border:1px solid rgba(251,113,133,0.32);border-radius:12px;padding:12px 20px;margin:14px 0;">"""
+            f"""<svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">"""
+            f"""<circle cx="12" cy="12" r="10" stroke="#fca5a5" stroke-width="1.8"/>"""
+            f"""<line x1="15" y1="9" x2="9" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>"""
+            f"""<line x1="9" y1="9" x2="15" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>"""
             f"""</svg>"""
-            f"""<span style="color:{text_color};font-size:0.82rem;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:0.02em;">OTP expires in</span>"""
-            f"""</div>"""
-            f"""<span style="color:{text_color};font-size:1.05rem;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,monospace;letter-spacing:0.05em;">{minutes:02d}:{seconds:02d}</span>"""
-            f"""</div>"""
-            f"""<div style="background:rgba(255,255,255,0.07);border-radius:99px;height:4px;overflow:hidden;">"""
-            f"""<div style="background:{bar_color};height:100%;width:{pct}%;border-radius:99px;transition:width 0.5s ease;"></div>"""
-            f"""</div>"""
+            f"""<span style="color:#fca5a5;font-size:0.9rem;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">OTP Expired</span>"""
             f"""</div>""",
             unsafe_allow_html=True
         )
+        return
+
+    # Live countdown — inline script, no iframe
+    st.markdown(f"""
+<div id="{tid}-wrap" style="
+    background: linear-gradient(135deg,rgba(52,211,153,0.10) 0%,rgba(52,211,153,0.04) 100%);
+    border: 1px solid rgba(52,211,153,0.30);
+    border-radius: 12px;
+    padding: 12px 20px;
+    margin: 14px 0;
+    transition: background 0.6s, border-color 0.6s;
+">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+    <div style="display:flex;align-items:center;gap:7px;">
+      <svg id="{tid}-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="10" stroke="#6ee7b7" stroke-width="1.8"/>
+        <polyline points="12 6 12 12 16 14" stroke="#6ee7b7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span id="{tid}-label" style="color:#6ee7b7;font-size:0.82rem;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:0.02em;">OTP expires in</span>
+    </div>
+    <span id="{tid}-clock" style="color:#6ee7b7;font-size:1.05rem;font-weight:700;font-family:ui-monospace,SFMono-Regular,monospace;letter-spacing:0.05em;">
+      {remaining_seconds // 60:02d}:{remaining_seconds % 60:02d}
+    </span>
+  </div>
+  <div style="background:rgba(255,255,255,0.07);border-radius:99px;height:4px;overflow:hidden;">
+    <div id="{tid}-bar" style="
+        background:#6ee7b7;
+        height:100%;
+        width:{max(0, min(100, int(remaining_seconds / 180 * 100)))}%;
+        border-radius:99px;
+        transition:width 1s linear, background 0.6s;
+    "></div>
+  </div>
+</div>
+
+<script>
+(function(){{
+  var rem  = {remaining_seconds};
+  var total = 180;
+  var wrap  = document.getElementById('{tid}-wrap');
+  var clock = document.getElementById('{tid}-clock');
+  var bar   = document.getElementById('{tid}-bar');
+  var label = document.getElementById('{tid}-label');
+  var icon  = document.getElementById('{tid}-icon');
+
+  function setColor(color, borderAlpha, bgFrom, bgTo) {{
+    if (wrap)  wrap.style.background = 'linear-gradient(135deg,' + bgFrom + ' 0%,' + bgTo + ' 100%)';
+    if (wrap)  wrap.style.borderColor = borderAlpha;
+    if (clock) clock.style.color = color;
+    if (label) label.style.color = color;
+    if (bar)   bar.style.background = color;
+    // update svg stroke
+    if (icon) {{
+      icon.querySelectorAll('circle,polyline').forEach(function(el){{
+        el.setAttribute('stroke', color);
+      }});
+    }}
+  }}
+
+  var iv = setInterval(function(){{
+    rem--;
+    if (rem <= 0) {{
+      clearInterval(iv);
+      if (wrap) {{
+        wrap.style.background = 'linear-gradient(135deg,rgba(251,113,133,0.15) 0%,rgba(251,113,133,0.06) 100%)';
+        wrap.style.borderColor = 'rgba(251,113,133,0.32)';
+        wrap.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:8px;">'
+          + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">'
+          + '<circle cx="12" cy="12" r="10" stroke="#fca5a5" stroke-width="1.8"/>'
+          + '<line x1="15" y1="9" x2="9" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>'
+          + '<line x1="9" y1="9" x2="15" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>'
+          + '</svg>'
+          + '<span style="color:#fca5a5;font-size:0.9rem;font-weight:600;font-family:-apple-system,sans-serif;">OTP Expired</span>'
+          + '</div>';
+      }}
+      return;
+    }}
+
+    var m = Math.floor(rem / 60);
+    var s = rem % 60;
+    if (clock) clock.textContent = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    var pct = Math.max(0, Math.min(100, (rem / total) * 100));
+    if (bar) bar.style.width = pct + '%';
+
+    if (rem <= 30) {{
+      setColor('#fca5a5','rgba(251,113,133,0.35)',
+        'rgba(251,113,133,0.12)','rgba(251,113,133,0.05)');
+    }} else if (rem <= 60) {{
+      setColor('#fde68a','rgba(251,191,36,0.35)',
+        'rgba(251,191,36,0.12)','rgba(251,191,36,0.05)');
+    }}
+  }}, 1000);
+}})();
+</script>
+""", unsafe_allow_html=True)
 
 # ------------------- Initialize Session State -------------------
 if "authenticated" not in st.session_state:
