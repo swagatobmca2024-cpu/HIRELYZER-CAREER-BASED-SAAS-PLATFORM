@@ -276,71 +276,70 @@ def render_notification(tab):
 def display_timer(remaining_seconds, expired=False, key_suffix=""):
     """
     Display a server-synced timer with glassmorphism styling.
+    Uses pure st.markdown (no iframe/components.v1.html) to prevent page shifting.
     Server-side validation ensures OTP expiry is accurately enforced.
 
     Args:
         remaining_seconds: Time remaining in seconds (server-calculated)
         expired: Whether the timer has expired
-        key_suffix: Unique suffix for the timer component
+        key_suffix: Unique suffix for the timer component (unused, kept for API compat)
     """
     minutes = remaining_seconds // 60
     seconds = remaining_seconds % 60
 
     if expired or remaining_seconds <= 0:
         st.markdown(
-            "<div class='timer-display timer-expired' style=\"background:linear-gradient(135deg,rgba(255,99,71,0.18) 0%,rgba(255,99,71,0.08) 100%);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px);border:2px solid rgba(255,99,71,0.4);border-radius:14px;padding:16px 24px;margin:20px 0;text-align:center;box-shadow:0 4px 20px rgba(255,99,71,0.15),inset 0 1px 0 rgba(255,255,255,0.1);\">"
-            "<span class='timer-text' style=\"color:#FF6347;font-size:1.15em;font-weight:bold;font-family:-apple-system,sans-serif;text-shadow:0 0 18px rgba(255,99,71,0.5);\">OTP Expired</span>"
-            "</div>",
+            """<div style="background:linear-gradient(135deg,rgba(251,113,133,0.15) 0%,rgba(251,113,133,0.06) 100%);"""
+            """border:1px solid rgba(251,113,133,0.30);border-radius:12px;padding:12px 20px;"""
+            """margin:14px 0;text-align:center;display:flex;align-items:center;justify-content:center;gap:8px;">"""
+            """<svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">"""
+            """<circle cx="12" cy="12" r="10" stroke="#fca5a5" stroke-width="1.8"/>"""
+            """<line x1="15" y1="9" x2="9" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>"""
+            """<line x1="9" y1="9" x2="15" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>"""
+            """</svg>"""
+            """<span style="color:#fca5a5;font-size:0.9rem;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">OTP Expired</span>"""
+            """</div>""",
             unsafe_allow_html=True
         )
     else:
-        # Client-side countdown for UX, but server validates on action
-        st.components.v1.html(f"""
-        <div class='timer-display' id='timer-{key_suffix}' style="
-            background: linear-gradient(135deg, rgba(255, 215, 0, 0.18) 0%, rgba(255, 165, 0, 0.08) 100%);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 2px solid rgba(255, 215, 0, 0.4);
-            border-radius: 14px;
-            padding: 16px 24px;
-            margin: 20px 0;
-            text-align: center;
-            box-shadow: 0 4px 20px rgba(255, 215, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-        ">
-            <span class='timer-text' style="
-                color: #FFD700;
-                font-size: 1.15em;
-                font-weight: bold;
-                font-family: 'Orbitron', sans-serif;
-                text-shadow: 0 0 18px rgba(255, 215, 0, 0.5);
-            ">⏱️ Time Remaining: <span id='countdown-{key_suffix}'>{minutes:02d}:{seconds:02d}</span></span>
-        </div>
-        <script>
-        (function() {{
-            let remaining = {remaining_seconds};
-            const countdownEl = document.getElementById('countdown-{key_suffix}');
-            const timerEl = document.getElementById('timer-{key_suffix}');
+        # Pure markdown timer — no iframe, no layout shift
+        # Server validates on action; this is display-only
+        pct = max(0, min(100, int(remaining_seconds / 180 * 100)))
+        if remaining_seconds <= 30:
+            bar_color = "#fca5a5"
+            text_color = "#fca5a5"
+            border_color = "rgba(251,113,133,0.35)"
+            bg = "linear-gradient(135deg,rgba(251,113,133,0.12) 0%,rgba(251,113,133,0.05) 100%)"
+        elif remaining_seconds <= 60:
+            bar_color = "#fde68a"
+            text_color = "#fde68a"
+            border_color = "rgba(251,191,36,0.35)"
+            bg = "linear-gradient(135deg,rgba(251,191,36,0.12) 0%,rgba(251,191,36,0.05) 100%)"
+        else:
+            bar_color = "#6ee7b7"
+            text_color = "#6ee7b7"
+            border_color = "rgba(52,211,153,0.30)"
+            bg = "linear-gradient(135deg,rgba(52,211,153,0.10) 0%,rgba(52,211,153,0.04) 100%)"
 
-            const interval = setInterval(() => {{
-                remaining--;
-                if (remaining <= 0) {{
-                    clearInterval(interval);
-                    if (timerEl) {{
-                        timerEl.style.background = 'linear-gradient(135deg, rgba(255, 99, 71, 0.18) 0%, rgba(255, 99, 71, 0.08) 100%)';
-                        timerEl.style.border = '2px solid rgba(255, 99, 71, 0.4)';
-                        timerEl.innerHTML = "<span style='color: #FF6347; font-size: 1.15em; font-weight: bold; font-family: Orbitron, sans-serif; text-shadow: 0 0 18px rgba(255, 99, 71, 0.5);'>⏱️ OTP Expired</span>";
-                    }}
-                }} else {{
-                    const mins = Math.floor(remaining / 60);
-                    const secs = remaining % 60;
-                    if (countdownEl) {{
-                        countdownEl.textContent = `${{mins.toString().padStart(2, '0')}}:${{secs.toString().padStart(2, '0')}}`;
-                    }}
-                }}
-            }}, 1000);
-        }})();
-        </script>
-        """, height=80)
+        st.markdown(
+            f"""<div style="background:{bg};border:1px solid {border_color};border-radius:12px;"""
+            f"""padding:12px 20px;margin:14px 0;">"""
+            f"""<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">"""
+            f"""<div style="display:flex;align-items:center;gap:7px;">"""
+            f"""<svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">"""
+            f"""<circle cx="12" cy="12" r="10" stroke="{text_color}" stroke-width="1.8"/>"""
+            f"""<polyline points="12 6 12 12 16 14" stroke="{text_color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>"""
+            f"""</svg>"""
+            f"""<span style="color:{text_color};font-size:0.82rem;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:0.02em;">OTP expires in</span>"""
+            f"""</div>"""
+            f"""<span style="color:{text_color};font-size:1.05rem;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,monospace;letter-spacing:0.05em;">{minutes:02d}:{seconds:02d}</span>"""
+            f"""</div>"""
+            f"""<div style="background:rgba(255,255,255,0.07);border-radius:99px;height:4px;overflow:hidden;">"""
+            f"""<div style="background:{bar_color};height:100%;width:{pct}%;border-radius:99px;transition:width 0.5s ease;"></div>"""
+            f"""</div>"""
+            f"""</div>""",
+            unsafe_allow_html=True
+        )
 
 # ------------------- Initialize Session State -------------------
 if "authenticated" not in st.session_state:
@@ -1826,22 +1825,18 @@ if not st.session_state.get("authenticated", False):
                                     st.session_state["_magic_link_pending"] = True
                                     st.session_state["_magic_link_email"] = "your registered email"
                                     notify("login", "success", "Login link sent to admin email! Click it to sign in.")
-                                    time.sleep(0.3)
                                     st.rerun()
                                 elif status == "bad_creds":
                                     notify("login", "error", message)
-                                    time.sleep(0.3)
                                     st.rerun()
                                 else:
                                     notify("login", "error", message)
-                                    time.sleep(0.3)
                                     st.rerun()
                             else:
                                 # ── Regular users: direct login ──
                                 _allowed, _lock_msg = check_brute_force(_input)
                                 if not _allowed:
                                     notify("login", "error", _lock_msg)
-                                    time.sleep(0.3)
                                     st.rerun()
                                 else:
                                     st.markdown("""
@@ -1867,12 +1862,10 @@ if not st.session_state.get("authenticated", False):
                                     if success:
                                         st.rerun()
                                     else:
-                                        notify("login", "error", "Invalid credentials. Please check your username and password.")
-                                        time.sleep(0.3)
+                                        notify("login", "error", "Invalid credentials. Please try again.")
                                         st.rerun()
                         else:
-                            notify("login", "warning", "Please enter your username or email and password.")
-                            time.sleep(0.3)
+                            notify("login", "warning", "Please enter your username/email and password.")
                             st.rerun()
 
                     st.markdown("<br>", unsafe_allow_html=True)
@@ -1900,28 +1893,36 @@ if not st.session_state.get("authenticated", False):
                         if email_input.strip():
                             _email_exists = get_user_by_email(email_input.strip())
                             if _email_exists:
-                                with st.spinner("Sending OTP to your email..."):
+                                st.markdown("""
+                                <div class="hly-spinner-wrap">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"
+                                              stroke="#38bdf8" stroke-width="1.6" fill="rgba(56,189,248,0.10)"/>
+                                        <path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
+                                    </svg>
+                                    Sending OTP to your email...
+                                </div>""", unsafe_allow_html=True)
+                                success = False
+                                with st.spinner(""):
                                     otp = generate_otp()
                                     success = send_email_otp(email_input.strip(), otp)
+                                    if success:
+                                        st.session_state.reset_email = email_input.strip()
+                                        st.session_state.reset_otp = otp
+                                        st.session_state.reset_otp_time = time.time()
+                                        st.session_state.reset_stage = "verify_otp"
+                                        notify("login", "success", "OTP sent! Check your email inbox.", duration=8.0)
+                                        time.sleep(0.5)
                                 if success:
-                                    st.session_state.reset_email = email_input.strip()
-                                    st.session_state.reset_otp = otp
-                                    st.session_state.reset_otp_time = time.time()
-                                    st.session_state.reset_stage = "verify_otp"
-                                    # Store a one-time success banner to show on next stage
-                                    st.session_state["_otp_just_sent"] = True
                                     st.rerun()
                                 else:
-                                    notify("login", "error", "Failed to send OTP. Please try again.")
-                                    time.sleep(0.3)
+                                    notify("login", "error", "Failed to send OTP. Please check your email and try again.")
                                     st.rerun()
                             else:
                                 notify("login", "error", "Email not found. Please register first.")
-                                time.sleep(0.3)
                                 st.rerun()
                         else:
                             notify("login", "warning", "Please enter your email address.")
-                            time.sleep(0.3)
                             st.rerun()
 
                 with col2:
@@ -1936,11 +1937,21 @@ if not st.session_state.get("authenticated", False):
                 st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16v16H4z" rx="2" stroke="#38bdf8" stroke-width="1.5" fill="none"/><path d="M4 9h16" stroke="#38bdf8" stroke-width="1.5"/><path d="M8 4v5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/><path d="M16 4v5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/></svg>
                     Verify OTP</h3>""", unsafe_allow_html=True)
-                st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.reset_email}</strong></p>", unsafe_allow_html=True)
 
-                # Show OTP-sent success banner if we just transitioned here
-                if st.session_state.pop("_otp_just_sent", False):
-                    notify("login", "success", "Verification code sent to your email. Please check your inbox.")
+                # ── Persistent sent-email banner (always visible, no timer dependency) ──
+                st.markdown(
+                    f"""<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;"""
+                    f"""border-radius:8px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.22);"""
+                    f"""margin-bottom:12px;">"""
+                    f"""<svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">"""
+                    f"""<path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#6ee7b7" stroke-width="1.6" fill="rgba(52,211,153,0.10)"/>"""
+                    f"""<path d="M2 8l10 7 10-7" stroke="#6ee7b7" stroke-width="1.6" stroke-linecap="round"/>"""
+                    f"""</svg>"""
+                    f"""<span style="color:#a7f3d0;font-size:0.84rem;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">"""
+                    f"""Verification code sent to <strong style="color:#6ee7b7;">{st.session_state.reset_email}</strong>. Check your inbox.</span>"""
+                    f"""</div>""",
+                    unsafe_allow_html=True
+                )
 
                 # Calculate elapsed and remaining time (server-side)
                 elapsed_time = time.time() - st.session_state.reset_otp_time
@@ -1952,23 +1963,36 @@ if not st.session_state.get("authenticated", False):
                 # Check if OTP expired (3 minutes)
                 if remaining_time == 0:
                     # OTP Expired - Show resend option
-                    notify("login", "error", "OTP expired. Please request a new one.")
+                    # notify() MUST be called before render_notification() so the
+                    # message is in session_state when the slot is rendered.
+                    notify("login", "error", "OTP expired. Please request a new one.", duration=8.0)
                     render_notification("login")
 
                     col1, col2 = st.columns(2)
                     with col1:
                         if st.button("Resend OTP", key="resend_otp_btn", use_container_width=True):
-                            with st.spinner("Sending new OTP..."):
+                            st.markdown("""
+                            <div class="hly-spinner-wrap">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"
+                                          stroke="#38bdf8" stroke-width="1.6" fill="rgba(56,189,248,0.10)"/>
+                                    <path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
+                                </svg>
+                                Sending new OTP...
+                            </div>""", unsafe_allow_html=True)
+                            success = False
+                            with st.spinner(""):
                                 otp = generate_otp()
                                 success = send_email_otp(st.session_state.reset_email, otp)
+                                if success:
+                                    st.session_state.reset_otp = otp
+                                    st.session_state.reset_otp_time = time.time()
+                                    notify("login", "info", "New OTP sent! Check your inbox.", duration=8.0)
+                                    time.sleep(0.5)
                             if success:
-                                st.session_state.reset_otp = otp
-                                st.session_state.reset_otp_time = time.time()
-                                st.session_state["_otp_just_sent"] = True
                                 st.rerun()
                             else:
                                 notify("login", "error", "Failed to send OTP. Please try again.")
-                                time.sleep(0.3)
                                 st.rerun()
 
                     with col2:
@@ -1977,8 +2001,7 @@ if not st.session_state.get("authenticated", False):
                             st.rerun()
                 else:
                     # OTP still valid - Show verification form
-                    otp_input = st.text_input("Enter 6-Digit OTP", key="otp_input", max_chars=6,
-                                              placeholder="Enter the 6-digit code from your email")
+                    otp_input = st.text_input("Enter 6-Digit OTP", key="otp_input", max_chars=6)
 
                     # Render notification area (reserves space)
                     render_notification("login")
@@ -1988,22 +2011,46 @@ if not st.session_state.get("authenticated", False):
                         if st.button("Verify OTP", key="verify_otp_btn", use_container_width=True):
                             current_elapsed = time.time() - st.session_state.reset_otp_time
                             if current_elapsed >= 180:
-                                notify("login", "error", "OTP has expired. Please request a new one.")
-                                time.sleep(0.3)
-                                st.rerun()
-                            elif not otp_input.strip():
-                                notify("login", "warning", "Please enter the 6-digit OTP from your email.")
-                                time.sleep(0.3)
-                                st.rerun()
-                            elif otp_input.strip() == st.session_state.reset_otp:
-                                with st.spinner("Verifying OTP..."):
-                                    st.session_state.reset_stage = "reset_password"
-                                    notify("login", "success", "OTP verified successfully! Please set your new password.")
+                                st.markdown("""
+                                <div class="hly-spinner-wrap">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/>
+                                        <line x1="12" y1="8" x2="12" y2="12" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
+                                        <circle cx="12" cy="16" r="1" fill="#fca5a5"/>
+                                    </svg>
+                                    Checking OTP...
+                                </div>""", unsafe_allow_html=True)
+                                with st.spinner(""):
+                                    notify("login", "error", "OTP has expired. Please request a new one.")
                                     time.sleep(0.6)
                                 st.rerun()
+                            elif otp_input.strip() == st.session_state.reset_otp:
+                                st.markdown("""
+                                <div class="hly-spinner-wrap">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M9 12l2 2 4-4" stroke="#34d399" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <circle cx="12" cy="12" r="9" stroke="#34d399" stroke-width="1.6"/>
+                                    </svg>
+                                    Verifying OTP...
+                                </div>""", unsafe_allow_html=True)
+                                with st.spinner(""):
+                                    st.session_state.reset_stage = "reset_password"
+                                    notify("login", "success", "OTP verified successfully!")
+                                    time.sleep(0.8)
+                                st.rerun()
                             else:
-                                notify("login", "error", "Invalid OTP. Please check the code and try again.")
-                                time.sleep(0.3)
+                                st.markdown("""
+                                <div class="hly-spinner-wrap">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/>
+                                        <line x1="15" y1="9" x2="9" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
+                                        <line x1="9" y1="9" x2="15" y2="15" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
+                                    </svg>
+                                    Checking OTP...
+                                </div>""", unsafe_allow_html=True)
+                                with st.spinner(""):
+                                    notify("login", "error", "Incorrect OTP. Please check your email and try again.")
+                                    time.sleep(0.6)
                                 st.rerun()
 
                     with col2:
@@ -2018,12 +2065,10 @@ if not st.session_state.get("authenticated", False):
                 st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M12 3a4 4 0 0 1 4 4v1H8V7a4 4 0 0 1 4-4z" stroke="#38bdf8" stroke-width="1.5" fill="none"/><rect x="5" y="11" width="14" height="10" rx="2" stroke="#38bdf8" stroke-width="1.5" fill="rgba(56,189,248,0.08)"/><circle cx="12" cy="16" r="1.5" fill="#38bdf8"/></svg>
                     Set New Password</h3>""", unsafe_allow_html=True)
-                st.markdown("<p style='color:#c9d1d9; text-align:center;'>Create a strong new password for your account</p>", unsafe_allow_html=True)
+                st.markdown("<p style='color:#c9d1d9; text-align:center;'>Enter your new password</p>", unsafe_allow_html=True)
 
-                new_password = st.text_input("New Password", type="password", key="new_password_input",
-                                             placeholder="Enter your new password")
-                confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password_input",
-                                                 placeholder="Re-enter your new password")
+                new_password = st.text_input("New Password", type="password", key="new_password_input")
+                confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password_input")
 
                 st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
 
@@ -2031,34 +2076,40 @@ if not st.session_state.get("authenticated", False):
                 render_notification("login")
 
                 if st.button("Reset Password", key="reset_password_btn", use_container_width=True):
-                    if not new_password.strip() or not confirm_password.strip():
-                        notify("login", "warning", "Please fill in both password fields.")
-                        time.sleep(0.3)
-                        st.rerun()
-                    elif new_password != confirm_password:
-                        notify("login", "error", "Passwords do not match. Please try again.")
-                        time.sleep(0.3)
-                        st.rerun()
-                    elif not is_strong_password(new_password):
-                        notify("login", "warning", "Password is too weak. Use at least 8 characters with uppercase, lowercase, number, and special character.")
-                        time.sleep(0.3)
-                        st.rerun()
-                    else:
-                        with st.spinner("Resetting your password..."):
-                            success = update_password_by_email(st.session_state.reset_email, new_password)
-                        if success:
-                            log_user_action(st.session_state.reset_email, "password_reset")
-                            st.session_state.reset_stage = "none"
-                            st.session_state.reset_email = ""
-                            st.session_state.reset_otp = ""
-                            st.session_state.reset_otp_time = 0
-                            notify("login", "success", "Password reset successful! You can now log in with your new password.")
-                            time.sleep(1)
-                            st.rerun()
+                    if new_password.strip() and confirm_password.strip():
+                        if new_password == confirm_password:
+                            st.markdown("""
+                            <div class="hly-spinner-wrap">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect x="5" y="11" width="14" height="10" rx="2"
+                                          stroke="#4f8cff" stroke-width="1.6" fill="rgba(79,140,255,0.10)"/>
+                                    <path d="M8 11V7a4 4 0 0 1 8 0v4"
+                                          stroke="#4f8cff" stroke-width="1.6" stroke-linecap="round"/>
+                                    <circle cx="12" cy="16" r="1.2" fill="#4f8cff"/>
+                                </svg>
+                                Resetting your password...
+                            </div>""", unsafe_allow_html=True)
+                            with st.spinner(""):
+                                success = update_password_by_email(st.session_state.reset_email, new_password)
+                                if success:
+                                    log_user_action(st.session_state.reset_email, "password_reset")
+                                    st.session_state.reset_stage = "none"
+                                    st.session_state.reset_email = ""
+                                    st.session_state.reset_otp = ""
+                                    st.session_state.reset_otp_time = 0
+                                    notify("login", "success", "Password reset successful! Please log in again.")
+                                    time.sleep(1)
+                            if success:
+                                st.rerun()
+                            else:
+                                notify("login", "error", "Failed to reset password. Please try again.")
+                                st.rerun()
                         else:
-                            notify("login", "error", "Failed to reset password. Please try again.")
-                            time.sleep(0.3)
+                            notify("login", "error", "Passwords do not match.")
                             st.rerun()
+                    else:
+                        notify("login", "warning", "Please fill in both password fields.")
+                        st.rerun()
 
                 if st.button("Back to Login", key="back_to_login_3"):
                     st.session_state.reset_stage = "none"
@@ -2071,11 +2122,21 @@ if not st.session_state.get("authenticated", False):
                 st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#38bdf8" stroke-width="1.5" fill="none"/><path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.5"/></svg>
                     Verify Your Email</h3>""", unsafe_allow_html=True)
-                st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit verification code sent to <strong>{st.session_state.pending_registration['email']}</strong></p>", unsafe_allow_html=True)
 
-                # Show one-time "code sent" banner on first entry to this stage
-                if st.session_state.pop("_reg_otp_just_sent", False):
-                    notify("register", "success", "Verification code sent! Please check your inbox.")
+                # ── Persistent sent-email banner (always visible, no timer dependency) ──
+                st.markdown(
+                    f"""<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;"""
+                    f"""border-radius:8px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.22);"""
+                    f"""margin-bottom:12px;">"""
+                    f"""<svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;">"""
+                    f"""<path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#6ee7b7" stroke-width="1.6" fill="rgba(52,211,153,0.10)"/>"""
+                    f"""<path d="M2 8l10 7 10-7" stroke="#6ee7b7" stroke-width="1.6" stroke-linecap="round"/>"""
+                    f"""</svg>"""
+                    f"""<span style="color:#a7f3d0;font-size:0.84rem;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">"""
+                    f"""Verification code sent to <strong style="color:#6ee7b7;">{st.session_state.pending_registration['email']}</strong>. Check your inbox.</span>"""
+                    f"""</div>""",
+                    unsafe_allow_html=True
+                )
 
                 # Calculate remaining time
                 from datetime import datetime
@@ -2087,21 +2148,34 @@ if not st.session_state.get("authenticated", False):
 
                 if remaining == 0:
                     # OTP Expired
-                    notify("register", "error", "Verification code expired. Please request a new one.")
+                    # notify() MUST be called before render_notification() so the
+                    # message is in session_state when the slot is rendered.
+                    notify("register", "error", "OTP expired. Please request a new one.", duration=8.0)
                     render_notification("register")
 
                     col1, col2 = st.columns(2)
                     with col1:
                         if st.button("Resend OTP", key="reg_resend_expired_btn", use_container_width=True):
                             pending = st.session_state.pending_registration
-                            with st.spinner("Sending new verification code..."):
+                            st.markdown("""
+                            <div class="hly-spinner-wrap">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"
+                                          stroke="#38bdf8" stroke-width="1.6" fill="rgba(56,189,248,0.10)"/>
+                                    <path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
+                                </svg>
+                                Sending new OTP...
+                            </div>""", unsafe_allow_html=True)
+                            success = False
+                            with st.spinner(""):
                                 success, message = add_user(pending['username'], pending['password'], pending['email'])
+                                if success:
+                                    notify("register", "success", "New OTP sent! Check your email.", duration=8.0)
+                                    time.sleep(0.5)
                             if success:
-                                st.session_state["_reg_otp_just_sent"] = True
                                 st.rerun()
                             else:
                                 notify("register", "error", message)
-                                time.sleep(0.3)
                                 st.rerun()
                     with col2:
                         if st.button("Start Over", key="reg_start_over_btn", use_container_width=True):
@@ -2109,8 +2183,7 @@ if not st.session_state.get("authenticated", False):
                             st.rerun()
                 else:
                     # OTP still valid
-                    otp_input = st.text_input("Enter 6-Digit Verification Code", key="reg_otp_input", max_chars=6,
-                                              placeholder="Enter the code from your email")
+                    otp_input = st.text_input("Enter 6-Digit OTP", key="reg_otp_input", max_chars=6)
 
                     # Render notification area (reserves space)
                     render_notification("register")
@@ -2121,43 +2194,61 @@ if not st.session_state.get("authenticated", False):
                             cached_username = st.session_state.pending_registration['username']
                             current_elapsed = (datetime.now(st.session_state.pending_registration['timestamp'].tzinfo) - st.session_state.pending_registration['timestamp']).total_seconds()
                             if current_elapsed >= 180:
-                                notify("register", "error", "Verification code has expired. Please request a new one.")
-                                time.sleep(0.3)
-                                st.rerun()
-                            elif not otp_input.strip():
-                                notify("register", "warning", "Please enter the 6-digit code from your email.")
-                                time.sleep(0.3)
+                                st.markdown("""
+                                <div class="hly-spinner-wrap">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <circle cx="12" cy="12" r="9" stroke="#fca5a5" stroke-width="1.6"/>
+                                        <line x1="12" y1="8" x2="12" y2="12" stroke="#fca5a5" stroke-width="2" stroke-linecap="round"/>
+                                        <circle cx="12" cy="16" r="1" fill="#fca5a5"/>
+                                    </svg>
+                                    Checking OTP...
+                                </div>""", unsafe_allow_html=True)
+                                with st.spinner(""):
+                                    notify("register", "error", "OTP has expired. Please request a new one.")
+                                    time.sleep(0.6)
                                 st.rerun()
                             else:
-                                with st.spinner("Verifying code..."):
+                                st.markdown("""
+                                <div class="hly-spinner-wrap">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M9 12l2 2 4-4" stroke="#34d399" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <circle cx="12" cy="12" r="9" stroke="#34d399" stroke-width="1.6"/>
+                                    </svg>
+                                    Verifying OTP...
+                                </div>""", unsafe_allow_html=True)
+                                with st.spinner(""):
                                     success, message = complete_registration(otp_input.strip())
-                                if success:
-                                    log_user_action(cached_username, "register")
-                                    notify("register", "success", "Account created successfully! You can now log in.")
-                                    time.sleep(0.5)
-                                    st.rerun()
-                                else:
-                                    # Show the error from complete_registration (invalid OTP, expired, etc.)
-                                    if "Invalid OTP" in message or "invalid" in message.lower():
-                                        notify("register", "error", "Invalid verification code. Please check the code and try again.")
-                                    elif "expired" in message.lower():
-                                        notify("register", "error", "Verification code has expired. Please request a new one.")
+                                    if success:
+                                        log_user_action(cached_username, "register")
+                                        notify("register", "success", message)
+                                        time.sleep(0.5)
                                     else:
                                         notify("register", "error", message)
-                                    time.sleep(0.3)
-                                    st.rerun()
+                                        time.sleep(0.6)
+                                st.rerun()
 
                     with col2:
                         if st.button("Resend", key="resend_reg_otp_btn", use_container_width=True):
                             pending = st.session_state.pending_registration
-                            with st.spinner("Sending new verification code..."):
+                            st.markdown("""
+                            <div class="hly-spinner-wrap">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"
+                                          stroke="#38bdf8" stroke-width="1.6" fill="rgba(56,189,248,0.10)"/>
+                                    <path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
+                                </svg>
+                                Sending new OTP...
+                            </div>""", unsafe_allow_html=True)
+                            with st.spinner(""):
+                                success = False
                                 success, message = add_user(pending['username'], pending['password'], pending['email'])
+                                if success:
+                                    notify("register", "info", "New OTP sent! Check your email.", duration=8.0)
+                                    time.sleep(0.5)
                             if success:
-                                st.session_state["_reg_otp_just_sent"] = True
                                 st.rerun()
                             else:
                                 notify("register", "error", message)
-                                time.sleep(0.3)
                                 st.rerun()
 
                     with col3:
@@ -2351,30 +2442,40 @@ if not st.session_state.get("authenticated", False):
                     if new_email.strip() and new_user.strip() and new_pass.strip():
                         # Validate before attempting registration
                         if not is_valid_email(new_email.strip()):
-                            notify("register", "warning", "Invalid email format. Please enter a valid email address.")
-                            time.sleep(0.3)
+                            notify("register", "warning", "Invalid email format.")
                             st.rerun()
                         elif email_exists(new_email.strip()):
-                            notify("register", "error", "This email is already registered. Please use a different email or log in.")
-                            time.sleep(0.3)
+                            notify("register", "error", "Email already registered.")
                             st.rerun()
                         elif username_exists(new_user.strip()):
-                            notify("register", "error", "This username is already taken. Please choose a different username.")
-                            time.sleep(0.3)
+                            notify("register", "error", "Username already exists.")
                             st.rerun()
                         else:
-                            with st.spinner("Sending verification code to your email..."):
+                            st.markdown("""
+                            <div class="hly-spinner-wrap">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                     xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"
+                                          stroke="#38bdf8" stroke-width="1.6" fill="rgba(56,189,248,0.10)"/>
+                                    <path d="M2 8l10 7 10-7"
+                                          stroke="#38bdf8" stroke-width="1.6" stroke-linecap="round"/>
+                                </svg>
+                                Sending verification OTP to your email...
+                            </div>
+                            """, unsafe_allow_html=True)
+                            success = False
+                            with st.spinner(""):
                                 success, message = add_user(new_user.strip(), new_pass.strip(), new_email.strip())
+                                if success:
+                                    notify("register", "success", "Verification code sent! Check your email inbox.", duration=10.0)
+                                    time.sleep(0.8)
                             if success:
-                                st.session_state["_reg_otp_just_sent"] = True
                                 st.rerun()
                             else:
                                 notify("register", "error", message)
-                                time.sleep(0.3)
                                 st.rerun()
                     else:
-                        notify("register", "warning", "Please fill in all fields: email, username, and password.")
-                        time.sleep(0.3)
+                        notify("register", "warning", "Please fill in all fields (email, username, and password).")
                         st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
