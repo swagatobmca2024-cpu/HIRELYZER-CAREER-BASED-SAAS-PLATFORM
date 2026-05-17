@@ -313,7 +313,11 @@ def fetch_analytics_data(scope_username=None):
         df = pd.DataFrame(rows, columns=['role', 'location', 'platform', 'search_session_id', 'timestamp'])
         if not df.empty:
             df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
-            df = df.dropna(subset=['timestamp'])
+            # IMPORTANT: do NOT dropna here — a single NULL timestamp would silently
+            # reduce total_searches by 1 (145 rows → shows 144). Instead fill bad
+            # timestamps with epoch so the row is always counted but charts still work.
+            _epoch = pd.Timestamp('1970-01-01', tz='UTC')
+            df['timestamp'] = df['timestamp'].fillna(_epoch)
             df['timestamp_ist'] = df['timestamp'].dt.tz_convert('Asia/Kolkata')
             df['date']    = df['timestamp_ist'].dt.date.astype(str)
             df['hour']    = df['timestamp_ist'].dt.hour
