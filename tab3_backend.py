@@ -154,8 +154,14 @@ def save_job_search(username, role, location, results, session_id=""):
             return
 
 
-def prune_old_searches(username):
-    """Keep only the last 50 saved job searches per user (optional cleanup)."""
+def prune_old_searches(username, keep=200):
+    """
+    Keep only the last `keep` saved job searches per user (optional cleanup).
+    Default raised to 200 so normal usage never triggers pruning.
+    Call explicitly if you need to reclaim DB space.
+    NOTE: intentionally NOT called automatically after every search —
+    that was the bug that froze the count at 50.
+    """
     if not username:
         return
 
@@ -167,11 +173,14 @@ def prune_old_searches(username):
                 SELECT id FROM user_jobs
                 WHERE username = %s
                 ORDER BY timestamp DESC, id DESC
-                LIMIT 50
+                LIMIT %s
             )
-        """, (username, username))
+        """, (username, username, keep))
+        # Clear ALL read caches so counts and analytics reflect the pruned state
         get_saved_job_searches.clear()
         get_total_saved_searches_count.clear()
+        get_available_platforms.clear()
+        fetch_analytics_data.clear()
     except Exception as e:
         st.error(f"Error pruning old searches: {e}")
 
@@ -292,13 +301,13 @@ def fetch_analytics_data(scope_username=None):
         if scope_username:
             cur.execute(
                 """SELECT role, location, platform, search_session_id, timestamp
-                   FROM user_jobs WHERE username = %s""",
+                   FROM user_jobs WHERE username = %s AND is_deleted = FALSE""",
                 (scope_username,)
             )
         else:
             cur.execute(
                 """SELECT role, location, platform, search_session_id, timestamp
-                   FROM user_jobs"""
+                   FROM user_jobs WHERE is_deleted = FALSE"""
             )
         rows = cur.fetchall()
         df = pd.DataFrame(rows, columns=['role', 'location', 'platform', 'search_session_id', 'timestamp'])
