@@ -1403,10 +1403,10 @@ def _job_search_interactive():
                         st.markdown(_card_html, unsafe_allow_html=True)
 
                     with delete_col:
-                        # Delete button
                         if st.button("🗑", key=f"delete_{search['id']}", help="Delete this search"):
-                            delete_saved_job_search(search['id'])
-                            st.rerun(scope="fragment")
+                            success = delete_saved_job_search(search['id'])
+                            if success:
+                                st.rerun(scope="fragment")
             else:
                 st.markdown(f"""
 <div class="empty-state">
