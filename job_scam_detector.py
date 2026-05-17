@@ -4397,7 +4397,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         help="Your current job title — helps assess whether the offer aligns with your level",
     )
     _years_exp = up3.text_input(
-        "Experience (yrs)",
+        "Exp (yrs)",
         placeholder="e.g., 3",
         key="jsd_uexp",
         help="Total years of professional experience",
@@ -4511,7 +4511,30 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         job["salary"]   = e.text_input("Salary Offered",  placeholder="e.g., 8-12 LPA",           key="jsd_sa")
         job["contact"]  = f.text_input("Contact Email",   placeholder="e.g., hr@acme.com",        key="jsd_ct")
         job["description"]  = st.text_area("Job Description",  height=120, key="jsd_d",
+                                            max_chars=_MAX_PASTE_CHARS,
                                             placeholder="Describe the role and responsibilities...")
+        # ── Live character counter for Job Description (mirrors paste mode) ──
+        _desc_chars = len(job.get("description") or "")
+        _desc_pct   = _desc_chars / _MAX_PASTE_CHARS
+        if _desc_chars > 0:
+            if _desc_pct < 0.75:
+                _dc, _lc = "#22c55e", "#6b7280"
+            elif _desc_pct < 0.95:
+                _dc, _lc = "#f59e0b", "#f59e0b"
+            else:
+                _dc, _lc = "#ef4444", "#ef4444"
+            st.markdown(
+                f'''<div style="display:flex;align-items:center;gap:8px;margin:-6px 0 6px;">
+                <div style="flex:1;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;">
+                  <div style="width:{min(_desc_pct*100,100):.1f}%;height:100%;
+                       background:{_dc};border-radius:2px;transition:width .2s;"></div>
+                </div>
+                <span style="font-size:0.68rem;color:{_lc};white-space:nowrap;
+                     font-variant-numeric:tabular-nums;">
+                  {_desc_chars:,} / {_MAX_PASTE_CHARS:,}
+                </span></div>''',
+                unsafe_allow_html=True,
+            )
         job["requirements"] = st.text_area("Requirements",     height=80,  key="jsd_r",
                                             placeholder="Skills, experience, qualifications...")
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
