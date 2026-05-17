@@ -62,11 +62,7 @@ def _conn():
             try:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
-                # Only rollback if the connection is in a dirty/aborted state.
-                # Unconditional rollback was issuing a ROLLBACK on clean connections
-                # and could interfere with autocommit transitions in create_user_table.
-                if conn.status != psycopg2.extensions.STATUS_READY:
-                    conn.rollback()
+                conn.rollback()
             except Exception:
                 need_reconnect = True
                 try:
@@ -157,151 +153,103 @@ def email_exists(email):
 # ── Table creation ───────────────────────────────────────────────────────────
 
 def create_user_table():
-    # FIX v3: Each DDL statement is executed individually in autocommit=True mode.
-    # Previously a single cur.execute(ddl) sent all statements as one string; some
-    # psycopg2/libpq versions silently drop everything after the first statement or
-    # behave inconsistently.  One execute() per statement is explicit and safe.
-    #
-    # The except block previously did:
-    #     conn.autocommit = False   ← CRASH: set_session cannot be used inside a transaction
-    #     conn.rollback()
-    # psycopg2 raises ProgrammingError if you change autocommit while a (failed)
-    # transaction is open.  Fix: rollback FIRST to clear the aborted-txn state,
-    # THEN restore autocommit — each step in its own try/except so cleanup never
-    # masks the original error.
-
-    ddl_statements = [
-        # ── Tables ──────────────────────────────────────────────────────────
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id           SERIAL PRIMARY KEY,
-            username     TEXT UNIQUE NOT NULL,
-            password     TEXT NOT NULL,
-            email        TEXT UNIQUE
-        )
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS user_logs (
-            id        SERIAL PRIMARY KEY,
-            username  TEXT NOT NULL,
-            action    TEXT NOT NULL,
-            timestamp TEXT NOT NULL
-        )
-        """,
-        """
-        CREATE TABLE IF NOT EXISTS feature_usage (
-            id       SERIAL PRIMARY KEY,
-            username TEXT NOT NULL,
-            feature  TEXT NOT NULL,
-            used_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-        """,
-        "CREATE INDEX IF NOT EXISTS idx_feature_usage_lookup ON feature_usage (username, feature, used_at)",
-        """
-        CREATE TABLE IF NOT EXISTS scam_feedback (
-            id            SERIAL PRIMARY KEY,
-            username      TEXT NOT NULL,
-            job_title     TEXT,
-            company       TEXT,
-            verdict       TEXT,
-            blended_score INTEGER,
-            rating        TEXT NOT NULL,
-            submitted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-        """,
-        "CREATE INDEX IF NOT EXISTS idx_scam_feedback_user ON scam_feedback (username, submitted_at DESC)",
-        """
-        CREATE TABLE IF NOT EXISTS login_tokens (
-            id         SERIAL PRIMARY KEY,
-            token      TEXT UNIQUE NOT NULL,
-            username   TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            used       BOOLEAN NOT NULL DEFAULT FALSE
-        )
-        """,
-        "CREATE INDEX IF NOT EXISTS idx_login_tokens_token ON login_tokens (token)",
-        """
-        CREATE TABLE IF NOT EXISTS login_attempts (
-            id           SERIAL PRIMARY KEY,
-            identifier   TEXT NOT NULL,
-            attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-        """,
-        "CREATE INDEX IF NOT EXISTS idx_login_attempts_lookup ON login_attempts (identifier, attempted_at)",
-        """
-        CREATE TABLE IF NOT EXISTS scam_analysis_history (
-            id          SERIAL PRIMARY KEY,
-            username    TEXT NOT NULL,
-            job_title   TEXT,
-            company     TEXT,
-            score       INTEGER,
-            verdict     TEXT,
-            analysed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            is_deleted  BOOLEAN NOT NULL DEFAULT FALSE
-        )
-        """,
-        "CREATE INDEX IF NOT EXISTS idx_scam_history_user ON scam_analysis_history (username, analysed_at DESC)",
-    ]
-
+    ddl = """
+    CREATE TABLE IF NOT EXISTS users (
+        id           SERIAL PRIMARY KEY,
+        username     TEXT UNIQUE NOT NULL,
+        password     TEXT NOT NULL,
+        email        TEXT UNIQUE
+    );
+    CREATE TABLE IF NOT EXISTS user_logs (
+        id        SERIAL PRIMARY KEY,
+        username  TEXT NOT NULL,
+        action    TEXT NOT NULL,
+        timestamp TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS feature_usage (
+        id       SERIAL PRIMARY KEY,
+        username TEXT NOT NULL,
+        feature  TEXT NOT NULL,
+        used_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_feature_usage_lookup
+        ON feature_usage (username, feature, used_at);
+    CREATE TABLE IF NOT EXISTS scam_feedback (
+        id           SERIAL PRIMARY KEY,
+        username     TEXT NOT NULL,
+        job_title    TEXT,
+        company      TEXT,
+        verdict      TEXT,
+        blended_score INTEGER,
+        rating       TEXT NOT NULL,
+        submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_scam_feedback_user
+        ON scam_feedback (username, submitted_at DESC);
+    CREATE TABLE IF NOT EXISTS login_tokens (
+        id         SERIAL PRIMARY KEY,
+        token      TEXT UNIQUE NOT NULL,
+        username   TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        used       BOOLEAN NOT NULL DEFAULT FALSE
+    );
+    CREATE INDEX IF NOT EXISTS idx_login_tokens_token ON login_tokens (token);
+    CREATE TABLE IF NOT EXISTS login_attempts (
+        id         SERIAL PRIMARY KEY,
+        identifier TEXT NOT NULL,
+        attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_login_attempts_lookup
+        ON login_attempts (identifier, attempted_at);
+    CREATE TABLE IF NOT EXISTS scam_analysis_history (
+        id          SERIAL PRIMARY KEY,
+        username    TEXT NOT NULL,
+        job_title   TEXT,
+        company     TEXT,
+        score       INTEGER,
+        verdict     TEXT,
+        analysed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        is_deleted  BOOLEAN NOT NULL DEFAULT FALSE
+    );
+    CREATE INDEX IF NOT EXISTS idx_scam_history_user
+        ON scam_analysis_history (username, analysed_at DESC);
+    """
     conn = _conn()
     try:
-        # autocommit=True: each DDL statement is its own implicit transaction.
-        # This avoids InFailedSqlTransaction bleed-through if one statement
-        # errors while others have already succeeded.
+        # FIX v2: DDL (CREATE TABLE / CREATE INDEX) in PostgreSQL is transactional,
+        # but some Postgres configurations and psycopg2 versions behave unexpectedly
+        # when DDL runs inside an explicit transaction that was previously in an error
+        # state (InFailedSqlTransaction). Setting autocommit=True for the DDL block
+        # ensures each statement auto-commits and cannot be rolled back inadvertently.
+        # We restore autocommit=False afterwards for safety.
         conn.autocommit = True
         with conn.cursor() as cur:
-            for stmt in ddl_statements:
-                cur.execute(stmt)
-
-            # ── Migration: add is_deleted to pre-existing tables ──────────
-            # IF NOT EXISTS is not supported for ADD COLUMN in older Postgres;
-            # catch duplicate_column (42701) and continue safely.
+            cur.execute(ddl)
+            # ── Migration: add is_deleted column to existing tables ────────
+            # IF NOT EXISTS not supported for ADD COLUMN in older Postgres;
+            # catch the duplicate_column error (42701) and ignore it safely.
             try:
                 cur.execute(
                     "ALTER TABLE scam_analysis_history "
                     "ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT FALSE"
                 )
-            except psycopg2.errors.DuplicateColumn:
-                pass  # column already exists — safe to ignore
             except Exception:
-                pass  # any other migration hiccup is non-fatal at startup
-
-        # ── Restore autocommit before DML ─────────────────────────────────
-        # Must happen OUTSIDE the DDL cursor block and before the DML block.
+                pass  # column already exists — safe to ignore
         conn.autocommit = False
 
-        # Prune stale rows — DML runs in a normal explicit transaction.
+        # Prune stale rows — these are DML, run in a normal transaction after DDL.
         with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM feature_usage WHERE used_at < NOW() - INTERVAL '2 hours'"
-            )
-            cur.execute(
-                "DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '15 minutes'"
-            )
+            # Prune feature_usage rows older than 2 hours
+            cur.execute("DELETE FROM feature_usage WHERE used_at < NOW() - INTERVAL '2 hours'")
+            # Prune login_attempts older than 15 minutes
+            cur.execute("DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '15 minutes'")
         conn.commit()
-
     except Exception as e:
-        # FIX: rollback FIRST to clear any aborted-transaction state, THEN
-        # restore autocommit.  The previous order was reversed, causing
-        # "set_session cannot be used inside a transaction" on every startup
-        # after a DDL error.
+        conn.autocommit = False  # always restore
         try:
             conn.rollback()
         except Exception:
             pass
-        try:
-            conn.autocommit = False
-        except Exception:
-            # Connection is truly broken — can't restore autocommit state.
-            # Nuke it so _conn() forces a fresh reconnect on the next call
-            # instead of handing out a permanently broken connection that
-            # raises "set table cannot be used inside a transaction" on
-            # every subsequent operation.
-            try:
-                conn.close()
-            except Exception:
-                pass
-            _user_conn_holder["conn"] = None
         st.error(f"Error creating tables: {e}")
 
 
