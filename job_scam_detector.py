@@ -3690,6 +3690,7 @@ IMPORTANT JUDGMENT RULES (follow strictly):
    - mlm_pyramid fired → verdict MUST be at least LIKELY_SCAM.
    - scam_description fired → verdict MUST be at least SUSPICIOUS.
    In top_red_flags, the payment demand must ALWAYS be listed first.
+7. For positive_signals: list ONLY signals observable from the JOB DESCRIPTION TEXT itself — e.g. "Detailed role responsibilities listed", "Named hiring manager with title", "Specific office address provided", "Realistic salary band for the role", "Company registration number mentioned", "Professional tone with correct grammar". Do NOT echo network/infrastructure facts (DNS, HTTPS, SSL, LinkedIn, domain age) here — those are already captured by the probe layer and will be shown separately to the user.
 
 Required JSON schema (all keys mandatory):
 {{
@@ -3697,12 +3698,13 @@ Required JSON schema (all keys mandatory):
   "verdict": "<SAFE|SUSPICIOUS|LIKELY_SCAM|DEFINITE_SCAM>",
   "company_legitimacy": "<VERIFIED|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
   "top_red_flags": ["<str>","<str>","<str>"],
-  "positive_signals": ["<str>"],
+  "positive_signals": ["<job-description-level observation only>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
   "salary_assessment": "<NOT_PROVIDED if salary missing, else detailed structured assessment per the rules above>",
   "recommended_action": "<specific advice for the job seeker>",
-  "similar_scam_type": "<identify the scam pattern by cross-referencing BOTH rule signals AND probe results AND job text. Choose the BEST match from this taxonomy — or combine if multiple apply: UPFRONT_FEE_SCAM | MLM_PYRAMID | FAKE_GOVT_JOB | DATA_ENTRY_SCAM | FAKE_INTERNSHIP | PLACEMENT_FEE_TRAP | WFH_EARN_FROM_HOME | GHOST_COMPANY | DOMAIN_IMPERSONATION | TYPOSQUAT_BRAND | BAIT_AND_SWITCH_SALARY | WHATSAPP_ONLY_SCAM | PERSONAL_DATA_HARVEST | INVESTMENT_FRAUD | Unknown. For each match explain WHY in 1 sentence.>",
+  "similar_scam_type": "<ONLY the taxonomy keyword — no explanation: UPFRONT_FEE_SCAM | MLM_PYRAMID | FAKE_GOVT_JOB | DATA_ENTRY_SCAM | FAKE_INTERNSHIP | PLACEMENT_FEE_TRAP | WFH_EARN_FROM_HOME | GHOST_COMPANY | DOMAIN_IMPERSONATION | TYPOSQUAT_BRAND | BAIT_AND_SWITCH_SALARY | WHATSAPP_ONLY_SCAM | PERSONAL_DATA_HARVEST | INVESTMENT_FRAUD | Unknown>",
+  "scam_pattern_reason": "<one sentence: WHY this scam type, cross-referencing rule signals + probe results + job text>",
   "confidence": <0-100>
 }}"""
 
@@ -4158,7 +4160,109 @@ def _render_signal_cards(signals: dict):
     col_r.markdown(right_html or "<div></div>", unsafe_allow_html=True)
 
 
-def _render_ai_dive(llm: dict):
+def _humanize_scam_type(raw: str) -> tuple[str, str]:
+    """
+    Split a similar_scam_type string into (label, explanation).
+
+    The LLM sometimes returns bare enum names like 'UPFRONT_FEE_SCAM' and
+    sometimes appends an explanation after a comma or dash:
+      'UPFRONT_FEE_SCAM, because the job posting demands an upfront payment...'
+    Returns:
+      label       — human-readable badge text, e.g. 'Upfront Fee Scam'
+      explanation — the reasoning sentence, or '' if none given
+    """
+    if not raw or raw.strip().lower() in ("unknown", "none", ""):
+        return "Unknown", ""
+
+    # Split off the explanation at the first ', because', ' — ', ' - ', or ','
+    # keeping the taxonomy keyword as the label.
+    raw = raw.strip()
+    explanation = ""
+    for sep in (", because ", ", Because ", " — ", " - ", ", "):
+        if sep in raw:
+            parts = raw.split(sep, 1)
+            label_raw = parts[0].strip()
+            explanation = sep.strip().lstrip(",").strip().capitalize() + sep.join(parts[1:])
+            raw = label_raw
+            break
+
+    # Humanize the enum-style label: UPFRONT_FEE_SCAM → Upfront Fee Scam
+    label = raw.replace("_", " ").title()
+    return label, explanation
+
+
+def _build_probe_positive_signals(probes: dict) -> list[str]:
+    """
+    Derive human-readable positive signals from live network probe results.
+    These are probe-layer facts (infrastructure), distinct from the LLM's
+    job-description-level positive signals.
+    Returns a list of concise strings, e.g. ['DNS resolved', 'HTTPS live'].
+    """
+    sigs: list[str] = []
+    if not probes:
+        return sigs
+
+    cd  = probes.get("company_domain", {})
+    sr  = probes.get("site_reach", {})
+    da  = probes.get("domain_age", {})
+    mx  = probes.get("mx_record", {})
+    fe  = probes.get("free_email", {})
+    t   = probes.get("typosquat", {})
+    spf = probes.get("spf_dmarc", {})
+
+    # Infrastructure signals
+    if cd.get("domain_exists"):
+        sigs.append("DNS resolved")
+    if sr.get("reachable"):
+        sigs.append("HTTPS live")
+    if sr.get("ssl_valid"):
+        sigs.append("SSL valid")
+
+    # Domain age
+    age_st = da.get("status", "")
+    if age_st in ("old", "established"):
+        age_days = da.get("age_days")
+        age_str  = f"{age_days // 365}+ yr" if age_days and age_days >= 365 else ""
+        sigs.append(f"Established domain{(' (' + age_str + ')') if age_str else ''}")
+
+    # MX / mail server
+    if mx.get("status") == "MX_FOUND" and not mx.get("voip_risk"):
+        sigs.append("Corporate MX mail server found")
+
+    # SPF / DMARC
+    if spf.get("spf") and spf.get("dmarc"):
+        sigs.append("SPF & DMARC email authentication present")
+    elif spf.get("spf"):
+        sigs.append("SPF email authentication present")
+
+    # Company identity
+    cb_ok   = bool((cd.get("clearbit")  or {}).get("found"))
+    wiki_ok = bool((cd.get("wikipedia") or {}).get("found"))
+    li_ok   = bool((cd.get("linkedin")  or {}).get("found"))
+    id_src  = cd.get("identity_sources", 0)
+
+    if id_src >= 2:
+        sources = [n for n, ok in [("Clearbit", cb_ok), ("Wikipedia", wiki_ok), ("LinkedIn", li_ok)] if ok]
+        sigs.append(f"Company identity confirmed by {', '.join(sources)}")
+    elif li_ok:
+        sigs.append("Company identity confirmed by LinkedIn")
+    elif cb_ok:
+        sigs.append("Company identity confirmed by Clearbit")
+    elif wiki_ok:
+        sigs.append("Company identity confirmed by Wikipedia")
+
+    # Typosquat clear
+    if not t.get("is_squatter") and t.get("similarity", 0) < 0.5:
+        sigs.append("No typosquatting risk detected")
+
+    # Recruiter uses corporate email
+    if not fe.get("uses_free_domain"):
+        sigs.append("Recruiter uses corporate (non-free) email")
+
+    return sigs
+
+
+def _render_ai_dive(llm: dict, probes: dict | None = None):
     if not llm:
         st.markdown('<p style="color:#6b7280;font-size:0.82rem;">AI analysis unavailable.</p>',
                     unsafe_allow_html=True)
@@ -4167,38 +4271,101 @@ def _render_ai_dive(llm: dict):
     cl     = llm.get("company_legitimacy", "UNVERIFIABLE")
     ci, cc = _CB.get(cl, _CB["UNVERIFIABLE"])
 
+    # ── FIX 1 & 2: Humanize scam type + keep boxes compact ──────────────────
+    raw_scam   = llm.get("similar_scam_type", "Unknown")
+    scam_label, scam_explanation = _humanize_scam_type(raw_scam)
+    # Prefer dedicated reason field (new schema) if the LLM returned it
+    if llm.get("scam_pattern_reason", "").strip():
+        scam_explanation = llm["scam_pattern_reason"].strip()
+    cl_label   = cl.replace("_", " ").title()   # e.g. "UNVERIFIABLE" → "Unverifiable"
+
+    # Scam explanation goes below the badge as small muted text (no box bloat)
+    scam_explain_html = (
+        f'<div style="font-size:0.72rem;color:#8b949e;line-height:1.5;margin-top:5px;">'
+        f'{_html_escape.escape(scam_explanation)}</div>'
+        if scam_explanation else ""
+    )
+
     st.markdown(
-        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;align-items:start;">'
+        # Company Status — compact single-line badge
         f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
-        f'border-radius:9px;padding:12px;">'
-        f'<div style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;'
-        f'letter-spacing:1px;margin-bottom:5px;">Company Status</div>'
-        f'<div style="display:flex;align-items:center;gap:6px;color:{cc};font-weight:600;font-size:0.83rem;">'
-        f'{_svg(ci,13,cc)}{cl.replace("_"," ")}</div></div>'
+        f'border-radius:9px;padding:12px 14px;">'
+        f'<div style="font-size:0.62rem;color:#6b7280;text-transform:uppercase;'
+        f'letter-spacing:1px;margin-bottom:6px;">Company Status</div>'
+        f'<div style="display:flex;align-items:center;gap:6px;color:{cc};font-weight:700;font-size:0.85rem;">'
+        f'{_svg(ci,13,cc)}{cl_label}</div></div>'
+        # Scam Pattern — label + optional explanation
         f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
-        f'border-radius:9px;padding:12px;">'
-        f'<div style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;'
-        f'letter-spacing:1px;margin-bottom:5px;">Scam Pattern</div>'
-        f'<div style="color:#a78bfa;font-weight:600;font-size:0.83rem;">'
-        f'{llm.get("similar_scam_type","Unknown")}</div></div></div>',
+        f'border-radius:9px;padding:12px 14px;">'
+        f'<div style="font-size:0.62rem;color:#6b7280;text-transform:uppercase;'
+        f'letter-spacing:1px;margin-bottom:6px;">Scam Pattern</div>'
+        f'<div style="color:#a78bfa;font-weight:700;font-size:0.85rem;">{scam_label}</div>'
+        f'{scam_explain_html}</div></div>',
         unsafe_allow_html=True,
     )
 
-    # Batch red flags and positive signals into one markdown each
+    # ── FIX 3: Merge probe-based + LLM job-description positive signals ──────
+    # Probe signals = network/infrastructure facts (always deterministic)
+    # LLM signals   = job-description-level observations from AI analysis
+    # We keep them in two visually distinct sub-sections so the user can tell
+    # which layer each signal comes from.
+    probe_sigs = _build_probe_positive_signals(probes or {})
+
+    # Filter LLM positive_signals: strip any that are verbatim re-statements of
+    # probe facts (the LLM sometimes echoes the probe summary it was given).
+    _PROBE_ECHO_PATTERNS = (
+        "dns resolved", "https live", "ssl valid", "ssl certificate",
+        "domain exists", "mx record", "mx server", "spf record", "dmarc",
+        "company identity confirmed", "linkedin", "clearbit", "wikipedia",
+        "no typosquat", "corporate email", "reachable", "domain age",
+    )
+    llm_sigs_raw  = llm.get("positive_signals", [])[:8]
+    llm_sigs_jd   = [
+        s for s in llm_sigs_raw
+        if not any(kw in s.lower() for kw in _PROBE_ECHO_PATTERNS)
+    ]
+
+    # ── Red flags HTML ────────────────────────────────────────────────────────
     fc1, fc2 = st.columns(2)
     flags_html = "".join(
         f'<div style="background:rgba(239,68,68,0.05);border-left:2px solid #ef4444;'
         f'padding:7px 11px;border-radius:0 6px 6px 0;margin-bottom:5px;'
-        f'color:#fca5a5;font-size:0.79rem;">{f}</div>'
-        for f in llm.get("top_red_flags",[])[:5]
+        f'color:#fca5a5;font-size:0.79rem;">{_html_escape.escape(f)}</div>'
+        for f in llm.get("top_red_flags", [])[:5]
     ) or '<div style="color:#6b7280;font-size:0.79rem;font-style:italic;">None identified.</div>'
 
-    pos_html = "".join(
-        f'<div style="background:rgba(34,197,94,0.05);border-left:2px solid #22c55e;'
-        f'padding:7px 11px;border-radius:0 6px 6px 0;margin-bottom:5px;'
-        f'color:#86efac;font-size:0.79rem;">{p}</div>'
-        for p in llm.get("positive_signals",[])[:5]
-    ) or '<div style="color:#6b7280;font-size:0.79rem;font-style:italic;">No positive signals identified.</div>'
+    # ── Positive signals HTML — two labelled sub-sections ────────────────────
+    def _pos_item(text: str, dim: bool = False) -> str:
+        color = "#94a3b8" if dim else "#86efac"
+        bg    = "rgba(34,197,94,0.03)" if dim else "rgba(34,197,94,0.05)"
+        return (
+            f'<div style="background:{bg};border-left:2px solid #22c55e;'
+            f'padding:7px 11px;border-radius:0 6px 6px 0;margin-bottom:5px;'
+            f'color:{color};font-size:0.79rem;">{_html_escape.escape(text)}</div>'
+        )
+
+    pos_parts: list[str] = []
+
+    if probe_sigs:
+        pos_parts.append(
+            '<div style="font-size:0.64rem;color:#6b7280;text-transform:uppercase;'
+            'letter-spacing:0.7px;margin:4px 0 5px;">Network &amp; Infrastructure</div>'
+        )
+        pos_parts.extend(_pos_item(s) for s in probe_sigs)
+
+    if llm_sigs_jd:
+        pos_parts.append(
+            '<div style="font-size:0.64rem;color:#6b7280;text-transform:uppercase;'
+            'letter-spacing:0.7px;margin:8px 0 5px;">Job Description</div>'
+        )
+        pos_parts.extend(_pos_item(s) for s in llm_sigs_jd)
+
+    pos_html = (
+        "".join(pos_parts)
+        if pos_parts
+        else '<div style="color:#6b7280;font-size:0.79rem;font-style:italic;">No positive signals identified.</div>'
+    )
 
     fc1.markdown(
         f'<div style="font-size:0.71rem;font-weight:600;color:#ef4444;text-transform:uppercase;'
@@ -5507,7 +5674,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         )
         _render_signal_cards(res["signals"])
     with t2:
-        _render_ai_dive(res.get("llm", {}))
+        _render_ai_dive(res.get("llm", {}), probes=res.get("probes", {}))
     with t3:
         _render_checklist(res)
 
