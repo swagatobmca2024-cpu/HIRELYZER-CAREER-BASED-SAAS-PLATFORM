@@ -21,7 +21,6 @@ from tab3_backend import (
     fetch_live_jobs,
     search_jobs,
     save_job_search,
-    prune_old_searches,
     delete_saved_job_search,
     get_saved_job_searches,
     get_total_saved_searches_count,
@@ -944,7 +943,9 @@ def _job_search_interactive():
                         })
                     _session_id = str(uuid.uuid4())  # one UUID per search click
                     save_job_search(st.session_state.username, job_role, location, formatted_results, _session_id)
-                    prune_old_searches(st.session_state.username)
+                    # NOTE: prune_old_searches intentionally NOT called here.
+                    # Pruning was hard-capping row count at 50 — every new insert
+                    # was immediately deleted back to the limit, freezing the count.
                     # Signal pagination to reset to page 1 so stale offset never
                     # causes a row to be skipped or duplicated in Saved Searches.
                     st.session_state["_search_just_saved"] = True
@@ -1103,7 +1104,9 @@ def _job_search_interactive():
                     formatted_results,
                     _session_id
                 )
-                prune_old_searches(st.session_state.username)
+                # NOTE: prune_old_searches intentionally NOT called here.
+                # Pruning was hard-capping row count at 50 — every new insert
+                # was immediately deleted back to the limit, freezing the count.
                 # Signal pagination to reset to page 1 so stale offset never
                 # causes a row to be skipped or duplicated in Saved Searches.
                 st.session_state["_search_just_saved"] = True
@@ -1517,7 +1520,14 @@ def _analytics_dashboard():
             """, unsafe_allow_html=True)
         else:
             # ── Compute KPIs ───────────────────────────────────────
-            total_searches      = len(df_analytics)
+            # Count unique search *sessions* (not raw rows). Each search click
+            # inserts N rows that share one search_session_id UUID.  Rows with
+            # an empty/legacy session_id (pre-feature) each count as 1 session.
+            _has_session = df_analytics['search_session_id'].str.strip().ne('')
+            total_searches = (
+                df_analytics.loc[_has_session, 'search_session_id'].nunique()
+                + int((~_has_session).sum())
+            )
             unique_roles        = df_analytics['role'].nunique()
             unique_locations    = df_analytics['location'].nunique()
             top_platform_series = df_analytics['platform'].value_counts()
@@ -1919,7 +1929,7 @@ def _analytics_dashboard():
             ist_now = datetime.now(ZoneInfo('Asia/Kolkata')).strftime("%b %d, %Y %I:%M %p IST")
             st.markdown(f"""
             <div class="analytics-footer">
-                {total_searches:,} records · {scope_label} · Updated {ist_now} · Supabase PostgreSQL
+                {total_searches:,} searches · {len(df_analytics):,} records · {scope_label} · Updated {ist_now} · Supabase PostgreSQL
             </div>
             """, unsafe_allow_html=True)
 
