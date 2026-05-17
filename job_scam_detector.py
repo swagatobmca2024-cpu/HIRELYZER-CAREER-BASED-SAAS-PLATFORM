@@ -343,6 +343,13 @@ _PAY_PHRASES = [
     r"sim.*card.*fee",r"scanner.*fee",r"biometric.*fee",
     r"police.*verification.*fee",r"insurance.*premium.*joining",
     r"token.*amount",r"earnest.*money",r"caution.*deposit",
+    # Internship/placement fee scam variants
+    r"internship.*fee",r"one.time.*fee",r"seat.*confirmation.*fee",
+    r"onboarding.*fee",r"registration.*charges",r"enrollment.*fee",
+    r"placement.*fee",r"interview.*fee",r"shortlisting.*fee",
+    r"document.*verification.*fee",r"offer.*letter.*fee",
+    r"training.*material.*fee",r"course.*fee.*joining",
+    r"refundable.*security",r"one.time.*payment.*joining",
 ]
 _MLM_PHRASES = [
     r"unlimited earning",r"be your own boss",r"passive income",
@@ -3485,7 +3492,7 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _llm_prompt(job: dict, probe_warnings: list, probes: dict = None) -> str:
+def _llm_prompt(job: dict, probe_warnings: list, probes: dict = None, rule_signals: dict = None) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
 
     # Build a structured probe confirmation summary for the LLM so it
@@ -3542,6 +3549,37 @@ def _llm_prompt(job: dict, probe_warnings: list, probes: dict = None) -> str:
             f"Recruiter uses free/personal email: {'YES' if fe.get('uses_free_domain') else 'NO'}"
         )
     probe_summary = "\n".join(f"  {l}" for l in probe_summary_lines) if probe_summary_lines else "  Not available."
+
+    # Build rule signals summary — fired rule names + labels for LLM context
+    _RULE_LABELS = {
+        "upfront_payment":      "Upfront payment / fee demanded",
+        "mlm_pyramid":          "MLM / pyramid scheme language",
+        "too_good_salary":      "Unrealistically high salary",
+        "scam_description":     "Scam job description (guaranteed income / earn from home)",
+        "vague_description":    "Vague / generic job description",
+        "single_strong_vague":  "Suspicious salary/benefit language",
+        "free_email_contact":   "Free/personal email with no website",
+        "urgency_pressure":     "Artificial urgency / pressure tactics",
+        "no_company_info":      "No verifiable company identity",
+        "whatsapp_only_contact":"WhatsApp/Telegram only contact",
+        "interview_only_remote":"Interview/offer via WhatsApp or video only",
+        "personal_info_demand": "Premature personal info demand (Aadhaar/PAN)",
+        "work_from_home_bait":  "WFH bait (data entry / form filling)",
+        "india_scam_pattern":   "Known Indian scam pattern (data entry/typing/captcha)",
+        "fake_govt_job":        "Fake government/railway/bank job",
+        "invalid_gstin":        "Invalid GSTIN format",
+        "req_paradox":          "Requirement contradiction (fresher + senior exp)",
+        "poor_grammar":         "Suspicious grammar / formatting",
+        "missing_salary":       "Salary not disclosed",
+        "unrealistic_benefits": "Unrealistic benefit claims",
+        "location_mismatch":    "Location/jurisdiction mismatch",
+    }
+    fired_rules = []
+    if rule_signals:
+        for k, v in rule_signals.items():
+            label = _RULE_LABELS.get(k, k)
+            fired_rules.append(f"  [{k}] {label}")
+    rule_signals_summary = "\n".join(fired_rules) if fired_rules else "  None fired."
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
 
@@ -3634,6 +3672,9 @@ LIVE NETWORK PROBE RESULTS (hard evidence — use this to determine company_legi
 PROBE WARNING MESSAGES (failures only):
 {ctx}
 
+RULE ENGINE SIGNALS FIRED (cross-reference these with job text AND probe results to identify the scam pattern):
+{rule_signals_summary}
+
 SALARY ASSESSMENT RULE (mandatory):
 {salary_instruction}
 
@@ -3642,6 +3683,13 @@ IMPORTANT JUDGMENT RULES (follow strictly):
 2. A basic or simple company website is NOT evidence of fraud — many legitimate small companies have minimal web presence.
 3. Only mark company_legitimacy as LIKELY_FAKE or GHOST_COMPANY if you have concrete evidence (domain doesn't exist, name clearly fabricated, impersonating another company). Use UNVERIFIABLE for companies that simply cannot be confirmed.
 4. Do NOT add "Overly broad job locations" or "Multiple locations" as a red flag unless there is a genuine contradiction.
+5. CROSS-SYNTHESIS RULE: You MUST read the Rule Engine Signals AND the Probe Results AND the job description TOGETHER to determine the scam pattern. For example: upfront_payment signal + new domain + no MX = UPFRONT_FEE_SCAM with ghost infrastructure. Or: scam_description + whatsapp_only + no company identity = WFH_EARN_FROM_HOME scam. Do not treat each layer in isolation.
+6. MANDATORY ESCALATION — these rules override all positive signals:
+   - upfront_payment fired → verdict MUST be LIKELY_SCAM or DEFINITE_SCAM. No legitimate employer ever charges candidates. A professional website or LinkedIn presence does NOT excuse a payment demand.
+   - fake_govt_job fired → verdict MUST be DEFINITE_SCAM. Government jobs never charge fees.
+   - mlm_pyramid fired → verdict MUST be at least LIKELY_SCAM.
+   - scam_description fired → verdict MUST be at least SUSPICIOUS.
+   In top_red_flags, the payment demand must ALWAYS be listed first.
 
 Required JSON schema (all keys mandatory):
 {{
@@ -3654,7 +3702,7 @@ Required JSON schema (all keys mandatory):
   "linguistic_analysis": "<tone, urgency, grammar observations>",
   "salary_assessment": "<NOT_PROVIDED if salary missing, else detailed structured assessment per the rules above>",
   "recommended_action": "<specific advice for the job seeker>",
-  "similar_scam_type": "<known pattern name or Unknown>",
+  "similar_scam_type": "<identify the scam pattern by cross-referencing BOTH rule signals AND probe results AND job text. Choose the BEST match from this taxonomy — or combine if multiple apply: UPFRONT_FEE_SCAM | MLM_PYRAMID | FAKE_GOVT_JOB | DATA_ENTRY_SCAM | FAKE_INTERNSHIP | PLACEMENT_FEE_TRAP | WFH_EARN_FROM_HOME | GHOST_COMPANY | DOMAIN_IMPERSONATION | TYPOSQUAT_BRAND | BAIT_AND_SWITCH_SALARY | WHATSAPP_ONLY_SCAM | PERSONAL_DATA_HARVEST | INVESTMENT_FRAUD | Unknown. For each match explain WHY in 1 sentence.>",
   "confidence": <0-100>
 }}"""
 
@@ -4960,7 +5008,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     for attempt in range(2):
                         try:
-                            prompt = _llm_prompt(job, warnings, probes)
+                            prompt = _llm_prompt(job, warnings, probes, rules_result.get("signals", {}))
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
@@ -5004,14 +5052,17 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     # FIX C: override company_legitimacy using hard probe evidence.
                     # LLM judges from text only — probes have harder network evidence.
+                    # EXCEPTION: never upgrade to VERIFIED if upfront payment was detected —
+                    # a company charging fees is not "legitimate" regardless of web presence.
                     if llm_parse_ok:
-                        cd_res     = probes.get("company_domain", {})
-                        id_sources = cd_res.get("identity_sources", 0)
-                        domain_ok  = cd_res.get("domain_exists", False)
-                        name_match = cd_res.get("domain_matches_company", False)
-                        if id_sources >= 2 and domain_ok and name_match:
+                        cd_res      = probes.get("company_domain", {})
+                        id_sources  = cd_res.get("identity_sources", 0)
+                        domain_ok   = cd_res.get("domain_exists", False)
+                        name_match  = cd_res.get("domain_matches_company", False)
+                        has_payment = "upfront_payment" in rules_result.get("signals", {})
+                        if id_sources >= 2 and domain_ok and name_match and not has_payment:
                             llm_data["company_legitimacy"] = "VERIFIED"
-                        elif id_sources >= 1 and domain_ok:
+                        elif id_sources >= 1 and domain_ok and not has_payment:
                             if llm_data.get("company_legitimacy") in ("LIKELY_FAKE", "GHOST_COMPANY"):
                                 llm_data["company_legitimacy"] = "UNVERIFIABLE"
 
@@ -5084,6 +5135,18 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                                         if _WEIGHTS.get(k, 0) >= 18]
                     critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
                     blended = max(blended, critical_weight)
+
+                    # UPFRONT PAYMENT HARD OVERRIDE: charging candidates is NEVER
+                    # legitimate — no clean probe result can wash this out.
+                    # Force blended to at least 55 (LIKELY_SCAM) regardless of
+                    # how good the company's network presence looks.
+                    _fired = rules_result.get("signals", {})
+                    if "upfront_payment" in _fired:
+                        blended = max(blended, 55)
+                    if "fake_govt_job" in _fired:
+                        blended = max(blended, 60)
+                    if "mlm_pyramid" in _fired:
+                        blended = max(blended, 50)
 
                     # Probe penalty floor: only if penalty is itself significant (>= 25).
                     # Cap raised to 75 above, so this now correctly pushes into
