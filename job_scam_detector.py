@@ -1,52 +1,52 @@
 from __future__ import annotations
 """
-job_scam_detector.py  —  Production Grade v5
+job_scam_detector.py  --  Production Grade v5
 ─────────────────────────────────────────────
 Fixes in v5 (over v4):
 
-  BUG 1 — RESET BUTTON BROKEN:
+  BUG 1 -- RESET BUTTON BROKEN:
     st.rerun(scope="app") inside @st.fragment raises an error in Streamlit ≥ 1.33.
     Fixed: use st.rerun() (no scope arg) which always works.
     Also fixed: the clear-keys loop now correctly deletes widget keys INCLUDING
     jsd_raw and jsd_mode so the text area and radio actually blank out.
 
-  BUG 2 — ANALYSE BUTTON DOUBLE-FIRE / RACE CONDITION:
+  BUG 2 -- ANALYSE BUTTON DOUBLE-FIRE / RACE CONDITION:
     jsd_running flag was set but the fragment re-runs on EVERY widget interaction,
     causing the flag to sometimes be seen as True on the very next keystroke, 
     permanently disabling the button until a full page reload.
     Fixed: jsd_running is only checked/set during the run block; cleared via
     st.session_state.pop() both on success and failure.
 
-  BUG 3 — AUTO-DETECT (PASTE MODE) VERY WEAK / INFLATED SCORES:
+  BUG 3 -- AUTO-DETECT (PASTE MODE) VERY WEAK / INFLATED SCORES:
     auto_extract() was setting description=raw, requirements=raw, benefits=raw
     (all = full raw text). _run_rules() joins all fields and saw every phrase
     3-6× making rule scores wildly inflated. REAL description is now kept as raw
     but requirements and benefits are left empty so the rule engine reads each 
     section exactly once.
 
-  BUG 4 — _quick_prescan ALSO INFLATED:
+  BUG 4 -- _quick_prescan ALSO INFLATED:
     _quick_prescan passed the same inflated auto_extract dict to _run_rules.
     Fixed: prescan now calls _run_rules with a clean job dict where only 
     description=raw; requirements and benefits are empty strings.
 
-  BUG 5 — _salary_outlier FALSE POSITIVES IN PASTE MODE:
+  BUG 5 -- _salary_outlier FALSE POSITIVES IN PASTE MODE:
     When salary = full raw text, _salary_outlier matched phone numbers, 
     zip codes, etc. Fixed: salary field in paste mode only contains the 
     extracted salary snippet, not the full text.
 
-  BUG 6 — OVERRIDE FIELDS IGNORED AFTER EXPANDER:
+  BUG 6 -- OVERRIDE FIELDS IGNORED AFTER EXPANDER:
     The override expander widgets updated extracted["key"] but the fragment
     re-ran immediately on each keystroke, so the PREVIOUS extracted values
     were used when Analyse was clicked. Fixed: override values are read from
     session_state keys (jsd_ot, jsd_oco, etc.) AT THE TIME OF THE BUTTON CLICK,
     not from the live widget object.
 
-  BUG 7 — CHECKLIST KEY COLLISION:
+  BUG 7 -- CHECKLIST KEY COLLISION:
     Used id(result) for checklist keys which changes every run, creating
     hundreds of orphaned session_state keys. Fixed: use a stable key 
     "jsd_c_{idx}" (no result-id suffix).
 
-  BUG 8 — FORMULA COMMENT/CODE/HTML MISMATCH:
+  BUG 8 -- FORMULA COMMENT/CODE/HTML MISMATCH:
     Docstring said 55%/30%/15% but code did 60%/25%/15% and the score strip
     HTML also showed 0.60/0.25. All three now agree on 60/25/15.
 
@@ -54,13 +54,13 @@ Fixes carried from v4 (unchanged):
   - PAGE RE-RENDER BUG, FRAGMENT ISOLATION, RAW HTML EXPOSURE,
     AUTO-ANALYSE ON PASTE, UX POLISH, PRODUCTION GUIDANCE.
 """
-# v5 patch by senior engineer — all 8 bugs fixed above.
+# v5 patch by senior engineer -- all 8 bugs fixed above.
 
 """
 Original v4 docstring preserved below for reference:
 Fixes in v4:
   - PAGE RE-RENDER BUG: Analysis result stored in session_state and rendered
-    OUTSIDE the form block — submit no longer resets the whole page.
+    OUTSIDE the form block -- submit no longer resets the whole page.
   - FRAGMENT ISOLATION: Input widgets wrapped in @st.fragment so only the
     input area re-runs on widget interaction, not the full app.
   - RAW HTML EXPOSURE: All unsafe HTML is now gated through a single
@@ -69,7 +69,7 @@ Fixes in v4:
   - REFRESH / RESET BUTTON: A dedicated Reset button clears all jsd_ keys
     and reruns cleanly.
   - AUTO-ANALYSE ON PASTE: When text is pasted the rule-based pre-scan runs
-    immediately and shows a lightweight inline risk preview — no button needed
+    immediately and shows a lightweight inline risk preview -- no button needed
     for the first-pass signal. Full AI analysis still requires the button.
   - UX POLISH: Sticky top-bar score badge, keyboard shortcut hint, improved
     loading state with progress steps, section anchors for scrolling.
@@ -102,7 +102,7 @@ import pytz
 _IST = pytz.timezone("Asia/Kolkata")
 
 def _now_ist() -> str:
-    """Return current time as IST string — always '08 May 14:35' format."""
+    """Return current time as IST string -- always '08 May 14:35' format."""
     return datetime.now(_IST).strftime("%-d %b %H:%M")
 
 import ssl
@@ -111,7 +111,7 @@ import contextlib
 
 import streamlit as st
 
-# Rate-limit helpers — imported lazily so job_scam_detector can run standalone
+# Rate-limit helpers -- imported lazily so job_scam_detector can run standalone
 # (unit tests, etc.) without requiring the full user_login module.
 def _get_rate_limit_fns():
     """Return (check_and_gate, record_usage, get_count) or None if unavailable."""
@@ -122,20 +122,20 @@ def _get_rate_limit_fns():
         return None
 
 _SCAM_FEATURE   = "scam_detector"
-_SCAM_LIMIT     = 3   # analyses per hour — mirrors USAGE_LIMITS in user_login.py
+_SCAM_LIMIT     = 3   # analyses per hour -- mirrors USAGE_LIMITS in user_login.py
 _MAX_PASTE_CHARS = 10_000  # hard cap on paste length (real postings: 1500-4000 chars)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PRODUCTION GUIDE  — set env PRINT_PROD_GUIDE=1 to display on startup
+# PRODUCTION GUIDE  -- set env PRINT_PROD_GUIDE=1 to display on startup
 # ─────────────────────────────────────────────────────────────────────────────
 
 _PROD_GUIDE = """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║              JOB SCAM DETECTOR — PRODUCTION CHECKLIST                      ║
+║              JOB SCAM DETECTOR -- PRODUCTION CHECKLIST                      ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║  SECRETS                                                                    ║
-║  • Store GROQ_API_KEY in .streamlit/secrets.toml or env var — never in     ║
+║  • Store GROQ_API_KEY in .streamlit/secrets.toml or env var -- never in     ║
 ║    source code. Access via st.secrets["GROQ_API_KEY"].                      ║
 ║                                                                             ║
 ║  CACHING                                                                    ║
@@ -145,7 +145,7 @@ _PROD_GUIDE = """
 ║                                                                             ║
 ║  RATE-LIMITING                                                              ║
 ║  • Add a per-user token bucket (Redis / Upstash) before call_llm_fn().     ║
-║  • Groq free tier: 30 req/min, 6000 tokens/min — enforce on server side.   ║
+║  • Groq free tier: 30 req/min, 6000 tokens/min -- enforce on server side.   ║
 ║                                                                             ║
 ║  SECURITY                                                                   ║
 ║  • All st.markdown(unsafe_allow_html=True) calls use server-generated HTML.║
@@ -153,7 +153,7 @@ _PROD_GUIDE = """
 ║  • Add Content-Security-Policy header via a reverse proxy (nginx/Caddy).   ║
 ║                                                                             ║
 ║  PERFORMANCE                                                                ║
-║  • Move run_live_probes to a background asyncio task — don't block Groq.   ║
+║  • Move run_live_probes to a background asyncio task -- don't block Groq.   ║
 ║  • Set STREAMLIT_SERVER_MAX_UPLOAD_SIZE=5 (no file uploads needed here).   ║
 ║                                                                             ║
 ║  DEPLOYMENT                                                                 ║
@@ -173,7 +173,7 @@ if os.environ.get("PRINT_PROD_GUIDE") == "1":
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SECURITY HELPER — always escape user text before putting it in HTML
+# SECURITY HELPER -- always escape user text before putting it in HTML
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _esc(text: str) -> str:
@@ -182,7 +182,7 @@ def _esc(text: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SVG ICON SYSTEM  — zero emojis anywhere
+# SVG ICON SYSTEM  -- zero emojis anywhere
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _svg(paths: str, size: int = 14, stroke: str = "currentColor", sw: float = 2) -> str:
@@ -333,7 +333,7 @@ _PAY_PHRASES = [
     r"processing fee",r"joining fee",r"membership fee",r"buy.*starter kit",
     r"purchase.*materials",r"invest.*joining",r"small.*investment",
     r"courier.*charge",r"background.*check.*fee",r"verification.*charge",
-    # NEW — common Indian scam variants
+    # NEW -- common Indian scam variants
     r"pay.*before.*joining",r"deposit.*refund.*after",r"id.*card.*fee",
     r"uniform.*charge",r"laptop.*deposit",r"tool.*kit.*purchase",
     r"sim.*card.*fee",r"scanner.*fee",r"biometric.*fee",
@@ -346,7 +346,7 @@ _MLM_PHRASES = [
     r"downline",r"upline",r"pyramid",r"direct selling",
     r"recruit.*friends",r"grow your team",r"commission.*recruit",
     r"financial freedom.*join",r"work from.*anywhere.*earn",
-    # NEW — Indian MLM / chain marketing
+    # NEW -- Indian MLM / chain marketing
     r"chain.*marketing",r"binary.*plan",r"matrix.*plan",r"level.*income",
     r"team.*bonus",r"generation.*income",r"franchise.*opportunity",
     r"business.*opportunity.*join",r"modicare",r"amway.*distributor",
@@ -510,7 +510,7 @@ _GSTIN_RE = re.compile(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# AUTO-EXTRACT — runs on every paste keystroke, no button needed
+# AUTO-EXTRACT -- runs on every paste keystroke, no button needed
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Known Indian cities + common metro abbreviations for location heuristic
@@ -523,7 +523,7 @@ _KNOWN_CITIES = re.compile(
     re.IGNORECASE,
 )
 
-# Common job-title role words — used to score candidate title lines
+# Common job-title role words -- used to score candidate title lines
 _ROLE_WORDS = re.compile(
     r"\b(engineer|developer|analyst|manager|intern|associate|consultant|"
     r"designer|architect|scientist|lead|head|officer|executive|specialist|"
@@ -546,13 +546,13 @@ _TITLE_NOISE = re.compile(
     re.IGNORECASE,
 )
 
-# Standalone hiring-shout lines — not a title
+# Standalone hiring-shout lines -- not a title
 _HIRING_SHOUT = re.compile(
     r"^(urgent\s+hir|immediate\s+hir|\*+\s*urgent|\*+\s*hir|hiring\s*[!*]+$)",
     re.IGNORECASE,
 )
 
-# Company name suffixes — expanded with more Indian patterns
+# Company name suffixes -- expanded with more Indian patterns
 _CO_SUFFIXES = re.compile(
     r"\b(pvt\.?\s*ltd\.?|private\s+limited|limited|llp|llc|inc\.?|"
     r"corp\.?|technologies|tech|solutions|services|systems|consultancy|"
@@ -562,7 +562,7 @@ _CO_SUFFIXES = re.compile(
     re.IGNORECASE,
 )
 
-# Free/personal email domains — company cannot be extracted from these
+# Free/personal email domains -- company cannot be extracted from these
 _FREE_EMAIL_DOMAINS = re.compile(
     r"@(gmail|yahoo|hotmail|outlook|rediffmail|ymail|icloud|protonmail"
     r"|zohomail|aol|live|msn)\.",
@@ -573,7 +573,7 @@ _FREE_EMAIL_DOMAINS = re.compile(
 def _clean(val: str) -> str:
     """Strip markdown, asterisks, leading bullets, extra whitespace."""
     val = re.sub(r"[\*\_\#\~`]", "", val)
-    val = re.sub(r"^[\-•–—]\s*", "", val.strip())
+    val = re.sub(r"^[\-•–--]\s*", "", val.strip())
     return val.strip().rstrip(".,;:")
 
 
@@ -603,18 +603,18 @@ def _xs(text: str) -> str:
     Extract salary / CTC information.
 
     BUG FIX: The old currency pattern used [\d,\.\s]+ (spaces included) and made
-    the unit suffix optional with no lookahead, so "Rs L" — where Rs appears
-    anywhere and L (lakh abbreviation) appears later on the same line — matched
+    the unit suffix optional with no lookahead, so "Rs L" -- where Rs appears
+    anywhere and L (lakh abbreviation) appears later on the same line -- matched
     as a salary. Fixes:
       1. Require at least one digit immediately after the currency symbol (no space swallowing).
       2. Only accept the abbreviated "L" suffix when it directly follows the number
          (no gap), preventing false matches against unrelated "L" characters.
       3. Fall back to bare number patterns (e.g. "18,500 per month", "12 LPA") when
-         no currency symbol is present — common in Indian job postings.
+         no currency symbol is present -- common in Indian job postings.
     """
     t = text or ""
 
-    # Strategy 1: explicit label — highest confidence
+    # Strategy 1: explicit label -- highest confidence
     m = re.search(
         r"(?i)(?:salary|ctc|pay|package|compensation|remuneration|stipend|fixed)"
         r"\s*[:\-\u2013]\s*([^\n]{3,80})",
@@ -653,7 +653,7 @@ def _xs(text: str) -> str:
     if m3:
         return _clean(m3.group(0))
 
-    # Strategy 4: bare number + explicit unit — e.g. "18,500 per month", "12 LPA"
+    # Strategy 4: bare number + explicit unit -- e.g. "18,500 per month", "12 LPA"
     # Only match when the unit keyword is present to avoid random numbers.
     m4 = re.search(
         r"\b(\d[\d,\.]*(?:\s*[-\u2013]\s*\d[\d,\.]*)?)"
@@ -689,7 +689,7 @@ def _xc(text: str) -> str:
 
 def _xt(text: str) -> str:
     """
-    Extract job title — 6-strategy fallback, production grade.
+    Extract job title -- 6-strategy fallback, production grade.
 
     Fixes over v5:
     - Strategy 0: rejects "URGENT HIRING" / shout lines before anything else
@@ -730,7 +730,7 @@ def _xt(text: str) -> str:
     if val and not _TITLE_NOISE.search(val) and not _HIRING_SHOUT.search(val):
         return _title_clean(val)
 
-    # Strategy 2: "looking for / seeking / need a X" — paragraph-style postings
+    # Strategy 2: "looking for / seeking / need a X" -- paragraph-style postings
     m = re.search(
         r"(?i)(?:looking\s+for\s+a?n?\s*|seeking\s+a?n?\s*|need\s+a?n?\s*|"
         r"require\s+a?n?\s*|searching\s+for\s+a?n?\s*)"
@@ -807,7 +807,7 @@ def _xt(text: str) -> str:
 
 def _xco(text: str) -> str:
     """
-    Extract company name — 6-strategy fallback, production grade.
+    Extract company name -- 6-strategy fallback, production grade.
 
     BUG FIX v7:
     - Strategy 5 was grabbing skills/requirements lines as company names
@@ -821,7 +821,7 @@ def _xco(text: str) -> str:
     """
     t = text or ""
 
-    # ── Section header keywords — lines starting with these are NEVER company names
+    # ── Section header keywords -- lines starting with these are NEVER company names
     _SECTION_HEADERS = re.compile(
         r"^(requirements?|qualifications?|skills?|experience|responsibilities?|"
         r"about\s+(the\s+)?role|job\s+description|what\s+you|who\s+you|"
@@ -833,7 +833,7 @@ def _xco(text: str) -> str:
         re.IGNORECASE,
     )
 
-    # ── Tech/skill keywords — if line contains these it's a requirements line, not company
+    # ── Tech/skill keywords -- if line contains these it's a requirements line, not company
     _SKILL_KEYWORDS = re.compile(
         r"(python|java|javascript|react|node|angular|vue|django|flask|"
         r"sql|mysql|postgresql|mongodb|aws|azure|gcp|docker|kubernetes|"
@@ -854,7 +854,7 @@ def _xco(text: str) -> str:
             return ""
         return s.title() if s else ""
 
-    # Strategy 1: explicit keyword label — highest confidence
+    # Strategy 1: explicit keyword label -- highest confidence
     val = _xf(t, [
         "company", "organization", "organisation", "employer", "firm",
         "about us", "about the company", "about company",
@@ -867,7 +867,7 @@ def _xco(text: str) -> str:
         if cleaned:
             return cleaned
 
-    # Strategy 2: company suffix heuristic — SINGLE LINE only
+    # Strategy 2: company suffix heuristic -- SINGLE LINE only
     # FIX: greedy suffix chain grabs full name e.g. "XYZ Technologies Pvt Ltd"
     # FIX: _SKILL_KEYWORDS guard blocks "Hybrid AI Systems Integration"
     _sfx = _CO_SUFFIXES.pattern
@@ -936,10 +936,10 @@ def _xco(text: str) -> str:
                 if result:
                     return result
 
-    # Strategy 5: standalone line — FIXED with strict guards
+    # Strategy 5: standalone line -- FIXED with strict guards
     lines = [_clean(l) for l in t.split("\n") if _clean(l)]
     for line in lines[1:5]:
-        # Word count guard — company names are 1-5 words max
+        # Word count guard -- company names are 1-5 words max
         word_count = len(line.split())
         if word_count > 5 or word_count < 1:
             continue
@@ -948,7 +948,7 @@ def _xco(text: str) -> str:
         # Section header guard
         if _SECTION_HEADERS.search(line):
             continue
-        # Skill/tech keyword guard — FIX for "Nowledge Of Llm Integration..."
+        # Skill/tech keyword guard -- FIX for "Nowledge Of Llm Integration..."
         if _SKILL_KEYWORDS.search(line):
             continue
         if _ROLE_WORDS.search(line):
@@ -1020,7 +1020,7 @@ def _xloc(text: str) -> str:
     # Strategy 2: known city list
     m = _KNOWN_CITIES.search(t)
     if m:
-        # Return just the matched city/mode — don't grab trailing words.
+        # Return just the matched city/mode -- don't grab trailing words.
         # Old code grabbed up to 40 chars which pulled in "Gurgaon team",
         # "Remote / Work From Home position" etc.
         city = m.group(0).strip()
@@ -1052,7 +1052,7 @@ def _llm_extract_fields(raw: str, call_llm_fn) -> dict:
 
     Design notes
     ─────────────
-    • PRIMARY extraction layer — runs before regex.
+    • PRIMARY extraction layer -- runs before regex.
     • Results are cached in st.session_state keyed by hash(raw[:3000]) so the
       LLM is NOT called again on every keystroke re-render; only when text changes.
     • Post-validation rejects hallucinated company names (skill sentences, etc.)
@@ -1092,16 +1092,16 @@ def _llm_extract_fields(raw: str, call_llm_fn) -> dict:
         return cached
 
     prompt = f"""You are a job-posting parser. Extract structured fields from the posting below.
-Return ONLY a valid JSON object — no markdown fences, no preamble.
+Return ONLY a valid JSON object -- no markdown fences, no preamble.
 
 Fields to extract (return null for any field not clearly present):
 
 {{
-  "title":   "<job role / position name only — e.g. 'Software Engineer', 'Data Analyst'>",
-  "company": "<hiring company name only — proper noun, max 5 words — e.g. 'Infosys', 'Zoho Corporation'>",
-  "location":"<city or work-mode only — e.g. 'Bangalore', 'Remote', 'Hybrid - Mumbai'>",
-  "salary":  "<CTC or stipend as written — e.g. '12-18 LPA', '₹50,000/month'>",
-  "website": "<company/apply URL if present — e.g. 'https://careers.example.com'>",
+  "title":   "<job role / position name only -- e.g. 'Software Engineer', 'Data Analyst'>",
+  "company": "<hiring company name only -- proper noun, max 5 words -- e.g. 'Infosys', 'Zoho Corporation'>",
+  "location":"<city or work-mode only -- e.g. 'Bangalore', 'Remote', 'Hybrid - Mumbai'>",
+  "salary":  "<CTC or stipend as written -- e.g. '12-18 LPA', '₹50,000/month'>",
+  "website": "<company/apply URL if present -- e.g. 'https://careers.example.com'>",
   "contact": "<email and/or phone if present>"
 }}
 
@@ -1113,7 +1113,7 @@ STRICT RULES:
 - "company": must be a proper noun company name. Do NOT return skill or requirement sentences.
   BAD: "Knowledge Of LLM Integration And Hybrid AI Systems"
   BAD: "Looking for candidates with experience"
-  BAD: "Technologies Pvt Ltd"  (incomplete — missing real name)
+  BAD: "Technologies Pvt Ltd"  (incomplete -- missing real name)
   If genuinely unclear, return null.
 
 - "salary": copy the salary/CTC/stipend text verbatim. null if not mentioned.
@@ -1165,12 +1165,12 @@ def auto_extract(raw: str, call_llm_fn=None) -> dict:
     """
     LLM-FIRST extraction pipeline (v6).
 
-    Layer 1 — LLM  (primary, when call_llm_fn supplied):
+    Layer 1 -- LLM  (primary, when call_llm_fn supplied):
         _llm_extract_fields() calls LLaMA 3.3-70B to extract all fields at once.
-        Results are hash-cached in session_state — re-renders on every keystroke
+        Results are hash-cached in session_state -- re-renders on every keystroke
         do NOT re-call the LLM; only genuinely changed text triggers a new call.
 
-    Layer 2 — Regex  (fallback / gap-fill):
+    Layer 2 -- Regex  (fallback / gap-fill):
         Each field the LLM returned "" for is filled by its regex extractor
         (_xt, _xco, _xloc, _xs, _xu, _xc).  Regex also handles the case where
         call_llm_fn is None (e.g. prescan in _quick_prescan, unit tests).
@@ -1201,8 +1201,8 @@ def auto_extract(raw: str, call_llm_fn=None) -> dict:
         "salary":       salary,
         "contact":      contact,
         "description":  raw,
-        "requirements": "",   # intentionally empty — prevents _run_rules triple-count
-        "benefits":     "",   # intentionally empty — same reason
+        "requirements": "",   # intentionally empty -- prevents _run_rules triple-count
+        "benefits":     "",   # intentionally empty -- same reason
     }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1211,7 +1211,7 @@ def auto_extract(raw: str, call_llm_fn=None) -> dict:
 
 _T_RDAP  = 6
 _T_REACH = 5
-_T_MCA   = 10   # MCA/Zaubacorp can be slow — give enough headroom
+_T_MCA   = 10   # MCA/Zaubacorp can be slow -- give enough headroom
 
 
 def _extract_domain(s: str) -> Optional[str]:
@@ -1226,7 +1226,7 @@ def _extract_domain(s: str) -> Optional[str]:
 
 def _age_status(age_days: int) -> str:
     """
-    Tiered domain age status — replaces binary young/old.
+    Tiered domain age status -- replaces binary young/old.
     0-30   = very_young  (very high risk)
     31-90  = young       (high risk)
     91-180 = moderate    (moderate risk)
@@ -1241,7 +1241,7 @@ def _age_status(age_days: int) -> str:
 def _whois_age_fallback(domain: str) -> dict | None:
     """
     Lightweight raw WHOIS TCP query (port 43) as fallback when RDAP fails.
-    Blocked on Streamlit Cloud (port 43 TCP blocked) — degrades gracefully.
+    Blocked on Streamlit Cloud (port 43 TCP blocked) -- degrades gracefully.
 
     Date format fixes:
     - ISO:    2020-01-15  (standard)
@@ -1264,7 +1264,7 @@ def _whois_age_fallback(domain: str) -> dict | None:
     }
     server = whois_servers.get(tld, f"whois.nic.{tld}")
 
-    # Multiple date format parsers — handles Indian WHOIS format
+    # Multiple date format parsers -- handles Indian WHOIS format
     date_formats = [
         (r"(\d{4}-\d{2}-\d{2})",         "%Y-%m-%d"),   # 2020-01-15
         (r"(\d{2}-\w{3}-\d{4})",          "%d-%b-%Y"),   # 15-Jan-2020 ← Indian
@@ -1298,7 +1298,7 @@ def _whois_age_fallback(domain: str) -> dict | None:
                                 "age_days":   age,
                                 "registered": dt.strftime("%d %b %Y"),
                                 "detail":     (
-                                    f"Registered {dt.strftime('%d %b %Y')} — "
+                                    f"Registered {dt.strftime('%d %b %Y')} -- "
                                     f"{age} days old (via WHOIS)"
                                 ),
                                 "source": "WHOIS",
@@ -1313,7 +1313,7 @@ def _whois_age_fallback(domain: str) -> dict | None:
 
 # ── SSRF Protection ───────────────────────────────────────────────────────────
 # All probe functions must call _safe_domain() before making any network
-# request. This prevents Server-Side Request Forgery — a user pasting
+# request. This prevents Server-Side Request Forgery -- a user pasting
 # "http://169.254.169.254" (AWS metadata) or "http://localhost/admin"
 # as a company website would otherwise cause the probe to hit internal infra.
 
@@ -1349,7 +1349,7 @@ _SSRF_BLOCKED_DOMAINS: frozenset = frozenset({
 
 def _safe_domain(domain: str) -> tuple[bool, str]:
     """
-    Validate a domain is safe to probe — blocks SSRF attack vectors.
+    Validate a domain is safe to probe -- blocks SSRF attack vectors.
 
     Returns (is_safe: bool, reason: str).
     Call before ANY socket/HTTP operation on user-supplied input.
@@ -1400,10 +1400,10 @@ def _safe_domain(domain: str) -> tuple[bool, str]:
             if addr in blocked:
                 return False, (
                     f"Domain resolves to blocked IP range {ip_str} "
-                    "(private/loopback/metadata — SSRF blocked)"
+                    "(private/loopback/metadata -- SSRF blocked)"
                 )
     except socket.gaierror:
-        pass   # domain doesn't resolve — let probe handle it naturally
+        pass   # domain doesn't resolve -- let probe handle it naturally
 
     return True, ""
 
@@ -1497,7 +1497,7 @@ def _probe_domain_age(domain: str) -> dict:
                                 registrar=registrar,
                                 privacy_proxy=privacy_proxy,
                                 detail=(
-                                    f"Registered {dt.strftime('%d %b %Y')} — "
+                                    f"Registered {dt.strftime('%d %b %Y')} -- "
                                     f"{age} days old{exp_str}{reg_str}{privacy_str}"
                                 ),
                                 source="RDAP",
@@ -1519,7 +1519,7 @@ def _probe_domain_age(domain: str) -> dict:
         return out
 
     if out["status"] == "unknown":
-        out["detail"] = "Domain age unavailable — verify manually on whois.domaintools.com"
+        out["detail"] = "Domain age unavailable -- verify manually on whois.domaintools.com"
     return out
 
 
@@ -1557,13 +1557,13 @@ def _probe_site_reachable(domain: str) -> dict:
             if addr.is_private or addr.is_loopback:
                 out.update(
                     reachable=False,
-                    detail=f"Domain resolves to private/loopback IP {resolved_ip} — SSRF blocked",
+                    detail=f"Domain resolves to private/loopback IP {resolved_ip} -- SSRF blocked",
                 )
                 return out
         except ValueError:
             pass
     except socket.gaierror:
-        out.update(reachable=False, detail="DNS resolution failed — domain does not exist or is offline")
+        out.update(reachable=False, detail="DNS resolution failed -- domain does not exist or is offline")
         return out
 
     # ── HTTP/HTTPS probes with redirect following ─────────────────────────────
@@ -1611,7 +1611,7 @@ def _probe_site_reachable(domain: str) -> dict:
                 except Exception:
                     ssl_valid = None  # could not verify, not necessarily bad
 
-            detail_parts = [f"HTTP {status} — site is live"]
+            detail_parts = [f"HTTP {status} -- site is live"]
             if is_parked:
                 detail_parts.append("appears to be a PARKED domain")
             if redirect_to:
@@ -1633,12 +1633,12 @@ def _probe_site_reachable(domain: str) -> dict:
 
         except urllib.error.HTTPError as e:
             out.update(reachable=True, status_code=e.code,
-                       detail=f"HTTP {e.code} — server responded")
+                       detail=f"HTTP {e.code} -- server responded")
             return out
         except (urllib.error.URLError, socket.timeout, OSError):
             continue
 
-    out.update(reachable=False, detail="No HTTP/HTTPS response — site appears offline")
+    out.update(reachable=False, detail="No HTTP/HTTPS response -- site appears offline")
     return out
 
 
@@ -1679,7 +1679,7 @@ def _probe_typosquatting(domain: str) -> dict:
 
     1. Levenshtein edit distance ≤ 2 on homoglyph-normalised SLDs.
        Catches: netlfix, nettflix, netfl1x, g00gle, inf0sys, w1pro …
-       Skips brands with SLD < 4 chars (tcs, ril …) — too short, too noisy.
+       Skips brands with SLD < 4 chars (tcs, ril …) -- too short, too noisy.
 
     2. Brand-keyword prefix/suffix containment.
        Catches: infosys-careers.com, wipro-jobs.in, careers.infosys.net …
@@ -1706,7 +1706,7 @@ def _probe_typosquatting(domain: str) -> dict:
         b_sld  = b.split(".")[0]
         b_norm = _typo_normalise(b_sld)
 
-        # Skip very short brand SLDs — too prone to coincidental matches
+        # Skip very short brand SLDs -- too prone to coincidental matches
         if len(b_sld) < 4:
             continue
 
@@ -1744,7 +1744,7 @@ def _probe_typosquatting(domain: str) -> dict:
                       f"(edit distance {best_lev_dist} after homoglyph normalisation)")
         else:
             detail = (f"'{domain}' contains brand keyword "
-                      f"'{prefix_brand.split('.')[0]}' — possible impersonation of {prefix_brand}")
+                      f"'{prefix_brand.split('.')[0]}' -- possible impersonation of {prefix_brand}")
         out.update(is_squatter=True, detail=detail)
     else:
         out["detail"] = (f"No typosquat detected (closest: {closest}, "
@@ -1775,10 +1775,10 @@ def _probe_mx_record(contact: str) -> dict:
 
     Verdicts:
       - NO_EMAIL       : no email address found at all
-      - FREE_DOMAIN    : all emails use free providers (Gmail etc.) — skip MX
+      - FREE_DOMAIN    : all emails use free providers (Gmail etc.) -- skip MX
       - MX_FOUND       : at least one corporate domain has valid MX records
       - NO_MX          : corporate domain exists in DNS but has NO mail servers
-                         configured — company doesn't actually use that domain
+                         configured -- company doesn't actually use that domain
                          for email (strongest scam signal)
       - DNS_FAIL       : corporate domain doesn't resolve at all
       - INCONCLUSIVE   : mixed or edge case
@@ -1794,7 +1794,7 @@ def _probe_mx_record(contact: str) -> dict:
     # ── Extract all email addresses ──────────────────────────────────────────
     emails = re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", contact or "")
     if not emails:
-        out["detail"] = "No email address found — cannot verify mail infrastructure"
+        out["detail"] = "No email address found -- cannot verify mail infrastructure"
         return out
 
     # Separate free vs corporate domains
@@ -1806,13 +1806,13 @@ def _probe_mx_record(contact: str) -> dict:
             status="FREE_DOMAIN",
             detail=(
                 f"Only free email domain(s) found: {', '.join(list(set(free_domains))[:2])}. "
-                "MX check skipped — this is itself a red flag."
+                "MX check skipped -- this is itself a red flag."
             ),
         )
         return out
 
     # ── Query MX records for each corporate domain via public DNS-over-HTTPS ─
-    # Using Cloudflare DoH (1.1.1.1) — no system DNS library needed,
+    # Using Cloudflare DoH (1.1.1.1) -- no system DNS library needed,
     # works in all environments including Streamlit Cloud.
     for domain in dict.fromkeys(corp_domains):   # deduplicate, preserve order
         out["domain"] = domain
@@ -1830,7 +1830,7 @@ def _probe_mx_record(contact: str) -> dict:
 
             status_code = data.get("Status", -1)
 
-            # NXDOMAIN (3) — domain does not exist in DNS at all
+            # NXDOMAIN (3) -- domain does not exist in DNS at all
             if status_code == 3:
                 out.update(
                     status="DNS_FAIL",
@@ -1897,7 +1897,7 @@ def _probe_mx_record(contact: str) -> dict:
                 # ── Build detail string ────────────────────────────────────
                 flags = []
                 if voip_risk:
-                    flags.append("BULK/TRANSACTIONAL mail — not a real corporate inbox")
+                    flags.append("BULK/TRANSACTIONAL mail -- not a real corporate inbox")
                 if free_mx and not voip_risk:
                     flags.append("routes through free provider (Google/Outlook)")
                 if ghost_mx:
@@ -1908,7 +1908,7 @@ def _probe_mx_record(contact: str) -> dict:
                     f"{', '.join(mx_hosts[:2])}"
                 )
                 if flags:
-                    detail += " — " + " | ".join(flags)
+                    detail += " -- " + " | ".join(flags)
 
                 out.update(
                     status="MX_FOUND",
@@ -1937,7 +1937,7 @@ def _probe_mx_record(contact: str) -> dict:
             out.update(
                 status="INCONCLUSIVE",
                 domain=domain,
-                detail=f"MX lookup timed out for '{domain}' — verify manually",
+                detail=f"MX lookup timed out for '{domain}' -- verify manually",
             )
             # try next domain if any
             continue
@@ -1983,8 +1983,8 @@ def _probe_spf_dmarc(domain: str) -> dict:
     """
     Check SPF and DMARC TXT records for a domain.
 
-    SPF  — "v=spf1 ..." TXT record on the domain itself
-    DMARC — "v=DMARC1 ..." TXT record on _dmarc.{domain}
+    SPF  -- "v=spf1 ..." TXT record on the domain itself
+    DMARC -- "v=DMARC1 ..." TXT record on _dmarc.{domain}
 
     Why it matters:
     - Real companies always configure SPF (authorises their mail servers)
@@ -1992,7 +1992,7 @@ def _probe_spf_dmarc(domain: str) -> dict:
     - A domain with MX but NO SPF + NO DMARC = set up just enough to look real
       but the owner never actually uses it for legitimate business email
 
-    Uses Cloudflare DoH — same as _probe_mx_record. No dnspython needed.
+    Uses Cloudflare DoH -- same as _probe_mx_record. No dnspython needed.
     Gracefully returns SKIPPED if domain is empty or network fails.
     """
     out = {
@@ -2005,7 +2005,7 @@ def _probe_spf_dmarc(domain: str) -> dict:
     }
 
     if not domain:
-        out["detail"] = "No domain — SPF/DMARC check skipped"
+        out["detail"] = "No domain -- SPF/DMARC check skipped"
         return out
 
     def _txt_query(name: str) -> list[str]:
@@ -2063,7 +2063,7 @@ def _probe_spf_dmarc(domain: str) -> dict:
 
 
 # ── Company name intelligence ─────────────────────────────────────────────────
-# Noise suffixes stripped before matching — prevents "Innovateloop Solutions"
+# Noise suffixes stripped before matching -- prevents "Innovateloop Solutions"
 # failing to match "innovateloop" because "solutions" shifts the slug.
 _CORP_SUFFIXES = re.compile(
     r"(private|pvt|public|limited|ltd|llp|llc|inc|corp|corporation|"
@@ -2205,7 +2205,7 @@ def _probe_domain_candidates(company: str) -> tuple[str, bool]:
     slug variants × TLD combinations via DNS A-record lookup.
     Returns (best_domain, guessed) where guessed=True means no website was provided.
 
-    Uses parallel socket checks — all candidates probed simultaneously.
+    Uses parallel socket checks -- all candidates probed simultaneously.
     """
     variants = _company_slug_variants(company)
     candidates = [
@@ -2243,7 +2243,7 @@ def _probe_domain_candidates(company: str) -> tuple[str, bool]:
 
 def _check_clearbit(company: str) -> dict:
     """
-    Clearbit Autocomplete API — completely free, no API key, no rate limit issues.
+    Clearbit Autocomplete API -- completely free, no API key, no rate limit issues.
     Returns known company details (domain, logo) for globally recognised companies.
     If a company appears here it is almost certainly real.
 
@@ -2281,7 +2281,7 @@ def _check_clearbit(company: str) -> dict:
                     found=True,
                     domain=cb_domain,
                     detail=(
-                        f"Clearbit: '{cb_name}' ({cb_domain}) — "
+                        f"Clearbit: '{cb_name}' ({cb_domain}) -- "
                         f"globally recognised company ✓"
                     ),
                 )
@@ -2289,7 +2289,7 @@ def _check_clearbit(company: str) -> dict:
 
         out.update(
             found=False,
-            detail=f"'{company}' not matched in Clearbit — may be a small/regional company",
+            detail=f"'{company}' not matched in Clearbit -- may be a small/regional company",
         )
     except Exception as e:
         out.update(found=None, detail=f"Clearbit check skipped: {type(e).__name__}")
@@ -2298,11 +2298,11 @@ def _check_clearbit(company: str) -> dict:
 
 def _check_wikipedia(company: str) -> dict:
     """
-    Wikipedia REST API — free, no key, zero rate limit issues.
+    Wikipedia REST API -- free, no key, zero rate limit issues.
     A company with a Wikipedia article is almost certainly a real legal entity.
 
     Checks both the company name directly and key word variants.
-    Uses /api/rest_v1/page/summary/{title} — returns 200 for real pages, 404 for none.
+    Uses /api/rest_v1/page/summary/{title} -- returns 200 for real pages, 404 for none.
     """
     out = {"found": None, "detail": ""}
     if not company or len(company.strip()) < 3:
@@ -2314,7 +2314,7 @@ def _check_wikipedia(company: str) -> dict:
         name_clean,
         name_clean.split()[0] if name_clean.split() else "",
     ]
-    # Also try with "company" appended — e.g. "Innovateloop company"
+    # Also try with "company" appended -- e.g. "Innovateloop company"
     candidates.append(name_clean + " company")
 
     for candidate in candidates:
@@ -2346,18 +2346,18 @@ def _check_wikipedia(company: str) -> dict:
                     if any(kw in extract for kw in company_keywords):
                         out.update(
                             found=True,
-                            detail=f"Wikipedia: '{title}' — {desc[:80] if desc else 'verified company article'} ✓",
+                            detail=f"Wikipedia: '{title}' -- {desc[:80] if desc else 'verified company article'} ✓",
                         )
                         return out
         except urllib.error.HTTPError as e:
             if e.code == 404:
-                continue   # not found — try next candidate
+                continue   # not found -- try next candidate
         except Exception:
             continue
 
     out.update(
         found=False,
-        detail=f"'{company}' has no Wikipedia article — not a globally known company",
+        detail=f"'{company}' has no Wikipedia article -- not a globally known company",
     )
     return out
 
@@ -2365,7 +2365,7 @@ def _check_wikipedia(company: str) -> dict:
 def _check_linkedin_existence(company: str) -> dict:
     """
     Check if a LinkedIn company page exists for this company.
-    Method: HEAD request to linkedin.com/company/{slug} — 200=exists, 404=does not.
+    Method: HEAD request to linkedin.com/company/{slug} -- 200=exists, 404=does not.
     No login required for existence check.
 
     LinkedIn slugs are typically: company name lowercased, spaces→hyphens.
@@ -2436,19 +2436,19 @@ def _check_linkedin_existence(company: str) -> dict:
 
 def _probe_company_domain(args: tuple) -> dict:
     """
-    Production-grade company identity verification — multi-source, parallel.
+    Production-grade company identity verification -- multi-source, parallel.
 
     Sub-checks (all run in parallel threads):
-    A. Domain infrastructure  — DNS, HTTPS port, MX, multi-TLD guessing
-    B. Clearbit autocomplete  — free global company index, no API key
-    C. Wikipedia API          — company article existence, no API key
-    D. LinkedIn existence     — HEAD request to company page slug
-    E. Name intelligence      — fuzzy match, abbreviation resolver, suffix strip
+    A. Domain infrastructure  -- DNS, HTTPS port, MX, multi-TLD guessing
+    B. Clearbit autocomplete  -- free global company index, no API key
+    C. Wikipedia API          -- company article existence, no API key
+    D. LinkedIn existence     -- HEAD request to company page slug
+    E. Name intelligence      -- fuzzy match, abbreviation resolver, suffix strip
 
     Scoring philosophy:
     - Each source that CONFIRMS the company subtracts from suspicion.
     - Each source that DENIES adds to suspicion.
-    - Unknown (API failed) is neutral — no penalty.
+    - Unknown (API failed) is neutral -- no penalty.
     - Infrastructure signals (no DNS, no MX) are the hardest evidence.
 
     Score range: 0 = fully verified, 75+ = likely fake company
@@ -2472,7 +2472,7 @@ def _probe_company_domain(args: tuple) -> dict:
     }
 
     if not company and not website:
-        out["detail"] = "No company name or website — cannot verify"
+        out["detail"] = "No company name or website -- cannot verify"
         return out
 
     # ── A. Domain resolution ──────────────────────────────────────────────────
@@ -2486,7 +2486,7 @@ def _probe_company_domain(args: tuple) -> dict:
         )
         if m:
             domain = m.group(1)
-            # Skip job-board domains — checking linkedin.com tells us nothing
+            # Skip job-board domains -- checking linkedin.com tells us nothing
             _JOB_BOARDS = {
                 "linkedin.com", "naukri.com", "indeed.com", "glassdoor.com",
                 "shine.com", "monster.com", "internshala.com", "foundit.in",
@@ -2538,7 +2538,7 @@ def _probe_company_domain(args: tuple) -> dict:
             domain_signals.append(f"Domain '{domain}' has NO DNS record")
             out["score"] += 40
             out["scam_signals"].append(
-                f"Domain '{domain}' does not exist in DNS — "
+                f"Domain '{domain}' does not exist in DNS -- "
                 "real companies always have a registered domain"
             )
 
@@ -2553,7 +2553,7 @@ def _probe_company_domain(args: tuple) -> dict:
                 domain_signals.append(f"No HTTPS at '{domain}'")
                 out["score"] += 20
                 out["scam_signals"].append(
-                    f"No HTTPS website at '{domain}' — domain registered but unused"
+                    f"No HTTPS website at '{domain}' -- domain registered but unused"
                 )
 
             # MX records
@@ -2563,7 +2563,7 @@ def _probe_company_domain(args: tuple) -> dict:
                 domain_signals.append(f"No MX at '{domain}'")
                 out["score"] += 15
                 out["scam_signals"].append(
-                    f"'{domain}' has no MX records — not set up for corporate email"
+                    f"'{domain}' has no MX records -- not set up for corporate email"
                 )
 
             # Name match (fuzzy + abbreviation-aware)
@@ -2578,12 +2578,12 @@ def _probe_company_domain(args: tuple) -> dict:
                 out["score"] += 10
                 out["scam_signals"].append(
                     f"Domain '{domain}' has low name similarity to '{company}' "
-                    f"({score:.0%}) — suspicious mismatch"
+                    f"({score:.0%}) -- suspicious mismatch"
                 )
     else:
-        out["score"] += 15   # no domain at all — mild penalty
+        out["score"] += 15   # no domain at all -- mild penalty
         out["scam_signals"].append(
-            "No company domain found or guessed — cannot verify infrastructure"
+            "No company domain found or guessed -- cannot verify infrastructure"
         )
 
     # ── D. Collect identity results ───────────────────────────────────────────
@@ -2623,7 +2623,7 @@ def _probe_company_domain(args: tuple) -> dict:
         out["score"] += 15
         out["scam_signals"].append(
             f"'{company}' not found in any public company database "
-            "(Clearbit, Wikipedia, LinkedIn) — likely not a real registered company"
+            "(Clearbit, Wikipedia, LinkedIn) -- likely not a real registered company"
         )
 
     # ── E. Build detail string ────────────────────────────────────────────────
@@ -2635,7 +2635,7 @@ def _probe_company_domain(args: tuple) -> dict:
         if not guessed:
             matched = out.get("domain_matches_company")
             infra_parts.append(f"Name match {'✓' if matched else '✗'}")
-    infra_str = f"{'(guessed) ' if guessed else ''}{domain} — {' | '.join(infra_parts)}" if domain else "No domain"
+    infra_str = f"{'(guessed) ' if guessed else ''}{domain} -- {' | '.join(infra_parts)}" if domain else "No domain"
 
     id_str = ""
     if confirmed > 0:
@@ -2666,7 +2666,7 @@ def _mca_word_match(name_clean: str, html: str) -> bool:
     if not words:
         return False
     html_upper = html.upper()
-    # Use word-boundary regex for each word — no substring false positives
+    # Use word-boundary regex for each word -- no substring false positives
     hits = sum(
         1 for w in words
         if re.search(rf"\b{re.escape(w)}\b", html_upper)
@@ -2710,13 +2710,13 @@ def _probe_mca(company: str) -> dict:
     """
     4-tier MCA lookup with graceful fallback:
 
-    Tier 1 — Zaubacorp  (mirrors MCA data, no auth, reliable)
-    Tier 2 — IndiaFilings search  (second public MCA mirror)
-    Tier 3 — MCA21 V3 REST API   (official but often blocks bots)
-    Tier 4 — Graceful degradation with manual verification link
+    Tier 1 -- Zaubacorp  (mirrors MCA data, no auth, reliable)
+    Tier 2 -- IndiaFilings search  (second public MCA mirror)
+    Tier 3 -- MCA21 V3 REST API   (official but often blocks bots)
+    Tier 4 -- Graceful degradation with manual verification link
 
     Why NOT mca.gov.in/mcafoportal (old code):
-      • MCA21 V2 portal is RETIRED — returns 403/redirect always.
+      • MCA21 V2 portal is RETIRED -- returns 403/redirect always.
       • Even MCA21 V3 requires a session cookie from their React SPA.
       • Public mirrors (Zaubacorp, IndiaFilings) are more reliable for
         programmatic lookup and are always up-to-date (they sync nightly).
@@ -2730,7 +2730,7 @@ def _probe_mca(company: str) -> dict:
     # ── Guard: no company name extracted ──────────────────────────────────
     if not company or len(company.strip()) < 3:
         out["detail"] = (
-            "No company name detected in posting — "
+            "No company name detected in posting -- "
             "add 'Company: [name]' in the job text to enable this check"
         )
         return out
@@ -2743,24 +2743,24 @@ def _probe_mca(company: str) -> dict:
     encoded_raw = urllib.parse.quote(name_clean)
 
     # ── Tier 1: Zaubacorp ─────────────────────────────────────────────────
-    # Public MCA data mirror — no auth required, highly reliable
+    # Public MCA data mirror -- no auth required, highly reliable
     try:
         url = f"https://www.zaubacorp.com/company-list/p-1/CompanyName-{encoded}.html"
         raw = _mca_make_request(url, {"Referer": "https://www.zaubacorp.com/"})
         if _mca_word_match(name_clean, raw):
             out.update(
                 found=True,
-                detail=f"Found in MCA registry via Zaubacorp — '{name_title}' is legally registered in India",
+                detail=f"Found in MCA registry via Zaubacorp -- '{name_title}' is legally registered in India",
                 source="MCA India (via Zaubacorp)",
             )
         elif "no company found" in raw.lower() or "0 companies" in raw.lower() or len(raw.strip()) < 500:
             out.update(
                 found=False,
-                detail=f"'{name_title}' NOT found in MCA — company may not be legally registered in India",
+                detail=f"'{name_title}' NOT found in MCA -- company may not be legally registered in India",
                 source="MCA India (via Zaubacorp)",
             )
         else:
-            # Got a page but couldn't match — fall through to Tier 2
+            # Got a page but couldn't match -- fall through to Tier 2
             raise ValueError("Zaubacorp: no conclusive match, trying next tier")
         return out
     except Exception:
@@ -2773,14 +2773,14 @@ def _probe_mca(company: str) -> dict:
         if _mca_word_match(name_clean, raw):
             out.update(
                 found=True,
-                detail=f"Found in MCA registry via IndiaFilings — '{name_title}' is legally registered",
+                detail=f"Found in MCA registry via IndiaFilings -- '{name_title}' is legally registered",
                 source="MCA India (via IndiaFilings)",
             )
             return out
         elif "no result" in raw.lower() or "not found" in raw.lower():
             out.update(
                 found=False,
-                detail=f"'{name_title}' NOT found in MCA — verify at mca.gov.in",
+                detail=f"'{name_title}' NOT found in MCA -- verify at mca.gov.in",
                 source="MCA India (via IndiaFilings)",
             )
             return out
@@ -2807,40 +2807,40 @@ def _probe_mca(company: str) -> dict:
                 or []
             )
             if companies:
-                # Verify the top result actually matches — API sometimes returns
+                # Verify the top result actually matches -- API sometimes returns
                 # unrelated companies when there's a partial name match
                 top_name = str(companies[0].get("companyName", ""))
                 if _mca_word_match(name_clean, top_name):
                     out.update(
                         found=True,
-                        detail=f"Found in MCA21 V3 — '{top_name}' is legally registered in India",
+                        detail=f"Found in MCA21 V3 -- '{top_name}' is legally registered in India",
                         source="MCA India (MCA21 V3 API)",
                     )
                 else:
                     out.update(
                         found=False,
-                        detail=f"'{name_title}' not matched in MCA21 V3 results — verify manually",
+                        detail=f"'{name_title}' not matched in MCA21 V3 results -- verify manually",
                         source="MCA India (MCA21 V3 API)",
                     )
             else:
                 out.update(
                     found=False,
-                    detail=f"'{name_title}' NOT found in MCA21 — may not be registered",
+                    detail=f"'{name_title}' NOT found in MCA21 -- may not be registered",
                     source="MCA India (MCA21 V3 API)",
                 )
         except (json.JSONDecodeError, KeyError):
-            # API returned HTML (bot block) — fall to Tier 4
+            # API returned HTML (bot block) -- fall to Tier 4
             raise ValueError("MCA21 V3: non-JSON response (bot block)")
         return out
     except Exception:
         pass
 
     # ── Tier 4: Graceful degradation ──────────────────────────────────────
-    # All tiers failed — don't show a scary error, give user actionable info
+    # All tiers failed -- don't show a scary error, give user actionable info
     out.update(
         found=None,
         detail=(
-            f"MCA lookup blocked by all sources for '{name_title}' — "
+            f"MCA lookup blocked by all sources for '{name_title}' -- "
             f"verify manually: mca.gov.in/MCA21Version3"
         ),
         source="MCA India (manual check required)",
@@ -2853,7 +2853,7 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
     """
     Cache probe results for 1 hour keyed on (domain, contact, company, website).
     Identical domain lookups within the same server session skip all network calls.
-    Cache is per-server-process — cleared on app restart (acceptable for Streamlit Cloud).
+    Cache is per-server-process -- cleared on app restart (acceptable for Streamlit Cloud).
     """
     probes: dict = {
         "domain_age":     {"status": "skipped", "detail": "No domain provided"},
@@ -2900,7 +2900,7 @@ def run_live_probes(job: dict) -> dict:
                 domain = em_dom
                 break
 
-    # Delegate to cached version — identical (domain, contact, company, website)
+    # Delegate to cached version -- identical (domain, contact, company, website)
     # combinations skip all network calls for 1 hour (st.cache_data TTL).
     return _run_live_probes_cached(domain or "", contact, company, website)
 
@@ -2914,20 +2914,20 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
     if da_status == "very_young":      # 0-30 days
         penalty += 30
         warnings.append(
-            f"Domain registered {reg_str} — only {age_days} days old. "
+            f"Domain registered {reg_str} -- only {age_days} days old. "
             "Extremely new: scam sites are often created days before a campaign."
         )
     elif da_status == "young":         # 31-90 days
         penalty += 20
         warnings.append(
-            f"Domain registered {reg_str} — only {age_days} days old (< 3 months). "
+            f"Domain registered {reg_str} -- only {age_days} days old (< 3 months). "
             "Legitimate businesses rarely recruit this soon after registering a domain."
         )
     elif da_status == "moderate":      # 91-180 days
         penalty += 10
         warnings.append(
-            f"Domain registered {reg_str} — {age_days} days old (3–6 months). "
-            "Relatively new domain — verify through other channels."
+            f"Domain registered {reg_str} -- {age_days} days old (3–6 months). "
+            "Relatively new domain -- verify through other channels."
         )
     if probes.get("site_reach", {}).get("reachable") is False:
         penalty += 12
@@ -2952,22 +2952,22 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
     mx_status = mx.get("status", "")
     mx_dom = mx.get("domain", "")
     if mx_status == "NO_MX":
-        penalty += 22   # strongest MX signal — domain exists but has no mail servers
+        penalty += 22   # strongest MX signal -- domain exists but has no mail servers
         warnings.append(
-            f"Corporate email domain '{mx_dom}' has NO MX records — "
+            f"Corporate email domain '{mx_dom}' has NO MX records -- "
             "domain is registered for appearances only, not actually used for email"
         )
     elif mx_status == "DNS_FAIL":
         penalty += 18
         warnings.append(
-            f"Corporate email domain '{mx_dom}' does not exist in DNS — "
+            f"Corporate email domain '{mx_dom}' does not exist in DNS -- "
             "the company email address is completely fabricated"
         )
     elif mx_status == "MX_FOUND":
         if mx.get("ghost_mx"):
             penalty += 20
             warnings.append(
-                f"'{mx_dom}' MX records point to non-existent hostnames — "
+                f"'{mx_dom}' MX records point to non-existent hostnames -- "
                 "mail server is fake (ghost MX)"
             )
         if mx.get("voip_risk"):
@@ -2979,7 +2979,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         if mx.get("free_mx") and not mx.get("voip_risk"):
             penalty += 6
             warnings.append(
-                f"'{mx_dom}' uses a free mail provider (Google/Outlook) — "
+                f"'{mx_dom}' uses a free mail provider (Google/Outlook) -- "
                 "not a dedicated corporate mail server"
             )
 
@@ -2988,7 +2988,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
     if age.get("privacy_proxy") and da_status in ("very_young", "young", "moderate"):
         penalty += 10
         warnings.append(
-            "Domain WHOIS is privacy-protected and less than 6 months old — "
+            "Domain WHOIS is privacy-protected and less than 6 months old -- "
             "common pattern for scam domains"
         )
     if age.get("registrar"):
@@ -3001,7 +3001,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
             penalty += 8
             warnings.append(
                 f"Domain registered with '{age['registrar']}' and is less than "
-                "6 months old — registrar commonly used for disposable scam domains"
+                "6 months old -- registrar commonly used for disposable scam domains"
             )
     cd       = probes.get("company_domain", {})
     cd_score = cd.get("score", 0)
@@ -3017,7 +3017,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         penalty += 20
         warnings.append(
             f"Company domain '{cd.get('domain', '')}' does not exist and "
-            "not found in any public company database — very likely fake"
+            "not found in any public company database -- very likely fake"
         )
     elif cd_score >= 35:
         penalty += 15
@@ -3042,15 +3042,15 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         if not spf.get("spf") and not spf.get("dmarc"):
             penalty += 18
             warnings.append(
-                f"'{spf_dom}' has NO SPF and NO DMARC records — domain not "
+                f"'{spf_dom}' has NO SPF and NO DMARC records -- domain not "
                 "configured for legitimate corporate email (common scam pattern)"
             )
         elif not spf.get("spf"):
             penalty += 10
-            warnings.append(f"'{spf_dom}' has no SPF record — email authentication missing")
+            warnings.append(f"'{spf_dom}' has no SPF record -- email authentication missing")
         elif not spf.get("dmarc"):
             penalty += 8
-            warnings.append(f"'{spf_dom}' has no DMARC record — anti-spoofing not configured")
+            warnings.append(f"'{spf_dom}' has no DMARC record -- anti-spoofing not configured")
     return min(penalty, 55), warnings
 
 
@@ -3062,7 +3062,7 @@ def _any(text: str, patterns: list) -> list:
     return [p for p in patterns if re.search(p, text, re.IGNORECASE)]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# SALARY CALIBRATION — role × city bands (INR per annum, LPA)
+# SALARY CALIBRATION -- role × city bands (INR per annum, LPA)
 # Replaces the blunt ₹5L–₹9.9Cr outlier rule that was flagging senior roles.
 # Format: { role_keyword: (min_lpa, max_lpa) }
 # If the detected salary falls ABOVE max_lpa by >2× it is flagged as outlier.
@@ -3111,7 +3111,7 @@ _SALARY_BANDS: dict[str, tuple[float, float]] = {
     "ceo":                    (40.0, 500.0),
 }
 
-# City cost-of-living multipliers — applied to max band threshold
+# City cost-of-living multipliers -- applied to max band threshold
 _CITY_MULTIPLIERS: dict[str, float] = {
     "bangalore": 1.3, "bengaluru": 1.3,
     "mumbai": 1.25, "delhi": 1.2, "gurgaon": 1.2, "gurugram": 1.2,
@@ -3160,7 +3160,7 @@ def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
                 break
 
     if lpa_val is None:
-        return False   # no salary number found — don't flag
+        return False   # no salary number found -- don't flag
 
     # ── Look up role band ──────────────────────────────────────────────────
     title_lower = title.lower()
@@ -3182,10 +3182,10 @@ def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
     if band:
         _, max_lpa = band
         effective_max = max_lpa * city_mult
-        # Flag only if salary is more than 2× the ceiling — clear scam territory
+        # Flag only if salary is more than 2× the ceiling -- clear scam territory
         return lpa_val > effective_max * 2.0
     else:
-        # No band match — only flag truly impossible numbers (>₹5Cr / >500 LPA).
+        # No band match -- only flag truly impossible numbers (>₹5Cr / >500 LPA).
         # Do NOT flag normal salaries just because the role isn't in the band table.
         return lpa_val > 500.0
 
@@ -3236,13 +3236,13 @@ def _run_rules(job: dict) -> dict:
                  "Asking for senior experience under a fresher posting is a bait tactic.")
             break
     # ── Job board source trust multiplier ────────────────────────────────────
-    # Postings from verified job boards carry implicit trust — lower score.
+    # Postings from verified job boards carry implicit trust -- lower score.
     # WhatsApp/Telegram-only contact with no verifiable URL is a red flag.
     source_hits = _any(full, _PLATFORM_TRUST)
     wa_hits     = _any(full, _URGENCY_PHRASES_WA)
     has_url     = bool(re.search(r"https?://[^\s]{8,}", full))
     if wa_hits and not source_hits and not has_url:
-        _add("whatsapp_only_contact", "WhatsApp / Telegram Only — No Verifiable URL",
+        _add("whatsapp_only_contact", "WhatsApp / Telegram Only -- No Verifiable URL",
              "Legitimate companies post on official portals. WhatsApp-only jobs are a major red flag.",
              wa_hits)
 
@@ -3253,7 +3253,7 @@ def _run_rules(job: dict) -> dict:
     if h: _add("location_mismatch","Location / Jurisdiction Mismatch",
                 "Company location, pay currency and candidate requirements do not align.", h)
     h = _any(full, _WFH_PHRASES)
-    if h: _add("work_from_home_bait","WFH Bait — Data Entry / Form Filling",
+    if h: _add("work_from_home_bait","WFH Bait -- Data Entry / Form Filling",
                 "High-pay work-from-home roles with no skills required are almost always scams.", h)
     if not job.get("salary","").strip() or len(job.get("salary","").strip()) < 4:
         _add("missing_salary","Salary Completely Absent",
@@ -3266,7 +3266,7 @@ def _run_rules(job: dict) -> dict:
     # ── India-specific signal checks ─────────────────────────────────────────
     h = _any(full, _INDIA_SCAM_PHRASES)
     if h:
-        # Check if it is also a fake govt job — give it the higher weight
+        # Check if it is also a fake govt job -- give it the higher weight
         fake_govt = _any(full, [
             r"government.*job.*guaranteed", r"sarkari.*naukri",
             r"railway.*recruitment.*apply.*fee", r"rrb.*ntpc.*apply.*fee",
@@ -3275,7 +3275,7 @@ def _run_rules(job: dict) -> dict:
         ])
         if fake_govt:
             _add("fake_govt_job", "Fake Government / Railway / Bank Job",
-                 "Impersonating PSU/railway/bank recruitment — no government job "
+                 "Impersonating PSU/railway/bank recruitment -- no government job "
                  "ever charges a fee or guarantees selection.", fake_govt)
         else:
             _add("india_scam_pattern", "Indian Scam Job Pattern Detected",
@@ -3297,7 +3297,7 @@ def _run_rules(job: dict) -> dict:
              "(2-digit state + PAN + entity + Z + checksum). Fake GSTINs are "
              "used to appear legitimate.", near_gstin[:2])
     elif gstin_matches:
-        # Valid format — check state code is real (01-37)
+        # Valid format -- check state code is real (01-37)
         for state_code, pan, entity, chk in gstin_matches:
             sc = int(state_code)
             if not (1 <= sc <= 37):
@@ -3347,16 +3347,51 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
-    salary_instruction = (
-        "The salary was NOT provided in this job posting. "
-        "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
-        "do NOT guess, infer, or comment on whether it is realistic."
-        if not salary_raw else
-        "Assess whether the stated salary is realistic for this role and location. "
-        "If it seems unrealistically high, flag it as a potential scam signal."
-    )
-    return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
-Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
+
+    # User context for personalised salary analysis
+    user_location    = (job.get("user_location") or "").strip()
+    current_role     = (job.get("current_role") or "").strip()
+    years_experience = (job.get("years_experience") or "").strip()
+
+    user_ctx_lines = []
+    if user_location:    user_ctx_lines.append(f"Candidate Location: {user_location}")
+    if current_role:     user_ctx_lines.append(f"Candidate Current Role: {current_role}")
+    if years_experience: user_ctx_lines.append(f"Candidate Experience: {years_experience} years")
+    user_ctx_block = "\n".join(user_ctx_lines) if user_ctx_lines else "Not provided"
+
+    if not salary_raw:
+        salary_instruction = (
+            "Salary is NOT stated in this posting. "
+            "Set salary_assessment.verdict to \"NOT_PROVIDED\". "
+            "In salary_assessment.detail, briefly note that many legitimate companies "
+            "omit salary at the JD stage and advise the candidate to ask at the "
+            "interview stage -- do NOT treat missing salary as a scam signal on its own. "
+            "Leave market_range, experience_evaluation, location_adjustment, and "
+            "skill_alignment as empty strings."
+        )
+    else:
+        salary_instruction = (
+            "Perform a detailed, personalised salary assessment. "
+            "salary_assessment must be a JSON object with these keys:\n"
+            "  - verdict: exactly one of 'REALISTIC', 'ON_THE_LOW_END', 'ON_THE_HIGH_END', 'UNREALISTIC_SCAM'\n"
+            "  - market_range: typical market range for this role in the job location "
+            "    (e.g. '8–14 LPA for a mid-level Data Scientist in Bangalore'). "
+            "    Use both INR (LPA / ₹/month) AND USD equivalents where helpful.\n"
+            "  - experience_evaluation: how the stated salary aligns with the "
+            "    candidate's stated experience level. If experience is not provided, "
+            "    assess against typical fresher/mid/senior bands.\n"
+            "  - location_adjustment: cost-of-living and market-rate commentary for "
+            "    the job location (city/region). Compare metros vs tier-2 cities if relevant.\n"
+            "  - skill_alignment: whether the salary matches the skill demands in the JD "
+            "    (e.g. niche tech stack, leadership scope, domain expertise premium).\n"
+            "  - detail: 2-3 sentence plain-English summary a job seeker can act on.\n"
+            "Only use verdict=UNREALISTIC_SCAM if the salary is clearly 3×+ above market "
+            "ceiling -- minor inflation is ON_THE_HIGH_END, not a scam flag. "
+            "Many companies deliberately omit or understate salary; do not over-penalise."
+        )
+
+    return f"""You are a senior HR fraud investigator and compensation analyst specialising in Indian and global employment markets.
+Analyse the job posting and return ONLY a valid JSON object -- no markdown, no prose, no fences.
 
 JOB POSTING:
 Title: {job.get('title','N/A')}
@@ -3368,6 +3403,9 @@ Description: {job.get('description','N/A')[:8000]}
 Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
+
+CANDIDATE CONTEXT (use to personalise salary analysis):
+{user_ctx_block}
 
 LIVE PROBE FINDINGS:
 {ctx}
@@ -3384,11 +3422,18 @@ Required JSON schema (all keys mandatory):
   "positive_signals": ["<str>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
+  "salary_assessment": {{
+    "verdict": "<REALISTIC|ON_THE_LOW_END|ON_THE_HIGH_END|UNREALISTIC_SCAM|NOT_PROVIDED>",
+    "market_range": "<typical range for this role+location, INR and USD>",
+    "experience_evaluation": "<how salary aligns with candidate experience>",
+    "location_adjustment": "<city/region cost-of-living commentary>",
+    "skill_alignment": "<salary vs JD skill demands>",
+    "detail": "<2-3 sentence plain-English summary>"
+  }},
   "recommended_action": "<specific advice for the job seeker>",
   "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
-}}"""
+}}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3411,7 +3456,7 @@ _V: dict = {
                       "label": "LIKELY SCAM"},
     "DEFINITE_SCAM": {"icon": I.SKULL,        "color": "#dc2626",
                       "bg": "rgba(220,38,38,0.10)",   "border": "rgba(220,38,38,0.38)",
-                      "label": "DEFINITE SCAM — DO NOT APPLY"},
+                      "label": "DEFINITE SCAM -- DO NOT APPLY"},
     "UNKNOWN":       {"icon": I.INFO,         "color": "#6b7280",
                       "bg": "rgba(107,114,128,0.07)", "border": "rgba(107,114,128,0.2)",
                       "label": "INCONCLUSIVE"},
@@ -3479,7 +3524,7 @@ def _score_meaning(score: int, verdict: str) -> tuple[str, str]:
         if score <= 10:
             return "Extremely clean posting", "No meaningful red flags found. Background noise only."
         else:
-            return "Looks legitimate", "Minor low-weight signals only — common in real job ads. Safe to apply."
+            return "Looks legitimate", "Minor low-weight signals only -- common in real job ads. Safe to apply."
     elif verdict == "SUSPICIOUS":
         return "Worth investigating first", "Some signals raised caution. Verify company details before applying."
     elif verdict == "LIKELY_SCAM":
@@ -3494,7 +3539,7 @@ def _render_verdict_banner(result: dict):
     s   = result["blended_score"]
     headline, meaning = _score_meaning(s, v)
 
-    # Score zone markers on the bar — 4 coloured segments
+    # Score zone markers on the bar -- 4 coloured segments
     zone_bar = (
         '<div style="position:relative;height:10px;border-radius:999px;overflow:hidden;'
         'background:linear-gradient(to right,#22c55e 0%,#22c55e 24%,'
@@ -3505,10 +3550,10 @@ def _render_verdict_banner(result: dict):
         f'border-radius:50%;box-shadow:0 0 0 2px {cfg["color"]}44;"></div></div>'
         '<div style="display:flex;justify-content:space-between;'
         'font-size:0.62rem;color:#6b7280;margin-bottom:12px;">'
-        '<span style="color:#22c55e;">0 — Safe</span>'
-        '<span style="color:#f59e0b;">25 — Suspicious</span>'
-        '<span style="color:#ef4444;">50 — Likely scam</span>'
-        '<span style="color:#dc2626;">75 — Definite scam</span>'
+        '<span style="color:#22c55e;">0 -- Safe</span>'
+        '<span style="color:#f59e0b;">25 -- Suspicious</span>'
+        '<span style="color:#ef4444;">50 -- Likely scam</span>'
+        '<span style="color:#dc2626;">75 -- Definite scam</span>'
         '</div>'
     )
 
@@ -3601,7 +3646,7 @@ def _render_score_strip(result: dict):
                       "How many of 15 pattern rules matched"),
                 unsafe_allow_html=True)
 
-    # Formula explainer — shows users exactly how the number was built
+    # Formula explainer -- shows users exactly how the number was built
     # FIX v5 BUG 8: all three (comment, code, HTML) now agree on 60/25/15.
     ai_s  = result["ai_score"]
     rul_s = result["rule_score"]
@@ -3713,7 +3758,7 @@ def _render_probe_table(probes: dict):
         elif r.get("found") is False:
             id_parts.append(f"{label} ✗")
         else:
-            id_parts.append(f"{label} —")
+            id_parts.append(f"{label} --")
     if confirmed >= 2:
         id_badge = _badge("CONFIRMED", "#22c55e", "rgba(34,197,94,0.12)")
     elif confirmed == 1:
@@ -3762,7 +3807,7 @@ def _render_probe_table(probes: dict):
 def _render_signal_cards(signals: dict):
     """
     KEY FIX: batch all cards per column into ONE st.markdown call each.
-    Previously each card was its own st.markdown inside a column loop —
+    Previously each card was its own st.markdown inside a column loop --
     Streamlit was escaping the SVG/HTML in that context, showing raw tags.
     """
     if not signals:
@@ -3809,6 +3854,97 @@ def _render_signal_cards(signals: dict):
     col_l, col_r = st.columns(2)
     col_l.markdown(left_html  or "<div></div>", unsafe_allow_html=True)
     col_r.markdown(right_html or "<div></div>", unsafe_allow_html=True)
+
+
+def _render_salary_assessment(val):
+    """Render the rich salary assessment card -- handles both the new dict format
+    and the legacy plain-string format returned by older model responses."""
+
+    # ── Normalise: accept dict or plain string ────────────────────────────────
+    if isinstance(val, dict):
+        sa = val
+    elif isinstance(val, str):
+        # Try to parse if it looks like JSON
+        try:
+            sa = json.loads(val)
+        except Exception:
+            sa = {"verdict": val.strip().upper(), "detail": val}
+    else:
+        sa = {}
+
+    verdict = (sa.get("verdict") or "").strip().upper()
+
+    # ── NOT_PROVIDED -- soft informational card ────────────────────────────────
+    if not verdict or verdict == "NOT_PROVIDED" or "not_provided" in verdict.lower():
+        st.markdown(
+            f'<div style="background:rgba(107,114,128,0.06);border:1px solid rgba(107,114,128,0.18);'
+            f'border-radius:9px;padding:14px;margin-bottom:10px;">'
+            f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
+            f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
+            f'{_svg(I.DOLLAR_OFF,11,"#6b7280")}Salary Reality Check</div>'
+            f'<div style="display:flex;align-items:flex-start;gap:8px;color:#9ca3af;font-size:0.83rem;">'
+            f'{_svg(I.INFO,13,"#6b7280")}'
+            f'<span><strong style="color:#8b949e;">Salary not disclosed</strong> -- '
+            f'{_esc(sa.get("detail") or "Many legitimate companies omit salary at the JD stage. Ask the recruiter for a clear range at the interview stage.")}'
+            f'</span></div></div>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    # ── Verdict colour map ────────────────────────────────────────────────────
+    _SALARY_VERDICT_STYLE: dict = {
+        "REALISTIC":         ("#22c55e", "rgba(34,197,94,0.08)",  "rgba(34,197,94,0.25)",  I.CHECK,      "Realistic"),
+        "ON_THE_LOW_END":    ("#f59e0b", "rgba(245,158,11,0.08)", "rgba(245,158,11,0.25)", I.ALERT_TRI,  "On the Low End"),
+        "ON_THE_HIGH_END":   ("#38bdf8", "rgba(56,189,248,0.08)", "rgba(56,189,248,0.25)", I.TRENDING_UP,"On the High End"),
+        "UNREALISTIC_SCAM":  ("#ef4444", "rgba(239,68,68,0.08)",  "rgba(239,68,68,0.25)",  I.SKULL,      "Unrealistic -- Scam Signal"),
+        "UNREALISTIC":       ("#ef4444", "rgba(239,68,68,0.08)",  "rgba(239,68,68,0.25)",  I.SKULL,      "Unrealistic"),
+    }
+    color, bg, border, icon, label = _SALARY_VERDICT_STYLE.get(
+        verdict,
+        ("#8b949e", "rgba(107,114,128,0.06)", "rgba(107,114,128,0.18)", I.DOLLAR, verdict.replace("_"," ").title()),
+    )
+
+    def _row(icon_path, row_label, row_val):
+        if not row_val:
+            return ""
+        return (
+            f'<div style="display:flex;gap:8px;padding:8px 0;'
+            f'border-bottom:1px solid rgba(255,255,255,0.05);">'
+            f'<div style="flex-shrink:0;padding-top:1px;">{_svg(icon_path,12,"#6b7280")}</div>'
+            f'<div>'
+            f'<div style="font-size:0.65rem;color:#6b7280;text-transform:uppercase;'
+            f'letter-spacing:0.7px;margin-bottom:2px;">{row_label}</div>'
+            f'<div style="font-size:0.82rem;color:#c9d1d9;line-height:1.55;">{_esc(str(row_val))}</div>'
+            f'</div></div>'
+        )
+
+    rows_html = (
+        _row(I.TRENDING_UP, "Market Range",          sa.get("market_range",""))
+        + _row(I.AWARD,     "Experience Fit",        sa.get("experience_evaluation",""))
+        + _row(I.MAP_PIN,   "Location Adjustment",   sa.get("location_adjustment",""))
+        + _row(I.LAYERS,    "Skill Alignment",       sa.get("skill_alignment",""))
+    )
+
+    st.markdown(
+        f'<div style="background:{bg};border:1px solid {border};border-radius:9px;'
+        f'padding:14px;margin-bottom:10px;">'
+        # Header
+        f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+        f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
+        f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;">'
+        f'{_svg(I.DOLLAR,11,"#6b7280")}Salary Reality Check</div>'
+        f'<span style="font-size:0.72rem;font-weight:700;color:{color};background:rgba(0,0,0,0.2);'
+        f'padding:3px 8px;border-radius:5px;border:1px solid {border};">'
+        f'{_svg(icon,11,color)} {label}</span>'
+        f'</div>'
+        # Rows
+        + rows_html
+        # Summary detail
+        + (f'<div style="margin-top:10px;font-size:0.82rem;color:#c9d1d9;line-height:1.65;">'
+           f'{_esc(sa.get("detail",""))}</div>' if sa.get("detail") else "")
+        + f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _render_ai_dive(llm: dict):
@@ -3874,28 +4010,9 @@ def _render_ai_dive(llm: dict):
         if not val:
             continue
 
-        # ── Special handling: salary was not given in the posting ────────────
-        if field == "salary_assessment" and (
-            not val.strip()
-            or val.strip().upper() == "NOT_PROVIDED"
-            or "not provided" in val.lower()
-            or "not mentioned" in val.lower()
-            or "no salary" in val.lower()
-        ):
-            st.markdown(
-                f'<div style="background:rgba(107,114,128,0.06);border:1px solid rgba(107,114,128,0.18);'
-                f'border-radius:9px;padding:14px;margin-bottom:10px;">'
-                f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
-                f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
-                f'{_svg(I.DOLLAR_OFF,11,"#6b7280")}Salary Reality Check</div>'
-                f'<div style="display:flex;align-items:center;gap:8px;color:#9ca3af;font-size:0.83rem;">'
-                f'{_svg(I.ALERT_CIRCLE,13,"#f59e0b")}'
-                f'<span><strong style="color:#f59e0b;">Salary not disclosed</strong> — '
-                f'this posting does not mention any salary, CTC, or compensation. '
-                f'No realistic assessment can be made. Consider asking the recruiter '
-                f'for a clear salary range before proceeding.</span></div></div>',
-                unsafe_allow_html=True,
-            )
+        # ── Special handling: salary_assessment (structured object or legacy string)
+        if field == "salary_assessment":
+            _render_salary_assessment(val)
             continue
 
         st.markdown(
@@ -3904,13 +4021,13 @@ def _render_ai_dive(llm: dict):
             f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
             f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
             f'{_svg(icon_path,11,"#6b7280")}{title}</div>'
-            f'<div style="color:#c9d1d9;font-size:0.83rem;line-height:1.65;">{val}</div></div>',
+            f'<div style="color:#c9d1d9;font-size:0.83rem;line-height:1.65;">{_esc(str(val))}</div></div>',
             unsafe_allow_html=True,
         )
 
     st.markdown(
         f'<div style="text-align:right;color:#6b7280;font-size:0.69rem;margin-top:2px;">'
-        f'AI Confidence: {llm.get("confidence","—")}/100</div>',
+        f'AI Confidence: {llm.get("confidence","--")}/100</div>',
         unsafe_allow_html=True,
     )
 
@@ -3936,7 +4053,7 @@ def _render_checklist(result: dict):
         unsafe_allow_html=True,
     )
     for idx, (icon_path, text, default) in enumerate(_CHECKLIST):
-        # FIX v5: removed id(result) suffix — it changed every run, creating
+        # FIX v5: removed id(result) suffix -- it changed every run, creating
         # hundreds of orphaned session_state keys and breaking checkbox state.
         st.checkbox(text, value=default, key=f"jsd_c_{idx}")
     st.markdown(
@@ -3953,7 +4070,7 @@ def _render_checklist(result: dict):
 def _add_to_history(result: dict):
     h = st.session_state.setdefault("jsd_history", [])
     entry = {
-        "id":      None,   # filled in after DB save — used for soft-delete
+        "id":      None,   # filled in after DB save -- used for soft-delete
         "title":   result["job"].get("title", "Untitled"),
         "company": result["job"].get("company", "Unknown"),
         "score":   result["blended_score"],
@@ -3975,7 +4092,7 @@ def _add_to_history(result: dict):
             )
             entry["id"] = new_id   # store id so ✕ Remove can soft-delete by id
     except Exception:
-        pass  # non-fatal — session_state history still works
+        pass  # non-fatal -- session_state history still works
 
     h.insert(0, entry)
     st.session_state["jsd_history"] = h[:5]
@@ -4006,7 +4123,7 @@ def _render_history():
         )
         return
 
-    # ── CSS injection — style Streamlit buttons to look like small icon/text
+    # ── CSS injection -- style Streamlit buttons to look like small icon/text
     # buttons without using st.columns() which collapses in the narrow sidebar.
     # We target the specific keys via the data-testid attribute Streamlit adds.
     # "Clear all" → full-width subtle text button at top.
@@ -4060,7 +4177,7 @@ def _render_history():
         unsafe_allow_html=True,
     )
 
-    # ── "Clear all" — full-width button, NO st.columns ───────────────────
+    # ── "Clear all" -- full-width button, NO st.columns ───────────────────
     # FIX: removed st.columns([4,1]) which squeezed the button into ~40px
     # in the already-narrow hist_col, making text render vertically.
     if st.button("Clear all", key="jsd_hist_clear_all", help="Remove all recent analyses",
@@ -4079,7 +4196,7 @@ def _render_history():
     for idx, h in enumerate(history):
         cfg = _V.get(h["verdict"], _V["UNKNOWN"])
 
-        # Card HTML — self-contained, no button inside (avoids HTML-button conflicts)
+        # Card HTML -- self-contained, no button inside (avoids HTML-button conflicts)
         st.markdown(
             f'<div style="padding:10px 12px;background:rgba(255,255,255,0.02);'
             f'border:1px solid rgba(255,255,255,0.06);border-radius:8px;margin-bottom:2px;">'
@@ -4107,8 +4224,8 @@ def _render_history():
             unsafe_allow_html=True,
         )
 
-        # ✕ Delete button — full-width container, CSS above right-aligns it.
-        # FIX: removed st.columns([5,1]) — the 1-unit column was ~30px wide
+        # ✕ Delete button -- full-width container, CSS above right-aligns it.
+        # FIX: removed st.columns([5,1]) -- the 1-unit column was ~30px wide
         # inside hist_col, making the ✕ symbol wrap or disappear entirely.
         if st.button("✕ Remove", key=f"jsd_hist_del_{idx}",
                      help=f"Remove '{h['title']}'",
@@ -4131,7 +4248,7 @@ def _render_history():
 
 def _quick_prescan(raw: str) -> dict | None:
     """
-    Lightweight instant signal preview — runs rule engine only (no network, no LLM).
+    Lightweight instant signal preview -- runs rule engine only (no network, no LLM).
     Returns a minimal result dict or None if text is too short.
 
     BUG FIX v5: previously called _run_rules(auto_extract(raw)) where auto_extract
@@ -4141,9 +4258,9 @@ def _quick_prescan(raw: str) -> dict | None:
     if not raw or len(raw.strip()) < 30:
         return None
 
-    # FIX: Build a clean prescan job dict — description is raw (full text),
+    # FIX: Build a clean prescan job dict -- description is raw (full text),
     # requirements and benefits are intentionally empty to avoid triple-counting.
-    extracted = auto_extract(raw)   # prescan — no LLM fallback (speed priority)
+    extracted = auto_extract(raw)   # prescan -- no LLM fallback (speed priority)
     prescan_job = {
         "title":        extracted["title"],
         "company":      extracted["company"],
@@ -4157,12 +4274,12 @@ def _quick_prescan(raw: str) -> dict | None:
     }
     rules = _run_rules(prescan_job)
     score = rules["rule_score"]
-    # Calibrated thresholds — a single low-weight signal (e.g. missing_salary=4)
+    # Calibrated thresholds -- a single low-weight signal (e.g. missing_salary=4)
     # must NOT trigger a SUSPICIOUS banner. Only meaningful rule hits qualify.
     if score == 0:
         verdict = "SAFE"
     elif score < 15:
-        verdict = "SAFE"        # low-weight noise signals — not a meaningful warning
+        verdict = "SAFE"        # low-weight noise signals -- not a meaningful warning
     elif score < 30:
         verdict = "SUSPICIOUS"
     elif score < 55:
@@ -4192,7 +4309,7 @@ def _render_quick_prescan(prescan: dict):
         f'<div style="font-size:0.8rem;font-weight:700;color:{cfg["color"]};">'
         f'Quick Scan: {cfg["label"]}</div>'
         f'<div style="font-size:0.72rem;color:#8b949e;margin-top:1px;">'
-        f'Rule engine found {n} signal(s) — rule score {s}/100. '
+        f'Rule engine found {n} signal(s) -- rule score {s}/100. '
         f'Click <strong style="color:#c9d1d9;">Analyse for Scam Signals</strong> '
         f'for full AI + network analysis.</div>'
         f'</div>'
@@ -4214,7 +4331,7 @@ def _render_rate_limit_bar(username: str) -> bool:
     """
     fns = _get_rate_limit_fns()
     if fns is None:
-        return True   # standalone / no user_login — allow
+        return True   # standalone / no user_login -- allow
 
     _, _, get_count = fns
     try:
@@ -4235,9 +4352,9 @@ def _render_rate_limit_bar(username: str) -> bool:
     else:
         bar_color, text_color = "#ef4444", "#ef4444"
         bg, border           = "rgba(239,68,68,0.07)",  "rgba(239,68,68,0.22)"
-        status_label         = "Limit reached — resets within 60 min"
+        status_label         = "Limit reached -- resets within 60 min"
 
-    # Segmented pip display — filled pips = used, coloured pips = remaining
+    # Segmented pip display -- filled pips = used, coloured pips = remaining
     pips = ""
     for i in range(_SCAM_LIMIT):
         filled = i < used
@@ -4328,7 +4445,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             height=230, key="jsd_raw",
             max_chars=_MAX_PASTE_CHARS,
             placeholder=(
-                "Paste the complete job posting here — company name, website, "
+                "Paste the complete job posting here -- company name, website, "
                 "salary, requirements, benefits, contact details...\n\n"
                 "All fields are auto-detected as you type."
             ),
@@ -4374,13 +4491,54 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 + _field_row(I.DOLLAR,   "Salary",     extracted["salary"])
                 + _field_row(I.MAIL,     "Contact",    extracted["contact"])
             )
+
+            # ── Your Profile layer — only when at least one candidate field is filled
+            _uloc  = st.session_state.get("jsd_uloc",  "").strip()
+            _crole = st.session_state.get("jsd_crole", "").strip()
+            _yexp  = st.session_state.get("jsd_yexp",  "").strip()
+
+            def _profile_row(icon_path: str, label: str, value: str) -> str:
+                """Like _field_row but purple-tinted for the candidate profile layer."""
+                val_html = (
+                    f'<span style="color:#d8b4fe;">{_esc(value)}</span>'
+                    if value else
+                    '<span style="color:#4b3f6b;font-style:italic;">Not set</span>'
+                )
+                return (
+                    f'<div style="display:flex;align-items:flex-start;gap:9px;padding:6px 0;'
+                    f'border-bottom:1px solid rgba(167,139,250,0.08);">'
+                    f'<div style="margin-top:1px;flex-shrink:0;">{_svg(icon_path,11,"#7c3aed")}</div>'
+                    f'<div style="flex:1;">'
+                    f'<div style="font-size:0.66rem;color:#7c3aed;text-transform:uppercase;'
+                    f'letter-spacing:0.8px;margin-bottom:2px;">{label}</div>'
+                    f'<div style="font-size:0.81rem;line-height:1.4;">{val_html}</div>'
+                    f'</div></div>'
+                )
+
+            profile_html = ""
+            if _uloc or _crole or _yexp:
+                profile_html = (
+                    f'<div style="margin-top:10px;padding-top:10px;'
+                    f'border-top:1px solid rgba(167,139,250,0.18);">'
+                    f'<div style="font-size:0.66rem;font-weight:600;color:#a78bfa;'
+                    f'text-transform:uppercase;letter-spacing:0.9px;margin-bottom:6px;'
+                    f'display:flex;align-items:center;gap:5px;">'
+                    f'{_svg(I.AWARD,9,"#a78bfa")} Your Profile</div>'
+                    + _profile_row(I.MAP_PIN,      "Your Location",       _uloc)
+                    + _profile_row(I.ID_CARD,       "Current Role",        _crole)
+                    + _profile_row(I.TRENDING_UP,   "Years of Experience", _yexp)
+                    + f'</div>'
+                )
+
             st.markdown(
                 f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);'
                 f'border-radius:10px;padding:14px 16px;margin-top:8px;">'
                 f'<div style="font-size:0.69rem;font-weight:600;color:#8b949e;text-transform:uppercase;'
                 f'letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">'
                 f'{_svg(I.ZAP,10,"#a78bfa")} Auto-Detected Fields</div>'
-                f'{fields_html}</div>',
+                f'{fields_html}'
+                f'{profile_html}'
+                f'</div>',
                 unsafe_allow_html=True,
             )
 
@@ -4396,20 +4554,37 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 oc2.text_input("Contact",  value=extracted["contact"],  key="jsd_oct")
                 oc1.text_input("Website",  value=extracted["website"],  key="jsd_ow")
                 oc2.text_input("Location", value=extracted["location"], key="jsd_ol")
+                # Candidate context
+                st.markdown(
+                    f'<div style="font-size:0.7rem;font-weight:600;color:#8b949e;'
+                    f'text-transform:uppercase;letter-spacing:0.8px;margin:10px 0 6px;'
+                    f'display:flex;align-items:center;gap:5px;">'
+                    f'{_svg(I.AWARD,9,"#a78bfa")} Your Context '
+                    f'<span style="font-weight:400;color:#6b7280;text-transform:none;'
+                    f'letter-spacing:0;">(optional -- personalises salary analysis)</span></div>',
+                    unsafe_allow_html=True,
+                )
+                px1, px2, px3 = st.columns(3)
+                px1.text_input("Your Location",       placeholder="e.g., Kolkata",     key="jsd_uloc")
+                px2.text_input("Your Current Role",   placeholder="e.g., Data Analyst", key="jsd_crole")
+                px3.text_input("Years of Experience", placeholder="e.g., 3",           key="jsd_yexp")
 
         # FIX v5 BUG 6: Build job from session_state override keys if they exist
         # (populated by the expander above). Falls back to auto_extract values if
         # the override expander was never opened.
         job = {
-            "title":        st.session_state.get("jsd_ot",  extracted.get("title", "")),
-            "company":      st.session_state.get("jsd_oco", extracted.get("company", "")),
-            "website":      st.session_state.get("jsd_ow",  extracted.get("website", "")),
-            "location":     st.session_state.get("jsd_ol",  extracted.get("location", "")),
-            "salary":       st.session_state.get("jsd_os",  extracted.get("salary", "")),
-            "contact":      st.session_state.get("jsd_oct", extracted.get("contact", "")),
-            "description":  raw or "",
-            "requirements": "",   # FIX v5 BUG 3: keep empty — description has everything
-            "benefits":     "",   # FIX v5 BUG 3: keep empty — description has everything
+            "title":            st.session_state.get("jsd_ot",  extracted.get("title", "")),
+            "company":          st.session_state.get("jsd_oco", extracted.get("company", "")),
+            "website":          st.session_state.get("jsd_ow",  extracted.get("website", "")),
+            "location":         st.session_state.get("jsd_ol",  extracted.get("location", "")),
+            "salary":           st.session_state.get("jsd_os",  extracted.get("salary", "")),
+            "contact":          st.session_state.get("jsd_oct", extracted.get("contact", "")),
+            "description":      raw or "",
+            "requirements":     "",   # FIX v5 BUG 3: keep empty -- description has everything
+            "benefits":         "",   # FIX v5 BUG 3: keep empty -- description has everything
+            "user_location":    st.session_state.get("jsd_uloc",  ""),
+            "current_role":     st.session_state.get("jsd_crole", ""),
+            "years_experience": st.session_state.get("jsd_yexp",  ""),
         }
 
     else:
@@ -4428,8 +4603,20 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                                             placeholder="Skills, experience, qualifications...")
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
                                             placeholder="What the employer offers...")
+        # ── Candidate context for personalised salary analysis ─────────────
+        st.markdown(
+            f'<div style="font-size:0.72rem;font-weight:600;color:#8b949e;text-transform:uppercase;'
+            f'letter-spacing:0.8px;margin:14px 0 6px;display:flex;align-items:center;gap:6px;">'
+            f'{_svg(I.AWARD,10,"#a78bfa")} Your Context <span style="font-weight:400;'
+            f'color:#6b7280;text-transform:none;letter-spacing:0;">(optional -- improves salary analysis)</span></div>',
+            unsafe_allow_html=True,
+        )
+        cx1, cx2, cx3 = st.columns(3)
+        job["user_location"]    = cx1.text_input("Your Location",       placeholder="e.g., Kolkata",    key="jsd_uloc")
+        job["current_role"]     = cx2.text_input("Your Current Role",   placeholder="e.g., Data Analyst", key="jsd_crole")
+        job["years_experience"] = cx3.text_input("Years of Experience", placeholder="e.g., 3",          key="jsd_yexp")
 
-    # Use only meaningful fields for "is there any input" check — not description
+    # Use only meaningful fields for "is there any input" check -- not description
     # (which in paste mode is raw and always present once the user types).
     if mode == "Paste Full Job Description":
         full_check = (raw or "").strip()
@@ -4453,7 +4640,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 type="primary",
                 use_container_width=True,
                 key="jsd_btn",
-                # FIX v5 BUG 2: only check jsd_running here — don't set it here.
+                # FIX v5 BUG 2: only check jsd_running here -- don't set it here.
                 # Setting it before rendering the button caused the NEXT fragment
                 # rerun (triggered by any widget) to see True and lock the button.
                 disabled=not allowed or st.session_state.get("jsd_running", False),
@@ -4461,7 +4648,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     "Runs full AI analysis + 5 live network probes. Takes ~10s."
                     if allowed else
                     f"You have used all {_SCAM_LIMIT} analyses for this hour. "
-                    "Please wait — quota resets on a rolling 60-minute window."
+                    "Please wait -- quota resets on a rolling 60-minute window."
                 ),
             )
         with clear_col:
@@ -4474,7 +4661,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             )
 
         if clear:
-            # Show spinner while clearing — use a flag so the fragment
+            # Show spinner while clearing -- use a flag so the fragment
             # re-renders itself cleanly without a full page blink.
             # st.rerun() kills any active spinner immediately (Streamlit
             # limitation), so we set a flag, rerun once to show the spinner
@@ -4489,10 +4676,12 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 paste_keys = [
                     "jsd_raw", "jsd_mode",
                     "jsd_ot", "jsd_oco", "jsd_os", "jsd_oct", "jsd_ow", "jsd_ol",
+                    "jsd_uloc", "jsd_crole", "jsd_yexp",
                 ]
                 fill_keys = [
                     "jsd_t", "jsd_co", "jsd_w", "jsd_l",
                     "jsd_sa", "jsd_ct", "jsd_d", "jsd_r", "jsd_b",
+                    "jsd_uloc", "jsd_crole", "jsd_yexp",
                 ]
                 for k in paste_keys + fill_keys:
                     st.session_state.pop(k, None)
@@ -4510,7 +4699,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             st.session_state["jsd_running"] = True
 
             # ── Spinner wraps the entire analysis pipeline ─────────────────────
-            with st.spinner("Running analysis — this takes ~10 seconds…"):
+            with st.spinner("Running analysis -- this takes ~10 seconds…"):
                 # Progress steps shown during the ~10s wait
                 prog = st.progress(0, text="Starting analysis…")
                 try:
@@ -4543,10 +4732,10 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         try:
                             prompt = _llm_prompt(job, warnings)
                             if attempt == 1:
-                                # Stricter retry prompt — force JSON only
+                                # Stricter retry prompt -- force JSON only
                                 prompt += (
                                     "\n\nCRITICAL: Your previous response could not be "
-                                    "parsed as JSON. Return ONLY a raw JSON object — "
+                                    "parsed as JSON. Return ONLY a raw JSON object -- "
                                     "no markdown, no explanation, no preamble. "
                                     f"Schema required: {json.dumps(_LLM_SCHEMA)}"
                                 )
@@ -4561,7 +4750,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                             m     = re.search(r"\{.*\}", clean, re.DOTALL)
                             if m:
                                 candidate = json.loads(m.group())
-                                # Schema validation — must have these keys
+                                # Schema validation -- must have these keys
                                 required = {"ai_risk_score", "verdict"}
                                 if required.issubset(candidate.keys()):
                                     llm_data      = candidate
@@ -4604,13 +4793,13 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     ai_confidence = max(0, min(100, ai_confidence))
 
                     if ai_failed:
-                        # AI completely failed — redistribute its 60% to rules
+                        # AI completely failed -- redistribute its 60% to rules
                         w_ai, w_rule, w_probe = 0.00, 0.75, 0.25
                     elif ai_confidence < 50:
-                        # AI unsure — reduce its weight, boost rules
+                        # AI unsure -- reduce its weight, boost rules
                         w_ai, w_rule, w_probe = 0.40, 0.40, 0.20
                     elif probe_coverage < 0.5:
-                        # Less than half probes ran — boost AI, reduce probe weight
+                        # Less than half probes ran -- boost AI, reduce probe weight
                         w_ai, w_rule, w_probe = 0.70, 0.25, 0.05
                     else:
                         # Normal: standard 60/25/15
@@ -4660,11 +4849,11 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                             "LIKELY_SCAM"   if blended >= 50 else
                             "SUSPICIOUS"    if blended >= 25 else "SAFE")
 
-                    # AI verdict override — only allowed within 5 points of next band.
+                    # AI verdict override -- only allowed within 5 points of next band.
                     # FIX: old logic let LLM upgrade verdict at any score, causing
                     # score=19 to show SUSPICIOUS (yellow) because LLM returned
                     # "SUSPICIOUS". The blended score already incorporates AI score
-                    # at 60% weight — double-counting LLM verdict creates false warnings.
+                    # at 60% weight -- double-counting LLM verdict creates false warnings.
                     # Now: LLM can only push verdict up if blended is close to the next
                     # threshold (within 5 pts). Score 19 → next threshold 25 → 25-5=20,
                     # 19 < 20 → override blocked → correctly stays SAFE (green).
@@ -4702,10 +4891,10 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         try:
                             record_usage(username, _SCAM_FEATURE)
                         except Exception:
-                            pass  # non-fatal — don't block result display
+                            pass  # non-fatal -- don't block result display
 
                     st.session_state.pop("jsd_running", None)
-                    st.rerun()   # FIX: was st.rerun(scope="app") — invalid in fragment
+                    st.rerun()   # FIX: was st.rerun(scope="app") -- invalid in fragment
 
                 except Exception as exc:
                     prog.empty()
@@ -4718,7 +4907,7 @@ def _render_feedback(result: dict):
     Thumbs up / thumbs down widget shown after every analysis result.
     Saves to Supabase scam_feedback table (created on first use).
     Feedback is keyed by (username, job_title, company, verdict) so the same
-    user can't spam — but they can correct a previous vote.
+    user can't spam -- but they can correct a previous vote.
     """
     # Stable key based on result content, not object id
     fb_key = f"jsd_fb_{result.get('timestamp','')}"
@@ -4761,7 +4950,7 @@ def _render_feedback(result: dict):
 def _save_feedback(result: dict, rating: str):
     """
     Persist feedback to Supabase. Creates table if it doesn't exist.
-    Non-fatal — UI never errors even if DB write fails.
+    Non-fatal -- UI never errors even if DB write fails.
     """
     try:
         from user_login import _execute
@@ -4839,7 +5028,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         f'<h2 style="margin:0 0 4px;font-size:1.45rem;font-weight:700;color:#e6edf3;'
         f'letter-spacing:-0.02em;">Job Scam Detector</h2>'
         f'<p style="margin:0;color:#8b949e;font-size:0.82rem;line-height:1.5;">'
-        f'Paste any job posting — AI analysis + 5 live network probes detect '
+        f'Paste any job posting -- AI analysis + 5 live network probes detect '
         f'fake listings before you apply or share personal data.</p>'
         f'</div>'
 
@@ -4853,7 +5042,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         f'</div>'
         f'</div>'
 
-        # ── Stat row — 4 mini metric cards ────────────────────────────────
+        # ── Stat row -- 4 mini metric cards ────────────────────────────────
         f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">'
         + "".join([
             f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
@@ -4900,13 +5089,13 @@ def render_job_scam_detector_tab(call_llm_fn):
         _render_history()
 
     with form_col:
-        # ── Rate-limit bar — always visible, renders live quota from Supabase
+        # ── Rate-limit bar -- always visible, renders live quota from Supabase
         allowed = _render_rate_limit_bar(username)
 
         # ── Input section (fragment-isolated) ─────────────────────────────
         _render_input_fragment(call_llm_fn, username=username, allowed=allowed)
 
-    # ── Results — rendered at TOP-LEVEL scope, outside the fragment ────────
+    # ── Results -- rendered at TOP-LEVEL scope, outside the fragment ────────
     # This is the critical fix: results live here so they persist across
     # fragment re-runs and are never wiped by widget interaction.
     res = st.session_state.get("jsd_last_result")
