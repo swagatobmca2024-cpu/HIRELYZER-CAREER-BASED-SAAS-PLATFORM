@@ -3387,8 +3387,9 @@ def _run_rules(job: dict) -> dict:
                 "High-pay work-from-home roles with no skills required are almost always scams.", h)
     if not job.get("salary","").strip() or len(job.get("salary","").strip()) < 4:
         _add("missing_salary","Salary Not Disclosed",
-             "Salary is not mentioned. Many Indian companies share this only after interviews — "
-             "this is a transparency note, not necessarily a scam signal.")
+             "No salary range is mentioned. In India this is common practice — most companies "
+             "discuss compensation only after shortlisting. This note is suppressed from the "
+             "risk score when the company's network presence is verified.")
     g_hits = _any(full, _GRAMMAR_PATTERNS)
     _STRONG_GRAMMAR = [r"\b(kindly revert|do the needful|revert back|prepone)\b",
                        r"\b(myself is|myself am|i am having)\b"]
@@ -3691,6 +3692,8 @@ IMPORTANT JUDGMENT RULES (follow strictly):
    - scam_description fired → verdict MUST be at least SUSPICIOUS.
    In top_red_flags, the payment demand must ALWAYS be listed first.
 7. For positive_signals: list ONLY signals observable from the JOB DESCRIPTION TEXT itself — e.g. "Detailed role responsibilities listed", "Named hiring manager with title", "Specific office address provided", "Realistic salary band for the role", "Company registration number mentioned", "Professional tone with correct grammar". Do NOT echo network/infrastructure facts (DNS, HTTPS, SSL, LinkedIn, domain age) here — those are already captured by the probe layer and will be shown separately to the user.
+8. In top_red_flags: write every item as a plain English sentence describing the actual concern (e.g. "Salary is not disclosed" or "Job description is vague with no specific responsibilities"). NEVER copy a raw signal key name (like "missing_salary" or "vague_description") — those are internal codes not shown to users.
+9. Salary not disclosed is NOT a red flag on its own when the network probes confirm company identity — many legitimate Indian companies discuss salary only after interviews. Only flag missing salary if it is combined with other suspicion (e.g. upfront payment, fake company, WhatsApp-only contact).
 
 Required JSON schema (all keys mandatory):
 {{
@@ -4327,11 +4330,46 @@ def _render_ai_dive(llm: dict, probes: dict | None = None):
     ]
 
     # ── Red flags HTML ────────────────────────────────────────────────────────
+    # Sanitize: if the LLM echoes a raw signal key (e.g. "missing_salary"),
+    # replace it with a human-readable label before display.
+    _RAW_KEY_LABELS = {
+        "missing_salary":        "Salary not disclosed",
+        "vague_description":     "Job description is vague with no specific responsibilities",
+        "single_strong_vague":   "Suspicious salary/benefits language (e.g. 'salary no bar')",
+        "upfront_payment":       "Upfront payment or fee demanded",
+        "mlm_pyramid":           "MLM / pyramid scheme language detected",
+        "too_good_salary":       "Unrealistically high salary offered",
+        "free_email_contact":    "Recruiter uses personal email with no company website",
+        "urgency_pressure":      "Artificial urgency or pressure tactics",
+        "no_company_info":       "No verifiable company identity found",
+        "whatsapp_only_contact": "Contact only via WhatsApp or Telegram — no official URL",
+        "interview_only_remote": "Interview or offer sent via WhatsApp/video only",
+        "personal_info_demand":  "Premature request for Aadhaar, PAN, or passport",
+        "work_from_home_bait":   "High-pay WFH role requiring no skills (data entry bait)",
+        "india_scam_pattern":    "Matches known Indian scam job pattern",
+        "fake_govt_job":         "Impersonating government/railway/bank recruitment",
+        "invalid_gstin":         "GST number present but fails format validation",
+        "req_paradox":           "Contradictory requirements (fresher role + senior experience)",
+        "poor_grammar":          "Suspicious grammar or formatting patterns",
+        "scam_description":      "Scam job description language (guaranteed income / earn from home)",
+    }
+    def _sanitize_flag(f: str) -> str:
+        stripped = f.strip()
+        # Exact match on a raw key name
+        if stripped in _RAW_KEY_LABELS:
+            return _RAW_KEY_LABELS[stripped]
+        # Key used as a prefix with colon/dash (e.g. "missing_salary: ...")
+        for key, label in _RAW_KEY_LABELS.items():
+            if stripped.lower().startswith(key + ":") or stripped.lower().startswith(key + " -"):
+                rest = stripped[len(key):].lstrip(": -").strip()
+                return f"{label}{' — ' + rest if rest else ''}"
+        return stripped
+
     fc1, fc2 = st.columns(2)
     flags_html = "".join(
         f'<div style="background:rgba(239,68,68,0.05);border-left:2px solid #ef4444;'
         f'padding:7px 11px;border-radius:0 6px 6px 0;margin-bottom:5px;'
-        f'color:#fca5a5;font-size:0.79rem;">{_html_escape.escape(f)}</div>'
+        f'color:#fca5a5;font-size:0.79rem;">{_html_escape.escape(_sanitize_flag(f))}</div>'
         for f in llm.get("top_red_flags", [])[:5]
     ) or '<div style="color:#6b7280;font-size:0.79rem;font-style:italic;">None identified.</div>'
 
@@ -5212,7 +5250,33 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     prog.progress(90, text="Blending scores…")
                     ai_s   = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
-                    rule_s = rules_result["rule_score"]
+
+                    # ── PROBE-VERIFIED SUPPRESSION ────────────────────────────────
+                    # In India, not publishing salary is standard practice for many
+                    # legitimate companies. When the network probes confirm company
+                    # identity (≥1 identity source + domain exists + HTTPS live),
+                    # missing_salary and vague_description carry near-zero diagnostic
+                    # value — suppress their rule-score contribution so they don't
+                    # push an otherwise clean posting into SUSPICIOUS territory.
+                    _fired_sigs  = rules_result.get("signals", {})
+                    _cd_probe    = probes.get("company_domain", {})
+                    _sr_probe    = probes.get("site_reach", {})
+                    _probe_clean = (
+                        _cd_probe.get("identity_sources", 0) >= 1
+                        and _cd_probe.get("domain_exists", False)
+                        and _sr_probe.get("reachable", False)
+                    )
+                    _SUPPRESS_WHEN_CLEAN = {"missing_salary", "vague_description", "single_strong_vague"}
+                    if _probe_clean:
+                        _suppressed_weight = sum(
+                            _WEIGHTS.get(k, 0)
+                            for k in _fired_sigs
+                            if k in _SUPPRESS_WHEN_CLEAN
+                        )
+                        # Recompute rule_s without the suppressed signals
+                        rule_s = max(0, rules_result["rule_score"] - _suppressed_weight)
+                    else:
+                        rule_s = rules_result["rule_score"]
 
                     # Clamp AI score to valid range (guard against hallucinated values)
                     ai_s = max(0, min(100, ai_s))
