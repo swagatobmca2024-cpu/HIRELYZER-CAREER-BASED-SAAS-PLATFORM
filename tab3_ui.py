@@ -1096,6 +1096,14 @@ def _job_search_interactive():
                         "apply_link": job.get("job_apply_link", "#"),
                         "company":    clean_html(job.get("employer_name", "")),
                     })
+                # If RapidAPI returned 0 jobs (quota/network/no matches), still
+                # insert 1 placeholder row so the search count always increases.
+                if not formatted_results:
+                    formatted_results = [{
+                        "platform": "RapidAPI (Live)",
+                        "apply_link": "#",
+                        "company": "",
+                    }]
                 _session_id = str(uuid.uuid4())  # one UUID per search click
                 save_job_search(
                     st.session_state.username,
@@ -1520,14 +1528,11 @@ def _analytics_dashboard():
             """, unsafe_allow_html=True)
         else:
             # ── Compute KPIs ───────────────────────────────────────
-            # Count unique search *sessions* (not raw rows). Each search click
-            # inserts N rows that share one search_session_id UUID.  Rows with
-            # an empty/legacy session_id (pre-feature) each count as 1 session.
-            _has_session = df_analytics['search_session_id'].str.strip().ne('')
-            total_searches = (
-                df_analytics.loc[_has_session, 'search_session_id'].nunique()
-                + int((~_has_session).sum())
-            )
+            # Raw row count — every inserted record counts:
+            #   External Platforms: 1 click → 3 rows (LinkedIn + Naukri + FoundIt) → +3
+            #   RapidAPI slider=N:  1 click → N rows                                → +N
+            # No session grouping, no deduplication, no cap.
+            total_searches      = len(df_analytics)
             unique_roles        = df_analytics['role'].nunique()
             unique_locations    = df_analytics['location'].nunique()
             top_platform_series = df_analytics['platform'].value_counts()
@@ -1929,7 +1934,7 @@ def _analytics_dashboard():
             ist_now = datetime.now(ZoneInfo('Asia/Kolkata')).strftime("%b %d, %Y %I:%M %p IST")
             st.markdown(f"""
             <div class="analytics-footer">
-                {total_searches:,} searches · {len(df_analytics):,} records · {scope_label} · Updated {ist_now} · Supabase PostgreSQL
+                {total_searches:,} records · {scope_label} · Updated {ist_now} · Supabase PostgreSQL
             </div>
             """, unsafe_allow_html=True)
 
