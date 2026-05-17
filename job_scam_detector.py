@@ -251,6 +251,7 @@ _SIG_ICON: dict[str, str] = {
     "poor_grammar":            I.FILE_TEXT,
     "generic_template":        I.COPY,
     "whatsapp_only_contact":   I.PHONE,
+    "scam_description":         I.SKULL,
 }
 
 
@@ -262,7 +263,7 @@ _WEIGHTS: dict[str, int] = {
     "upfront_payment":         25,
     "mlm_pyramid":             20,
     "too_good_salary":         18,
-    "vague_description":       14,
+    "vague_description":        8,   # generic filler language — lazy writing, not necessarily scam
     "free_email_contact":      12,
     "urgency_pressure":        12,
     "whatsapp_only_contact":   15,
@@ -283,6 +284,7 @@ _WEIGHTS: dict[str, int] = {
     "fake_govt_job":           20,   # impersonating railway/bank/defence recruitment
     "interview_only_remote":   13,   # WhatsApp/Meet-only interview, no in-person
     "single_strong_vague":      9,   # one high-confidence vague phrase fires alone
+    "scam_description":         16,   # scam-specific phrases: guaranteed income, earn from home, no skills
 }
 
 _FREE_DOMAINS: frozenset[str] = frozenset({
@@ -3296,17 +3298,22 @@ def _run_rules(job: dict) -> dict:
         _add("single_strong_vague","Suspicious Salary / Benefits Language",
              "Phrases like 'salary no bar' or 'attractive package' without specifics "
              "are hallmarks of scam postings designed to lure candidates.", strong_vague_hit)
-    free_hits = [e for e in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", full)
-                 if e.lower() in _FREE_DOMAINS]
-    # FIX 5: free_email probe already catches this standalone — only double-flag
-    # here when there is also no company website (stronger compound signal).
-    if free_hits and bad_site:
-        _add("free_email_contact","Personal Email — No Company Website",
-             "Free email address with no company website is a strong combined scam signal. "
-             "Corporate recruiters use company domain emails.", free_hits)
-    h = _any(full, _URGENCY_PHRASES)
-    if h: _add("urgency_pressure","Artificial Urgency / Pressure Tactics",
-                "Creating panic prevents candidates from properly researching the company.", h)
+
+    # FIX E: scam_description — scam-specific phrases, higher weight than generic vagueness
+    _SCAM_DESC_PHRASES = [
+        r"guaranteed.*income", r"assured.*salary", r"earn.*from.*home.*no.*skill",
+        r"no.*experience.*required.*high.*salary", r"work.*from.*home.*\d{4,}.*per.*day",
+        r"unlimited.*earning", r"passive.*income.*guaranteed",
+        r"be.*your.*own.*boss.*earn", r"financial.*freedom.*guaranteed",
+        r"100.*percent.*work.*from.*home.*earn", r"part.*time.*\d{5,}.*month",
+        r"just.*click.*earn", r"refer.*earn.*\d{4,}", r"investment.*return.*guaranteed",
+    ]
+    scam_desc_hit = _any(full, _SCAM_DESC_PHRASES)
+    if scam_desc_hit:
+        _add("scam_description", "Scam Job Description Language",
+             "Phrases like 'guaranteed income', 'earn from home no skills', or 'unlimited earnings' "
+             "are hallmarks of fraudulent job postings — not legitimate employment.", scam_desc_hit)
+    # FIX F: define bad_name/bad_site/no_addr BEFORE free_email check (was NameError)
     bad_name = not job.get("company","").strip() or \
                job.get("company","").strip().lower() in ("","n/a","confidential","undisclosed")
     bad_site = not job.get("website","").strip() or len(job.get("website","").strip()) < 6
@@ -3315,6 +3322,17 @@ def _run_rules(job: dict) -> dict:
         r"industrial.*area|it.*park|cyber.*city|tech.*park|business.*park|"
         r"tower|complex|plaza|hub|hq|headquarters|registered.*office)\b",
         job.get("description",""), re.IGNORECASE)
+
+    free_hits = [e for e in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", full)
+                 if e.lower() in _FREE_DOMAINS]
+    # free_email probe catches standalone — only double-flag with no website (compound signal)
+    if free_hits and bad_site:
+        _add("free_email_contact","Personal Email — No Company Website",
+             "Free email address with no company website is a strong combined scam signal. "
+             "Corporate recruiters use company domain emails.", free_hits)
+    h = _any(full, _URGENCY_PHRASES)
+    if h: _add("urgency_pressure","Artificial Urgency / Pressure Tactics",
+                "Creating panic prevents candidates from properly researching the company.", h)
     if (bad_name and bad_site) or (bad_site and no_addr) or (bad_name and no_addr):
         _add("no_company_info","No Verifiable Company Identity",
              "Legitimate companies provide verifiable name, website and physical address.")
@@ -3467,8 +3485,63 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _llm_prompt(job: dict, probe_warnings: list) -> str:
+def _llm_prompt(job: dict, probe_warnings: list, probes: dict = None) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
+
+    # Build a structured probe confirmation summary for the LLM so it
+    # knows about BOTH confirmed signals AND failed checks.
+    probe_summary_lines = []
+    if probes:
+        cd   = probes.get("company_domain", {})
+        da   = probes.get("domain_age", {})
+        sr   = probes.get("site_reach", {})
+        mx   = probes.get("mx_record", {})
+        spf  = probes.get("spf_dmarc", {})
+        typo = probes.get("typosquat", {})
+        fe   = probes.get("free_email", {})
+
+        # Domain infrastructure
+        probe_summary_lines.append(
+            f"DNS resolved: {'YES' if cd.get('domain_exists') else 'NO'} | "
+            f"HTTPS live: {'YES' if sr.get('reachable') else 'NO/UNKNOWN'} | "
+            f"SSL valid: {'YES' if sr.get('ssl_valid') else 'NO/UNKNOWN'} | "
+            f"Parked site: {'YES' if sr.get('is_parked') else 'NO'}"
+        )
+        # Domain age
+        age_days = da.get("age_days")
+        if age_days:
+            probe_summary_lines.append(f"Domain age: {age_days} days ({da.get('status','unknown')})")
+        # MX / email
+        probe_summary_lines.append(f"MX mail server status: {mx.get('status','NOT_CHECKED')}")
+        # SPF/DMARC
+        probe_summary_lines.append(
+            f"SPF record: {'present' if spf.get('spf') else 'missing'} | "
+            f"DMARC record: {'present' if spf.get('dmarc') else 'missing'}"
+        )
+        # Typosquat
+        probe_summary_lines.append(
+            f"Typosquatting check: {'SQUATTER DETECTED' if typo.get('is_squatter') else 'CLEAR'}"
+        )
+        # Company identity sources
+        id_src  = cd.get("identity_sources", 0)
+        cb_ok   = bool((cd.get("clearbit") or {}).get("found"))
+        wiki_ok = bool((cd.get("wikipedia") or {}).get("found"))
+        li_ok   = bool((cd.get("linkedin") or {}).get("found"))
+        probe_summary_lines.append(
+            f"Company identity confirmed by {id_src} source(s): "
+            f"Clearbit={'YES' if cb_ok else 'NO'} | "
+            f"Wikipedia={'YES' if wiki_ok else 'NO'} | "
+            f"LinkedIn={'YES' if li_ok else 'NO'}"
+        )
+        # Name-domain match
+        probe_summary_lines.append(
+            f"Company name matches domain: {'YES' if cd.get('domain_matches_company') else 'NO/UNKNOWN'}"
+        )
+        # Free email
+        probe_summary_lines.append(
+            f"Recruiter uses free/personal email: {'YES' if fe.get('uses_free_domain') else 'NO'}"
+        )
+    probe_summary = "\n".join(f"  {l}" for l in probe_summary_lines) if probe_summary_lines else "  Not available."
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
 
@@ -3493,24 +3566,50 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
             "do NOT guess, infer, or comment on whether it is realistic."
         )
     else:
-        salary_instruction = (
-            f"Provide a DETAILED, STRUCTURED salary assessment for the stated salary ({salary_display}). "
-            f"Your salary_assessment must be a single paragraph covering ALL of the following dimensions:\n"
-            f"1. MARKET RANGE — State the typical market salary range for this role and location "
-            f"   (e.g., '8–14 LPA for a mid-level Data Scientist in Bangalore in 2024').\n"
-            f"2. ALIGNMENT WITH ROLE — Does the offered salary match the stated role's seniority, "
-            f"   skill requirements, and responsibilities?\n"
-            f"3. EXPERIENCE-BASED EVALUATION — Use the candidate's experience level "
-            f"   ({candidate_exp_years if candidate_exp_years else 'unknown years'}) to evaluate fit. "
-            f"   Is this salary appropriate for their stage?\n"
-            f"4. LOCATION-BASED DIFFERENCES — How does the job's location ({job.get('location','N/A')}) "
-            f"   and the candidate's location ({candidate_location if candidate_location else 'unknown'}) "
-            f"   affect compensation expectations? Account for cost-of-living and regional pay bands.\n"
-            f"5. SCAM SIGNAL — Is this salary suspiciously high (possible lure) or suspiciously low "
-            f"   (possible exploitation)? State clearly: REALISTIC, SLIGHTLY_HIGH, INFLATED (scam risk), "
-            f"   or BELOW_MARKET.\n"
-            f"Write in plain English, 4–6 sentences. Do NOT use bullet points inside the JSON string."
-        )
+        # Detect if salary is a vague phrase rather than a real number
+        import re as _re
+        has_number = bool(_re.search(r"\d", salary_raw))
+        vague_salary = not has_number or bool(_re.search(
+            r"\b(competitive|market|industry|standard|negotiable|best|attractive|"
+            r"good|handsome|as per|commensurate|no bar|disclosure|discuss)\b",
+            salary_raw, _re.IGNORECASE
+        ))
+
+        if vague_salary and not has_number:
+            salary_instruction = (
+                f"The salary stated is vague and non-numeric: '{salary_display}'. "
+                f"You MUST set salary_assessment to state: "
+                f"(a) that the salary is not disclosed as a specific number — this is a transparency issue, "
+                f"(b) what the typical market range IS for this role in India "
+                f"(e.g. '6–14 LPA for a Data Scientist in Bangalore'), "
+                f"(c) whether vague salary language like 'competitive' or 'market standard' "
+                f"is a common scam tactic in India to lure candidates without commitment. "
+                f"End with verdict: VAGUE — treat as mild caution, not a definite scam signal."
+            )
+        else:
+            salary_instruction = (
+                f"Provide a DETAILED, STRUCTURED salary assessment for the stated salary ({salary_display}). "
+                f"IMPORTANT: This tool is India-focused. Always anchor your analysis to INDIAN salary "
+                f"standards in INR/LPA first. Only reference USD/global if the job is explicitly "
+                f"international or the company is a verified foreign MNC.\n"
+                f"Your salary_assessment must be a single paragraph covering ALL of the following:\n"
+                f"1. MARKET RANGE — State the typical Indian market range in LPA for this role and location "
+                f"   (e.g., '8–14 LPA for a mid-level Data Scientist in Bangalore in 2024'). "
+                f"   If location is remote or outside India, still state the Indian equivalent first.\n"
+                f"2. ALIGNMENT WITH ROLE — Does the offered salary match the role's seniority, "
+                f"   skill requirements, and responsibilities?\n"
+                f"3. EXPERIENCE-BASED EVALUATION — Use the candidate's experience "
+                f"   ({candidate_exp_years if candidate_exp_years else 'unknown years'}) to evaluate fit. "
+                f"   Is this salary appropriate for their career stage?\n"
+                f"4. LOCATION-BASED DIFFERENCES — How does the job location ({job.get('location','N/A')}) "
+                f"   and candidate location ({candidate_location if candidate_location else 'unknown'}) "
+                f"   affect pay expectations? Account for Indian city tiers (Tier-1/2/3) and cost-of-living.\n"
+                f"5. SCAM SIGNAL — Is this salary suspiciously high (possible lure) or suspiciously low "
+                f"   (exploitation / bait-and-switch)? State clearly: REALISTIC, SLIGHTLY_HIGH, "
+                f"   INFLATED (scam risk), or BELOW_MARKET.\n"
+                f"Write in plain English, 4–6 sentences. Do NOT use bullet points inside the JSON string. "
+                f"Do NOT default to USD unless the role is verified international."
+            )
 
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
@@ -3529,11 +3628,20 @@ Contact: {job.get('contact','N/A')}
 CANDIDATE CONTEXT (for personalised salary analysis):
 {candidate_ctx}
 
-LIVE PROBE FINDINGS:
+LIVE NETWORK PROBE RESULTS (hard evidence — use this to determine company_legitimacy):
+{probe_summary}
+
+PROBE WARNING MESSAGES (failures only):
 {ctx}
 
 SALARY ASSESSMENT RULE (mandatory):
 {salary_instruction}
+
+IMPORTANT JUDGMENT RULES (follow strictly):
+1. Multiple job locations or pan-India roles are NOT a red flag. Many legitimate companies post across cities. Only flag location as suspicious if it contradicts salary currency or candidate eligibility (e.g. "USA job but must be India-based and accept ₹5,000/month").
+2. A basic or simple company website is NOT evidence of fraud — many legitimate small companies have minimal web presence.
+3. Only mark company_legitimacy as LIKELY_FAKE or GHOST_COMPANY if you have concrete evidence (domain doesn't exist, name clearly fabricated, impersonating another company). Use UNVERIFIABLE for companies that simply cannot be confirmed.
+4. Do NOT add "Overly broad job locations" or "Multiple locations" as a red flag unless there is a genuine contradiction.
 
 Required JSON schema (all keys mandatory):
 {{
@@ -4852,7 +4960,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     for attempt in range(2):
                         try:
-                            prompt = _llm_prompt(job, warnings)
+                            prompt = _llm_prompt(job, warnings, probes)
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
@@ -4893,6 +5001,19 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     # Clamp AI score to valid range (guard against hallucinated values)
                     ai_s = max(0, min(100, ai_s))
+
+                    # FIX C: override company_legitimacy using hard probe evidence.
+                    # LLM judges from text only — probes have harder network evidence.
+                    if llm_parse_ok:
+                        cd_res     = probes.get("company_domain", {})
+                        id_sources = cd_res.get("identity_sources", 0)
+                        domain_ok  = cd_res.get("domain_exists", False)
+                        name_match = cd_res.get("domain_matches_company", False)
+                        if id_sources >= 2 and domain_ok and name_match:
+                            llm_data["company_legitimacy"] = "VERIFIED"
+                        elif id_sources >= 1 and domain_ok:
+                            if llm_data.get("company_legitimacy") in ("LIKELY_FAKE", "GHOST_COMPANY"):
+                                llm_data["company_legitimacy"] = "UNVERIFIABLE"
 
                     # ── 3. ADAPTIVE BLENDING ───────────────────────────────────────
                     # Fixed 60/25/15 is wrong when:
