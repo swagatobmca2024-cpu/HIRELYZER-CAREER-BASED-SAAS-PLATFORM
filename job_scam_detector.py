@@ -281,6 +281,8 @@ _WEIGHTS: dict[str, int] = {
     "invalid_phone":           10,   # phone present but not valid Indian format
     "invalid_pin":              8,   # PIN code present but invalid for claimed state
     "fake_govt_job":           20,   # impersonating railway/bank/defence recruitment
+    "interview_only_remote":   13,   # WhatsApp/Meet-only interview, no in-person
+    "single_strong_vague":      9,   # one high-confidence vague phrase fires alone
 }
 
 _FREE_DOMAINS: frozenset[str] = frozenset({
@@ -3283,23 +3285,37 @@ def _run_rules(job: dict) -> dict:
     if h: _add("unrealistic_benefits","Unrealistic Benefit Claims",
                 "Promised earnings or perks are statistically implausible.", h)
     h = _any(full, _VAGUE_PHRASES)
+    _STRONG_VAGUE = [r"salary.*no.*bar", r"handsome.*salary", r"good.*package",
+                     r"as per.*industry standard", r"best in.*industry",
+                     r"market.*competitive", r"attractive.*salary"]
+    strong_vague_hit = _any(full, _STRONG_VAGUE)
     if len(h) >= 2:
         _add("vague_description","Vague / Generic Description",
              "Real postings specify responsibilities. Vagueness may hide a non-existent role.", h)
+    elif strong_vague_hit:
+        _add("single_strong_vague","Suspicious Salary / Benefits Language",
+             "Phrases like 'salary no bar' or 'attractive package' without specifics "
+             "are hallmarks of scam postings designed to lure candidates.", strong_vague_hit)
     free_hits = [e for e in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", full)
                  if e.lower() in _FREE_DOMAINS]
-    if free_hits:
-        _add("free_email_contact","Personal / Free Email Used",
-             "Corporate recruiters use company domain emails, not Gmail/Yahoo/Hotmail.", free_hits)
+    # FIX 5: free_email probe already catches this standalone — only double-flag
+    # here when there is also no company website (stronger compound signal).
+    if free_hits and bad_site:
+        _add("free_email_contact","Personal Email — No Company Website",
+             "Free email address with no company website is a strong combined scam signal. "
+             "Corporate recruiters use company domain emails.", free_hits)
     h = _any(full, _URGENCY_PHRASES)
     if h: _add("urgency_pressure","Artificial Urgency / Pressure Tactics",
                 "Creating panic prevents candidates from properly researching the company.", h)
     bad_name = not job.get("company","").strip() or \
                job.get("company","").strip().lower() in ("","n/a","confidential","undisclosed")
     bad_site = not job.get("website","").strip() or len(job.get("website","").strip()) < 6
-    no_addr  = not re.search(r"\b(street|road|nagar|colony|sector|floor|building|office)\b",
-                              job.get("description",""), re.IGNORECASE)
-    if (bad_name and bad_site) or (bad_site and no_addr):
+    no_addr  = not re.search(
+        r"\b(street|road|nagar|colony|sector|floor|building|office|plot|phase|"
+        r"industrial.*area|it.*park|cyber.*city|tech.*park|business.*park|"
+        r"tower|complex|plaza|hub|hq|headquarters|registered.*office)\b",
+        job.get("description",""), re.IGNORECASE)
+    if (bad_name and bad_site) or (bad_site and no_addr) or (bad_name and no_addr):
         _add("no_company_info","No Verifiable Company Identity",
              "Legitimate companies provide verifiable name, website and physical address.")
     for fp, ep in _PARADOX_PATTERNS:
@@ -3319,6 +3335,22 @@ def _run_rules(job: dict) -> dict:
              "Legitimate companies post on official portals. WhatsApp-only jobs are a major red flag.",
              wa_hits)
 
+    # FIX 6: WhatsApp/video-only interview detection
+    _INTERVIEW_ONLY_PHRASES = [
+        r"interview.*on.*whatsapp", r"interview.*via.*whatsapp",
+        r"interview.*on.*google.*meet", r"interview.*on.*zoom.*only",
+        r"no.*in.person.*interview", r"interview.*online.*only",
+        r"hr.*will.*call.*on.*whatsapp", r"whatsapp.*interview.*process",
+        r"video.*call.*interview.*only", r"skype.*interview.*only",
+        r"telephonic.*interview.*only.*no.*face",
+        r"selected.*on.*whatsapp", r"offer.*letter.*whatsapp",
+    ]
+    wa_int_hits = _any(full, _INTERVIEW_ONLY_PHRASES)
+    if wa_int_hits:
+        _add("interview_only_remote","Interview / Offer via WhatsApp or Video Only",
+             "Legitimate companies conduct structured interviews. WhatsApp-only or "
+             "video-only hiring with no physical process is a major red flag.", wa_int_hits)
+
     h = _any(full, _PERSONAL_PHRASES)
     if h: _add("personal_info_demand","Premature Personal Info Request",
                 "Requesting Aadhaar/PAN/passport at application stage is a major red flag.", h)
@@ -3333,9 +3365,13 @@ def _run_rules(job: dict) -> dict:
              "Salary is not mentioned. Many Indian companies share this only after interviews — "
              "this is a transparency note, not necessarily a scam signal.")
     g_hits = _any(full, _GRAMMAR_PATTERNS)
-    if len(g_hits) >= 2:
+    _STRONG_GRAMMAR = [r"\b(kindly revert|do the needful|revert back|prepone)\b",
+                       r"\b(myself is|myself am|i am having)\b"]
+    strong_grammar_hit = _any(full, _STRONG_GRAMMAR)
+    if len(g_hits) >= 2 or strong_grammar_hit:
         _add("poor_grammar","Suspicious Grammar / Formatting",
-             "Excessive punctuation, random CAPS or known spam-text patterns detected.", g_hits)
+             "Excessive punctuation, random CAPS or known spam-text patterns detected.",
+             g_hits or strong_grammar_hit)
 
     # ── India-specific signal checks ─────────────────────────────────────────
     h = _any(full, _INDIA_SCAM_PHRASES)
