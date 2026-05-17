@@ -342,6 +342,21 @@ def display_timer(remaining_seconds, expired=False, key_suffix=""):
         </script>
         """, height=80)
 
+
+def mask_email(email: str) -> str:
+    """Mask email for display: show first 2 chars of local part, mask the rest, keep domain.
+    e.g. brandontiger231@gmail.com → br***@gmail.com
+    """
+    if not email or '@' not in email:
+        return email
+    local, domain = email.split('@', 1)
+    if len(local) <= 2:
+        masked_local = local[0] + '***'
+    else:
+        masked_local = local[:2] + '***'
+    return f"{masked_local}@{domain}"
+
+
 # ------------------- Initialize Session State -------------------
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -1937,7 +1952,7 @@ if not st.session_state.get("authenticated", False):
                 st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M4 4h16v16H4z" rx="2" stroke="#38bdf8" stroke-width="1.5" fill="none"/><path d="M4 9h16" stroke="#38bdf8" stroke-width="1.5"/><path d="M8 4v5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/><path d="M16 4v5" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/></svg>
                     Verify OTP</h3>""", unsafe_allow_html=True)
-                st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.reset_email}</strong></p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{mask_email(st.session_state.reset_email)}</strong></p>", unsafe_allow_html=True)
 
                 # Calculate elapsed and remaining time (server-side)
                 elapsed_time = time.time() - st.session_state.reset_otp_time
@@ -2105,7 +2120,7 @@ if not st.session_state.get("authenticated", False):
                 st.markdown("""<h3 style='color:#e6edf3; text-align:center; font-family:-apple-system,sans-serif; font-size:1.05rem; font-weight:600;'>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="vertical-align:-3px; margin-right:6px;" xmlns="http://www.w3.org/2000/svg"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" stroke="#38bdf8" stroke-width="1.5" fill="none"/><path d="M2 8l10 7 10-7" stroke="#38bdf8" stroke-width="1.5"/></svg>
                     Verify Your Email</h3>""", unsafe_allow_html=True)
-                st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{st.session_state.pending_registration['email']}</strong></p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='color:#c9d1d9; text-align:center;'>Enter the 6-digit OTP sent to <strong>{mask_email(st.session_state.pending_registration['email'])}</strong></p>", unsafe_allow_html=True)
 
                 # Calculate remaining time
                 from datetime import datetime
