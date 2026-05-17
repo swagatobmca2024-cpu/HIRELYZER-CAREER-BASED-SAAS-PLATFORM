@@ -273,7 +273,7 @@ _WEIGHTS: dict[str, int] = {
     "location_mismatch":        7,
     "poor_grammar":             6,
     "work_from_home_bait":      5,
-    "missing_salary":           1,   # Reduced: many legitimate companies don't disclose salary
+    "missing_salary":           4,
     "generic_template":         4,
     # ── India-specific signals ────────────────────────────────────────────────
     "india_scam_pattern":      16,   # data entry, typing, captcha, fake govt jobs
@@ -3256,8 +3256,8 @@ def _run_rules(job: dict) -> dict:
     if h: _add("work_from_home_bait","WFH Bait — Data Entry / Form Filling",
                 "High-pay work-from-home roles with no skills required are almost always scams.", h)
     if not job.get("salary","").strip() or len(job.get("salary","").strip()) < 4:
-        _add("missing_salary","Salary Not Disclosed",
-             "Salary details are not mentioned. This is common practice — many companies discuss compensation during the interview process. Not a strong scam indicator on its own.")
+        _add("missing_salary","Salary Completely Absent",
+             "Hidden salary is commonly used to lure, then lowball candidates.")
     g_hits = _any(full, _GRAMMAR_PATTERNS)
     if len(g_hits) >= 2:
         _add("poor_grammar","Suspicious Grammar / Formatting",
@@ -3343,56 +3343,19 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _llm_prompt(job: dict, probe_warnings: list, user_context: Optional[dict] = None) -> str:
+def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
-
-    uc = user_context or {}
-    user_location   = (uc.get("user_location") or "").strip()
-    current_role    = (uc.get("current_role") or "").strip()
-    years_exp       = (uc.get("years_exp") or "").strip()
-
-    # Build user context block for the prompt
-    user_ctx_lines = []
-    if user_location:  user_ctx_lines.append(f"User's Current Location: {user_location}")
-    if current_role:   user_ctx_lines.append(f"User's Current Role: {current_role}")
-    if years_exp:      user_ctx_lines.append(f"User's Years of Experience: {years_exp}")
-    user_ctx_block = "\n".join(user_ctx_lines) if user_ctx_lines else "Not provided"
-
-    if not salary_raw:
-        salary_instruction = (
-            "The salary was NOT provided in this job posting. "
-            "This is NORMAL — many legitimate companies (especially in India and globally) "
-            "do NOT disclose compensation upfront; it is discussed during interviews. "
-            "DO NOT treat missing salary as a red flag or scam indicator. "
-            "Instead, set salary_assessment to a helpful paragraph that: "
-            "(1) acknowledges salary was not disclosed which is common practice, "
-            "(2) based on the job title, company, and location in the posting, "
-            "and the user's profile (location, role, experience) below, "
-            "provides a realistic market salary range for this role in INR/USD as appropriate, "
-            "(3) mentions typical compensation benchmarks for this role/city in the Indian market "
-            "or global market if applicable, "
-            "(4) notes current hiring trends for this role. "
-            "Be specific with numbers (e.g. '6–10 LPA for a mid-level Python developer in Pune'). "
-            "Do NOT write 'NOT_PROVIDED'."
-        )
-    else:
-        salary_instruction = (
-            f"The job posting states a salary of: {salary_raw}. "
-            "Provide a DETAILED salary assessment paragraph covering: "
-            "(1) Whether this salary is realistic or inflated/unrealistic for the role and location, "
-            "(2) The typical market salary range for this exact role in the stated city/country "
-            "(use INR/LPA for Indian roles, USD for US/international), "
-            "(3) How well this aligns with the user's experience level and current role, "
-            "(4) Location-based compensation differences (e.g. Bangalore vs Tier-2 cities, "
-            "or India vs global), "
-            "(5) Current hiring market trends for this role (hot/cooling/stable), "
-            "(6) A clear conclusion: is this salary a realistic offer, suspiciously high (scam signal), "
-            "or below market. Be specific with numbers and city/role context."
-        )
-
-    return f"""You are a senior HR fraud investigator and compensation analyst specialising in Indian and global employment markets.
+    salary_instruction = (
+        "The salary was NOT provided in this job posting. "
+        "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
+        "do NOT guess, infer, or comment on whether it is realistic."
+        if not salary_raw else
+        "Assess whether the stated salary is realistic for this role and location. "
+        "If it seems unrealistically high, flag it as a potential scam signal."
+    )
+    return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
 JOB POSTING:
@@ -3406,27 +3369,11 @@ Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
 
-USER PROFILE (for salary calibration):
-{user_ctx_block}
-
 LIVE PROBE FINDINGS:
 {ctx}
 
-SALARY ASSESSMENT INSTRUCTIONS (mandatory — write a rich paragraph, not just "realistic" or "unrealistic"):
+SALARY ASSESSMENT RULE (mandatory):
 {salary_instruction}
-
-IMPORTANT SALARY KNOWLEDGE BASE (apply this when assessing):
-- Indian tech salary benchmarks (2024-25): Entry (0-2 yrs): 3-8 LPA; Mid (2-5 yrs): 8-20 LPA; Senior (5-8 yrs): 18-40 LPA; Staff/Principal: 35-80 LPA+
-- Top Indian tech cities: Bangalore > Hyderabad > Pune > Chennai > NCR/Gurgaon > Mumbai (in order of tech pay premium)
-- Tier-2 cities (Jaipur, Ahmedabad, Kochi, Indore, Nagpur): typically 20-30% lower than Bangalore
-- Non-tech roles (HR, Admin, Sales, Marketing): 3-12 LPA for most levels
-- Startups: often 10-20% below MNC/product companies; can compensate with ESOPs
-- Global/MNC roles based in India: can be 1.5-2.5x above Indian market average
-- USD roles (US, Canada, UK remote): $60k-$200k+ depending on seniority/stack
-- Missing salary is NOT a scam indicator — companies like TCS, Infosys, and most startups routinely omit it
-- Scam salary signals: absurdly high (>3x market for role), guaranteed weekly payout, per-day earnings claims
-- Currency awareness: ₹ = INR; LPA = Lakhs Per Annum; CTC = Cost To Company
-- Current Indian hiring market (2025): Cautious in IT services; active in product/SaaS, AI/ML, cloud infra; fintech stabilising
 
 Required JSON schema (all keys mandatory):
 {{
@@ -3437,7 +3384,7 @@ Required JSON schema (all keys mandatory):
   "positive_signals": ["<str>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<rich paragraph covering market range, experience alignment, location differences, hiring trends — see instructions above>",
+  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
   "recommended_action": "<specific advice for the job seeker>",
   "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
@@ -3931,6 +3878,9 @@ def _render_ai_dive(llm: dict):
         if field == "salary_assessment" and (
             not val.strip()
             or val.strip().upper() == "NOT_PROVIDED"
+            or "not provided" in val.lower()
+            or "not mentioned" in val.lower()
+            or "no salary" in val.lower()
         ):
             st.markdown(
                 f'<div style="background:rgba(107,114,128,0.06);border:1px solid rgba(107,114,128,0.18);'
@@ -3938,7 +3888,7 @@ def _render_ai_dive(llm: dict):
                 f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
                 f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
                 f'{_svg(I.DOLLAR_OFF,11,"#6b7280")}Salary Reality Check</div>'
-                f'<div style="display:flex;align-items:flex-start;gap:8px;color:#9ca3af;font-size:0.83rem;">'
+                f'<div style="display:flex;align-items:center;gap:8px;color:#9ca3af;font-size:0.83rem;">'
                 f'{_svg(I.ALERT_CIRCLE,13,"#f59e0b")}'
                 f'<span><strong style="color:#f59e0b;">Salary not disclosed</strong> — '
                 f'this posting does not mention any salary, CTC, or compensation. '
@@ -4370,44 +4320,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         horizontal=True, key="jsd_mode", label_visibility="collapsed",
     )
 
-    # ── User Profile Section — for accurate salary calibration ────────────────
-    st.markdown(
-        f'<div style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.18);'
-        f'border-radius:10px;padding:12px 16px;margin-bottom:12px;">'
-        f'<div style="font-size:0.69rem;font-weight:600;color:#a78bfa;text-transform:uppercase;'
-        f'letter-spacing:1px;margin-bottom:8px;display:flex;align-items:center;gap:6px;">'
-        f'{_svg(I.ID_CARD,10,"#a78bfa")} Your Profile '
-        f'<span style="font-size:0.62rem;color:#6b7280;font-weight:400;text-transform:none;'
-        f'letter-spacing:0px;">(optional — improves salary accuracy)</span></div>'
-        f'<div style="font-size:0.75rem;color:#6b7280;">Providing your location, role, and experience '
-        f'enables the AI to give you a personalised, market-calibrated salary assessment.</div></div>',
-        unsafe_allow_html=True,
-    )
-    up1, up2, up3 = st.columns([2, 2, 1])
-    _user_location = up1.text_input(
-        "Your Current Location",
-        placeholder="e.g., Bangalore / Mumbai / Kolkata",
-        key="jsd_uloc",
-        help="City or region where you are currently based — used to compare salary norms",
-    )
-    _current_role = up2.text_input(
-        "Your Current Role",
-        placeholder="e.g., Software Engineer / Data Analyst",
-        key="jsd_urole",
-        help="Your current job title — helps assess whether the offer aligns with your level",
-    )
-    _years_exp = up3.text_input(
-        "Exp (yrs)",
-        placeholder="e.g., 3",
-        key="jsd_uexp",
-        help="Total years of professional experience",
-    )
-    user_context = {
-        "user_location": _user_location,
-        "current_role":  _current_role,
-        "years_exp":     _years_exp,
-    }
-
     job: dict = {}
 
     if mode == "Paste Full Job Description":
@@ -4511,30 +4423,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         job["salary"]   = e.text_input("Salary Offered",  placeholder="e.g., 8-12 LPA",           key="jsd_sa")
         job["contact"]  = f.text_input("Contact Email",   placeholder="e.g., hr@acme.com",        key="jsd_ct")
         job["description"]  = st.text_area("Job Description",  height=120, key="jsd_d",
-                                            max_chars=_MAX_PASTE_CHARS,
                                             placeholder="Describe the role and responsibilities...")
-        # ── Live character counter for Job Description (mirrors paste mode) ──
-        _desc_chars = len(job.get("description") or "")
-        _desc_pct   = _desc_chars / _MAX_PASTE_CHARS
-        if _desc_chars > 0:
-            if _desc_pct < 0.75:
-                _dc, _lc = "#22c55e", "#6b7280"
-            elif _desc_pct < 0.95:
-                _dc, _lc = "#f59e0b", "#f59e0b"
-            else:
-                _dc, _lc = "#ef4444", "#ef4444"
-            st.markdown(
-                f'''<div style="display:flex;align-items:center;gap:8px;margin:-6px 0 6px;">
-                <div style="flex:1;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;">
-                  <div style="width:{min(_desc_pct*100,100):.1f}%;height:100%;
-                       background:{_dc};border-radius:2px;transition:width .2s;"></div>
-                </div>
-                <span style="font-size:0.68rem;color:{_lc};white-space:nowrap;
-                     font-variant-numeric:tabular-nums;">
-                  {_desc_chars:,} / {_MAX_PASTE_CHARS:,}
-                </span></div>''',
-                unsafe_allow_html=True,
-            )
         job["requirements"] = st.text_area("Requirements",     height=80,  key="jsd_r",
                                             placeholder="Skills, experience, qualifications...")
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
@@ -4600,7 +4489,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 paste_keys = [
                     "jsd_raw", "jsd_mode",
                     "jsd_ot", "jsd_oco", "jsd_os", "jsd_oct", "jsd_ow", "jsd_ol",
-                    "jsd_uloc", "jsd_urole", "jsd_uexp",
                 ]
                 fill_keys = [
                     "jsd_t", "jsd_co", "jsd_w", "jsd_l",
@@ -4653,7 +4541,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     for attempt in range(2):
                         try:
-                            prompt = _llm_prompt(job, warnings, user_context)
+                            prompt = _llm_prompt(job, warnings)
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
@@ -4951,7 +4839,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         f'<h2 style="margin:0 0 4px;font-size:1.45rem;font-weight:700;color:#e6edf3;'
         f'letter-spacing:-0.02em;">Job Scam Detector</h2>'
         f'<p style="margin:0;color:#8b949e;font-size:0.82rem;line-height:1.5;">'
-        f'Paste any job posting — AI analysis + 6 live network probes detect '
+        f'Paste any job posting — AI analysis + 5 live network probes detect '
         f'fake listings before you apply or share personal data.</p>'
         f'</div>'
 
