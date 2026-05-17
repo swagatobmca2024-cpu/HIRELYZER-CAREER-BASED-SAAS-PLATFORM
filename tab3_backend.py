@@ -186,16 +186,38 @@ def prune_old_searches(username, keep=200):
 
 
 def delete_saved_job_search(search_id):
-    """Soft-delete a saved job search — hides from UI but keeps in analytics."""
-    try:
-        cur = _pg().cursor()
-        cur.execute("UPDATE user_jobs SET is_deleted = TRUE WHERE id = %s", (search_id,))
-        get_saved_job_searches.clear()
-        get_total_saved_searches_count.clear()
-        get_available_platforms.clear()
-        # fetch_analytics_data NOT cleared — soft delete must not affect analytics
-    except Exception as e:
-        st.error(f"Error deleting job search: {e}")
+    """
+    Soft-delete a saved job search — sets is_deleted=TRUE so it hides from
+    the saved cards UI but is retained in analytics (analytics queries do NOT
+    filter by is_deleted, so deleting a card never changes any analytics count).
+    Returns True on success, False on failure.
+    """
+    for attempt in range(2):  # retry once on stale connection
+        try:
+            conn = _pg()
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE user_jobs SET is_deleted = TRUE WHERE id = %s AND is_deleted = FALSE",
+                (int(search_id),)   # cast to int — guards against string id type mismatch
+            )
+            rows_affected = cur.rowcount   # 1 = success, 0 = already deleted or wrong id
+            # Clear saved-card caches so UI reflects the deletion immediately.
+            # fetch_analytics_data intentionally NOT cleared — analytics are immutable.
+            get_saved_job_searches.clear()
+            get_total_saved_searches_count.clear()
+            get_available_platforms.clear()
+            if rows_affected == 0:
+                st.warning("Card was already deleted or could not be found.")
+            return rows_affected > 0
+        except psycopg2.OperationalError:
+            _get_pg_conn.clear()       # force reconnect
+            if attempt == 1:
+                st.error("Database connection lost while deleting. Please try again.")
+                return False
+        except Exception as e:
+            st.error(f"Error deleting job search: {e}")
+            return False
+    return False
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -298,16 +320,20 @@ def fetch_analytics_data(scope_username=None):
     """
     try:
         cur = _pg().cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        # ⚠️  INTENTIONALLY no is_deleted filter here.
+        # Analytics are a permanent record of searches ever made.
+        # Soft-deleting a saved card must NOT affect any analytics counts.
+        # Only the saved-card UI queries filter is_deleted = FALSE.
         if scope_username:
             cur.execute(
                 """SELECT role, location, platform, search_session_id, timestamp
-                   FROM user_jobs WHERE username = %s AND is_deleted = FALSE""",
+                   FROM user_jobs WHERE username = %s""",
                 (scope_username,)
             )
         else:
             cur.execute(
                 """SELECT role, location, platform, search_session_id, timestamp
-                   FROM user_jobs WHERE is_deleted = FALSE"""
+                   FROM user_jobs"""
             )
         rows = cur.fetchall()
         df = pd.DataFrame(rows, columns=['role', 'location', 'platform', 'search_session_id', 'timestamp'])
