@@ -251,7 +251,6 @@ _SIG_ICON: dict[str, str] = {
     "poor_grammar":            I.FILE_TEXT,
     "generic_template":        I.COPY,
     "whatsapp_only_contact":   I.PHONE,
-    "scam_description":         I.SKULL,
 }
 
 
@@ -263,7 +262,7 @@ _WEIGHTS: dict[str, int] = {
     "upfront_payment":         25,
     "mlm_pyramid":             20,
     "too_good_salary":         18,
-    "vague_description":        8,   # generic filler language — lazy writing, not necessarily scam
+    "vague_description":       14,
     "free_email_contact":      12,
     "urgency_pressure":        12,
     "whatsapp_only_contact":   15,
@@ -282,9 +281,6 @@ _WEIGHTS: dict[str, int] = {
     "invalid_phone":           10,   # phone present but not valid Indian format
     "invalid_pin":              8,   # PIN code present but invalid for claimed state
     "fake_govt_job":           20,   # impersonating railway/bank/defence recruitment
-    "interview_only_remote":   13,   # WhatsApp/Meet-only interview, no in-person
-    "single_strong_vague":      9,   # one high-confidence vague phrase fires alone
-    "scam_description":         16,   # scam-specific phrases: guaranteed income, earn from home, no skills
 }
 
 _FREE_DOMAINS: frozenset[str] = frozenset({
@@ -343,13 +339,6 @@ _PAY_PHRASES = [
     r"sim.*card.*fee",r"scanner.*fee",r"biometric.*fee",
     r"police.*verification.*fee",r"insurance.*premium.*joining",
     r"token.*amount",r"earnest.*money",r"caution.*deposit",
-    # Internship/placement fee scam variants
-    r"internship.*fee",r"one.time.*fee",r"seat.*confirmation.*fee",
-    r"onboarding.*fee",r"registration.*charges",r"enrollment.*fee",
-    r"placement.*fee",r"interview.*fee",r"shortlisting.*fee",
-    r"document.*verification.*fee",r"offer.*letter.*fee",
-    r"training.*material.*fee",r"course.*fee.*joining",
-    r"refundable.*security",r"one.time.*payment.*joining",
 ]
 _MLM_PHRASES = [
     r"unlimited earning",r"be your own boss",r"passive income",
@@ -2922,21 +2911,6 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
     da_status = age.get("status", "unknown")
     age_days  = age.get("age_days", 999) or 999
     reg_str   = age.get("registered", "recently")
-
-    # GAP FIX 1a: No domain at all — all domain probes were skipped.
-    # A posting with no verifiable web presence is inherently suspicious.
-    all_domain_probes_skipped = (
-        da_status in ("skipped", "unknown")
-        and probes.get("site_reach", {}).get("reachable") is None
-        and not probes.get("typosquat", {}).get("is_squatter", False)
-        and probes.get("company_domain", {}).get("domain_exists") is None
-    )
-    if all_domain_probes_skipped:
-        penalty += 15
-        warnings.append(
-            "No company website or domain found — job posting has no verifiable "
-            "web presence. Legitimate companies always have a registered domain."
-        )
     if da_status == "very_young":      # 0-30 days
         penalty += 30
         warnings.append(
@@ -3077,7 +3051,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         elif not spf.get("dmarc"):
             penalty += 8
             warnings.append(f"'{spf_dom}' has no DMARC record — anti-spoofing not configured")
-    return min(penalty, 75), warnings
+    return min(penalty, 55), warnings
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3135,43 +3109,6 @@ _SALARY_BANDS: dict[str, tuple[float, float]] = {
     "vp":                     (30.0, 200.0),
     "cto":                    (40.0, 300.0),
     "ceo":                    (40.0, 500.0),
-    # GAP FIX 3b: additional roles that were previously unmatched
-    "consultant":             (5.0,  40.0),
-    "business analyst":       (4.0,  25.0),
-    "cloud engineer":         (6.0,  50.0),
-    "cloud architect":        (20.0, 100.0),
-    "cybersecurity":          (6.0,  55.0),
-    "security engineer":      (7.0,  55.0),
-    "ui/ux":                  (4.0,  30.0),
-    "ux designer":            (4.0,  28.0),
-    "ui designer":            (3.5,  25.0),
-    "embedded":               (4.0,  35.0),
-    "support engineer":       (2.5,  18.0),
-    "technical support":      (2.5,  15.0),
-    "scrum master":           (8.0,  40.0),
-    "blockchain":             (8.0,  60.0),
-    "network engineer":       (3.5,  30.0),
-    "database":               (4.0,  35.0),
-    "bi developer":           (4.0,  30.0),
-    "etl":                    (4.0,  30.0),
-    "sap":                    (5.0,  45.0),
-    "java developer":         (4.0,  40.0),
-    "python developer":       (4.0,  40.0),
-    "react":                  (4.0,  38.0),
-    "angular":                (4.0,  35.0),
-    "node":                   (4.0,  38.0),
-    "dot net":                (4.0,  35.0),
-    ".net":                   (4.0,  35.0),
-    "flutter":                (4.0,  32.0),
-    "content":                (2.0,  15.0),
-    "seo":                    (2.0,  12.0),
-    "social media":           (2.0,  12.0),
-    "data entry":             (1.2,   5.0),
-    "telecaller":             (1.2,   6.0),
-    "bpo":                    (1.5,   7.0),
-    # Catch-all: generic white-collar role — only fires if no specific band matched.
-    # Prevents the >500 LPA fallback from missing realistic outliers.
-    "_generic":               (1.5,  60.0),
 }
 
 # City cost-of-living multipliers — applied to max band threshold
@@ -3226,25 +3163,12 @@ def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
         return False   # no salary number found — don't flag
 
     # ── Look up role band ──────────────────────────────────────────────────
-    # GAP FIX 3c: pick the MOST SPECIFIC (longest keyword) match, not first.
-    # Prevents "manager" matching before "product manager" for "Product Manager".
-    # Also try candidate_role if job title is missing/vague.
     title_lower = title.lower()
-    cand_role_lower = ((job or {}).get("candidate_role") or "").lower()
-    search_text = title_lower or cand_role_lower
-
     band: Optional[tuple[float, float]] = None
-    best_kw_len = 0
     for keyword, b in _SALARY_BANDS.items():
-        if keyword.startswith("_"):     # skip meta-keys like _generic
-            continue
-        if keyword in search_text and len(keyword) > best_kw_len:
+        if keyword in title_lower:
             band = b
-            best_kw_len = len(keyword)
-
-    # Fall back to catch-all generic band if no specific match
-    if band is None and search_text:
-        band = _SALARY_BANDS.get("_generic")
+            break
 
     # ── Apply city multiplier ──────────────────────────────────────────────
     city_mult = 1.0
@@ -3256,18 +3180,10 @@ def _salary_outlier(salary_text: str, job: Optional[dict] = None) -> bool:
 
     # ── Decision ──────────────────────────────────────────────────────────
     if band:
-        min_lpa, max_lpa = band
+        _, max_lpa = band
         effective_max = max_lpa * city_mult
-        effective_min = min_lpa * city_mult
-        # Flag if salary is more than 2× the ceiling — clear scam lure territory
-        if lpa_val > effective_max * 2.0:
-            return True
-        # GAP FIX 3a: flag if salary is below 40% of the band minimum —
-        # bait-and-switch / exploitation pattern (promise low pay, then
-        # reveal it's commission-only or unpaid trial period).
-        if lpa_val < effective_min * 0.4 and lpa_val > 0:
-            return True
-        return False
+        # Flag only if salary is more than 2× the ceiling — clear scam territory
+        return lpa_val > effective_max * 2.0
     else:
         # No band match — only flag truly impossible numbers (>₹5Cr / >500 LPA).
         # Do NOT flag normal salaries just because the role isn't in the band table.
@@ -3294,53 +3210,23 @@ def _run_rules(job: dict) -> dict:
     if h: _add("unrealistic_benefits","Unrealistic Benefit Claims",
                 "Promised earnings or perks are statistically implausible.", h)
     h = _any(full, _VAGUE_PHRASES)
-    _STRONG_VAGUE = [r"salary.*no.*bar", r"handsome.*salary", r"good.*package",
-                     r"as per.*industry standard", r"best in.*industry",
-                     r"market.*competitive", r"attractive.*salary"]
-    strong_vague_hit = _any(full, _STRONG_VAGUE)
     if len(h) >= 2:
         _add("vague_description","Vague / Generic Description",
              "Real postings specify responsibilities. Vagueness may hide a non-existent role.", h)
-    elif strong_vague_hit:
-        _add("single_strong_vague","Suspicious Salary / Benefits Language",
-             "Phrases like 'salary no bar' or 'attractive package' without specifics "
-             "are hallmarks of scam postings designed to lure candidates.", strong_vague_hit)
-
-    # FIX E: scam_description — scam-specific phrases, higher weight than generic vagueness
-    _SCAM_DESC_PHRASES = [
-        r"guaranteed.*income", r"assured.*salary", r"earn.*from.*home.*no.*skill",
-        r"no.*experience.*required.*high.*salary", r"work.*from.*home.*\d{4,}.*per.*day",
-        r"unlimited.*earning", r"passive.*income.*guaranteed",
-        r"be.*your.*own.*boss.*earn", r"financial.*freedom.*guaranteed",
-        r"100.*percent.*work.*from.*home.*earn", r"part.*time.*\d{5,}.*month",
-        r"just.*click.*earn", r"refer.*earn.*\d{4,}", r"investment.*return.*guaranteed",
-    ]
-    scam_desc_hit = _any(full, _SCAM_DESC_PHRASES)
-    if scam_desc_hit:
-        _add("scam_description", "Scam Job Description Language",
-             "Phrases like 'guaranteed income', 'earn from home no skills', or 'unlimited earnings' "
-             "are hallmarks of fraudulent job postings — not legitimate employment.", scam_desc_hit)
-    # FIX F: define bad_name/bad_site/no_addr BEFORE free_email check (was NameError)
-    bad_name = not job.get("company","").strip() or \
-               job.get("company","").strip().lower() in ("","n/a","confidential","undisclosed")
-    bad_site = not job.get("website","").strip() or len(job.get("website","").strip()) < 6
-    no_addr  = not re.search(
-        r"\b(street|road|nagar|colony|sector|floor|building|office|plot|phase|"
-        r"industrial.*area|it.*park|cyber.*city|tech.*park|business.*park|"
-        r"tower|complex|plaza|hub|hq|headquarters|registered.*office)\b",
-        job.get("description",""), re.IGNORECASE)
-
     free_hits = [e for e in re.findall(r"[\w.+\-]+@([\w\-]+\.[a-zA-Z]{2,})", full)
                  if e.lower() in _FREE_DOMAINS]
-    # free_email probe catches standalone — only double-flag with no website (compound signal)
-    if free_hits and bad_site:
-        _add("free_email_contact","Personal Email — No Company Website",
-             "Free email address with no company website is a strong combined scam signal. "
-             "Corporate recruiters use company domain emails.", free_hits)
+    if free_hits:
+        _add("free_email_contact","Personal / Free Email Used",
+             "Corporate recruiters use company domain emails, not Gmail/Yahoo/Hotmail.", free_hits)
     h = _any(full, _URGENCY_PHRASES)
     if h: _add("urgency_pressure","Artificial Urgency / Pressure Tactics",
                 "Creating panic prevents candidates from properly researching the company.", h)
-    if (bad_name and bad_site) or (bad_site and no_addr) or (bad_name and no_addr):
+    bad_name = not job.get("company","").strip() or \
+               job.get("company","").strip().lower() in ("","n/a","confidential","undisclosed")
+    bad_site = not job.get("website","").strip() or len(job.get("website","").strip()) < 6
+    no_addr  = not re.search(r"\b(street|road|nagar|colony|sector|floor|building|office)\b",
+                              job.get("description",""), re.IGNORECASE)
+    if (bad_name and bad_site) or (bad_site and no_addr):
         _add("no_company_info","No Verifiable Company Identity",
              "Legitimate companies provide verifiable name, website and physical address.")
     for fp, ep in _PARADOX_PATTERNS:
@@ -3360,22 +3246,6 @@ def _run_rules(job: dict) -> dict:
              "Legitimate companies post on official portals. WhatsApp-only jobs are a major red flag.",
              wa_hits)
 
-    # FIX 6: WhatsApp/video-only interview detection
-    _INTERVIEW_ONLY_PHRASES = [
-        r"interview.*on.*whatsapp", r"interview.*via.*whatsapp",
-        r"interview.*on.*google.*meet", r"interview.*on.*zoom.*only",
-        r"no.*in.person.*interview", r"interview.*online.*only",
-        r"hr.*will.*call.*on.*whatsapp", r"whatsapp.*interview.*process",
-        r"video.*call.*interview.*only", r"skype.*interview.*only",
-        r"telephonic.*interview.*only.*no.*face",
-        r"selected.*on.*whatsapp", r"offer.*letter.*whatsapp",
-    ]
-    wa_int_hits = _any(full, _INTERVIEW_ONLY_PHRASES)
-    if wa_int_hits:
-        _add("interview_only_remote","Interview / Offer via WhatsApp or Video Only",
-             "Legitimate companies conduct structured interviews. WhatsApp-only or "
-             "video-only hiring with no physical process is a major red flag.", wa_int_hits)
-
     h = _any(full, _PERSONAL_PHRASES)
     if h: _add("personal_info_demand","Premature Personal Info Request",
                 "Requesting Aadhaar/PAN/passport at application stage is a major red flag.", h)
@@ -3386,18 +3256,12 @@ def _run_rules(job: dict) -> dict:
     if h: _add("work_from_home_bait","WFH Bait — Data Entry / Form Filling",
                 "High-pay work-from-home roles with no skills required are almost always scams.", h)
     if not job.get("salary","").strip() or len(job.get("salary","").strip()) < 4:
-        _add("missing_salary","Salary Not Disclosed",
-             "No salary range is mentioned. In India this is common practice — most companies "
-             "discuss compensation only after shortlisting. This note is suppressed from the "
-             "risk score when the company's network presence is verified.")
+        _add("missing_salary","Salary Completely Absent",
+             "Hidden salary is commonly used to lure, then lowball candidates.")
     g_hits = _any(full, _GRAMMAR_PATTERNS)
-    _STRONG_GRAMMAR = [r"\b(kindly revert|do the needful|revert back|prepone)\b",
-                       r"\b(myself is|myself am|i am having)\b"]
-    strong_grammar_hit = _any(full, _STRONG_GRAMMAR)
-    if len(g_hits) >= 2 or strong_grammar_hit:
+    if len(g_hits) >= 2:
         _add("poor_grammar","Suspicious Grammar / Formatting",
-             "Excessive punctuation, random CAPS or known spam-text patterns detected.",
-             g_hits or strong_grammar_hit)
+             "Excessive punctuation, random CAPS or known spam-text patterns detected.", g_hits)
 
     # ── India-specific signal checks ─────────────────────────────────────────
     h = _any(full, _INDIA_SCAM_PHRASES)
@@ -3455,32 +3319,18 @@ def _run_rules(job: dict) -> dict:
                  "(6-9xxxxxxxxx) or landline (0xx-xxxxxxx) format. "
                  "Scammers often use virtual/VoIP numbers.", invalid_phones[:2])
 
-    # ── PIN code validation ───────────────────────────────────────────
-    # GAP FIX 7: check 60-char context window around each number; only flag
-    # PINs that appear near genuine address context to avoid false positives.
-    pin_matches = list(re.finditer(r"(?<!\d)([1-9]\d{5})(?!\d)", full))
+    # ── PIN code validation ───────────────────────────────────────────────────
+    pin_matches = re.findall(r"([1-9]\d{5})", full)
     invalid_pins = []
-    _PIN_SKIP_CTX = re.compile(
-        r"(phone|mobile|contact|call|whatsapp|telegram|salary|ctc|lpa|"
-        r"account|ifsc|upi|gpay|paytm|employee|order|invoice)",
-        re.IGNORECASE
-    )
-    _ADDR_CTX = re.compile(
-        r"(pin|pincode|pin code|postal|zip|address|location|city|district|state)",
-        re.IGNORECASE
-    )
-    for m in pin_matches[:8]:
-        pin        = m.group(1)
-        start      = max(0, m.start() - 60)
-        end        = min(len(full), m.end() + 60)
-        ctx_window = full[start:end]
-        if _PIN_SKIP_CTX.search(ctx_window):
-            continue
+    for pin in pin_matches[:5]:   # check first 5 found
         prefix2 = pin[:2]
         prefix3 = pin[:3]
+        # First digit must be 1-9 (already guaranteed by regex)
+        # Prefix must exist in our map for a specific state claim
         if prefix2 not in _PIN_STATE_MAP and prefix3 not in _PIN_STATE_MAP:
-            if _ADDR_CTX.search(ctx_window):   # only flag near address context
-                invalid_pins.append(pin)
+            # Not a known valid PIN prefix
+            if not re.search(r"(phone|mobile|contact|call|whatsapp)", full[:200], re.I):
+                invalid_pins.append(pin)  # only flag if not near contact section
     if invalid_pins:
         _add("invalid_pin", "Suspicious PIN Code",
              f"PIN code(s) {invalid_pins[:2]} do not match any known Indian postal prefix.",
@@ -3493,163 +3343,18 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _llm_prompt(job: dict, probe_warnings: list, probes: dict = None, rule_signals: dict = None) -> str:
+def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
-
-    # Build a structured probe confirmation summary for the LLM so it
-    # knows about BOTH confirmed signals AND failed checks.
-    probe_summary_lines = []
-    if probes:
-        cd   = probes.get("company_domain", {})
-        da   = probes.get("domain_age", {})
-        sr   = probes.get("site_reach", {})
-        mx   = probes.get("mx_record", {})
-        spf  = probes.get("spf_dmarc", {})
-        typo = probes.get("typosquat", {})
-        fe   = probes.get("free_email", {})
-
-        # Domain infrastructure
-        probe_summary_lines.append(
-            f"DNS resolved: {'YES' if cd.get('domain_exists') else 'NO'} | "
-            f"HTTPS live: {'YES' if sr.get('reachable') else 'NO/UNKNOWN'} | "
-            f"SSL valid: {'YES' if sr.get('ssl_valid') else 'NO/UNKNOWN'} | "
-            f"Parked site: {'YES' if sr.get('is_parked') else 'NO'}"
-        )
-        # Domain age
-        age_days = da.get("age_days")
-        if age_days:
-            probe_summary_lines.append(f"Domain age: {age_days} days ({da.get('status','unknown')})")
-        # MX / email
-        probe_summary_lines.append(f"MX mail server status: {mx.get('status','NOT_CHECKED')}")
-        # SPF/DMARC
-        probe_summary_lines.append(
-            f"SPF record: {'present' if spf.get('spf') else 'missing'} | "
-            f"DMARC record: {'present' if spf.get('dmarc') else 'missing'}"
-        )
-        # Typosquat
-        probe_summary_lines.append(
-            f"Typosquatting check: {'SQUATTER DETECTED' if typo.get('is_squatter') else 'CLEAR'}"
-        )
-        # Company identity sources
-        id_src  = cd.get("identity_sources", 0)
-        cb_ok   = bool((cd.get("clearbit") or {}).get("found"))
-        wiki_ok = bool((cd.get("wikipedia") or {}).get("found"))
-        li_ok   = bool((cd.get("linkedin") or {}).get("found"))
-        probe_summary_lines.append(
-            f"Company identity confirmed by {id_src} source(s): "
-            f"Clearbit={'YES' if cb_ok else 'NO'} | "
-            f"Wikipedia={'YES' if wiki_ok else 'NO'} | "
-            f"LinkedIn={'YES' if li_ok else 'NO'}"
-        )
-        # Name-domain match
-        probe_summary_lines.append(
-            f"Company name matches domain: {'YES' if cd.get('domain_matches_company') else 'NO/UNKNOWN'}"
-        )
-        # Free email
-        probe_summary_lines.append(
-            f"Recruiter uses free/personal email: {'YES' if fe.get('uses_free_domain') else 'NO'}"
-        )
-    probe_summary = "\n".join(f"  {l}" for l in probe_summary_lines) if probe_summary_lines else "  Not available."
-
-    # Build rule signals summary — fired rule names + labels for LLM context
-    _RULE_LABELS = {
-        "upfront_payment":      "Upfront payment / fee demanded",
-        "mlm_pyramid":          "MLM / pyramid scheme language",
-        "too_good_salary":      "Unrealistically high salary",
-        "scam_description":     "Scam job description (guaranteed income / earn from home)",
-        "vague_description":    "Vague / generic job description",
-        "single_strong_vague":  "Suspicious salary/benefit language",
-        "free_email_contact":   "Free/personal email with no website",
-        "urgency_pressure":     "Artificial urgency / pressure tactics",
-        "no_company_info":      "No verifiable company identity",
-        "whatsapp_only_contact":"WhatsApp/Telegram only contact",
-        "interview_only_remote":"Interview/offer via WhatsApp or video only",
-        "personal_info_demand": "Premature personal info demand (Aadhaar/PAN)",
-        "work_from_home_bait":  "WFH bait (data entry / form filling)",
-        "india_scam_pattern":   "Known Indian scam pattern (data entry/typing/captcha)",
-        "fake_govt_job":        "Fake government/railway/bank job",
-        "invalid_gstin":        "Invalid GSTIN format",
-        "req_paradox":          "Requirement contradiction (fresher + senior exp)",
-        "poor_grammar":         "Suspicious grammar / formatting",
-        "missing_salary":       "Salary not disclosed",
-        "unrealistic_benefits": "Unrealistic benefit claims",
-        "location_mismatch":    "Location/jurisdiction mismatch",
-    }
-    fired_rules = []
-    if rule_signals:
-        for k, v in rule_signals.items():
-            label = _RULE_LABELS.get(k, k)
-            fired_rules.append(f"  [{k}] {label}")
-    rule_signals_summary = "\n".join(fired_rules) if fired_rules else "  None fired."
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
-
-    # Candidate context for personalised salary analysis
-    candidate_location  = (job.get("candidate_location") or "").strip()
-    candidate_role      = (job.get("candidate_role") or "").strip()
-    candidate_exp_years = (job.get("candidate_exp_years") or "").strip()
-
-    candidate_ctx_lines = []
-    if candidate_location:
-        candidate_ctx_lines.append(f"Candidate's current location: {candidate_location}")
-    if candidate_role:
-        candidate_ctx_lines.append(f"Candidate's current job role: {candidate_role}")
-    if candidate_exp_years:
-        candidate_ctx_lines.append(f"Candidate's years of experience: {candidate_exp_years}")
-    candidate_ctx = ("\n".join(candidate_ctx_lines)) if candidate_ctx_lines else "Not provided."
-
-    if not salary_raw:
-        salary_instruction = (
-            "The salary was NOT provided in this job posting. "
-            "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
-            "do NOT guess, infer, or comment on whether it is realistic."
-        )
-    else:
-        # Detect if salary is a vague phrase rather than a real number
-        import re as _re
-        has_number = bool(_re.search(r"\d", salary_raw))
-        vague_salary = not has_number or bool(_re.search(
-            r"\b(competitive|market|industry|standard|negotiable|best|attractive|"
-            r"good|handsome|as per|commensurate|no bar|disclosure|discuss)\b",
-            salary_raw, _re.IGNORECASE
-        ))
-
-        if vague_salary and not has_number:
-            salary_instruction = (
-                f"The salary stated is vague and non-numeric: '{salary_display}'. "
-                f"You MUST set salary_assessment to state: "
-                f"(a) that the salary is not disclosed as a specific number — this is a transparency issue, "
-                f"(b) what the typical market range IS for this role in India "
-                f"(e.g. '6–14 LPA for a Data Scientist in Bangalore'), "
-                f"(c) whether vague salary language like 'competitive' or 'market standard' "
-                f"is a common scam tactic in India to lure candidates without commitment. "
-                f"End with verdict: VAGUE — treat as mild caution, not a definite scam signal."
-            )
-        else:
-            salary_instruction = (
-                f"Provide a DETAILED, STRUCTURED salary assessment for the stated salary ({salary_display}). "
-                f"IMPORTANT: This tool is India-focused. Always anchor your analysis to INDIAN salary "
-                f"standards in INR/LPA first. Only reference USD/global if the job is explicitly "
-                f"international or the company is a verified foreign MNC.\n"
-                f"Your salary_assessment must be a single paragraph covering ALL of the following:\n"
-                f"1. MARKET RANGE — State the typical Indian market range in LPA for this role and location "
-                f"   (e.g., '8–14 LPA for a mid-level Data Scientist in Bangalore in 2024'). "
-                f"   If location is remote or outside India, still state the Indian equivalent first.\n"
-                f"2. ALIGNMENT WITH ROLE — Does the offered salary match the role's seniority, "
-                f"   skill requirements, and responsibilities?\n"
-                f"3. EXPERIENCE-BASED EVALUATION — Use the candidate's experience "
-                f"   ({candidate_exp_years if candidate_exp_years else 'unknown years'}) to evaluate fit. "
-                f"   Is this salary appropriate for their career stage?\n"
-                f"4. LOCATION-BASED DIFFERENCES — How does the job location ({job.get('location','N/A')}) "
-                f"   and candidate location ({candidate_location if candidate_location else 'unknown'}) "
-                f"   affect pay expectations? Account for Indian city tiers (Tier-1/2/3) and cost-of-living.\n"
-                f"5. SCAM SIGNAL — Is this salary suspiciously high (possible lure) or suspiciously low "
-                f"   (exploitation / bait-and-switch)? State clearly: REALISTIC, SLIGHTLY_HIGH, "
-                f"   INFLATED (scam risk), or BELOW_MARKET.\n"
-                f"Write in plain English, 4–6 sentences. Do NOT use bullet points inside the JSON string. "
-                f"Do NOT default to USD unless the role is verified international."
-            )
-
+    salary_instruction = (
+        "The salary was NOT provided in this job posting. "
+        "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
+        "do NOT guess, infer, or comment on whether it is realistic."
+        if not salary_raw else
+        "Assess whether the stated salary is realistic for this role and location. "
+        "If it seems unrealistically high, flag it as a potential scam signal."
+    )
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
@@ -3664,36 +3369,11 @@ Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
 
-CANDIDATE CONTEXT (for personalised salary analysis):
-{candidate_ctx}
-
-LIVE NETWORK PROBE RESULTS (hard evidence — use this to determine company_legitimacy):
-{probe_summary}
-
-PROBE WARNING MESSAGES (failures only):
+LIVE PROBE FINDINGS:
 {ctx}
-
-RULE ENGINE SIGNALS FIRED (cross-reference these with job text AND probe results to identify the scam pattern):
-{rule_signals_summary}
 
 SALARY ASSESSMENT RULE (mandatory):
 {salary_instruction}
-
-IMPORTANT JUDGMENT RULES (follow strictly):
-1. Multiple job locations or pan-India roles are NOT a red flag. Many legitimate companies post across cities. Only flag location as suspicious if it contradicts salary currency or candidate eligibility (e.g. "USA job but must be India-based and accept ₹5,000/month").
-2. A basic or simple company website is NOT evidence of fraud — many legitimate small companies have minimal web presence.
-3. Only mark company_legitimacy as LIKELY_FAKE or GHOST_COMPANY if you have concrete evidence (domain doesn't exist, name clearly fabricated, impersonating another company). Use UNVERIFIABLE for companies that simply cannot be confirmed.
-4. Do NOT add "Overly broad job locations" or "Multiple locations" as a red flag unless there is a genuine contradiction.
-5. CROSS-SYNTHESIS RULE: You MUST read the Rule Engine Signals AND the Probe Results AND the job description TOGETHER to determine the scam pattern. For example: upfront_payment signal + new domain + no MX = UPFRONT_FEE_SCAM with ghost infrastructure. Or: scam_description + whatsapp_only + no company identity = WFH_EARN_FROM_HOME scam. Do not treat each layer in isolation.
-6. MANDATORY ESCALATION — these rules override all positive signals:
-   - upfront_payment fired → verdict MUST be LIKELY_SCAM or DEFINITE_SCAM. No legitimate employer ever charges candidates. A professional website or LinkedIn presence does NOT excuse a payment demand.
-   - fake_govt_job fired → verdict MUST be DEFINITE_SCAM. Government jobs never charge fees.
-   - mlm_pyramid fired → verdict MUST be at least LIKELY_SCAM.
-   - scam_description fired → verdict MUST be at least SUSPICIOUS.
-   In top_red_flags, the payment demand must ALWAYS be listed first.
-7. For positive_signals: list ONLY signals observable from the JOB DESCRIPTION TEXT itself — e.g. "Detailed role responsibilities listed", "Named hiring manager with title", "Specific office address provided", "Realistic salary band for the role", "Company registration number mentioned", "Professional tone with correct grammar". Do NOT echo network/infrastructure facts (DNS, HTTPS, SSL, LinkedIn, domain age) here — those are already captured by the probe layer and will be shown separately to the user.
-8. In top_red_flags: write every item as a plain English sentence describing the actual concern (e.g. "Salary is not disclosed" or "Job description is vague with no specific responsibilities"). NEVER copy a raw signal key name (like "missing_salary" or "vague_description") — those are internal codes not shown to users.
-9. Salary not disclosed is NOT a red flag on its own when the network probes confirm company identity — many legitimate Indian companies discuss salary only after interviews. Only flag missing salary if it is combined with other suspicion (e.g. upfront payment, fake company, WhatsApp-only contact).
 
 Required JSON schema (all keys mandatory):
 {{
@@ -3701,13 +3381,12 @@ Required JSON schema (all keys mandatory):
   "verdict": "<SAFE|SUSPICIOUS|LIKELY_SCAM|DEFINITE_SCAM>",
   "company_legitimacy": "<VERIFIED|UNVERIFIABLE|LIKELY_FAKE|GHOST_COMPANY>",
   "top_red_flags": ["<str>","<str>","<str>"],
-  "positive_signals": ["<job-description-level observation only>"],
+  "positive_signals": ["<str>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<NOT_PROVIDED if salary missing, else detailed structured assessment per the rules above>",
+  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
   "recommended_action": "<specific advice for the job seeker>",
-  "similar_scam_type": "<ONLY the taxonomy keyword — no explanation: UPFRONT_FEE_SCAM | MLM_PYRAMID | FAKE_GOVT_JOB | DATA_ENTRY_SCAM | FAKE_INTERNSHIP | PLACEMENT_FEE_TRAP | WFH_EARN_FROM_HOME | GHOST_COMPANY | DOMAIN_IMPERSONATION | TYPOSQUAT_BRAND | BAIT_AND_SWITCH_SALARY | WHATSAPP_ONLY_SCAM | PERSONAL_DATA_HARVEST | INVESTMENT_FRAUD | Unknown>",
-  "scam_pattern_reason": "<one sentence: WHY this scam type, cross-referencing rule signals + probe results + job text>",
+  "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
 }}"""
 
@@ -3949,37 +3628,6 @@ def _render_score_strip(result: dict):
         unsafe_allow_html=True,
     )
 
-    # GAP FIX 2a: surface AI failure and low probe coverage as inline warnings
-    ai_failed     = result.get("ai_failed", False)
-    probes_ran    = result.get("probes_ran", 0)
-    probes_total  = result.get("probes_total", 7)
-    probe_pct     = result.get("probe_coverage", 1.0)
-
-    warnings_html = ""
-    if ai_failed:
-        warnings_html += (
-            f'<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;'
-            f'background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);'
-            f'border-radius:7px;margin-top:8px;font-size:0.76rem;color:#fbbf24;">'
-            f'{_svg(I.ALERT_TRI,12,"#f59e0b")}'
-            f'<span><strong>AI layer unavailable</strong> — LLM call failed on both attempts. '
-            f'Score is based on rule engine ({int(result["rule_score"])} pts) and '
-            f'network probes ({int(result["probe_penalty"])} pts) only. '
-            f'Result may be less accurate than usual.</span></div>'
-        )
-    if probe_pct < 0.5 and not ai_failed:
-        warnings_html += (
-            f'<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;'
-            f'background:rgba(56,189,248,0.07);border:1px solid rgba(56,189,248,0.2);'
-            f'border-radius:7px;margin-top:8px;font-size:0.76rem;color:#7dd3fc;">'
-            f'{_svg(I.GLOBE,12,"#38bdf8")}'
-            f'<span><strong>Limited probe data</strong> — only {probes_ran}/{probes_total} '
-            f'network checks returned results (domain or contact info may be missing). '
-            f'AI weight increased to compensate.</span></div>'
-        )
-    if warnings_html:
-        st.markdown(warnings_html, unsafe_allow_html=True)
-
 
 def _render_probe_table(probes: dict):
     def _row(icon_path, label, badge_html, detail):
@@ -4163,109 +3811,7 @@ def _render_signal_cards(signals: dict):
     col_r.markdown(right_html or "<div></div>", unsafe_allow_html=True)
 
 
-def _humanize_scam_type(raw: str) -> tuple[str, str]:
-    """
-    Split a similar_scam_type string into (label, explanation).
-
-    The LLM sometimes returns bare enum names like 'UPFRONT_FEE_SCAM' and
-    sometimes appends an explanation after a comma or dash:
-      'UPFRONT_FEE_SCAM, because the job posting demands an upfront payment...'
-    Returns:
-      label       — human-readable badge text, e.g. 'Upfront Fee Scam'
-      explanation — the reasoning sentence, or '' if none given
-    """
-    if not raw or raw.strip().lower() in ("unknown", "none", ""):
-        return "Unknown", ""
-
-    # Split off the explanation at the first ', because', ' — ', ' - ', or ','
-    # keeping the taxonomy keyword as the label.
-    raw = raw.strip()
-    explanation = ""
-    for sep in (", because ", ", Because ", " — ", " - ", ", "):
-        if sep in raw:
-            parts = raw.split(sep, 1)
-            label_raw = parts[0].strip()
-            explanation = sep.strip().lstrip(",").strip().capitalize() + sep.join(parts[1:])
-            raw = label_raw
-            break
-
-    # Humanize the enum-style label: UPFRONT_FEE_SCAM → Upfront Fee Scam
-    label = raw.replace("_", " ").title()
-    return label, explanation
-
-
-def _build_probe_positive_signals(probes: dict) -> list[str]:
-    """
-    Derive human-readable positive signals from live network probe results.
-    These are probe-layer facts (infrastructure), distinct from the LLM's
-    job-description-level positive signals.
-    Returns a list of concise strings, e.g. ['DNS resolved', 'HTTPS live'].
-    """
-    sigs: list[str] = []
-    if not probes:
-        return sigs
-
-    cd  = probes.get("company_domain", {})
-    sr  = probes.get("site_reach", {})
-    da  = probes.get("domain_age", {})
-    mx  = probes.get("mx_record", {})
-    fe  = probes.get("free_email", {})
-    t   = probes.get("typosquat", {})
-    spf = probes.get("spf_dmarc", {})
-
-    # Infrastructure signals
-    if cd.get("domain_exists"):
-        sigs.append("DNS resolved")
-    if sr.get("reachable"):
-        sigs.append("HTTPS live")
-    if sr.get("ssl_valid"):
-        sigs.append("SSL valid")
-
-    # Domain age
-    age_st = da.get("status", "")
-    if age_st in ("old", "established"):
-        age_days = da.get("age_days")
-        age_str  = f"{age_days // 365}+ yr" if age_days and age_days >= 365 else ""
-        sigs.append(f"Established domain{(' (' + age_str + ')') if age_str else ''}")
-
-    # MX / mail server
-    if mx.get("status") == "MX_FOUND" and not mx.get("voip_risk"):
-        sigs.append("Corporate MX mail server found")
-
-    # SPF / DMARC
-    if spf.get("spf") and spf.get("dmarc"):
-        sigs.append("SPF & DMARC email authentication present")
-    elif spf.get("spf"):
-        sigs.append("SPF email authentication present")
-
-    # Company identity
-    cb_ok   = bool((cd.get("clearbit")  or {}).get("found"))
-    wiki_ok = bool((cd.get("wikipedia") or {}).get("found"))
-    li_ok   = bool((cd.get("linkedin")  or {}).get("found"))
-    id_src  = cd.get("identity_sources", 0)
-
-    if id_src >= 2:
-        sources = [n for n, ok in [("Clearbit", cb_ok), ("Wikipedia", wiki_ok), ("LinkedIn", li_ok)] if ok]
-        sigs.append(f"Company identity confirmed by {', '.join(sources)}")
-    elif li_ok:
-        sigs.append("Company identity confirmed by LinkedIn")
-    elif cb_ok:
-        sigs.append("Company identity confirmed by Clearbit")
-    elif wiki_ok:
-        sigs.append("Company identity confirmed by Wikipedia")
-
-    # Typosquat clear
-    if not t.get("is_squatter") and t.get("similarity", 0) < 0.5:
-        sigs.append("No typosquatting risk detected")
-
-    # Recruiter uses corporate email
-    if not fe.get("uses_free_domain"):
-        sigs.append("Recruiter uses corporate (non-free) email")
-
-    return sigs
-
-
-def _render_ai_dive(llm: dict, probes: dict | None = None):
+def _render_ai_dive(llm: dict):
     if not llm:
         st.markdown('<p style="color:#6b7280;font-size:0.82rem;">AI analysis unavailable.</p>',
                     unsafe_allow_html=True)
@@ -4274,136 +3820,38 @@ def _render_ai_dive(llm: dict, probes: dict | None = None):
     cl     = llm.get("company_legitimacy", "UNVERIFIABLE")
     ci, cc = _CB.get(cl, _CB["UNVERIFIABLE"])
 
-    # ── FIX 1 & 2: Humanize scam type + keep boxes compact ──────────────────
-    raw_scam   = llm.get("similar_scam_type", "Unknown")
-    scam_label, scam_explanation = _humanize_scam_type(raw_scam)
-    # Prefer dedicated reason field (new schema) if the LLM returned it
-    if llm.get("scam_pattern_reason", "").strip():
-        scam_explanation = llm["scam_pattern_reason"].strip()
-    cl_label   = cl.replace("_", " ").title()   # e.g. "UNVERIFIABLE" → "Unverifiable"
-
-    # Scam explanation goes below the badge as small muted text (no box bloat)
-    scam_explain_html = (
-        f'<div style="font-size:0.72rem;color:#8b949e;line-height:1.5;margin-top:5px;">'
-        f'{_html_escape.escape(scam_explanation)}</div>'
-        if scam_explanation else ""
-    )
-
     st.markdown(
-        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;align-items:start;">'
-        # Company Status — compact single-line badge
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
         f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
-        f'border-radius:9px;padding:12px 14px;">'
-        f'<div style="font-size:0.62rem;color:#6b7280;text-transform:uppercase;'
-        f'letter-spacing:1px;margin-bottom:6px;">Company Status</div>'
-        f'<div style="display:flex;align-items:center;gap:6px;color:{cc};font-weight:700;font-size:0.85rem;">'
-        f'{_svg(ci,13,cc)}{cl_label}</div></div>'
-        # Scam Pattern — label + optional explanation
+        f'border-radius:9px;padding:12px;">'
+        f'<div style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;'
+        f'letter-spacing:1px;margin-bottom:5px;">Company Status</div>'
+        f'<div style="display:flex;align-items:center;gap:6px;color:{cc};font-weight:600;font-size:0.83rem;">'
+        f'{_svg(ci,13,cc)}{cl.replace("_"," ")}</div></div>'
         f'<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);'
-        f'border-radius:9px;padding:12px 14px;">'
-        f'<div style="font-size:0.62rem;color:#6b7280;text-transform:uppercase;'
-        f'letter-spacing:1px;margin-bottom:6px;">Scam Pattern</div>'
-        f'<div style="color:#a78bfa;font-weight:700;font-size:0.85rem;">{scam_label}</div>'
-        f'{scam_explain_html}</div></div>',
+        f'border-radius:9px;padding:12px;">'
+        f'<div style="font-size:0.66rem;color:#6b7280;text-transform:uppercase;'
+        f'letter-spacing:1px;margin-bottom:5px;">Scam Pattern</div>'
+        f'<div style="color:#a78bfa;font-weight:600;font-size:0.83rem;">'
+        f'{llm.get("similar_scam_type","Unknown")}</div></div></div>',
         unsafe_allow_html=True,
     )
 
-    # ── FIX 3: Merge probe-based + LLM job-description positive signals ──────
-    # Probe signals = network/infrastructure facts (always deterministic)
-    # LLM signals   = job-description-level observations from AI analysis
-    # We keep them in two visually distinct sub-sections so the user can tell
-    # which layer each signal comes from.
-    probe_sigs = _build_probe_positive_signals(probes or {})
-
-    # Filter LLM positive_signals: strip any that are verbatim re-statements of
-    # probe facts (the LLM sometimes echoes the probe summary it was given).
-    _PROBE_ECHO_PATTERNS = (
-        "dns resolved", "https live", "ssl valid", "ssl certificate",
-        "domain exists", "mx record", "mx server", "spf record", "dmarc",
-        "company identity confirmed", "linkedin", "clearbit", "wikipedia",
-        "no typosquat", "corporate email", "reachable", "domain age",
-    )
-    llm_sigs_raw  = llm.get("positive_signals", [])[:8]
-    llm_sigs_jd   = [
-        s for s in llm_sigs_raw
-        if not any(kw in s.lower() for kw in _PROBE_ECHO_PATTERNS)
-    ]
-
-    # ── Red flags HTML ────────────────────────────────────────────────────────
-    # Sanitize: if the LLM echoes a raw signal key (e.g. "missing_salary"),
-    # replace it with a human-readable label before display.
-    _RAW_KEY_LABELS = {
-        "missing_salary":        "Salary not disclosed",
-        "vague_description":     "Job description is vague with no specific responsibilities",
-        "single_strong_vague":   "Suspicious salary/benefits language (e.g. 'salary no bar')",
-        "upfront_payment":       "Upfront payment or fee demanded",
-        "mlm_pyramid":           "MLM / pyramid scheme language detected",
-        "too_good_salary":       "Unrealistically high salary offered",
-        "free_email_contact":    "Recruiter uses personal email with no company website",
-        "urgency_pressure":      "Artificial urgency or pressure tactics",
-        "no_company_info":       "No verifiable company identity found",
-        "whatsapp_only_contact": "Contact only via WhatsApp or Telegram — no official URL",
-        "interview_only_remote": "Interview or offer sent via WhatsApp/video only",
-        "personal_info_demand":  "Premature request for Aadhaar, PAN, or passport",
-        "work_from_home_bait":   "High-pay WFH role requiring no skills (data entry bait)",
-        "india_scam_pattern":    "Matches known Indian scam job pattern",
-        "fake_govt_job":         "Impersonating government/railway/bank recruitment",
-        "invalid_gstin":         "GST number present but fails format validation",
-        "req_paradox":           "Contradictory requirements (fresher role + senior experience)",
-        "poor_grammar":          "Suspicious grammar or formatting patterns",
-        "scam_description":      "Scam job description language (guaranteed income / earn from home)",
-    }
-    def _sanitize_flag(f: str) -> str:
-        stripped = f.strip()
-        # Exact match on a raw key name
-        if stripped in _RAW_KEY_LABELS:
-            return _RAW_KEY_LABELS[stripped]
-        # Key used as a prefix with colon/dash (e.g. "missing_salary: ...")
-        for key, label in _RAW_KEY_LABELS.items():
-            if stripped.lower().startswith(key + ":") or stripped.lower().startswith(key + " -"):
-                rest = stripped[len(key):].lstrip(": -").strip()
-                return f"{label}{' — ' + rest if rest else ''}"
-        return stripped
-
+    # Batch red flags and positive signals into one markdown each
     fc1, fc2 = st.columns(2)
     flags_html = "".join(
         f'<div style="background:rgba(239,68,68,0.05);border-left:2px solid #ef4444;'
         f'padding:7px 11px;border-radius:0 6px 6px 0;margin-bottom:5px;'
-        f'color:#fca5a5;font-size:0.79rem;">{_html_escape.escape(_sanitize_flag(f))}</div>'
-        for f in llm.get("top_red_flags", [])[:5]
+        f'color:#fca5a5;font-size:0.79rem;">{f}</div>'
+        for f in llm.get("top_red_flags",[])[:5]
     ) or '<div style="color:#6b7280;font-size:0.79rem;font-style:italic;">None identified.</div>'
 
-    # ── Positive signals HTML — two labelled sub-sections ────────────────────
-    def _pos_item(text: str, dim: bool = False) -> str:
-        color = "#94a3b8" if dim else "#86efac"
-        bg    = "rgba(34,197,94,0.03)" if dim else "rgba(34,197,94,0.05)"
-        return (
-            f'<div style="background:{bg};border-left:2px solid #22c55e;'
-            f'padding:7px 11px;border-radius:0 6px 6px 0;margin-bottom:5px;'
-            f'color:{color};font-size:0.79rem;">{_html_escape.escape(text)}</div>'
-        )
-
-    pos_parts: list[str] = []
-
-    if probe_sigs:
-        pos_parts.append(
-            '<div style="font-size:0.64rem;color:#6b7280;text-transform:uppercase;'
-            'letter-spacing:0.7px;margin:4px 0 5px;">Network &amp; Infrastructure</div>'
-        )
-        pos_parts.extend(_pos_item(s) for s in probe_sigs)
-
-    if llm_sigs_jd:
-        pos_parts.append(
-            '<div style="font-size:0.64rem;color:#6b7280;text-transform:uppercase;'
-            'letter-spacing:0.7px;margin:8px 0 5px;">Job Description</div>'
-        )
-        pos_parts.extend(_pos_item(s) for s in llm_sigs_jd)
-
-    pos_html = (
-        "".join(pos_parts)
-        if pos_parts
-        else '<div style="color:#6b7280;font-size:0.79rem;font-style:italic;">No positive signals identified.</div>'
-    )
+    pos_html = "".join(
+        f'<div style="background:rgba(34,197,94,0.05);border-left:2px solid #22c55e;'
+        f'padding:7px 11px;border-radius:0 6px 6px 0;margin-bottom:5px;'
+        f'color:#86efac;font-size:0.79rem;">{p}</div>'
+        for p in llm.get("positive_signals",[])[:5]
+    ) or '<div style="color:#6b7280;font-size:0.79rem;font-style:italic;">No positive signals identified.</div>'
 
     fc1.markdown(
         f'<div style="font-size:0.71rem;font-weight:600;color:#ef4444;text-transform:uppercase;'
@@ -4709,15 +4157,15 @@ def _quick_prescan(raw: str) -> dict | None:
     }
     rules = _run_rules(prescan_job)
     score = rules["rule_score"]
-    # Calibrated thresholds — aligned exactly with the full-analysis blended bands
-    # so the quick pre-scan banner and the final verdict can never disagree.
-    # Full bands: <25=SAFE, 25-49=SUSPICIOUS, 50-74=LIKELY_SCAM, >=75=DEFINITE_SCAM
-    # A single low-weight signal (e.g. missing_salary=4) stays SAFE — correct.
-    if score < 25:
+    # Calibrated thresholds — a single low-weight signal (e.g. missing_salary=4)
+    # must NOT trigger a SUSPICIOUS banner. Only meaningful rule hits qualify.
+    if score == 0:
         verdict = "SAFE"
-    elif score < 50:
+    elif score < 15:
+        verdict = "SAFE"        # low-weight noise signals — not a meaningful warning
+    elif score < 30:
         verdict = "SUSPICIOUS"
-    elif score < 75:
+    elif score < 55:
         verdict = "LIKELY_SCAM"
     else:
         verdict = "DEFINITE_SCAM"
@@ -4926,53 +4374,13 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 + _field_row(I.DOLLAR,   "Salary",     extracted["salary"])
                 + _field_row(I.MAIL,     "Contact",    extracted["contact"])
             )
-
-            # ── Your Profile layer — shown only when ≥1 candidate field filled ─
-            cand_loc  = st.session_state.get("jsd_cand_loc", "").strip()
-            cand_role = st.session_state.get("jsd_cand_role", "").strip()
-            cand_exp  = st.session_state.get("jsd_cand_exp", "").strip()
-
-            def _profile_row(icon_path: str, label: str, value: str) -> str:
-                val_html = (
-                    f'<span style="color:#c4b5fd;">{_esc(value)}</span>'
-                    if value else
-                    '<span style="color:#4b5563;font-style:italic;">Not provided</span>'
-                )
-                return (
-                    f'<div style="display:flex;align-items:flex-start;gap:9px;padding:6px 0;'
-                    f'border-bottom:1px solid rgba(167,139,250,0.08);">'
-                    f'<div style="margin-top:1px;flex-shrink:0;">{_svg(icon_path,11,"#a78bfa")}</div>'
-                    f'<div style="flex:1;">'
-                    f'<div style="font-size:0.66rem;color:#7c6faa;text-transform:uppercase;'
-                    f'letter-spacing:0.8px;margin-bottom:2px;">{label}</div>'
-                    f'<div style="font-size:0.81rem;line-height:1.4;">{val_html}</div>'
-                    f'</div></div>'
-                )
-
-            profile_html = ""
-            if cand_loc or cand_role or cand_exp:
-                profile_rows = (
-                    _profile_row(I.MAP_PIN,      "Your Location",       cand_loc)
-                    + _profile_row(I.ID_CARD,    "Current Role",        cand_role)
-                    + _profile_row(I.TRENDING_UP,"Years of Experience", cand_exp)
-                )
-                profile_html = (
-                    f'<div style="margin-top:10px;padding-top:10px;'
-                    f'border-top:1px solid rgba(167,139,250,0.18);">'
-                    f'<div style="font-size:0.66rem;font-weight:600;color:#a78bfa;'
-                    f'text-transform:uppercase;letter-spacing:0.9px;margin-bottom:4px;'
-                    f'display:flex;align-items:center;gap:5px;">'
-                    f'{_svg(I.AWARD,10,"#a78bfa")} Your Profile</div>'
-                    f'{profile_rows}</div>'
-                )
-
             st.markdown(
                 f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);'
                 f'border-radius:10px;padding:14px 16px;margin-top:8px;">'
                 f'<div style="font-size:0.69rem;font-weight:600;color:#8b949e;text-transform:uppercase;'
                 f'letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">'
                 f'{_svg(I.ZAP,10,"#a78bfa")} Auto-Detected Fields</div>'
-                f'{fields_html}{profile_html}</div>',
+                f'{fields_html}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -4989,32 +4397,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 oc1.text_input("Website",  value=extracted["website"],  key="jsd_ow")
                 oc2.text_input("Location", value=extracted["location"], key="jsd_ol")
 
-                # ── Candidate context — for personalised salary analysis ──────
-                st.markdown(
-                    '<div style="margin:10px 0 6px;font-size:0.69rem;font-weight:600;'
-                    'color:#a78bfa;text-transform:uppercase;letter-spacing:0.8px;">'
-                    '&#9670; Your Profile '
-                    '<span style="color:#6b7280;font-weight:400;font-size:0.65rem;">'
-                    '(optional — improves salary analysis accuracy)</span></div>',
-                    unsafe_allow_html=True,
-                )
-                cc1, cc2 = st.columns(2)
-                cc1.text_input(
-                    "Your Current Location",
-                    placeholder="e.g., Bangalore, Mumbai, Delhi",
-                    key="jsd_cand_loc",
-                )
-                cc2.text_input(
-                    "Your Current Job Role",
-                    placeholder="e.g., Data Analyst, Backend Developer",
-                    key="jsd_cand_role",
-                )
-                st.text_input(
-                    "Years of Experience",
-                    placeholder="e.g., 2, 5, 10+",
-                    key="jsd_cand_exp",
-                )
-
         # FIX v5 BUG 6: Build job from session_state override keys if they exist
         # (populated by the expander above). Falls back to auto_extract values if
         # the override expander was never opened.
@@ -5028,76 +4410,24 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             "description":  raw or "",
             "requirements": "",   # FIX v5 BUG 3: keep empty — description has everything
             "benefits":     "",   # FIX v5 BUG 3: keep empty — description has everything
-            # Candidate context — used by LLM for personalised salary analysis
-            "candidate_location":  st.session_state.get("jsd_cand_loc", ""),
-            "candidate_role":      st.session_state.get("jsd_cand_role", ""),
-            "candidate_exp_years": st.session_state.get("jsd_cand_exp", ""),
         }
 
     else:
         a, b_ = st.columns(2)
-        job["title"]    = a.text_input("Job Title",       placeholder="e.g., Software Engineer",  key="jsd_t",  max_chars=120)
-        job["company"]  = b_.text_input("Company Name",   placeholder="e.g., Acme Corp",          key="jsd_co", max_chars=120)
+        job["title"]    = a.text_input("Job Title",       placeholder="e.g., Software Engineer",  key="jsd_t")
+        job["company"]  = b_.text_input("Company Name",   placeholder="e.g., Acme Corp",          key="jsd_co")
         c, d = st.columns(2)
-        job["website"]  = c.text_input("Company Website", placeholder="https://acmecorp.com",     key="jsd_w",  max_chars=200)
-        job["location"] = d.text_input("Location",        placeholder="e.g., Bangalore, India",   key="jsd_l",  max_chars=120)
+        job["website"]  = c.text_input("Company Website", placeholder="https://acmecorp.com",     key="jsd_w")
+        job["location"] = d.text_input("Location",        placeholder="e.g., Bangalore, India",   key="jsd_l")
         e, f = st.columns(2)
-        job["salary"]   = e.text_input("Salary Offered",  placeholder="e.g., 8-12 LPA",           key="jsd_sa", max_chars=80)
-        job["contact"]  = f.text_input("Contact Email",   placeholder="e.g., hr@acme.com",        key="jsd_ct", max_chars=120)
-        # Text areas: combined budget of 10,000 chars (description 10000, requirements 2500, benefits 1500)
-        job["description"]  = st.text_area("Job Description",  height=120, key="jsd_d",  max_chars=10000,
+        job["salary"]   = e.text_input("Salary Offered",  placeholder="e.g., 8-12 LPA",           key="jsd_sa")
+        job["contact"]  = f.text_input("Contact Email",   placeholder="e.g., hr@acme.com",        key="jsd_ct")
+        job["description"]  = st.text_area("Job Description",  height=120, key="jsd_d",
                                             placeholder="Describe the role and responsibilities...")
-        # ── Styled char meter for Job Description (matches paste mode) ──────────
-        _jd_count = len(st.session_state.get("jsd_d", "") or "")
-        _jd_pct   = _jd_count / 10000
-        if _jd_count > 0:
-            if _jd_pct < 0.75:
-                _jd_bar, _jd_lbl = "#22c55e", "#6b7280"
-            elif _jd_pct < 0.95:
-                _jd_bar, _jd_lbl = "#f59e0b", "#f59e0b"
-            else:
-                _jd_bar, _jd_lbl = "#ef4444", "#ef4444"
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:8px;margin:-6px 0 6px;">'
-                f'<div style="flex:1;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;">'
-                f'<div style="width:{min(_jd_pct*100,100):.1f}%;height:100%;'
-                f'background:{_jd_bar};border-radius:2px;transition:width .2s;"></div>'
-                f'</div>'
-                f'<span style="font-size:0.68rem;color:{_jd_lbl};white-space:nowrap;'
-                f'font-variant-numeric:tabular-nums;">'
-                f'{_jd_count:,} / 10,000</span></div>',
-                unsafe_allow_html=True,
-            )
-        job["requirements"] = st.text_area("Requirements",     height=80,  key="jsd_r",  max_chars=2500,
+        job["requirements"] = st.text_area("Requirements",     height=80,  key="jsd_r",
                                             placeholder="Skills, experience, qualifications...")
-        job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",  max_chars=1500,
+        job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
                                             placeholder="What the employer offers...")
-
-        # ── Candidate context — for personalised salary analysis ──────────────
-        st.markdown(
-            '<div style="margin:10px 0 6px;font-size:0.69rem;font-weight:600;'
-            'color:#a78bfa;text-transform:uppercase;letter-spacing:0.8px;">'
-            '&#9670; Your Profile '
-            '<span style="color:#6b7280;font-weight:400;font-size:0.65rem;">'
-            '(optional — improves salary analysis accuracy)</span></div>',
-            unsafe_allow_html=True,
-        )
-        fc1, fc2 = st.columns(2)
-        job["candidate_location"]  = fc1.text_input(
-            "Your Current Location",
-            placeholder="e.g., Bangalore, Mumbai, Delhi",
-            key="jsd_cand_loc",
-        )
-        job["candidate_role"]      = fc2.text_input(
-            "Your Current Job Role",
-            placeholder="e.g., Data Analyst, Backend Developer",
-            key="jsd_cand_role",
-        )
-        job["candidate_exp_years"] = st.text_input(
-            "Years of Experience",
-            placeholder="e.g., 2, 5, 10+",
-            key="jsd_cand_exp",
-        )
 
     # Use only meaningful fields for "is there any input" check — not description
     # (which in paste mode is raw and always present once the user types).
@@ -5159,12 +4489,10 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 paste_keys = [
                     "jsd_raw", "jsd_mode",
                     "jsd_ot", "jsd_oco", "jsd_os", "jsd_oct", "jsd_ow", "jsd_ol",
-                    "jsd_cand_loc", "jsd_cand_role", "jsd_cand_exp",
                 ]
                 fill_keys = [
                     "jsd_t", "jsd_co", "jsd_w", "jsd_l",
                     "jsd_sa", "jsd_ct", "jsd_d", "jsd_r", "jsd_b",
-                    "jsd_cand_loc", "jsd_cand_role", "jsd_cand_exp",
                 ]
                 for k in paste_keys + fill_keys:
                     st.session_state.pop(k, None)
@@ -5213,7 +4541,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     for attempt in range(2):
                         try:
-                            prompt = _llm_prompt(job, warnings, probes, rules_result.get("signals", {}))
+                            prompt = _llm_prompt(job, warnings)
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
@@ -5250,52 +4578,10 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     prog.progress(90, text="Blending scores…")
                     ai_s   = int(llm_data.get("ai_risk_score", rules_result["rule_score"]))
-
-                    # ── PROBE-VERIFIED SUPPRESSION ────────────────────────────────
-                    # In India, not publishing salary is standard practice for many
-                    # legitimate companies. When the network probes confirm company
-                    # identity (≥1 identity source + domain exists + HTTPS live),
-                    # missing_salary and vague_description carry near-zero diagnostic
-                    # value — suppress their rule-score contribution so they don't
-                    # push an otherwise clean posting into SUSPICIOUS territory.
-                    _fired_sigs  = rules_result.get("signals", {})
-                    _cd_probe    = probes.get("company_domain", {})
-                    _sr_probe    = probes.get("site_reach", {})
-                    _probe_clean = (
-                        _cd_probe.get("identity_sources", 0) >= 1
-                        and _cd_probe.get("domain_exists", False)
-                        and _sr_probe.get("reachable", False)
-                    )
-                    _SUPPRESS_WHEN_CLEAN = {"missing_salary", "vague_description", "single_strong_vague"}
-                    if _probe_clean:
-                        _suppressed_weight = sum(
-                            _WEIGHTS.get(k, 0)
-                            for k in _fired_sigs
-                            if k in _SUPPRESS_WHEN_CLEAN
-                        )
-                        # Recompute rule_s without the suppressed signals
-                        rule_s = max(0, rules_result["rule_score"] - _suppressed_weight)
-                    else:
-                        rule_s = rules_result["rule_score"]
+                    rule_s = rules_result["rule_score"]
 
                     # Clamp AI score to valid range (guard against hallucinated values)
                     ai_s = max(0, min(100, ai_s))
-
-                    # FIX C: override company_legitimacy using hard probe evidence.
-                    # LLM judges from text only — probes have harder network evidence.
-                    # EXCEPTION: never upgrade to VERIFIED if upfront payment was detected —
-                    # a company charging fees is not "legitimate" regardless of web presence.
-                    if llm_parse_ok:
-                        cd_res      = probes.get("company_domain", {})
-                        id_sources  = cd_res.get("identity_sources", 0)
-                        domain_ok   = cd_res.get("domain_exists", False)
-                        name_match  = cd_res.get("domain_matches_company", False)
-                        has_payment = "upfront_payment" in rules_result.get("signals", {})
-                        if id_sources >= 2 and domain_ok and name_match and not has_payment:
-                            llm_data["company_legitimacy"] = "VERIFIED"
-                        elif id_sources >= 1 and domain_ok and not has_payment:
-                            if llm_data.get("company_legitimacy") in ("LIKELY_FAKE", "GHOST_COMPANY"):
-                                llm_data["company_legitimacy"] = "UNVERIFIABLE"
 
                     # ── 3. ADAPTIVE BLENDING ───────────────────────────────────────
                     # Fixed 60/25/15 is wrong when:
@@ -5304,32 +4590,12 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     # (c) AI confidence is low → reduce AI weight, increase rules
                     #
                     # Count how many probes actually returned meaningful data
-                    # GAP FIX 1b: robust probe coverage — a probe counts as
-                    # "ran" only when it returned at least one substantive non-None
-                    # value and had no Probe error. Skipped/NO_EMAIL/No-domain
-                    # states are treated as not-ran for weighting purposes.
-                    _SKIPPED_DETAILS = {"No domain provided", "No domain"}
-                    _SKIPPED_STATUSES = {"skipped", "NO_EMAIL"}
-                    def _probe_ran(k: str, v: dict) -> bool:
-                        if "Probe error" in v.get("detail", ""):
-                            return False
-                        if v.get("detail", "") in _SKIPPED_DETAILS:
-                            return False
-                        if v.get("status", "") in _SKIPPED_STATUSES:
-                            return False
-                        # Check at least one substantive field is non-None
-                        substantive = {
-                            "domain_age":     "age_days",
-                            "site_reach":     "reachable",
-                            "typosquat":      "is_squatter",
-                            "free_email":     "uses_free_domain",
-                            "mx_record":      "status",
-                            "company_domain": "domain_exists",
-                            "spf_dmarc":      "spf",
-                        }
-                        key = substantive.get(k)
-                        return key is not None and v.get(key) is not None
-                    probes_ran = sum(_probe_ran(k, v) for k, v in probes.items())
+                    probes_ran = sum(
+                        1 for k, v in probes.items()
+                        if v.get("detail") and "No domain" not in v.get("detail","")
+                        and "skipped" not in str(v.get("status",""))
+                        and "Probe error" not in v.get("detail","")
+                    )
                     probes_total = len(probes)
                     probe_coverage = probes_ran / max(probes_total, 1)
 
@@ -5341,12 +4607,8 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         # AI completely failed — redistribute its 60% to rules
                         w_ai, w_rule, w_probe = 0.00, 0.75, 0.25
                     elif ai_confidence < 50:
-                        # AI unsure — reduce its weight, boost rules.
-                        # GAP FIX 2b: also floor blended at rule_score so an
-                        # uncertain LLM cannot pull the score below hard rule evidence.
+                        # AI unsure — reduce its weight, boost rules
                         w_ai, w_rule, w_probe = 0.40, 0.40, 0.20
-                        # Floor applied after blended is computed — set flag here
-                        _apply_low_confidence_floor = True
                     elif probe_coverage < 0.5:
                         # Less than half probes ran — boost AI, reduce probe weight
                         w_ai, w_rule, w_probe = 0.70, 0.25, 0.05
@@ -5354,12 +4616,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         # Normal: standard 60/25/15
                         w_ai, w_rule, w_probe = 0.60, 0.25, 0.15
 
-                    if "_apply_low_confidence_floor" not in dir():
-                        _apply_low_confidence_floor = False
                     blended = int(w_ai * ai_s + w_rule * rule_s + w_probe * penalty)
-                    # GAP FIX 2b: apply low-confidence AI floor
-                    if _apply_low_confidence_floor:
-                        blended = max(blended, rule_s)
 
                     # Hard floor only from HIGH-weight signals (>=18 pts each).
                     critical_signals = [k for k, s in rules_result["signals"].items()
@@ -5367,22 +4624,8 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     critical_weight  = sum(_WEIGHTS.get(k, 0) for k in critical_signals)
                     blended = max(blended, critical_weight)
 
-                    # UPFRONT PAYMENT HARD OVERRIDE: charging candidates is NEVER
-                    # legitimate — no clean probe result can wash this out.
-                    # Force blended to at least 55 (LIKELY_SCAM) regardless of
-                    # how good the company's network presence looks.
-                    _fired = rules_result.get("signals", {})
-                    if "upfront_payment" in _fired:
-                        blended = max(blended, 55)
-                    if "fake_govt_job" in _fired:
-                        blended = max(blended, 60)
-                    if "mlm_pyramid" in _fired:
-                        blended = max(blended, 50)
-
-                    # Probe penalty floor: only if penalty is itself significant (>= 25).
-                    # Cap raised to 75 above, so this now correctly pushes into
-                    # DEFINITE_SCAM territory when all infra probes fail.
-                    if penalty >= 25:
+                    # Probe penalty floor: only if penalty is itself significant (>= 20)
+                    if penalty >= 20:
                         blended = max(blended, penalty)
 
                     # ── HARD PROBE OVERRIDE (Improvement 4) ───────────────────────
@@ -5442,11 +4685,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         "probes":         probes,    "probe_warnings": warnings,
                         "llm":            llm_data,  "job":            job,
                         "timestamp":      _now_ist(),
-                        # GAP FIX 2a: surface AI failure and probe coverage to UI
-                        "ai_failed":      ai_failed,
-                        "probe_coverage": round(probe_coverage, 2),
-                        "probes_ran":     probes_ran,
-                        "probes_total":   probes_total,
                     }
                     prog.progress(100, text="Done.")
                     time.sleep(0.3)
@@ -5687,45 +4925,6 @@ def render_job_scam_detector_tab(call_llm_fn):
 
     _render_verdict_banner(res)
     _render_score_strip(res)
-
-    # ── New-company advisory — shown only when domain is young AND company
-    #    is not found in any identity source. Score is NOT affected.
-    _probes       = res.get("probes", {})
-    _age_days     = (_probes.get("domain_age") or {}).get("age_days") or 999
-    _cd            = (_probes.get("company_domain") or {})
-    _clearbit_found = _cd.get("clearbit_found", False)
-    _wiki_found     = _cd.get("wiki_found",     False)
-    _li_found       = _cd.get("linkedin_found", False)
-    _no_identity    = not (_clearbit_found or _wiki_found or _li_found)
-    _young_domain   = _age_days < 180
-    _final_verdict  = res.get("final_verdict", "SAFE")
-
-    if _young_domain and _no_identity and _final_verdict in ("SAFE", "SUSPICIOUS"):
-        _age_str = f"{_age_days} days old" if _age_days < 999 else "age unknown"
-        st.markdown(
-            f'<div style="display:flex;align-items:flex-start;gap:10px;'
-            f'padding:11px 15px;margin:10px 0 4px;'
-            f'background:rgba(56,189,248,0.06);'
-            f'border:1px solid rgba(56,189,248,0.18);'
-            f'border-left:3px solid #38bdf8;'
-            f'border-radius:8px;">'
-            f'<div style="font-size:1rem;margin-top:1px;">&#128270;</div>'
-            f'<div style="flex:1;">'
-            f'<div style="font-size:0.74rem;font-weight:600;color:#7dd3fc;'
-            f'text-transform:uppercase;letter-spacing:0.7px;margin-bottom:4px;">'
-            f'New / Unverified Company — Advisory</div>'
-            f'<div style="font-size:0.79rem;color:#94a3b8;line-height:1.55;">'
-            f'This company\'s domain is <strong style="color:#7dd3fc;">{_age_str}</strong> '
-            f'and was not found in Clearbit, Wikipedia, or LinkedIn. '
-            f'This is common for genuine startups and new businesses — '
-            f'<strong style="color:#e2e8f0;">it does not affect the scam score.</strong> '
-            f'As a precaution: verify the company on MCA21 / ROC, check if the founders '
-            f'are reachable on LinkedIn, and avoid sharing personal documents until you '
-            f'have confirmed the company\'s registration details independently.'
-            f'</div></div></div>',
-            unsafe_allow_html=True,
-        )
-
     st.markdown("<br>", unsafe_allow_html=True)
     _render_probe_table(res["probes"])
 
@@ -5738,7 +4937,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         )
         _render_signal_cards(res["signals"])
     with t2:
-        _render_ai_dive(res.get("llm", {}), probes=res.get("probes", {}))
+        _render_ai_dive(res.get("llm", {}))
     with t3:
         _render_checklist(res)
 
