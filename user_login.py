@@ -16,10 +16,6 @@ import dns.resolver
 
 
 # ── Connection management (isolated — never touches other modules' connections) ─
-# FIX: replaced st.cache_resource singleton + .clear() with a module-level holder.
-# st.cache_resource.clear() nukes ALL cached resources app-wide, which killed
-# llm_manager and db_manager connections whenever a login DB hiccup occurred.
-
 _user_conn_holder: dict = {"conn": None}
 _user_reconnect_lock = threading.Lock()
 
@@ -46,11 +42,11 @@ def _conn():
     """
     Return a live psycopg2 connection.
 
-    FIX: Liveness check is a real SELECT 1 round-trip — the old code read
-         conn.isolation_level which is a pure Python attribute and never
-         touches the socket, so stale connections passed silently.
-    FIX: Reconnect only replaces THIS module's connection; does NOT call
-         st.cache_resource.clear() which would destroy all other connections.
+    FIX v3: After a successful SELECT 1 liveness check, we now call rollback()
+    inside a try/except so that any lingering aborted transaction is cleared
+    before the connection is returned.  Previously a failed rollback() here
+    would leave the connection in InFailedSqlTransaction, causing
+    set_session/autocommit changes to raise ProgrammingError.
     """
     with _user_reconnect_lock:
         conn = _user_conn_holder.get("conn")
@@ -62,7 +58,15 @@ def _conn():
             try:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
-                conn.rollback()
+                # Always rollback after liveness check to discard any open/aborted txn
+                try:
+                    conn.rollback()
+                except Exception:
+                    need_reconnect = True
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
             except Exception:
                 need_reconnect = True
                 try:
@@ -74,6 +78,32 @@ def _conn():
             _user_conn_holder["conn"] = _make_user_connection()
 
         return _user_conn_holder["conn"]
+
+
+def _reset_conn_to_default():
+    """
+    Ensure the connection is in a clean, non-autocommit state.
+    Call this as a finally-guard whenever autocommit is toggled.
+    """
+    conn = _user_conn_holder.get("conn")
+    if conn is None:
+        return
+    try:
+        # Rollback any open/aborted transaction first — required before
+        # changing autocommit, otherwise psycopg2 raises
+        # "set_session cannot be used inside a transaction".
+        conn.rollback()
+    except Exception:
+        pass
+    try:
+        conn.autocommit = False
+    except Exception:
+        # Connection is broken — drop it so the next call reconnects
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _user_conn_holder["conn"] = None
 
 
 def _execute(sql: str, params=None, fetch: str = "none"):
@@ -216,40 +246,46 @@ def create_user_table():
     """
     conn = _conn()
     try:
-        # FIX v2: DDL (CREATE TABLE / CREATE INDEX) in PostgreSQL is transactional,
-        # but some Postgres configurations and psycopg2 versions behave unexpectedly
-        # when DDL runs inside an explicit transaction that was previously in an error
-        # state (InFailedSqlTransaction). Setting autocommit=True for the DDL block
-        # ensures each statement auto-commits and cannot be rolled back inadvertently.
-        # We restore autocommit=False afterwards for safety.
-        conn.autocommit = True
-        with conn.cursor() as cur:
-            cur.execute(ddl)
-            # ── Migration: add is_deleted column to existing tables ────────
-            # IF NOT EXISTS not supported for ADD COLUMN in older Postgres;
-            # catch the duplicate_column error (42701) and ignore it safely.
-            try:
-                cur.execute(
-                    "ALTER TABLE scam_analysis_history "
-                    "ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT FALSE"
-                )
-            except Exception:
-                pass  # column already exists — safe to ignore
-        conn.autocommit = False
-
-        # Prune stale rows — these are DML, run in a normal transaction after DDL.
-        with conn.cursor() as cur:
-            # Prune feature_usage rows older than 2 hours
-            cur.execute("DELETE FROM feature_usage WHERE used_at < NOW() - INTERVAL '2 hours'")
-            # Prune login_attempts older than 15 minutes
-            cur.execute("DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '15 minutes'")
-        conn.commit()
-    except Exception as e:
-        conn.autocommit = False  # always restore
+        # ── FIX v3: rollback() BEFORE flipping autocommit ──────────────────
+        # psycopg2 raises "set_session cannot be used inside a transaction"
+        # if autocommit is changed while a transaction (even an aborted one)
+        # is still open on the connection.  A rollback() always clears that,
+        # whether the previous state was clean, mid-transaction, or aborted.
         try:
             conn.rollback()
         except Exception:
             pass
+
+        conn.autocommit = True
+        try:
+            with conn.cursor() as cur:
+                cur.execute(ddl)
+                # Migration: add is_deleted column to existing tables
+                try:
+                    cur.execute(
+                        "ALTER TABLE scam_analysis_history "
+                        "ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT FALSE"
+                    )
+                except psycopg2.errors.DuplicateColumn:
+                    pass  # column already exists — safe to ignore
+                except Exception:
+                    pass
+        finally:
+            # ── FIX v3: restore autocommit=False in a finally block ────────
+            # Previously this lived only in the except branch, so a mid-DDL
+            # error would leave autocommit=True for the rest of the session,
+            # silently skipping commits on all subsequent DML.
+            _reset_conn_to_default()
+
+        # Prune stale rows — DML, run in a normal transaction after DDL.
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM feature_usage WHERE used_at < NOW() - INTERVAL '2 hours'")
+            cur.execute("DELETE FROM login_attempts WHERE attempted_at < NOW() - INTERVAL '15 minutes'")
+        conn.commit()
+
+    except Exception as e:
+        # Guarantee the connection is back in a clean state no matter what.
+        _reset_conn_to_default()
         st.error(f"Error creating tables: {e}")
 
 
@@ -277,7 +313,7 @@ def _send_email(to_email: str, subject: str, body: str) -> bool:
             server.login(sender_email, sender_password)
             server.sendmail(sender_email, to_email, msg.as_string())
         finally:
-            server.quit()  # always close — prevents SMTP connection leak on exception
+            server.quit()
         return True
     except smtplib.SMTPException as e:
         st.error(f"SMTP Error: {e}")
@@ -429,14 +465,7 @@ def send_login_link(username_or_email: str, password: str):
     """
     Verify credentials, then send a magic login link.
     Returns (status, message, username_or_None).
-
-    status values:
-      'link_sent'   — credentials OK, email sent
-      'bad_creds'   — wrong username/password
-      'no_email'    — user has no email on record
-      'email_fail'  — credentials OK but SMTP failed
     """
-    # Resolve username + password + email
     if '@' in username_or_email:
         sql = "SELECT username, password, email FROM users WHERE email = %s"
     else:
@@ -444,12 +473,12 @@ def send_login_link(username_or_email: str, password: str):
 
     row = _execute(sql, (username_or_email,), fetch="one")
     if not row:
-        _record_failed_login(username_or_email)  # FIX: count failures toward brute-force lockout
+        _record_failed_login(username_or_email)
         return "bad_creds", "❌ Invalid credentials. Please try again.", None
 
     stored_hashed = row["password"]
     if not bcrypt.checkpw(password.encode("utf-8"), stored_hashed.encode("utf-8")):
-        _record_failed_login(username_or_email)  # FIX: count failures toward brute-force lockout
+        _record_failed_login(username_or_email)
         return "bad_creds", "❌ Invalid credentials. Please try again.", None
 
     actual_username = row["username"]
@@ -458,7 +487,6 @@ def send_login_link(username_or_email: str, password: str):
     if not email:
         return "no_email", "⚠️ No email linked to this account. Contact support.", None
 
-    # Generate a secure token and persist it
     token = str(uuid.uuid4())
     try:
         _execute(
@@ -468,7 +496,6 @@ def send_login_link(username_or_email: str, password: str):
     except Exception as e:
         return "email_fail", f"❌ Could not create login token: {e}", None
 
-    # Send the email
     if not _send_login_link_email(email, actual_username, token):
         return "email_fail", "❌ Failed to send login email. Please try again.", None
 
@@ -495,9 +522,7 @@ def verify_login_token(token: str):
     if row["used"]:
         return False, "⚠️ This login link has already been used. Please log in again."
 
-    # Check expiry (10 minutes)
     created_at = row["created_at"]
-    # created_at from Supabase is tz-aware UTC
     now_utc = datetime.now(pytz.utc)
     if isinstance(created_at, datetime) and created_at.tzinfo is None:
         created_at = pytz.utc.localize(created_at)
@@ -507,16 +532,14 @@ def verify_login_token(token: str):
 
     username = row["username"]
 
-    # Mark token as used
     try:
         _execute(
             "UPDATE login_tokens SET used = TRUE WHERE token = %s",
             (token,),
         )
     except Exception:
-        pass  # non-fatal — proceed with login
+        pass  # non-fatal
 
-    # Set session state
     st.session_state.username = username
     st.session_state.authenticated = True
 
@@ -535,17 +558,11 @@ def cleanup_expired_login_tokens():
 
 # ── Brute-force protection ────────────────────────────────────────────────────
 
-MAX_LOGIN_ATTEMPTS = 5          # max failures allowed
-LOCKOUT_WINDOW_SECONDS = 900    # 15-minute rolling window
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_WINDOW_SECONDS = 900
 
 
 def _resolve_canonical_key(username_or_email: str) -> str:
-    """
-    Always resolve to the lowercase username so that logging in with
-    an email vs username always hits the same counter in login_attempts.
-    Falls back to the raw input (lowercased) if user doesn't exist —
-    this still prevents enumeration since the counter tracks the typed value.
-    """
     try:
         if '@' in username_or_email:
             row = _execute(
@@ -563,34 +580,21 @@ def _resolve_canonical_key(username_or_email: str) -> str:
             return row["username"].lower()
     except Exception:
         pass
-    return username_or_email.lower()  # unknown user — track raw input
+    return username_or_email.lower()
 
 
 def _record_failed_login(identifier: str):
-    """
-    Log one failed login attempt using the canonical username key.
-
-    FIX v2 — CRITICAL: Previously stored get_ist_time() (IST, UTC+5:30) but
-    check_brute_force compared with Postgres NOW() which is UTC. That made the
-    15-minute lockout window 5h30m wrong — brute-force protection NEVER fired
-    in India.
-    Fix: omit attempted_at entirely — column DEFAULT is NOW() in Postgres UTC,
-    which matches the WHERE attempted_at > NOW() - INTERVAL '15 minutes' check
-    exactly. No Python datetime needed or passed.
-    """
     try:
         key = _resolve_canonical_key(identifier)
-        # FIX: no attempted_at arg — Postgres DEFAULT NOW() (UTC) is authoritative
         _execute(
             "INSERT INTO login_attempts (identifier) VALUES (%s)",
             (key,),
         )
     except Exception:
-        pass  # non-fatal
+        pass
 
 
 def _clear_failed_logins(identifier: str):
-    """Remove all failed attempts after a successful login."""
     try:
         key = _resolve_canonical_key(identifier)
         _execute(
@@ -598,15 +602,10 @@ def _clear_failed_logins(identifier: str):
             (key,),
         )
     except Exception:
-        pass  # non-fatal
+        pass
 
 
 def check_brute_force(identifier: str):
-    """
-    Check if the identifier (username or email) is locked out.
-    Resolves to canonical username first so email/username share one counter.
-    Returns (allowed: bool, message: str).
-    """
     try:
         key = _resolve_canonical_key(identifier)
         row = _execute(
@@ -620,7 +619,7 @@ def check_brute_force(identifier: str):
         )
         count = row["cnt"] if row else 0
     except Exception:
-        return True, ""  # fail open — don't block on DB hiccup
+        return True, ""
 
     if count >= MAX_LOGIN_ATTEMPTS:
         remaining = LOCKOUT_WINDOW_SECONDS // 60
@@ -701,7 +700,6 @@ def get_user_by_email(email):
 
 
 def get_user_email_by_username(username: str) -> str:
-    """Return the registered email address for a given username, or '' if not found."""
     try:
         row = _execute(
             "SELECT email FROM users WHERE username = %s", (username,), fetch="one"
@@ -714,19 +712,10 @@ def get_user_email_by_username(username: str) -> str:
 def send_analysis_email(
     to_email: str,
     candidate_name: str,
-    pdf_bytes,          # BytesIO — the full analysis report PDF
-    docx_bytes,         # BytesIO — the optimised Modern ATS resume DOCX
+    pdf_bytes,
+    docx_bytes,
     resume_filename: str,
 ) -> bool:
-    """
-    Silently send the analysis report PDF and optimised resume DOCX to the
-    user's registered email address.  Called from a daemon thread in main so
-    the UI is never blocked.
-
-    Uses the same SMTP credentials already configured in st.secrets
-    (email_address / email_password).  Returns True on success, False on any
-    error (errors are swallowed — this is a background, best-effort delivery).
-    """
     try:
         import smtplib
         from email.mime.multipart import MIMEMultipart
@@ -737,7 +726,6 @@ def send_analysis_email(
         sender_email    = st.secrets["email_address"]
         sender_password = st.secrets["email_password"]
 
-        # ── Build the message ─────────────────────────────────────────────
         msg = MIMEMultipart()
         msg["From"]    = sender_email
         msg["To"]      = to_email
@@ -762,7 +750,6 @@ HIRELYZER Team
 """
         msg.attach(MIMEText(body, "plain"))
 
-        # ── Attachment 1: PDF report ──────────────────────────────────────
         if pdf_bytes is not None:
             pdf_bytes.seek(0)
             pdf_part = MIMEBase("application", "octet-stream")
@@ -776,7 +763,6 @@ HIRELYZER Team
             )
             msg.attach(pdf_part)
 
-        # ── Attachment 2: DOCX optimised resume ───────────────────────────
         if docx_bytes is not None:
             docx_bytes.seek(0)
             docx_part = MIMEBase("application", "octet-stream")
@@ -790,7 +776,6 @@ HIRELYZER Team
             )
             msg.attach(docx_part)
 
-        # ── Send via Gmail SMTP ───────────────────────────────────────────
         server = smtplib.SMTP("smtp.gmail.com", 587)
         try:
             server.starttls()
@@ -802,7 +787,6 @@ HIRELYZER Team
         return True
 
     except Exception:
-        # Silent failure — background delivery is best-effort only
         return False
 
 
@@ -812,10 +796,6 @@ def update_password_by_email(email, new_password):
         return False
 
     hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    # FIX: acquire conn once and reuse it for both execute and rollback.
-    # Old code called _conn() again in the except block which could return a
-    # brand-new connection and rollback nothing, leaving the original transaction
-    # in a broken state (InFailedSqlTransaction on all subsequent calls).
     conn = _conn()
     try:
         with conn.cursor() as cur:
@@ -840,12 +820,11 @@ def update_password_by_email(email, new_password):
 USAGE_LIMITS = {
     "resume_analyzer": 2,
     "ai_coach": 2,
-    "scam_detector": 3,   # 3 full AI analyses per hour per user
+    "scam_detector": 3,
 }
 
 
 def get_usage_count_last_hour(username: str, feature: str) -> int:
-    """Return how many times username used feature in the last 60 minutes."""
     try:
         row = _execute(
             """
@@ -859,26 +838,20 @@ def get_usage_count_last_hour(username: str, feature: str) -> int:
         )
         return row["cnt"] if row else 0
     except Exception:
-        return 0  # fail open — don't block users due to a DB hiccup
+        return 0
 
 
 def record_feature_usage(username: str, feature: str):
-    """Log one usage event. Call AFTER the feature successfully runs."""
     try:
         _execute(
             "INSERT INTO feature_usage (username, feature) VALUES (%s, %s)",
             (username, feature),
         )
     except Exception:
-        pass  # non-fatal
+        pass
 
 
 def check_and_gate_feature(username: str, feature: str):
-    """
-    Check if user is within their hourly limit.
-    Returns (allowed: bool, message: str).
-    Call BEFORE running the feature.
-    """
     limit = USAGE_LIMITS.get(feature, 999)
     count = get_usage_count_last_hour(username, feature)
     feature_label = "AI Coach" if feature == "ai_coach" else feature.replace('_', ' ').title()
@@ -905,37 +878,10 @@ def check_and_gate_feature(username: str, feature: str):
 # ── Scam analysis history (persistent across sessions) ───────────────────────
 
 def save_scam_analysis(username: str, job_title: str, company: str, score: int, verdict: str) -> int | None:
-    """
-    Persist one scam analysis result to scam_analysis_history.
-    Returns the new row's id (needed for soft-delete by id, not index).
-    Non-fatal if it fails — returns None on error.
-
-    IST FIX: Passes analysed_at explicitly as IST timestamp so Supabase
-    stores IST (UTC+5:30) instead of UTC. DEFAULT NOW() in Postgres always
-    uses the server clock in UTC — we override it with the correct IST value.
-
-    FIX v2: Replaced broken CTE pattern (WITH inserted AS ... DELETE) with
-    two clean separate queries:
-
-    OLD (broken):
-      - CTE did INSERT ... RETURNING id but outer query was DELETE, so
-        RETURNING id was never selected out — row was always None.
-      - Second SELECT grabbed most recent row by timestamp which could
-        return the wrong row under concurrent inserts (race condition).
-      - DELETE inside CTE had undefined visibility of the just-inserted
-        row in the subquery, making prune logic unreliable.
-
-    NEW (fixed):
-      1. INSERT ... RETURNING id  — gets the exact new row id, no ambiguity.
-      2. Separate DELETE prune    — runs after insert succeeds, clean and safe.
-         Prunes rows beyond the 50 most recent (by id DESC, not timestamp,
-         which is stable and index-friendly).
-    """
     try:
         ist = pytz.timezone("Asia/Kolkata")
         now_ist = datetime.now(ist)
 
-        # Step 1: Insert and get the new row's id directly via RETURNING
         new_row = _execute(
             """
             INSERT INTO scam_analysis_history
@@ -949,9 +895,6 @@ def save_scam_analysis(username: str, job_title: str, company: str, score: int, 
         )
         new_id = new_row["id"] if new_row else None
 
-        # Step 2: Prune rows beyond 50 most recent for this user.
-        # Uses id DESC (stable, index-friendly) instead of analysed_at
-        # to avoid timestamp tie-breaking issues.
         _execute(
             """
             DELETE FROM scam_analysis_history
@@ -972,12 +915,6 @@ def save_scam_analysis(username: str, job_title: str, company: str, score: int, 
 
 
 def load_scam_history(username: str) -> list[dict]:
-    """
-    Load the 10 most recent NON-deleted analyses for a user from DB.
-    Soft-deleted rows (is_deleted=TRUE) are excluded — they still exist
-    in the table as a permanent audit log but are hidden from the UI.
-    Returns [] on any error.
-    """
     try:
         rows = _execute(
             """
@@ -994,7 +931,7 @@ def load_scam_history(username: str) -> list[dict]:
         )
         return [
             {
-                "id":      r["id"],        # needed for targeted soft-delete
+                "id":      r["id"],
                 "title":   r["job_title"],
                 "company": r["company"],
                 "score":   r["score"],
@@ -1008,12 +945,6 @@ def load_scam_history(username: str) -> list[dict]:
 
 
 def soft_delete_scam_analysis(username: str, record_id: int) -> bool:
-    """
-    Soft-delete one analysis by its DB id.
-    Sets is_deleted=TRUE — record stays in table permanently as audit log.
-    Called when user clicks ✕ Remove on a sidebar card.
-    Uses record id (not positional index) — safe against concurrent inserts.
-    """
     try:
         _execute(
             """
@@ -1029,11 +960,6 @@ def soft_delete_scam_analysis(username: str, record_id: int) -> bool:
 
 
 def soft_delete_all_scam_history(username: str):
-    """
-    Soft-delete ALL analyses for a user.
-    Sets is_deleted=TRUE on every row — records stay permanently in DB.
-    Called when user clicks 'Clear all' in the sidebar.
-    """
     try:
         _execute(
             """
@@ -1048,9 +974,4 @@ def soft_delete_all_scam_history(username: str):
 
 
 def delete_all_scam_history(username: str):
-    """
-    Intentionally kept as a no-op stub.
-    UI removal (✕ / Clear all) only clears session_state — Supabase records
-    are NEVER deleted. This table is a permanent audit log.
-    """
     pass  # do NOT delete from DB — records are permanent
