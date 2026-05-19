@@ -3636,7 +3636,7 @@ def _render_score_strip(result: dict):
                       "Sum of weights for matched red-flag phrases"),
                 unsafe_allow_html=True)
     c3.markdown(_card(I.GLOBE, "Probe Penalty", result["probe_penalty"],
-                      "#38bdf8", "5 live network checks",
+                      "#38bdf8", "7 live network checks",
                       "Added for young domain, free email, bad MCA etc."),
                 unsafe_allow_html=True)
     c4.markdown(_card(I.ZAP,   "Flags Fired",   len(result["signals"]),
@@ -4622,7 +4622,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 # rerun (triggered by any widget) to see True and lock the button.
                 disabled=not allowed or st.session_state.get("jsd_running", False),
                 help=(
-                    "Runs full AI analysis + 5 live network probes. Takes ~10s."
+                    "Runs full AI analysis + 7 live network probes. Takes ~10s."
                     if allowed else
                     f"You have used all {_SCAM_LIMIT} analyses for this hour. "
                     "Please wait — quota resets on a rolling 60-minute window."
@@ -4682,7 +4682,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     prog.progress(10, text="Running 15-signal rule engine…")
                     rules_result = _run_rules(job)
 
-                    prog.progress(30, text="Launching 5 live network probes (parallel)…")
+                    prog.progress(30, text="Launching 7 live network probes (parallel)…")
                     probes = run_live_probes(job)
                     penalty, warnings = _probe_risk(probes)
 
@@ -5004,7 +5004,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         f'<h2 style="margin:0 0 4px;font-size:1.45rem;font-weight:700;color:#e6edf3;'
         f'letter-spacing:-0.02em;">Job Scam Detector</h2>'
         f'<p style="margin:0;color:#8b949e;font-size:0.82rem;line-height:1.5;">'
-        f'Paste any job posting — AI analysis + 5 live network probes detect '
+        f'Paste any job posting — AI analysis + 7 live network probes detect '
         f'fake listings before you apply or share personal data.</p>'
         f'</div>'
 
