@@ -3345,16 +3345,60 @@ def _run_rules(job: dict) -> dict:
 
 def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
-    salary_raw = (job.get("salary") or "").strip()
+    salary_raw     = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
-    salary_instruction = (
-        "The salary was NOT provided in this job posting. "
-        "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
-        "do NOT guess, infer, or comment on whether it is realistic."
-        if not salary_raw else
-        "Assess whether the stated salary is realistic for this role and location. "
-        "If it seems unrealistically high, flag it as a potential scam signal."
-    )
+
+    # ── User context fields for personalised salary assessment ────────────────
+    user_location = (job.get("user_location") or "").strip()
+    current_role  = (job.get("current_role")  or "").strip()
+    years_exp_raw = (job.get("years_exp")     or "").strip()
+
+    # Build a rich context block only when the user provided at least one field
+    user_ctx_parts = []
+    if user_location:
+        user_ctx_parts.append(f"Candidate Location: {user_location}")
+    if current_role:
+        user_ctx_parts.append(f"Candidate Current Role: {current_role}")
+    if years_exp_raw:
+        user_ctx_parts.append(f"Candidate Years of Experience: {years_exp_raw}")
+    user_ctx_block = "\n".join(user_ctx_parts) if user_ctx_parts else ""
+
+    # ── Salary instruction — three tiers depending on available data ──────────
+    if not salary_raw:
+        salary_instruction = (
+            "The salary was NOT provided in this job posting. "
+            "You MUST set salary_assessment to a JSON object with: "
+            "verdict='NOT_PROVIDED', market_range='N/A', "
+            "experience_fit='N/A', location_context='N/A', "
+            "skill_alignment='N/A', scam_signal=false, summary='Salary not disclosed'."
+        )
+    elif user_ctx_parts:
+        salary_instruction = (
+            f"The candidate has provided personal context (see CANDIDATE CONTEXT above). "
+            f"Produce a DETAILED salary assessment object with ALL of these keys:\n"
+            f"  - verdict: one of 'BELOW_MARKET' | 'MARKET_RATE' | 'ABOVE_MARKET' | 'SUSPICIOUS_HIGH' | 'SUSPICIOUS_LOW'\n"
+            f"  - market_range: realistic salary band for THIS role in the job's stated location (e.g. '₹4–7 LPA for junior SWE in Bangalore')\n"
+            f"  - experience_fit: does the offered salary match {years_exp_raw or 'the stated'} years of experience? Explain in 1-2 sentences.\n"
+            f"  - location_context: how does compensation differ between the candidate's location ({user_location or 'unspecified'}) and the job's location?\n"
+            f"  - skill_alignment: does the salary match the skills/qualifications demanded in the JD? 1-2 sentences.\n"
+            f"  - scam_signal: true if salary is unrealistically high (>2× market ceiling) — potential bait tactic.\n"
+            f"  - summary: 2-3 sentence overall verdict in plain English, referencing the candidate's {years_exp_raw or ''} experience as {current_role or 'their current role'}."
+        )
+    else:
+        salary_instruction = (
+            "Assess whether the stated salary is realistic for this role and location. "
+            "Return salary_assessment as a JSON object with: "
+            "verdict (BELOW_MARKET|MARKET_RATE|ABOVE_MARKET|SUSPICIOUS_HIGH|SUSPICIOUS_LOW), "
+            "market_range (typical band for this role/location), "
+            "experience_fit ('N/A — no candidate experience provided'), "
+            "location_context (location-based compensation note), "
+            "skill_alignment (1 sentence on skills vs pay), "
+            "scam_signal (true if >2x market ceiling), "
+            "summary (2-sentence plain-English verdict)."
+        )
+
+    user_ctx_section = f"\nCANDIDATE CONTEXT:\n{user_ctx_block}\n" if user_ctx_block else ""
+
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
@@ -3368,7 +3412,7 @@ Description: {job.get('description','N/A')[:8000]}
 Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
-
+{user_ctx_section}
 LIVE PROBE FINDINGS:
 {ctx}
 
@@ -3384,7 +3428,15 @@ Required JSON schema (all keys mandatory):
   "positive_signals": ["<str>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
+  "salary_assessment": {{
+    "verdict": "<NOT_PROVIDED|BELOW_MARKET|MARKET_RATE|ABOVE_MARKET|SUSPICIOUS_HIGH|SUSPICIOUS_LOW>",
+    "market_range": "<typical salary band for this role/location>",
+    "experience_fit": "<how salary aligns with candidate experience>",
+    "location_context": "<compensation differences by location>",
+    "skill_alignment": "<salary vs skills/qualifications demanded>",
+    "scam_signal": <true|false>,
+    "summary": "<2-3 sentence plain-English overall verdict>"
+  }},
   "recommended_action": "<specific advice for the job seeker>",
   "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
@@ -3466,6 +3518,16 @@ def _field_row(icon_path: str, label: str, value: str) -> str:
         f'letter-spacing:0.8px;margin-bottom:2px;">{label}</div>'
         f'<div style="font-size:0.81rem;line-height:1.4;">{val_html}</div>'
         f'</div></div>'
+    )
+
+
+def _profile_input_label(icon_path: str, label: str) -> str:
+    """Inline SVG icon + uppercase label rendered above a st.text_input widget."""
+    return (
+        f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:2px;">'
+        f'{_svg(icon_path, 10, "#a78bfa")}'
+        f'<span style="font-size:0.66rem;color:#8b949e;text-transform:uppercase;'
+        f'letter-spacing:0.8px;">{label}</span></div>'
     )
 
 
@@ -3867,35 +3929,10 @@ def _render_ai_dive(llm: dict):
     for field, icon_path, title in [
         ("fake_company_evidence", I.GHOST,     "Company Legitimacy Analysis"),
         ("linguistic_analysis",   I.FILE_TEXT, "Linguistic Pattern Analysis"),
-        ("salary_assessment",     I.DOLLAR,    "Salary Reality Check"),
         ("recommended_action",    I.SHIELD,    "Recommended Action"),
     ]:
         val = llm.get(field, "")
         if not val:
-            continue
-
-        # ── Special handling: salary was not given in the posting ────────────
-        if field == "salary_assessment" and (
-            not val.strip()
-            or val.strip().upper() == "NOT_PROVIDED"
-            or "not provided" in val.lower()
-            or "not mentioned" in val.lower()
-            or "no salary" in val.lower()
-        ):
-            st.markdown(
-                f'<div style="background:rgba(107,114,128,0.06);border:1px solid rgba(107,114,128,0.18);'
-                f'border-radius:9px;padding:14px;margin-bottom:10px;">'
-                f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
-                f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
-                f'{_svg(I.DOLLAR_OFF,11,"#6b7280")}Salary Reality Check</div>'
-                f'<div style="display:flex;align-items:center;gap:8px;color:#9ca3af;font-size:0.83rem;">'
-                f'{_svg(I.ALERT_CIRCLE,13,"#f59e0b")}'
-                f'<span><strong style="color:#f59e0b;">Salary not disclosed</strong> — '
-                f'this posting does not mention any salary, CTC, or compensation. '
-                f'No realistic assessment can be made. Consider asking the recruiter '
-                f'for a clear salary range before proceeding.</span></div></div>',
-                unsafe_allow_html=True,
-            )
             continue
 
         st.markdown(
@@ -3904,7 +3941,122 @@ def _render_ai_dive(llm: dict):
             f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
             f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
             f'{_svg(icon_path,11,"#6b7280")}{title}</div>'
-            f'<div style="color:#c9d1d9;font-size:0.83rem;line-height:1.65;">{val}</div></div>',
+            f'<div style="color:#c9d1d9;font-size:0.83rem;line-height:1.65;">{_esc(str(val))}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Rich Salary Reality Check card ───────────────────────────────────────
+    raw_sa = llm.get("salary_assessment")
+
+    # Normalise: handle both legacy string responses and new dict responses
+    if isinstance(raw_sa, str):
+        # Legacy string — wrap into a minimal dict so the card renders
+        low = raw_sa.strip().lower()
+        if not raw_sa.strip() or low in ("not_provided",) or "not provided" in low or "not mentioned" in low or "no salary" in low:
+            sa = {"verdict": "NOT_PROVIDED", "summary": None}
+        else:
+            sa = {"verdict": "LEGACY", "summary": raw_sa.strip()}
+    elif isinstance(raw_sa, dict):
+        sa = raw_sa
+    else:
+        sa = {}
+
+    verdict_key = (sa.get("verdict") or "NOT_PROVIDED").upper()
+
+    _SA_META: dict[str, tuple[str,str,str]] = {
+        # key               → (label,          hex-colour,  bg-rgba)
+        "NOT_PROVIDED":     ("Not Disclosed",  "#6b7280",   "rgba(107,114,128,0.06)"),
+        "BELOW_MARKET":     ("Below Market",   "#38bdf8",   "rgba(56,189,248,0.07)"),
+        "MARKET_RATE":      ("Market Rate",    "#22c55e",   "rgba(34,197,94,0.07)"),
+        "ABOVE_MARKET":     ("Above Market",   "#a78bfa",   "rgba(167,139,250,0.07)"),
+        "SUSPICIOUS_HIGH":  ("Suspicious — Unusually High", "#ef4444", "rgba(239,68,68,0.07)"),
+        "SUSPICIOUS_LOW":   ("Suspicious — Unusually Low",  "#f59e0b", "rgba(245,158,11,0.07)"),
+        "LEGACY":           ("Assessed",       "#8b949e",   "rgba(139,148,158,0.06)"),
+    }
+    sa_label, sa_color, sa_bg = _SA_META.get(verdict_key, _SA_META["LEGACY"])
+    scam_flag = sa.get("scam_signal", False)
+
+    # ── Build the detail rows (only rows with actual content are rendered) ────
+    detail_rows = [
+        (I.TRENDING_UP, "Market Range",        sa.get("market_range")),
+        (I.LAYERS,      "Experience Fit",      sa.get("experience_fit")),
+        (I.MAP_PIN,     "Location Context",    sa.get("location_context")),
+        (I.LIST,        "Skill Alignment",     sa.get("skill_alignment")),
+    ]
+    detail_html = ""
+    for dicon, dlabel, dval in detail_rows:
+        if dval and str(dval).strip() and str(dval).strip().lower() not in ("n/a", "not provided", ""):
+            detail_html += (
+                f'<div style="display:flex;gap:8px;margin-bottom:9px;align-items:flex-start;">'
+                f'<div style="flex-shrink:0;margin-top:2px;">{_svg(dicon,11,"#6b7280")}</div>'
+                f'<div><span style="font-size:0.67rem;font-weight:600;color:#6b7280;'
+                f'text-transform:uppercase;letter-spacing:0.8px;">{dlabel}</span>'
+                f'<div style="color:#c9d1d9;font-size:0.81rem;line-height:1.6;margin-top:2px;">'
+                f'{_esc(str(dval))}</div></div></div>'
+            )
+
+    scam_banner = ""
+    if scam_flag:
+        scam_banner = (
+            f'<div style="display:flex;align-items:center;gap:7px;padding:8px 11px;'
+            f'background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.22);'
+            f'border-radius:7px;margin-bottom:10px;">'
+            f'{_svg(I.ALERT_CIRCLE,12,"#ef4444")}'
+            f'<span style="font-size:0.79rem;color:#fca5a5;font-weight:500;">'
+            f'Salary is unrealistically high — possible bait tactic used by scammers.</span></div>'
+        )
+
+    summary_html = ""
+    if sa.get("summary") and str(sa["summary"]).strip():
+        summary_html = (
+            f'<div style="border-top:1px solid rgba(255,255,255,0.06);'
+            f'padding-top:10px;margin-top:4px;color:#c9d1d9;font-size:0.83rem;line-height:1.65;">'
+            f'{_esc(str(sa["summary"]))}</div>'
+        )
+
+    if verdict_key == "NOT_PROVIDED" and not sa.get("summary"):
+        # Minimal "not disclosed" card
+        st.markdown(
+            f'<div style="background:rgba(107,114,128,0.06);border:1px solid rgba(107,114,128,0.18);'
+            f'border-radius:9px;padding:14px;margin-bottom:10px;">'
+            f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;font-weight:600;'
+            f'color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">'
+            f'{_svg(I.DOLLAR_OFF,11,"#6b7280")}Salary Reality Check</div>'
+            f'<div style="display:flex;align-items:center;gap:8px;color:#9ca3af;font-size:0.83rem;">'
+            f'{_svg(I.ALERT_CIRCLE,13,"#f59e0b")}'
+            f'<span><strong style="color:#f59e0b;">Salary not disclosed</strong> — '
+            f'this posting does not mention any salary, CTC, or compensation. '
+            f'No realistic assessment can be made. Consider asking the recruiter '
+            f'for a clear salary range before proceeding.</span></div></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            f'<div style="background:{sa_bg};border:1px solid rgba(255,255,255,0.07);'
+            f'border-left:3px solid {sa_color};'
+            f'border-radius:9px;padding:14px 16px;margin-bottom:10px;">'
+
+            # ── Header row: title + verdict badge ─────────────────────────────
+            f'<div style="display:flex;align-items:center;justify-content:space-between;'
+            f'margin-bottom:12px;">'
+            f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;'
+            f'font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;">'
+            f'{_svg(I.DOLLAR,11,"#6b7280")}Salary Reality Check</div>'
+            f'<div style="padding:3px 10px;border-radius:20px;font-size:0.69rem;font-weight:700;'
+            f'color:{sa_color};background:rgba(0,0,0,0.25);border:1px solid {sa_color}40;'
+            f'letter-spacing:0.4px;">{sa_label}</div>'
+            f'</div>'
+
+            # ── Scam warning banner (only when flagged) ────────────────────────
+            + scam_banner
+
+            # ── Detail rows ───────────────────────────────────────────────────
+            + detail_html
+
+            # ── Summary prose ─────────────────────────────────────────────────
+            + summary_html
+
+            + f'</div>',
             unsafe_allow_html=True,
         )
 
@@ -4377,12 +4529,41 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             st.markdown(
                 f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);'
                 f'border-radius:10px;padding:14px 16px;margin-top:8px;">'
+                # ── Top layer header ──────────────────────────────────────────
                 f'<div style="font-size:0.69rem;font-weight:600;color:#8b949e;text-transform:uppercase;'
                 f'letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">'
                 f'{_svg(I.ZAP,10,"#a78bfa")} Auto-Detected Fields</div>'
-                f'{fields_html}</div>',
+                f'{fields_html}'
+                # ── Divider + Your Profile header ─────────────────────────────
+                f'<div style="border-top:1px solid rgba(255,255,255,0.07);margin:10px 0 10px;">'
+                f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'
+                f'{_svg(I.ID_CARD,10,"#a78bfa")}'
+                f'<span style="font-size:0.69rem;font-weight:600;color:#a78bfa;'
+                f'text-transform:uppercase;letter-spacing:1px;">Your Profile</span>'
+                f'<span style="font-size:0.67rem;color:#6b7280;font-weight:400;">'
+                f'— optional, improves salary analysis</span>'
+                f'</div></div>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
+
+            # ── Your Profile input rows (3 columns, each with SVG label) ──────
+            # Rendered as Streamlit widgets OUTSIDE the HTML block so they're
+            # interactive. The SVG labels are injected via st.markdown above
+            # each column group.
+            prof_c1, prof_c2, prof_c3 = st.columns(3)
+            with prof_c1:
+                st.markdown(_profile_input_label(I.MAP_PIN,     "Your Location"),    unsafe_allow_html=True)
+                st.text_input("Your Location",       label_visibility="collapsed",
+                              placeholder="e.g., Bangalore",   key="jsd_uloc")
+            with prof_c2:
+                st.markdown(_profile_input_label(I.ID_CARD,     "Current Role"),     unsafe_allow_html=True)
+                st.text_input("Current Role",        label_visibility="collapsed",
+                              placeholder="e.g., Junior Dev",  key="jsd_urole")
+            with prof_c3:
+                st.markdown(_profile_input_label(I.TRENDING_UP, "Years of Exp"),     unsafe_allow_html=True)
+                st.text_input("Years of Experience", label_visibility="collapsed",
+                              placeholder="e.g., 2 / Fresher", key="jsd_uexp")
 
             with st.expander("Override detected fields (optional)", expanded=False):
                 oc1, oc2 = st.columns(2)
@@ -4410,24 +4591,55 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
             "description":  raw or "",
             "requirements": "",   # FIX v5 BUG 3: keep empty — description has everything
             "benefits":     "",   # FIX v5 BUG 3: keep empty — description has everything
+            # ── User profile fields (optional, for personalised salary analysis) ─
+            "user_location": st.session_state.get("jsd_uloc",  ""),
+            "current_role":  st.session_state.get("jsd_urole", ""),
+            "years_exp":     st.session_state.get("jsd_uexp",  ""),
         }
 
     else:
         a, b_ = st.columns(2)
-        job["title"]    = a.text_input("Job Title",       placeholder="e.g., Software Engineer",  key="jsd_t")
-        job["company"]  = b_.text_input("Company Name",   placeholder="e.g., Acme Corp",          key="jsd_co")
+        job["title"]    = a.text_input("Job Title",       placeholder="e.g., Software Engineer",  key="jsd_t",  max_chars=200)
+        job["company"]  = b_.text_input("Company Name",  placeholder="e.g., Acme Corp",           key="jsd_co", max_chars=200)
         c, d = st.columns(2)
-        job["website"]  = c.text_input("Company Website", placeholder="https://acmecorp.com",     key="jsd_w")
-        job["location"] = d.text_input("Location",        placeholder="e.g., Bangalore, India",   key="jsd_l")
+        job["website"]  = c.text_input("Company Website", placeholder="https://acmecorp.com",     key="jsd_w",  max_chars=300)
+        job["location"] = d.text_input("Location",        placeholder="e.g., Bangalore, India",   key="jsd_l",  max_chars=200)
         e, f = st.columns(2)
-        job["salary"]   = e.text_input("Salary Offered",  placeholder="e.g., 8-12 LPA",           key="jsd_sa")
-        job["contact"]  = f.text_input("Contact Email",   placeholder="e.g., hr@acme.com",        key="jsd_ct")
-        job["description"]  = st.text_area("Job Description",  height=120, key="jsd_d",
+        job["salary"]   = e.text_input("Salary Offered",  placeholder="e.g., 8-12 LPA",           key="jsd_sa", max_chars=150)
+        job["contact"]  = f.text_input("Contact Email",   placeholder="e.g., hr@acme.com",        key="jsd_ct", max_chars=300)
+        job["description"]  = st.text_area("Job Description",  height=120, key="jsd_d", max_chars=5000,
                                             placeholder="Describe the role and responsibilities...")
-        job["requirements"] = st.text_area("Requirements",     height=80,  key="jsd_r",
+        job["requirements"] = st.text_area("Requirements",     height=80,  key="jsd_r", max_chars=2000,
                                             placeholder="Skills, experience, qualifications...")
-        job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
+        job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b", max_chars=1000,
                                             placeholder="What the employer offers...")
+
+        # ── Your Profile card — same style as paste mode ───────────────────────
+        st.markdown(
+            f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);'
+            f'border-radius:10px;padding:14px 16px;margin-top:10px;">'
+            f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">'
+            f'{_svg(I.ID_CARD,10,"#a78bfa")}'
+            f'<span style="font-size:0.69rem;font-weight:600;color:#a78bfa;'
+            f'text-transform:uppercase;letter-spacing:1px;">Your Profile</span>'
+            f'<span style="font-size:0.67rem;color:#6b7280;font-weight:400;">'
+            f'— optional, improves salary analysis</span>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+        up1, up2, up3 = st.columns(3)
+        with up1:
+            st.markdown(_profile_input_label(I.MAP_PIN,     "Your Location"),  unsafe_allow_html=True)
+            job["user_location"] = st.text_input("Your Location",       label_visibility="collapsed",
+                                                  placeholder="e.g., Hyderabad",    key="jsd_uloc", max_chars=100)
+        with up2:
+            st.markdown(_profile_input_label(I.ID_CARD,     "Current Role"),   unsafe_allow_html=True)
+            job["current_role"]  = st.text_input("Current Role",        label_visibility="collapsed",
+                                                  placeholder="e.g., Data Analyst", key="jsd_urole", max_chars=100)
+        with up3:
+            st.markdown(_profile_input_label(I.TRENDING_UP, "Years of Exp"),   unsafe_allow_html=True)
+            job["years_exp"]     = st.text_input("Years of Experience", label_visibility="collapsed",
+                                                  placeholder="e.g., 3 / Fresher",  key="jsd_uexp",  max_chars=20)
 
     # Use only meaningful fields for "is there any input" check — not description
     # (which in paste mode is raw and always present once the user types).
@@ -4489,10 +4701,12 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 paste_keys = [
                     "jsd_raw", "jsd_mode",
                     "jsd_ot", "jsd_oco", "jsd_os", "jsd_oct", "jsd_ow", "jsd_ol",
+                    "jsd_uloc", "jsd_urole", "jsd_uexp",
                 ]
                 fill_keys = [
                     "jsd_t", "jsd_co", "jsd_w", "jsd_l",
                     "jsd_sa", "jsd_ct", "jsd_d", "jsd_r", "jsd_b",
+                    "jsd_uloc", "jsd_urole", "jsd_uexp",
                 ]
                 for k in paste_keys + fill_keys:
                     st.session_state.pop(k, None)
