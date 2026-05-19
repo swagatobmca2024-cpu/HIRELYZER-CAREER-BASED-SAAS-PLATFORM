@@ -3943,23 +3943,24 @@ def _render_ai_dive(llm: dict):
 
         # ── Salary assessment — rich display ──────────────────────────────────
         if field == "salary_assessment":
-            # Detect if scam-level salary warning appears in the text
+            # Only flag SUSPICIOUS when salary is unrealistically HIGH (scam bait).
+            # Low / below-market salary = stingy employer, NOT a scam signal.
+            # Negative phrases in the AI text (e.g. "no scam signal") must cancel the flag.
             val_lower = val.lower()
-            is_scam_salary = any(kw in val_lower for kw in [
-                "unrealistically high", "suspiciously high", "scam signal",
-                "too high", "red flag", "2×", "2x", ">2", "way above"
+            _pos_scam = any(kw in val_lower for kw in [
+                "unrealistically high", "suspiciously high",
+                "too high", "way above", "2x the", "clear scam",
             ])
-            is_below_market = any(kw in val_lower for kw in [
-                "below market", "underpaid", "below average", "lower than market"
+            _neg_scam = any(neg in val_lower for neg in [
+                "not suspiciously high", "no clear indication of a scam",
+                "salary is not", "does not indicate", "no scam",
+                "is not a scam",
             ])
-            border_color = "#ef4444" if is_scam_salary else "#f59e0b" if is_below_market else "#22c55e"
-            badge_color  = border_color
-            badge_text   = (
-                "SUSPICIOUS — POSSIBLE SCAM SIGNAL" if is_scam_salary
-                else "BELOW MARKET" if is_below_market
-                else "MARKET ALIGNED"
-            )
-            badge_icon   = I.ALERT_CIRCLE if is_scam_salary else I.ALERT_TRI if is_below_market else I.CHECK
+            is_scam_salary = _pos_scam and not _neg_scam
+            border_color = "#ef4444" if is_scam_salary else "rgba(255,255,255,0.08)"
+            badge_color  = "#ef4444" if is_scam_salary else "#8b949e"
+            badge_text   = "SUSPICIOUS — INFLATED SALARY" if is_scam_salary else "SALARY ASSESSED"
+            badge_icon   = I.ALERT_CIRCLE if is_scam_salary else I.DOLLAR
             st.markdown(
                 f'<div style="background:rgba(255,255,255,0.02);'
                 f'border:1px solid rgba(255,255,255,0.06);'
