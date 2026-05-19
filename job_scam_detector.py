@@ -3347,56 +3347,14 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
-
-    # ── User context for personalised salary assessment ────────────────────────
-    user_location   = (job.get("user_location") or "").strip()
-    user_role       = (job.get("user_role") or "").strip()
-    user_experience = (job.get("user_experience") or "").strip()
-
-    user_ctx_lines = []
-    if user_location:   user_ctx_lines.append(f"Candidate's current location: {user_location}")
-    if user_role:       user_ctx_lines.append(f"Candidate's current/target role: {user_role}")
-    if user_experience: user_ctx_lines.append(f"Candidate's years of experience: {user_experience}")
-    user_ctx_block = (
-        "CANDIDATE CONTEXT (use this to personalise the salary assessment):\n"
-        + "\n".join(user_ctx_lines)
-        if user_ctx_lines else ""
+    salary_instruction = (
+        "The salary was NOT provided in this job posting. "
+        "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
+        "do NOT guess, infer, or comment on whether it is realistic."
+        if not salary_raw else
+        "Assess whether the stated salary is realistic for this role and location. "
+        "If it seems unrealistically high, flag it as a potential scam signal."
     )
-
-    if not salary_raw:
-        salary_instruction = (
-            "The salary was NOT provided in this job posting. "
-            "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
-            "do NOT guess, infer, or comment on whether it is realistic."
-        )
-    else:
-        # Build a rich, personalised salary prompt
-        candidate_hints = []
-        if user_role:       candidate_hints.append(f"candidate's role ({user_role})")
-        if user_experience: candidate_hints.append(f"experience ({user_experience} years)")
-        if user_location:   candidate_hints.append(f"location ({user_location})")
-        hint_str = ", ".join(candidate_hints) if candidate_hints else "the job posting details"
-
-        salary_instruction = (
-            f"The stated salary is: {salary_raw}. "
-            f"Provide a DETAILED salary assessment covering ALL of the following points, "
-            f"personalised using the {hint_str}:\n"
-            f"1. MARKET RANGE: What is the typical market salary range (min–max) for this role, "
-            f"   seniority level, and location in India? Give actual INR/LPA figures.\n"
-            f"2. ALIGNMENT: How well does the stated salary align with market expectations? "
-            f"   Is it below market, at market, above market, or suspiciously high?\n"
-            f"3. EXPERIENCE FIT: Is this compensation appropriate for the candidate's "
-            f"   experience level and role? Mention specific expectations for freshers vs "
-            f"   mid-level vs senior profiles.\n"
-            f"4. LOCATION FACTOR: How does the location affect compensation? "
-            f"   E.g., metro cities (Bangalore, Mumbai, Delhi) vs tier-2 cities vs WFH roles.\n"
-            f"5. SCAM SIGNAL: If the salary is unrealistically high (>2x market), "
-            f"   end your response with the exact phrase: 'This is a scam signal.' "
-            f"   Otherwise do NOT use the words scam signal at all.\n"
-            f"Write 3–5 sentences covering these points as a coherent paragraph — "
-            f"not a bullet list. Be specific with numbers."
-        )
-
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
@@ -3410,8 +3368,6 @@ Description: {job.get('description','N/A')[:8000]}
 Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
-
-{user_ctx_block}
 
 LIVE PROBE FINDINGS:
 {ctx}
@@ -3428,7 +3384,7 @@ Required JSON schema (all keys mandatory):
   "positive_signals": ["<str>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<NOT_PROVIDED if salary missing — otherwise a detailed paragraph covering market range, alignment, experience fit, location factor, and scam signal if applicable>",
+  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
   "recommended_action": "<specific advice for the job seeker>",
   "similar_scam_type": "<known pattern name or Unknown>",
   "confidence": <0-100>
@@ -3637,7 +3593,7 @@ def _render_score_strip(result: dict):
                       "Sum of weights for matched red-flag phrases"),
                 unsafe_allow_html=True)
     c3.markdown(_card(I.GLOBE, "Probe Penalty", result["probe_penalty"],
-                      "#38bdf8", "7 live network checks",
+                      "#38bdf8", "5 live network checks",
                       "Added for young domain, free email, bad MCA etc."),
                 unsafe_allow_html=True)
     c4.markdown(_card(I.ZAP,   "Flags Fired",   len(result["signals"]),
@@ -3938,51 +3894,6 @@ def _render_ai_dive(llm: dict):
                 f'this posting does not mention any salary, CTC, or compensation. '
                 f'No realistic assessment can be made. Consider asking the recruiter '
                 f'for a clear salary range before proceeding.</span></div></div>',
-                unsafe_allow_html=True,
-            )
-            continue
-
-        # ── Salary assessment — rich display ──────────────────────────────────
-        if field == "salary_assessment":
-            # Only flag SUSPICIOUS when the AI explicitly concludes the salary IS
-            # a scam signal — look for affirmative conclusory phrases only.
-            # Never match mid-sentence phrases like "does not seem suspiciously high".
-            val_lower = val.lower()
-            is_scam_salary = any(kw in val_lower for kw in [
-                "is a scam signal",
-                "indicates a scam",
-                "is a red flag",
-                "salary is a scam",
-                "unrealistically high salary",
-                "inflated to lure",
-                "classic scam bait",
-            ])
-            border_color = "#ef4444" if is_scam_salary else "rgba(255,255,255,0.08)"
-            badge_color  = "#ef4444" if is_scam_salary else "#8b949e"
-            badge_text   = "SUSPICIOUS — INFLATED SALARY" if is_scam_salary else "SALARY ASSESSED"
-            badge_icon   = I.ALERT_CIRCLE if is_scam_salary else I.DOLLAR
-            st.markdown(
-                f'<div style="background:rgba(255,255,255,0.02);'
-                f'border:1px solid rgba(255,255,255,0.06);'
-                f'border-left:3px solid {border_color};'
-                f'border-radius:9px;padding:14px;margin-bottom:10px;">'
-                # Header row
-                f'<div style="display:flex;align-items:center;justify-content:space-between;'
-                f'margin-bottom:10px;">'
-                f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;'
-                f'font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;">'
-                f'{_svg(I.DOLLAR,11,"#6b7280")}Salary Reality Check</div>'
-                # Verdict badge
-                f'<div style="display:flex;align-items:center;gap:5px;padding:3px 9px;'
-                f'border-radius:20px;background:rgba(255,255,255,0.04);'
-                f'border:1px solid {border_color}40;">'
-                f'{_svg(badge_icon,10,badge_color)}'
-                f'<span style="font-size:0.63rem;font-weight:700;color:{badge_color};'
-                f'letter-spacing:0.6px;">{badge_text}</span></div>'
-                f'</div>'
-                # Main assessment paragraph
-                f'<div style="color:#c9d1d9;font-size:0.83rem;line-height:1.7;">{_esc(val)}</div>'
-                f'</div>',
                 unsafe_allow_html=True,
             )
             continue
@@ -4463,38 +4374,13 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 + _field_row(I.DOLLAR,   "Salary",     extracted["salary"])
                 + _field_row(I.MAIL,     "Contact",    extracted["contact"])
             )
-
-            # ── Your Profile — read live widget values for conditional display ──
-            _uloc = st.session_state.get("jsd_uloc", "").strip()
-            _urol = st.session_state.get("jsd_urol", "").strip()
-            _uexp = st.session_state.get("jsd_uexp", "").strip()
-            _any_profile = bool(_uloc or _urol or _uexp)
-
-            profile_layer = ""
-            if _any_profile:
-                profile_rows = (
-                    _field_row(I.MAP_PIN,     "Your Location",   _uloc or "—")
-                    + _field_row(I.ID_CARD,   "Current Role",    _urol or "—")
-                    + _field_row(I.TRENDING_UP,"Experience",     _uexp or "—")
-                )
-                profile_layer = (
-                    f'<div style="border-top:1px solid rgba(167,139,250,0.18);'
-                    f'margin-top:10px;padding-top:10px;">'
-                    f'<div style="font-size:0.66rem;font-weight:600;color:#a78bfa;'
-                    f'text-transform:uppercase;letter-spacing:0.9px;margin-bottom:6px;'
-                    f'display:flex;align-items:center;gap:5px;">'
-                    f'{_svg(I.SPARKLE,9,"#a78bfa")} Your Profile</div>'
-                    f'{profile_rows}</div>'
-                )
-
             st.markdown(
                 f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);'
                 f'border-radius:10px;padding:14px 16px;margin-top:8px;">'
                 f'<div style="font-size:0.69rem;font-weight:600;color:#8b949e;text-transform:uppercase;'
                 f'letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">'
                 f'{_svg(I.ZAP,10,"#a78bfa")} Auto-Detected Fields</div>'
-                f'{fields_html}'
-                f'{profile_layer}</div>',
+                f'{fields_html}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -4511,44 +4397,19 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 oc1.text_input("Website",  value=extracted["website"],  key="jsd_ow")
                 oc2.text_input("Location", value=extracted["location"], key="jsd_ol")
 
-        # ── Your Profile input fields — always rendered so session_state keys exist
-        # (the display layer above reads from these keys reactively)
-        st.markdown(
-            f'<div style="margin-top:10px;padding:11px 14px 8px;'
-            f'background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.15);'
-            f'border-radius:10px;">'
-            f'<div style="font-size:0.67rem;font-weight:600;color:#a78bfa;'
-            f'text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;'
-            f'display:flex;align-items:center;gap:5px;">'
-            f'{_svg(I.SPARKLE,9,"#a78bfa")} Your Profile '
-            f'<span style="color:#6b7280;font-weight:400;text-transform:none;'
-            f'letter-spacing:0;font-size:0.67rem;">'
-            f'— optional · personalises salary assessment</span></div>',
-            unsafe_allow_html=True,
-        )
-        pc1, pc2, pc3 = st.columns(3)
-        pc1.text_input("Your Location",       placeholder="e.g., Kolkata / Mumbai / WFH", key="jsd_uloc")
-        pc2.text_input("Your Current Role",   placeholder="e.g., Software Engineer",      key="jsd_urol")
-        pc3.text_input("Years of Experience", placeholder="e.g., 2 / Fresher / 5+",       key="jsd_uexp")
-        st.markdown("</div>", unsafe_allow_html=True)
-
         # FIX v5 BUG 6: Build job from session_state override keys if they exist
         # (populated by the expander above). Falls back to auto_extract values if
         # the override expander was never opened.
         job = {
-            "title":           st.session_state.get("jsd_ot",  extracted.get("title", "")),
-            "company":         st.session_state.get("jsd_oco", extracted.get("company", "")),
-            "website":         st.session_state.get("jsd_ow",  extracted.get("website", "")),
-            "location":        st.session_state.get("jsd_ol",  extracted.get("location", "")),
-            "salary":          st.session_state.get("jsd_os",  extracted.get("salary", "")),
-            "contact":         st.session_state.get("jsd_oct", extracted.get("contact", "")),
-            "description":     raw or "",
-            "requirements":    "",   # FIX v5 BUG 3: keep empty — description has everything
-            "benefits":        "",   # FIX v5 BUG 3: keep empty — description has everything
-            # User profile context — always read from widget keys
-            "user_location":   st.session_state.get("jsd_uloc", ""),
-            "user_role":       st.session_state.get("jsd_urol", ""),
-            "user_experience": st.session_state.get("jsd_uexp", ""),
+            "title":        st.session_state.get("jsd_ot",  extracted.get("title", "")),
+            "company":      st.session_state.get("jsd_oco", extracted.get("company", "")),
+            "website":      st.session_state.get("jsd_ow",  extracted.get("website", "")),
+            "location":     st.session_state.get("jsd_ol",  extracted.get("location", "")),
+            "salary":       st.session_state.get("jsd_os",  extracted.get("salary", "")),
+            "contact":      st.session_state.get("jsd_oct", extracted.get("contact", "")),
+            "description":  raw or "",
+            "requirements": "",   # FIX v5 BUG 3: keep empty — description has everything
+            "benefits":     "",   # FIX v5 BUG 3: keep empty — description has everything
         }
 
     else:
@@ -4562,37 +4423,11 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         job["salary"]   = e.text_input("Salary Offered",  placeholder="e.g., 8-12 LPA",           key="jsd_sa")
         job["contact"]  = f.text_input("Contact Email",   placeholder="e.g., hr@acme.com",        key="jsd_ct")
         job["description"]  = st.text_area("Job Description",  height=120, key="jsd_d",
-                                            max_chars=_MAX_PASTE_CHARS,
                                             placeholder="Describe the role and responsibilities...")
         job["requirements"] = st.text_area("Requirements",     height=80,  key="jsd_r",
                                             placeholder="Skills, experience, qualifications...")
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
                                             placeholder="What the employer offers...")
-
-        # ── Your Profile — manual mode ─────────────────────────────────────────
-        st.markdown(
-            f'<div style="margin-top:12px;padding:12px 16px 10px;'
-            f'background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.18);'
-            f'border-radius:10px;">'
-            f'<div style="font-size:0.68rem;font-weight:600;color:#a78bfa;'
-            f'text-transform:uppercase;letter-spacing:0.9px;margin-bottom:10px;'
-            f'display:flex;align-items:center;gap:6px;">'
-            f'{_svg(I.SPARKLE,10,"#a78bfa")} Your Profile '
-            f'<span style="color:#6b7280;font-weight:400;text-transform:none;'
-            f'letter-spacing:0;font-size:0.67rem;">'
-            f'— optional · personalises the salary assessment</span></div>',
-            unsafe_allow_html=True,
-        )
-        mc1, mc2, mc3 = st.columns(3)
-        mc1.text_input("Your Location",       placeholder="e.g., Kolkata / Mumbai / WFH", key="jsd_uloc")
-        mc2.text_input("Your Current Role",   placeholder="e.g., Software Engineer",      key="jsd_urol")
-        mc3.text_input("Years of Experience", placeholder="e.g., 2 / Fresher / 5+",       key="jsd_uexp")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # Wire user profile into job dict for manual mode
-        job["user_location"]   = st.session_state.get("jsd_uloc", "")
-        job["user_role"]       = st.session_state.get("jsd_urol", "")
-        job["user_experience"] = st.session_state.get("jsd_uexp", "")
 
     # Use only meaningful fields for "is there any input" check — not description
     # (which in paste mode is raw and always present once the user types).
@@ -4623,7 +4458,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 # rerun (triggered by any widget) to see True and lock the button.
                 disabled=not allowed or st.session_state.get("jsd_running", False),
                 help=(
-                    "Runs full AI analysis + 7 live network probes. Takes ~10s."
+                    "Runs full AI analysis + 5 live network probes. Takes ~10s."
                     if allowed else
                     f"You have used all {_SCAM_LIMIT} analyses for this hour. "
                     "Please wait — quota resets on a rolling 60-minute window."
@@ -4658,7 +4493,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 fill_keys = [
                     "jsd_t", "jsd_co", "jsd_w", "jsd_l",
                     "jsd_sa", "jsd_ct", "jsd_d", "jsd_r", "jsd_b",
-                    "jsd_uloc", "jsd_urol", "jsd_uexp",
                 ]
                 for k in paste_keys + fill_keys:
                     st.session_state.pop(k, None)
@@ -4683,7 +4517,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     prog.progress(10, text="Running 15-signal rule engine…")
                     rules_result = _run_rules(job)
 
-                    prog.progress(30, text="Launching 7 live network probes (parallel)…")
+                    prog.progress(30, text="Launching 5 live network probes (parallel)…")
                     probes = run_live_probes(job)
                     penalty, warnings = _probe_risk(probes)
 
@@ -4843,54 +4677,6 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         final = av if blended >= next_threshold - 5 else sv
                     else:
                         final = sv
-
-                    # ── COMPANY LEGITIMACY COORDINATION ───────────────────────
-                    # AI returns company_legitimacy from job text alone.
-                    # Probe layer has hard network evidence — override AI when
-                    # probes are conclusive in either direction.
-                    _cd    = probes.get("company_domain", {})
-                    _spf   = probes.get("spf_dmarc", {})
-                    _reach = probes.get("site_reach", {})
-                    _mx    = probes.get("mx_record", {})
-                    _da    = probes.get("domain_age", {})
-
-                    _confirmed_sources = _cd.get("identity_sources", 0)
-                    _cd_verified       = _cd.get("score", 99) < 20
-                    _spf_ok            = bool(_spf.get("spf") and _spf.get("dmarc"))
-                    _mx_ok             = (_mx.get("status") == "MX_FOUND"
-                                          and not _mx.get("ghost_mx"))
-                    _site_ok           = bool(_reach.get("reachable")
-                                              and not _reach.get("is_parked"))
-                    _established       = ((_da.get("age_days") or 0) >= 180)
-
-                    # VERIFIED: 2+ identity sources confirmed + clean domain
-                    #           + live site + established domain age
-                    _probe_verified = (
-                        _confirmed_sources >= 2
-                        and _cd_verified
-                        and _site_ok
-                        and _established
-                    )
-                    # GHOST: domain doesn't exist, or parked with zero identity
-                    _probe_ghost = (
-                        not _cd.get("domain_exists", True)
-                        or (_reach.get("is_parked") and _confirmed_sources == 0)
-                    )
-                    # LIKELY_FAKE: no identity confirmed + high bad domain score
-                    _probe_fake = (
-                        _confirmed_sources == 0
-                        and _cd.get("score", 0) >= 35
-                    )
-
-                    ai_cl = llm_data.get("company_legitimacy", "UNVERIFIABLE")
-                    if _probe_ghost:
-                        llm_data["company_legitimacy"] = "GHOST_COMPANY"
-                    elif _probe_fake and ai_cl in ("UNVERIFIABLE", "LIKELY_FAKE"):
-                        llm_data["company_legitimacy"] = "LIKELY_FAKE"
-                    elif _probe_verified:
-                        # Probes confirmed the company — override AI pessimism
-                        llm_data["company_legitimacy"] = "VERIFIED"
-                    # else: keep AI's value — probes inconclusive
 
                     res = {
                         "blended_score":  blended,   "rule_score":     rule_s,
@@ -5053,7 +4839,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         f'<h2 style="margin:0 0 4px;font-size:1.45rem;font-weight:700;color:#e6edf3;'
         f'letter-spacing:-0.02em;">Job Scam Detector</h2>'
         f'<p style="margin:0;color:#8b949e;font-size:0.82rem;line-height:1.5;">'
-        f'Paste any job posting — AI analysis + 7 live network probes detect '
+        f'Paste any job posting — AI analysis + 5 live network probes detect '
         f'fake listings before you apply or share personal data.</p>'
         f'</div>'
 
@@ -5080,7 +4866,7 @@ def render_job_scam_detector_tab(call_llm_fn):
             f'</div>'
             for ic, label, val, col in [
                 (I.CPU,      "AI Engine",     "LLaMA 3.3-70B",   "#a78bfa"),
-                (I.GLOBE,    "Live Probes",   "7 checks",        "#38bdf8"),
+                (I.GLOBE,    "Live Probes",   "6 checks",        "#38bdf8"),
                 (I.LIST,     "Rule Signals",  "15 patterns",     "#f59e0b"),
                 (I.SHIELD,   "Hourly Limit",  f"{_SCAM_LIMIT} analyses", "#22c55e"),
             ]
@@ -5089,13 +4875,14 @@ def render_job_scam_detector_tab(call_llm_fn):
 
         # ── Feature pill row ──────────────────────────────────────────────
         f'<div style="display:flex;flex-wrap:wrap;gap:5px;">'
-        + _pill(I.CALENDAR, "Domain Age",           "#38bdf8")
-        + _pill(I.GLOBE,    "Site Reachability",     "#6366f1")
-        + _pill(I.COPY,     "Typosquat Check",       "#ef4444")
+        + _pill(I.CPU,      "AI Deep Analysis",     "#a78bfa")
+        + _pill(I.CALENDAR, "Domain Age Probe",      "#38bdf8")
         + _pill(I.MAIL,     "Free Email Detection",  "#f59e0b")
-        + _pill(I.SERVER,   "MX Mail Server",        "#22c55e")
+        + _pill(I.SERVER,   "MX Mail Server Check",  "#22c55e")
+        + _pill(I.COPY,     "Typosquat Check",       "#ef4444")
         + _pill(I.BUILDING, "Company Domain Check",  "#22c55e")
-        + _pill(I.SHIELD,   "SPF / DMARC",           "#a78bfa")
+        + _pill(I.SERVER,   "Site Reachability",     "#6366f1")
+        + _pill(I.LIST,     "15-Signal Rule Engine", "#8b949e")
         + f'</div>'
         + f'</div>',
         unsafe_allow_html=True,
