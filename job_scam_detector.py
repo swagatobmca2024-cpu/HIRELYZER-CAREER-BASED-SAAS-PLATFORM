@@ -3390,8 +3390,9 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
             f"   mid-level vs senior profiles.\n"
             f"4. LOCATION FACTOR: How does the location affect compensation? "
             f"   E.g., metro cities (Bangalore, Mumbai, Delhi) vs tier-2 cities vs WFH roles.\n"
-            f"5. SCAM SIGNAL: If the salary is unrealistically high (>2× market), "
-            f"   explicitly flag it as a potential scam signal.\n"
+            f"5. SCAM SIGNAL: If the salary is unrealistically high (>2x market), "
+            f"   end your response with the exact phrase: 'This is a scam signal.' "
+            f"   Otherwise do NOT use the words scam signal at all.\n"
             f"Write 3–5 sentences covering these points as a coherent paragraph — "
             f"not a bullet list. Be specific with numbers."
         )
@@ -3943,20 +3944,19 @@ def _render_ai_dive(llm: dict):
 
         # ── Salary assessment — rich display ──────────────────────────────────
         if field == "salary_assessment":
-            # Only flag SUSPICIOUS when salary is unrealistically HIGH (scam bait).
-            # Low / below-market salary = stingy employer, NOT a scam signal.
-            # Negative phrases in the AI text (e.g. "no scam signal") must cancel the flag.
+            # Only flag SUSPICIOUS when the AI explicitly concludes the salary IS
+            # a scam signal — look for affirmative conclusory phrases only.
+            # Never match mid-sentence phrases like "does not seem suspiciously high".
             val_lower = val.lower()
-            _pos_scam = any(kw in val_lower for kw in [
-                "unrealistically high", "suspiciously high",
-                "too high", "way above", "2x the", "clear scam",
+            is_scam_salary = any(kw in val_lower for kw in [
+                "is a scam signal",
+                "indicates a scam",
+                "is a red flag",
+                "salary is a scam",
+                "unrealistically high salary",
+                "inflated to lure",
+                "classic scam bait",
             ])
-            _neg_scam = any(neg in val_lower for neg in [
-                "not suspiciously high", "no clear indication of a scam",
-                "salary is not", "does not indicate", "no scam",
-                "is not a scam",
-            ])
-            is_scam_salary = _pos_scam and not _neg_scam
             border_color = "#ef4444" if is_scam_salary else "rgba(255,255,255,0.08)"
             badge_color  = "#ef4444" if is_scam_salary else "#8b949e"
             badge_text   = "SUSPICIOUS — INFLATED SALARY" if is_scam_salary else "SALARY ASSESSED"
@@ -4562,6 +4562,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         job["salary"]   = e.text_input("Salary Offered",  placeholder="e.g., 8-12 LPA",           key="jsd_sa")
         job["contact"]  = f.text_input("Contact Email",   placeholder="e.g., hr@acme.com",        key="jsd_ct")
         job["description"]  = st.text_area("Job Description",  height=120, key="jsd_d",
+                                            max_chars=_MAX_PASTE_CHARS,
                                             placeholder="Describe the role and responsibilities...")
         job["requirements"] = st.text_area("Requirements",     height=80,  key="jsd_r",
                                             placeholder="Skills, experience, qualifications...")
@@ -4842,6 +4843,54 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         final = av if blended >= next_threshold - 5 else sv
                     else:
                         final = sv
+
+                    # ── COMPANY LEGITIMACY COORDINATION ───────────────────────
+                    # AI returns company_legitimacy from job text alone.
+                    # Probe layer has hard network evidence — override AI when
+                    # probes are conclusive in either direction.
+                    _cd    = probes.get("company_domain", {})
+                    _spf   = probes.get("spf_dmarc", {})
+                    _reach = probes.get("site_reach", {})
+                    _mx    = probes.get("mx_record", {})
+                    _da    = probes.get("domain_age", {})
+
+                    _confirmed_sources = _cd.get("identity_sources", 0)
+                    _cd_verified       = _cd.get("score", 99) < 20
+                    _spf_ok            = bool(_spf.get("spf") and _spf.get("dmarc"))
+                    _mx_ok             = (_mx.get("status") == "MX_FOUND"
+                                          and not _mx.get("ghost_mx"))
+                    _site_ok           = bool(_reach.get("reachable")
+                                              and not _reach.get("is_parked"))
+                    _established       = ((_da.get("age_days") or 0) >= 180)
+
+                    # VERIFIED: 2+ identity sources confirmed + clean domain
+                    #           + live site + established domain age
+                    _probe_verified = (
+                        _confirmed_sources >= 2
+                        and _cd_verified
+                        and _site_ok
+                        and _established
+                    )
+                    # GHOST: domain doesn't exist, or parked with zero identity
+                    _probe_ghost = (
+                        not _cd.get("domain_exists", True)
+                        or (_reach.get("is_parked") and _confirmed_sources == 0)
+                    )
+                    # LIKELY_FAKE: no identity confirmed + high bad domain score
+                    _probe_fake = (
+                        _confirmed_sources == 0
+                        and _cd.get("score", 0) >= 35
+                    )
+
+                    ai_cl = llm_data.get("company_legitimacy", "UNVERIFIABLE")
+                    if _probe_ghost:
+                        llm_data["company_legitimacy"] = "GHOST_COMPANY"
+                    elif _probe_fake and ai_cl in ("UNVERIFIABLE", "LIKELY_FAKE"):
+                        llm_data["company_legitimacy"] = "LIKELY_FAKE"
+                    elif _probe_verified:
+                        # Probes confirmed the company — override AI pessimism
+                        llm_data["company_legitimacy"] = "VERIFIED"
+                    # else: keep AI's value — probes inconclusive
 
                     res = {
                         "blended_score":  blended,   "rule_score":     rule_s,
