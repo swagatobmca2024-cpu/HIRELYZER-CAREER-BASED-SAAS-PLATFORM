@@ -5031,7 +5031,7 @@ def render_job_scam_detector_tab(call_llm_fn):
             f'</div>'
             for ic, label, val, col in [
                 (I.CPU,      "AI Engine",     "LLaMA 3.3-70B",   "#a78bfa"),
-                (I.GLOBE,    "Live Probes",   "6 checks",        "#38bdf8"),
+                (I.GLOBE,    "Live Probes",   "7 checks",        "#38bdf8"),
                 (I.LIST,     "Rule Signals",  "15 patterns",     "#f59e0b"),
                 (I.SHIELD,   "Hourly Limit",  f"{_SCAM_LIMIT} analyses", "#22c55e"),
             ]
@@ -5040,14 +5040,13 @@ def render_job_scam_detector_tab(call_llm_fn):
 
         # ── Feature pill row ──────────────────────────────────────────────
         f'<div style="display:flex;flex-wrap:wrap;gap:5px;">'
-        + _pill(I.CPU,      "AI Deep Analysis",     "#a78bfa")
-        + _pill(I.CALENDAR, "Domain Age Probe",      "#38bdf8")
-        + _pill(I.MAIL,     "Free Email Detection",  "#f59e0b")
-        + _pill(I.SERVER,   "MX Mail Server Check",  "#22c55e")
+        + _pill(I.CALENDAR, "Domain Age",           "#38bdf8")
+        + _pill(I.GLOBE,    "Site Reachability",     "#6366f1")
         + _pill(I.COPY,     "Typosquat Check",       "#ef4444")
+        + _pill(I.MAIL,     "Free Email Detection",  "#f59e0b")
+        + _pill(I.SERVER,   "MX Mail Server",        "#22c55e")
         + _pill(I.BUILDING, "Company Domain Check",  "#22c55e")
-        + _pill(I.SERVER,   "Site Reachability",     "#6366f1")
-        + _pill(I.LIST,     "15-Signal Rule Engine", "#8b949e")
+        + _pill(I.SHIELD,   "SPF / DMARC",           "#a78bfa")
         + f'</div>'
         + f'</div>',
         unsafe_allow_html=True,
