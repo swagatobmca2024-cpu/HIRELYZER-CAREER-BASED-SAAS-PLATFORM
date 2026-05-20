@@ -1,5 +1,6 @@
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 import bcrypt
 import streamlit as st
 from datetime import datetime, timedelta
@@ -15,102 +16,83 @@ from email.mime.multipart import MIMEMultipart
 import dns.resolver
 
 
-# ── Connection management (isolated — never touches other modules' connections) ─
-_user_conn_holder: dict = {"conn": None}
-_user_reconnect_lock = threading.Lock()
+# ── Connection pool (thread-safe — each user gets their own connection) ───────
+# maxconn=15 leaves headroom for Supabase's own internal connections
+# (Supabase free tier allows 20 total).
+_pool: "psycopg2.pool.ThreadedConnectionPool | None" = None
+_pool_lock = threading.Lock()
 
 
-def _make_user_connection():
-    """Open a fresh psycopg2 connection for user_login operations."""
-    conn = psycopg2.connect(
-        host=st.secrets["SUPABASE_HOST"],
-        dbname=st.secrets["SUPABASE_DB"],
-        user=st.secrets["SUPABASE_USER"],
-        password=st.secrets["SUPABASE_PASSWORD"],
-        port=st.secrets["SUPABASE_PORT"],
-        connect_timeout=30,
-        keepalives=1,
-        keepalives_idle=30,
-        keepalives_interval=10,
-        keepalives_count=5,
-    )
-    conn.autocommit = False
-    return conn
+def _get_pool() -> "psycopg2.pool.ThreadedConnectionPool":
+    """Return the shared ThreadedConnectionPool, creating it once on first call."""
+    global _pool
+    if _pool is not None:
+        return _pool
+    with _pool_lock:
+        if _pool is None:  # double-check after acquiring lock
+            _pool = psycopg2.pool.ThreadedConnectionPool(
+                minconn=2,
+                maxconn=15,
+                host=st.secrets["SUPABASE_HOST"],
+                dbname=st.secrets["SUPABASE_DB"],
+                user=st.secrets["SUPABASE_USER"],
+                password=st.secrets["SUPABASE_PASSWORD"],
+                port=st.secrets["SUPABASE_PORT"],
+                connect_timeout=30,
+                keepalives=1,
+                keepalives_idle=30,
+                keepalives_interval=10,
+                keepalives_count=5,
+            )
+    return _pool
 
 
 def _conn():
     """
-    Return a live psycopg2 connection.
-
-    FIX v3: After a successful SELECT 1 liveness check, we now call rollback()
-    inside a try/except so that any lingering aborted transaction is cleared
-    before the connection is returned.  Previously a failed rollback() here
-    would leave the connection in InFailedSqlTransaction, causing
-    set_session/autocommit changes to raise ProgrammingError.
+    Borrow a connection from the pool.
+    Each call MUST be paired with _release_conn(conn) in a finally block.
+    The pool is thread-safe — concurrent users each get their own connection.
     """
-    with _user_reconnect_lock:
-        conn = _user_conn_holder.get("conn")
-        need_reconnect = False
-
-        if conn is None:
-            need_reconnect = True
-        else:
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT 1")
-                # Always rollback after liveness check to discard any open/aborted txn
-                try:
-                    conn.rollback()
-                except Exception:
-                    need_reconnect = True
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
-            except Exception:
-                need_reconnect = True
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-
-        if need_reconnect:
-            _user_conn_holder["conn"] = _make_user_connection()
-
-        return _user_conn_holder["conn"]
+    pool = _get_pool()
+    conn = pool.getconn()
+    conn.autocommit = False
+    # Clear any leftover transaction state from a previous borrower
+    try:
+        conn.rollback()
+    except Exception:
+        pass
+    return conn
 
 
-def _reset_conn_to_default():
+def _release_conn(conn, broken: bool = False) -> None:
+    """Return a connection to the pool. Pass broken=True to discard it."""
+    try:
+        _get_pool().putconn(conn, close=broken)
+    except Exception:
+        pass
+
+
+def _reset_conn_to_default(conn) -> None:
     """
-    Ensure the connection is in a clean, non-autocommit state.
+    Ensure a borrowed connection is back in clean non-autocommit state.
     Call this as a finally-guard whenever autocommit is toggled.
     """
-    conn = _user_conn_holder.get("conn")
-    if conn is None:
-        return
     try:
-        # Rollback any open/aborted transaction first — required before
-        # changing autocommit, otherwise psycopg2 raises
-        # "set_session cannot be used inside a transaction".
         conn.rollback()
     except Exception:
         pass
     try:
         conn.autocommit = False
     except Exception:
-        # Connection is broken — drop it so the next call reconnects
-        try:
-            conn.close()
-        except Exception:
-            pass
-        _user_conn_holder["conn"] = None
+        _release_conn(conn, broken=True)
 
 
 def _execute(sql: str, params=None, fetch: str = "none"):
     """
     Run a SQL statement inside an implicit transaction.
     fetch: 'one' | 'all' | 'none'
-    Commits on success, rolls back on error.
+    Borrows a connection from the pool, commits on success, rolls back on error,
+    and always returns the connection to the pool.
     """
     conn = _conn()
     try:
@@ -129,6 +111,8 @@ def _execute(sql: str, params=None, fetch: str = "none"):
         except Exception:
             pass
         raise
+    finally:
+        _release_conn(conn)
 
 
 # ── Utility ──────────────────────────────────────────────────────────────────
@@ -246,11 +230,7 @@ def create_user_table():
     """
     conn = _conn()
     try:
-        # ── FIX v3: rollback() BEFORE flipping autocommit ──────────────────
-        # psycopg2 raises "set_session cannot be used inside a transaction"
-        # if autocommit is changed while a transaction (even an aborted one)
-        # is still open on the connection.  A rollback() always clears that,
-        # whether the previous state was clean, mid-transaction, or aborted.
+        # rollback() clears any open/aborted txn before flipping autocommit
         try:
             conn.rollback()
         except Exception:
@@ -271,11 +251,8 @@ def create_user_table():
                 except Exception:
                     pass
         finally:
-            # ── FIX v3: restore autocommit=False in a finally block ────────
-            # Previously this lived only in the except branch, so a mid-DDL
-            # error would leave autocommit=True for the rest of the session,
-            # silently skipping commits on all subsequent DML.
-            _reset_conn_to_default()
+            # Restore autocommit=False so this connection is clean when returned to pool
+            _reset_conn_to_default(conn)
 
         # Prune stale rows — DML, run in a normal transaction after DDL.
         with conn.cursor() as cur:
@@ -285,8 +262,10 @@ def create_user_table():
 
     except Exception as e:
         # Guarantee the connection is back in a clean state no matter what.
-        _reset_conn_to_default()
+        _reset_conn_to_default(conn)
         st.error(f"Error creating tables: {e}")
+    finally:
+        _release_conn(conn)
 
 
 # ── OTP helpers ───────────────────────────────────────────────────────────────
@@ -894,6 +873,20 @@ def save_scam_analysis(username: str, job_title: str, company: str, score: int, 
             fetch="one",
         )
         new_id = new_row["id"] if new_row else None
+
+        _execute(
+            """
+            DELETE FROM scam_analysis_history
+            WHERE username = %s
+              AND id NOT IN (
+                  SELECT id FROM scam_analysis_history
+                  WHERE username = %s
+                  ORDER BY id DESC
+                  LIMIT 50
+              )
+            """,
+            (username, username),
+        )
 
         return new_id
     except Exception:
