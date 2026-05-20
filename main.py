@@ -6684,10 +6684,49 @@ def _sanitize_html_for_pdf(html_string):
     return sanitized
 
 
-# html_to_pdf_bytes is now provided by pdf_fix.py
-# which handles A4 page size, pt font sizes, page-break logic,
-# flex→block conversion, and gradient stripping automatically.
-from pdf_fix import html_to_pdf_bytes
+def html_to_pdf_bytes(html_string):
+    # NOTE: Do NOT use f-string here. Template HTML contains CSS variables like
+    # {C_PRIMARY} which Python re-evaluates as f-string placeholders → CSSParseError crash.
+    # Use plain string + .replace() to safely inject html_string.
+
+    # Sanitise modern CSS that xhtml2pdf cannot parse before wrapping.
+    safe_html = _sanitize_html_for_pdf(html_string)
+
+    wrapper = """
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {
+                size: A4 portrait;
+                margin: 0;
+            }
+            html, body {
+                margin: 0;
+                padding: 0;
+                font-size: 12pt;
+                font-family: "Segoe UI", "Helvetica", sans-serif;
+                line-height: 1.5;
+                color: #000;
+                background: #fff;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+        </style>
+    </head>
+    <body>
+        __HTML_CONTENT__
+    </body>
+    </html>
+    """
+    styled_html = wrapper.replace("__HTML_CONTENT__", safe_html)
+
+    pdf_io = BytesIO()
+    pisa.CreatePDF(styled_html, dest=pdf_io)
+    pdf_io.seek(0)
+    return pdf_io
 # ══════════════════════════════════════════════════════════════════════════════
 # IMPORTS — modular resume & cover letter engines
 # ══════════════════════════════════════════════════════════════════════════════
@@ -9327,40 +9366,32 @@ with tab2:
                 st.session_state["generated_html"]
             ).read()
 
-        col_html, col_pdf, col_preview = st.columns([1, 1, 1])
+        col1, spacer, col2 = st.columns([1, 0.15, 0.85])
 
         # HTML Resume Download Button
-        with col_html:
+        with col1:
             html_bytes = st.session_state["generated_html"].encode("utf-8")
             html_file = BytesIO(html_bytes)
 
             st.download_button(
-                label="⬇️ Download as Template (.html)",
+                label="⬇️ Download as Template",
                 data=html_file,
                 file_name=f"{st.session_state['name'].replace(' ', '_')}_Resume.html",
                 mime="text/html",
                 key="download_resume_html"
             )
 
-        # PDF Resume Download Button — use cached bytes
-        with col_pdf:
-            st.download_button(
-                label="⬇️ Download as PDF",
-                data=st.session_state["pdf_resume_bytes"],
-                file_name=f"{st.session_state['name'].replace(' ', '_')}_Resume.pdf",
-                mime="application/pdf",
-                key="download_resume_pdf"
-            )
-
-        # Preview Template Button — smart toggle
-        with col_preview:
+        # Preview Template Button — smart toggle: spinner only when opening, instant when closing
+        with col2:
             is_previewing = st.session_state.get("show_template_preview", False)
             if st.button("👁️ Preview Template", key="preview_template_btn"):
                 if not is_previewing:
+                    # Opening — show spinner since we're loading the iframe
                     with st.spinner("Loading template preview..."):
                         time.sleep(2)
                         st.session_state["show_template_preview"] = True
                 else:
+                    # Closing — instant, no spinner
                     st.session_state["show_template_preview"] = False
 
         # Show/hide the template preview iframe
@@ -9376,6 +9407,16 @@ with tab2:
                 height=600,
                 scrolling=True,
             )
+
+        # PDF Resume Download Button — use cached bytes
+        pdf_resume_bytes = BytesIO(st.session_state["pdf_resume_bytes"])
+        
+        # ✅ Extra Help Note
+        st.markdown("""
+        ✅ After downloading your HTML resume, you can 
+        <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
+        convert it to PDF using Sejda's free online tool</a>.
+        """, unsafe_allow_html=True)
 
         # ==========================
         # 📩 Cover Letter Expander
