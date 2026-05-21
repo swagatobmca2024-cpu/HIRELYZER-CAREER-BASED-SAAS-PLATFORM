@@ -874,20 +874,6 @@ def save_scam_analysis(username: str, job_title: str, company: str, score: int, 
         )
         new_id = new_row["id"] if new_row else None
 
-        _execute(
-            """
-            DELETE FROM scam_analysis_history
-            WHERE username = %s
-              AND id NOT IN (
-                  SELECT id FROM scam_analysis_history
-                  WHERE username = %s
-                  ORDER BY id DESC
-                  LIMIT 50
-              )
-            """,
-            (username, username),
-        )
-
         return new_id
     except Exception:
         return None
