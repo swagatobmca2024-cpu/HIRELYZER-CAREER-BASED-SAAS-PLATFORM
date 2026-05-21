@@ -297,102 +297,34 @@ _BRAND_DOMAINS: list[str] = [
     "ltimindtree.com","mindtree.com","mphasis.com","hexaware.com",
     "persistent.com","cyient.com","niit.com","kpit.com","l&t.com",
     "larsentoubro.com","tech-mahindra.com","techmahindra.com",
-    # ── Indian IT mid-tier ────────────────────────────────────────────────────
-    "coforge.com","sonata-software.com","mastek.com","birlasoft.com",
-    "niittech.com","tataelxsi.com","happiestminds.com","zensar.com",
-    "firstsource.com","hindujaglobal.com","sasken.com","minda.co.in",
-    "ltts.com","eclerx.com","exlservice.com","wnsgs.com","igate.com",
-    "patni.com","rolta.com","subex.com","nucleus-software.com",
-    "intellect.com","ramco.com","newgen.com","3isoftware.com",
-    # ── Indian banks ─────────────────────────────────────────────────────────
+    # ── Indian banks / fintech ────────────────────────────────────────────────
     "hdfcbank.com","icicibank.com","sbi.co.in","axisbank.com",
     "kotakbank.com","yesbank.in","idfcfirstbank.com","federalbank.co.in",
-    "bankofbaroda.in","pnbindia.in","canarabank.com","unionbankofindia.co.in",
-    "indusind.com","rblbank.com","southindianbank.com","dhanbank.com",
-    "hsbc.co.in","citibank.co.in","standardchartered.co.in",
-    "bandhanbank.com","aubank.in","ujjivansfb.in","equitasbank.com",
-    "nabard.org","sidbi.in","eximbankIndia.com","nsdl.co.in",
-    # ── Indian fintech / payments ─────────────────────────────────────────────
     "paytm.com","phonepe.com","razorpay.com","cred.club","groww.in",
     "zerodha.com","upstox.com","policybazaar.com","lendingkart.com",
-    "mobikwik.com","freecharge.in","bharatpe.com","slice.is",
-    "jupiter.money","fi.money","niyo.co","khatabook.com","okCredit.com",
-    "indmoney.com","smallcase.com","5paisa.com","angelbroking.com",
-    "icicidirect.com","hdfcsec.com","sharekhan.com","motilaloswal.com",
-    # ── Indian insurance ──────────────────────────────────────────────────────
-    "licindia.in","hdfclife.com","iciciprulife.com","sbilife.co.in",
-    "bajajallianz.com","maxlifeinsurance.com","religare.in",
-    "starhealth.in","niacl.in","orientalinsurance.org.in",
-    "unitedindiainsurance.co.in","godigit.com","acko.com",
-    # ── Indian pharma / healthcare ────────────────────────────────────────────
-    "sunpharma.com","drreddys.com","cipla.com","lupin.net",
-    "torrentpharma.com","auropharma.com","glenmarkpharma.com",
-    "mankind.in","alkem.com","abbottindia.com","pfizerindia.com",
-    "apollohospitals.com","fortishealthcare.com","manipalhospitals.com",
-    "narayanahealth.org","medanta.org","maxhealthcare.in",
-    "1mg.com","practo.com","pharmeasy.in","netmeds.com",
-    # ── Indian auto / manufacturing ───────────────────────────────────────────
-    "heromotocorp.com","bajajauto.com","marutisuzuki.com",
-    "hyundai.com","tvsmotor.com","ashokleyland.com","bosch.in",
-    "maruti.co.in","honda2wheelersindia.com","royalenfield.com",
-    "eicher.in","escorts.in","motherson.com","minda.co.in",
-    "ceattyres.com","apollotyres.com","mrf.com",
-    # ── Indian FMCG / retail ──────────────────────────────────────────────────
-    "hul.com","itcportal.com","nestle.in","dabur.com",
-    "marico.com","godrej.com","emami.com","patanjaliayurved.net",
-    "pgindia.com","reckittbenckiser.co.in","colgate.co.in",
-    "dmart.in","spencers.in","bigbazaar.com","relianceretail.com",
-    "tatacliq.com","croma.com","vijaysales.com","reliance-digital.com",
-    # ── Indian telecom ────────────────────────────────────────────────────────
-    "airtel.in","vodafoneidea.com","bsnl.co.in","jio.com",
-    "tatacommunications.com","mtnl.net.in","tikona.in","hathway.com",
+    # ── Indian consumer / e-comm ──────────────────────────────────────────────
+    "flipkart.com","myntra.com","meesho.com","ajio.com","nykaa.com",
+    "swiggy.in","zomato.com","ola.com","olamoney.com","oyo.com",
+    "bigbasket.com","blinkit.com","dunzo.com","urbancompany.com",
+    "byju.com","byjus.com","unacademy.com","vedantu.com","upgrad.com",
     # ── Indian conglomerates ──────────────────────────────────────────────────
     "relianceindustries.com","ril.com","jio.com","jiosaavn.com",
     "tatamotors.com","tatagroup.com","tatasteel.com","tatacommunications.com",
     "mahindra.com","bajajfinserv.com","bajajfinance.in","bajaj.com",
     "adanigroup.com","adaniports.com","aditya-birla.com",
-    "hindalco.com","ultratechcement.com","grasim.com",
-    "vedanta.com","jsw.in","jswsteel.com","sail.co.in",
-    "ongc.co.in","iocl.com","bpcl.in","hpcl.com","gail.com",
-    # ── Indian new-age startups ───────────────────────────────────────────────
-    "dream11.com","mpl.live","games24x7.com",
-    "cars24.com","droom.in","olx.in","quikr.com",
-    "licious.in","meatigo.com","rebel-foods.com","faasos.com",
-    "urbanladder.com","pepperfry.com","wakefit.co","sleepycat.in",
-    "healthkart.com","mamaearth.in","mcaffeine.com","plum.co.in",
-    "classplus.co","doubtnut.com","toppr.com","testbook.com",
-    "sharechat.com","moj.in","josh.app","koo.in",
-    # ── Indian consulting / staffing ──────────────────────────────────────────
-    "randstad.in","teamlease.com","quesscorp.com","manpowergroup.co.in",
-    "adecco.co.in","mafoi.com","ikya.in","abc-consultants.com",
-    "naukrigulf.com","headhonchos.com","3ipeople.com",
     # ── Global MNCs with India ops ────────────────────────────────────────────
     "accenture.com","capgemini.com","cognizant.com","deloitte.com",
     "pwc.com","kpmg.com","ey.com","mckinsey.com","bain.com","bcg.com",
     "ibm.com","oracle.com","sap.com","salesforce.com","adobe.com",
     "amazon.in","amazon.com","google.com","microsoft.com",
     "meta.com","apple.com","netflix.com","uber.com","airbnb.com",
-    "cisco.com","intel.com","qualcomm.com","ti.com","amd.com",
-    "samsung.com","sony.com","lg.com","dell.com","hp.com","lenovo.com",
-    "ericsson.com","nokia.com","siemens.com","honeywell.com","ge.com",
-    "3m.com","abbott.com","johnson.com","unilever.com","nestle.com",
-    "bosch.com","continental.com","zf.com","schaeffler.com",
-    "ntt.com","dxc.com","unisys.com","hpe.com","fujitsu.com",
-    "atos.com","cgi.com","lenovopro.com","vmware.com","sas.com",
-    "servicenow.com","workday.com","atlassian.com","slack.com",
-    "twilio.com","stripe.com","shopify.com","hubspot.com",
     # ── Job boards / platforms ────────────────────────────────────────────────
     "naukri.com","linkedin.com","indeed.com","glassdoor.com",
     "shine.com","monster.com","foundit.in","internshala.com",
     "freshersworld.com","iimjobs.com","hirist.com","apna.co",
-    "instahyre.com","cutshort.io","wellfound.com","angellist.com",
-    "timesjobs.com","careesma.in","placementindia.com",
-    # ── Indian SaaS / dev tools ───────────────────────────────────────────────
+    # ── Freshworks / SaaS ────────────────────────────────────────────────────
     "freshworks.com","zoho.com","chargebee.com","postman.com",
     "browserstack.com","hasura.io","clevertap.com","moengage.com",
-    "leadsquared.com","kapture.cx","exotel.com","knowlarity.com",
-    "darwinbox.com","greythr.com","sumhr.com","keka.com","zimyo.com",
-    "razorpayx.com","open.money","happay.in","expensya.com",
 ]
 
 _PAY_PHRASES = [
@@ -2916,421 +2848,6 @@ def _probe_mca(company: str) -> dict:
     return out
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PROBE 7 — ATS / CAREERS PAGE VERIFICATION
-# ─────────────────────────────────────────────────────────────────────────────
-
-_T_ATS = 7
-
-_ATS_URL_PATTERNS = [
-    ("careers.{domain}",       ["", "/jobs", "/openings"]),
-    ("jobs.{domain}",          ["", "/all"]),
-    ("hiring.{domain}",        [""]),
-    ("{domain}/careers",       ["", "/jobs", "/openings", "/current-openings"]),
-    ("{domain}/jobs",          ["", "/all"]),
-    ("{domain}/about/careers", [""]),
-    ("{domain}/en/careers",    [""]),
-    ("boards.greenhouse.io/{slug}", [""]),
-    ("jobs.lever.co/{slug}",        [""]),
-    ("{slug}.wd1.myworkdayjobs.com/en-US/{slug}", [""]),
-    ("{slug}.wd3.myworkdayjobs.com/en-US/{slug}", [""]),
-    ("{slug}.wd5.myworkdayjobs.com/en-US/{slug}", [""]),
-    ("careers-{slug}.icims.com/jobs/search",      [""]),
-    ("{slug}.bamboohr.com/careers",               [""]),
-    ("careers.zoho.com/zoho/jobs/{slug}",         [""]),
-    ("{slug}.freshteam.com/jobs",                 [""]),
-    ("jobs.smartrecruiters.com/{slug}",           [""]),
-]
-
-_CAREERS_PAGE_SIGNALS = re.compile(
-    r"(apply\s+now|view\s+openings?|current\s+openings?|open\s+positions?"
-    r"|job\s+listing|career\s+opportunity|submit\s+application"
-    r"|work\s+with\s+us|join\s+our\s+team|explore\s+opportunities"
-    r"|job\s+id|requisition|req\s+id|posting\s+date"
-    r"|full[- ]time|part[- ]time|contract\s+role"
-    r"|greenhouse\.io|lever\.co|workday|icims|bamboohr|freshteam"
-    r"|smartrecruiters|zoho\s+recruit|job\s+description)",
-    re.IGNORECASE,
-)
-
-_ROLE_STOP_WORDS = {
-    "a", "an", "the", "and", "or", "for", "of", "in", "at", "to",
-    "with", "on", "is", "are", "be", "as", "we", "our", "your",
-    "india", "remote", "hybrid", "bangalore", "mumbai", "delhi",
-    "hyderabad", "chennai", "pune", "noida", "gurgaon",
-}
-
-_CORP_SUFFIXES_ATS = re.compile(
-    r"\b(pvt|ltd|private|limited|llp|llc|inc|corp|technologies|"
-    r"technology|solutions|services|enterprises?|consultancy|"
-    r"consulting|infotech|softwares?|systems?|group|global|india)\b",
-    re.IGNORECASE,
-)
-
-
-def _ats_slug(name: str) -> str:
-    """'Infosys Technologies Pvt Ltd' → 'infosys-technologies'"""
-    name = _CORP_SUFFIXES_ATS.sub("", name)
-    name = re.sub(r"[^a-z0-9\s]", "", name.lower()).strip()
-    words = name.split()[:3]
-    return "-".join(w for w in words if w)
-
-
-def _ats_http_get(url: str) -> tuple:
-    """Returns (status_code, body_text). Raises on network errors."""
-    req = urllib.request.Request(
-        url, method="GET",
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,*/*;q=0.9",
-            "Accept-Language": "en-US,en;q=0.9",
-        },
-    )
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    with urllib.request.urlopen(req, timeout=_T_ATS, context=ctx) as resp:
-        body = resp.read(8192).decode("utf-8", errors="ignore")
-        return resp.status, body
-
-
-def _probe_ats_careers(args: tuple) -> dict:
-    """
-    Verify the company has a real accessible careers/jobs page and optionally
-    that the specific job title appears on it.
-
-    Returns:
-      found=True + title_match=True  → page exists, title confirmed (score 0)
-      found=True + title_match=False → page exists, title absent   (score 15)
-      found=True + title_match=None  → page exists, no title to check (score 0)
-      found=False                    → no careers page found        (score 25)
-      found=None                     → inconclusive                 (score 0)
-    """
-    company:   str = args[0] if args else ""
-    job_title: str = args[1] if len(args) > 1 else ""
-    website:   str = args[2] if len(args) > 2 else ""
-
-    out = {
-        "found":       None,
-        "title_match": None,
-        "careers_url": "",
-        "detail":      "",
-        "score":       0,
-        "source":      "ATS / careers page",
-    }
-
-    if not company and not website:
-        out["detail"] = "No company name or website — ATS check skipped"
-        return out
-
-    # Derive domain
-    domain = ""
-    if website:
-        m = re.search(r"(?:https?://)?(?:www\.)?([a-z0-9\-\.]+\.[a-z]{2,})", website.lower())
-        if m:
-            domain = m.group(1)
-    _JOB_BOARDS_ATS = {
-        "linkedin.com", "naukri.com", "indeed.com", "glassdoor.com",
-        "shine.com", "monster.com", "internshala.com", "foundit.in",
-        "timesjobs.com", "apna.co", "hirist.com", "instahyre.com",
-        "wellfound.com", "cutshort.io", "iimjobs.com",
-    }
-    if domain and any(jb in domain for jb in _JOB_BOARDS_ATS):
-        domain = ""
-
-    slug = _ats_slug(company) if company else (domain.split(".")[0] if domain else "")
-    if not domain and not slug:
-        out["detail"] = "Cannot derive domain or slug — ATS check skipped"
-        return out
-
-    # Build candidate URLs
-    candidates: list = []
-    for template, paths in _ATS_URL_PATTERNS:
-        base = template.format(
-            domain=domain or (slug + ".com"),
-            slug=slug,
-        )
-        for path in paths:
-            url = f"https://{base}{path}".rstrip("/")
-            if url not in candidates:
-                candidates.append(url)
-
-    # Parallel HTTP probes
-    found_url:  list = []
-    found_body: list = []
-    lock = threading.Lock()
-
-    def _try_url(url: str) -> None:
-        try:
-            status, body = _ats_http_get(url)
-            if status in (200, 301, 302) and _CAREERS_PAGE_SIGNALS.search(body):
-                with lock:
-                    if not found_url:
-                        found_url.append(url)
-                        found_body.append(body)
-        except Exception:
-            pass
-
-    threads = [threading.Thread(target=_try_url, args=(u,), daemon=True)
-               for u in candidates[:20]]
-    for t in threads: t.start()
-    for t in threads: t.join(timeout=_T_ATS + 2)
-
-    if not found_url:
-        out.update(
-            found=False,
-            score=25,
-            detail=(
-                f"No careers/jobs page found for '{company}'. "
-                "Legitimate employers always have an accessible careers page. "
-                f"Checked {min(len(candidates), 20)} URL patterns."
-            ),
-        )
-        return out
-
-    careers_url  = found_url[0]
-    careers_body = found_body[0] if found_body else ""
-    out["careers_url"] = careers_url
-
-    # Title presence check
-    title_match = None
-    if job_title and len(job_title.strip()) >= 4:
-        title_words = [
-            w.lower() for w in re.findall(r"[a-zA-Z]{3,}", job_title)
-            if w.lower() not in _ROLE_STOP_WORDS
-        ]
-        if len(title_words) >= 2:
-            body_lower = careers_body.lower()
-            hits = sum(1 for w in title_words if w in body_lower)
-            title_match = hits >= max(1, round(len(title_words) * 0.6))
-
-    out["title_match"] = title_match
-
-    if title_match is True:
-        out.update(found=True, score=0,
-                   detail=(f"Careers page found: {careers_url} ✓ "
-                           f"Job title '{job_title}' keywords found on page ✓"))
-    elif title_match is False:
-        out.update(found=True, score=15,
-                   detail=(f"Careers page found: {careers_url} ✓ "
-                           f"BUT title '{job_title}' keywords NOT found on page — "
-                           "role may not be officially posted."))
-    else:
-        out.update(found=True, score=0,
-                   detail=f"Careers page found: {careers_url} ✓")
-    return out
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PROBE 8 — RECRUITER IDENTITY CHECK
-# ─────────────────────────────────────────────────────────────────────────────
-
-_T_REC = 6
-
-_RECRUITER_NAME_PATTERNS = [
-    r"(?:contact|recruiter|hiring\s+manager|reach\s+out\s+to|connect\s+with|"
-    r"reach\s+(?:out\s+to\s+)?me|my\s+name\s+is|i\s+am|i'm|regards|"
-    r"warm\s+regards|thanks|sincerely)[,:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})",
-    r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\s*[|\-–]\s*(?:HR|Recruiter|Talent|Hiring)",
-    r"[-–]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\s*$",
-]
-
-_GENERIC_NAME_RE = re.compile(
-    r"^(hr\s+team|hiring\s+team|recruitment\s+team|talent\s+team|"
-    r"hr\s+department|admin|no\s+reply|noreply|team|support|info|"
-    r"career|jobs|recruitment)$",
-    re.IGNORECASE,
-)
-
-
-def _extract_recruiter_name(contact_text: str, description: str = "") -> str:
-    full_text = f"{contact_text}\n{description}"
-    for pattern in _RECRUITER_NAME_PATTERNS:
-        m = re.search(pattern, full_text, re.MULTILINE)
-        if m:
-            candidate = m.group(1).strip()
-            words = candidate.split()
-            if (2 <= len(words) <= 4
-                    and all(2 <= len(w) <= 20 for w in words)
-                    and not any(c.isdigit() for c in candidate)):
-                return candidate
-    return ""
-
-
-def _check_email_domain_vs_company_name(email: str, company: str) -> tuple:
-    """Returns (matches: bool, reason: str)."""
-    if not email or not company:
-        return True, ""
-    domain = email.split("@")[-1].lower()
-    if domain in _FREE_DOMAINS:
-        return False, f"Recruiter uses personal email '{domain}', not a company domain"
-    domain_sld = re.sub(r"\.[a-z]{2,}$", "", domain).replace("-", "").replace(".", "")
-    company_clean = _CORP_SUFFIXES_ATS.sub("", company)
-    company_slug  = re.sub(r"[^a-z0-9]", "", company_clean.lower())[:20]
-    ratio = difflib.SequenceMatcher(None, company_slug, domain_sld).ratio()
-    if ratio >= 0.60:
-        return True, f"Email domain '{domain}' matches company '{company}' ✓"
-    return False, (
-        f"Email domain '{domain}' does not match company name '{company}' "
-        f"(similarity {ratio:.0%}) — possible impersonation or 3rd-party recruiter"
-    )
-
-
-def _linkedin_person_exists(name: str) -> dict:
-    """HEAD-request linkedin.com/in/{slug} — 200=exists, 404=absent."""
-    out = {"found": None, "detail": "", "url": ""}
-    if not name or len(name.strip()) < 4:
-        out["detail"] = "No recruiter name to check on LinkedIn"
-        return out
-    parts = re.sub(r"[^a-z\s]", "", name.lower()).split()
-    if len(parts) < 2:
-        out["detail"] = "Name too short for LinkedIn lookup"
-        return out
-    slugs = [
-        "-".join(parts[:2]),
-        "".join(parts[:2]),
-        f"{parts[0][0]}-{parts[-1]}",
-    ]
-    found_slug = None
-    lock = threading.Lock()
-
-    def _try(slug: str) -> None:
-        nonlocal found_slug
-        if not slug or len(slug) < 3:
-            return
-        try:
-            req = urllib.request.Request(
-                f"https://www.linkedin.com/in/{slug}",
-                method="HEAD",
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/124.0.0.0 Safari/537.36"
-                    ),
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
-            )
-            with urllib.request.urlopen(req, timeout=_T_REC) as resp:
-                if resp.status in (200, 301, 302):
-                    with lock:
-                        if found_slug is None:
-                            found_slug = slug
-        except Exception:
-            pass
-
-    threads = [threading.Thread(target=_try, args=(s,), daemon=True) for s in slugs]
-    for t in threads: t.start()
-    for t in threads: t.join(timeout=_T_REC + 1)
-
-    if found_slug:
-        url = f"https://www.linkedin.com/in/{found_slug}"
-        out.update(found=True, url=url, detail=f"LinkedIn profile found: {url} ✓")
-    else:
-        out.update(found=False, detail=f"No LinkedIn profile found for '{name}'")
-    return out
-
-
-def _probe_recruiter_id(args: tuple) -> dict:
-    """
-    Three-layer recruiter identity check:
-      Layer 1 — extract recruiter name from contact/description
-      Layer 2 — email domain vs company name consistency
-      Layer 3 — LinkedIn profile existence via HEAD request
-    """
-    contact:     str = args[0] if args else ""
-    company:     str = args[1] if len(args) > 1 else ""
-    description: str = args[2] if len(args) > 2 else ""
-
-    out = {
-        "found":          None,
-        "score":          0,
-        "detail":         "",
-        "recruiter_name": "",
-        "email":          "",
-        "email_match":    None,
-        "linkedin":       {},
-        "source":         "Recruiter identity",
-    }
-
-    if not contact and not description:
-        out["detail"] = "No contact information — recruiter check skipped"
-        return out
-
-    # Layer 1: extract name & email
-    name  = _extract_recruiter_name(contact, description)
-    emails = re.findall(r"[\w.+\-]+@[\w\-]+\.[a-zA-Z]{2,}", contact or "")
-    email  = emails[0] if emails else ""
-    out["recruiter_name"] = name
-    out["email"]          = email
-
-    signals: list = []
-    penalty = 0
-
-    if name and _GENERIC_NAME_RE.match(name):
-        signals.append(
-            f"Recruiter identified only as '{name}' — no real person named"
-        )
-        penalty += 5
-
-    # Layer 2: email domain vs company
-    email_match = None
-    if email and company:
-        email_match, reason = _check_email_domain_vs_company_name(email, company)
-        out["email_match"] = email_match
-        if not email_match:
-            signals.append(reason)
-            penalty += 18
-    elif not email:
-        signals.append("No recruiter email address found in posting")
-        penalty += 8
-
-    # Layer 3: LinkedIn profile existence
-    li_result: dict = {}
-    if name and not _GENERIC_NAME_RE.match(name or ""):
-        li_result = _linkedin_person_exists(name)
-    else:
-        li_result = {"found": None, "detail": "No name extracted — LinkedIn check skipped"}
-
-    out["linkedin"] = li_result
-    li_found = li_result.get("found")
-
-    if li_found is False:
-        signals.append(
-            f"No LinkedIn profile found for recruiter '{name}' — "
-            "could not verify this person works at the company"
-        )
-        penalty += 8
-
-    out["score"] = min(penalty, 35)
-
-    if penalty == 0 and (email_match or li_found):
-        out.update(
-            found=True,
-            detail=(
-                "Recruiter identity checks passed"
-                + (f" — {name}" if name else "")
-                + (f" | {li_result.get('detail', '')}" if li_found else "")
-            ),
-        )
-    elif penalty >= 20:
-        out.update(found=False,
-                   detail="Recruiter identity suspicious: " + " | ".join(signals[:2]))
-    else:
-        out.update(
-            found=None,
-            detail=(
-                "Recruiter identity partially verified"
-                + (" — " + " | ".join(signals[:2]) if signals else "")
-            ),
-        )
-    return out
-
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def _run_live_probes_cached(domain: str, contact: str, company: str, website: str) -> dict:
     """
@@ -3346,8 +2863,6 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         "mx_record":      {"status": "NO_EMAIL", "detail": ""},
         "company_domain": {"domain_exists": None, "detail": ""},
         "spf_dmarc":      {"spf": None, "dmarc": None, "detail": "", "score": 0},
-        "ats_verify":     {"found": None, "detail": ""},
-        "recruiter_id":   {"found": None, "detail": ""},
     }
     lock = threading.Lock()
 
@@ -3359,8 +2874,6 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         with lock:
             probes[key] = r
 
-    _desc_snippet = contact[:3000] if contact else ""
-
     tasks = [
         ("domain_age",     _probe_domain_age,      domain or ""),
         ("site_reach",     _probe_site_reachable,   domain or ""),
@@ -3369,8 +2882,6 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         ("mx_record",      _probe_mx_record,        contact),
         ("company_domain", _probe_company_domain,   (company, website)),
         ("spf_dmarc",      _probe_spf_dmarc,        domain or ""),
-        ("ats_verify",     _probe_ats_careers,      (company, "", website)),
-        ("recruiter_id",   _probe_recruiter_id,     (contact, company, _desc_snippet)),
     ]
     threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
     for t in threads: t.start()
@@ -3540,30 +3051,6 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         elif not spf.get("dmarc"):
             penalty += 8
             warnings.append(f"'{spf_dom}' has no DMARC record — anti-spoofing not configured")
-    # ── ATS / careers page probe ─────────────────────────────────────────────
-    ats = probes.get("ats_verify", {})
-    ats_score = ats.get("score", 0)
-    if ats.get("found") is False:
-        penalty += 20
-        warnings.append(ats.get("detail", "No careers page found for this company"))
-    elif ats_score >= 15:
-        penalty += ats_score
-        warnings.append(ats.get("detail", "Job title not found on company careers page"))
-    elif ats.get("found") is True and ats.get("title_match") is True:
-        penalty = max(0, penalty - 5)
-
-    # ── Recruiter identity probe ──────────────────────────────────────────────
-    rec = probes.get("recruiter_id", {})
-    rec_score = rec.get("score", 0)
-    if rec.get("found") is False:
-        penalty += rec_score
-        if rec.get("detail"):
-            warnings.append(rec["detail"])
-    elif rec_score > 0:
-        penalty += rec_score
-        if rec.get("detail"):
-            warnings.append(rec["detail"])
-
     return min(penalty, 55), warnings
 
 
@@ -4254,39 +3741,6 @@ def _render_probe_table(probes: dict):
     else:
         spf_badge = _badge("MISSING", "#dc2626", "rgba(220,38,38,0.12)")
     rows.append(_row(I.SHIELD, "SPF / DMARC", spf_badge, spf.get("detail", "")))
-
-    # ── ATS / Careers page row ────────────────────────────────────────────────
-    ats = probes.get("ats_verify", {})
-    ats_found = ats.get("found")
-    ats_tm    = ats.get("title_match")
-    if ats_found is None:
-        ats_badge = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
-    elif ats_found is True and ats_tm is True:
-        ats_badge = _badge("VERIFIED ✓", "#22c55e", "rgba(34,197,94,0.12)")
-    elif ats_found is True and ats_tm is False:
-        ats_badge = _badge("PAGE OK / TITLE MISSING", "#f59e0b", "rgba(245,158,11,0.12)")
-    elif ats_found is True:
-        ats_badge = _badge("PAGE FOUND ✓", "#22c55e", "rgba(34,197,94,0.12)")
-    else:
-        ats_badge = _badge("NO PAGE FOUND", "#dc2626", "rgba(220,38,38,0.12)")
-    rows.append(_row(I.BUILDING, "Careers Page (ATS)", ats_badge, ats.get("detail", "")))
-
-    # ── Recruiter identity row ────────────────────────────────────────────────
-    rec = probes.get("recruiter_id", {})
-    rec_found = rec.get("found")
-    if rec_found is None:
-        if rec.get("score", 0) > 0:
-            rec_badge = _badge("PARTIAL", "#f59e0b", "rgba(245,158,11,0.12)")
-        else:
-            rec_badge = _badge("NOT CHECKED", "#6b7280", "rgba(107,114,128,0.12)")
-    elif rec_found is True:
-        rec_badge = _badge("VERIFIED ✓", "#22c55e", "rgba(34,197,94,0.12)")
-    else:
-        rec_badge = _badge("SUSPICIOUS", "#dc2626", "rgba(220,38,38,0.12)")
-    rec_detail = rec.get("detail", "")
-    if rec.get("recruiter_name"):
-        rec_detail = f"{rec['recruiter_name']} — {rec_detail}"
-    rows.append(_row(I.ID_CARD, "Recruiter Identity", rec_badge, rec_detail))
 
     st.markdown(
         f'<div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;'
