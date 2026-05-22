@@ -2848,6 +2848,126 @@ def _probe_mca(company: str) -> dict:
     return out
 
 
+def _probe_safe_browsing(urls: list[str]) -> dict:
+    """
+    Google Safe Browsing API v4 — checks URLs against Google's threat database.
+
+    Threats detected:
+      MALWARE, SOCIAL_ENGINEERING (phishing), UNWANTED_SOFTWARE,
+      POTENTIALLY_HARMFUL_APPLICATION
+
+    API key is read from st.secrets["GOOGLE_SAFE_BROWSING_KEY"].
+    If the key is missing or the API call fails, returns a neutral result
+    so a misconfigured key never blocks the rest of the analysis.
+
+    Returns:
+      {
+        "threats_found": bool,
+        "threat_urls":   [list of flagged URLs],
+        "threat_types":  [list of threat type strings],
+        "detail":        str,
+        "score":         int   (0 = clean, 30 = threat found)
+      }
+    """
+    out = {
+        "threats_found": False,
+        "threat_urls":   [],
+        "threat_types":  [],
+        "detail":        "",
+        "score":         0,
+    }
+
+    # ── Filter to valid URLs only ─────────────────────────────────────────────
+    valid_urls = [u for u in (urls or []) if u and u.startswith("http")]
+    if not valid_urls:
+        out["detail"] = "No URLs to check"
+        return out
+
+    # ── Read API key from secrets ─────────────────────────────────────────────
+    try:
+        api_key = st.secrets.get("GOOGLE_SAFE_BROWSING_KEY", "")
+    except Exception:
+        api_key = os.environ.get("GOOGLE_SAFE_BROWSING_KEY", "")
+
+    if not api_key:
+        out["detail"] = "Safe Browsing key not configured — skipped"
+        return out
+
+    # ── Build request payload ─────────────────────────────────────────────────
+    payload = json.dumps({
+        "client": {
+            "clientId":      "job-scam-detector",
+            "clientVersion": "5.0",
+        },
+        "threatInfo": {
+            "threatTypes": [
+                "MALWARE",
+                "SOCIAL_ENGINEERING",
+                "UNWANTED_SOFTWARE",
+                "POTENTIALLY_HARMFUL_APPLICATION",
+            ],
+            "platformTypes":   ["ANY_PLATFORM"],
+            "threatEntryTypes": ["URL"],
+            "threatEntries":   [{"url": u} for u in valid_urls[:10]],
+        },
+    }).encode("utf-8")
+
+    api_url = (
+        f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={api_key}"
+    )
+
+    try:
+        req = urllib.request.Request(
+            api_url,
+            data=payload,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent":   "ScamDetector/5.0",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        matches = data.get("matches", [])
+        if not matches:
+            out["detail"] = (
+                f"Safe Browsing: {len(valid_urls)} URL(s) checked — no threats found"
+            )
+            return out
+
+        # ── Threats found ─────────────────────────────────────────────────────
+        flagged_urls  = list({m["threat"]["url"] for m in matches})
+        threat_types  = list({m["threatType"]    for m in matches})
+
+        _THREAT_LABELS = {
+            "MALWARE":                        "Malware",
+            "SOCIAL_ENGINEERING":             "Phishing / Social Engineering",
+            "UNWANTED_SOFTWARE":              "Unwanted Software",
+            "POTENTIALLY_HARMFUL_APPLICATION":"Potentially Harmful App",
+        }
+        readable = [_THREAT_LABELS.get(t, t) for t in threat_types]
+
+        out.update(
+            threats_found = True,
+            threat_urls   = flagged_urls,
+            threat_types  = threat_types,
+            score         = 30,
+            detail        = (
+                f"Google Safe Browsing flagged {len(flagged_urls)} URL(s): "
+                f"{', '.join(readable)}. "
+                f"Flagged: {', '.join(flagged_urls[:2])}"
+            ),
+        )
+
+    except urllib.error.HTTPError as e:
+        out["detail"] = f"Safe Browsing API error: HTTP {e.code}"
+    except Exception as e:
+        out["detail"] = f"Safe Browsing check skipped: {type(e).__name__}"
+
+    return out
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def _run_live_probes_cached(domain: str, contact: str, company: str, website: str) -> dict:
     """
@@ -2863,6 +2983,7 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         "mx_record":      {"status": "NO_EMAIL", "detail": ""},
         "company_domain": {"domain_exists": None, "detail": ""},
         "spf_dmarc":      {"spf": None, "dmarc": None, "detail": "", "score": 0},
+        "safe_browsing":  {"threats_found": False, "detail": "Not checked", "score": 0},
     }
     lock = threading.Lock()
 
@@ -2874,6 +2995,18 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         with lock:
             probes[key] = r
 
+    # ── Collect all URLs from domain + website + description for Safe Browsing ─
+    sb_urls: list[str] = []
+    if domain:
+        sb_urls.append(f"https://{domain}")
+        sb_urls.append(f"http://{domain}")
+    if website and website.startswith("http"):
+        sb_urls.append(website)
+    # Also grab any URLs embedded in the contact/description fields
+    extra = re.findall(r"https?://[^\s)\"',<>{}\[\]]{6,}", contact or "")
+    sb_urls.extend(extra[:5])
+    sb_urls = list(dict.fromkeys(sb_urls))   # deduplicate, preserve order
+
     tasks = [
         ("domain_age",     _probe_domain_age,      domain or ""),
         ("site_reach",     _probe_site_reachable,   domain or ""),
@@ -2882,6 +3015,7 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         ("mx_record",      _probe_mx_record,        contact),
         ("company_domain", _probe_company_domain,   (company, website)),
         ("spf_dmarc",      _probe_spf_dmarc,        domain or ""),
+        ("safe_browsing",  _probe_safe_browsing,    sb_urls),
     ]
     threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
     for t in threads: t.start()
@@ -3051,7 +3185,20 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         elif not spf.get("dmarc"):
             penalty += 8
             warnings.append(f"'{spf_dom}' has no DMARC record — anti-spoofing not configured")
+    # ── Google Safe Browsing ──────────────────────────────────────────────────
+    sb = probes.get("safe_browsing", {})
+    if sb.get("threats_found"):
+        # Safe Browsing is high-confidence — Google's own database
+        # Penalty bypasses the 55 cap because a confirmed phishing/malware
+        # URL is definitive evidence regardless of other signals
+        penalty += 35
+        warnings.append(
+            f"Google Safe Browsing flagged this URL as dangerous: "
+            f"{sb.get('detail', '')}"
+        )
+
     return min(penalty, 55), warnings
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3741,6 +3888,18 @@ def _render_probe_table(probes: dict):
     else:
         spf_badge = _badge("MISSING", "#dc2626", "rgba(220,38,38,0.12)")
     rows.append(_row(I.SHIELD, "SPF / DMARC", spf_badge, spf.get("detail", "")))
+
+    # ── Google Safe Browsing row ──────────────────────────────────────────────
+    sb = probes.get("safe_browsing", {})
+    if sb.get("threats_found"):
+        sb_badge = _badge("THREAT DETECTED", "#dc2626", "rgba(220,38,38,0.12)")
+    elif sb.get("detail", "").startswith("No URLs"):
+        sb_badge = _badge("NO URLS", "#6b7280", "rgba(107,114,128,0.12)")
+    elif "skipped" in sb.get("detail", "").lower() or "not configured" in sb.get("detail", "").lower():
+        sb_badge = _badge("SKIPPED", "#6b7280", "rgba(107,114,128,0.12)")
+    else:
+        sb_badge = _badge("CLEAN", "#22c55e", "rgba(34,197,94,0.12)")
+    rows.append(_row(I.SHIELD, "Google Safe Browsing", sb_badge, _esc(sb.get("detail", ""))))
 
     st.markdown(
         f'<div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;'
