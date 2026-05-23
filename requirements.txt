@@ -11,6 +11,7 @@ cloudscraper
 PyPDF2
 pdfplumber
 pytesseract
+dnstwist==20250130
 pdf2image
 Pillow
 psycopg2-binary
