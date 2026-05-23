@@ -2884,9 +2884,30 @@ def _mca_word_match(name_clean: str, html: str) -> bool:
 
 def _mca_make_request(url: str, extra_headers: dict | None = None) -> str:
     """
-    Shared HTTP helper for MCA probes. Uses a realistic browser UA + headers
-    to avoid bot detection. Returns decoded response body or raises.
+    Shared HTTP helper for MCA probes.
+    Primary:  cloudscraper — bypasses Cloudflare/bot-detection challenges that
+              urllib cannot handle (this is why Zaubacorp/IndiaFilings started
+              blocking requests even with a realistic User-Agent).
+    Fallback: urllib — used if cloudscraper is not installed.
+    Returns decoded response body or raises.
     """
+    extra_headers = extra_headers or {}
+
+    # ── Primary: cloudscraper ─────────────────────────────────────────────
+    try:
+        import cloudscraper  # pip install cloudscraper
+        scraper = cloudscraper.create_scraper(
+            browser={"browser": "chrome", "platform": "windows", "mobile": False}
+        )
+        resp = scraper.get(url, headers=extra_headers, timeout=_T_MCA, verify=False)
+        resp.raise_for_status()
+        return resp.text
+    except ImportError:
+        pass  # cloudscraper not installed — fall through to urllib
+    except Exception:
+        raise  # real network/HTTP error — propagate so caller can try next tier
+
+    # ── Fallback: urllib (no Cloudflare bypass) ───────────────────────────
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -2899,8 +2920,7 @@ def _mca_make_request(url: str, extra_headers: dict | None = None) -> str:
         "Connection":      "keep-alive",
         "Cache-Control":   "no-cache",
     }
-    if extra_headers:
-        headers.update(extra_headers)
+    headers.update(extra_headers)
     req = urllib.request.Request(url, headers=headers)
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
