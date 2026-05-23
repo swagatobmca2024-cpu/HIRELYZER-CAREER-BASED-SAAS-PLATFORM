@@ -14,6 +14,7 @@ pytesseract
 pdf2image
 Pillow
 psycopg2-binary
+reportlab
 
 matplotlib
 pytz
