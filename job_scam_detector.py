@@ -295,36 +295,139 @@ _BRAND_DOMAINS: list[str] = [
     # ── Tier-1 Indian IT / tech ───────────────────────────────────────────────
     "infosys.com","tcs.com","wipro.com","hcltech.com","hcl.com",
     "ltimindtree.com","mindtree.com","mphasis.com","hexaware.com",
-    "persistent.com","cyient.com","niit.com","kpit.com","l&t.com",
+    "persistent.com","cyient.com","niit.com","kpit.com",
     "larsentoubro.com","tech-mahindra.com","techmahindra.com",
-    # ── Indian banks / fintech ────────────────────────────────────────────────
+    "lntinfotech.com","ltts.com","sonata-software.com","mastech.com",
+    "zensar.com","coforge.com","firstsource.com","eclerx.com",
+    "infoedge.com","rcom.co.in","patni.com","igate.com",
+    "sasken.com","tanla.com","kellton.com","happiest-minds.com",
+    "newgen.co.in","nucleus-software.com","tataelxsi.com",
+    "birlasoft.com","3i-infotech.com","geometrics.com",
+    # ── Indian IT mid-tier ────────────────────────────────────────────────────
+    "niit-tech.com","ramsystems.com","infotech.com","techprocess.com",
+    "microland.com","subexgroup.com","sophiagenetics.com",
+    "majesco.com","cigniti.com","expleo.com","collabera.com",
+    "syntel.com","ibs.in","rscube.com","quatrro.com",
+    # ── Indian banks ─────────────────────────────────────────────────────────
     "hdfcbank.com","icicibank.com","sbi.co.in","axisbank.com",
     "kotakbank.com","yesbank.in","idfcfirstbank.com","federalbank.co.in",
+    "pnb.co.in","bankofbaroda.co.in","canarabank.com","unionbankofindia.co.in",
+    "indianbank.in","bankofindia.co.in","centralbankofindia.co.in",
+    "ucobank.com","bankofmaharashtra.in","syndicatebank.com",
+    "indusind.com","rblbank.com","dcbbank.com","southindianbank.com",
+    "karurbank.com","cityunionbank.com","tmb.in","ujjivansfb.in",
+    "equitasbank.com","aubank.in","esafbank.com","suryodaybank.com",
+    # ── Indian fintech ────────────────────────────────────────────────────────
     "paytm.com","phonepe.com","razorpay.com","cred.club","groww.in",
     "zerodha.com","upstox.com","policybazaar.com","lendingkart.com",
-    # ── Indian consumer / e-comm ──────────────────────────────────────────────
+    "mobikwik.com","freecharge.in","jiomoney.com","airtelbank.com",
+    "instamojo.com","cashfree.com","billdesk.com","ccavenue.com",
+    "angel-one.com","angelbroking.com","5paisa.com","sharekhan.com",
+    "motilaloswal.com","icicidirect.com","hdfcsec.com","kotak.com",
+    "navi.com","slice.is","uni.cards","stashfin.com","moneyview.in",
+    "kissht.com","cashe.co.in","incred.com","kreditbee.com",
+    "ftcash.com","axio.in","fibe.in",
+    # ── Indian e-commerce / consumer ─────────────────────────────────────────
     "flipkart.com","myntra.com","meesho.com","ajio.com","nykaa.com",
-    "swiggy.in","zomato.com","ola.com","olamoney.com","oyo.com",
+    "swiggy.in","zomato.com","ola.com","olamoney.com","olaelectric.com","olacabs.com","olamoney.com","oyo.com",
     "bigbasket.com","blinkit.com","dunzo.com","urbancompany.com",
+    "snapdeal.com","shopclues.com","paytmmall.com","tatacliq.com",
+    "reliancedigital.in","jiomart.com","amazon.in","indiamart.com",
+    "tradeindia.com","exportersindia.com","justdial.com","sulekha.com",
+    "1mg.com","pharmeasy.in","netmeds.com","medplus.in","apotek.com",
+    "lenskart.com","pepperfry.com","urban-ladder.com","wakefit.co",
+    "mamaearth.in","boat-lifestyle.com","noise.com","mivi.in",
+    # ── Indian edtech ─────────────────────────────────────────────────────────
     "byju.com","byjus.com","unacademy.com","vedantu.com","upgrad.com",
+    "simplilearn.com","coursera.org","udemy.com","whitehatjr.com",
+    "collegedunia.com","collegedekho.com","careers360.com","shiksha.com",
+    "topper.com","toppr.com","physicswallah.net","pw.live",
+    "gradeup.co","testbook.com","adda247.com","oliveboard.com",
+    "embibe.com","doubtnut.com","extramarks.com","meritnation.com",
     # ── Indian conglomerates ──────────────────────────────────────────────────
-    "relianceindustries.com","ril.com","jio.com","jiosaavn.com",
+    "relianceindustries.com","ril.com","jio.com","jiosaavn.com","jiophone.com","jiocinema.com","jiomoney.com","jiomart.com",
     "tatamotors.com","tatagroup.com","tatasteel.com","tatacommunications.com",
-    "mahindra.com","bajajfinserv.com","bajajfinance.in","bajaj.com",
-    "adanigroup.com","adaniports.com","aditya-birla.com",
+    "tataconsultancy.com","tatapower.com","tatachemicals.com",
+    "mahindra.com","mahindrafinance.com","mahindralogisoft.com",
+    "bajajfinserv.com","bajajfinance.in","bajaj.com","bajajelectricals.com",
+    "adanigroup.com","adaniports.com","adanigreen.com","adanienterprise.com",
+    "aditya-birla.com","birlacorporation.com","ultratechcement.com",
+    "godrejgroup.com","godrej.com","godrejproperties.com",
+    "itc.in","itcportal.com","hmtmachinetools.com",
+    "airtelindia.com","airtel.in","vodafoneidea.com","bsnl.co.in",
+    "mtnl.net.in","reliancejio.com",
+    # ── Indian pharma / healthcare ────────────────────────────────────────────
+    "sunpharma.com","drreddys.com","cipla.com","lupin.com",
+    "aurorabiopharma.com","zyduslife.com","glenmarkpharma.com",
+    "torrentpharma.com","alkem.com","abbottindia.com","pfizer.co.in",
+    "apollohospitals.com","fortishealthcare.com","maxhealthcare.in",
+    "manipalhospitals.com","nhshealthcare.com","aster-dm.com",
+    "medanta.org","narayanahealth.org","yashoda.com",
+    # ── Indian auto / manufacturing ───────────────────────────────────────────
+    "marutisuzuki.com","hyundai.com","honda2wheelersindia.com",
+    "heromc.in","bajajauto.com","tvsmotor.com","royalenfield.com",
+    "ashokleyland.com","eichergroup.com","forcemotors.com",
+    "bhel.com","ntpc.com","nhpc.com","ongc.co.in","gail.com",
+    "ioc.com","bpcl.in","hpcl.com","coalindia.in",
     # ── Global MNCs with India ops ────────────────────────────────────────────
     "accenture.com","capgemini.com","cognizant.com","deloitte.com",
     "pwc.com","kpmg.com","ey.com","mckinsey.com","bain.com","bcg.com",
     "ibm.com","oracle.com","sap.com","salesforce.com","adobe.com",
-    "amazon.in","amazon.com","google.com","microsoft.com",
-    "meta.com","apple.com","netflix.com","uber.com","airbnb.com",
+    "amazon.com","google.com","microsoft.com","meta.com","apple.com",
+    "netflix.com","uber.com","airbnb.com","twitter.com","linkedin.com",
+    "intel.com","amd.com","qualcomm.com","nvidia.com","cisco.com",
+    "hp.com","dell.com","lenovo.com","samsung.com","sony.com","lg.com",
+    "bosch.in","siemens.co.in","honeywell.com","ge.com","3m.com",
+    "abbott.com","johnson.com","unilever.com","nestle.in","pepsi.com",
+    "cocacola.com","amex.com","visa.com","mastercard.com","paypal.com",
+    "jpmorgan.com","citibank.com","hsbc.co.in","standardchartered.com",
+    "barclays.com","deutsche-bank.com","bnpparibas.com",
+    "shell.com","exxon.com","bp.com","totalenergies.com",
+    "boeing.com","airbus.com","lockheedmartin.com","caterpillar.com",
+    # ── Global tech ───────────────────────────────────────────────────────────
+    "atlassian.com","slack.com","zoom.us","dropbox.com","github.com",
+    "gitlab.com","docker.com","twilio.com","stripe.com","shopify.com",
+    "hubspot.com","zendesk.com","servicenow.com","workday.com",
+    "splunk.com","elastic.co","mongodb.com","databricks.com",
+    "snowflake.com","confluent.io","hashicorp.com","terraform.io",
+    "cloudflare.com","fastly.com","akamai.com","digitalocean.com",
+    "linode.com","vultr.com","heroku.com","vercel.com","netlify.com",
     # ── Job boards / platforms ────────────────────────────────────────────────
     "naukri.com","linkedin.com","indeed.com","glassdoor.com",
     "shine.com","monster.com","foundit.in","internshala.com",
     "freshersworld.com","iimjobs.com","hirist.com","apna.co",
-    # ── Freshworks / SaaS ────────────────────────────────────────────────────
+    "workindia.in","timesjobs.com","instahyre.com","cutshort.io",
+    "wellfound.com","angellist.com","hasjob.co","naukrigulf.com",
+    "bayt.com","xing.com","ziprecruiter.com","dice.com",
+    # ── Global remote work / freelance platforms ────────────────────────────────
+    "turing.com","toptal.com","upwork.com","fiverr.com","freelancer.com",
+    "gun.io","arc.dev","remoteok.com","remote.co","weworkremotely.com",
+    "hubstaff.com","deel.com","remote.com","oysterhr.com","papaya-global.com",
+    "andela.com","lemon.io","crossover.com","10xmanagement.com",
+    "hackerearth.com","hackerrank.com","codingninjas.com","geeksforgeeks.org",
+    "leetcode.com","codechef.com","codeforces.com","topcoder.com",
+    # ── Indian SaaS / startups ────────────────────────────────────────────────
     "freshworks.com","zoho.com","chargebee.com","postman.com",
     "browserstack.com","hasura.io","clevertap.com","moengage.com",
+    "razorpay.com","darwinbox.com","greythr.com","keka.com",
+    "springverify.com","leadsquared.com","livespace.com","meero.com",
+    "khatabook.com","okCredit.com","veefin.com","recur.club",
+    "setu.co","signzy.com","hyperface.co","yap.co","open.money",
+    "niyo.co","fi.money","jupiter.money","freo.money","epifi.com",
+    "smallcase.com","ditto.insurance","acko.com","digit.in",
+    "coverfox.com","renewbuy.com","turtlemint.com",
+    # ── Indian media / entertainment ──────────────────────────────────────────
+    "hotstar.com","sonyliv.com","zee5.com","voot.com","mxplayer.in",
+    "jiocinema.com","erosnow.com","altbalaji.com","hoichoi.tv",
+    "timesofindia.com","hindustantimes.com","ndtv.com","thehindu.com",
+    "livemint.com","economictimes.com","moneycontrol.com",
+    "businessstandard.com","financialexpress.com","deccanherald.com",
+    # ── Indian govt / PSU (commonly impersonated) ─────────────────────────────
+    "upsc.gov.in","ssc.nic.in","ibps.in","rbi.org.in","sebi.gov.in",
+    "irdai.gov.in","trai.gov.in","nic.in","gov.in","india.gov.in",
+    "indianrailways.gov.in","irctc.co.in","airindia.in","aai.aero",
+    "isro.gov.in","drdo.gov.in","barc.gov.in","ies.gov.in",
+    "sail.co.in","nmdc.co.in","rinl.co.in","moil.nic.in",
 ]
 
 _PAY_PHRASES = [
@@ -1706,21 +1809,36 @@ def _probe_typosquatting(domain: str) -> dict:
         b_sld  = b.split(".")[0]
         b_norm = _typo_normalise(b_sld)
 
-        # Skip very short brand SLDs — too prone to coincidental matches
-        if len(b_sld) < 4:
-            continue
-
-        # ── Check 1: Levenshtein on normalised SLDs ───────────────────────
-        if d_norm != b_norm:          # exact match = the real domain, skip
-            dist = _levenshtein(d_norm, b_norm)
-            if dist < best_lev_dist:
-                best_lev_dist, best_lev_brand = dist, b
+        # ── Check 1: Levenshtein on normalised SLDs ─────────────────────
+        # Only use Levenshtein for brands with 6+ chars — short brands
+        # like "ring", "ola", "jio" cause too many false positives
+        # (e.g. "turing" vs "ring" = dist 2, completely unrelated).
+        # Also enforce proportionality: edit distance must be ≤ 25% of
+        # brand length so "flippkart" (dist 1 from "flipkart"=8 chars,
+        # ratio=0.125) is caught but "turing" (dist 2 from "ring"=4 chars,
+        # ratio=0.5) is not.
+        if len(b_sld) >= 6:
+            if d_norm != b_norm:      # exact match = the real domain, skip
+                dist = _levenshtein(d_norm, b_norm)
+                # Proportionality guard: dist must be ≤ 25% of brand length
+                max_allowed = max(1, int(len(b_norm) * 0.25))
+                if dist <= max_allowed and dist < best_lev_dist:
+                    best_lev_dist, best_lev_brand = dist, b
 
         # ── Check 2: brand keyword embedded in domain ─────────────────────
         # e.g. "infosys-careers.com" contains "infosys"
+        # Short brands (tcs, ola, jio, ring) use a stricter extra-chars
+        # threshold (≥4 extra chars) to avoid false positives like
+        # "oracle" matching "ola" or "turing" matching "ring".
         if b_norm in d_norm and d_norm != b_norm:
             extra = d_norm.replace(b_norm, "")
-            if len(extra) >= 2:       # at least 2 extra chars to avoid "infosyss"
+            # Very short brands (≤4 chars): need 5+ extra chars to avoid
+            # "ringtone" matching "ring", "biology" matching "bio" etc.
+            # Short brands (5 chars): need 4+ extra chars
+            # Normal brands (6+ chars): need 2+ extra chars
+            min_extra = (5 if len(b_sld) <= 4 else
+                         4 if len(b_sld) <= 5 else 2)
+            if len(extra) >= min_extra:
                 prefix_brand = b
 
     is_lev_squatter    = (best_lev_dist <= 2 and best_lev_brand is not None
@@ -2863,6 +2981,7 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         "mx_record":      {"status": "NO_EMAIL", "detail": ""},
         "company_domain": {"domain_exists": None, "detail": ""},
         "spf_dmarc":      {"spf": None, "dmarc": None, "detail": "", "score": 0},
+        "gsb":            {"checked": False, "is_unsafe": False, "threats": [], "detail": ""},
     }
     lock = threading.Lock()
 
@@ -2875,18 +2994,102 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
             probes[key] = r
 
     tasks = [
-        ("domain_age",     _probe_domain_age,      domain or ""),
-        ("site_reach",     _probe_site_reachable,   domain or ""),
-        ("typosquat",      _probe_typosquatting,    domain or ""),
-        ("free_email",     _probe_free_email,       contact),
-        ("mx_record",      _probe_mx_record,        contact),
-        ("company_domain", _probe_company_domain,   (company, website)),
-        ("spf_dmarc",      _probe_spf_dmarc,        domain or ""),
+        ("domain_age",     _probe_domain_age,           domain or ""),
+        ("site_reach",     _probe_site_reachable,        domain or ""),
+        ("typosquat",      _probe_typosquatting,         domain or ""),
+        ("free_email",     _probe_free_email,            contact),
+        ("mx_record",      _probe_mx_record,             contact),
+        ("company_domain", _probe_company_domain,        (company, website)),
+        ("spf_dmarc",      _probe_spf_dmarc,             domain or ""),
+        ("gsb",            _probe_google_safe_browsing,  website or f"https://{domain}" if domain else ""),
     ]
     threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
     for t in threads: t.start()
     for t in threads: t.join(timeout=_T_MCA + 4)
     return probes
+
+
+def _probe_google_safe_browsing(url: str) -> dict:
+    """
+    Check URL against Google Safe Browsing API v4.
+    Catches known phishing, malware, and social engineering pages.
+    Key read from st.secrets["GOOGLE_SAFE_BROWSING_KEY"] — falls back
+    gracefully if key is missing or API call fails.
+    """
+    out = {
+        "checked":   False,
+        "is_unsafe": False,
+        "threats":   [],
+        "detail":    "",
+    }
+    if not url:
+        out["detail"] = "No URL provided"
+        return out
+
+    # Normalise to full URL
+    if not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
+
+    # Read API key from Streamlit secrets
+    try:
+        import streamlit as _st
+        gsb_key = (
+            _st.secrets.get("GOOGLE_SAFE_BROWSING_KEY")
+            or _st.secrets.get("GOOGLE_SAFE_BROWSING_API_KEY")
+            or ""
+        )
+    except Exception:
+        gsb_key = os.environ.get("GOOGLE_SAFE_BROWSING_KEY", "")
+
+    if not gsb_key:
+        out["detail"] = "GSB key not configured — skipped"
+        return out
+
+    api_url = f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={gsb_key}"
+    payload = {
+        "client":     {"clientId": "job-scam-detector", "clientVersion": "1.0"},
+        "threatInfo": {
+            "threatTypes":      [
+                "MALWARE", "SOCIAL_ENGINEERING",
+                "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION",
+            ],
+            "platformTypes":    ["ANY_PLATFORM"],
+            "threatEntryTypes": ["URL"],
+            "threatEntries":    [{"url": url}],
+        },
+    }
+    try:
+        import json as _json
+        req = urllib.request.Request(
+            api_url,
+            data=_json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = _json.loads(resp.read().decode())
+
+        out["checked"] = True
+        matches = data.get("matches", [])
+        if matches:
+            threat_types = list({m.get("threatType", "UNKNOWN") for m in matches})
+            out.update(
+                is_unsafe=True,
+                threats=threat_types,
+                detail=(
+                    f"GOOGLE SAFE BROWSING: URL flagged as "
+                    f"{', '.join(threat_types)} — this site is on Google\'s "
+                    f"threat blocklist"
+                ),
+            )
+        else:
+            out["detail"] = "Google Safe Browsing: URL is clean — not on any threat list"
+    except urllib.error.HTTPError as e:
+        out["detail"] = f"GSB API error: HTTP {e.code}"
+    except Exception as ex:
+        out["detail"] = f"GSB probe failed: {ex}"
+
+    return out
 
 
 def run_live_probes(job: dict) -> dict:
@@ -2948,6 +3151,18 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         penalty += 12
         dom = probes["free_email"].get("domain", "")
         warnings.append(f"Recruiter uses personal email domain: {dom}")
+    # ── Google Safe Browsing result ──────────────────────────────────────────
+    gsb = probes.get("gsb", {})
+    if gsb.get("is_unsafe"):
+        penalty += 55   # Hard signal — Google has already confirmed this as a threat
+        threat_str = ", ".join(gsb.get("threats", ["UNKNOWN"]))
+        warnings.append(
+            f"GOOGLE SAFE BROWSING FLAG: This URL is on Google\'s threat blocklist "
+            f"({threat_str}) — do NOT proceed with this job application"
+        )
+    elif gsb.get("checked") and not gsb.get("is_unsafe"):
+        pass  # Clean — no penalty, no warning needed
+
     mx = probes.get("mx_record", {})
     mx_status = mx.get("status", "")
     mx_dom = mx.get("domain", "")
@@ -3347,14 +3562,104 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
-    salary_instruction = (
-        "The salary was NOT provided in this job posting. "
-        "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
-        "do NOT guess, infer, or comment on whether it is realistic."
-        if not salary_raw else
-        "Assess whether the stated salary is realistic for this role and location. "
-        "If it seems unrealistically high, flag it as a potential scam signal."
+
+    # ── User context for personalised salary assessment ────────────────────────
+    user_location   = (job.get("user_location") or "").strip()
+    user_role       = (job.get("user_role") or "").strip()
+    user_experience = (job.get("user_experience") or "").strip()
+
+    user_ctx_lines = []
+    if user_location:   user_ctx_lines.append(f"Candidate's current location: {user_location}")
+    if user_role:       user_ctx_lines.append(f"Candidate's current/target role: {user_role}")
+    if user_experience: user_ctx_lines.append(f"Candidate's years of experience: {user_experience}")
+    user_ctx_block = (
+        "CANDIDATE CONTEXT (use this to personalise the salary assessment):\n"
+        + "\n".join(user_ctx_lines)
+        if user_ctx_lines else ""
     )
+
+    # ── Currency normalisation — convert to LPA before passing to AI ────────────
+    def _normalise_salary_for_prompt(raw: str) -> str:
+        import re as _re
+        r = raw.strip()
+        r_low = r.lower()
+        # USD/hour → LPA (40hr/week, 50 weeks, $1=₹84)
+        m = _re.search(r"\$\s*(\d[\d,\.]*)[\s]*/[\s]*h(?:our|r)?", r, _re.I)
+        if m:
+            lpa = round(float(m.group(1).replace(",","")) * 40 * 50 * 84 / 100000, 1)
+            return f"{r}  [≈ ₹{lpa} LPA at $1=₹84]"
+        # USD/day → LPA (260 working days)
+        m = _re.search(r"\$\s*(\d[\d,\.]*)[\s]*/[\s]*day", r, _re.I)
+        if m:
+            lpa = round(float(m.group(1).replace(",","")) * 260 * 84 / 100000, 1)
+            return f"{r}  [≈ ₹{lpa} LPA at $1=₹84]"
+        # USD/week → LPA (52 weeks)
+        m = _re.search(r"\$\s*(\d[\d,\.]*)[\s]*/[\s]*w(?:eek|k)?", r, _re.I)
+        if m:
+            lpa = round(float(m.group(1).replace(",","")) * 52 * 84 / 100000, 1)
+            return f"{r}  [≈ ₹{lpa} LPA at $1=₹84]"
+        # USD/month → LPA (12 months)
+        m = _re.search(r"\$\s*(\d[\d,\.]*)[\s]*/[\s]*m(?:onth|o\.?)?", r, _re.I)
+        if not m:
+            m = _re.search(r"(\d[\d,\.]*)[\s]*USD[\s]*/[\s]*month", r, _re.I)
+        if m:
+            lpa = round(float(m.group(1).replace(",","")) * 12 * 84 / 100000, 1)
+            return f"{r}  [≈ ₹{lpa} LPA at $1=₹84]"
+        # USD/year
+        m = _re.search(r"\$\s*(\d[\d,\.]*)[\s]*(?:k\b)?[\s]*(?:per[\s]+(?:year|annum|yr)|p\.?a\.?|annual)", r, _re.I)
+        if m:
+            v = float(m.group(1).replace(",","")) * (1000 if "k" in r_low else 1)
+            lpa = round(v * 84 / 100000, 1)
+            return f"{r}  [≈ ₹{lpa} LPA at $1=₹84]"
+        # INR/month → LPA
+        m = _re.search(r"(?:₹|Rs\.?|INR)[\s]*(\d[\d,\.]*)[\s]*/[\s]*(?:month|mo\.?|pm\b)", r, _re.I)
+        if not m:
+            m = _re.search(r"(\d[\d,\.]*)[\s]*/[\s]*(?:month|per[\s]+month|pm\b)", r, _re.I)
+        if m:
+            lpa = round(float(m.group(1).replace(",","")) * 12 / 100000, 2)
+            return f"{r}  [≈ ₹{lpa} LPA]"
+        return r  # already LPA or unknown format
+
+    salary_display_prompt = _normalise_salary_for_prompt(salary_raw) if salary_raw else "N/A"
+
+    if not salary_raw:
+        salary_instruction = (
+            "The salary was NOT provided in this job posting. "
+            "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
+            "do NOT guess, infer, or comment on whether it is realistic."
+        )
+    else:
+        # Build a rich, personalised salary prompt
+        candidate_hints = []
+        if user_role:       candidate_hints.append(f"candidate's role ({user_role})")
+        if user_experience: candidate_hints.append(f"experience ({user_experience} years)")
+        if user_location:   candidate_hints.append(f"location ({user_location})")
+        hint_str = ", ".join(candidate_hints) if candidate_hints else "the job posting details"
+
+        # Ground the AI with explicit known values to prevent hallucination
+        known_role     = user_role     or job.get("title", "") or "this role"
+        known_location = user_location or job.get("location", "") or "India"
+        known_exp      = user_experience or "not specified"
+
+        salary_instruction = (
+            f"The stated salary is: {salary_display_prompt}.\n"
+            f"Assess this salary using ONLY these known facts — Role='{known_role}', "
+            f"Location='{known_location}', Experience='{known_exp}'.\n"
+            f"STRICT RULES:\n"
+            f"1. Do NOT assume or invent any detail not stated above.\n"
+            f"2. State the typical market salary range (min-max LPA) for this exact "
+            f"role and location in India as of 2024-25. If uncertain, give a wider "
+            f"range and say so — never invent precise numbers you are not confident about.\n"
+            f"3. Use exactly one label: BELOW MARKET / AT MARKET / ABOVE MARKET / SUSPICIOUSLY HIGH.\n"
+            f"4. Only mention location impact if location is specific (e.g. Bangalore, Kolkata, remote). "
+            f"If vague, skip this point.\n"
+            f"5. SCAM SIGNAL RULE: only if stated salary is more than 2x the upper end of your "
+            f"market range, end with the exact phrase: 'This is a scam signal.' "
+            f"Otherwise never use those words.\n"
+            f"Write 3-4 factual sentences. No bullet list. No filler phrases. "
+            f"If information is insufficient for a confident assessment, say so honestly."
+        )
+
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
@@ -3368,6 +3673,8 @@ Description: {job.get('description','N/A')[:8000]}
 Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
+
+{user_ctx_block}
 
 LIVE PROBE FINDINGS:
 {ctx}
@@ -3384,9 +3691,9 @@ Required JSON schema (all keys mandatory):
   "positive_signals": ["<str>"],
   "fake_company_evidence": "<detailed reasoning about company authenticity>",
   "linguistic_analysis": "<tone, urgency, grammar observations>",
-  "salary_assessment": "<NOT_PROVIDED if salary missing, else realistic/unrealistic assessment>",
+  "salary_assessment": "<NOT_PROVIDED if salary missing — otherwise a detailed paragraph covering market range, alignment, experience fit, location factor, and scam signal if applicable>",
   "recommended_action": "<specific advice for the job seeker>",
-  "similar_scam_type": "<known pattern name or Unknown>",
+  "similar_scam_type": "<Pick the SINGLE best match from this exhaustive list. Read all options carefully before choosing. FEE-BASED: Internship fee scam | Training fee scam | Registration fee scam | Security deposit scam | Equipment/laptop fee scam | Background check fee scam | Certification fee scam | Joining fee scam | Refundable deposit scam | Uniform/kit fee scam. FAKE IDENTITY: Ghost company scam | Brand impersonation scam | Cloned company website scam | Fake recruiter scam | Fake HR scam | Fake LinkedIn recruiter scam | Government job impersonation scam | MNC impersonation scam | Freelance platform impersonation scam. FINANCIAL: Advance fee scam | Overpayment/cheque scam | Cryptocurrency job scam | Money mule/reshipping scam | Fake payroll scam | Commission withholding scam | Fake investment job scam | Pyramid/MLM disguised as job. DATA THEFT: Personal data harvesting scam | Document collection scam (Aadhaar/PAN/passport) | Bank details harvesting scam | Fake KYC job scam | Identity theft recruitment scam. REMOTE/ONLINE: Work-from-home task scam | Online survey/review job scam | Like-and-earn / watch-and-earn scam | Fake freelance project scam | Remote data entry scam | Social media manager fake job | Fake content moderation job. OFFER-BASED: Too-good-to-be-true salary scam | Unsolicited job offer scam | Fake visa sponsorship scam | Fake abroad placement scam | Fake government job scam | Fake PSU/bank recruitment scam | Fake campus placement scam. TECHNICAL: Phishing via job portal scam | Malware attachment job scam | Fake video interview scam | WhatsApp job scam | Telegram job scam | SMS job scam. EXPLOITATION: Unpaid internship disguised as paid | Fake apprenticeship scam | Bait-and-switch job scam | Commission-only disguised as salaried | Fake probation period scam | Slave labour disguised as internship. OTHER: Unknown>,"
   "confidence": <0-100>
 }}"""
 
@@ -3593,7 +3900,7 @@ def _render_score_strip(result: dict):
                       "Sum of weights for matched red-flag phrases"),
                 unsafe_allow_html=True)
     c3.markdown(_card(I.GLOBE, "Probe Penalty", result["probe_penalty"],
-                      "#38bdf8", "5 live network checks",
+                      "#38bdf8", "8 live network checks",
                       "Added for young domain, free email, bad MCA etc."),
                 unsafe_allow_html=True)
     c4.markdown(_card(I.ZAP,   "Flags Fired",   len(result["signals"]),
@@ -3741,6 +4048,19 @@ def _render_probe_table(probes: dict):
     else:
         spf_badge = _badge("MISSING", "#dc2626", "rgba(220,38,38,0.12)")
     rows.append(_row(I.SHIELD, "SPF / DMARC", spf_badge, spf.get("detail", "")))
+
+    # ── Google Safe Browsing row ──────────────────────────────────────────────
+    gsb = probes.get("gsb", {})
+    if not gsb.get("checked"):
+        if "key not configured" in gsb.get("detail", "").lower():
+            gsb_badge = _badge("NOT CONFIGURED", "#6b7280", "rgba(107,114,128,0.12)")
+        else:
+            gsb_badge = _badge("NOT CHECKED",    "#6b7280", "rgba(107,114,128,0.12)")
+    elif gsb.get("is_unsafe"):
+        gsb_badge = _badge("⚠ THREAT DETECTED", "#dc2626", "rgba(220,38,38,0.15)")
+    else:
+        gsb_badge = _badge("CLEAN ✓",           "#22c55e", "rgba(34,197,94,0.12)")
+    rows.append(_row(I.SHIELD, "Google Safe Browsing", gsb_badge, gsb.get("detail", "")))
 
     st.markdown(
         f'<div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;'
@@ -3894,6 +4214,51 @@ def _render_ai_dive(llm: dict):
                 f'this posting does not mention any salary, CTC, or compensation. '
                 f'No realistic assessment can be made. Consider asking the recruiter '
                 f'for a clear salary range before proceeding.</span></div></div>',
+                unsafe_allow_html=True,
+            )
+            continue
+
+        # ── Salary assessment — rich display ──────────────────────────────────
+        if field == "salary_assessment":
+            # Only flag SUSPICIOUS when the AI explicitly concludes the salary IS
+            # a scam signal — look for affirmative conclusory phrases only.
+            # Never match mid-sentence phrases like "does not seem suspiciously high".
+            val_lower = val.lower()
+            is_scam_salary = any(kw in val_lower for kw in [
+                "is a scam signal",
+                "indicates a scam",
+                "is a red flag",
+                "salary is a scam",
+                "unrealistically high salary",
+                "inflated to lure",
+                "classic scam bait",
+            ])
+            border_color = "#ef4444" if is_scam_salary else "rgba(255,255,255,0.08)"
+            badge_color  = "#ef4444" if is_scam_salary else "#8b949e"
+            badge_text   = "SUSPICIOUS — INFLATED SALARY" if is_scam_salary else "SALARY ASSESSED"
+            badge_icon   = I.ALERT_CIRCLE if is_scam_salary else I.DOLLAR
+            st.markdown(
+                f'<div style="background:rgba(255,255,255,0.02);'
+                f'border:1px solid rgba(255,255,255,0.06);'
+                f'border-left:3px solid {border_color};'
+                f'border-radius:9px;padding:14px;margin-bottom:10px;">'
+                # Header row
+                f'<div style="display:flex;align-items:center;justify-content:space-between;'
+                f'margin-bottom:10px;">'
+                f'<div style="display:flex;align-items:center;gap:6px;font-size:0.68rem;'
+                f'font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.9px;">'
+                f'{_svg(I.DOLLAR,11,"#6b7280")}Salary Reality Check</div>'
+                # Verdict badge
+                f'<div style="display:flex;align-items:center;gap:5px;padding:3px 9px;'
+                f'border-radius:20px;background:rgba(255,255,255,0.04);'
+                f'border:1px solid {border_color}40;">'
+                f'{_svg(badge_icon,10,badge_color)}'
+                f'<span style="font-size:0.63rem;font-weight:700;color:{badge_color};'
+                f'letter-spacing:0.6px;">{badge_text}</span></div>'
+                f'</div>'
+                # Main assessment paragraph
+                f'<div style="color:#c9d1d9;font-size:0.83rem;line-height:1.7;">{_esc(val)}</div>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
             continue
@@ -4374,13 +4739,38 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 + _field_row(I.DOLLAR,   "Salary",     extracted["salary"])
                 + _field_row(I.MAIL,     "Contact",    extracted["contact"])
             )
+
+            # ── Your Profile — read live widget values for conditional display ──
+            _uloc = st.session_state.get("jsd_uloc", "").strip()
+            _urol = st.session_state.get("jsd_urol", "").strip()
+            _uexp = st.session_state.get("jsd_uexp", "").strip()
+            _any_profile = bool(_uloc or _urol or _uexp)
+
+            profile_layer = ""
+            if _any_profile:
+                profile_rows = (
+                    _field_row(I.MAP_PIN,     "Your Location",   _uloc or "—")
+                    + _field_row(I.ID_CARD,   "Current Role",    _urol or "—")
+                    + _field_row(I.TRENDING_UP,"Experience",     _uexp or "—")
+                )
+                profile_layer = (
+                    f'<div style="border-top:1px solid rgba(167,139,250,0.18);'
+                    f'margin-top:10px;padding-top:10px;">'
+                    f'<div style="font-size:0.66rem;font-weight:600;color:#a78bfa;'
+                    f'text-transform:uppercase;letter-spacing:0.9px;margin-bottom:6px;'
+                    f'display:flex;align-items:center;gap:5px;">'
+                    f'{_svg(I.SPARKLE,9,"#a78bfa")} Your Profile</div>'
+                    f'{profile_rows}</div>'
+                )
+
             st.markdown(
                 f'<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);'
                 f'border-radius:10px;padding:14px 16px;margin-top:8px;">'
                 f'<div style="font-size:0.69rem;font-weight:600;color:#8b949e;text-transform:uppercase;'
                 f'letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">'
                 f'{_svg(I.ZAP,10,"#a78bfa")} Auto-Detected Fields</div>'
-                f'{fields_html}</div>',
+                f'{fields_html}'
+                f'{profile_layer}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -4397,19 +4787,44 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 oc1.text_input("Website",  value=extracted["website"],  key="jsd_ow")
                 oc2.text_input("Location", value=extracted["location"], key="jsd_ol")
 
+        # ── Your Profile input fields — always rendered so session_state keys exist
+        # (the display layer above reads from these keys reactively)
+        st.markdown(
+            f'<div style="margin-top:10px;padding:11px 14px 8px;'
+            f'background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.15);'
+            f'border-radius:10px;">'
+            f'<div style="font-size:0.67rem;font-weight:600;color:#a78bfa;'
+            f'text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;'
+            f'display:flex;align-items:center;gap:5px;">'
+            f'{_svg(I.SPARKLE,9,"#a78bfa")} Your Profile '
+            f'<span style="color:#6b7280;font-weight:400;text-transform:none;'
+            f'letter-spacing:0;font-size:0.67rem;">'
+            f'— optional · personalises salary assessment</span></div>',
+            unsafe_allow_html=True,
+        )
+        pc1, pc2, pc3 = st.columns(3)
+        pc1.text_input("Your Location",       placeholder="e.g., Kolkata / Mumbai / WFH", key="jsd_uloc")
+        pc2.text_input("Your Current Role",   placeholder="e.g., Software Engineer",      key="jsd_urol")
+        pc3.text_input("Years of Experience", placeholder="e.g., 2 / Fresher / 5+",       key="jsd_uexp")
+        st.markdown("</div>", unsafe_allow_html=True)
+
         # FIX v5 BUG 6: Build job from session_state override keys if they exist
         # (populated by the expander above). Falls back to auto_extract values if
         # the override expander was never opened.
         job = {
-            "title":        st.session_state.get("jsd_ot",  extracted.get("title", "")),
-            "company":      st.session_state.get("jsd_oco", extracted.get("company", "")),
-            "website":      st.session_state.get("jsd_ow",  extracted.get("website", "")),
-            "location":     st.session_state.get("jsd_ol",  extracted.get("location", "")),
-            "salary":       st.session_state.get("jsd_os",  extracted.get("salary", "")),
-            "contact":      st.session_state.get("jsd_oct", extracted.get("contact", "")),
-            "description":  raw or "",
-            "requirements": "",   # FIX v5 BUG 3: keep empty — description has everything
-            "benefits":     "",   # FIX v5 BUG 3: keep empty — description has everything
+            "title":           st.session_state.get("jsd_ot",  extracted.get("title", "")),
+            "company":         st.session_state.get("jsd_oco", extracted.get("company", "")),
+            "website":         st.session_state.get("jsd_ow",  extracted.get("website", "")),
+            "location":        st.session_state.get("jsd_ol",  extracted.get("location", "")),
+            "salary":          st.session_state.get("jsd_os",  extracted.get("salary", "")),
+            "contact":         st.session_state.get("jsd_oct", extracted.get("contact", "")),
+            "description":     raw or "",
+            "requirements":    "",   # FIX v5 BUG 3: keep empty — description has everything
+            "benefits":        "",   # FIX v5 BUG 3: keep empty — description has everything
+            # User profile context — always read from widget keys
+            "user_location":   st.session_state.get("jsd_uloc", ""),
+            "user_role":       st.session_state.get("jsd_urol", ""),
+            "user_experience": st.session_state.get("jsd_uexp", ""),
         }
 
     else:
@@ -4423,11 +4838,37 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
         job["salary"]   = e.text_input("Salary Offered",  placeholder="e.g., 8-12 LPA",           key="jsd_sa")
         job["contact"]  = f.text_input("Contact Email",   placeholder="e.g., hr@acme.com",        key="jsd_ct")
         job["description"]  = st.text_area("Job Description",  height=120, key="jsd_d",
+                                            max_chars=_MAX_PASTE_CHARS,
                                             placeholder="Describe the role and responsibilities...")
         job["requirements"] = st.text_area("Requirements",     height=80,  key="jsd_r",
                                             placeholder="Skills, experience, qualifications...")
         job["benefits"]     = st.text_area("Benefits / Perks", height=60,  key="jsd_b",
                                             placeholder="What the employer offers...")
+
+        # ── Your Profile — manual mode ─────────────────────────────────────────
+        st.markdown(
+            f'<div style="margin-top:12px;padding:12px 16px 10px;'
+            f'background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.18);'
+            f'border-radius:10px;">'
+            f'<div style="font-size:0.68rem;font-weight:600;color:#a78bfa;'
+            f'text-transform:uppercase;letter-spacing:0.9px;margin-bottom:10px;'
+            f'display:flex;align-items:center;gap:6px;">'
+            f'{_svg(I.SPARKLE,10,"#a78bfa")} Your Profile '
+            f'<span style="color:#6b7280;font-weight:400;text-transform:none;'
+            f'letter-spacing:0;font-size:0.67rem;">'
+            f'— optional · personalises the salary assessment</span></div>',
+            unsafe_allow_html=True,
+        )
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.text_input("Your Location",       placeholder="e.g., Kolkata / Mumbai / WFH", key="jsd_uloc")
+        mc2.text_input("Your Current Role",   placeholder="e.g., Software Engineer",      key="jsd_urol")
+        mc3.text_input("Years of Experience", placeholder="e.g., 2 / Fresher / 5+",       key="jsd_uexp")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # Wire user profile into job dict for manual mode
+        job["user_location"]   = st.session_state.get("jsd_uloc", "")
+        job["user_role"]       = st.session_state.get("jsd_urol", "")
+        job["user_experience"] = st.session_state.get("jsd_uexp", "")
 
     # Use only meaningful fields for "is there any input" check — not description
     # (which in paste mode is raw and always present once the user types).
@@ -4458,7 +4899,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 # rerun (triggered by any widget) to see True and lock the button.
                 disabled=not allowed or st.session_state.get("jsd_running", False),
                 help=(
-                    "Runs full AI analysis + 5 live network probes. Takes ~10s."
+                    "Runs full AI analysis + 8 live network probes. Takes ~10s."
                     if allowed else
                     f"You have used all {_SCAM_LIMIT} analyses for this hour. "
                     "Please wait — quota resets on a rolling 60-minute window."
@@ -4493,6 +4934,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                 fill_keys = [
                     "jsd_t", "jsd_co", "jsd_w", "jsd_l",
                     "jsd_sa", "jsd_ct", "jsd_d", "jsd_r", "jsd_b",
+                    "jsd_uloc", "jsd_urol", "jsd_uexp",
                 ]
                 for k in paste_keys + fill_keys:
                     st.session_state.pop(k, None)
@@ -4517,7 +4959,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     prog.progress(10, text="Running 15-signal rule engine…")
                     rules_result = _run_rules(job)
 
-                    prog.progress(30, text="Launching 5 live network probes (parallel)…")
+                    prog.progress(30, text="Launching 8 live network probes (parallel)…")
                     probes = run_live_probes(job)
                     penalty, warnings = _probe_risk(probes)
 
@@ -4677,6 +5119,248 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         final = av if blended >= next_threshold - 5 else sv
                     else:
                         final = sv
+
+                    # ── COMPANY LEGITIMACY COORDINATION ───────────────────────
+                    # AI returns company_legitimacy from job text alone.
+                    # Probe layer has hard network evidence — override AI when
+                    # probes are conclusive in either direction.
+                    _cd    = probes.get("company_domain", {})
+                    _spf   = probes.get("spf_dmarc", {})
+                    _reach = probes.get("site_reach", {})
+                    _mx    = probes.get("mx_record", {})
+                    _da    = probes.get("domain_age", {})
+
+                    _confirmed_sources = _cd.get("identity_sources", 0)
+                    _cd_verified       = _cd.get("score", 99) < 20
+                    _spf_ok            = bool(_spf.get("spf") and _spf.get("dmarc"))
+                    _mx_ok             = (_mx.get("status") == "MX_FOUND"
+                                          and not _mx.get("ghost_mx"))
+                    _site_ok           = bool(_reach.get("reachable")
+                                              and not _reach.get("is_parked"))
+                    _established       = ((_da.get("age_days") or 0) >= 180)
+
+                    # VERIFIED: 2+ identity sources confirmed + clean domain
+                    #           + live site + established domain age
+                    _probe_verified = (
+                        _confirmed_sources >= 2
+                        and _cd_verified
+                        and _site_ok
+                        and _established
+                    )
+                    # GHOST: domain doesn't exist, or parked with zero identity
+                    _probe_ghost = (
+                        not _cd.get("domain_exists", True)
+                        or (_reach.get("is_parked") and _confirmed_sources == 0)
+                    )
+                    # LIKELY_FAKE: no identity confirmed + high bad domain score
+                    _probe_fake = (
+                        _confirmed_sources == 0
+                        and _cd.get("score", 0) >= 35
+                    )
+
+                    ai_cl = llm_data.get("company_legitimacy", "UNVERIFIABLE")
+                    if _probe_ghost:
+                        llm_data["company_legitimacy"] = "GHOST_COMPANY"
+                    elif _probe_fake and ai_cl in ("UNVERIFIABLE", "LIKELY_FAKE"):
+                        llm_data["company_legitimacy"] = "LIKELY_FAKE"
+                    elif _probe_verified:
+                        # Probes confirmed the company — override AI pessimism
+                        llm_data["company_legitimacy"] = "VERIFIED"
+                    # else: keep AI's value — probes inconclusive
+
+                    # ── SCAM PATTERN FALLBACK ──────────────────────────────────────────
+                    # If AI returned Unknown, derive pattern from rule signals.
+                    # Deterministic — zero hallucination. Priority-ordered map.
+                    _sigs = rules_result.get("signals", {})
+                    _ai_pattern = llm_data.get("similar_scam_type", "Unknown").strip()
+                    if _ai_pattern.lower() in ("unknown", "", "none"):
+                        _pattern = None
+                        _full_low = (
+                            job.get("description", "") + " "
+                            + job.get("title", "") + " "
+                            + job.get("requirements", "") + " "
+                            + job.get("benefits", "")
+                        ).lower()
+
+                        def _has(*words):
+                            return any(w in _full_low for w in words)
+
+                        # ── Tier 1: Most specific govt/PSU impersonation ──────
+                        if "fake_govt_job" in _sigs:
+                            if _has("railway", "rrb", "ntpc", "rrb-ntpc"):
+                                _pattern = "Fake PSU/bank recruitment scam"
+                            elif _has("bank", "ibps", "sbi", "rbi", "nabard"):
+                                _pattern = "Fake PSU/bank recruitment scam"
+                            elif _has("defence", "army", "navy", "airforce", "military"):
+                                _pattern = "Fake government job scam"
+                            elif _has("upsc", "ssc", "ias", "ips", "ifs"):
+                                _pattern = "Fake government job scam"
+                            else:
+                                _pattern = "Fake government job scam"
+
+                        # ── Tier 2: Fee-based scams ───────────────────────────
+                        elif "upfront_payment" in _sigs:
+                            if _has("intern", "internship", "trainee", "apprentice"):
+                                _pattern = "Internship fee scam"
+                            elif _has("laptop", "macbook", "device", "equipment", "tool kit"):
+                                _pattern = "Equipment/laptop fee scam"
+                            elif _has("uniform", "kit", "starter kit", "id card"):
+                                _pattern = "Uniform/kit fee scam"
+                            elif _has("security deposit", "caution deposit", "refundable deposit",
+                                      "earnest money", "token amount"):
+                                _pattern = "Security deposit scam"
+                            elif _has("background check", "bgv", "police verification",
+                                      "verification charge", "biometric"):
+                                _pattern = "Background check fee scam"
+                            elif _has("training", "course", "certification", "diploma",
+                                      "industrial training"):
+                                _pattern = "Training fee scam"
+                            elif _has("registration", "enroll", "membership", "joining fee",
+                                      "processing fee"):
+                                _pattern = "Registration fee scam"
+                            elif _has("insurance", "premium", "policy"):
+                                _pattern = "Advance fee scam"
+                            elif _has("courier", "delivery", "logistics", "shipping"):
+                                _pattern = "Advance fee scam"
+                            elif _has("sim", "scanner", "biometric"):
+                                _pattern = "Equipment/laptop fee scam"
+                            else:
+                                _pattern = "Advance fee scam"
+
+                        # ── Tier 3: MLM / pyramid ─────────────────────────────
+                        elif "mlm_pyramid" in _sigs:
+                            if _has("modicare", "amway", "vestige", "herbalife",
+                                    "oriflame", "forever living", "4life"):
+                                _pattern = "Pyramid/MLM disguised as job"
+                            elif _has("chain marketing", "binary plan", "matrix plan",
+                                      "level income", "generation income"):
+                                _pattern = "Pyramid/MLM disguised as job"
+                            elif _has("franchise", "business opportunity", "dealership"):
+                                _pattern = "Fake freelance project scam"
+                            else:
+                                _pattern = "Pyramid/MLM disguised as job"
+
+                        # ── Tier 4: WFH / online task scams ──────────────────
+                        elif "work_from_home_bait" in _sigs or "india_scam_pattern" in _sigs:
+                            if _has("captcha", "captcha entry", "captcha typing"):
+                                _pattern = "Remote data entry scam"
+                            elif _has("data entry", "typing job", "copy paste", "form filling"):
+                                _pattern = "Remote data entry scam"
+                            elif _has("ad posting", "advertisement posting", "classified posting"):
+                                _pattern = "Remote data entry scam"
+                            elif _has("survey", "online survey", "product review",
+                                      "review writing"):
+                                _pattern = "Online survey/review job scam"
+                            elif _has("youtube like", "facebook like", "instagram follow",
+                                      "like and earn", "watch and earn", "subscribe and earn"):
+                                _pattern = "Like-and-earn / watch-and-earn scam"
+                            elif _has("amazon", "flipkart", "meesho", "resell",
+                                      "reseller", "dropship"):
+                                _pattern = "Fake freelance project scam"
+                            elif _has("content moderation", "image tagging", "data labelling",
+                                      "annotation"):
+                                _pattern = "Fake content moderation job"
+                            elif _has("social media", "instagram manager", "facebook manager"):
+                                _pattern = "Social media manager fake job"
+                            else:
+                                _pattern = "Work-from-home task scam"
+
+                        # ── Tier 5: Data / identity theft ────────────────────
+                        elif "personal_info_demand" in _sigs:
+                            if _has("aadhaar", "aadhar", "pan card", "pan number"):
+                                _pattern = "Document collection scam (Aadhaar/PAN/passport)"
+                            elif _has("passport", "visa", "travel document"):
+                                _pattern = "Document collection scam (Aadhaar/PAN/passport)"
+                            elif _has("bank account", "account number", "ifsc", "upi",
+                                      "gpay", "paytm number"):
+                                _pattern = "Bank details harvesting scam"
+                            elif _has("kyc", "know your customer", "e-kyc"):
+                                _pattern = "Fake KYC job scam"
+                            elif _has("selfie", "photo", "whatsapp photo"):
+                                _pattern = "Identity theft recruitment scam"
+                            else:
+                                _pattern = "Personal data harvesting scam"
+
+                        # ── Tier 6: WhatsApp / Telegram channel scams ─────────
+                        elif "whatsapp_only_contact" in _sigs:
+                            if _has("telegram", "telegram group", "telegram channel"):
+                                _pattern = "Telegram job scam"
+                            elif _has("whatsapp group", "whatsapp channel"):
+                                _pattern = "WhatsApp job scam"
+                            else:
+                                _pattern = "WhatsApp job scam"
+
+                        # ── Tier 7: Salary / benefit lures ───────────────────
+                        elif "too_good_salary" in _sigs:
+                            if _has("abroad", "overseas", "foreign", "usa", "uk",
+                                    "dubai", "canada", "australia"):
+                                _pattern = "Fake visa sponsorship scam"
+                            elif _has("cryptocurrency", "crypto", "bitcoin", "usdt"):
+                                _pattern = "Cryptocurrency job scam"
+                            else:
+                                _pattern = "Too-good-to-be-true salary scam"
+
+                        elif "unrealistic_benefits" in _sigs:
+                            if _has("guaranteed", "assured", "100% placement"):
+                                _pattern = "Too-good-to-be-true offer"
+                            elif _has("passive income", "residual income", "financial freedom"):
+                                _pattern = "Pyramid/MLM disguised as job"
+                            else:
+                                _pattern = "Too-good-to-be-true offer"
+
+                        # ── Tier 8: Structural red flags ──────────────────────
+                        elif "req_paradox" in _sigs:
+                            if _has("commission", "target based", "incentive only"):
+                                _pattern = "Commission-only disguised as salaried"
+                            else:
+                                _pattern = "Bait-and-switch job scam"
+
+                        elif "no_company_info" in _sigs:
+                            if _has("startup", "new company", "growing company"):
+                                _pattern = "Ghost company scam"
+                            else:
+                                _pattern = "Ghost company scam"
+
+                        elif "location_mismatch" in _sigs:
+                            if _has("visa", "sponsorship", "abroad", "overseas"):
+                                _pattern = "Fake visa sponsorship scam"
+                            elif _has("usa", "uk", "dubai", "singapore", "canada"):
+                                _pattern = "Fake abroad placement scam"
+                            else:
+                                _pattern = "Fake abroad placement scam"
+
+                        elif "free_email_contact" in _sigs:
+                            if _has("mnc", "tcs", "infosys", "wipro", "google",
+                                    "amazon", "microsoft"):
+                                _pattern = "MNC impersonation scam"
+                            else:
+                                _pattern = "Fake recruiter scam"
+
+                        elif "urgency_pressure" in _sigs:
+                            if _has("walk in", "walk-in", "direct interview"):
+                                _pattern = "Fake job offer"
+                            else:
+                                _pattern = "Fake job offer"
+
+                        elif "vague_description" in _sigs:
+                            _pattern = "Fake job offer"
+
+                        elif "poor_grammar" in _sigs:
+                            _pattern = "Fake job offer"
+
+                        elif "invalid_gstin" in _sigs:
+                            _pattern = "Ghost company scam"
+
+                        elif "invalid_phone" in _sigs:
+                            _pattern = "Fake recruiter scam"
+
+                        elif "missing_salary" in _sigs and len(_sigs) >= 3:
+                            # Missing salary alone isn't a pattern, but combined
+                            # with 2+ other signals it suggests deliberate hiding
+                            _pattern = "Bait-and-switch job scam"
+
+                        if _pattern:
+                            llm_data["similar_scam_type"] = _pattern
 
                     res = {
                         "blended_score":  blended,   "rule_score":     rule_s,
@@ -4839,7 +5523,7 @@ def render_job_scam_detector_tab(call_llm_fn):
         f'<h2 style="margin:0 0 4px;font-size:1.45rem;font-weight:700;color:#e6edf3;'
         f'letter-spacing:-0.02em;">Job Scam Detector</h2>'
         f'<p style="margin:0;color:#8b949e;font-size:0.82rem;line-height:1.5;">'
-        f'Paste any job posting — AI analysis + 5 live network probes detect '
+        f'Paste any job posting — AI analysis + 8 live network probes detect '
         f'fake listings before you apply or share personal data.</p>'
         f'</div>'
 
@@ -4866,7 +5550,7 @@ def render_job_scam_detector_tab(call_llm_fn):
             f'</div>'
             for ic, label, val, col in [
                 (I.CPU,      "AI Engine",     "LLaMA 3.3-70B",   "#a78bfa"),
-                (I.GLOBE,    "Live Probes",   "6 checks",        "#38bdf8"),
+                (I.GLOBE,    "Live Probes",   "8 checks",        "#38bdf8"),
                 (I.LIST,     "Rule Signals",  "15 patterns",     "#f59e0b"),
                 (I.SHIELD,   "Hourly Limit",  f"{_SCAM_LIMIT} analyses", "#22c55e"),
             ]
@@ -4875,14 +5559,14 @@ def render_job_scam_detector_tab(call_llm_fn):
 
         # ── Feature pill row ──────────────────────────────────────────────
         f'<div style="display:flex;flex-wrap:wrap;gap:5px;">'
-        + _pill(I.CPU,      "AI Deep Analysis",     "#a78bfa")
-        + _pill(I.CALENDAR, "Domain Age Probe",      "#38bdf8")
-        + _pill(I.MAIL,     "Free Email Detection",  "#f59e0b")
-        + _pill(I.SERVER,   "MX Mail Server Check",  "#22c55e")
+        + _pill(I.CALENDAR, "Domain Age",           "#38bdf8")
+        + _pill(I.GLOBE,    "Site Reachability",     "#6366f1")
         + _pill(I.COPY,     "Typosquat Check",       "#ef4444")
+        + _pill(I.MAIL,     "Free Email Detection",  "#f59e0b")
+        + _pill(I.SERVER,   "MX Mail Server",        "#22c55e")
         + _pill(I.BUILDING, "Company Domain Check",  "#22c55e")
-        + _pill(I.SERVER,   "Site Reachability",     "#6366f1")
-        + _pill(I.LIST,     "15-Signal Rule Engine", "#8b949e")
+        + _pill(I.SHIELD,   "SPF / DMARC",           "#a78bfa")
+        + _pill(I.GLOBE,    "Google Safe Browsing",  "#22c55e")
         + f'</div>'
         + f'</div>',
         unsafe_allow_html=True,
