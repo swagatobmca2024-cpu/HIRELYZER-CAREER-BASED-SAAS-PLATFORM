@@ -325,80 +325,7 @@ _BRAND_DOMAINS: list[str] = [
     # ── Freshworks / SaaS ────────────────────────────────────────────────────
     "freshworks.com","zoho.com","chargebee.com","postman.com",
     "browserstack.com","hasura.io","clevertap.com","moengage.com",
-    # ── Additional Indian IT / outsourcing ───────────────────────────────────
-    "coforge.com","birlasoft.com","mastek.com","happiest-minds.com",
-    "sonata-software.com","niit-tech.com","sasken.com","subex.com",
-    "nucleus-software.com","geometrics.com","igate.com","syntel.com",
-    # ── Additional Indian banks ───────────────────────────────────────────────
-    "bandhanbank.com","rblbank.com","csbbank.com","dbs.com",
-    "hsbc.co.in","standardchartered.co.in","citibank.co.in",
-    "pnbindia.in","canarabank.in","unionbankofindia.co.in",
-    "bankofbaroda.in","indianbank.in","centralbankofindia.co.in",
-    "kvb.co.in","tmb.in","southindianbank.com","bojindia.com",
-    # ── Govt job portals (heavily impersonated) ───────────────────────────────
-    "ncs.gov.in","ibps.in","upsc.gov.in","ssc.nic.in",
-    "indianrailways.gov.in","joinindianarmy.nic.in","joinindiannavy.gov.in",
-    "careerairforce.nic.in","bsnl.co.in","ongcindia.com","ntpc.co.in",
-    "coalindia.in","bhel.com","sail.co.in","powergrid.in",
-    "nationalcareerservice.gov.in","epfindia.gov.in","esic.nic.in",
-    # ── Additional job boards ─────────────────────────────────────────────────
-    "timesjobs.com","wisdomjobs.com","placementindia.com","quikr.com",
-    "workindia.in","rozgar.com","careers360.com","shinelearning.com",
-    # ── Logistics / delivery (WFH delivery scams) ─────────────────────────────
-    "delhivery.com","bluedart.com","ekart.in","shadowfax.in",
-    "xpressbees.com","ecomexpress.com","dtdc.com","fedex.com",
-    "dhl.com","indiapost.gov.in","speedpost.in",
-    # ── Insurance / finance ───────────────────────────────────────────────────
-    "licindia.in","hdfclife.com","iciciprulife.com","sbilife.co.in",
-    "maxlifeinsurance.com","bajajlife.com","reliancelife.com",
-    "icicilombard.com","newindia.co.in","orientalinsurance.co.in",
-    "angelbroking.com","5paisa.com","motilaloswalmf.com",
 ]
-
-# ── Scam suffix/prefix words added around brand names ────────────────────────
-# Catches: "tcs-official-hiring.com", "jobs-amazon.in", "wipro-wfh.com"
-_SCAM_SUFFIXES: set[str] = {
-    "jobs","job","careers","career","hiring","hire","recruit","recruitment",
-    "hr","apply","vacancy","vacancies","opening","openings","wfh","work",
-    "home","remote","online","official","india","pvt","ltd","services",
-    "consultant","consultancy","placement","placements","solutions","staffing",
-    "global","international","group","corp","corporate","infotech",
-    "technologies","tech","it","digital","systems","portal","genuine",
-    "verified","real","direct","authorized","registered","certified",
-    "approved","trusted","alert","notice","notification","update",
-}
-
-_SCAM_PREFIXES: set[str] = {
-    "jobs","job","career","careers","hr","hire","apply","official","real",
-    "genuine","verified","get","find","work","join","recruit","placement",
-    "opportunity","alert","notice","apply","now","new",
-}
-
-# ── Unicode / Cyrillic homoglyph map ─────────────────────────────────────────
-# Catches domains using visually identical Unicode characters
-_UNICODE_HOMOGLYPH_MAP: dict[str, str] = {
-    "\u0430": "a",  "\u0435": "e",  "\u043e": "o",  "\u0440": "p",
-    "\u0441": "c",  "\u0445": "x",  "\u0443": "y",  "\u0456": "i",
-    "\u0457": "i",  "\u03bf": "o",  "\u03b1": "a",  "\u03b5": "e",
-    "\uff41": "a",  "\uff42": "b",  "\uff43": "c",  "\uff44": "d",
-    "\uff45": "e",  "\uff46": "f",  "\uff47": "g",  "\uff48": "h",
-    "\uff49": "i",  "\uff4a": "j",  "\uff4b": "k",  "\uff4c": "l",
-    "\uff4d": "m",  "\uff4e": "n",  "\uff4f": "o",  "\uff50": "p",
-    "\uff51": "q",  "\uff52": "r",  "\uff53": "s",  "\uff54": "t",
-    "\uff55": "u",  "\uff56": "v",  "\uff57": "w",  "\uff58": "x",
-    "\uff59": "y",  "\uff5a": "z",
-}
-
-# ── Keyboard adjacency map for proximity-aware typo detection ─────────────────
-_KEYBOARD_ADJACENT: dict[str, str] = {
-    "a": "sqwz",  "b": "vghn",  "c": "xdfv",  "d": "srfce",
-    "e": "wrsdf", "f": "drtgc", "g": "ftyh",  "h": "gyuj",
-    "i": "ujko",  "j": "hukin", "k": "ijlo",  "l": "kop",
-    "m": "njk",   "n": "bhjm",  "o": "iklp",  "p": "ol",
-    "q": "wa",    "r": "etdf",  "s": "awedx", "t": "rfyg",
-    "u": "yhji",  "v": "cfgb",  "w": "qase",  "x": "zsdc",
-    "y": "tghu",  "z": "asx",
-}
 
 _PAY_PHRASES = [
     r"pay.*registration",r"registration fee",r"training fee",r"kit fee",
@@ -1725,14 +1652,8 @@ _HOMOGLYPH_MAP: dict[str, str] = {
 }
 
 def _typo_normalise(s: str) -> str:
-    """
-    Lowercase, strip separators, apply homoglyph + Unicode substitutions.
-    Now also handles Cyrillic/Greek lookalikes via _UNICODE_HOMOGLYPH_MAP.
-    """
+    """Lowercase, strip separators, apply homoglyph substitutions."""
     s = re.sub(r"[-_.]", "", s.lower())
-    # Apply Unicode homoglyphs first (Cyrillic, Greek, full-width)
-    s = "".join(_UNICODE_HOMOGLYPH_MAP.get(c, c) for c in s)
-    # Then apply ASCII homoglyphs (0→o, 1→l, 3→e etc.)
     return "".join(_HOMOGLYPH_MAP.get(c, c) for c in s)
 
 def _levenshtein(s1: str, s2: str) -> int:
@@ -1752,34 +1673,34 @@ def _levenshtein(s1: str, s2: str) -> int:
 
 def _probe_typosquatting(domain: str) -> dict:
     """
-    Typosquat detection v3 — four complementary checks:
+    Typosquat detection v2  (replaces SequenceMatcher / 72% threshold).
 
-    1. Levenshtein edit distance on homoglyph+Unicode-normalised SLDs.
-       Threshold is now SMART — scales with brand name length to reduce
-       false positives on short names (tcs, hcl).
+    Two complementary checks on normalised SLDs:
+
+    1. Levenshtein edit distance ≤ 2 on homoglyph-normalised SLDs.
+       Catches: netlfix, nettflix, netfl1x, g00gle, inf0sys, w1pro …
+       Skips brands with SLD < 4 chars (tcs, ril …) — too short, too noisy.
 
     2. Brand-keyword prefix/suffix containment.
-       Catches: infosys-careers.com, wipro-jobs.in, jobs-amazon.in
+       Catches: infosys-careers.com, wipro-jobs.in, careers.infosys.net …
+       Requires ≥ 2 extra chars beyond the brand token (avoids "infosyss").
 
-    3. Scam suffix/prefix word detection.
-       Catches: tcs-official-hiring.com, genuine-wipro-jobs.com
-
-    4. Keyboard proximity check.
-       Catches intentional adjacent-key typos: infosya (y next to s),
-       amazpn (p next to o), flipkart → fliokart.
+    Root cause of the old false positives (netomi, netsol, netapp):
+       SequenceMatcher was run on FULL domains including .com suffix, inflating
+       scores: "netomi.com" vs "netflix.com" = 76% (above 72% threshold) even
+       though SLD-only score is only 61%. Switching to Levenshtein on SLD-only
+       + homoglyph normalisation eliminates these false positives entirely.
     """
     out = {"is_squatter": False, "closest_brand": None, "similarity": 0.0, "detail": ""}
     if not domain:
         return out
 
-    d_sld  = domain.split(".")[0]
-    d_norm = _typo_normalise(d_sld)
+    d_sld      = domain.split(".")[0]
+    d_norm     = _typo_normalise(d_sld)
 
-    best_lev_dist:  int        = 999
-    best_lev_brand: str | None = None
-    prefix_brand:   str | None = None
-    suffix_brand:   str | None = None
-    keyboard_brand: str | None = None
+    best_lev_dist:  int         = 999
+    best_lev_brand: str | None  = None
+    prefix_brand:   str | None  = None
 
     for b in _BRAND_DOMAINS:
         b_sld  = b.split(".")[0]
@@ -1789,99 +1710,46 @@ def _probe_typosquatting(domain: str) -> dict:
         if len(b_sld) < 4:
             continue
 
-        # ── Check 1: Smart-threshold Levenshtein ─────────────────────────
-        # Scale allowed edit distance by brand name length
-        blen = len(b_norm)
-        if blen <= 5:
-            threshold = 1       # short names: very strict
-        elif blen <= 9:
-            threshold = 1       # medium names: still strict
-        else:
-            threshold = 2       # long names: allow 2 edits
-
-        if d_norm != b_norm:
+        # ── Check 1: Levenshtein on normalised SLDs ───────────────────────
+        if d_norm != b_norm:          # exact match = the real domain, skip
             dist = _levenshtein(d_norm, b_norm)
             if dist < best_lev_dist:
                 best_lev_dist, best_lev_brand = dist, b
 
-        # ── Check 2: Brand keyword embedded in domain ─────────────────────
+        # ── Check 2: brand keyword embedded in domain ─────────────────────
+        # e.g. "infosys-careers.com" contains "infosys"
         if b_norm in d_norm and d_norm != b_norm:
             extra = d_norm.replace(b_norm, "")
-            if len(extra) >= 2:
+            if len(extra) >= 2:       # at least 2 extra chars to avoid "infosyss"
                 prefix_brand = b
 
-        # ── Check 3: Scam suffix/prefix word stripping ────────────────────
-        # Strip known scam words from domain, check if remainder = brand
-        # e.g. "tcs-official-hiring" → strip "official","hiring" → "tcs"
-        d_parts = re.split(r"[-_]", d_sld.lower())
-        scam_stripped = "".join(
-            p for p in d_parts
-            if p not in _SCAM_SUFFIXES and p not in _SCAM_PREFIXES
-        )
-        if scam_stripped and scam_stripped != d_sld.lower():
-            stripped_norm = _typo_normalise(scam_stripped)
-            if stripped_norm == b_norm and len(d_parts) > 1:
-                suffix_brand = b
+    is_lev_squatter    = (best_lev_dist <= 2 and best_lev_brand is not None
+                          and d_norm != _typo_normalise(best_lev_brand.split(".")[0]))
+    is_prefix_squatter = prefix_brand is not None
+    is_squatter        = is_lev_squatter or is_prefix_squatter
 
-        # ── Check 4: Keyboard proximity ───────────────────────────────────
-        # Check if domain differs from brand by exactly 1 keyboard-adjacent char
-        if (len(d_norm) == len(b_norm)
-                and d_norm != b_norm
-                and _levenshtein(d_norm, b_norm) == 1):
-            for i, (c1, c2) in enumerate(zip(d_norm, b_norm)):
-                if c1 != c2 and c1 in _KEYBOARD_ADJACENT.get(c2, ""):
-                    keyboard_brand = b
-                    break
-
-    # ── Determine overall result ──────────────────────────────────────────────
-    is_lev_squatter      = (best_lev_dist is not None
-                            and best_lev_brand is not None
-                            and d_norm != _typo_normalise(best_lev_brand.split(".")[0])
-                            and best_lev_dist <= (1 if len(_typo_normalise(
-                                best_lev_brand.split(".")[0])) <= 9 else 2))
-    is_prefix_squatter   = prefix_brand  is not None
-    is_suffix_squatter   = suffix_brand  is not None
-    is_keyboard_squatter = keyboard_brand is not None
-    is_squatter          = (is_lev_squatter or is_prefix_squatter
-                            or is_suffix_squatter or is_keyboard_squatter)
-
-    # Similarity score for UI
+    # Compute a 0-1 similarity figure for the UI progress bar
     if best_lev_brand:
-        b_sld_len  = max(len(_typo_normalise(best_lev_brand.split(".")[0])), 1)
+        b_sld_len = max(len(_typo_normalise(best_lev_brand.split(".")[0])), 1)
         similarity = round(1.0 - best_lev_dist / b_sld_len, 3)
     else:
         similarity = 0.0
 
-    closest = best_lev_brand or prefix_brand or suffix_brand or keyboard_brand
+    closest = best_lev_brand or prefix_brand
     out.update(similarity=max(0.0, similarity), closest_brand=closest)
 
     if is_squatter:
         if is_lev_squatter:
-            detail = (
-                f"'{domain}' is a likely typosquat of '{best_lev_brand}' "
-                f"(edit distance {best_lev_dist} after homoglyph normalisation)"
-            )
-        elif is_keyboard_squatter:
-            detail = (
-                f"'{domain}' appears to be a keyboard-proximity typo of "
-                f"'{keyboard_brand}' — adjacent key substitution detected"
-            )
-        elif is_suffix_squatter:
-            detail = (
-                f"'{domain}' uses brand name '{suffix_brand.split('.')[0]}' "
-                f"surrounded by scam keywords — likely impersonation"
-            )
+            detail = (f"'{domain}' is a likely typosquat of '{best_lev_brand}' "
+                      f"(edit distance {best_lev_dist} after homoglyph normalisation)")
         else:
-            detail = (
-                f"'{domain}' contains brand keyword "
-                f"'{prefix_brand.split('.')[0]}' — possible impersonation of {prefix_brand}"
-            )
+            detail = (f"'{domain}' contains brand keyword "
+                      f"'{prefix_brand.split('.')[0]}' — possible impersonation of {prefix_brand}")
         out.update(is_squatter=True, detail=detail)
     else:
-        out["detail"] = (
-            f"No typosquat detected (closest: {closest}, edit distance {best_lev_dist})"
-            if closest else "No close brand match found"
-        )
+        out["detail"] = (f"No typosquat detected (closest: {closest}, "
+                         f"edit distance {best_lev_dist})"
+                         if closest else "No close brand match found")
     return out
 
 
@@ -2980,126 +2848,6 @@ def _probe_mca(company: str) -> dict:
     return out
 
 
-def _probe_safe_browsing(urls: list[str]) -> dict:
-    """
-    Google Safe Browsing API v4 — checks URLs against Google's threat database.
-
-    Threats detected:
-      MALWARE, SOCIAL_ENGINEERING (phishing), UNWANTED_SOFTWARE,
-      POTENTIALLY_HARMFUL_APPLICATION
-
-    API key is read from st.secrets["GOOGLE_SAFE_BROWSING_KEY"].
-    If the key is missing or the API call fails, returns a neutral result
-    so a misconfigured key never blocks the rest of the analysis.
-
-    Returns:
-      {
-        "threats_found": bool,
-        "threat_urls":   [list of flagged URLs],
-        "threat_types":  [list of threat type strings],
-        "detail":        str,
-        "score":         int   (0 = clean, 30 = threat found)
-      }
-    """
-    out = {
-        "threats_found": False,
-        "threat_urls":   [],
-        "threat_types":  [],
-        "detail":        "",
-        "score":         0,
-    }
-
-    # ── Filter to valid URLs only ─────────────────────────────────────────────
-    valid_urls = [u for u in (urls or []) if u and u.startswith("http")]
-    if not valid_urls:
-        out["detail"] = "No URLs to check"
-        return out
-
-    # ── Read API key from secrets ─────────────────────────────────────────────
-    try:
-        api_key = st.secrets.get("GOOGLE_SAFE_BROWSING_KEY", "")
-    except Exception:
-        api_key = os.environ.get("GOOGLE_SAFE_BROWSING_KEY", "")
-
-    if not api_key:
-        out["detail"] = "Safe Browsing key not configured — skipped"
-        return out
-
-    # ── Build request payload ─────────────────────────────────────────────────
-    payload = json.dumps({
-        "client": {
-            "clientId":      "job-scam-detector",
-            "clientVersion": "5.0",
-        },
-        "threatInfo": {
-            "threatTypes": [
-                "MALWARE",
-                "SOCIAL_ENGINEERING",
-                "UNWANTED_SOFTWARE",
-                "POTENTIALLY_HARMFUL_APPLICATION",
-            ],
-            "platformTypes":   ["ANY_PLATFORM"],
-            "threatEntryTypes": ["URL"],
-            "threatEntries":   [{"url": u} for u in valid_urls[:10]],
-        },
-    }).encode("utf-8")
-
-    api_url = (
-        f"https://safebrowsing.googleapis.com/v4/threatMatches:find?key={api_key}"
-    )
-
-    try:
-        req = urllib.request.Request(
-            api_url,
-            data=payload,
-            method="POST",
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent":   "ScamDetector/5.0",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-
-        matches = data.get("matches", [])
-        if not matches:
-            out["detail"] = (
-                f"Safe Browsing: {len(valid_urls)} URL(s) checked — no threats found"
-            )
-            return out
-
-        # ── Threats found ─────────────────────────────────────────────────────
-        flagged_urls  = list({m["threat"]["url"] for m in matches})
-        threat_types  = list({m["threatType"]    for m in matches})
-
-        _THREAT_LABELS = {
-            "MALWARE":                        "Malware",
-            "SOCIAL_ENGINEERING":             "Phishing / Social Engineering",
-            "UNWANTED_SOFTWARE":              "Unwanted Software",
-            "POTENTIALLY_HARMFUL_APPLICATION":"Potentially Harmful App",
-        }
-        readable = [_THREAT_LABELS.get(t, t) for t in threat_types]
-
-        out.update(
-            threats_found = True,
-            threat_urls   = flagged_urls,
-            threat_types  = threat_types,
-            score         = 30,
-            detail        = (
-                f"Google Safe Browsing flagged {len(flagged_urls)} URL(s): "
-                f"{', '.join(readable)}. "
-                f"Flagged: {', '.join(flagged_urls[:2])}"
-            ),
-        )
-
-    except urllib.error.HTTPError as e:
-        out["detail"] = f"Safe Browsing API error: HTTP {e.code}"
-    except Exception as e:
-        out["detail"] = f"Safe Browsing check skipped: {type(e).__name__}"
-
-    return out
-
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def _run_live_probes_cached(domain: str, contact: str, company: str, website: str) -> dict:
     """
@@ -3115,7 +2863,6 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         "mx_record":      {"status": "NO_EMAIL", "detail": ""},
         "company_domain": {"domain_exists": None, "detail": ""},
         "spf_dmarc":      {"spf": None, "dmarc": None, "detail": "", "score": 0},
-        "safe_browsing":  {"threats_found": False, "detail": "Not checked", "score": 0},
     }
     lock = threading.Lock()
 
@@ -3127,18 +2874,6 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         with lock:
             probes[key] = r
 
-    # ── Collect all URLs from domain + website + description for Safe Browsing ─
-    sb_urls: list[str] = []
-    if domain:
-        sb_urls.append(f"https://{domain}")
-        sb_urls.append(f"http://{domain}")
-    if website and website.startswith("http"):
-        sb_urls.append(website)
-    # Also grab any URLs embedded in the contact/description fields
-    extra = re.findall(r"https?://[^\s)\"',<>{}\[\]]{6,}", contact or "")
-    sb_urls.extend(extra[:5])
-    sb_urls = list(dict.fromkeys(sb_urls))   # deduplicate, preserve order
-
     tasks = [
         ("domain_age",     _probe_domain_age,      domain or ""),
         ("site_reach",     _probe_site_reachable,   domain or ""),
@@ -3147,7 +2882,6 @@ def _run_live_probes_cached(domain: str, contact: str, company: str, website: st
         ("mx_record",      _probe_mx_record,        contact),
         ("company_domain", _probe_company_domain,   (company, website)),
         ("spf_dmarc",      _probe_spf_dmarc,        domain or ""),
-        ("safe_browsing",  _probe_safe_browsing,    sb_urls),
     ]
     threads = [threading.Thread(target=_run, args=t, daemon=True) for t in tasks]
     for t in threads: t.start()
@@ -3243,13 +2977,10 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
                 "mail service, not a real corporate mail server"
             )
         if mx.get("free_mx") and not mx.get("voip_risk"):
-            # Google Workspace / Microsoft 365 is completely normal for legitimate
-            # small and mid-sized Indian companies. Only add a tiny informational
-            # note — do NOT penalise or treat this as a red flag.
-            # penalty intentionally 0 here
+            penalty += 6
             warnings.append(
-                f"'{mx_dom}' routes mail through Google/Microsoft 365 — "
-                "this is normal for many legitimate companies using hosted email"
+                f"'{mx_dom}' uses a free mail provider (Google/Outlook) — "
+                "not a dedicated corporate mail server"
             )
 
     # ── RDAP registrar / privacy signals ─────────────────────────────────────
@@ -3320,20 +3051,7 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
         elif not spf.get("dmarc"):
             penalty += 8
             warnings.append(f"'{spf_dom}' has no DMARC record — anti-spoofing not configured")
-    # ── Google Safe Browsing ──────────────────────────────────────────────────
-    sb = probes.get("safe_browsing", {})
-    if sb.get("threats_found"):
-        # Safe Browsing is high-confidence — Google's own database
-        # Penalty bypasses the 55 cap because a confirmed phishing/malware
-        # URL is definitive evidence regardless of other signals
-        penalty += 35
-        warnings.append(
-            f"Google Safe Browsing flagged this URL as dangerous: "
-            f"{sb.get('detail', '')}"
-        )
-
     return min(penalty, 55), warnings
-
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3625,122 +3343,18 @@ def _run_rules(job: dict) -> dict:
 # LLM
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _llm_prompt(job: dict, probe_warnings: list, probes: dict | None = None) -> str:
+def _llm_prompt(job: dict, probe_warnings: list) -> str:
     ctx = "\n".join(f"  - {w}" for w in probe_warnings) if probe_warnings else "  - None"
-
-    # ── Build explicit probe verification summary for the LLM ────────────────
-    # This ensures the LLM knows what the live probes actually confirmed,
-    # so it doesn't say UNVERIFIABLE when the domain is clearly verified.
-    probe_summary_lines = []
-    if probes:
-        # Domain age
-        da = probes.get("domain_age", {})
-        if da.get("status") == "ESTABLISHED":
-            probe_summary_lines.append(
-                f"DOMAIN AGE: ESTABLISHED — registered {da.get('age_days', '?')} days ago (trusted domain)"
-            )
-        elif da.get("status") not in ("skipped", "unknown", None, ""):
-            probe_summary_lines.append(f"DOMAIN AGE: {da.get('status','?')} — {da.get('detail','')}")
-
-        # Site reachability
-        sr = probes.get("site_reach", {})
-        if sr.get("reachable") is True:
-            probe_summary_lines.append(
-                "SITE: LIVE — website is reachable with valid SSL certificate"
-            )
-        elif sr.get("reachable") is False:
-            probe_summary_lines.append(f"SITE: OFFLINE — {sr.get('detail','')}")
-
-        # Company domain check
-        cd = probes.get("company_domain", {})
-        if cd.get("domain_exists") is True:
-            probe_summary_lines.append(
-                f"COMPANY DOMAIN: VERIFIED — {cd.get('detail','')}"
-            )
-
-        # Company identity (Clearbit/LinkedIn)
-        ci = probes.get("company_identity", {})
-        if ci:
-            probe_summary_lines.append(f"COMPANY IDENTITY: {ci.get('detail','')}")
-
-        # MX record
-        mx = probes.get("mx_record", {})
-        mx_status = mx.get("status", "")
-        if mx_status == "MX_OK":
-            probe_summary_lines.append(
-                f"MAIL SERVER: CONFIGURED — {mx.get('detail','')}"
-            )
-        elif mx_status in ("NO_MX", "DNS_FAIL"):
-            probe_summary_lines.append(
-                f"MAIL SERVER: MISSING — {mx.get('detail','')}"
-            )
-        elif mx_status == "FREE_PROVIDER":
-            probe_summary_lines.append(
-                f"MAIL SERVER: Routes through free provider (Gmail/Outlook) — "
-                f"not a dedicated corporate mail server"
-            )
-
-        # MCA
-        mca = probes.get("mca", {})
-        if mca:
-            probe_summary_lines.append(f"MCA REGISTRY: {mca.get('detail','')}")
-
-        # SPF / DMARC
-        spf = probes.get("spf_dmarc", {})
-        if spf.get("spf") or spf.get("dmarc"):
-            probe_summary_lines.append(f"SPF/DMARC: {spf.get('detail','')}")
-
-        # Safe Browsing
-        sb = probes.get("safe_browsing", {})
-        if sb.get("threats_found"):
-            probe_summary_lines.append(
-                f"GOOGLE SAFE BROWSING: THREAT DETECTED — {sb.get('detail','')}"
-            )
-        elif not sb.get("threats_found") and "checked" in sb.get("detail", "").lower():
-            probe_summary_lines.append("GOOGLE SAFE BROWSING: CLEAN — no threats found")
-
-    probe_summary = (
-        "\n".join(f"  {line}" for line in probe_summary_lines)
-        if probe_summary_lines
-        else "  No structured probe data available"
-    )
-
-    # ── Salary instruction ────────────────────────────────────────────────────
     salary_raw = (job.get("salary") or "").strip()
     salary_display = salary_raw if salary_raw else "N/A"
     salary_instruction = (
         "The salary was NOT provided in this job posting. "
-        "Set salary_assessment to exactly \"NOT_PROVIDED\". "
-        "Do NOT penalise the posting for missing salary — many legitimate companies "
-        "disclose salary only during interviews. Do not flag this as a red flag."
+        "You MUST set salary_assessment to exactly: \"NOT_PROVIDED\" — "
+        "do NOT guess, infer, or comment on whether it is realistic."
         if not salary_raw else
-        "Assess whether the stated salary is realistic for this role, experience level, "
-        "and Indian city. Flag ONLY if unrealistically high (e.g. ₹5L/month for a fresher) "
-        "or suspiciously vague (e.g. 'unlimited earnings'). Normal corporate salaries "
-        "without explicit mention are NOT a red flag."
+        "Assess whether the stated salary is realistic for this role and location. "
+        "If it seems unrealistically high, flag it as a potential scam signal."
     )
-
-    # ── Company legitimacy instruction ────────────────────────────────────────
-    legitimacy_instruction = ""
-    if probes:
-        cd = probes.get("company_domain", {})
-        da = probes.get("domain_age", {})
-        if cd.get("domain_exists") is True and da.get("status") == "ESTABLISHED":
-            legitimacy_instruction = (
-                "\nCOMPANY LEGITIMACY INSTRUCTION (MANDATORY): "
-                "The live network probes have CONFIRMED that this company's domain is "
-                "real, established, and verifiable. You MUST set company_legitimacy to "
-                "\"VERIFIED\" unless you have strong text-based evidence of fraud. "
-                "Do NOT set it to UNVERIFIABLE just because the job description text "
-                "lacks company details — the probes have already verified the domain."
-            )
-        elif cd.get("domain_exists") is False:
-            legitimacy_instruction = (
-                "\nCOMPANY LEGITIMACY INSTRUCTION: "
-                "The live network probes could NOT confirm this company's domain exists. "
-                "Treat company legitimacy with suspicion."
-            )
-
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
 Analyse the job posting and return ONLY a valid JSON object — no markdown, no prose, no fences.
 
@@ -3755,21 +3369,11 @@ Requirements: {job.get('requirements','N/A')}
 Benefits: {job.get('benefits','N/A')}
 Contact: {job.get('contact','N/A')}
 
-LIVE PROBE FINDINGS (these are facts from real-time network checks — trust them):
+LIVE PROBE FINDINGS:
 {ctx}
-
-STRUCTURED PROBE VERIFICATION SUMMARY:
-{probe_summary}
-{legitimacy_instruction}
 
 SALARY ASSESSMENT RULE (mandatory):
 {salary_instruction}
-
-IMPORTANT RULES:
-- A missing salary is NOT a red flag for Indian corporate jobs.
-- A company email that routes through Outlook/Google MX is NORMAL for small/mid companies — do NOT flag as "free email" or "personal mail".
-- Base company_legitimacy on the probe summary above, not just the text content.
-- Only flag linguistic issues if they are genuinely suspicious, not just generic HR language.
 
 Required JSON schema (all keys mandatory):
 {{
@@ -4069,13 +3673,8 @@ def _render_probe_table(probes: dict):
     mx = probes.get("mx_record", {})
     mx_st = mx.get("status", "")
     if mx_st == "MX_FOUND":
-        if mx.get("voip_risk"):
-            mx_b = _badge("VOIP/BULK", "#f59e0b", "rgba(245,158,11,0.12)")
-        elif mx.get("free_mx"):
-            # Google Workspace / O365 — normal for legitimate companies
-            mx_b = _badge("HOSTED EMAIL", "#22c55e", "rgba(34,197,94,0.12)")
-        else:
-            mx_b = _badge("MX OK", "#22c55e", "rgba(34,197,94,0.12)")
+        mx_b = (_badge("VOIP/BULK", "#f59e0b", "rgba(245,158,11,0.12)") if mx.get("voip_risk")
+                else _badge("MX OK", "#22c55e", "rgba(34,197,94,0.12)"))
     elif mx_st == "NO_MX":
         mx_b = _badge("NO MX RECORDS", "#dc2626", "rgba(220,38,38,0.12)")
     elif mx_st == "DNS_FAIL":
@@ -4142,18 +3741,6 @@ def _render_probe_table(probes: dict):
     else:
         spf_badge = _badge("MISSING", "#dc2626", "rgba(220,38,38,0.12)")
     rows.append(_row(I.SHIELD, "SPF / DMARC", spf_badge, spf.get("detail", "")))
-
-    # ── Google Safe Browsing row ──────────────────────────────────────────────
-    sb = probes.get("safe_browsing", {})
-    if sb.get("threats_found"):
-        sb_badge = _badge("THREAT DETECTED", "#dc2626", "rgba(220,38,38,0.12)")
-    elif sb.get("detail", "").startswith("No URLs"):
-        sb_badge = _badge("NO URLS", "#6b7280", "rgba(107,114,128,0.12)")
-    elif "skipped" in sb.get("detail", "").lower() or "not configured" in sb.get("detail", "").lower():
-        sb_badge = _badge("SKIPPED", "#6b7280", "rgba(107,114,128,0.12)")
-    else:
-        sb_badge = _badge("CLEAN", "#22c55e", "rgba(34,197,94,0.12)")
-    rows.append(_row(I.SHIELD, "Google Safe Browsing", sb_badge, _esc(sb.get("detail", ""))))
 
     st.markdown(
         f'<div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;'
@@ -4954,7 +4541,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     for attempt in range(2):
                         try:
-                            prompt = _llm_prompt(job, warnings, probes)
+                            prompt = _llm_prompt(job, warnings)
                             if attempt == 1:
                                 # Stricter retry prompt — force JSON only
                                 prompt += (
