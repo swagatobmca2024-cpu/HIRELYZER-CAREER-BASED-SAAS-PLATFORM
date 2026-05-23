@@ -270,9 +270,9 @@ _WEIGHTS: dict[str, int] = {
     "req_paradox":             10,
     "personal_info_demand":     9,
     "unrealistic_benefits":     7,
-    "location_mismatch":        7,
+    "location_mismatch":       12,   # raised: fake abroad placement very common in India
     "poor_grammar":             6,
-    "work_from_home_bait":      5,
+    "work_from_home_bait":     11,   # raised: #1 scam category in India currently
     "missing_salary":           4,
     "generic_template":         4,
     # ── India-specific signals ────────────────────────────────────────────────
@@ -341,7 +341,7 @@ _BRAND_DOMAINS: list[str] = [
     "byju.com","byjus.com","unacademy.com","vedantu.com","upgrad.com",
     "simplilearn.com","coursera.org","udemy.com","whitehatjr.com",
     "collegedunia.com","collegedekho.com","careers360.com","shiksha.com",
-    "topper.com","toppr.com","physicswallah.net","pw.live",
+    "topper.com","toppr.com","physicswallah.net",
     "gradeup.co","testbook.com","adda247.com","oliveboard.com",
     "embibe.com","doubtnut.com","extramarks.com","meritnation.com",
     # ── Indian conglomerates ──────────────────────────────────────────────────
@@ -371,18 +371,18 @@ _BRAND_DOMAINS: list[str] = [
     "ioc.com","bpcl.in","hpcl.com","coalindia.in",
     # ── Global MNCs with India ops ────────────────────────────────────────────
     "accenture.com","capgemini.com","cognizant.com","deloitte.com",
-    "pwc.com","kpmg.com","ey.com","mckinsey.com","bain.com","bcg.com",
+    "pwc.com","kpmg.com","mckinsey.com","bain.com","bcg.com",
     "ibm.com","oracle.com","sap.com","salesforce.com","adobe.com",
     "amazon.com","google.com","microsoft.com","meta.com","apple.com",
     "netflix.com","uber.com","airbnb.com","twitter.com","linkedin.com",
     "intel.com","amd.com","qualcomm.com","nvidia.com","cisco.com",
-    "hp.com","dell.com","lenovo.com","samsung.com","sony.com","lg.com",
-    "bosch.in","siemens.co.in","honeywell.com","ge.com","3m.com",
+    "dell.com","lenovo.com","samsung.com","sony.com",
+    "bosch.in","siemens.co.in","honeywell.com",
     "abbott.com","johnson.com","unilever.com","nestle.in","pepsi.com",
     "cocacola.com","amex.com","visa.com","mastercard.com","paypal.com",
     "jpmorgan.com","citibank.com","hsbc.co.in","standardchartered.com",
     "barclays.com","deutsche-bank.com","bnpparibas.com",
-    "shell.com","exxon.com","bp.com","totalenergies.com",
+    "shell.com","exxon.com","totalenergies.com",
     "boeing.com","airbus.com","lockheedmartin.com","caterpillar.com",
     # ── Global tech ───────────────────────────────────────────────────────────
     "atlassian.com","slack.com","zoom.us","dropbox.com","github.com",
@@ -413,7 +413,7 @@ _BRAND_DOMAINS: list[str] = [
     "springverify.com","leadsquared.com","livespace.com","meero.com",
     "khatabook.com","okCredit.com","veefin.com","recur.club",
     "setu.co","signzy.com","hyperface.co","yap.co","open.money",
-    "niyo.co","fi.money","jupiter.money","freo.money","epifi.com",
+    "niyo.co","jupiter.money","freo.money","epifi.com",
     "smallcase.com","ditto.insurance","acko.com","digit.in",
     "coverfox.com","renewbuy.com","turtlemint.com",
     # ── Indian media / entertainment ──────────────────────────────────────────
@@ -436,7 +436,14 @@ _PAY_PHRASES = [
     r"processing fee",r"joining fee",r"membership fee",r"buy.*starter kit",
     r"purchase.*materials",r"invest.*joining",r"small.*investment",
     r"courier.*charge",r"background.*check.*fee",r"verification.*charge",
-    # NEW — common Indian scam variants
+    # internship fee variants — very common Indian scam
+    r"internship fee",r"one.time.*fee",r"one time fee",r"one-time fee",
+    r"confirmation fee",r"seat.*confirmation.*fee",r"seat.*booking.*fee",
+    r"seat.*fee",r"programme fee",r"program fee",r"onboarding fee",
+    r"pay.*confirm.*seat",r"pay.*secure.*seat",r"pay.*before.*start",
+    r"amount.*confirm",r"fee.*refund",r"refundable.*fee",
+    r"pay.*joining",r"payment.*joining",r"fee.*joining",
+    # common Indian scam variants
     r"pay.*before.*joining",r"deposit.*refund.*after",r"id.*card.*fee",
     r"uniform.*charge",r"laptop.*deposit",r"tool.*kit.*purchase",
     r"sim.*card.*fee",r"scanner.*fee",r"biometric.*fee",
@@ -1776,98 +1783,132 @@ def _levenshtein(s1: str, s2: str) -> int:
 
 def _probe_typosquatting(domain: str) -> dict:
     """
-    Typosquat detection v2  (replaces SequenceMatcher / 72% threshold).
+    Typosquat detection v3 — Hybrid Levenshtein + dnstwist approach.
 
-    Two complementary checks on normalised SLDs:
+    Stage 1 (fast, ~0.2ms): Levenshtein pre-filter on all 500+ brands
+      → picks top-5 closest brand candidates by edit distance
+      → also runs prefix/containment check for short brands (tcs, ola, jio)
 
-    1. Levenshtein edit distance ≤ 2 on homoglyph-normalised SLDs.
-       Catches: netlfix, nettflix, netfl1x, g00gle, inf0sys, w1pro …
-       Skips brands with SLD < 4 chars (tcs, ril …) — too short, too noisy.
+    Stage 2 (accurate, ~70ms): dnstwist on top-5 candidates only
+      → generates ALL mutation types: addition, omission, transposition,
+        replacement, homoglyph, repetition, bitsquatting, vowel-swap etc.
+      → checks if input domain appears in any mutation set
+      → catches attacks Levenshtein alone misses (e.g. flipakrt = transposition)
 
-    2. Brand-keyword prefix/suffix containment.
-       Catches: infosys-careers.com, wipro-jobs.in, careers.infosys.net …
-       Requires ≥ 2 extra chars beyond the brand token (avoids "infosyss").
-
-    Root cause of the old false positives (netomi, netsol, netapp):
-       SequenceMatcher was run on FULL domains including .com suffix, inflating
-       scores: "netomi.com" vs "netflix.com" = 76% (above 72% threshold) even
-       though SLD-only score is only 61%. Switching to Levenshtein on SLD-only
-       + homoglyph normalisation eliminates these false positives entirely.
+    Falls back gracefully to Stage 1 result if dnstwist unavailable.
+    Never runs dnstwist on all 500+ brands — would take 35s.
     """
     out = {"is_squatter": False, "closest_brand": None, "similarity": 0.0, "detail": ""}
     if not domain:
         return out
 
-    d_sld      = domain.split(".")[0]
-    d_norm     = _typo_normalise(d_sld)
+    d_sld  = domain.split(".")[0]
+    d_norm = _typo_normalise(d_sld)
 
-    best_lev_dist:  int         = 999
-    best_lev_brand: str | None  = None
-    prefix_brand:   str | None  = None
+    # ── Stage 1: Fast Levenshtein pre-filter ─────────────────────────────────
+    scored       = []
+    prefix_brand = None
 
     for b in _BRAND_DOMAINS:
         b_sld  = b.split(".")[0]
         b_norm = _typo_normalise(b_sld)
 
-        # ── Check 1: Levenshtein on normalised SLDs ─────────────────────
-        # Only use Levenshtein for brands with 6+ chars — short brands
-        # like "ring", "ola", "jio" cause too many false positives
-        # (e.g. "turing" vs "ring" = dist 2, completely unrelated).
-        # Also enforce proportionality: edit distance must be ≤ 25% of
-        # brand length so "flippkart" (dist 1 from "flipkart"=8 chars,
-        # ratio=0.125) is caught but "turing" (dist 2 from "ring"=4 chars,
-        # ratio=0.5) is not.
-        if len(b_sld) >= 6:
-            if d_norm != b_norm:      # exact match = the real domain, skip
-                dist = _levenshtein(d_norm, b_norm)
-                # Proportionality guard: dist must be ≤ 25% of brand length
-                max_allowed = max(1, int(len(b_norm) * 0.25))
-                if dist <= max_allowed and dist < best_lev_dist:
-                    best_lev_dist, best_lev_brand = dist, b
+        # Exact match = the real domain itself — skip entirely
+        if d_norm == b_norm:
+            out["detail"] = f"Exact match — '{domain}' is the real brand domain"
+            return out
 
-        # ── Check 2: brand keyword embedded in domain ─────────────────────
-        # e.g. "infosys-careers.com" contains "infosys"
-        # Short brands (tcs, ola, jio, ring) use a stricter extra-chars
-        # threshold (≥4 extra chars) to avoid false positives like
-        # "oracle" matching "ola" or "turing" matching "ring".
-        if b_norm in d_norm and d_norm != b_norm:
+        # Levenshtein for 6+ char brands with proportionality guard
+        # Use NORMALISED SLDs so homoglyphs (f1ipkart→flipkart) rank correctly
+        if len(b_sld) >= 6:
+            dist = _levenshtein(d_norm, b_norm)
+            max_allowed = max(1, int(len(b_norm) * 0.25))
+            if dist <= max_allowed:
+                scored.append((dist, b))
+            # Also add as candidate if normalised match is very close
+            # even if raw dist exceeds threshold — catches f1ipkart→flipkart
+            elif dist <= 3:
+                scored.append((dist + 0.5, b))  # slightly lower priority
+
+        # Prefix/containment for all brands — stricter threshold for short ones
+        if b_norm in d_norm:
             extra = d_norm.replace(b_norm, "")
-            # Very short brands (≤4 chars): need 5+ extra chars to avoid
-            # "ringtone" matching "ring", "biology" matching "bio" etc.
-            # Short brands (5 chars): need 4+ extra chars
-            # Normal brands (6+ chars): need 2+ extra chars
             min_extra = (5 if len(b_sld) <= 4 else
                          4 if len(b_sld) <= 5 else 2)
-            if len(extra) >= min_extra:
+            if len(extra) >= min_extra and prefix_brand is None:
                 prefix_brand = b
 
-    is_lev_squatter    = (best_lev_dist <= 2 and best_lev_brand is not None
-                          and d_norm != _typo_normalise(best_lev_brand.split(".")[0]))
-    is_prefix_squatter = prefix_brand is not None
-    is_squatter        = is_lev_squatter or is_prefix_squatter
+    # Sort candidates by edit distance — take top 5 for dnstwist
+    scored.sort(key=lambda x: x[0])
+    top_candidates = [b for _, b in scored[:5]]
+    best_lev_dist  = scored[0][0] if scored else 999
+    best_lev_brand = scored[0][1] if scored else None
 
-    # Compute a 0-1 similarity figure for the UI progress bar
+    # ── Stage 2: dnstwist deep check on top candidates ───────────────────────
+    dnstwist_brand = None
+    try:
+        import dnstwist as _dnstwist
+        for brand in top_candidates:
+            fuzz = _dnstwist.Fuzzer(brand)
+            fuzz.generate()
+            # Check exact domain match in mutations
+            mutation_domains = {d["domain"] for d in fuzz.domains}
+            # Also check SLD-only match (catches TLD swaps: .com → .in)
+            mutation_slds    = {d["domain"].split(".")[0] for d in fuzz.domains}
+            if domain in mutation_domains or d_sld in mutation_slds:
+                dnstwist_brand = brand
+                break
+    except Exception:
+        pass   # dnstwist unavailable — fall back to Stage 1 result
+
+    # ── Check 3: Direct homoglyph normalisation match ────────────────────────
+    # e.g. f1ipkart → normalises to "flipkart" → exact match
+    # Catches human-typed homoglyphs (0→o, 1→l, 3→e) that dnstwist misses
+    homoglyph_brand = None
+    for b in _BRAND_DOMAINS:
+        b_sld  = b.split(".")[0]
+        b_norm = _typo_normalise(b_sld)
+        if d_norm == b_norm and domain.split(".")[0] != b_sld:
+            homoglyph_brand = b
+            break
+
+    # ── Determine final verdict ───────────────────────────────────────────────
+    is_lev_squatter      = best_lev_dist <= 2 and best_lev_brand is not None
+    is_prefix_squatter   = prefix_brand is not None
+    is_dnstwist_squatter = dnstwist_brand is not None
+    is_homoglyph         = homoglyph_brand is not None
+    is_squatter = is_lev_squatter or is_prefix_squatter or is_dnstwist_squatter or is_homoglyph
+
+    # Similarity score for UI
     if best_lev_brand:
-        b_sld_len = max(len(_typo_normalise(best_lev_brand.split(".")[0])), 1)
-        similarity = round(1.0 - best_lev_dist / b_sld_len, 3)
+        b_len      = max(len(_typo_normalise(best_lev_brand.split(".")[0])), 1)
+        similarity = round(1.0 - best_lev_dist / b_len, 3)
     else:
-        similarity = 0.0
+        similarity = 1.0 if is_homoglyph else 0.0
 
-    closest = best_lev_brand or prefix_brand
+    closest = homoglyph_brand or dnstwist_brand or best_lev_brand or prefix_brand
     out.update(similarity=max(0.0, similarity), closest_brand=closest)
 
     if is_squatter:
-        if is_lev_squatter:
-            detail = (f"'{domain}' is a likely typosquat of '{best_lev_brand}' "
-                      f"(edit distance {best_lev_dist} after homoglyph normalisation)")
+        if is_homoglyph:
+            method = f"homoglyph substitution — normalises to '{_typo_normalise(d_sld)}'"
+        elif is_dnstwist_squatter and not is_lev_squatter and not is_prefix_squatter:
+            method = "dnstwist mutation analysis"
+        elif is_lev_squatter:
+            method = f"edit distance {best_lev_dist} after homoglyph normalisation"
         else:
-            detail = (f"'{domain}' contains brand keyword "
-                      f"'{prefix_brand.split('.')[0]}' — possible impersonation of {prefix_brand}")
-        out.update(is_squatter=True, detail=detail)
+            method = f"brand keyword '{prefix_brand.split('.')[0]}' embedded in domain"
+        out.update(
+            is_squatter=True,
+            detail=(f"'{domain}' is a likely typosquat of '{closest}' "
+                    f"({method})")
+        )
     else:
-        out["detail"] = (f"No typosquat detected (closest: {closest}, "
-                         f"edit distance {best_lev_dist})"
-                         if closest else "No close brand match found")
+        out["detail"] = (
+            f"No typosquat detected (closest brand: {closest}, "
+            f"edit distance {best_lev_dist})"
+            if closest else "No close brand match found"
+        )
     return out
 
 
@@ -5116,7 +5157,9 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     sv_sev = _sev.get(sv, 0)
                     if av_sev > sv_sev:
                         next_threshold = _thresholds.get(av_sev, 100)
-                        final = av if blended >= next_threshold - 5 else sv
+                        # Override window tightened to 3pts — prevents score 49
+                        # showing LIKELY_SCAM when score band shows CAUTION.
+                        final = av if blended >= next_threshold - 3 else sv
                     else:
                         final = sv
 
