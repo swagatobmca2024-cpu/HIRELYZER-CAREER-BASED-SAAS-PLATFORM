@@ -3761,7 +3761,7 @@ Required JSON schema (all keys mandatory):
   "linguistic_analysis": "<tone, urgency, grammar observations>",
   "salary_assessment": "<NOT_PROVIDED if salary missing — otherwise a detailed paragraph covering market range, alignment, experience fit, location factor, and scam signal if applicable>",
   "recommended_action": "<specific advice for the job seeker>",
-  "similar_scam_type": "<Pick the SINGLE best match from this exhaustive list. Read all options carefully before choosing. FEE-BASED: Internship fee scam | Training fee scam | Registration fee scam | Security deposit scam | Equipment/laptop fee scam | Background check fee scam | Certification fee scam | Joining fee scam | Refundable deposit scam | Uniform/kit fee scam. FAKE IDENTITY: Ghost company scam | Brand impersonation scam | Cloned company website scam | Fake recruiter scam | Fake HR scam | Fake LinkedIn recruiter scam | Government job impersonation scam | MNC impersonation scam | Freelance platform impersonation scam. FINANCIAL: Advance fee scam | Overpayment/cheque scam | Cryptocurrency job scam | Money mule/reshipping scam | Fake payroll scam | Commission withholding scam | Fake investment job scam | Pyramid/MLM disguised as job. DATA THEFT: Personal data harvesting scam | Document collection scam (Aadhaar/PAN/passport) | Bank details harvesting scam | Fake KYC job scam | Identity theft recruitment scam. REMOTE/ONLINE: Work-from-home task scam | Online survey/review job scam | Like-and-earn / watch-and-earn scam | Fake freelance project scam | Remote data entry scam | Social media manager fake job | Fake content moderation job. OFFER-BASED: Too-good-to-be-true salary scam | Unsolicited job offer scam | Fake visa sponsorship scam | Fake abroad placement scam | Fake government job scam | Fake PSU/bank recruitment scam | Fake campus placement scam. TECHNICAL: Phishing via job portal scam | Malware attachment job scam | Fake video interview scam | WhatsApp job scam | Telegram job scam | SMS job scam. EXPLOITATION: Unpaid internship disguised as paid | Fake apprenticeship scam | Bait-and-switch job scam | Commission-only disguised as salaried | Fake probation period scam | Slave labour disguised as internship. OTHER: Unknown>,"
+  "similar_scam_type": "<IMPORTANT: If ai_risk_score < 30 OR top_red_flags is empty, you MUST return exactly: Unknown. Only assign a scam pattern when you have identified clear, specific evidence of that pattern in the job text. Do NOT guess or assign patterns to clean postings. If unsure, return Unknown. If evidence exists, pick the SINGLE best match from this exhaustive list. Read all options carefully before choosing. FEE-BASED: Internship fee scam | Training fee scam | Registration fee scam | Security deposit scam | Equipment/laptop fee scam | Background check fee scam | Certification fee scam | Joining fee scam | Refundable deposit scam | Uniform/kit fee scam. FAKE IDENTITY: Ghost company scam | Brand impersonation scam | Cloned company website scam | Fake recruiter scam | Fake HR scam | Fake LinkedIn recruiter scam | Government job impersonation scam | MNC impersonation scam | Freelance platform impersonation scam. FINANCIAL: Advance fee scam | Overpayment/cheque scam | Cryptocurrency job scam | Money mule/reshipping scam | Fake payroll scam | Commission withholding scam | Fake investment job scam | Pyramid/MLM disguised as job. DATA THEFT: Personal data harvesting scam | Document collection scam (Aadhaar/PAN/passport) | Bank details harvesting scam | Fake KYC job scam | Identity theft recruitment scam. REMOTE/ONLINE: Work-from-home task scam | Online survey/review job scam | Like-and-earn / watch-and-earn scam | Fake freelance project scam | Remote data entry scam | Social media manager fake job | Fake content moderation job. OFFER-BASED: Too-good-to-be-true salary scam | Unsolicited job offer scam | Fake visa sponsorship scam | Fake abroad placement scam | Fake government job scam | Fake PSU/bank recruitment scam | Fake campus placement scam. TECHNICAL: Phishing via job portal scam | Malware attachment job scam | Fake video interview scam | WhatsApp job scam | Telegram job scam | SMS job scam. EXPLOITATION: Unpaid internship disguised as paid | Fake apprenticeship scam | Bait-and-switch job scam | Commission-only disguised as salaried | Fake probation period scam | Slave labour disguised as internship. OTHER: Unknown>,"
   "confidence": <0-100>
 }}"""
 
@@ -5264,7 +5264,19 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                     # Deterministic — zero hallucination. Priority-ordered map.
                     _sigs = rules_result.get("signals", {})
                     _ai_pattern = llm_data.get("similar_scam_type", "Unknown").strip()
-                    if _ai_pattern.lower() in ("unknown", "", "none"):
+                    # Only override "Unknown" if score is actually suspicious.
+                    # If blended < 25 (SAFE) — keep Unknown, never assign a
+                    # scam pattern to a clean posting just because one low-weight
+                    # signal fired (e.g. missing_salary=4, vague_description=14)
+                    # Safety override: if blended < 25 (SAFE zone), never show
+                    # a scam pattern regardless of what AI returned.
+                    # Many real companies have missing salary or vague descriptions —
+                    # these alone should never produce a scam pattern label.
+                    if blended < 25 and _ai_pattern.lower() not in ("unknown", "", "none"):
+                        llm_data["similar_scam_type"] = "Unknown"
+                        _ai_pattern = "Unknown"
+
+                    if _ai_pattern.lower() in ("unknown", "", "none") and blended >= 25:
                         _pattern = None
                         _full_low = (
                             job.get("description", "") + " "
@@ -5427,16 +5439,19 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                             else:
                                 _pattern = "Fake recruiter scam"
 
-                        elif "urgency_pressure" in _sigs:
-                            if _has("walk in", "walk-in", "direct interview"):
-                                _pattern = "Fake job offer"
-                            else:
-                                _pattern = "Fake job offer"
-
-                        elif "vague_description" in _sigs:
+                        elif "urgency_pressure" in _sigs and len(_sigs) >= 2:
+                            # Urgency alone (e.g. application deadline) is not
+                            # a scam pattern — require at least 1 other signal
                             _pattern = "Fake job offer"
 
-                        elif "poor_grammar" in _sigs:
+                        elif "vague_description" in _sigs and len(_sigs) >= 3:
+                            # Vague description alone is common in real postings
+                            # Only flag if 2+ other signals also fired
+                            _pattern = "Fake job offer"
+
+                        elif "poor_grammar" in _sigs and len(_sigs) >= 3:
+                            # Poor grammar alone doesn't make it a scam
+                            # Only flag if 2+ other signals also fired
                             _pattern = "Fake job offer"
 
                         elif "invalid_gstin" in _sigs:
