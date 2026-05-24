@@ -663,8 +663,26 @@ Each paragraph should be 2-4 sentences.
 
         st.session_state["cover_letter_html"] = cover_letter_html
 
-        # ✅ Show cover letter in an iframe so the full HTML template renders correctly
-        # (st.markdown cannot render full <!DOCTYPE html> documents — it leaks raw tags)
+        # ── Render PDF via html_to_pdf_bytes (available in taab2.py scope) ──────
+        try:
+            from taab2 import html_to_pdf_bytes as _h2pdf
+        except ImportError:
+            # Fallback: try to import from wherever it lives
+            try:
+                from main import html_to_pdf_bytes as _h2pdf
+            except ImportError:
+                _h2pdf = None
+
+        if _h2pdf is not None:
+            _pdf_buf = _h2pdf(cover_letter_html)
+            st.session_state["cover_letter_pdf"] = _pdf_buf.read()
+        else:
+            st.session_state["cover_letter_pdf"] = None
+
+        # ── Store plain text body ────────────────────────────────────────────
+        # (already stored above as cover_letter_body → session_state["cover_letter"])
+
+        # ── Show inline HTML preview ─────────────────────────────────────────
         import streamlit.components.v1 as _cl_components
         st.success("✅ Cover letter generated successfully!")
         st.markdown(
@@ -677,3 +695,46 @@ Each paragraph should be 2-4 sentences.
             height=700,
             scrolling=True,
         )
+
+        # ── Download buttons ─────────────────────────────────────────────────
+        _safe_name = name.replace(" ", "_")
+        _dl_col1, _dl_col2, _dl_col3 = st.columns(3)
+
+        with _dl_col1:
+            st.download_button(
+                label="📥 Download Cover Letter (HTML)",
+                data=cover_letter_html.encode("utf-8"),
+                file_name=f"{_safe_name}_Cover_Letter.html",
+                mime="text/html",
+                key="download_cl_html_inline",
+            )
+
+        with _dl_col2:
+            if st.session_state.get("cover_letter_pdf"):
+                st.download_button(
+                    label="📥 Download Cover Letter (PDF)",
+                    data=st.session_state["cover_letter_pdf"],
+                    file_name=f"{_safe_name}_Cover_Letter.pdf",
+                    mime="application/pdf",
+                    key="download_cl_pdf_inline",
+                )
+
+        with _dl_col3:
+            try:
+                from docx import Document as _DocxDoc
+                _docx_bio = __import__('io').BytesIO()
+                _docx = _DocxDoc()
+                _docx.add_heading("Cover Letter", 0)
+                for _line in cover_letter_body.split("\n"):
+                    _docx.add_paragraph(_line if _line.strip() else "")
+                _docx.save(_docx_bio)
+                _docx_bio.seek(0)
+                st.download_button(
+                    label="📥 Download Cover Letter (.docx)",
+                    data=_docx_bio,
+                    file_name=f"{_safe_name}_Cover_Letter.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key="download_cl_docx_inline",
+                )
+            except ImportError:
+                st.info("Install python-docx for DOCX download.")
