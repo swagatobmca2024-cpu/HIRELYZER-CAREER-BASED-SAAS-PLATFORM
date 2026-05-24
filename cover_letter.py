@@ -1,581 +1,770 @@
 # cover_letter.py
 # ══════════════════════════════════════════════════════════════════════════════
-# COVER LETTER TEMPLATES — 6 industry-standard HTML cover letter templates
-# + generate_cover_letter_from_resume_builder() Streamlit UI function
+# 10 premium HTML cover letter templates — rebuilt from scratch
+# Inspired by Enhancv, Novoresume, Resume.io, Canva Cover Letters
 #
-# Imported by main.py:
+# Imports:
 #   from cover_letter import (
-#       render_cover_letter_professional, render_cover_letter_modern,
-#       render_cover_letter_creative, render_cover_letter_executive,
-#       render_cover_letter_entry_level, render_cover_letter_ats,
+#       render_cover_letter_cobalt, render_cover_letter_emerald,
+#       render_cover_letter_executive_dark, render_cover_letter_creative_coral,
+#       render_cover_letter_minimal_mono, render_cover_letter_slate,
+#       render_cover_letter_golden, render_cover_letter_entry_level,
+#       render_cover_letter_ats_clean, render_cover_letter_sidebar_accent,
 #       COVER_LETTER_TEMPLATES, render_cover_letter,
 #       generate_cover_letter_from_resume_builder,
 #   )
 # ══════════════════════════════════════════════════════════════════════════════
 
-def render_cover_letter_professional(data):
-    """
-    Cover Letter Template 1 — Professional / Corporate
-    Clean, formal, navy accents. Ideal for finance, law, consulting, banking.
-    data keys: name, job_title, email, phone, location, linkedin,
-               company, hiring_manager, role, date, body_paragraphs (list of str)
-    """
-    name          = data.get("name", "Your Name")
-    job_title     = data.get("job_title", "")
-    email         = data.get("email", "")
-    phone         = data.get("phone", "")
-    location      = data.get("location", "")
-    linkedin      = data.get("linkedin", "")
-    company       = data.get("company", "Hiring Company")
-    hiring_manager= data.get("hiring_manager", "Hiring Manager")
-    role          = data.get("role", "the position")
-    date_str      = data.get("date", "")
-    paragraphs    = data.get("body_paragraphs", [
-        "I am writing to express my strong interest in the [Role] position at [Company]. With my background in [Field], I am confident that I can make a meaningful contribution to your team.",
-        "Throughout my career, I have developed expertise in [Key Skills]. In my previous role at [Previous Company], I successfully [Key Achievement], which demonstrates my ability to deliver results in a fast-paced environment.",
-        "I am particularly drawn to [Company] because of [Specific Reason]. I am excited about the opportunity to bring my skills in [Relevant Skills] to your organization and help achieve [Company Goal].",
-    ])
+# ─────────────────────────────────────────────────────────────────────────────
+# SHARED HELPER
+# ─────────────────────────────────────────────────────────────────────────────
 
-    contact_parts = []
-    if email:    contact_parts.append(f"<a href='mailto:{email}' style='color:#1e3a5f;text-decoration:none;'>{email}</a>")
-    if phone:    contact_parts.append(f"<span>{phone}</span>")
-    if location: contact_parts.append(f"<span>{location}</span>")
+def _contact_row(data, link_color="#1e3a5f", sep=" &nbsp;|&nbsp; "):
+    """Build the contact info HTML string from data dict."""
+    parts = []
+    email    = data.get("email", "")
+    phone    = data.get("phone", "")
+    location = data.get("location", "")
+    linkedin = data.get("linkedin", "")
+    portfolio= data.get("portfolio", "")
+    if email:
+        parts.append(f"<a href='mailto:{email}' style='color:{link_color};text-decoration:none;'>{email}</a>")
+    if phone:
+        parts.append(f"<span>{phone}</span>")
+    if location:
+        parts.append(f"<span>{location}</span>")
     if linkedin:
-        href = linkedin if linkedin.startswith('http') else f"https://{linkedin}"
-        contact_parts.append(f"<a href='{href}' target='_blank' style='color:#1e3a5f;text-decoration:none;'>{linkedin}</a>")
-    contact_line = " &nbsp;|&nbsp; ".join(contact_parts)
+        href = linkedin if linkedin.startswith("http") else f"https://{linkedin}"
+        parts.append(f"<a href='{href}' target='_blank' style='color:{link_color};text-decoration:none;'>{linkedin}</a>")
+    if portfolio:
+        href = portfolio if portfolio.startswith("http") else f"https://{portfolio}"
+        parts.append(f"<a href='{href}' target='_blank' style='color:{link_color};text-decoration:none;'>{portfolio}</a>")
+    return sep.join(parts)
 
-    paras_html = "".join(
-        f"<p style='margin-bottom:16px;font-size:14px;color:#1a1a1a;line-height:1.8;text-align:justify;'>{p}</p>"
-        for p in paragraphs
-    )
+def _paras_html(paragraphs, style="margin-bottom:16px;font-size:14px;color:#1f2937;line-height:1.85;"):
+    return "".join(f"<p style='{style}'>{p}</p>" for p in paragraphs)
+
+def _default_paras():
+    return [
+        "I am writing to express my strong interest in the [Role] position at [Company]. "
+        "With my background in [Field] and a consistent track record of [Achievement], "
+        "I am confident I can make an immediate and meaningful contribution to your team.",
+        "In my previous role at [Previous Company], I successfully [Key Achievement], "
+        "which resulted in [Measurable Outcome]. This experience has strengthened my expertise in "
+        "[Skill 1], [Skill 2], and [Skill 3] — all of which are directly relevant to this opportunity.",
+        "I am particularly drawn to [Company] because of [Specific Reason]. "
+        "I am excited about the prospect of bringing my skills and enthusiasm to your organization "
+        "and helping achieve [Company Goal]. I look forward to the opportunity to discuss my application.",
+    ]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE 1 — Cobalt Professional
+# Deep cobalt blue header band, white name, clean body.
+# Best for: Finance, Consulting, Banking, Law, Corporate roles.
+# ══════════════════════════════════════════════════════════════════════════════
+def render_cover_letter_cobalt(data):
+    name           = data.get("name", "Your Name")
+    job_title      = data.get("job_title", "")
+    company        = data.get("company", "Hiring Company")
+    hiring_manager = data.get("hiring_manager", "Hiring Manager")
+    role           = data.get("role", "the position")
+    date_str       = data.get("date", "")
+    paragraphs     = data.get("body_paragraphs", _default_paras())
+
+    contact = _contact_row(data, link_color="#93c5fd", sep=" &nbsp;·&nbsp; ")
+    body    = _paras_html(paragraphs, "margin-bottom:16px;font-size:14px;color:#1a1a1a;line-height:1.85;text-align:justify;")
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><title>Cover Letter — {name}</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Georgia',serif; background:#fff; color:#1a1a1a; padding:50px 70px; line-height:1.6; }}
-</style>
-</head>
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1a1a1a; padding:0; line-height:1.6; }}
+</style></head>
 <body>
 <div>
-  <!-- HEADER -->
-  <div style='border-bottom:3px solid #1e3a5f;padding-bottom:18px;margin-bottom:28px;'>
-    <h1 style='font-size:30px;font-weight:700;color:#1e3a5f;letter-spacing:1px;margin-bottom:4px;'>{name}</h1>
-    {f"<div style='font-size:15px;color:#374151;font-weight:600;margin-bottom:8px;'>{job_title}</div>" if job_title else ''}
-    <div style='font-size:13px;color:#555;'>{contact_line}</div>
+  <!-- COBALT HEADER BAND -->
+  <div style='background:#1b3a6b;padding:36px 60px 28px;'>
+    <h1 style='font-size:30px;font-weight:800;color:#ffffff;letter-spacing:0.5px;margin-bottom:4px;'>{name}</h1>
+    {f"<div style='font-size:14px;color:#93c5fd;font-weight:600;margin-bottom:10px;'>{job_title}</div>" if job_title else ""}
+    <div style='font-size:12px;color:rgba(255,255,255,0.75);'>{contact}</div>
   </div>
-
-  <!-- DATE -->
-  {f"<p style='font-size:14px;color:#374151;margin-bottom:20px;'>{date_str}</p>" if date_str else ''}
-
-  <!-- RECIPIENT -->
-  <div style='margin-bottom:24px;'>
-    <p style='font-size:14px;font-weight:600;color:#1a1a1a;'>{hiring_manager}</p>
-    <p style='font-size:14px;color:#374151;'>{company}</p>
-  </div>
-
-  <!-- GREETING -->
-  <p style='font-size:14px;color:#1a1a1a;margin-bottom:20px;'>Dear {hiring_manager},</p>
+  <div style='height:4px;background:#2563eb;'></div>
 
   <!-- BODY -->
-  {paras_html}
-
-  <!-- CLOSING -->
-  <p style='font-size:14px;color:#1a1a1a;margin-bottom:6px;'>I would welcome the opportunity to discuss how my experience aligns with the needs of {company}. Thank you for your time and consideration.</p>
-  <p style='font-size:14px;color:#1a1a1a;margin-top:28px;'>Sincerely,</p>
-  <p style='font-size:15px;font-weight:700;color:#1e3a5f;margin-top:8px;'>{name}</p>
-  {f"<p style='font-size:13px;color:#555;margin-top:4px;'>{job_title}</p>" if job_title else ''}
+  <div style='padding:40px 60px;'>
+    {f"<p style='font-size:13px;color:#6b7280;margin-bottom:20px;'>{date_str}</p>" if date_str else ""}
+    <div style='margin-bottom:22px;'>
+      <p style='font-size:14px;font-weight:700;color:#1b3a6b;'>{hiring_manager}</p>
+      <p style='font-size:14px;color:#374151;'>{company}</p>
+    </div>
+    <p style='font-size:14px;margin-bottom:18px;'>Dear {hiring_manager},</p>
+    {body}
+    <p style='font-size:14px;color:#374151;margin-bottom:34px;'>
+      I would welcome the opportunity to discuss how my experience aligns with the needs of {company}.
+      Thank you for your time and consideration.
+    </p>
+    <p style='font-size:14px;'>Sincerely,</p>
+    <p style='font-size:16px;font-weight:800;color:#1b3a6b;margin-top:12px;'>{name}</p>
+    {f"<p style='font-size:13px;color:#2563eb;margin-top:3px;'>{job_title}</p>" if job_title else ""}
+  </div>
 </div>
 </body></html>"""
 
 
-def render_cover_letter_modern(data):
-    """
-    Cover Letter Template 2 — Modern Minimal
-    Clean white layout with teal accent line. Ideal for startups, tech, design roles.
-    """
-    name          = data.get("name", "Your Name")
-    job_title     = data.get("job_title", "")
-    email         = data.get("email", "")
-    phone         = data.get("phone", "")
-    location      = data.get("location", "")
-    linkedin      = data.get("linkedin", "")
-    company       = data.get("company", "Company Name")
-    hiring_manager= data.get("hiring_manager", "Hiring Manager")
-    role          = data.get("role", "the position")
-    date_str      = data.get("date", "")
-    paragraphs    = data.get("body_paragraphs", [
-        "I'm excited to apply for the [Role] role at [Company]. My background in [Field] and passion for [Domain] make me a strong match for this position.",
-        "In my most recent role, I [Key Achievement], which led to [Quantified Result]. I thrive in environments that value [Culture Trait] and I'm ready to bring that energy to [Company].",
-        "What excites me most about [Company] is [Specific Reason]. I'd love to explore how my skills in [Relevant Skills] can help your team reach its next milestone.",
-    ])
+# ══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE 2 — Emerald Minimal
+# Left accent bar, emerald green, ultra-clean body.
+# Best for: Tech, Product, Engineering, Startups.
+# ══════════════════════════════════════════════════════════════════════════════
+def render_cover_letter_emerald(data):
+    name           = data.get("name", "Your Name")
+    job_title      = data.get("job_title", "")
+    company        = data.get("company", "Company Name")
+    hiring_manager = data.get("hiring_manager", "Hiring Manager")
+    role           = data.get("role", "the position")
+    date_str       = data.get("date", "")
+    paragraphs     = data.get("body_paragraphs", _default_paras())
 
-    contact_items = []
-    if email:    contact_items.append(f"<a href='mailto:{email}' style='color:#0d9488;text-decoration:none;'>{email}</a>")
-    if phone:    contact_items.append(phone)
-    if location: contact_items.append(location)
-    if linkedin:
-        href = linkedin if linkedin.startswith('http') else f"https://{linkedin}"
-        contact_items.append(f"<a href='{href}' target='_blank' style='color:#0d9488;text-decoration:none;'>{linkedin}</a>")
-    contact_line = " &nbsp;&middot;&nbsp; ".join(contact_items)
-
-    paras_html = "".join(
-        f"<p style='margin-bottom:14px;font-size:14px;color:#374151;line-height:1.8;'>{p}</p>"
-        for p in paragraphs
-    )
+    contact = _contact_row(data, link_color="#065f46", sep=" &nbsp;·&nbsp; ")
+    body    = _paras_html(paragraphs, "margin-bottom:16px;font-size:14px;color:#1f2937;line-height:1.85;")
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><title>Cover Letter — {name}</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:48px 64px; line-height:1.6; }}
-</style>
-</head>
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#111827; padding:48px 64px; line-height:1.6; }}
+</style></head>
 <body>
 <div>
-  <!-- HEADER BAND -->
-  <div style='display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #0d9488;padding-bottom:16px;margin-bottom:32px;'>
+  <!-- NAME + LEFT BAR -->
+  <div style='display:flex;align-items:stretch;margin-bottom:28px;'>
+    <div style='width:5px;background:#065f46;border-radius:3px;margin-right:20px;flex-shrink:0;'></div>
     <div>
-      <h1 style='font-size:28px;font-weight:800;color:#0f172a;letter-spacing:0.5px;margin-bottom:2px;'>{name}</h1>
-      {f"<div style='font-size:14px;color:#0d9488;font-weight:600;'>{job_title}</div>" if job_title else ''}
+      <h1 style='font-size:28px;font-weight:800;color:#0f172a;margin-bottom:3px;'>{name}</h1>
+      {f"<div style='font-size:14px;color:#065f46;font-weight:600;margin-bottom:6px;'>{job_title}</div>" if job_title else ""}
+      <div style='font-size:12px;color:#6b7280;'>{contact}</div>
     </div>
-    <div style='text-align:right;font-size:12px;color:#6b7280;line-height:1.9;'>{contact_line}</div>
   </div>
+  <div style='height:1px;background:#d1fae5;margin-bottom:28px;'></div>
 
-  <!-- DATE + RECIPIENT -->
-  {f"<p style='font-size:13px;color:#6b7280;margin-bottom:16px;'>{date_str}</p>" if date_str else ''}
-  <div style='margin-bottom:20px;'>
-    <p style='font-size:14px;font-weight:600;color:#1f2937;'>{hiring_manager}</p>
+  {f"<p style='font-size:13px;color:#9ca3af;margin-bottom:18px;'>{date_str}</p>" if date_str else ""}
+  <div style='margin-bottom:22px;'>
+    <p style='font-size:14px;font-weight:700;color:#065f46;'>{hiring_manager}</p>
     <p style='font-size:14px;color:#6b7280;'>{company}</p>
   </div>
-
-  <!-- GREETING -->
   <p style='font-size:14px;margin-bottom:18px;'>Dear {hiring_manager},</p>
-
-  <!-- BODY -->
-  {paras_html}
-
-  <!-- CLOSING -->
-  <p style='font-size:14px;color:#374151;margin-bottom:30px;'>I'd love the chance to chat about how I can contribute to {company}. Thank you for considering my application.</p>
+  {body}
+  <p style='font-size:14px;color:#374151;margin-bottom:32px;'>
+    I'd love the chance to discuss how I can contribute to {company}. Thank you for considering my application.
+  </p>
   <p style='font-size:14px;'>Best regards,</p>
-  <div style='margin-top:10px;padding-top:10px;border-top:2px solid #0d9488;display:inline-block;'>
-    <p style='font-size:16px;font-weight:700;color:#0f172a;'>{name}</p>
-    {f"<p style='font-size:13px;color:#0d9488;'>{job_title}</p>" if job_title else ''}
+  <div style='margin-top:12px;padding-top:10px;border-top:2px solid #6ee7b7;display:inline-block;'>
+    <p style='font-size:16px;font-weight:800;color:#0f172a;'>{name}</p>
+    {f"<p style='font-size:13px;color:#065f46;'>{job_title}</p>" if job_title else ""}
   </div>
+</div>
 </body></html>"""
 
 
-def render_cover_letter_creative(data):
-    """
-    Cover Letter Template 3 — Creative
-    Bold header with accent colour bar. Ideal for design, marketing, media, content roles.
-    """
-    name          = data.get("name", "Your Name")
-    job_title     = data.get("job_title", "")
-    email         = data.get("email", "")
-    phone         = data.get("phone", "")
-    location      = data.get("location", "")
-    linkedin      = data.get("linkedin", "")
-    portfolio     = data.get("portfolio", "")
-    company       = data.get("company", "Company Name")
-    hiring_manager= data.get("hiring_manager", "Hiring Team")
-    role          = data.get("role", "the position")
-    date_str      = data.get("date", "")
-    accent        = data.get("accent_color", "#7c3aed")
-    paragraphs    = data.get("body_paragraphs", [
-        "Great design solves real problems — and that's exactly the philosophy I bring to every project. I'm applying for [Role] at [Company] because I believe your team's work embodies this principle.",
-        "My background in [Field] has equipped me with [Skills]. At [Previous Company], I led [Project] which resulted in [Outcome]. I'm proud of the process as much as the product.",
-        "I'm inspired by [Company]'s approach to [Specific Work/Campaign/Product]. I would love to contribute my skills in [Creative Skills] to your upcoming projects.",
-    ])
+# ══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE 3 — Executive Dark
+# Midnight-navy gradient header, gold accent bar. C-suite / Director feel.
+# Best for: C-Suite, VP, Director, Senior Leadership.
+# ══════════════════════════════════════════════════════════════════════════════
+def render_cover_letter_executive_dark(data):
+    name           = data.get("name", "Your Name")
+    job_title      = data.get("job_title", "")
+    company        = data.get("company", "Company Name")
+    hiring_manager = data.get("hiring_manager", "Search Committee")
+    role           = data.get("role", "the position")
+    date_str       = data.get("date", "")
+    paragraphs     = data.get("body_paragraphs", _default_paras())
 
-    contact_items = []
-    if email:     contact_items.append(f"<a href='mailto:{email}' style='color:white;text-decoration:none;'>{email}</a>")
-    if phone:     contact_items.append(f"<span style='color:rgba(255,255,255,0.85);'>{phone}</span>")
-    if location:  contact_items.append(f"<span style='color:rgba(255,255,255,0.85);'>{location}</span>")
-    if linkedin:
-        href = linkedin if linkedin.startswith('http') else f"https://{linkedin}"
-        contact_items.append(f"<a href='{href}' target='_blank' style='color:white;text-decoration:none;'>{linkedin}</a>")
-    if portfolio:
-        href = portfolio if portfolio.startswith('http') else f"https://{portfolio}"
-        contact_items.append(f"<a href='{href}' target='_blank' style='color:white;text-decoration:none;'>{portfolio}</a>")
-    contact_line = " &nbsp;&bull;&nbsp; ".join(contact_items)
-
-    paras_html = "".join(
-        f"<p style='margin-bottom:16px;font-size:14px;color:#1f2937;line-height:1.85;'>{p}</p>"
-        for p in paragraphs
-    )
+    contact = _contact_row(data, link_color="#d4af37", sep=" &nbsp;|&nbsp; ")
+    body    = _paras_html(paragraphs, "margin-bottom:16px;font-size:14px;color:#1a1a1a;line-height:1.9;text-align:justify;")
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><title>Cover Letter — {name}</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:0; line-height:1.6; }}
-</style>
-</head>
-<body>
-<div>
-  <!-- CREATIVE HEADER BAND -->
-  <div style='background:{accent};padding:36px 56px 28px;'>
-    <h1 style='font-size:32px;font-weight:800;color:#ffffff;letter-spacing:1px;margin-bottom:4px;'>{name}</h1>
-    {f"<div style='font-size:15px;color:rgba(255,255,255,0.85);font-weight:600;margin-bottom:12px;'>{job_title}</div>" if job_title else ''}
-    <div style='font-size:12px;'>{contact_line}</div>
-  </div>
-
-  <!-- BODY AREA -->
-  <div style='padding:40px 56px;'>
-    {f"<p style='font-size:13px;color:#9ca3af;margin-bottom:18px;'>{date_str}</p>" if date_str else ''}
-
-    <div style='margin-bottom:22px;'>
-      <p style='font-size:14px;font-weight:700;color:#1f2937;'>{hiring_manager}</p>
-      <p style='font-size:14px;color:#6b7280;'>{company}</p>
-    </div>
-
-    <p style='font-size:14px;margin-bottom:18px;'>Dear {hiring_manager},</p>
-
-    {paras_html}
-
-    <p style='font-size:14px;color:#374151;margin-bottom:32px;'>I would be thrilled to discuss this further. Thank you for your time — I look forward to hearing from you.</p>
-
-    <p style='font-size:14px;'>Warmly,</p>
-    <p style='font-size:17px;font-weight:800;color:{accent};margin-top:10px;'>{name}</p>
-    {f"<p style='font-size:13px;color:#6b7280;'>{job_title}</p>" if job_title else ''}
-  </div>
-</body></html>"""
-
-
-def render_cover_letter_executive(data):
-    """
-    Cover Letter Template 4 — Executive
-    Sophisticated dark-header layout. Ideal for C-suite, VP, Director-level applications.
-    """
-    name          = data.get("name", "Your Name")
-    job_title     = data.get("job_title", "")
-    email         = data.get("email", "")
-    phone         = data.get("phone", "")
-    location      = data.get("location", "")
-    linkedin      = data.get("linkedin", "")
-    company       = data.get("company", "Company Name")
-    hiring_manager= data.get("hiring_manager", "Board / Search Committee")
-    role          = data.get("role", "the position")
-    date_str      = data.get("date", "")
-    paragraphs    = data.get("body_paragraphs", [
-        "With over [X] years leading [Function/Division] in [Industry], I bring a track record of driving strategic growth and operational excellence. I am writing to express my interest in the [Role] position at [Company].",
-        "At [Previous Organization], I spearheaded [Initiative], resulting in [Revenue/Efficiency/Growth Outcome]. This experience has sharpened my ability to align cross-functional teams around ambitious goals while maintaining fiscal discipline.",
-        "I am drawn to [Company] because of its [Specific Initiative, Vision, or Market Position]. I am confident that my leadership philosophy — centred on [Value 1], [Value 2], and [Value 3] — aligns with your organizational culture.",
-    ])
-
-    contact_items = []
-    if email:    contact_items.append(f"<a href='mailto:{email}' style='color:#d4af37;text-decoration:none;'>{email}</a>")
-    if phone:    contact_items.append(f"<span>{phone}</span>")
-    if location: contact_items.append(f"<span>{location}</span>")
-    if linkedin:
-        href = linkedin if linkedin.startswith('http') else f"https://{linkedin}"
-        contact_items.append(f"<a href='{href}' target='_blank' style='color:#d4af37;text-decoration:none;'>{linkedin}</a>")
-    contact_line = " &nbsp;|&nbsp; ".join(contact_items)
-
-    paras_html = "".join(
-        f"<p style='margin-bottom:16px;font-size:14px;color:#1a1a1a;line-height:1.85;text-align:justify;'>{p}</p>"
-        for p in paragraphs
-    )
-
-    return f"""<!DOCTYPE html>
-<html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
-<style>
-  * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Georgia',serif; background:#fff; color:#1a1a1a; padding:0; line-height:1.6; }}
-</style>
-</head>
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:'Georgia',serif; background:#fff; color:#1a1a1a; padding:0; line-height:1.6; }}
+</style></head>
 <body>
 <div>
   <!-- EXECUTIVE DARK HEADER -->
-  <div style='background:linear-gradient(135deg,#0d1b2a,#1a2f4c);padding:40px 64px 32px;'>
-    <h1 style='font-size:30px;font-weight:700;color:#ffffff;letter-spacing:2px;margin-bottom:4px;font-family:"Georgia",serif;'>{name}</h1>
-    {f"<div style='font-size:14px;color:#d4af37;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;'>{job_title}</div>" if job_title else ''}
-    <div style='font-size:12px;color:#adb5bd;'>{contact_line}</div>
+  <div style='background:linear-gradient(135deg,#0d1b2a 0%,#1a2f4c 100%);padding:44px 64px 34px;'>
+    <h1 style='font-size:30px;font-weight:700;color:#ffffff;letter-spacing:2px;margin-bottom:5px;font-family:"Georgia",serif;'>{name}</h1>
+    {f"<div style='font-size:13px;color:#d4af37;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;'>{job_title}</div>" if job_title else ""}
+    <div style='font-size:12px;color:#adb5bd;'>{contact}</div>
   </div>
   <div style='height:4px;background:linear-gradient(90deg,#d4af37,#b8860b);'></div>
 
   <!-- BODY -->
-  <div style='padding:42px 64px;'>
-    {f"<p style='font-size:13px;color:#6b7280;margin-bottom:22px;'>{date_str}</p>" if date_str else ''}
-
+  <div style='padding:44px 64px;'>
+    {f"<p style='font-size:13px;color:#6b7280;margin-bottom:24px;'>{date_str}</p>" if date_str else ""}
     <div style='margin-bottom:24px;'>
       <p style='font-size:14px;font-weight:700;color:#0d1b2a;'>{hiring_manager}</p>
       <p style='font-size:14px;color:#374151;'>{company}</p>
     </div>
-
     <p style='font-size:14px;margin-bottom:20px;'>Dear {hiring_manager},</p>
-
-    {paras_html}
-
-    <p style='font-size:14px;color:#374151;margin-bottom:34px;'>I welcome the opportunity to explore this further at your convenience. Please find my resume enclosed for your review.</p>
-
+    {body}
+    <p style='font-size:14px;color:#374151;margin-bottom:36px;'>
+      I welcome the opportunity to explore this further at your convenience.
+      Please find my resume enclosed for your review.
+    </p>
     <p style='font-size:14px;'>Respectfully yours,</p>
-    <p style='font-size:18px;font-weight:700;color:#0d1b2a;margin-top:12px;font-family:"Georgia",serif;'>{name}</p>
-    {f"<p style='font-size:13px;color:#d4af37;font-weight:600;margin-top:4px;'>{job_title}</p>" if job_title else ''}
+    <p style='font-size:18px;font-weight:700;color:#0d1b2a;margin-top:14px;font-family:"Georgia",serif;'>{name}</p>
+    {f"<p style='font-size:13px;color:#d4af37;font-weight:600;margin-top:4px;'>{job_title}</p>" if job_title else ""}
   </div>
+</div>
 </body></html>"""
 
 
-def render_cover_letter_entry_level(data):
-    """
-    Cover Letter Template 5 — Entry-Level / Fresher
-    Bright, approachable layout with blue accents. Ideal for recent graduates, interns.
-    """
-    name          = data.get("name", "Your Name")
-    job_title     = data.get("job_title", "")
-    email         = data.get("email", "")
-    phone         = data.get("phone", "")
-    location      = data.get("location", "")
-    linkedin      = data.get("linkedin", "")
-    company       = data.get("company", "Company Name")
-    hiring_manager= data.get("hiring_manager", "Hiring Manager")
-    role          = data.get("role", "the position")
-    date_str      = data.get("date", "")
-    paragraphs    = data.get("body_paragraphs", [
-        "I am a recent graduate in [Field] from [University] and am excited to apply for the [Role] opportunity at [Company]. My academic training and hands-on project experience have prepared me to contribute meaningfully from day one.",
-        "During my studies, I developed strong skills in [Skill 1], [Skill 2], and [Skill 3]. My final-year project on [Project Topic] gave me practical exposure to [Relevant Technology/Process], and I achieved [Result/Grade/Recognition].",
-        "I am eager to grow within a company like [Company] that values [Culture Value]. I am a quick learner, highly motivated, and committed to delivering quality work. I look forward to contributing to your team.",
-    ])
+# ══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE 4 — Coral Creative
+# Full-bleed vivid coral/red header, bold name, white text.
+# Best for: Design, Marketing, Content, Media, Creative Agencies.
+# ══════════════════════════════════════════════════════════════════════════════
+def render_cover_letter_creative_coral(data):
+    name           = data.get("name", "Your Name")
+    job_title      = data.get("job_title", "")
+    company        = data.get("company", "Company Name")
+    hiring_manager = data.get("hiring_manager", "Hiring Team")
+    role           = data.get("role", "the position")
+    date_str       = data.get("date", "")
+    accent         = data.get("accent_color", "#e11d48")
+    paragraphs     = data.get("body_paragraphs", _default_paras())
 
-    contact_items = []
-    if email:    contact_items.append(f"<a href='mailto:{email}' style='color:#1d4ed8;text-decoration:none;'>{email}</a>")
-    if phone:    contact_items.append(phone)
-    if location: contact_items.append(location)
-    if linkedin:
-        href = linkedin if linkedin.startswith('http') else f"https://{linkedin}"
-        contact_items.append(f"<a href='{href}' target='_blank' style='color:#1d4ed8;text-decoration:none;'>{linkedin}</a>")
-    contact_line = " &nbsp;|&nbsp; ".join(contact_items)
-
-    paras_html = "".join(
-        f"<p style='margin-bottom:16px;font-size:14px;color:#374151;line-height:1.8;'>{p}</p>"
-        for p in paragraphs
-    )
+    contact = _contact_row(data, link_color="white", sep=" &nbsp;•&nbsp; ")
+    # Override contact link color to white since header is vivid
+    contact = contact.replace("color:#e11d48", "color:white").replace("color:#065f46","color:white")
+    body    = _paras_html(paragraphs, "margin-bottom:16px;font-size:14px;color:#1f2937;line-height:1.85;")
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><title>Cover Letter — {name}</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:48px 64px; line-height:1.6; }}
-</style>
-</head>
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:0; line-height:1.6; }}
+</style></head>
 <body>
 <div>
-  <!-- HEADER -->
-  <div style='background:#eff6ff;border-left:5px solid #1d4ed8;padding:22px 28px;margin-bottom:30px;border-radius:0 8px 8px 0;'>
-    <h1 style='font-size:26px;font-weight:800;color:#1e3a8a;margin-bottom:2px;'>{name}</h1>
-    {f"<div style='font-size:14px;color:#3b82f6;font-weight:600;margin-bottom:8px;'>{job_title}</div>" if job_title else ''}
-    <div style='font-size:12px;color:#6b7280;'>{contact_line}</div>
+  <!-- VIVID CREATIVE HEADER -->
+  <div style='background:{accent};padding:40px 56px 32px;'>
+    <h1 style='font-size:34px;font-weight:900;color:#ffffff;letter-spacing:0.5px;margin-bottom:4px;'>{name}</h1>
+    {f"<div style='font-size:15px;color:rgba(255,255,255,0.85);font-weight:600;margin-bottom:12px;'>{job_title}</div>" if job_title else ""}
+    <div style='font-size:12px;color:rgba(255,255,255,0.8);'>{contact}</div>
   </div>
 
-  <!-- DATE + RECIPIENT -->
-  {f"<p style='font-size:13px;color:#9ca3af;margin-bottom:18px;'>{date_str}</p>" if date_str else ''}
+  <!-- BODY -->
+  <div style='padding:40px 56px;'>
+    {f"<p style='font-size:13px;color:#9ca3af;margin-bottom:18px;'>{date_str}</p>" if date_str else ""}
+    <div style='margin-bottom:22px;'>
+      <p style='font-size:14px;font-weight:700;color:#1f2937;'>{hiring_manager}</p>
+      <p style='font-size:14px;color:#6b7280;'>{company}</p>
+    </div>
+    <p style='font-size:14px;margin-bottom:18px;'>Dear {hiring_manager},</p>
+    {body}
+    <p style='font-size:14px;color:#374151;margin-bottom:34px;'>
+      I would be thrilled to discuss this further. Thank you for your time — I look forward to hearing from you.
+    </p>
+    <p style='font-size:14px;'>Warmly,</p>
+    <p style='font-size:18px;font-weight:900;color:{accent};margin-top:12px;'>{name}</p>
+    {f"<p style='font-size:13px;color:#6b7280;margin-top:3px;'>{job_title}</p>" if job_title else ""}
+  </div>
+</div>
+</body></html>"""
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE 5 — Minimal Monochrome
+# Pure black/white typography-first design. No header bands, no color.
+# Best for: ATS, Conservative industries, Academia, Law.
+# ══════════════════════════════════════════════════════════════════════════════
+def render_cover_letter_minimal_mono(data):
+    name           = data.get("name", "Your Name")
+    job_title      = data.get("job_title", "")
+    company        = data.get("company", "Company Name")
+    hiring_manager = data.get("hiring_manager", "Hiring Manager")
+    role           = data.get("role", "the position")
+    date_str       = data.get("date", "")
+    paragraphs     = data.get("body_paragraphs", _default_paras())
+
+    contact = _contact_row(data, link_color="#111827", sep=" | ")
+    body    = _paras_html(paragraphs, "margin-bottom:16px;font-size:14px;color:#1a1a1a;line-height:1.9;text-align:justify;")
+
+    return f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>Cover Letter — {name}</title>
+<style>
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:'Georgia',serif; background:#fff; color:#1a1a1a; padding:52px 70px; line-height:1.6; }}
+</style></head>
+<body>
+<div>
+  <!-- MINIMAL HEADER -->
+  <div style='border-bottom:2px solid #111827;padding-bottom:16px;margin-bottom:28px;'>
+    <h1 style='font-size:28px;font-weight:700;color:#111827;margin-bottom:4px;letter-spacing:0.5px;'>{name}</h1>
+    {f"<div style='font-size:14px;color:#374151;margin-bottom:6px;'>{job_title}</div>" if job_title else ""}
+    <div style='font-size:12px;color:#6b7280;'>{contact}</div>
+  </div>
+
+  {f"<p style='font-size:14px;color:#374151;margin-bottom:20px;'>{date_str}</p>" if date_str else ""}
+  <div style='margin-bottom:22px;'>
+    <p style='font-size:14px;font-weight:600;color:#1a1a1a;'>{hiring_manager}</p>
+    <p style='font-size:14px;color:#374151;'>{company}</p>
+  </div>
+  <p style='font-size:14px;margin-bottom:20px;'>Dear {hiring_manager},</p>
+  {body}
+  <p style='font-size:14px;color:#374151;margin-bottom:32px;'>
+    I would welcome the opportunity to discuss my application at your convenience.
+    Thank you for your time and consideration.
+  </p>
+  <p style='font-size:14px;'>Yours sincerely,</p>
+  <p style='font-size:16px;font-weight:700;color:#111827;margin-top:14px;'>{name}</p>
+  {f"<p style='font-size:13px;color:#6b7280;margin-top:3px;'>{job_title}</p>" if job_title else ""}
+</div>
+</body></html>"""
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE 6 — Slate Two-Tone
+# Dark slate header with violet accent rule. Structured, refined.
+# Best for: Product Management, Strategy, Operations, Mid-Senior roles.
+# ══════════════════════════════════════════════════════════════════════════════
+def render_cover_letter_slate(data):
+    name           = data.get("name", "Your Name")
+    job_title      = data.get("job_title", "")
+    company        = data.get("company", "Company Name")
+    hiring_manager = data.get("hiring_manager", "Hiring Manager")
+    role           = data.get("role", "the position")
+    date_str       = data.get("date", "")
+    paragraphs     = data.get("body_paragraphs", _default_paras())
+
+    contact = _contact_row(data, link_color="#cbd5e1", sep=" &nbsp;·&nbsp; ")
+    body    = _paras_html(paragraphs, "margin-bottom:16px;font-size:14px;color:#1e293b;line-height:1.85;")
+
+    return f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>Cover Letter — {name}</title>
+<style>
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1e293b; padding:0; line-height:1.6; }}
+</style></head>
+<body>
+<div>
+  <!-- SLATE HEADER -->
+  <div style='background:#334155;padding:38px 60px 30px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;'>
+    <div>
+      <h1 style='font-size:28px;font-weight:800;color:#ffffff;margin-bottom:4px;'>{name}</h1>
+      {f"<div style='font-size:13px;color:#94a3b8;font-weight:500;'>{job_title}</div>" if job_title else ""}
+    </div>
+    <div style='text-align:right;font-size:12px;color:#94a3b8;line-height:1.9;'>{contact}</div>
+  </div>
+  <div style='height:3px;background:#7c3aed;'></div>
+
+  <!-- BODY -->
+  <div style='padding:40px 60px;'>
+    {f"<p style='font-size:13px;color:#9ca3af;margin-bottom:20px;'>{date_str}</p>" if date_str else ""}
+    <div style='margin-bottom:22px;'>
+      <p style='font-size:14px;font-weight:700;color:#334155;'>{hiring_manager}</p>
+      <p style='font-size:14px;color:#64748b;'>{company}</p>
+    </div>
+    <p style='font-size:14px;margin-bottom:18px;'>Dear {hiring_manager},</p>
+    {body}
+    <p style='font-size:14px;color:#475569;margin-bottom:34px;'>
+      I look forward to the opportunity to further discuss how I can contribute to {company}.
+      Thank you for your consideration.
+    </p>
+    <p style='font-size:14px;'>Best regards,</p>
+    <p style='font-size:16px;font-weight:800;color:#334155;margin-top:12px;'>{name}</p>
+    {f"<p style='font-size:13px;color:#7c3aed;margin-top:3px;'>{job_title}</p>" if job_title else ""}
+  </div>
+</div>
+</body></html>"""
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE 7 — Golden Prestige
+# Warm cream background, gold double-rule, serif typography.
+# Best for: Legal, Finance, Academia, Traditional Professional roles.
+# ══════════════════════════════════════════════════════════════════════════════
+def render_cover_letter_golden(data):
+    name           = data.get("name", "Your Name")
+    job_title      = data.get("job_title", "")
+    company        = data.get("company", "Company Name")
+    hiring_manager = data.get("hiring_manager", "Hiring Manager")
+    role           = data.get("role", "the position")
+    date_str       = data.get("date", "")
+    paragraphs     = data.get("body_paragraphs", _default_paras())
+
+    contact = _contact_row(data, link_color="#b45309", sep=" &nbsp;|&nbsp; ")
+    body    = _paras_html(paragraphs, "margin-bottom:16px;font-size:14px;color:#1c1917;line-height:1.9;text-align:justify;")
+
+    return f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>Cover Letter — {name}</title>
+<style>
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:'Georgia',serif; background:#fdf8f0; color:#1c1917; padding:52px 68px; line-height:1.6; }}
+</style></head>
+<body>
+<div>
+  <!-- GOLDEN HEADER -->
+  <div style='text-align:center;margin-bottom:6px;'>
+    <h1 style='font-size:30px;font-weight:700;color:#1c1917;letter-spacing:1px;margin-bottom:4px;'>{name}</h1>
+    {f"<div style='font-size:14px;color:#b45309;font-style:italic;margin-bottom:8px;'>{job_title}</div>" if job_title else ""}
+    <div style='font-size:12px;color:#78716c;'>{contact}</div>
+  </div>
+  <div style='height:1px;background:#fcd34d;margin:10px 0 3px;'></div>
+  <div style='height:2.5px;background:#b45309;margin-bottom:28px;'></div>
+
+  {f"<p style='font-size:14px;color:#78716c;margin-bottom:20px;'>{date_str}</p>" if date_str else ""}
+  <div style='margin-bottom:22px;'>
+    <p style='font-size:14px;font-weight:700;color:#1c1917;'>{hiring_manager}</p>
+    <p style='font-size:14px;color:#78716c;'>{company}</p>
+  </div>
+  <p style='font-size:14px;margin-bottom:20px;'>Dear {hiring_manager},</p>
+  {body}
+  <p style='font-size:14px;color:#44403c;margin-bottom:32px;'>
+    I would be delighted to discuss this opportunity further at your earliest convenience.
+    Thank you for your time and consideration.
+  </p>
+  <div style='height:1px;background:#fcd34d;margin:0 0 3px;'></div>
+  <div style='height:2px;background:#b45309;margin-bottom:14px;'></div>
+  <p style='font-size:14px;'>Yours faithfully,</p>
+  <p style='font-size:17px;font-weight:700;color:#1c1917;margin-top:12px;font-family:"Georgia",serif;'>{name}</p>
+  {f"<p style='font-size:13px;color:#b45309;font-style:italic;margin-top:3px;'>{job_title}</p>" if job_title else ""}
+</div>
+</body></html>"""
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE 8 — Entry-Level / Fresher
+# Bright blue left-border box header. Energetic, approachable, clear.
+# Best for: Fresh Graduates, Interns, Junior Roles, First Job.
+# ══════════════════════════════════════════════════════════════════════════════
+def render_cover_letter_entry_level(data):
+    name           = data.get("name", "Your Name")
+    job_title      = data.get("job_title", "")
+    company        = data.get("company", "Company Name")
+    hiring_manager = data.get("hiring_manager", "Hiring Manager")
+    role           = data.get("role", "the position")
+    date_str       = data.get("date", "")
+    paragraphs     = data.get("body_paragraphs", [
+        "I am a recent graduate in [Field] from [University] and I am excited to apply for the "
+        "[Role] opportunity at [Company]. My academic training and hands-on project work have "
+        "prepared me to contribute meaningfully from day one.",
+        "During my studies, I developed strong skills in [Skill 1], [Skill 2], and [Skill 3]. "
+        "My final-year project on [Topic] gave me practical exposure to [Technology/Process], "
+        "and I achieved [Result/Grade/Recognition].",
+        "I am eager to grow within a company like [Company] that values [Culture Value]. "
+        "I am a fast learner, highly motivated, and committed to quality work. "
+        "I look forward to contributing to your team.",
+    ])
+
+    contact = _contact_row(data, link_color="#1d4ed8", sep=" &nbsp;|&nbsp; ")
+    body    = _paras_html(paragraphs, "margin-bottom:16px;font-size:14px;color:#374151;line-height:1.85;")
+
+    return f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>Cover Letter — {name}</title>
+<style>
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:48px 62px; line-height:1.6; }}
+</style></head>
+<body>
+<div>
+  <!-- ENTRY-LEVEL HEADER BOX -->
+  <div style='background:#eff6ff;border-left:5px solid #1d4ed8;padding:22px 28px;margin-bottom:30px;border-radius:0 8px 8px 0;'>
+    <h1 style='font-size:26px;font-weight:800;color:#1e3a8a;margin-bottom:3px;'>{name}</h1>
+    {f"<div style='font-size:14px;color:#3b82f6;font-weight:600;margin-bottom:6px;'>{job_title}</div>" if job_title else ""}
+    <div style='font-size:12px;color:#6b7280;'>{contact}</div>
+  </div>
+
+  {f"<p style='font-size:13px;color:#9ca3af;margin-bottom:18px;'>{date_str}</p>" if date_str else ""}
   <div style='margin-bottom:22px;'>
     <p style='font-size:14px;font-weight:600;color:#1f2937;'>{hiring_manager}</p>
     <p style='font-size:14px;color:#6b7280;'>{company}</p>
   </div>
-
-  <!-- GREETING -->
   <p style='font-size:14px;margin-bottom:18px;'>Dear {hiring_manager},</p>
-
-  <!-- BODY -->
-  {paras_html}
-
-  <!-- CLOSING -->
-  <p style='font-size:14px;color:#374151;margin-bottom:28px;'>I would be grateful for the opportunity to interview and learn more about this role. Thank you for your time and consideration.</p>
+  {body}
+  <p style='font-size:14px;color:#374151;margin-bottom:30px;'>
+    I would be grateful for the opportunity to interview and learn more about this role.
+    Thank you for your time and consideration.
+  </p>
   <p style='font-size:14px;'>Sincerely,</p>
-  <p style='font-size:16px;font-weight:700;color:#1e3a8a;margin-top:10px;'>{name}</p>
-  {f"<p style='font-size:13px;color:#6b7280;'>{job_title}</p>" if job_title else ''}
+  <p style='font-size:16px;font-weight:700;color:#1e3a8a;margin-top:12px;'>{name}</p>
+  {f"<p style='font-size:13px;color:#6b7280;margin-top:3px;'>{job_title}</p>" if job_title else ""}
 </div>
 </body></html>"""
 
 
-def render_cover_letter_ats(data):
-    """
-    Cover Letter Template 6 — Technical / ATS-Optimized
-    Plain, fully text-based, high keyword density. Zero graphics — maximum ATS parse rate.
-    Ideal for software engineers, data scientists, technical roles with ATS screening.
-    """
-    name          = data.get("name", "Your Name")
-    job_title     = data.get("job_title", "")
-    email         = data.get("email", "")
-    phone         = data.get("phone", "")
-    location      = data.get("location", "")
-    linkedin      = data.get("linkedin", "")
-    portfolio     = data.get("portfolio", "")
-    company       = data.get("company", "Company Name")
-    hiring_manager= data.get("hiring_manager", "Hiring Manager")
-    role          = data.get("role", "the position")
-    date_str      = data.get("date", "")
-    key_skills    = data.get("key_skills", "Python, Machine Learning, SQL, Cloud Infrastructure, Agile")
-    paragraphs    = data.get("body_paragraphs", [
-        "I am applying for the [Role] position at [Company]. My technical background includes [Key Skills] with [X] years of hands-on industry experience across [Domain 1] and [Domain 2].",
-        "In my current role at [Company], I [Specific Technical Achievement] using [Technologies], which resulted in [Measurable Outcome — e.g., 40% reduction in processing time]. I also led [Another Contribution] that improved [System/Process] reliability by [Metric].",
-        "I am particularly interested in [Company]'s work on [Product/Project/Technology Stack]. My experience with [Relevant Tool/Framework] and my understanding of [Technical Domain] position me to add immediate value to your engineering team.",
-    ])
+# ══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE 9 — ATS Clean Technical
+# Pure plain text, no images, no color blocks. Maximum keyword visibility.
+# Best for: Software Engineers, Data Scientists, any ATS-heavy pipeline.
+# ══════════════════════════════════════════════════════════════════════════════
+def render_cover_letter_ats_clean(data):
+    name           = data.get("name", "Your Name")
+    job_title      = data.get("job_title", "")
+    company        = data.get("company", "Company Name")
+    hiring_manager = data.get("hiring_manager", "Hiring Manager")
+    role           = data.get("role", "the position")
+    date_str       = data.get("date", "")
+    key_skills     = data.get("key_skills", "")
+    paragraphs     = data.get("body_paragraphs", _default_paras())
 
-    if job_title: contact_parts_line = f"{name} | {job_title}"
-    else:         contact_parts_line = name
+    # ATS: plain text contact, no links
+    parts = []
+    for k in ["email","phone","location","linkedin","portfolio"]:
+        v = data.get(k,"")
+        if v: parts.append(v)
+    contact_plain = " | ".join(parts)
 
-    details = []
-    if email:    details.append(email)
-    if phone:    details.append(phone)
-    if location: details.append(location)
-    if linkedin: details.append(linkedin)
-    if portfolio:details.append(portfolio)
-    details_line = " | ".join(details)
+    name_line = f"{name} | {job_title}" if job_title else name
+    body    = _paras_html(paragraphs, "margin-bottom:14px;font-size:14px;color:#111827;line-height:1.85;")
 
-    paras_html = "".join(
-        f"<p style='margin-bottom:14px;font-size:14px;color:#111827;line-height:1.8;'>{p}</p>"
-        for p in paragraphs
-    )
+    skills_block = ""
+    if key_skills:
+        skills_block = f"<p style='margin-bottom:14px;font-size:14px;color:#111827;line-height:1.85;'><strong>Core Skills:</strong> {key_skills}</p>"
 
     return f"""<!DOCTYPE html>
 <html lang='en'>
-<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Cover Letter — {name}</title>
+<head><meta charset='UTF-8'><title>Cover Letter — {name}</title>
 <style>
-  * {{ box-sizing:border-box; margin:0; padding:0; }}
-  body {{ font-family:Arial,Helvetica,sans-serif; background:#fff; color:#111827; padding:48px 64px; line-height:1.6; font-size:14px; }}
-  hr {{ border:none; border-top:1px solid #d1d5db; margin:18px 0; }}
-</style>
-</head>
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:Arial,Helvetica,sans-serif; background:#fff; color:#111827; padding:50px 66px; line-height:1.6; font-size:14px; }}
+hr {{ border:none; border-top:1px solid #d1d5db; margin:16px 0; }}
+</style></head>
 <body>
 <div>
-  <!-- ATS HEADER — plain text, no images -->
-  <div style='margin-bottom:6px;'>
-    <p style='font-size:22px;font-weight:700;color:#111827;'>{contact_parts_line}</p>
-    <p style='font-size:13px;color:#374151;margin-top:4px;'>{details_line}</p>
-  </div>
+  <p style='font-size:22px;font-weight:700;'>{name_line}</p>
+  <p style='font-size:13px;color:#374151;margin-top:4px;margin-bottom:4px;'>{contact_plain}</p>
   <hr>
-
-  <!-- DATE -->
-  {f"<p style='margin-bottom:16px;color:#374151;'>{date_str}</p>" if date_str else ''}
-
-  <!-- RECIPIENT -->
+  {f"<p style='margin-bottom:16px;color:#374151;'>{date_str}</p>" if date_str else ""}
   <div style='margin-bottom:20px;'>
-    <p style='font-weight:600;color:#111827;'>{hiring_manager}</p>
+    <p style='font-weight:600;'>{hiring_manager}</p>
     <p style='color:#374151;'>{company}</p>
   </div>
-
-  <!-- SUBJECT LINE (ATS-friendly) -->
   <p style='font-weight:700;margin-bottom:18px;'>Re: Application for {role} — {name}</p>
-
-  <!-- GREETING -->
   <p style='margin-bottom:18px;'>Dear {hiring_manager},</p>
-
-  <!-- BODY -->
-  {paras_html}
-
-  <!-- KEY SKILLS MENTION (ATS keyword boost) -->
-  <p style='margin-bottom:14px;font-size:14px;color:#111827;line-height:1.8;'>
-    <strong>Core Technical Skills:</strong> {key_skills}
+  {body}
+  {skills_block}
+  <p style='margin-bottom:28px;color:#374151;'>
+    I have attached my resume for your review and am available for an interview at your earliest convenience.
   </p>
-
-  <!-- CLOSING -->
-  <p style='margin-bottom:28px;color:#374151;'>I have attached my resume for your review. I am available for an interview at your earliest convenience and can be reached at {email or phone or "the contact details above"}.</p>
   <p>Sincerely,</p>
-  <p style='font-weight:700;font-size:15px;margin-top:10px;'>{name}</p>
-  {f"<p style='color:#374151;margin-top:2px;'>{job_title}</p>" if job_title else ''}
+  <p style='font-weight:700;font-size:15px;margin-top:12px;'>{name}</p>
+  {f"<p style='color:#374151;margin-top:3px;'>{job_title}</p>" if job_title else ""}
 </div>
 </body></html>"""
 
 
-# ── Cover Letter template registry ────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE 10 — Sidebar Accent
+# Left accent sidebar strip (thin colored column), main content right.
+# Inspired by Novoresume "Bucharest" cover letter layout.
+# Best for: Tech Leads, Product Designers, Creative Professionals.
+# ══════════════════════════════════════════════════════════════════════════════
+def render_cover_letter_sidebar_accent(data):
+    name           = data.get("name", "Your Name")
+    job_title      = data.get("job_title", "")
+    company        = data.get("company", "Company Name")
+    hiring_manager = data.get("hiring_manager", "Hiring Manager")
+    role           = data.get("role", "the position")
+    date_str       = data.get("date", "")
+    accent         = data.get("accent_color", "#0891b2")
+    paragraphs     = data.get("body_paragraphs", _default_paras())
+
+    contact = _contact_row(data, link_color=accent, sep=" &nbsp;·&nbsp; ")
+    body    = _paras_html(paragraphs, "margin-bottom:16px;font-size:14px;color:#1f2937;line-height:1.85;")
+
+    return f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><title>Cover Letter — {name}</title>
+<style>
+* {{ box-sizing:border-box; margin:0; padding:0; }}
+body {{ font-family:'Segoe UI',Arial,sans-serif; background:#fff; color:#1f2937; padding:0; line-height:1.6; }}
+</style></head>
+<body>
+<div style='display:flex;min-height:100%;'>
+  <!-- LEFT ACCENT SIDEBAR -->
+  <div style='width:8px;background:{accent};flex-shrink:0;'></div>
+
+  <!-- MAIN CONTENT -->
+  <div style='flex:1;padding:48px 56px;'>
+    <!-- HEADER -->
+    <div style='border-bottom:1px solid #e5e7eb;padding-bottom:18px;margin-bottom:26px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;'>
+      <div>
+        <h1 style='font-size:28px;font-weight:800;color:#0f172a;margin-bottom:3px;'>{name}</h1>
+        {f"<div style='font-size:14px;color:{accent};font-weight:600;'>{job_title}</div>" if job_title else ""}
+      </div>
+      <div style='text-align:right;font-size:12px;color:#6b7280;line-height:1.9;'>{contact}</div>
+    </div>
+
+    {f"<p style='font-size:13px;color:#9ca3af;margin-bottom:18px;'>{date_str}</p>" if date_str else ""}
+    <div style='margin-bottom:22px;'>
+      <p style='font-size:14px;font-weight:700;color:#0f172a;'>{hiring_manager}</p>
+      <p style='font-size:14px;color:#6b7280;'>{company}</p>
+    </div>
+    <p style='font-size:14px;margin-bottom:18px;'>Dear {hiring_manager},</p>
+    {body}
+    <p style='font-size:14px;color:#374151;margin-bottom:32px;'>
+      I'd love the opportunity to discuss how I can contribute to {company}.
+      Thank you for considering my application.
+    </p>
+    <p style='font-size:14px;'>Best regards,</p>
+    <p style='font-size:17px;font-weight:800;color:#0f172a;margin-top:12px;'>{name}</p>
+    {f"<p style='font-size:13px;color:{accent};margin-top:3px;'>{job_title}</p>" if job_title else ""}
+  </div>
+</div>
+</body></html>"""
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# REGISTRY
+# ══════════════════════════════════════════════════════════════════════════════
+
 COVER_LETTER_TEMPLATES = {
-    "Professional / Corporate":     render_cover_letter_professional,
-    "Modern Minimal":               render_cover_letter_modern,
-    "Creative":                     render_cover_letter_creative,
-    "Executive":                    render_cover_letter_executive,
-    "Entry-Level / Fresher":        render_cover_letter_entry_level,
-    "Technical / ATS-Optimized":    render_cover_letter_ats,
+    "Cobalt Professional":      render_cover_letter_cobalt,
+    "Emerald Minimal":          render_cover_letter_emerald,
+    "Executive Dark":           render_cover_letter_executive_dark,
+    "Coral Creative":           render_cover_letter_creative_coral,
+    "Minimal Monochrome":       render_cover_letter_minimal_mono,
+    "Slate Two-Tone":           render_cover_letter_slate,
+    "Golden Prestige":          render_cover_letter_golden,
+    "Entry-Level / Fresher":    render_cover_letter_entry_level,
+    "ATS Clean":                render_cover_letter_ats_clean,
+    "Sidebar Accent":           render_cover_letter_sidebar_accent,
 }
 
+# Industry-fit hints shown in the UI next to each template
+COVER_LETTER_META = {
+    "Cobalt Professional":   ("🔵", "Finance, Banking, Consulting"),
+    "Emerald Minimal":       ("🟢", "Tech, Product, Engineering"),
+    "Executive Dark":        ("⚫", "C-Suite, VP, Directors"),
+    "Coral Creative":        ("🔴", "Design, Marketing, Media"),
+    "Minimal Monochrome":    ("⬜", "ATS, Conservative, Academia"),
+    "Slate Two-Tone":        ("🟣", "Product Mgmt, Strategy, Ops"),
+    "Golden Prestige":       ("🟡", "Legal, Finance, Traditional"),
+    "Entry-Level / Fresher": ("🔷", "Graduates, Interns, Junior"),
+    "ATS Clean":             ("📄", "Software Eng, Data, Technical"),
+    "Sidebar Accent":        ("🔹", "Tech Leads, Designers, Creative"),
+}
+
+
 def render_cover_letter(template_name, data):
-    """
-    Render a cover letter from a named template.
-
-    Args:
-        template_name (str): One of the keys in COVER_LETTER_TEMPLATES.
-        data (dict): Cover letter data. Common keys:
-            name, job_title, email, phone, location, linkedin, portfolio,
-            company, hiring_manager, role, date, body_paragraphs (list[str]),
-            key_skills (str, ATS template only), accent_color (str, Creative only).
-
-    Returns:
-        str: Full HTML string for the cover letter.
-    """
-    fn = COVER_LETTER_TEMPLATES.get(template_name)
-    if fn is None:
-        fn = render_cover_letter_professional
+    """Dispatch to named cover letter template. Returns HTML string."""
+    fn = COVER_LETTER_TEMPLATES.get(template_name, render_cover_letter_cobalt)
     return fn(data)
 
 
+# Legacy aliases for any old imports
+render_cover_letter_professional = render_cover_letter_cobalt
+render_cover_letter_modern       = render_cover_letter_emerald
+render_cover_letter_creative     = render_cover_letter_creative_coral
+render_cover_letter_executive    = render_cover_letter_executive_dark
+render_cover_letter_ats          = render_cover_letter_ats_clean
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STREAMLIT GENERATOR — generate_cover_letter_from_resume_builder()
+# ══════════════════════════════════════════════════════════════════════════════
+
 def generate_cover_letter_from_resume_builder():
     import streamlit as st
-    from datetime import datetime
-    import re
-    import time
-    from llm_manager import call_llm  # Ensure you import this
+    from datetime import datetime, timezone, timedelta
+    import re as _re
 
-    name = st.session_state.get("name", "")
+    name      = st.session_state.get("name", "")
     job_title = st.session_state.get("job_title", "")
-    summary = st.session_state.get("summary", "")
-    skills = st.session_state.get("skills", "")
-    location = st.session_state.get("location", "")
-    from datetime import timezone, timedelta
+    summary   = st.session_state.get("summary", "")
+    skills    = st.session_state.get("skills", "")
+    location  = st.session_state.get("location", "")
+
     IST = timezone(timedelta(hours=5, minutes=30))
     today_date = datetime.now(IST).strftime("%B %d, %Y")
 
-    # Wrap all inputs + submit in a form so Streamlit only reruns on submit,
-    # not on every keystroke (which was causing the page-reload flicker).
+    # ── Template selector CSS ────────────────────────────────────────────────
+    st.markdown("""
+    <style>
+    .cl-meta-hint { font-size:11px; color:#9ca3af; margin-top:2px; }
+    </style>
+    """, unsafe_allow_html=True)
+
     with st.form(key="cover_letter_form"):
-        # ✅ FIX 1 — Template selector dropdown
-        cover_letter_template = st.selectbox(
-            "🎨 Choose Cover Letter Template",
-            options=list(COVER_LETTER_TEMPLATES.keys()),
-            index=0,
-            key="cover_letter_template_select",
-            help="Select the style/format for your cover letter"
+        st.markdown(
+            "<div style='font-size:14px;font-weight:600;color:#93c5fd;margin-bottom:10px;'>"
+            "🎨 Choose Cover Letter Template</div>",
+            unsafe_allow_html=True,
         )
 
-        # ✅ FIX 3 — Accent color picker (only relevant for Creative template)
-        accent_color = st.color_picker("🎨 Choose Accent Color (Creative template only)", value="#7c3aed", key="cl_accent_color")
+        # Build template option labels with industry hints
+        _tpl_options = list(COVER_LETTER_TEMPLATES.keys())
+        _tpl_display = {
+            k: f"{COVER_LETTER_META[k][0]}  {k}  —  {COVER_LETTER_META[k][1]}"
+            for k in _tpl_options
+        }
 
-        # ✅ Input boxes for contact info
-        company = st.text_input("🏢 Target Company", placeholder="e.g., Google")
-        linkedin = st.text_input("🔗 LinkedIn URL", placeholder="e.g., https://linkedin.com/in/username")
-        email = st.text_input("📧 Email", placeholder="e.g., you@example.com")
-        mobile = st.text_input("📞 Mobile Number", placeholder="e.g., +91 9876543210")
+        cover_letter_template = st.selectbox(
+            "Template",
+            options=_tpl_options,
+            format_func=lambda k: _tpl_display[k],
+            index=0,
+            key="cover_letter_template_select",
+            label_visibility="collapsed",
+        )
 
-        submitted_cl = st.form_submit_button("✉️ Generate Cover Letter")
+        # Show industry hint for selected template
+        _hint_icon, _hint_text = COVER_LETTER_META.get(cover_letter_template, ("",""))
+        st.markdown(
+            f"<div class='cl-meta-hint'>Best for: <strong>{_hint_text}</strong></div>",
+            unsafe_allow_html=True,
+        )
 
-    # Resolve accent color: only use picked color for Creative, else default
-    if cover_letter_template != "Creative":
-        accent_color = "#003366"
+        # Accent color — only relevant for Coral Creative and Sidebar Accent templates
+        _show_accent = cover_letter_template in ("Coral Creative", "Sidebar Accent")
+        accent_color = st.color_picker(
+            "🎨 Accent Color (for Coral Creative / Sidebar Accent templates)",
+            value="#e11d48" if cover_letter_template == "Coral Creative" else "#0891b2",
+            key="cl_accent_color",
+            disabled=not _show_accent,
+        )
+        if not _show_accent:
+            accent_color = "#003366"  # neutral fallback
+
+        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+
+        company  = st.text_input("🏢 Target Company", placeholder="e.g., Google, Infosys, McKinsey")
+        linkedin = st.text_input("🔗 LinkedIn URL", placeholder="e.g., https://linkedin.com/in/yourname",
+                                  value=st.session_state.get("linkedin",""))
+        email    = st.text_input("📧 Email", placeholder="e.g., you@example.com",
+                                  value=st.session_state.get("email",""))
+        mobile   = st.text_input("📞 Mobile", placeholder="e.g., +91 9876543210",
+                                  value=st.session_state.get("phone",""))
+
+        submitted_cl = st.form_submit_button("✉️ Generate Cover Letter", use_container_width=True, type="primary")
 
     if submitted_cl:
-        # ✅ Validate input before generating
-        if not all([name, job_title, summary, skills, company, linkedin, email, mobile]):
-            st.warning("⚠️ Please fill in all fields including LinkedIn, email, and mobile.")
+        if not all([name, job_title, summary, skills, company, email, mobile]):
+            st.warning("⚠️ Please fill in all fields (name, job title, summary, skills, company, email, mobile) before generating.")
             return
 
-        prompt = f"""
-You are a professional cover letter writer.
+        prompt = f"""You are a professional cover letter writer.
 
-Write ONLY the body paragraphs of a cover letter for the candidate below.
+Write ONLY the 3 body paragraphs of a cover letter for the candidate below.
 Do NOT include: date, recipient address, salutation ("Dear ..."), closing ("Sincerely"), or the candidate's name at the end.
-The template will add all of those automatically — your job is only the 3 body paragraphs.
+The template adds all of those automatically — provide ONLY the 3 body paragraphs.
 
 Output exactly 3 paragraphs separated by a blank line (double newline).
-Each paragraph should be 2-4 sentences.
+Each paragraph: 2–4 sentences. Plain text only, no HTML tags.
 
-### Candidate Info:
+Candidate:
 - Name: {name}
 - Job Title: {job_title}
 - Target Company: {company}
@@ -583,64 +772,56 @@ Each paragraph should be 2-4 sentences.
 - Summary: {summary}
 - Skills: {skills}
 
-### Instructions:
-- Do NOT include the date, header, salutation, or sign-off.
-- Do NOT start with "Dear Hiring Manager" or any greeting.
-- Do NOT end with "Sincerely" or the candidate's name.
-- Do not use HTML tags.
-- Separate each paragraph with a blank line (double newline).
-- Return plain text body paragraphs ONLY.
+Rules:
+- Do NOT start with "Dear" or any greeting.
+- Do NOT end with "Sincerely", the name, or a sign-off.
+- No HTML tags.
+- Separate paragraphs with a blank line.
+- Return 3 body paragraphs ONLY.
 """
+        with st.spinner("✉️ Crafting your cover letter…"):
+            try:
+                from llm_manager import call_llm
+                cover_letter_raw = call_llm(prompt, session=st.session_state).strip()
+            except Exception as _e:
+                st.error(f"LLM error: {_e}")
+                return
 
-        # ✅ Call LLM
-        with st.spinner("✉️ Crafting your cover letter... please wait"):
-            cover_letter_raw = call_llm(prompt, session=st.session_state).strip()
-
-        # ✅ Strip any header/salutation/closing lines the LLM may have added despite instructions
-        import re as _cl_re
-
-        def _strip_letter_boilerplate(text):
-            """Remove date lines, salutation, closing and name sign-off from LLM output."""
+        # Strip boilerplate the LLM may add despite instructions
+        def _strip_boilerplate(text):
             lines = text.split('\n')
             cleaned = []
-            # Patterns to strip
-            skip_patterns = [
-                r'^\s*(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d',  # date lines
-                r'^\s*\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}',       # numeric date
-                r'^\s*dear\b',                                      # salutation
-                r'^\s*(sincerely|regards|best regards|yours truly|warm regards|respectfully)',  # closing
-                r'^\s*hiring manager[,.]?\s*$',                    # bare "Hiring Manager"
-                r'^\s*[a-z ]+,\s*(kolkata|mumbai|delhi|bangalore|hyderabad|chennai|pune)',  # "Company, City"
+            skip_re = [
+                _re.compile(p, _re.IGNORECASE) for p in [
+                    r'^\s*(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d',
+                    r'^\s*\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}',
+                    r'^\s*dear\b',
+                    r'^\s*(sincerely|regards|best regards|yours truly|warm regards|respectfully)\b',
+                    r'^\s*hiring manager[,.]?\s*$',
+                ]
             ]
-            skip_re = [_cl_re.compile(p, _cl_re.IGNORECASE) for p in skip_patterns]
-            # Also skip the last 1-2 lines if they look like a name sign-off (short line after closing)
-            # Find closing line index
             closing_idx = None
-            for i, line in enumerate(lines):
-                if any(r.match(line) for r in skip_re[4:5]):  # closing words
+            for i, ln in enumerate(lines):
+                if _re.match(r'^\s*(sincerely|regards|best|yours|warm|respectfully)', ln, _re.I):
                     closing_idx = i
-            for i, line in enumerate(lines):
-                if any(r.match(line) for r in skip_re):
+            for i, ln in enumerate(lines):
+                if any(r.match(ln) for r in skip_re):
                     continue
-                # Skip lines that are just the candidate name (after a closing)
-                if closing_idx is not None and i > closing_idx and line.strip().lower() in (name.lower(), job_title.lower(), ''):
+                if closing_idx is not None and i > closing_idx and ln.strip().lower() in (name.lower(), job_title.lower(), ''):
                     continue
-                cleaned.append(line)
+                cleaned.append(ln)
             return '\n'.join(cleaned).strip()
 
-        cover_letter_body = _strip_letter_boilerplate(cover_letter_raw)
-
-        # ✅ Store plain text (full body only, no boilerplate)
+        cover_letter_body = _strip_boilerplate(cover_letter_raw)
         st.session_state["cover_letter"] = cover_letter_body
 
-        # ✅ Robust paragraph splitting (handles \n\n and single \n)
-        normalised  = _cl_re.sub(r'\n{3,}', '\n\n', cover_letter_body)
-        raw_paras   = normalised.split('\n\n')
-        if len(raw_paras) <= 1:          # fallback: LLM used single newlines only
+        # Split into paragraphs robustly
+        normalised   = _re.sub(r'\n{3,}', '\n\n', cover_letter_body)
+        raw_paras    = normalised.split('\n\n')
+        if len(raw_paras) <= 1:
             raw_paras = normalised.split('\n')
         body_paragraphs = [p.strip() for p in raw_paras if p.strip()]
 
-        # ✅ Build structured data dict for all template renderers
         cl_data = {
             "name":            name,
             "job_title":       job_title,
@@ -648,32 +829,83 @@ Each paragraph should be 2-4 sentences.
             "phone":           mobile,
             "location":        location,
             "linkedin":        linkedin,
-            "portfolio":       "",
+            "portfolio":       st.session_state.get("portfolio", ""),
             "company":         company,
             "hiring_manager":  "Hiring Manager",
             "role":            job_title,
             "date":            today_date,
             "body_paragraphs": body_paragraphs,
-            "key_skills":      skills,       # used by ATS template
-            "accent_color":    accent_color, # FIX 3 — user-picked color for Creative
+            "key_skills":      skills,
+            "accent_color":    accent_color,
         }
 
-        # ✅ FIX 1 — Render using the chosen template
         cover_letter_html = render_cover_letter(cover_letter_template, cl_data)
-
         st.session_state["cover_letter_html"] = cover_letter_html
 
-        # ✅ Show cover letter in an iframe so the full HTML template renders correctly
-        # (st.markdown cannot render full <!DOCTYPE html> documents — it leaks raw tags)
+        # Generate PDF
+        try:
+            from taab2 import html_to_pdf_bytes as _h2pdf
+        except ImportError:
+            try:
+                from main import html_to_pdf_bytes as _h2pdf
+            except ImportError:
+                _h2pdf = None
+
+        if _h2pdf is not None:
+            try:
+                _pdf_buf = _h2pdf(cover_letter_html)
+                st.session_state["cover_letter_pdf"] = _pdf_buf.read()
+            except Exception:
+                st.session_state["cover_letter_pdf"] = None
+        else:
+            st.session_state["cover_letter_pdf"] = None
+
+        # Preview
         import streamlit.components.v1 as _cl_components
         st.success("✅ Cover letter generated successfully!")
         st.markdown(
-            "<p style='color:#555; font-size:13px; margin-top:8px;'>"
-            "📄 Cover Letter Preview (scroll to explore):</p>",
+            "<p style='color:#555;font-size:13px;margin-top:8px;'>📄 Cover Letter Preview (scroll to explore):</p>",
             unsafe_allow_html=True,
         )
-        _cl_components.html(
-            cover_letter_html,
-            height=700,
-            scrolling=True,
-        )
+        _cl_components.html(cover_letter_html, height=700, scrolling=True)
+
+        # Download buttons
+        _safe_name = name.replace(" ", "_")
+        _dl1, _dl2, _dl3 = st.columns(3)
+
+        with _dl1:
+            st.download_button(
+                label="📥 Download (HTML)",
+                data=cover_letter_html.encode("utf-8"),
+                file_name=f"{_safe_name}_Cover_Letter.html",
+                mime="text/html",
+                key="download_cl_html_inline",
+            )
+        with _dl2:
+            if st.session_state.get("cover_letter_pdf"):
+                st.download_button(
+                    label="📥 Download (PDF)",
+                    data=st.session_state["cover_letter_pdf"],
+                    file_name=f"{_safe_name}_Cover_Letter.pdf",
+                    mime="application/pdf",
+                    key="download_cl_pdf_inline",
+                )
+        with _dl3:
+            try:
+                from docx import Document as _DocxDoc
+                _docx_bio = __import__('io').BytesIO()
+                _docx = _DocxDoc()
+                _docx.add_heading("Cover Letter", 0)
+                for _line in cover_letter_body.split("\n"):
+                    _docx.add_paragraph(_line if _line.strip() else "")
+                _docx.save(_docx_bio)
+                _docx_bio.seek(0)
+                st.download_button(
+                    label="📥 Download (.docx)",
+                    data=_docx_bio,
+                    file_name=f"{_safe_name}_Cover_Letter.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key="download_cl_docx_inline",
+                )
+            except ImportError:
+                st.info("Install python-docx for DOCX download.")
