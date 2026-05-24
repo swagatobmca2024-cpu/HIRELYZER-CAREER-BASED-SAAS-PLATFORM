@@ -273,8 +273,8 @@ _WEIGHTS: dict[str, int] = {
     "location_mismatch":       12,   # raised: fake abroad placement very common in India
     "poor_grammar":             6,
     "work_from_home_bait":     11,   # raised: #1 scam category in India currently
-    "missing_salary":           4,
-    "generic_template":         4,
+    "missing_salary":           2,   # very low — most Indian companies dont disclose salary
+    "generic_template":         3,   # low — generic templates common in real postings too
     # ── India-specific signals ────────────────────────────────────────────────
     "india_scam_pattern":      16,   # data entry, typing, captcha, fake govt jobs
     "invalid_gstin":           18,   # GST number present but fails format check
@@ -2030,17 +2030,32 @@ def _probe_mx_record(contact: str) -> dict:
                 )
 
                 # ── Check 2: Free provider MX (Google/Outlook for "corp" domain)
-                # Real companies using GSuite/O365 are legitimate, but a domain
-                # claiming to be a company that routes through Google/Outlook
-                # personal mail tiers is a yellow flag.
-                _FREE_MX_PROVIDERS = (
-                    "google.com", "googlemail.com",
-                    "outlook.com", "hotmail.com", "protection.outlook.com",
-                    "yahoodns.net",
+                # Split free consumer providers vs legitimate paid corporate services.
+                # Microsoft 365 (protection.outlook.com), Google Workspace (aspmx.l.google.com)
+                # are PAID enterprise services used by millions of real companies — NOT free.
+                # Only flag truly free consumer mail providers as suspicious.
+                _FREE_CONSUMER_MX = (
+                    "hotmail.com",      # personal Hotmail — free consumer
+                    "yahoodns.net",     # Yahoo personal mail — free consumer
+                    "yahoomail.com",    # Yahoo personal mail
                 )
-                free_mx = any(
-                    any(p in h.lower() for p in _FREE_MX_PROVIDERS)
-                    for h in mx_hosts
+                # Legitimate paid corporate email services — never flag these
+                _CORPORATE_MX = (
+                    "protection.outlook.com",   # Microsoft 365 Exchange Online — paid
+                    "outlook.com",              # Could be M365 — check subdomain
+                    "google.com",               # Google Workspace — paid
+                    "googlemail.com",           # Google Workspace legacy
+                    "aspmx.l.google.com",       # Google Workspace — paid
+                    "amazonses.com",            # Amazon SES — paid
+                    "mimecast.com",             # Mimecast — paid enterprise
+                    "pphosted.com",             # Proofpoint — paid enterprise
+                    "mailprotect.com",          # Paid mail security
+                )
+                # Only flag if ALL MX records are free consumer providers
+                # NOT if they use paid corporate services like M365/Google Workspace
+                free_mx = (
+                    any(any(p in h.lower() for p in _FREE_CONSUMER_MX) for h in mx_hosts)
+                    and not any(any(p in h.lower() for p in _CORPORATE_MX) for h in mx_hosts)
                 )
 
                 # ── Check 3: MX hostname actually resolves ─────────────────
@@ -2062,7 +2077,7 @@ def _probe_mx_record(contact: str) -> dict:
                 if voip_risk:
                     flags.append("BULK/TRANSACTIONAL mail — not a real corporate inbox")
                 if free_mx and not voip_risk:
-                    flags.append("routes through free provider (Google/Outlook)")
+                    flags.append("routes through personal/consumer email provider")
                 if ghost_mx:
                     flags.append(f"MX hostname(s) do not resolve: {', '.join(unresolvable[:2])}")
 
@@ -3749,6 +3764,13 @@ LIVE PROBE FINDINGS:
 
 SALARY ASSESSMENT RULE (mandatory):
 {salary_instruction}
+
+CRITICAL RED FLAG RULES — follow strictly:
+1. MISSING SALARY: Do NOT flag absence of salary as a red flag. Most Indian companies do not disclose salary in job postings. This is completely normal. Never put "Lack of salary information" or "No salary mentioned" in top_red_flags.
+2. MISSING BENEFITS: Do NOT flag absence of benefits/perks as a red flag. Many companies discuss benefits during interviews. This is standard practice.
+3. MISSING LOCATION: Do NOT flag unspecified location as a red flag. Remote jobs, hybrid roles, and "location to be discussed" are extremely common. Never put "Unspecified location" or "No location" in top_red_flags.
+4. Only flag things that are ACTUAL scam signals — fee requests, urgency pressure, personal data demands, fake company evidence, unrealistic promises etc.
+5. top_red_flags must contain ONLY genuine scam indicators. If none exist, return an empty list [].
 
 Required JSON schema (all keys mandatory):
 {{
