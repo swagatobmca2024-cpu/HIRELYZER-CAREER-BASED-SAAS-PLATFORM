@@ -318,7 +318,7 @@ _BRAND_DOMAINS: list[str] = [
     "karurbank.com","cityunionbank.com","tmb.in","ujjivansfb.in",
     "equitasbank.com","aubank.in","esafbank.com","suryodaybank.com",
     # ── Indian fintech ────────────────────────────────────────────────────────
-    "paytm.com","phonepe.com","razorpay.com","cred.club","groww.in",
+    "paytm.com","paytmbank.com","paytmmoney.com","phonepe.com","razorpay.com","cred.club","groww.in",
     "zerodha.com","upstox.com","policybazaar.com","lendingkart.com",
     "mobikwik.com","freecharge.in","jiomoney.com","airtelbank.com",
     "instamojo.com","cashfree.com","billdesk.com","ccavenue.com",
@@ -414,7 +414,7 @@ _BRAND_DOMAINS: list[str] = [
     "khatabook.com","okCredit.com","veefin.com","recur.club",
     "setu.co","signzy.com","hyperface.co","yap.co","open.money",
     "niyo.co","jupiter.money","freo.money","epifi.com",
-    "smallcase.com","ditto.insurance","acko.com","digit.in",
+    "smallcase.com","ditto.insurance","acko.com",
     "coverfox.com","renewbuy.com","turtlemint.com",
     # ── Indian media / entertainment ──────────────────────────────────────────
     "hotstar.com","sonyliv.com","zee5.com","voot.com","mxplayer.in",
@@ -1830,11 +1830,15 @@ def _probe_typosquatting(domain: str) -> dict:
             elif dist <= 3:
                 scored.append((dist + 0.5, b))  # slightly lower priority
 
-        # Prefix/containment for all brands — stricter threshold for short ones
-        if b_norm in d_norm:
-            extra = d_norm.replace(b_norm, "")
-            min_extra = (5 if len(b_sld) <= 4 else
-                         4 if len(b_sld) <= 5 else 2)
+        # Prefix/suffix brand check — brand must START or END the domain
+        # e.g. "wiprojobs" starts with "wipro" → flagged
+        #      "jobswipro" ends with "wipro"   → flagged
+        #      "ayrindigital" contains "digit" but neither starts nor ends → CLEAN
+        # This eliminates false positives like "digital" containing "digit"
+        if (d_norm.startswith(b_norm) or d_norm.endswith(b_norm)) and d_norm != b_norm:
+            extra = d_norm[len(b_norm):] if d_norm.startswith(b_norm) else d_norm[:-len(b_norm)]
+            min_extra = (4 if len(b_sld) <= 4 else
+                         3 if len(b_sld) <= 5 else 2)
             if len(extra) >= min_extra and prefix_brand is None:
                 prefix_brand = b
 
@@ -3186,8 +3190,31 @@ def _probe_risk(probes: dict) -> tuple[int, list[str]]:
             warnings.append("Company website is a PARKED / placeholder domain")
     typo = probes.get("typosquat", {})
     if typo.get("is_squatter"):
-        penalty += 20
-        warnings.append(typo["detail"])
+        # ── MCA coordination ─────────────────────────────────────────────────
+        # If MCA confirmed the company is legally registered, the typosquat
+        # may be a legitimate sub-brand/related company — reduce penalty and
+        # soften warning. If MCA found nothing, it strengthens the flag.
+        cd = probes.get("company_domain", {})
+        # Use identity_sources and domain_matches_company as MCA proxy
+        # These are populated by _probe_company_domain from real network checks
+        cd_identity   = cd.get("identity_sources", 0)
+        cd_name_match = cd.get("domain_matches_company", False)
+        cd_verified   = cd.get("domain_exists") and cd.get("website_live")
+        # "Confirmed" = at least 1 identity source OR name matches AND site live
+        company_confirmed = cd_identity >= 1 or (cd_name_match and cd_verified)
+
+        if company_confirmed:
+            # Legally registered — downgrade to warning, halve penalty
+            penalty += 10
+            warnings.append(
+                f"Domain contains brand keyword — possible impersonation of "
+                f"{typo.get('closest_brand','a known brand')}, BUT company "
+                f"appears legally registered in MCA. Verify manually."
+            )
+        else:
+            # Not MCA confirmed — full penalty, strong warning
+            penalty += 20
+            warnings.append(typo["detail"])
     if probes.get("free_email", {}).get("uses_free_domain"):
         penalty += 12
         dom = probes["free_email"].get("domain", "")
@@ -4006,12 +4033,33 @@ def _render_probe_table(probes: dict):
          _badge("NOT CHECKED", "#6b7280","rgba(107,114,128,0.12)"))
     rows.append(_row(I.SERVER, "Site Reachability", b, r.get("detail","")))
 
-    t = probes.get("typosquat", {})
+    t   = probes.get("typosquat", {})
+    cd  = probes.get("company_domain", {})
     pct = int(t.get("similarity",0)*100)
-    b   = (_badge("TYPOSQUAT RISK","#dc2626","rgba(220,38,38,0.12)") if t.get("is_squatter") else
-           _badge(f"LOW RISK ({pct}%)","#f59e0b","rgba(245,158,11,0.12)") if pct >= 50 else
-           _badge("CLEAR","#22c55e","rgba(34,197,94,0.12)"))
-    rows.append(_row(I.COPY, "Typosquatting", b, t.get("detail","")))
+    # Use identity_sources and domain_matches_company as verification proxy
+    cd_identity   = cd.get("identity_sources", 0)
+    cd_name_match = cd.get("domain_matches_company", False)
+    cd_verified   = cd.get("domain_exists") and cd.get("website_live")
+    company_confirmed = cd_identity >= 1 or (cd_name_match and cd_verified)
+
+    if t.get("is_squatter"):
+        if company_confirmed:
+            # Typosquat fired BUT MCA says company is legally registered
+            # → downgrade to amber WARNING, not full red RISK
+            typo_badge   = _badge("VERIFY — MCA REGISTERED", "#f59e0b", "rgba(245,158,11,0.12)")
+            typo_detail  = (
+                f"{t.get('detail','')} — however, company appears legally "
+                f"registered in MCA. Could be a legitimate sub-brand. Verify manually."
+            )
+        else:
+            # Typosquat fired, no MCA confirmation → full red flag
+            typo_badge  = _badge("TYPOSQUAT RISK","#dc2626","rgba(220,38,38,0.12)")
+            typo_detail = t.get("detail","")
+    else:
+        typo_badge  = (_badge(f"LOW RISK ({pct}%)","#f59e0b","rgba(245,158,11,0.12)")
+                       if pct >= 50 else _badge("CLEAR","#22c55e","rgba(34,197,94,0.12)"))
+        typo_detail = t.get("detail","")
+    rows.append(_row(I.COPY, "Typosquatting", typo_badge, typo_detail))
 
     fe = probes.get("free_email", {})
     b  = (_badge("FREE EMAIL","#dc2626","rgba(220,38,38,0.12)") if fe.get("uses_free_domain")
