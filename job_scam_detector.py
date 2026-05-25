@@ -3697,10 +3697,15 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
         # INR/month → LPA
         m = _re.search(r"(?:₹|Rs\.?|INR)[\s]*(\d[\d,\.]*)[\s]*/[\s]*(?:month|mo\.?|pm\b)", r, _re.I)
         if not m:
-            m = _re.search(r"(\d[\d,\.]*)[\s]*/[\s]*(?:month|per[\s]+month|pm\b)", r, _re.I)
+            m = _re.search(r"(\d[\d,\.]*)[\s]*(?:/[\s]*|per[\s]+)(?:month|mo\.?|pm\b)", r, _re.I)
         if m:
             lpa = round(float(m.group(1).replace(",","")) * 12 / 100000, 2)
             return f"{r}  [≈ ₹{lpa} LPA]"
+        # No number found — vague text like "Competitive salary" or "As per industry"
+        # Tell AI explicitly that no figure is available to assess
+        import re as _re2
+        if not _re2.search(r"\d", r):
+            return f"{r}  [NOTE: No specific salary figure provided — assessment not possible]"
         return r  # already LPA or unknown format
 
     salary_display_prompt = _normalise_salary_for_prompt(salary_raw) if salary_raw else "N/A"
@@ -3740,7 +3745,11 @@ def _llm_prompt(job: dict, probe_warnings: list) -> str:
             f"market range, end with the exact phrase: 'This is a scam signal.' "
             f"Otherwise never use those words.\n"
             f"Write 3-4 factual sentences. No bullet list. No filler phrases. "
-            f"If information is insufficient for a confident assessment, say so honestly."
+            f"If information is insufficient for a confident assessment, say so honestly.\n"
+            f"6. If the salary field contains only vague text like 'Competitive', "
+            f"'As per industry', 'Best in class' with NO specific number — "
+            f"state clearly that no figure was provided and assessment is not possible. "
+            f"Do NOT invent or assume a salary range."
         )
 
     return f"""You are a senior HR fraud investigator specialising in Indian and global employment scams.
