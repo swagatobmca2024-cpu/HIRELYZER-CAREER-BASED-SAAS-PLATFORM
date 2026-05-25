@@ -6731,17 +6731,22 @@ def html_to_pdf_bytes(html_string):
 # IMPORTS — modular resume & cover letter engines
 # ══════════════════════════════════════════════════════════════════════════════
 from resume_builder import (
-    render_template_default, render_template_modern, render_template_sidebar,
-    render_template_classic, render_template_executive, render_template_timeline,
-    render_template_corporate, render_template_creative_green,
-    render_template_terracotta, render_template_navy_prestige,
-    render_template_slate_gray, render_template_teal_impact,
-    render_template_burgundy_classic, render_template_indigo_tech,
-    render_template_forest_green,
-    render_template_pure_white, render_template_midnight_black,
-    render_template_soft_lavender, render_template_warm_sand,
-    render_template_ice_blue,
-    RESUME_TEMPLATES, render_resume,
+    # Single-column templates
+    render_template_cobalt_executive, render_template_emerald_clean,
+    render_template_charcoal_impact, render_template_arctic_minimal,
+    render_template_ruby_professional, render_template_slate_modern,
+    render_template_golden_classic, render_template_navy_prestige,
+    render_template_coral_creative, render_template_monochrome_ats,
+    render_template_indigo_tech, render_template_forest_executive,
+    render_template_plum_elegant, render_template_copper_warm,
+    render_template_sky_corporate,
+    # Double-column templates
+    render_template_midnight_sidebar, render_template_sage_sidebar,
+    render_template_royal_sidebar, render_template_crimson_sidebar,
+    render_template_charcoal_sidebar, render_template_amber_sidebar,
+    # Registry and dispatch
+    RESUME_TEMPLATES, SINGLE_COLUMN_TEMPLATES, DOUBLE_COLUMN_TEMPLATES,
+    render_resume,
     _fmt_desc, _cert_name_html,
 )
 from cover_letter import (
@@ -7453,66 +7458,124 @@ with tab2:
         </style>
     """, unsafe_allow_html=True)
 
-    # 🎨 Template Selection — visual card grid
+    # 🎨 Template Selection — categorized card grid (15 single-col + 6 double-col)
     st.markdown("""
     <style>
-    div[data-testid="stHorizontalBlock"] .tpl-card-wrap { padding: 4px; }
+    .tpl-section-label {
+        font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+        color: #64748b; text-transform: uppercase; margin: 14px 0 8px;
+        padding-left: 2px;
+    }
+    .tpl-category-badge {
+        display: inline-block; font-size: 10px; font-weight: 600;
+        padding: 2px 8px; border-radius: 20px; margin-bottom: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-    TEMPLATE_META = [
-        ("Default (Professional)",        "#2f4f6f", "#e8f0fe"),
-        ("Modern Minimal",                 "#0d9488", "#f0fdfa"),
-        ("Elegant Sidebar",                "#7c3aed", "#f5f3ff"),
-        ("Classic Clean (Single Column)",  "#374151", "#f9fafb"),
-        ("Executive (Single Column)",      "#1e3a5f", "#eff6ff"),
-        ("Timeline (Single Column)",       "#b45309", "#fffbeb"),
-        ("Corporate Blue (Two Column)",    "#1d4ed8", "#eff6ff"),
-        ("Creative Green (Two Column)",    "#166534", "#f0fdf4"),
-        ("Warm Terracotta (Two Column)",   "#c2410c", "#fff7ed"),
-        ("Navy Prestige (Two Column)",     "#1e3a5f", "#f0f4ff"),
-        ("Slate Gray (Single Column)",     "#475569", "#f8fafc"),
-        ("Teal Impact (Two Column)",       "#0f766e", "#f0fdfa"),
-        ("Burgundy Classic (Single Column)","#881337","#fff1f2"),
-        ("Indigo Tech (Two Column)",       "#4338ca", "#eef2ff"),
-        ("Forest Green (Single Column)",   "#14532d", "#f0fdf4"),
-        # ── 6 new premium templates ──────────────────────────────────────────
-        ("Pure White (Single Column)",     "linear-gradient(to right,#ffffff 70%,#111111 100%)", "#ffffff"),
-        ("Midnight Black (Single Column)", "#f59e0b", "#111827"),
-        ("Soft Lavender (Single Column)",  "#6366f1", "#f5f3ff"),
-        ("Warm Sand (Single Column)",      "#b45309", "#fdf8f0"),
-        ("Ice Blue (Single Column)",       "#0369a1", "#eff9ff"),
+    # Template metadata: (name, primary_color, badge_bg, layout_icon)
+    # Single-column templates
+    _SINGLE_META = [
+        ("Cobalt Executive",   "#1b3a6b", "#dbeafe",  "▤"),
+        ("Emerald Clean",      "#065f46", "#d1fae5",  "▤"),
+        ("Charcoal Impact",    "#1c1c1e", "#fff7ed",  "▤"),
+        ("Arctic Minimal",     "#0891b2", "#ecfeff",  "▤"),
+        ("Ruby Professional",  "#9f1239", "#fff1f2",  "▤"),
+        ("Slate Modern",       "#334155", "#f1f5f9",  "▤"),
+        ("Golden Classic",     "#b45309", "#fef3c7",  "▤"),
+        ("Navy Prestige",      "#0f2d4f", "#fdf8f0",  "▤"),
+        ("Coral Creative",     "#e11d48", "#fff1f2",  "▤"),
+        ("Monochrome ATS",     "#000000", "#f5f5f5",  "▤"),
+        ("Indigo Tech",        "#3730a3", "#eef2ff",  "▤"),
+        ("Forest Executive",   "#14532d", "#dcfce7",  "▤"),
+        ("Plum Elegant",       "#6b21a8", "#f5f3ff",  "▤"),
+        ("Copper Warm",        "#92400e", "#fef3c7",  "▤"),
+        ("Sky Corporate",      "#0284c7", "#e0f2fe",  "▤"),
     ]
-    TEMPLATE_NAMES = [t[0] for t in TEMPLATE_META]
+    # Double-column templates
+    _DOUBLE_META = [
+        ("Midnight Sidebar",   "#0f172a", "#e0f2fe",  "▥"),
+        ("Sage Sidebar",       "#4d7c60", "#e8f5ee",  "▥"),
+        ("Royal Sidebar",      "#1e3a8a", "#eff6ff",  "▥"),
+        ("Crimson Sidebar",    "#991b1b", "#fff5f5",  "▥"),
+        ("Charcoal Sidebar",   "#18181b", "#ecfeff",  "▥"),
+        ("Amber Sidebar",      "#92400e", "#fef3c7",  "▥"),
+    ]
 
     if "selected_template_name" not in st.session_state:
-        st.session_state["selected_template_name"] = TEMPLATE_NAMES[0]
+        st.session_state["selected_template_name"] = _SINGLE_META[0][0]
 
-    st.markdown("<div style='margin:18px 0 8px;font-size:14px;font-weight:600;color:#93c5fd;'>🎨 Choose Resume Template</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div style='margin:18px 0 4px;font-size:14px;font-weight:600;color:#93c5fd;'>"
+        "🎨 Choose Resume Template</div>",
+        unsafe_allow_html=True,
+    )
 
-    # Show 5 cards per row
-    _tpl_rows = [TEMPLATE_META[i:i+5] for i in range(0, len(TEMPLATE_META), 5)]
-    for _row in _tpl_rows:
-        _cols = st.columns(len(_row))
-        for _ci, (_tname, _color, _light) in enumerate(_row):
-            with _cols[_ci]:
-                _is_sel = st.session_state["selected_template_name"] == _tname
-                _border = "2px solid #4da6ff" if _is_sel else "1px solid rgba(0,180,255,0.15)"
-                _glow   = "box-shadow: 0 0 12px rgba(77,166,255,0.45);" if _is_sel else ""
-                _is_light_swatch = _color.startswith("linear-gradient") or _color in ("#fdf8f0", "#eff9ff", "#fff0f6", "#f5f3ff", "#f8fafc", "#fffbeb")
-                _swatch_extra = "border:1px solid rgba(255,255,255,0.25);" if _is_light_swatch else ""
-                st.markdown(
-                    f"<div style='background:rgba(13,20,40,0.6);border:{_border};border-radius:10px;"
-                    f"padding:8px 6px 6px;text-align:center;{_glow}'>"
-                    f"<div style='height:28px;border-radius:6px;background:{_color};margin-bottom:6px;{_swatch_extra}'></div>"
-                    f"<div style='font-size:9.5px;color:{'#93c5fd' if _is_sel else '#6b7280'};font-weight:{'700' if _is_sel else '500'};line-height:1.3;'>{_tname}</div>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
-                if st.button("✓" if _is_sel else "Select", key=f"tpl_btn_{_tname}", use_container_width=True):
-                    if st.session_state["selected_template_name"] != _tname:
-                        st.session_state["selected_template_name"] = _tname
-                        st.rerun()
+    def _render_template_grid(meta_list, cols_per_row=5):
+        """Render a row-based template card grid for the given meta list."""
+        rows = [meta_list[i:i+cols_per_row] for i in range(0, len(meta_list), cols_per_row)]
+        for _row in rows:
+            _cols = st.columns(len(_row))
+            for _ci, (_tname, _color, _light, _icon) in enumerate(_row):
+                with _cols[_ci]:
+                    _is_sel = st.session_state["selected_template_name"] == _tname
+                    _border = "2px solid #4da6ff" if _is_sel else "1px solid rgba(0,180,255,0.15)"
+                    _glow   = "box-shadow:0 0 14px rgba(77,166,255,0.5),inset 0 0 8px rgba(77,166,255,0.08);" if _is_sel else ""
+                    _name_c = "#93c5fd" if _is_sel else "#6b7280"
+                    _name_w = "700" if _is_sel else "500"
+                    # Swatch: show primary color bar + layout icon overlay
+                    _icon_c = "#ffffff" if _color not in ("#f5f5f5","#fdf8f0","#ecfeff","#e0f2fe","#eef2ff","#fef3c7","#fff7ed") else "#333333"
+                    st.markdown(
+                        f"<div style='background:rgba(13,20,40,0.6);border:{_border};border-radius:10px;"
+                        f"padding:8px 5px 6px;text-align:center;{_glow}cursor:pointer;'>"
+                        f"<div style='height:30px;border-radius:6px;background:{_color};margin-bottom:5px;"
+                        f"display:flex;align-items:center;justify-content:center;"
+                        f"font-size:14px;color:{_icon_c};font-weight:bold;'>{_icon}</div>"
+                        f"<div style='font-size:9px;color:{_name_c};font-weight:{_name_w};"
+                        f"line-height:1.3;min-height:24px;display:flex;align-items:center;"
+                        f"justify-content:center;'>{_tname}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                    if st.button(
+                        "✓ Selected" if _is_sel else "Select",
+                        key=f"tpl_btn_{_tname}",
+                        use_container_width=True,
+                    ):
+                        if st.session_state["selected_template_name"] != _tname:
+                            st.session_state["selected_template_name"] = _tname
+                            st.rerun()
+
+    # ── Single-Column category ───────────────────────────────────────────────
+    st.markdown(
+        "<div style='margin:10px 0 6px;'>"
+        "<span class='tpl-category-badge' style='background:rgba(37,99,235,0.15);color:#60a5fa;"
+        "border:1px solid rgba(96,165,250,0.3);'>▤ Single-Column  ·  15 templates</span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    _render_template_grid(_SINGLE_META, cols_per_row=5)
+
+    # ── Double-Column category ───────────────────────────────────────────────
+    st.markdown(
+        "<div style='margin:14px 0 6px;'>"
+        "<span class='tpl-category-badge' style='background:rgba(124,58,237,0.15);color:#a78bfa;"
+        "border:1px solid rgba(167,139,250,0.3);'>▥ Two-Column Sidebar  ·  6 templates</span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    _render_template_grid(_DOUBLE_META, cols_per_row=6)
+
+    # Show which template is currently selected
+    _sel = st.session_state["selected_template_name"]
+    _is_double = _sel in [m[0] for m in _DOUBLE_META]
+    _layout_tag = "Two-Column Sidebar" if _is_double else "Single-Column"
+    st.markdown(
+        f"<div style='font-size:11px;color:#4b5563;margin:6px 0 12px;'>"
+        f"Selected: <strong style='color:#93c5fd;'>{_sel}</strong> "
+        f"<span style='color:#6b7280;'>· {_layout_tag}</span></div>",
+        unsafe_allow_html=True,
+    )
 
     selected_template = st.session_state["selected_template_name"]
 
@@ -7548,33 +7611,14 @@ with tab2:
                 "font-size:22px;margin:4px auto;'>👤</div>",
                 unsafe_allow_html=True,
             )
-    profile_img_html = ""
+    profile_img_bytes = None
 
     if st.session_state.get("encoded_profile_image"):
-        encoded_image = st.session_state["encoded_profile_image"]
-        profile_img_html = f"""
-        <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
-            <img src="data:image/png;base64,{encoded_image}" alt="Profile Photo"
-                 style="
-                    width: 140px;
-                    height: 140px;
-                    border-radius: 50%;
-                    object-fit: cover;
-                    object-position: center;
-                    border: 4px solid rgba(255,255,255,0.6);
-                    box-shadow:
-                        0 0 0 3px #4da6ff,
-                        0 8px 25px rgba(77, 166, 255, 0.3),
-                        0 4px 15px rgba(0, 0, 0, 0.15);
-                    transition: transform 0.3s ease-in-out;
-                "
-                onmouseover="this.style.transform='scale(1.07)'"
-                onmouseout="this.style.transform='scale(1)'"
-             />
-        </div>
-        """
-    else:
-        st.markdown("<div style='font-size:12px;color:#4b5563;margin-top:4px;'>📸 Upload a clear, front-facing photo (square or portrait preferred)</div>", unsafe_allow_html=True)
+        import base64 as _base64
+        try:
+            profile_img_bytes = _base64.b64decode(st.session_state["encoded_profile_image"])
+        except Exception:
+            profile_img_bytes = None
 
     # ---------------- Session State Defaults ----------------
     fields = ["name", "email", "phone", "linkedin", "location", "portfolio", "summary",
@@ -8468,8 +8512,9 @@ with tab2:
                 st.session_state["project_entries"] = [{"title": "", "tech": "", "duration": "", "description": ""}]
                 st.session_state["project_links"] = []
                 st.session_state["certificate_links"] = [{"name": "", "link": "", "duration": "", "description": ""}]
-                for _key in ["generated_html", "ai_output", "cover_letter",
-                             "cover_letter_html", "encoded_profile_image"]:
+                for _key in ["pdf_resume_bytes", "ai_output", "cover_letter",
+                             "cover_letter_pdf", "encoded_profile_image", "generated_html",
+                             "cover_letter_html", "show_pdf_preview"]:
                     st.session_state.pop(_key, None)
                 st.session_state["form_key_counter"] = _new_counter
                 st.session_state.pop("_confirm_clear", None)
@@ -8553,7 +8598,7 @@ with tab2:
         st.success("✅ Resume Generated Successfully! Scroll down to preview or download.")
         st.session_state["_resume_generated_msg"] = False  # show only once per submit
 
-    if "generated_html" in st.session_state:
+    if st.session_state.get("pdf_resume_bytes"):
         st.markdown("## 🧾 <span style='color:#336699;'>Resume Preview</span>", unsafe_allow_html=True)
         st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
 
@@ -9327,25 +9372,23 @@ with tab2:
                 for i, link in enumerate(st.session_state.project_links):
                     st.markdown(f"[🔗 Project {i+1}]({link})", unsafe_allow_html=True)
 
-    # Generate HTML content based on selected template — only on submit, stored in session_state
+    # Generate PDF content based on selected template — only on submit, stored in session_state
     if submitted:
         with st.spinner("⚙️ Generating your resume... please wait"):
-            # Render selected resume template via the registry dispatcher (resume_builder.py)
-            html_content = render_resume(selected_template, st.session_state, profile_img_html)
-
-            # Store the generated content and invalidate cached PDF so it's recomputed fresh
-            # NOTE: Use direct assignment instead of .pop() — .pop() on an existing key
-            # triggers an extra Streamlit rerun which causes visible page blinking.
-            st.session_state["generated_html"] = html_content
-            st.session_state["pdf_resume_bytes"] = None   # invalidate cache without extra rerun
-            st.session_state["show_template_preview"] = False
+            # render_resume() returns BytesIO PDF (ReportLab)
+            pdf_buf = render_resume(selected_template, st.session_state, profile_img_bytes)
+            pdf_bytes = pdf_buf.read()
+            st.session_state["pdf_resume_bytes"] = pdf_bytes
+            # Clear any stale HTML from previous runs
+            st.session_state.pop("generated_html", None)
+            st.session_state["show_pdf_preview"] = False
         st.session_state.pop("_resume_generating", None)
 
 with tab2:
     # ==========================
     # 📥 Resume Download Header
     # ==========================
-    if "generated_html" in st.session_state:
+    if st.session_state.get("pdf_resume_bytes"):
         st.markdown(
             """
             <div style='text-align: center; margin-top: 20px; margin-bottom: 30px;'>
@@ -9353,70 +9396,79 @@ with tab2:
                     📥 Download Your Resume
                 </h2>
                 <p style="color:#555; font-size:14px;">
-                    Choose your preferred format below
+                    Your resume is ready — download it as a PDF below
                 </p>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-        # Cache PDF bytes in session_state to avoid expensive recomputation on every rerun
-        if not st.session_state.get("pdf_resume_bytes"):
-            st.session_state["pdf_resume_bytes"] = html_to_pdf_bytes(
-                st.session_state["generated_html"]
-            ).read()
+        pdf_resume_bytes = st.session_state["pdf_resume_bytes"]
+        candidate_name = st.session_state.get("name", "Resume").replace(" ", "_")
 
-        col1, spacer, col2 = st.columns([1, 0.15, 0.85])
+        # Download + Preview buttons — download left, gap, preview right
+        col_dl, col_gap, col_pv = st.columns([1.6, 0.6, 1.6])
 
-        # HTML Resume Download Button
-        with col1:
-            html_bytes = st.session_state["generated_html"].encode("utf-8")
-            html_file = BytesIO(html_bytes)
-
+        with col_dl:
             st.download_button(
-                label="⬇️ Download as Template",
-                data=html_file,
-                file_name=f"{st.session_state['name'].replace(' ', '_')}_Resume.html",
-                mime="text/html",
-                key="download_resume_html"
+                label="⬇️ Download Resume (PDF)",
+                data=pdf_resume_bytes,
+                file_name=f"{candidate_name}_Resume.pdf",
+                mime="application/pdf",
+                key="download_resume_pdf",
             )
 
-        # Preview Template Button — smart toggle: spinner only when opening, instant when closing
-        with col2:
-            is_previewing = st.session_state.get("show_template_preview", False)
-            if st.button("👁️ Preview Template", key="preview_template_btn"):
-                if not is_previewing:
-                    # Opening — show spinner since we're loading the iframe
-                    with st.spinner("Loading template preview..."):
-                        time.sleep(2)
-                        st.session_state["show_template_preview"] = True
-                else:
-                    # Closing — instant, no spinner
-                    st.session_state["show_template_preview"] = False
+        with col_gap:
+            pass  # visual breathing room between buttons
 
-        # Show/hide the template preview iframe
-        if st.session_state.get("show_template_preview", False):
-            import streamlit.components.v1 as components
+        with col_pv:
+            is_previewing = st.session_state.get("show_pdf_preview", False)
+            btn_label = "🙈 Hide Preview" if is_previewing else "👁️ Preview Resume"
+            if st.button(btn_label, key="toggle_pdf_preview_btn", use_container_width=True):
+                if not is_previewing:
+                    with st.spinner("Loading preview..."):
+                        import time as _time; _time.sleep(2)
+                        st.session_state["show_pdf_preview"] = True
+                else:
+                    st.session_state["show_pdf_preview"] = False
+                st.rerun()
+
+        # ==========================
+        # 📄 Inline PDF Preview
+        # ==========================
+        if st.session_state.get("show_pdf_preview", False):
+            import base64 as _b64
+            import streamlit.components.v1 as _components
+            _pdf_b64 = _b64.b64encode(pdf_resume_bytes).decode("utf-8")
             st.markdown(
                 "<p style='color:#555; font-size:13px; margin-top:8px;'>"
-                "📄 Template Preview (scroll to explore):</p>",
+                "📄 Resume Preview — scroll to see all pages:</p>",
                 unsafe_allow_html=True,
             )
-            components.html(
-                st.session_state["generated_html"],
-                height=600,
-                scrolling=True,
+            # Chrome blocks data: URI PDFs in iframes as a security policy.
+            # Fix: decode base64 in JS, create a Blob URL — Chrome allows this.
+            _components.html(
+                f"""
+                <div style="width:100%;height:710px;border:1px solid #d1d5db;
+                            border-radius:8px;overflow:hidden;background:#f3f4f6;">
+                  <iframe id="pdf-frame" width="100%" height="100%"
+                    style="border:none;display:block;" allowfullscreen></iframe>
+                </div>
+                <script>
+                (function() {{
+                  var b64 = "{_pdf_b64}";
+                  var bin = atob(b64);
+                  var arr = new Uint8Array(bin.length);
+                  for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                  var blob = new Blob([arr], {{type: "application/pdf"}});
+                  var url  = URL.createObjectURL(blob);
+                  document.getElementById("pdf-frame").src = url;
+                }})();
+                </script>
+                """,
+                height=730,
+                scrolling=False,
             )
-
-        # PDF Resume Download Button — use cached bytes
-        pdf_resume_bytes = BytesIO(st.session_state["pdf_resume_bytes"])
-        
-        # ✅ Extra Help Note
-        st.markdown("""
-        ✅ After downloading your HTML resume, you can 
-        <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
-        convert it to PDF using Sejda's free online tool</a>.
-        """, unsafe_allow_html=True)
 
         # ==========================
         # 📩 Cover Letter Expander
@@ -9425,78 +9477,72 @@ with tab2:
             generate_cover_letter_from_resume_builder()
 
         # ==========================
-        # ✉️ Generated Cover Letter Downloads (NO PREVIEW HERE)
+        # ✉️ Generated Cover Letter Downloads
+        # — Inline buttons shown inside expander above (via generate_cover_letter_from_resume_builder)
+        # — Repeat download buttons here in tab2 for convenience if already generated
         # ==========================
-        if "cover_letter" in st.session_state:
+        _cl_html = st.session_state.get("cover_letter_html", "")
+        _cl_pdf  = st.session_state.get("cover_letter_pdf")
+        _cl_txt  = st.session_state.get("cover_letter", "")
+
+        if _cl_html or _cl_pdf:
             st.markdown(
                 """
-                <div style="margin-top: 30px; margin-bottom: 20px;">
-                    <h3 style="color: #003366;">✉️ Generated Cover Letter</h3>
-                    <p style="color:#555; font-size:14px;">
-                        You can download your generated cover letter in multiple formats.
+                <div style="margin-top: 30px; margin-bottom: 16px;">
+                    <h3 style="color: #003366;">✉️ Cover Letter — Quick Downloads</h3>
+                    <p style="color:#555; font-size:13px;">
+                        Already generated above — download again from here anytime.
                     </p>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
 
-            # ✅ Use already-rendered HTML from session (don't show again)
-            styled_cover_letter = st.session_state.get("cover_letter_html", "")
+            col1, col2, col3 = st.columns(3)
 
-            # ✅ Generate PDF from styled HTML
-            pdf_file = html_to_pdf_bytes(styled_cover_letter)
-
-            # ✅ DOCX Generator (preserves line breaks)
-            def create_docx_from_text(text, filename="cover_letter.docx"):
-                from docx import Document
-                bio = BytesIO()
-                doc = Document()
-                doc.add_heading("Cover Letter", 0)
-
-                for line in text.split("\n"):
-                    if line.strip():
-                        doc.add_paragraph(line)
-                    else:
-                        doc.add_paragraph("")  # preserve empty lines
-
-                doc.save(bio)
-                bio.seek(0)
-                return bio
-
-            # ==========================
-            # 📥 Cover Letter Download Buttons
-            # ==========================
-            st.markdown("""
-            <div style="margin-top: 25px; margin-bottom: 15px;">
-                <strong>⬇️ Download Your Cover Letter:</strong>
-            </div>
-            """, unsafe_allow_html=True)
-
-            col1,col2 = st.columns(2)
             with col1:
-                st.download_button(
-                    label="📥 Download Cover Letter (.docx)",
-                    data=create_docx_from_text(st.session_state["cover_letter"]),
-                    file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="download_coverletter_docx"
-                )
-            
-            with col2:
-                st.download_button(
-                    label="📥 Download Cover Letter (Template)",
-                    data=styled_cover_letter.encode("utf-8"),
-                    file_name=f"{st.session_state['name'].replace(' ', '_')}_Cover_Letter.html",
-                    mime="text/html",
-                    key="download_coverletter_html"
-                )
+                if _cl_html:
+                    st.download_button(
+                        label="📥 Download (HTML)",
+                        data=_cl_html.encode("utf-8"),
+                        file_name=f"{candidate_name}_Cover_Letter.html",
+                        mime="text/html",
+                        key="download_coverletter_html_tab2",
+                    )
 
-            # ✅ Helper note
-            st.markdown("""
-            ✅ If the HTML cover letter doesn't display properly, you can 
-            <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
-            convert it to PDF using Sejda's free online tool</a>.
-            """, unsafe_allow_html=True)
+            with col2:
+                if _cl_pdf:
+                    st.download_button(
+                        label="📥 Download (PDF)",
+                        data=_cl_pdf,
+                        file_name=f"{candidate_name}_Cover_Letter.pdf",
+                        mime="application/pdf",
+                        key="download_coverletter_pdf_tab2",
+                    )
+
+            with col3:
+                if _cl_txt:
+                    try:
+                        from docx import Document as _DocxDocument
+                        _bio = BytesIO()
+                        _doc = _DocxDocument()
+                        _doc.add_heading("Cover Letter", 0)
+                        for _line in _cl_txt.split("\n"):
+                            _doc.add_paragraph(_line if _line.strip() else "")
+                        _doc.save(_bio)
+                        _bio.seek(0)
+                        st.download_button(
+                            label="📥 Download (.docx)",
+                            data=_bio,
+                            file_name=f"{candidate_name}_Cover_Letter.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key="download_coverletter_docx_tab2",
+                        )
+                    except ImportError:
+                        st.info("Install python-docx for DOCX download.")
+
+    else:
+        st.info("📝 Fill in your resume details in the builder and click **Generate Resume** to create your PDF.")
 import streamlit as st
 
 
