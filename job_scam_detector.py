@@ -1628,7 +1628,46 @@ def _probe_domain_age(domain: str) -> dict:
         out.update(fallback)
         return out
 
-    if out["status"] == "unknown":
+    # ── Fallback 3: HTTP-based WHOIS API (works on Streamlit Cloud) ─────────────
+    # Port 43 is blocked on Streamlit Cloud — use a free HTTP WHOIS API instead
+    if out["status"] in ("unknown", "error"):
+        try:
+            import json as _json
+            _whois_url = f"https://api.whois.vu/?q={domain}&json"
+            _req = urllib.request.Request(
+                _whois_url,
+                headers={"User-Agent": "ScamDetector/4.0"},
+            )
+            with urllib.request.urlopen(_req, timeout=6) as _resp:
+                _data = _json.loads(_resp.read().decode())
+            _created = (
+                _data.get("creation_date") or
+                _data.get("created") or
+                _data.get("registered") or ""
+            )
+            if _created:
+                from datetime import datetime as _dt
+                for _fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d", "%d-%b-%Y"):
+                    try:
+                        _d = _dt.strptime(_created[:10], _fmt[:len(_created[:10])])
+                        _age = (_dt.utcnow() - _d).days
+                        out.update(
+                            status=_age_status(_age),
+                            age_days=_age,
+                            registered=_d.strftime("%d %b %Y"),
+                            detail=(
+                                f"Registered {_d.strftime('%d %b %Y')} — "
+                                f"{_age} days old (via WHOIS API)"
+                            ),
+                            source="WHOIS-API",
+                        )
+                        break
+                    except ValueError:
+                        continue
+        except Exception:
+            pass  # silently degrade — all 3 methods failed
+
+    if out["status"] in ("unknown", "error"):
         out["detail"] = "Domain age unavailable — verify manually on whois.domaintools.com"
     return out
 
@@ -5073,17 +5112,116 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
             # ── Spinner wraps the entire analysis pipeline ─────────────────────
             with st.spinner("Running analysis — this takes ~10 seconds…"):
-                # Progress steps shown during the ~10s wait
-                prog = st.progress(0, text="Starting analysis…")
-                try:
-                    prog.progress(10, text="Running 15-signal rule engine…")
-                    rules_result = _run_rules(job)
+                # ── Animated live feed ────────────────────────────────────────────
+                _feed_slot = st.empty()
+                prog       = st.progress(0, text="Starting…")
 
-                    prog.progress(30, text="Launching 8 live network probes (parallel)…")
+                def _feed(steps):
+                    _ic = {
+                        "waiting": (I.CLOCK,       "#4b5563"),
+                        "running": (I.SPARKLE,      "#a78bfa"),
+                        "done":    (I.CHECK,        "#22c55e"),
+                        "error":   (I.ALERT_CIRCLE, "#ef4444"),
+                    }
+                    rows_html = ""
+                    for label, state, detail in steps:
+                        icon_path, color = _ic[state]
+                        spin = "animation:spin 1s linear infinite;" if state == "running" else ""
+                        rows_html += (
+                            f'<div style="display:flex;align-items:center;gap:10px;'
+                            f'padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">' 
+                            f'<div style="flex-shrink:0;{spin}">{_svg(icon_path,14,color)}</div>'
+                            f'<div style="flex:1;font-size:0.81rem;color:#c9d1d9;">{label}</div>'
+                            f'<div style="font-size:0.73rem;color:{color};'
+                            f'font-weight:{"600" if state != "waiting" else "400"};">{detail}</div>'
+                            f'</div>'
+                        )
+                    _feed_slot.markdown(
+                        f'<style>@keyframes spin{{from{{transform:rotate(0deg)}}'
+                        f'to{{transform:rotate(360deg)}}}}</style>'
+                        f'<div style="background:rgba(255,255,255,0.02);'
+                        f'border:1px solid rgba(255,255,255,0.07);'
+                        f'border-radius:10px;padding:13px 16px;margin-bottom:8px;">'
+                        f'<div style="font-size:0.67rem;font-weight:600;color:#6b7280;'
+                        f'text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;'
+                        f'display:flex;align-items:center;gap:6px;">'
+                        f'{_svg(I.CPU,10,"#a78bfa")} Analysis in Progress</div>'
+                        f'{rows_html}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                _steps = [
+                    ("15-Signal Rule Engine",     "waiting", "Pending…"),
+                    ("8 Live Network Probes",      "waiting", "Pending…"),
+                    ("Domain Age",                 "waiting", "—"),
+                    ("Site Reachability",          "waiting", "—"),
+                    ("Typosquatting",              "waiting", "—"),
+                    ("Company Domain & Identity",  "waiting", "—"),
+                    ("Email / MX / SPF / DMARC",  "waiting", "—"),
+                    ("Google Safe Browsing",       "waiting", "—"),
+                    ("AI Deep Analysis",           "waiting", "Pending…"),
+                    ("Score Blending",             "waiting", "Pending…"),
+                ]
+                _feed(_steps)
+
+                try:
+                    # ── Step 1: Rule engine ───────────────────────────────────
+                    _steps[0] = ("15-Signal Rule Engine", "running", "Scanning job text…")
+                    _feed(_steps); prog.progress(10, text="Rule engine…")
+                    rules_result = _run_rules(job)
+                    _sc = len(rules_result.get("signals", {}))
+                    _steps[0] = ("15-Signal Rule Engine", "done",
+                                 f"{_sc} signal{'s' if _sc != 1 else ''} matched")
+                    _feed(_steps); prog.progress(25, text="Probes…")
+
+                    # ── Step 2: Probes ─────────────────────────────────────────
+                    _steps[1] = ("8 Live Network Probes", "running", "Launching parallel…")
+                    for i in range(2, 8):
+                        _steps[i] = (_steps[i][0], "running", "Checking…")
+                    _feed(_steps)
                     probes = run_live_probes(job)
                     penalty, warnings = _probe_risk(probes)
 
-                    prog.progress(60, text="Sending to AI for deep analysis…")
+                    # Update each probe row with real result
+                    def _ps(p, good_statuses=("ESTABLISHED","REACHABLE","VERIFIED","CONFIRMED",
+                                              "CLEAR","OK","FOUND","CLEAN","SPF")):
+                        s = str(p.get("status","")).upper()
+                        d = (p.get("detail") or "")[:50]
+                        state = ("done" if any(g in s for g in good_statuses)
+                                 else "error" if any(b in s for b in
+                                      ("FAIL","ERROR","UNREACHABLE","FAKE","SQUAT","THREAT","NEW ","LOOKUP"))
+                                 else "done")
+                        return state, d or s
+
+                    _da_s,  _da_d  = _ps(probes.get("domain_age",{}))
+                    _sr_s,  _sr_d  = _ps(probes.get("site_reach",{}))
+                    _ty_s,  _ty_d  = _ps(probes.get("typosquat",{}),
+                                         ("CLEAR","LOW"))
+                    _cd_s,  _cd_d  = _ps(probes.get("company_domain",{}))
+                    _mx_ok  = probes.get("mx_record",{}).get("status","") == "MX_FOUND"
+                    _spf_ok = bool(probes.get("spf_dmarc",{}).get("spf"))
+                    _em_s   = "done" if (_mx_ok or _spf_ok) else "error"
+                    _em_d   = ("MX ✓ SPF/DMARC ✓" if (_mx_ok and _spf_ok)
+                               else "MX ✓" if _mx_ok else "SPF ✓" if _spf_ok else "Not verified")
+                    _gsb    = probes.get("gsb", {})
+                    _gsb_s  = "error" if _gsb.get("is_unsafe") else "done"
+                    _gsb_d  = ("⚠ Threat detected" if _gsb.get("is_unsafe")
+                               else "Clean ✓" if _gsb.get("checked") else "Not configured")
+
+                    _steps[2] = ("Domain Age",               _da_s,  _da_d)
+                    _steps[3] = ("Site Reachability",        _sr_s,  _sr_d)
+                    _steps[4] = ("Typosquatting",            _ty_s,  _ty_d)
+                    _steps[5] = ("Company Domain & Identity",_cd_s,  _cd_d)
+                    _steps[6] = ("Email / MX / SPF / DMARC", _em_s,  _em_d)
+                    _steps[7] = ("Google Safe Browsing",     _gsb_s, _gsb_d)
+                    _steps[1] = ("8 Live Network Probes",    "done",
+                                 f"Done — penalty +{penalty}")
+                    _feed(_steps); prog.progress(60, text="AI analysis…")
+
+                    # ── Step 3: AI ────────────────────────────────────────────────
+                    _steps[8] = ("AI Deep Analysis", "running",
+                                 "Reading job text + probe findings…")
+                    _feed(_steps)
 
                     # ── LLM call with retry + structured output enforcement ────────
                     # Retry logic: attempt 1 = normal, attempt 2 = stricter prompt
@@ -5507,9 +5645,13 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                         "llm":            llm_data,  "job":            job,
                         "timestamp":      _now_ist(),
                     }
+                    _steps[9] = ("Score Blending", "done",
+                                 f"Final score: {blended}/100")
+                    _feed(_steps)
                     prog.progress(100, text="Done.")
-                    time.sleep(0.3)
+                    time.sleep(0.4)
                     prog.empty()
+                    _feed_slot.empty()
 
                     # Write result to session_state, then force a FULL app rerun
                     # so the results panel outside this fragment renders immediately.
@@ -5530,6 +5672,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                 except Exception as exc:
                     prog.empty()
+                    _feed_slot.empty()
                     st.session_state.pop("jsd_running", None)
                     st.error(f"Analysis failed: {exc}")
 
