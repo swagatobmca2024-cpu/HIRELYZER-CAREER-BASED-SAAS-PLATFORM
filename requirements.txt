@@ -15,7 +15,7 @@ dnstwist==20250130
 pdf2image
 Pillow
 psycopg2-binary
-reportlab
+reportlab>=4.0.9
 
 matplotlib
 pytz
@@ -39,4 +39,4 @@ langchain-huggingface
 langchain-groq
 sentence-transformers
 faiss-cpu
-xhtml2pdf
+xhtml2pdf>=0.2.16
