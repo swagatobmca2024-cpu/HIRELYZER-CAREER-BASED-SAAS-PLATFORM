@@ -17816,7 +17816,7 @@ if tab5:
 				
 				# Update layout for better spacing and readability
 				fig.update_layout(
-					height=800, 
+					height=700, 
 					showlegend=True,
 					legend=dict(
 						orientation="h",
@@ -17829,50 +17829,17 @@ if tab5:
 				)
 				
 				# Update x-axes for proper date formatting and spacing
-				# dtick must be in milliseconds for date axes in Plotly
-				MS_PER_DAY = 86400000
-				n_timeline = len(df_timeline)
-				n_ats = len(df_daily_ats) if not df_daily_ats.empty else n_timeline
-
-				if n_timeline <= 14:
-					dtick_row1 = MS_PER_DAY          # every day
-					tickfmt_row1 = "%b %d"
-				elif n_timeline <= 60:
-					dtick_row1 = 7 * MS_PER_DAY      # weekly
-					tickfmt_row1 = "%b %d"
-				elif n_timeline <= 180:
-					dtick_row1 = 14 * MS_PER_DAY     # bi-weekly
-					tickfmt_row1 = "%b %d '%y"
-				else:
-					dtick_row1 = "M1"                 # monthly (Plotly special value)
-					tickfmt_row1 = "%b '%y"
-
-				if n_ats <= 14:
-					dtick_row2 = MS_PER_DAY
-					tickfmt_row2 = "%b %d"
-				elif n_ats <= 60:
-					dtick_row2 = 7 * MS_PER_DAY
-					tickfmt_row2 = "%b %d"
-				elif n_ats <= 180:
-					dtick_row2 = 14 * MS_PER_DAY
-					tickfmt_row2 = "%b %d '%y"
-				else:
-					dtick_row2 = "M1"
-					tickfmt_row2 = "%b '%y"
-
 				fig.update_xaxes(title_text="Date", row=2, col=1)
 				fig.update_xaxes(
-					tickformat=tickfmt_row1,
-					tickangle=45,
-					dtick=dtick_row1,
-					ticklabelmode="period",
+					tickformat="%Y-%m-%d",
+					tickangle=30,
+					dtick="D1" if len(df_timeline) <= 30 else "D7",
 					row=1, col=1
 				)
 				fig.update_xaxes(
-					tickformat=tickfmt_row2,
-					tickangle=45,
-					dtick=dtick_row2,
-					ticklabelmode="period",
+					tickformat="%Y-%m-%d",
+					tickangle=30,
+					dtick="D1" if len(df_daily_ats) <= 30 else "D7",
 					row=2, col=1
 				)
 				
