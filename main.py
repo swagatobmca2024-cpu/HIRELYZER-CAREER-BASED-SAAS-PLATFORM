@@ -17762,7 +17762,7 @@ if tab5:
 		
 		try:
 			df_timeline = get_resume_count_by_day()
-			df_daily_ats = get_daily_ats_stats(days_limit=90)
+			df_daily_ats = get_daily_ats_stats()  # no limit — fetch full history to match upload timeline
 			
 			if not df_timeline.empty:
 				df_timeline = df_timeline.sort_values("day")
@@ -17807,16 +17807,42 @@ if tab5:
 				if not df_daily_ats.empty:
 					df_daily_ats['date'] = pd.to_datetime(df_daily_ats['date'])
 					fig.add_trace(
-						go.Scatter(x=df_daily_ats["date"], y=df_daily_ats["avg_ats"], 
+						go.Scatter(x=df_daily_ats["date"], y=df_daily_ats["avg_ats"],
 									mode='lines+markers', name='Daily Avg ATS',
 									line=dict(color='#d62728', width=2),
 									marker=dict(size=6)),
 						row=2, col=1
 					)
-				
+
+				# Compute a SHARED date range across both datasets so row2 starts
+				# from the same date as row1 (not just from when ATS data begins)
+				all_dates = list(df_timeline["day"])
+				if not df_daily_ats.empty:
+					all_dates += list(df_daily_ats["date"])
+				global_min = min(all_dates)
+				global_max = max(all_dates)
+				pad = pd.Timedelta(hours=12)
+				x_range = [global_min - pad, global_max + pad]
+
+				# Pick tick density based on total date span
+				total_days = (global_max - global_min).days
+				MS_PER_DAY = 86400000
+				if total_days <= 14:
+					dtick = MS_PER_DAY
+					tickfmt = "%b %d"
+				elif total_days <= 60:
+					dtick = 7 * MS_PER_DAY
+					tickfmt = "%b %d"
+				elif total_days <= 180:
+					dtick = 14 * MS_PER_DAY
+					tickfmt = "%b %d '%y"
+				else:
+					dtick = "M1"
+					tickfmt = "%b '%y"
+
 				# Update layout for better spacing and readability
 				fig.update_layout(
-					height=700, 
+					height=800,
 					showlegend=True,
 					legend=dict(
 						orientation="h",
@@ -17827,21 +17853,18 @@ if tab5:
 					),
 					margin=dict(t=80, b=70, l=50, r=50)
 				)
-				
-				# Update x-axes for proper date formatting and spacing
+
+				# Apply identical range + ticks to BOTH subplots
+				shared_xaxis = dict(
+					range=x_range,
+					tickformat=tickfmt,
+					tickangle=45,
+					dtick=dtick,
+					ticklabelmode="period",
+				)
 				fig.update_xaxes(title_text="Date", row=2, col=1)
-				fig.update_xaxes(
-					tickformat="%Y-%m-%d",
-					tickangle=30,
-					dtick="D1" if len(df_timeline) <= 30 else "D7",
-					row=1, col=1
-				)
-				fig.update_xaxes(
-					tickformat="%Y-%m-%d",
-					tickangle=30,
-					dtick="D1" if len(df_daily_ats) <= 30 else "D7",
-					row=2, col=1
-				)
+				fig.update_xaxes(**shared_xaxis, row=1, col=1)
+				fig.update_xaxes(**shared_xaxis, row=2, col=1)
 				
 				fig.update_yaxes(title_text="Upload Count", row=1, col=1)
 				fig.update_yaxes(title_text="Average ATS Score", row=2, col=1)
