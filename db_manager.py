@@ -1376,14 +1376,18 @@ Return ONLY one domain from this list, nothing else:
             logger.error(f"Error getting bias distribution: {e}")
             return pd.DataFrame()
 
-    def get_daily_ats_stats(self, days_limit: int = 90) -> pd.DataFrame:
+    def get_daily_ats_stats(self, days_limit: int = None) -> pd.DataFrame:
         try:
+            if days_limit:
+                where_clause = f"WHERE DATE(timestamp) >= CURRENT_DATE - INTERVAL '{days_limit} days'"
+            else:
+                where_clause = ""  # fetch ALL history — no cutoff
             sql = f"""
                 SELECT DATE(timestamp) AS date,
                        ROUND(AVG(ats_score)::numeric, 2) AS avg_ats,
                        COUNT(*) AS daily_count
                 FROM candidates
-                WHERE DATE(timestamp) >= CURRENT_DATE - INTERVAL '{days_limit} days'
+                {where_clause}
                 GROUP BY DATE(timestamp)
                 ORDER BY DATE(timestamp)
             """
@@ -1554,7 +1558,7 @@ def get_candidate_by_id(candidate_id: int):
 def get_bias_distribution(threshold: float = 0.6):
     return db_manager.get_bias_distribution(threshold)
 
-def get_daily_ats_stats(days_limit: int = 90):
+def get_daily_ats_stats(days_limit: int = None):
     return db_manager.get_daily_ats_stats(days_limit)
 
 def get_flagged_candidates(threshold: float = 0.6):
