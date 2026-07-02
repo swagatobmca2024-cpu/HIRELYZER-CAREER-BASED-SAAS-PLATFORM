@@ -9534,6 +9534,7 @@ with tab3:
 
     # ---------- Salary Insights ----------
     render_salary_insights()
+
 def evaluate_interview_answer(answer: str, question: str = None):
     """
     Uses an LLM to strictly evaluate an interview answer.
@@ -15900,7 +15901,8 @@ Generate {num_questions} questions now:
                             if _email_sent:
                                 st.markdown(
                                     f'<div style="background:#e6f4ea;border:1px solid #b7dfc0;'
-                                    f'border-radius:6px;padding:10px 14px;margin-top:8px;">'
+                                    f'border-radius:6px;padding:10px 14px;margin-top:8px;'
+                                    f'color:#1a7f37;">'
                                     f'{_SVG_MAIL}Report also sent to your registered email '
                                     f'({_recipient_email}).</div>',
                                     unsafe_allow_html=True
@@ -15908,7 +15910,8 @@ Generate {num_questions} questions now:
                             else:
                                 st.markdown(
                                     f'<div style="background:#fef3e2;border:1px solid #f2d29b;'
-                                    f'border-radius:6px;padding:10px 14px;margin-top:8px;">'
+                                    f'border-radius:6px;padding:10px 14px;margin-top:8px;'
+                                    f'color:#b45309;">'
                                     f'{_SVG_WARN}Could not send the report by email, but you can '
                                     f'still download it above.</div>',
                                     unsafe_allow_html=True
@@ -15916,7 +15919,8 @@ Generate {num_questions} questions now:
                         else:
                             st.markdown(
                                 f'<div style="background:#e8f4fb;border:1px solid #b7d9ec;'
-                                f'border-radius:6px;padding:10px 14px;margin-top:8px;">'
+                                f'border-radius:6px;padding:10px 14px;margin-top:8px;'
+                                f'color:#0369a1;">'
                                 f'{_SVG_INFO}No registered email found on your account — '
                                 f'download the report above instead.</div>',
                                 unsafe_allow_html=True
@@ -15924,7 +15928,8 @@ Generate {num_questions} questions now:
                     except Exception as _email_err:
                         st.markdown(
                             f'<div style="background:#fef3e2;border:1px solid #f2d29b;'
-                            f'border-radius:6px;padding:10px 14px;margin-top:8px;">'
+                            f'border-radius:6px;padding:10px 14px;margin-top:8px;'
+                            f'color:#b45309;">'
                             f'{_SVG_WARN}Email delivery skipped due to an error: {_email_err}</div>',
                             unsafe_allow_html=True
                         )
