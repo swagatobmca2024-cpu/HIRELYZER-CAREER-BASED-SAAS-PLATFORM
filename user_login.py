@@ -769,6 +769,111 @@ HIRELYZER Team
         return False
 
 
+def send_interview_report_email(
+    to_email: str,
+    candidate_name: str,
+    pdf_bytes: bytes,
+    role: str,
+    domain: str,
+    difficulty: str = "Medium",
+    overall_score=None,
+) -> bool:
+    """
+    Emails the AI Interview Coach PDF report to the user's registered email
+    (fetched via get_user_email_by_username). Uses an HTML body with inline
+    SVG icons instead of emoji, per Hirelyzer email formatting standard.
+    """
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.base import MIMEBase
+        from email import encoders as _enc
+
+        sender_email    = st.secrets["email_address"]
+        sender_password = st.secrets["email_password"]
+
+        msg = MIMEMultipart()
+        msg["From"]    = sender_email
+        msg["To"]      = to_email
+        msg["Subject"] = f"Hirelyzer — AI Interview Report for {candidate_name} ({role})"
+
+        score_line = (
+            f"<p style=\"margin:4px 0;\"><strong>Overall Score:</strong> {overall_score}</p>"
+            if overall_score is not None else ""
+        )
+
+        # Inline SVG icons (document + checkmark) — no emoji used anywhere in this email.
+        svg_doc = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" '
+            'viewBox="0 0 24 24" fill="none" stroke="#003366" stroke-width="2" '
+            'style="vertical-align:middle;margin-right:6px;">'
+            '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
+            '<polyline points="14 2 14 8 20 8"/></svg>'
+        )
+        svg_check = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" '
+            'viewBox="0 0 24 24" fill="none" stroke="#1a7f37" stroke-width="2.5" '
+            'style="vertical-align:middle;margin-right:6px;">'
+            '<polyline points="20 6 9 17 4 12"/></svg>'
+        )
+
+        html_body = f"""\
+<html>
+  <body style="font-family: Georgia, serif; color:#000; line-height:1.6;">
+    <div style="max-width:640px;margin:auto;padding:20px;">
+      <h2 style="color:#003366;margin-bottom:4px;">{svg_doc}Hirelyzer — AI Interview Report</h2>
+      <p>Hello {candidate_name},</p>
+      <p>Your AI-conducted mock interview on <strong>Hirelyzer</strong> has been completed and evaluated.
+      Your detailed report is attached to this email as a PDF.</p>
+
+      <p style="margin:14px 0 6px 0;"><strong>Interview Details</strong></p>
+      <p style="margin:4px 0;">{svg_check}<strong>Role:</strong> {role}</p>
+      <p style="margin:4px 0;">{svg_check}<strong>Domain:</strong> {domain}</p>
+      <p style="margin:4px 0;">{svg_check}<strong>Difficulty:</strong> {difficulty}</p>
+      {score_line}
+
+      <p style="margin-top:16px;">The attached PDF includes your question-by-question breakdown,
+      per-answer scoring, and personalised feedback for this session.</p>
+
+      <p>This email was generated automatically after your session — no action is required
+      on your part. It is provided for your records.</p>
+
+      <p style="margin-top:20px;">Best regards,<br/>
+      <strong>Hirelyzer Team</strong></p>
+    </div>
+  </body>
+</html>
+"""
+        msg.attach(MIMEText(html_body, "html"))
+
+        if pdf_bytes:
+            pdf_part = MIMEBase("application", "octet-stream")
+            pdf_part.set_payload(pdf_bytes)
+            _enc.encode_base64(pdf_part)
+            safe_name = re.sub(r"[^\w\-.]", "_", candidate_name or "candidate")
+            safe_role = re.sub(r"[^\w\-.]", "_", role or "role")
+            pdf_part.add_header(
+                "Content-Disposition",
+                "attachment",
+                filename=f"{safe_name}_{safe_role}_interview_report.pdf",
+            )
+            msg.attach(pdf_part)
+
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        try:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, to_email, msg.as_string())
+        finally:
+            server.quit()
+
+        return True
+
+    except Exception:
+        return False
+
+
 def update_password_by_email(email, new_password):
     if not is_strong_password(new_password):
         st.error("Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.")
