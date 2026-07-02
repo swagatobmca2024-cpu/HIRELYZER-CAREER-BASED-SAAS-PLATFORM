@@ -15859,6 +15859,75 @@ Generate {num_questions} questions now:
                         file_name=f"interview_report_{username}_{selected_role.replace(' ', '_')}_{completed_on.split()[0]}.pdf",
                         mime="application/pdf"
                     )
+
+                    # ── Auto-email the report to the user's registered address ──
+                    _SVG_MAIL = (
+                        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" '
+                        'viewBox="0 0 24 24" fill="none" stroke="#1a7f37" stroke-width="2" '
+                        'style="vertical-align:middle;margin-right:6px;">'
+                        '<path d="M4 4h16v16H4z"/><path d="m22 6-10 7L2 6"/></svg>'
+                    )
+                    _SVG_WARN = (
+                        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" '
+                        'viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" '
+                        'style="vertical-align:middle;margin-right:6px;">'
+                        '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 '
+                        '1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/>'
+                        '<line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+                    )
+                    _SVG_INFO = (
+                        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" '
+                        'viewBox="0 0 24 24" fill="none" stroke="#0369a1" stroke-width="2" '
+                        'style="vertical-align:middle;margin-right:6px;">'
+                        '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/>'
+                        '<line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+                    )
+
+                    try:
+                        from user_login import get_user_email_by_username, send_interview_report_email
+
+                        _recipient_email = get_user_email_by_username(username)
+                        if _recipient_email:
+                            _email_sent = send_interview_report_email(
+                                to_email=_recipient_email,
+                                candidate_name=username,
+                                pdf_bytes=pdf_bytes,
+                                role=selected_role,
+                                domain=selected_domain,
+                                difficulty=st.session_state.interview_difficulty,
+                                overall_score=overall_avg,
+                            )
+                            if _email_sent:
+                                st.markdown(
+                                    f'<div style="background:#e6f4ea;border:1px solid #b7dfc0;'
+                                    f'border-radius:6px;padding:10px 14px;margin-top:8px;">'
+                                    f'{_SVG_MAIL}Report also sent to your registered email '
+                                    f'({_recipient_email}).</div>',
+                                    unsafe_allow_html=True
+                                )
+                            else:
+                                st.markdown(
+                                    f'<div style="background:#fef3e2;border:1px solid #f2d29b;'
+                                    f'border-radius:6px;padding:10px 14px;margin-top:8px;">'
+                                    f'{_SVG_WARN}Could not send the report by email, but you can '
+                                    f'still download it above.</div>',
+                                    unsafe_allow_html=True
+                                )
+                        else:
+                            st.markdown(
+                                f'<div style="background:#e8f4fb;border:1px solid #b7d9ec;'
+                                f'border-radius:6px;padding:10px 14px;margin-top:8px;">'
+                                f'{_SVG_INFO}No registered email found on your account — '
+                                f'download the report above instead.</div>',
+                                unsafe_allow_html=True
+                            )
+                    except Exception as _email_err:
+                        st.markdown(
+                            f'<div style="background:#fef3e2;border:1px solid #f2d29b;'
+                            f'border-radius:6px;padding:10px 14px;margin-top:8px;">'
+                            f'{_SVG_WARN}Email delivery skipped due to an error: {_email_err}</div>',
+                            unsafe_allow_html=True
+                        )
                 else:
                     st.warning("PDF generation failed. You can still review your results above.")
 
