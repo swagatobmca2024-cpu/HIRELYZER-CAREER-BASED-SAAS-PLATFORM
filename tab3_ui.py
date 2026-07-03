@@ -1000,20 +1000,6 @@ def _job_search_interactive():
         _rapid_loc_idx  = LOCATIONS.index(st.session_state.rapid_loc_val)   if st.session_state.rapid_loc_val  in LOCATIONS  else None
         _rapid_c = st.session_state["_rapid_clear_count"]
 
-        # ── One-time notice when the form was auto pre-filled from a resume analysis ──
-        if st.session_state.pop("_rapid_prefilled_from_resume", False):
-            st.markdown(
-                '<div style="background:#e8f4fb;border:1px solid #b7d9ec;border-radius:6px;'
-                'padding:10px 14px;margin-bottom:10px;font-size:0.85rem;color:#334155;">'
-                '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" '
-                'fill="none" stroke="#0369a1" stroke-width="2" style="vertical-align:middle;margin-right:6px;">'
-                '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/>'
-                '<line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
-                'Search fields below were pre-filled based on your latest resume analysis. '
-                'Adjust as needed, then click Search Live Jobs.</div>',
-                unsafe_allow_html=True
-            )
-
         # RapidAPI Jobs Section — collapsible expander
         with st.expander("RapidAPI Live Job Search", expanded=True):
             with st.form(f"rapid_search_form_{_rapid_c}", clear_on_submit=False):
