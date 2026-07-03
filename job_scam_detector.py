@@ -80,7 +80,7 @@ Detection layers (unchanged):
   A. 6 live network probes  (parallel threads)
      domain age · site reachability · typosquatting · free-email · MX mail server · MCA registry
   B. 15-signal rule engine  (weighted, 0-100)
-  C. LLM deep analysis      (llama-3.3-70b-versatile via Groq)
+  C. LLM deep analysis      (openai/gpt-oss-120b via Groq)
   D. Blended score          (60% AI + 25% rules + 15% probe penalty)
 """
 
@@ -1239,7 +1239,7 @@ JSON:"""
         response = call_llm_fn(
             prompt,
             st.session_state,
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             temperature=0,
         )
         clean = re.sub(r"```(?:json)?|```", "", response).strip()
@@ -5253,7 +5253,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                             llm_raw = call_llm_fn(
                                 prompt,
                                 st.session_state,
-                                model="llama-3.3-70b-versatile",
+                                model="openai/gpt-oss-120b",
                                 temperature=0,
                             )
                             # Parse: strip markdown fences, extract first JSON object
