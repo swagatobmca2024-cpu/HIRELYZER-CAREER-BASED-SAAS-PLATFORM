@@ -4,6 +4,8 @@
 # No Streamlit, no DB, no API — zero side-effects on import.
 # =============================================================
 
+import re
+
 JOB_TITLES = [
     "Software Engineering",
     "Full Stack Development",
@@ -268,3 +270,55 @@ def get_companies_by_industry(industry):
             if "industry" in company and company["industry"] == industry:
                 companies.append(company)
     return companies
+
+
+def match_job_title_to_tab3(resume_domain: str):
+    """
+    Maps a resume-analysis domain (e.g. from db_manager.VALID_DOMAINS, like
+    "AI/Machine Learning" or "DevOps/Infrastructure") to the closest matching
+    entry in JOB_TITLES for Tab 3's search dropdown.
+
+    The two lists use slightly different spacing/naming conventions
+    (e.g. "AI/Machine Learning" vs "AI / Machine Learning"), so this
+    normalizes both sides before comparing. Returns None if no reasonable
+    match is found — callers should treat that as "don't pre-fill".
+    """
+    if not resume_domain or resume_domain == "Unknown":
+        return None
+
+    def _norm(s):
+        return re.sub(r'\s*/\s*', '/', s).strip().lower()
+
+    target = _norm(resume_domain)
+
+    # Exact normalized match first
+    for title in JOB_TITLES:
+        if _norm(title) == target:
+            return title
+
+    # Fallback: containment match (e.g. "Quality Assurance" -> "Quality Assurance / Testing")
+    for title in JOB_TITLES:
+        norm_title = _norm(title)
+        if target in norm_title or norm_title in target:
+            return title
+
+    return None
+
+
+def match_location_to_tab3(free_text_location: str):
+    """
+    Maps a free-text location string (e.g. "Kolkata, West Bengal" from the
+    Resume Builder's location field) to the closest matching entry in
+    LOCATIONS, via case-insensitive substring matching. Returns None if no
+    reasonable match is found.
+    """
+    if not free_text_location or not free_text_location.strip():
+        return None
+
+    target = free_text_location.strip().lower()
+
+    for loc in LOCATIONS:
+        if loc.lower() in target:
+            return loc
+
+    return None
