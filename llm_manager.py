@@ -44,7 +44,7 @@ DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
 # ── Per-minute token rate limiter (Groq free tier: ~6000 TPM per key) ────────
-TPM_LIMIT          = 5500          # stay slightly under the 6000 hard limit
+TPM_LIMIT          = 5500          # gpt-oss-120b free-tier cap is 8000 TPM; keep solid headroom
 TPM_WINDOW_SECONDS = 60
 CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
 
@@ -54,11 +54,13 @@ BACKOFF_BASE        = 0.4          # seconds — full-jitter base
 BACKOFF_MAX         = 8.0          # seconds — cap for a single inter-key sleep
 
 # ── Groq error signals ────────────────────────────────────────────────────────
-_QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests",
-                     "rateLimitError", "rate_limit_exceeded"]
-_DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
-                     "api key", "authentication", "permission denied",
-                     "invalid_api_key"]
+_QUOTA_SIGNALS     = ["quota", "rate limit", "429", "too many requests",
+                      "rateLimitError", "rate_limit_exceeded"]
+_DEAD_KEY_SIGNALS  = ["invalid api key", "unauthorized", "401", "403",
+                      "api key", "authentication", "permission denied",
+                      "invalid_api_key"]
+_OVERSIZED_SIGNALS = ["413", "payload too large", "request entity too large",
+                      "too large"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IN-MEMORY STATE  (module-level, shared across all threads in one worker)
@@ -469,6 +471,9 @@ def _classify_error(error: Exception) -> str:
     Returns:
         'quota'     — rate limited → 60-min cooldown
         'dead'      — bad/invalid key → 5-min cooldown
+        'oversized' — 413 payload too large → key is fine, prompt itself is
+                      the problem; rotating to another key will NOT help,
+                      so callers should stop retrying immediately.
         'transient' — network blip / server 500 / timeout → do NOT touch the key
     """
     msg = str(error).lower()
@@ -487,6 +492,8 @@ def _classify_error(error: Exception) -> str:
         except Exception:
             pass
 
+    if status_code == 413 or any(s in msg for s in _OVERSIZED_SIGNALS):
+        return "oversized"
     if status_code == 429 or any(s in msg for s in _QUOTA_SIGNALS):
         return "quota"
     if status_code in (401, 403) or any(s in msg for s in _DEAD_KEY_SIGNALS):
@@ -619,7 +626,7 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
 def call_llm(
     prompt: str,
     session,
-    model: str = "llama-3.3-70b-versatile",
+    model: str = "openai/gpt-oss-120b",
     temperature: float = 0,
 ) -> str:
     """
@@ -675,7 +682,12 @@ def call_llm(
             return response
         except Exception as e:
             err_type = _classify_error(e)
-            if err_type == "quota":
+            if err_type == "oversized":
+                # Prompt itself is too large — no key on earth will fix this.
+                # Don't waste the user's own key's quota; fall through to
+                # admin rotation, which will fail fast on the same signal.
+                pass
+            elif err_type == "quota":
                 _mem_record_failure(user_key, "quota")
                 _record_key_tokens(user_key, TPM_LIMIT, time.time())
                 _async_mark_failure(user_key, "quota")
@@ -738,6 +750,16 @@ def call_llm(
 
         except Exception as e:
             err_type = _classify_error(e)
+            if err_type == "oversized":
+                # Prompt itself exceeds Groq's request size limit. Rotating
+                # to another key sends the exact same oversized payload and
+                # will fail identically every time — stop immediately instead
+                # of burning through all N keys on a doomed request.
+                return (
+                    "❌ Prompt too large for the LLM to process. "
+                    "Please shorten the input (e.g. a shorter resume or job "
+                    "description) and try again."
+                )
             if err_type == "quota":
                 _mem_record_failure(key, "quota")
                 _record_key_tokens(key, TPM_LIMIT, time.time())
