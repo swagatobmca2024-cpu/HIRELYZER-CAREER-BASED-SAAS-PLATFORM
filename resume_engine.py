@@ -804,7 +804,7 @@ LAYOUT RECOGNITION RULES (apply before extracting any field):
 - "additional[].duration" = Apply 3-TIER DATE INFERENCE RULE. Use "" if no context exists.
 
 RESUME TEXT:
-\"\"\"{text[:5000]}\"\"\"
+\"\"\"{text[:8000]}\"\"\"
 """
 
     # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
@@ -3671,10 +3671,10 @@ SCORING SCALE for language ({lang_weight} pts max):
 ---
 
 📄 **JOB DESCRIPTION:**
-{job_description[:3000]}
+{job_description[:4000]}
 
 📄 **RESUME TEXT:**
-{resume_text[:4000]}
+{resume_text[:5000]}
 
 {logic_score_note}
 """
@@ -4076,7 +4076,7 @@ def create_chain(vectorstore):
     # ✅ FIX: do NOT increment usage before the call — only after success
 
     # ✅ Create the ChatGroq object
-    llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0, groq_api_key=groq_api_key)
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=groq_api_key)
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
     try:
