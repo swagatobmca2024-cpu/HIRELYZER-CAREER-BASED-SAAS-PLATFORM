@@ -5647,33 +5647,6 @@ Return ONLY one domain from this list, nothing else:
             "Job Domain": ats_scores.get("Job Domain", "Unknown"),
         })
 
-        # ── Pre-fill Tab 3 (Job Search) with this resume's domain + location ──
-        # Purely additive: only sets values if a reasonable match is found,
-        # never overwrites with a bad guess. Actual search still requires the
-        # user to click "Search Live Jobs" themselves in Tab 3.
-        #
-        # Location source priority:
-        #   1. user_location — the "Preferred Job Location" picked right here
-        #      in this same analysis flow (most intentional signal).
-        #   2. st.session_state["location"] — fallback to the Resume Builder
-        #      profile's home location, only if (1) wasn't provided.
-        try:
-            from tab3_data import match_job_title_to_tab3, match_location_to_tab3
-
-            _matched_role = match_job_title_to_tab3(domain)
-            if _matched_role:
-                st.session_state["rapid_role_val"] = _matched_role
-
-            _preferred_location = (user_location or "").strip() or st.session_state.get("location", "")
-            _matched_loc = match_location_to_tab3(_preferred_location)
-            if _matched_loc:
-                st.session_state["rapid_loc_val"] = _matched_loc
-
-            if _matched_role or _matched_loc:
-                st.session_state["_rapid_prefilled_from_resume"] = True
-        except Exception:
-            pass
-
         insert_candidate(
             (
                 uploaded_file.name,
