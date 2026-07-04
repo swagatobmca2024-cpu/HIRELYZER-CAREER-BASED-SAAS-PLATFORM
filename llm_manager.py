@@ -619,7 +619,7 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
 def call_llm(
     prompt: str,
     session,
-    model: str = "llama-3.3-70b-versatile",
+    model: str = "openai/gpt-oss-120b",
     temperature: float = 0,
 ) -> str:
     """
