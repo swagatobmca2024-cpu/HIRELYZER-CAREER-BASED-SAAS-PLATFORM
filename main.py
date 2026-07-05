@@ -7328,6 +7328,29 @@ def _autofill_projects(raw_proj):
     return entries, links
 
 
+def _autofill_summary_to_bullets(summary_text: str) -> str:
+    """
+    Tab-1 analysis stores the professional summary as one flowing paragraph
+    (its newlines are collapsed to spaces upstream in extract_resume_json).
+    Dumped straight into the Builder's summary box that reads as one dense
+    wall of text. Split it back into sentences and re-join as '• ' bullet
+    lines instead — the Builder's _fmt_desc() renderer already turns lines
+    starting with '• ' into a proper bullet list wherever summary is shown.
+    """
+    import re as _re
+    if not summary_text or not summary_text.strip():
+        return ""
+    text = _re.sub(r'\s+', ' ', summary_text).strip()
+    # Split on sentence-ending punctuation followed by a new sentence start
+    # (capital letter, digit, or opening quote) — avoids splitting on
+    # abbreviations/decimals like "B.Tech" or "3.5 GPA".
+    sentences = _re.split(r'(?<=[.!?])\s+(?=[A-Z0-9"\'])', text)
+    sentences = [s.strip() for s in sentences if s and s.strip()]
+    if len(sentences) <= 1:
+        return text  # only one sentence — nothing meaningful to bullet-ise
+    return "\n".join(f"• {s}" for s in sentences)
+
+
 def apply_autofill_to_builder(optimized_data: dict):
     """Push a Tab-1 'Optimized Resume Data' dict into the builder's session_state."""
     opt = optimized_data or {}
@@ -7340,7 +7363,7 @@ def apply_autofill_to_builder(optimized_data: dict):
     st.session_state["linkedin"]  = ct.get("linkedin", "") or ""
     st.session_state["portfolio"] = ct.get("portfolio", "") or ct.get("github", "") or ""
     st.session_state["job_title"] = ct.get("title", "") or st.session_state.get("job_title", "") or ""
-    st.session_state["summary"]   = opt.get("summary", "") or ""
+    st.session_state["summary"]   = _autofill_summary_to_bullets(opt.get("summary", "") or "")
 
     st.session_state["skills"]     = ", ".join([s for s in (opt.get("skills") or []) if s])
     st.session_state["Softskills"] = ", ".join([s for s in (opt.get("soft_skills") or []) if s])
