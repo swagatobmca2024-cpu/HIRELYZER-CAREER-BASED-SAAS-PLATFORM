@@ -215,6 +215,17 @@ def create_user_table():
     );
     CREATE INDEX IF NOT EXISTS idx_login_attempts_lookup
         ON login_attempts (identifier, attempted_at);
+    CREATE TABLE IF NOT EXISTS resume_autofill_profiles (
+        id             SERIAL PRIMARY KEY,
+        username       TEXT NOT NULL,
+        resume_name    TEXT,
+        candidate_name TEXT,
+        optimized_data JSONB NOT NULL,
+        saved_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        is_deleted     BOOLEAN NOT NULL DEFAULT FALSE
+    );
+    CREATE INDEX IF NOT EXISTS idx_resume_autofill_user
+        ON resume_autofill_profiles (username, saved_at DESC);
     CREATE TABLE IF NOT EXISTS scam_analysis_history (
         id          SERIAL PRIMARY KEY,
         username    TEXT NOT NULL,
@@ -1045,3 +1056,80 @@ def soft_delete_all_scam_history(username: str):
 
 def delete_all_scam_history(username: str):
     pass  # do NOT delete from DB — records are permanent
+
+
+# ── Resume autofill profiles (persist Tab-1 analysis for Tab-2 Builder) ──────
+# Survives page refresh / new sessions — unlike st.session_state.resume_data,
+# which only lives for the current browser session.
+
+def save_resume_for_autofill(username: str, resume_name: str, candidate_name: str,
+                              optimized_data: dict) -> int | None:
+    """Persist an analysed resume's structured JSON so it can autofill the
+    Resume Builder later, even after a page refresh or new login session."""
+    if not username or not optimized_data:
+        return None
+    try:
+        new_row = _execute(
+            """
+            INSERT INTO resume_autofill_profiles
+                (username, resume_name, candidate_name, optimized_data)
+            VALUES (%s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                username,
+                resume_name or "Untitled",
+                candidate_name or "Unknown",
+                psycopg2.extras.Json(optimized_data),
+            ),
+            fetch="one",
+        )
+        return new_row["id"] if new_row else None
+    except Exception:
+        return None
+
+
+def load_saved_resumes_for_autofill(username: str, limit: int = 10) -> list[dict]:
+    """Return the user's saved autofill profiles, most recent first."""
+    if not username:
+        return []
+    try:
+        rows = _execute(
+            """
+            SELECT id, resume_name, candidate_name, optimized_data,
+                   TO_CHAR(saved_at AT TIME ZONE 'Asia/Kolkata', 'FMDD Mon HH24:MI') AS time
+            FROM resume_autofill_profiles
+            WHERE username = %s AND is_deleted = FALSE
+            ORDER BY saved_at DESC
+            LIMIT %s
+            """,
+            (username, limit),
+            fetch="all",
+        )
+        return [
+            {
+                "id":             r["id"],
+                "resume_name":    r["resume_name"],
+                "candidate_name": r["candidate_name"],
+                "optimized_data": r["optimized_data"],  # psycopg2 decodes JSONB -> dict
+                "time":           r["time"],
+            }
+            for r in (rows or [])
+        ]
+    except Exception:
+        return []
+
+
+def delete_saved_resume_for_autofill(username: str, record_id: int) -> bool:
+    try:
+        _execute(
+            """
+            UPDATE resume_autofill_profiles
+            SET is_deleted = TRUE
+            WHERE id = %s AND username = %s
+            """,
+            (record_id, username),
+        )
+        return True
+    except Exception:
+        return False
