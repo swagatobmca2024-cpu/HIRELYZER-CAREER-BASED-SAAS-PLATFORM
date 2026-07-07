@@ -63,6 +63,8 @@ from user_login import (
     cleanup_expired_login_tokens, check_and_gate_feature,
     record_feature_usage, get_usage_count_last_hour, check_brute_force,
     get_user_email_by_username, send_analysis_email,
+    save_resume_for_autofill, load_saved_resumes_for_autofill,
+    delete_saved_resume_for_autofill,
 )
 
 from resume_processor import (
@@ -4834,983 +4836,983 @@ with tab1:
                         unsafe_allow_html=True
                     )
 
-# ✅ Initialize state
-# Initialize session state
-if "resume_data" not in st.session_state:
-    st.session_state.resume_data = []
+    # ✅ Initialize state
+    # Initialize session state
+    if "resume_data" not in st.session_state:
+        st.session_state.resume_data = []
 
-if "processed_files" not in st.session_state:
-    st.session_state.processed_files = set()
+    if "processed_files" not in st.session_state:
+        st.session_state.processed_files = set()
 
-resume_data = st.session_state.resume_data
+    resume_data = st.session_state.resume_data
 
-# ✏️ Resume Evaluation Logic
-if uploaded_files and job_description and not weights_valid:
-    st.warning(
-        f"⚠️ Resume analysis is blocked — your scoring weights add up to **{total_weight}/90**. "
-        f"Please adjust the sliders in the sidebar until the total equals exactly **90**.",
-        icon=None
-    )
+    # ✏️ Resume Evaluation Logic
+    if uploaded_files and job_description and not weights_valid:
+        st.warning(
+            f"⚠️ Resume analysis is blocked — your scoring weights add up to **{total_weight}/90**. "
+            f"Please adjust the sliders in the sidebar until the total equals exactly **90**.",
+            icon=None
+        )
 
-if uploaded_files and job_description and weights_valid:
-    # ── Usage gate: only check when there are NEW files not yet processed ─────
-    _gate_username = st.session_state.get("username")
-    _new_files = [
-        f for f in uploaded_files
-        if f.name not in st.session_state.get("processed_files", set())
-        and f.size <= _MAX_FILE_BYTES
-    ]
-    if _gate_username and _new_files:
-        _gate_allowed, _gate_msg = check_and_gate_feature(_gate_username, "resume_analyzer")
-        if not _gate_allowed:
-            st.markdown(_gate_msg, unsafe_allow_html=True)
-            _gate_used = get_usage_count_last_hour(_gate_username, "resume_analyzer")
-            _gate_svg_clock = (
-                '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
-                'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
-                'style="display:inline-block;vertical-align:middle;margin-right:5px;">'
-                '<circle cx="12" cy="12" r="10"/>'
-                '<polyline points="12 6 12 12 16 14"/>'
-                '</svg>'
-            )
-            st.markdown(
-                f'<div style="display:flex;align-items:center;font-size:0.88rem;color:#7dd3fc;'
-                f'background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);'
-                f'border-radius:8px;padding:10px 14px;margin-top:8px;font-family:-apple-system,sans-serif;">'
-                f'{_gate_svg_clock} You have used <b style="margin:0 3px;">{_gate_used}/2</b> resume analyses this hour. Resets on a rolling 60-minute window.</div>',
-                unsafe_allow_html=True
-            )
-            st.stop()
-    # ─────────────────────────────────────────────────────────────────────────
-
-    all_text = []
-
-    for uploaded_file in uploaded_files:
-        if uploaded_file.name in st.session_state.processed_files:
-            continue
-
-        # ── Skip files that exceeded the 5 MB size cap ───────────────────────
-        if uploaded_file.size > _MAX_FILE_BYTES:
-            continue
-
-        # ✅ Improved optimized scanner animation with better performance
-        scanner_placeholder = st.empty()
-
-        # ✅ IMPROVED: More efficient CSS animations with GPU acceleration
-        OPTIMIZED_SCANNER_HTML = f"""
-        <style>
-        .scanner-overlay {{
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            background: linear-gradient(135deg, #0b0c10 0%, #1a1c29 100%);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            will-change: transform, opacity;
-        }}
-        
-        .scanner-doc {{
-            width: 280px;
-            height: 340px;
-            background: linear-gradient(145deg, #f8f9fa, #e9ecef);
-            border-radius: 16px;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 20px 40px rgba(0, 191, 255, 0.3);
-            transform: translateZ(0);
-            will-change: transform;
-            animation: docFloat 3s ease-in-out infinite alternate;
-        }}
-        
-        @keyframes docFloat {{
-            0% {{ transform: translateY(0px) scale(1); }}
-            100% {{ transform: translateY(-8px) scale(1.02); }}
-        }}
-        
-        .doc-header {{
-            padding: 20px;
-            text-align: center;
-            border-bottom: 2px solid #e9ecef;
-        }}
-        
-        .doc-avatar {{
-            width: 50px;
-            height: 50px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            border-radius: 50%;
-            margin: 0 auto 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            color: white;
-        }}
-        
-        .doc-title {{
-            font-size: 16px;
-            font-weight: bold;
-            color: #2c3e50;
-            margin-bottom: 5px;
-            font-family: 'Segoe UI', sans-serif;
-        }}
-        
-        .doc-content {{
-            padding: 15px;
-            font-size: 12px;
-            color: #6c757d;
-            line-height: 1.4;
-        }}
-        
-        .scan-line {{
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 4px;
-            background: linear-gradient(90deg, transparent, rgba(0,191,255,0.8), transparent);
-            animation: scanMove 2.5s ease-in-out infinite;
-            box-shadow: 0 0 20px rgba(0,191,255,0.6);
-            transform: translateZ(0);
-            will-change: transform;
-        }}
-        
-        @keyframes scanMove {{
-            0% {{ top: 0; opacity: 1; }}
-            50% {{ opacity: 0.8; }}
-            100% {{ top: 340px; opacity: 1; }}
-        }}
-        
-        .scanner-text {{
-            margin-top: 30px;
-            font-family: 'Orbitron', 'Segoe UI', sans-serif;
-            font-weight: 600;
-            font-size: 18px;
-            color: #00bfff;
-            text-shadow: 0 0 10px rgba(0,191,255,0.5);
-            animation: textPulse 2s ease-in-out infinite;
-        }}
-        
-        @keyframes textPulse {{
-            0%, 100% {{ opacity: 1; transform: scale(1); }}
-            50% {{ opacity: 0.8; transform: scale(1.05); }}
-        }}
-        
-        .progress-bar {{
-            width: 200px;
-            height: 4px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 2px;
-            margin-top: 20px;
-            overflow: hidden;
-        }}
-        
-        .progress-fill {{
-            height: 100%;
-            background: linear-gradient(90deg, #00bfff, #1e90ff);
-            border-radius: 2px;
-            animation: progressFill 3s ease-in-out infinite;
-            transform: translateX(-100%);
-        }}
-        
-        @keyframes progressFill {{
-            0% {{ transform: translateX(-100%); }}
-            100% {{ transform: translateX(0); }}
-        }}
-        
-        /* Mobile optimizations */
-        @media (max-width: 768px) {{
-            .scanner-doc {{ width: 240px; height: 300px; }}
-            .scanner-text {{ font-size: 16px; }}
-        }}
-        </style>
-        
-        <div class="scanner-overlay">
-            <div class="scanner-doc">
-                <div class="scan-line"></div>
-                <div class="doc-header">
-                    <div class="doc-avatar">👤</div>
-                    <div class="doc-title">{job_title}</div>
-                </div>
-                <div class="doc-content">
-                    • Analyzing candidate profile...<br>
-                    • Extracting key skills...<br>
-                    • Matching with job requirements...<br>
-                    • Calculating ATS compatibility...<br>
-                    • Checking for bias patterns...
-                </div>
-            </div>
-            <div class="scanner-text">Scanning Resume...</div>
-            <div class="progress-bar">
-                <div class="progress-fill"></div>
-            </div>
-        </div>
-        """
-        
-        scanner_placeholder.markdown(OPTIMIZED_SCANNER_HTML, unsafe_allow_html=True)
-
-        # ✅ Save uploaded file
-        file_path = os.path.join(working_dir, uploaded_file.name)
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-
-        # ✅ Reduced delay for better UX
-        time.sleep(4)
-
-        # ✅ Extract text from PDF (scanned files return _SCANNED_SENTINEL)
-        uploaded_file.seek(0)
-        full_text = safe_extract_text(uploaded_file, container=tab1)
-        if full_text is None or full_text in (_SCANNED_SENTINEL, _NON_ENGLISH_SENTINEL):
-            # Rejection card already rendered by safe_extract_text for scanned/non-English files.
-            # Plain None means unreadable for another reason — warning already shown.
-            scanner_placeholder.empty()
-            continue
-
-        all_text.append(full_text)
-
-        # ── Long resume warning — styled card, non-blocking ──────────────────
-        # Content beyond 8000 chars is silently truncated in the LLM prompt.
-        # _render_long_resume_warning is imported from resume_processor and
-        # matches the app's glassmorphism dark theme exactly.
-        if len(full_text) > _LONG_RESUME_THRESHOLD:
-            with tab1:
-                _render_long_resume_warning(uploaded_file.name, len(full_text), container=tab1)
-
-        # ✅ Bias detection
-        bias_score, masc_count, fem_count, detected_masc, detected_fem = detect_bias(full_text)
-
-        # ✅ Format check (industry standard — no LLM call, run before parallel block)
-        try:
-            doc_check = fitz.open(file_path)
-            num_pages = doc_check.page_count
-            doc_check.close()
-        except Exception:
-            num_pages = 1
-        format_data = check_resume_format(full_text, num_pages, pdf_path=file_path, session=st.session_state)
-
-        # FIX: detect domains on the main thread BEFORE spawning parallel threads.
-        # This prevents both threads from simultaneously reading/writing st.session_state
-        # and firing duplicate LLM calls for domain detection.
-        _pre_valid_domains = [
-            "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
-            "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
-            "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
-            "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
-            "Networking", "Site Reliability Engineering", "Product Management", "Project Management",
-            "Business Analysis", "Technical Writing", "Digital Marketing", "E-commerce", "Fintech",
-            "Healthcare Tech", "EdTech", "IoT Development", "AR/VR Development", "Technical Sales",
-            "Agile Coaching", "Software Engineering"
+    if uploaded_files and job_description and weights_valid:
+        # ── Usage gate: only check when there are NEW files not yet processed ─────
+        _gate_username = st.session_state.get("username")
+        _new_files = [
+            f for f in uploaded_files
+            if f.name not in st.session_state.get("processed_files", set())
+            and f.size <= _MAX_FILE_BYTES
         ]
-        _pre_domain_list = ", ".join(_pre_valid_domains)
+        if _gate_username and _new_files:
+            _gate_allowed, _gate_msg = check_and_gate_feature(_gate_username, "resume_analyzer")
+            if not _gate_allowed:
+                st.markdown(_gate_msg, unsafe_allow_html=True)
+                _gate_used = get_usage_count_last_hour(_gate_username, "resume_analyzer")
+                _gate_svg_clock = (
+                    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" '
+                    'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+                    'style="display:inline-block;vertical-align:middle;margin-right:5px;">'
+                    '<circle cx="12" cy="12" r="10"/>'
+                    '<polyline points="12 6 12 12 16 14"/>'
+                    '</svg>'
+                )
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;font-size:0.88rem;color:#7dd3fc;'
+                    f'background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);'
+                    f'border-radius:8px;padding:10px 14px;margin-top:8px;font-family:-apple-system,sans-serif;">'
+                    f'{_gate_svg_clock} You have used <b style="margin:0 3px;">{_gate_used}/2</b> resume analyses this hour. Resets on a rolling 60-minute window.</div>',
+                    unsafe_allow_html=True
+                )
+                st.stop()
+        # ─────────────────────────────────────────────────────────────────────────
 
-        _pre_resume_cache_key = f"resume_domain_{hash(full_text[:500])}"
-        if _pre_resume_cache_key not in st.session_state:
-            _pre_resume_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across all levels — freshers, students, mid-level, and senior professionals.
+        all_text = []
 
-Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.
+        for uploaded_file in uploaded_files:
+            if uploaded_file.name in st.session_state.processed_files:
+                continue
 
-════════════════════════════════════════════════════════
-STEP 1 — DETERMINE CANDIDATE LEVEL FIRST
-════════════════════════════════════════════════════════
+            # ── Skip files that exceeded the 5 MB size cap ───────────────────────
+            if uploaded_file.size > _MAX_FILE_BYTES:
+                continue
 
-Classify the candidate into one of these levels before picking a domain:
+            # ✅ Improved optimized scanner animation with better performance
+            scanner_placeholder = st.empty()
 
-LEVEL A — Pure Fresher / Student with NO specialization evidence:
-  • Still studying OR just graduated
-  • No internship OR only 1 internship with no described work
-  • Projects listed as names only (no descriptions, no tech stack mentioned)
-  • Skills are only basic CS fundamentals (Java, C, C++, Python, HTML, SQL alone)
-  → DEFAULT to "Software Engineering" immediately. Do not over-classify.
-  → EXAMPLES: Only Java+MySQL+DBMS listed, no projects described → "Software Engineering"
+            # ✅ IMPROVED: More efficient CSS animations with GPU acceleration
+            OPTIMIZED_SCANNER_HTML = f"""
+            <style>
+            .scanner-overlay {{
+                position: fixed;
+                top: 0; left: 0;
+                width: 100vw; height: 100vh;
+                background: linear-gradient(135deg, #0b0c10 0%, #1a1c29 100%);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                z-index: 9999;
+                will-change: transform, opacity;
+            }}
+        
+            .scanner-doc {{
+                width: 280px;
+                height: 340px;
+                background: linear-gradient(145deg, #f8f9fa, #e9ecef);
+                border-radius: 16px;
+                position: relative;
+                overflow: hidden;
+                box-shadow: 0 20px 40px rgba(0, 191, 255, 0.3);
+                transform: translateZ(0);
+                will-change: transform;
+                animation: docFloat 3s ease-in-out infinite alternate;
+            }}
+        
+            @keyframes docFloat {{
+                0% {{ transform: translateY(0px) scale(1); }}
+                100% {{ transform: translateY(-8px) scale(1.02); }}
+            }}
+        
+            .doc-header {{
+                padding: 20px;
+                text-align: center;
+                border-bottom: 2px solid #e9ecef;
+            }}
+        
+            .doc-avatar {{
+                width: 50px;
+                height: 50px;
+                background: linear-gradient(135deg, #667eea, #764ba2);
+                border-radius: 50%;
+                margin: 0 auto 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 20px;
+                color: white;
+            }}
+        
+            .doc-title {{
+                font-size: 16px;
+                font-weight: bold;
+                color: #2c3e50;
+                margin-bottom: 5px;
+                font-family: 'Segoe UI', sans-serif;
+            }}
+        
+            .doc-content {{
+                padding: 15px;
+                font-size: 12px;
+                color: #6c757d;
+                line-height: 1.4;
+            }}
+        
+            .scan-line {{
+                position: absolute;
+                top: 0; left: 0;
+                width: 100%; height: 4px;
+                background: linear-gradient(90deg, transparent, rgba(0,191,255,0.8), transparent);
+                animation: scanMove 2.5s ease-in-out infinite;
+                box-shadow: 0 0 20px rgba(0,191,255,0.6);
+                transform: translateZ(0);
+                will-change: transform;
+            }}
+        
+            @keyframes scanMove {{
+                0% {{ top: 0; opacity: 1; }}
+                50% {{ opacity: 0.8; }}
+                100% {{ top: 340px; opacity: 1; }}
+            }}
+        
+            .scanner-text {{
+                margin-top: 30px;
+                font-family: 'Orbitron', 'Segoe UI', sans-serif;
+                font-weight: 600;
+                font-size: 18px;
+                color: #00bfff;
+                text-shadow: 0 0 10px rgba(0,191,255,0.5);
+                animation: textPulse 2s ease-in-out infinite;
+            }}
+        
+            @keyframes textPulse {{
+                0%, 100% {{ opacity: 1; transform: scale(1); }}
+                50% {{ opacity: 0.8; transform: scale(1.05); }}
+            }}
+        
+            .progress-bar {{
+                width: 200px;
+                height: 4px;
+                background: rgba(255,255,255,0.2);
+                border-radius: 2px;
+                margin-top: 20px;
+                overflow: hidden;
+            }}
+        
+            .progress-fill {{
+                height: 100%;
+                background: linear-gradient(90deg, #00bfff, #1e90ff);
+                border-radius: 2px;
+                animation: progressFill 3s ease-in-out infinite;
+                transform: translateX(-100%);
+            }}
+        
+            @keyframes progressFill {{
+                0% {{ transform: translateX(-100%); }}
+                100% {{ transform: translateX(0); }}
+            }}
+        
+            /* Mobile optimizations */
+            @media (max-width: 768px) {{
+                .scanner-doc {{ width: 240px; height: 300px; }}
+                .scanner-text {{ font-size: 16px; }}
+            }}
+            </style>
+        
+            <div class="scanner-overlay">
+                <div class="scanner-doc">
+                    <div class="scan-line"></div>
+                    <div class="doc-header">
+                        <div class="doc-avatar">👤</div>
+                        <div class="doc-title">{job_title}</div>
+                    </div>
+                    <div class="doc-content">
+                        • Analyzing candidate profile...<br>
+                        • Extracting key skills...<br>
+                        • Matching with job requirements...<br>
+                        • Calculating ATS compatibility...<br>
+                        • Checking for bias patterns...
+                    </div>
+                </div>
+                <div class="scanner-text">Scanning Resume...</div>
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+            </div>
+            """
+        
+            scanner_placeholder.markdown(OPTIMIZED_SCANNER_HTML, unsafe_allow_html=True)
 
-LEVEL B — Fresher / Student WITH specialization evidence:
-  • Still studying OR recently graduated BUT has AT LEAST ONE of:
-    - 1 internship where the domain is clearly described (e.g. "frontend web development internship")
-    - 1 project with a description mentioning domain-specific technologies
-    - Skills showing a clear technology stack (not just basics)
-  → DO classify into a specific domain based on the strongest evidence
-  → EXAMPLES:
-    - HTML+CSS+JS+React + frontend internship described → "Frontend Development"
-    - Django/Laravel + MySQL + web project described, NO frontend tech mentioned → "Backend Development"
-    - Django/Laravel + MySQL + HTML+CSS+JS + web project described → "Full Stack Development"
-    - Android/Flutter + built a mobile app described → "Mobile Development"
-    - TensorFlow/PyTorch + ML project described → "AI/Machine Learning"
+            # ✅ Save uploaded file
+            file_path = os.path.join(working_dir, uploaded_file.name)
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
 
-LEVEL C — Experienced Professional (1+ years full-time work):
-  → ALWAYS classify into a specific domain — never default to "Software Engineering" unless truly mixed
-  → Use job titles + tech stack + years of experience as primary signals
+            # ✅ Reduced delay for better UX
+            time.sleep(4)
 
-════════════════════════════════════════════════════════
-STEP 2 — DOMAIN CLASSIFICATION RULES (for Level B and C)
-════════════════════════════════════════════════════════
+            # ✅ Extract text from PDF (scanned files return _SCANNED_SENTINEL)
+            uploaded_file.seek(0)
+            full_text = safe_extract_text(uploaded_file, container=tab1)
+            if full_text is None or full_text in (_SCANNED_SENTINEL, _NON_ENGLISH_SENTINEL):
+                # Rejection card already rendered by safe_extract_text for scanned/non-English files.
+                # Plain None means unreadable for another reason — warning already shown.
+                scanner_placeholder.empty()
+                continue
 
-RULE A — DO NOT over-classify from basic skills alone (applies to ALL levels):
-  ✗ Java + MySQL + DBMS alone → NOT "Backend Development"
-  ✗ HTML + CSS alone → NOT "Frontend Development"
-  ✗ Python alone → NOT "AI/Machine Learning" or "Data Science"
-  ✗ SQL alone → NOT "Database Management" or "Data Science"
-  ✗ C / C++ alone → NOT "Embedded Systems" or "Software Engineering" specialist
-  ✓ Basic CS languages without frameworks + no described projects → "Software Engineering"
+            all_text.append(full_text)
 
-RULE B — WHAT COUNTS AS TRUE DOMAIN EVIDENCE:
-  → Frontend Development:
-     MUST have: HTML+CSS+JS PLUS at least one of (React/Vue/Angular/Bootstrap/jQuery)
-     AND: at least 1 described project OR internship explicitly about frontend/web UI
-     
-  → Backend Development:
-     MUST have: A backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI)
-     AND: database integration (MySQL/PostgreSQL/MongoDB) in a described project
-     NOT just: Java + SQL listed in skills with no project context
-     ⚠ "website" in project name does NOT mean Full Stack. Django + database + no frontend = Backend.
-     
-  → Full Stack Development:
-     MUST have: frontend technologies (HTML+CSS+JS or React/Vue/Angular/Bootstrap/jQuery)
-     AND: backend framework + database — ALL THREE explicitly present
-     AND: at least 1 project or internship that uses both frontend and backend
-     SELF-IDENTIFICATION counts: if summary says "full stack" or "front-end and back-end" → Full Stack
-     ⚠ "website" + backend framework alone is NOT Full Stack — frontend tech must be explicitly named.
-     
-  → Mobile Development:
-     MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift
-     AND: at least 1 described mobile app project
-     
-  → Data Science:
-     MUST have: pandas/numpy/matplotlib/seaborn/tableau/power bi
-     AND: actual data analysis or visualization project described
-     NOT just: SQL or Excel listed in skills
-     
-  → AI/Machine Learning:
-     MUST have: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/LLM/NLP/Computer Vision
-     AND: model training or ML pipeline described in a project
-     
-  → Cybersecurity:
-     MUST have: security tools (Kali/Burp Suite/Wireshark/Metasploit) OR security concepts (pentesting/OWASP/CTF)
-     AND: security internship or project described
-     NOTE: A cybersecurity VIRTUAL internship with no tools described = weak signal, check other evidence too
-     
-  → DevOps/Infrastructure:
-     MUST have: Docker/Kubernetes/CI-CD/Jenkins/Terraform/Ansible
-     AND: deployment or infrastructure project described
-     
-  → Cloud Engineering:
-     MUST have: AWS/Azure/GCP services (not just "cloud" mentioned)
-     AND: cloud deployment or architecture in a project
-     
-  → UI/UX Design:
-     MUST have: Figma/Adobe XD/Sketch/InVision
-     AND: wireframes/prototypes/user research described
-     
-  → Database Management:
-     MUST have: DBA role OR database optimization/administration as PRIMARY focus
-     NOT just: SQL listed as one of many skills
-     
-  → Product Management:
-     MUST have: product ownership, roadmaps, PRDs, stakeholder management
-     NOT just: Agile/Scrum keywords
-     
-  → Project Management:
-     MUST have: managing teams, project delivery, PMP/Prince2 or equivalent experience
-     
-  → Business Analysis:
-     MUST have: requirements gathering, process mapping, business case writing
-     
-  → Digital Marketing:
-     MUST have: SEO/SEM/campaigns/social media marketing with actual results
-     
-  → Blockchain Development:
-     MUST have: Solidity/Web3/Smart Contracts/Ethereum/DeFi in described projects
-     
-  → Game Development:
-     MUST have: Unity/Unreal Engine/game mechanics in described projects
-     
-  → Embedded Systems:
-     MUST have: microcontroller/RTOS/firmware/hardware programming described
-     
-  → IoT Development:
-     MUST have: IoT devices/sensors/protocols (MQTT/CoAP) + hardware integration
-     
-  → AR/VR Development:
-     MUST have: ARKit/ARCore/Unity3D/Unreal/Oculus in described projects
+            # ── Long resume warning — styled card, non-blocking ──────────────────
+            # Content beyond 8000 chars is silently truncated in the LLM prompt.
+            # _render_long_resume_warning is imported from resume_processor and
+            # matches the app's glassmorphism dark theme exactly.
+            if len(full_text) > _LONG_RESUME_THRESHOLD:
+                with tab1:
+                    _render_long_resume_warning(uploaded_file.name, len(full_text), container=tab1)
 
-RULE C — MIXED SIGNALS → pick the DOMINANT domain:
-  • Count: technologies + described projects + internship titles per domain
-  • The domain with the most evidence wins
-  • If frontend has 3 signals and cybersecurity has 1 virtual internship → Frontend wins
-  • If truly equal across 2 domains → "Full Stack Development" if they're frontend+backend, else "Software Engineering"
-  ⚠ INTERNSHIP TITLE CONFLICT RULE (critical for Level B):
-    If internship title suggests Domain A BUT skills + projects have 3+ strong signals for Domain B
-    AND Domain B is more specific than Domain A → Domain B wins over the internship title.
-    EXAMPLE: "Full Stack Developer Intern" + LangChain/LLaMA/RAG/FAISS/LLMs in skills+projects
-             → "AI/Machine Learning" wins, NOT "Full Stack Development"
-    EXAMPLE: "Full Stack Developer Intern" + only HTML/CSS/React/Node projects, no AI tools
-             → "Full Stack Development" wins correctly
-    EXAMPLE: "Android Developer Intern" + Flutter/Kotlin projects → "Mobile Development" wins correctly
+            # ✅ Bias detection
+            bias_score, masc_count, fem_count, detected_masc, detected_fem = detect_bias(full_text)
 
-RULE D — RESEARCH / ACADEMIC profiles:
-  • Research intern at university/NIT/IIT/ISRO/DRDO etc. → classify by research TOPIC
-  • AI/accessibility/NLP research → "AI/Machine Learning"
-  • Security research → "Cybersecurity"  
-  • Hardware/systems research → "Embedded Systems" or "Software Engineering"
-  • Generic CS research → "Software Engineering"
-
-RULE E — CAREER SWITCHERS:
-  • If candidate has old domain (e.g. mechanical engineer) but new projects/courses in tech → classify by new tech domain
-  • Recent certifications + projects in new domain outweigh old job titles
-
-RULE F — JOB TITLE as strong signal (Level C only):
-  • ONLY applies to Level C (1+ years full-time work experience)
-  • For Level C: explicit job title is the STRONGEST single signal
-  • "Backend Developer" → "Backend Development", "Data Analyst" → "Data Science"
-  ⚠ For Level B (freshers/students): internship title is ONE signal among many.
-    It can be OVERRIDDEN if skills + projects show 3+ strong signals for a different domain.
-    Do NOT blindly use internship title for Level B — apply Rule C conflict check first.
-
-════════════════════════════════════════════════════════
-STEP 3 — FINAL CHECK BEFORE ANSWERING
-════════════════════════════════════════════════════════
-
-Ask yourself:
-1. What is the candidate's LEVEL? (A / B / C)
-2. If Level A → return "Software Engineering"
-3. If Level B or C → what domain has the MOST evidence (technologies + described projects + internship/job titles)?
-4. Does that domain meet the TRUE EVIDENCE bar from Rule B?
-5. If Full Stack → are frontend tech + backend framework + database ALL explicitly mentioned? If frontend is missing → Backend, not Full Stack.
-6. If Level B → did I check Rule C conflict? Does the internship title conflict with skills+projects?
-   If yes → let skills+projects override the internship title.
-7. If Level C → is there a job title confirming the domain (Rule F)?
-8. If yes → return that domain. If no → return "Software Engineering"
-
-════════════════════════════════════════════════════════
-Resume Text:
-{full_text[:2500]}
-════════════════════════════════════════════════════════
-
-Return ONLY one domain from this list, nothing else:
-{_pre_domain_list}
-"""
+            # ✅ Format check (industry standard — no LLM call, run before parallel block)
             try:
-                _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
-                if _r in _pre_valid_domains:
-                    st.session_state[_pre_resume_cache_key] = _r
-                else:
-                    # LLM returned invalid domain — fall back to keyword detection
-                    _kw = db_manager.detect_domain_from_title_and_description("", full_text[:3000])
-                    st.session_state[_pre_resume_cache_key] = _kw if _kw != "Unclassified" else "Software Engineering"
+                doc_check = fitz.open(file_path)
+                num_pages = doc_check.page_count
+                doc_check.close()
             except Exception:
-                # LLM failed entirely — fall back to keyword detection
+                num_pages = 1
+            format_data = check_resume_format(full_text, num_pages, pdf_path=file_path, session=st.session_state)
+
+            # FIX: detect domains on the main thread BEFORE spawning parallel threads.
+            # This prevents both threads from simultaneously reading/writing st.session_state
+            # and firing duplicate LLM calls for domain detection.
+            _pre_valid_domains = [
+                "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
+                "Frontend Development", "Backend Development", "Full Stack Development", "Cybersecurity",
+                "Cloud Engineering", "DevOps/Infrastructure", "Quality Assurance", "Game Development",
+                "Blockchain Development", "Embedded Systems", "System Architecture", "Database Management",
+                "Networking", "Site Reliability Engineering", "Product Management", "Project Management",
+                "Business Analysis", "Technical Writing", "Digital Marketing", "E-commerce", "Fintech",
+                "Healthcare Tech", "EdTech", "IoT Development", "AR/VR Development", "Technical Sales",
+                "Agile Coaching", "Software Engineering"
+            ]
+            _pre_domain_list = ", ".join(_pre_valid_domains)
+
+            _pre_resume_cache_key = f"resume_domain_{hash(full_text[:500])}"
+            if _pre_resume_cache_key not in st.session_state:
+                _pre_resume_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across all levels — freshers, students, mid-level, and senior professionals.
+
+    Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.
+
+    ════════════════════════════════════════════════════════
+    STEP 1 — DETERMINE CANDIDATE LEVEL FIRST
+    ════════════════════════════════════════════════════════
+
+    Classify the candidate into one of these levels before picking a domain:
+
+    LEVEL A — Pure Fresher / Student with NO specialization evidence:
+      • Still studying OR just graduated
+      • No internship OR only 1 internship with no described work
+      • Projects listed as names only (no descriptions, no tech stack mentioned)
+      • Skills are only basic CS fundamentals (Java, C, C++, Python, HTML, SQL alone)
+      → DEFAULT to "Software Engineering" immediately. Do not over-classify.
+      → EXAMPLES: Only Java+MySQL+DBMS listed, no projects described → "Software Engineering"
+
+    LEVEL B — Fresher / Student WITH specialization evidence:
+      • Still studying OR recently graduated BUT has AT LEAST ONE of:
+        - 1 internship where the domain is clearly described (e.g. "frontend web development internship")
+        - 1 project with a description mentioning domain-specific technologies
+        - Skills showing a clear technology stack (not just basics)
+      → DO classify into a specific domain based on the strongest evidence
+      → EXAMPLES:
+        - HTML+CSS+JS+React + frontend internship described → "Frontend Development"
+        - Django/Laravel + MySQL + web project described, NO frontend tech mentioned → "Backend Development"
+        - Django/Laravel + MySQL + HTML+CSS+JS + web project described → "Full Stack Development"
+        - Android/Flutter + built a mobile app described → "Mobile Development"
+        - TensorFlow/PyTorch + ML project described → "AI/Machine Learning"
+
+    LEVEL C — Experienced Professional (1+ years full-time work):
+      → ALWAYS classify into a specific domain — never default to "Software Engineering" unless truly mixed
+      → Use job titles + tech stack + years of experience as primary signals
+
+    ════════════════════════════════════════════════════════
+    STEP 2 — DOMAIN CLASSIFICATION RULES (for Level B and C)
+    ════════════════════════════════════════════════════════
+
+    RULE A — DO NOT over-classify from basic skills alone (applies to ALL levels):
+      ✗ Java + MySQL + DBMS alone → NOT "Backend Development"
+      ✗ HTML + CSS alone → NOT "Frontend Development"
+      ✗ Python alone → NOT "AI/Machine Learning" or "Data Science"
+      ✗ SQL alone → NOT "Database Management" or "Data Science"
+      ✗ C / C++ alone → NOT "Embedded Systems" or "Software Engineering" specialist
+      ✓ Basic CS languages without frameworks + no described projects → "Software Engineering"
+
+    RULE B — WHAT COUNTS AS TRUE DOMAIN EVIDENCE:
+      → Frontend Development:
+         MUST have: HTML+CSS+JS PLUS at least one of (React/Vue/Angular/Bootstrap/jQuery)
+         AND: at least 1 described project OR internship explicitly about frontend/web UI
+     
+      → Backend Development:
+         MUST have: A backend framework (Django/Flask/Spring Boot/Laravel/Express/Node.js/FastAPI)
+         AND: database integration (MySQL/PostgreSQL/MongoDB) in a described project
+         NOT just: Java + SQL listed in skills with no project context
+         ⚠ "website" in project name does NOT mean Full Stack. Django + database + no frontend = Backend.
+     
+      → Full Stack Development:
+         MUST have: frontend technologies (HTML+CSS+JS or React/Vue/Angular/Bootstrap/jQuery)
+         AND: backend framework + database — ALL THREE explicitly present
+         AND: at least 1 project or internship that uses both frontend and backend
+         SELF-IDENTIFICATION counts: if summary says "full stack" or "front-end and back-end" → Full Stack
+         ⚠ "website" + backend framework alone is NOT Full Stack — frontend tech must be explicitly named.
+     
+      → Mobile Development:
+         MUST have: Android/iOS/Flutter/React Native/Kotlin/Swift
+         AND: at least 1 described mobile app project
+     
+      → Data Science:
+         MUST have: pandas/numpy/matplotlib/seaborn/tableau/power bi
+         AND: actual data analysis or visualization project described
+         NOT just: SQL or Excel listed in skills
+     
+      → AI/Machine Learning:
+         MUST have: TensorFlow/PyTorch/scikit-learn/Keras/HuggingFace/LLM/NLP/Computer Vision
+         AND: model training or ML pipeline described in a project
+     
+      → Cybersecurity:
+         MUST have: security tools (Kali/Burp Suite/Wireshark/Metasploit) OR security concepts (pentesting/OWASP/CTF)
+         AND: security internship or project described
+         NOTE: A cybersecurity VIRTUAL internship with no tools described = weak signal, check other evidence too
+     
+      → DevOps/Infrastructure:
+         MUST have: Docker/Kubernetes/CI-CD/Jenkins/Terraform/Ansible
+         AND: deployment or infrastructure project described
+     
+      → Cloud Engineering:
+         MUST have: AWS/Azure/GCP services (not just "cloud" mentioned)
+         AND: cloud deployment or architecture in a project
+     
+      → UI/UX Design:
+         MUST have: Figma/Adobe XD/Sketch/InVision
+         AND: wireframes/prototypes/user research described
+     
+      → Database Management:
+         MUST have: DBA role OR database optimization/administration as PRIMARY focus
+         NOT just: SQL listed as one of many skills
+     
+      → Product Management:
+         MUST have: product ownership, roadmaps, PRDs, stakeholder management
+         NOT just: Agile/Scrum keywords
+     
+      → Project Management:
+         MUST have: managing teams, project delivery, PMP/Prince2 or equivalent experience
+     
+      → Business Analysis:
+         MUST have: requirements gathering, process mapping, business case writing
+     
+      → Digital Marketing:
+         MUST have: SEO/SEM/campaigns/social media marketing with actual results
+     
+      → Blockchain Development:
+         MUST have: Solidity/Web3/Smart Contracts/Ethereum/DeFi in described projects
+     
+      → Game Development:
+         MUST have: Unity/Unreal Engine/game mechanics in described projects
+     
+      → Embedded Systems:
+         MUST have: microcontroller/RTOS/firmware/hardware programming described
+     
+      → IoT Development:
+         MUST have: IoT devices/sensors/protocols (MQTT/CoAP) + hardware integration
+     
+      → AR/VR Development:
+         MUST have: ARKit/ARCore/Unity3D/Unreal/Oculus in described projects
+
+    RULE C — MIXED SIGNALS → pick the DOMINANT domain:
+      • Count: technologies + described projects + internship titles per domain
+      • The domain with the most evidence wins
+      • If frontend has 3 signals and cybersecurity has 1 virtual internship → Frontend wins
+      • If truly equal across 2 domains → "Full Stack Development" if they're frontend+backend, else "Software Engineering"
+      ⚠ INTERNSHIP TITLE CONFLICT RULE (critical for Level B):
+        If internship title suggests Domain A BUT skills + projects have 3+ strong signals for Domain B
+        AND Domain B is more specific than Domain A → Domain B wins over the internship title.
+        EXAMPLE: "Full Stack Developer Intern" + LangChain/LLaMA/RAG/FAISS/LLMs in skills+projects
+                 → "AI/Machine Learning" wins, NOT "Full Stack Development"
+        EXAMPLE: "Full Stack Developer Intern" + only HTML/CSS/React/Node projects, no AI tools
+                 → "Full Stack Development" wins correctly
+        EXAMPLE: "Android Developer Intern" + Flutter/Kotlin projects → "Mobile Development" wins correctly
+
+    RULE D — RESEARCH / ACADEMIC profiles:
+      • Research intern at university/NIT/IIT/ISRO/DRDO etc. → classify by research TOPIC
+      • AI/accessibility/NLP research → "AI/Machine Learning"
+      • Security research → "Cybersecurity"  
+      • Hardware/systems research → "Embedded Systems" or "Software Engineering"
+      • Generic CS research → "Software Engineering"
+
+    RULE E — CAREER SWITCHERS:
+      • If candidate has old domain (e.g. mechanical engineer) but new projects/courses in tech → classify by new tech domain
+      • Recent certifications + projects in new domain outweigh old job titles
+
+    RULE F — JOB TITLE as strong signal (Level C only):
+      • ONLY applies to Level C (1+ years full-time work experience)
+      • For Level C: explicit job title is the STRONGEST single signal
+      • "Backend Developer" → "Backend Development", "Data Analyst" → "Data Science"
+      ⚠ For Level B (freshers/students): internship title is ONE signal among many.
+        It can be OVERRIDDEN if skills + projects show 3+ strong signals for a different domain.
+        Do NOT blindly use internship title for Level B — apply Rule C conflict check first.
+
+    ════════════════════════════════════════════════════════
+    STEP 3 — FINAL CHECK BEFORE ANSWERING
+    ════════════════════════════════════════════════════════
+
+    Ask yourself:
+    1. What is the candidate's LEVEL? (A / B / C)
+    2. If Level A → return "Software Engineering"
+    3. If Level B or C → what domain has the MOST evidence (technologies + described projects + internship/job titles)?
+    4. Does that domain meet the TRUE EVIDENCE bar from Rule B?
+    5. If Full Stack → are frontend tech + backend framework + database ALL explicitly mentioned? If frontend is missing → Backend, not Full Stack.
+    6. If Level B → did I check Rule C conflict? Does the internship title conflict with skills+projects?
+       If yes → let skills+projects override the internship title.
+    7. If Level C → is there a job title confirming the domain (Rule F)?
+    8. If yes → return that domain. If no → return "Software Engineering"
+
+    ════════════════════════════════════════════════════════
+    Resume Text:
+    {full_text[:2500]}
+    ════════════════════════════════════════════════════════
+
+    Return ONLY one domain from this list, nothing else:
+    {_pre_domain_list}
+    """
                 try:
-                    _kw = db_manager.detect_domain_from_title_and_description("", full_text[:3000])
-                    st.session_state[_pre_resume_cache_key] = _kw if _kw != "Unclassified" else "Software Engineering"
+                    _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
+                    if _r in _pre_valid_domains:
+                        st.session_state[_pre_resume_cache_key] = _r
+                    else:
+                        # LLM returned invalid domain — fall back to keyword detection
+                        _kw = db_manager.detect_domain_from_title_and_description("", full_text[:3000])
+                        st.session_state[_pre_resume_cache_key] = _kw if _kw != "Unclassified" else "Software Engineering"
                 except Exception:
-                    st.session_state[_pre_resume_cache_key] = "Software Engineering"
-        _pre_resume_domain = st.session_state[_pre_resume_cache_key]
-
-        _pre_jd_cache_key = f"jd_domain_{hash(job_description[:500])}"
-        if _pre_jd_cache_key not in st.session_state:
-            _pre_jd_prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions across all industries and levels.
-
-Your ONLY job: identify the PRIMARY professional domain this job description is hiring for.
-
-════════════════════════════════════════════════════════
-STEP 1 — READ THE JOB TITLE FIRST (strongest signal)
-════════════════════════════════════════════════════════
-
-Job Title: {job_title}
-
-If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scientist", "DevOps Engineer", "UX Designer"), use that domain directly — do not over-analyse the description.
-
-Title override examples:
-  "Backend Developer" → "Backend Development"
-  "Data Analyst" → "Data Science"
-  "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
-  "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
-  "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
-  "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
-  "Mobile Developer" / "Android" / "iOS" / "Flutter" → "Mobile Development"
-  "Full Stack Developer" → "Full Stack Development"
-  "Frontend Developer" / "Front End" → "Frontend Development"
-  "UX Designer" / "UI Designer" / "Product Designer" → "UI/UX Design"
-  "Security Engineer" / "Security Analyst" / "Penetration Tester" → "Cybersecurity"
-  "SRE" / "Site Reliability Engineer" → "Site Reliability Engineering"
-  "Blockchain Developer" / "Web3 Developer" → "Blockchain Development"
-  "Game Developer" / "Game Engineer" → "Game Development"
-  "Embedded Engineer" / "Firmware Engineer" → "Embedded Systems"
-  "IoT Engineer" → "IoT Development"
-  "Network Engineer" / "Network Admin" → "Networking"
-  "Database Administrator" / "DBA" → "Database Management"
-  "Product Manager" → "Product Management"
-  "Project Manager" / "Program Manager" → "Project Management"
-  "Business Analyst" → "Business Analysis"
-  "Scrum Master" / "Agile Coach" → "Agile Coaching"
-  "Technical Writer" → "Technical Writing"
-  "Sales Engineer" / "Pre-Sales" → "Technical Sales"
-  "Solution Architect" / "Enterprise Architect" → "System Architecture"
-
-════════════════════════════════════════════════════════
-STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE JD BELOW
-════════════════════════════════════════════════════════
-
-Job Description:
-{job_description[:2000]}
-
-Classification rules:
-  • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
-  • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work
-  • Full Stack: Both frontend AND backend tech explicitly required
-  • Data Science: SQL/Python analytics + pandas/numpy/Tableau/Power BI + analysis work
-  • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
-  • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
-  • Cloud: AWS/Azure/GCP services explicitly required (not just "cloud" mentioned)
-  • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
-  • Mobile: Android/iOS/Flutter/React Native explicitly required
-  • UI/UX: Figma/wireframes/prototyping/user research required
-  • Product Management: roadmap/PRD/stakeholder management (not just Agile)
-  • Project Management: team delivery/PMP/programme management
-  • Business Analysis: requirements/BRD/process mapping as primary duty
-  • Quality Assurance: test automation/test planning as primary duty
-  • Fintech: payment/banking/trading/KYC/AML systems
-  • Healthcare Tech: EHR/EMR/HIPAA/clinical systems
-  • EdTech: LMS/e-learning/educational platform
-  • Game Development: Unity/Unreal/game mechanics explicitly required
-  • Blockchain: Solidity/Web3/smart contracts explicitly required
-  • Embedded: firmware/RTOS/microcontroller/hardware explicitly required
-
-════════════════════════════════════════════════════════
-STEP 3 — FINAL CHECK
-════════════════════════════════════════════════════════
-
-1. Did the job title directly name a domain? → Use that.
-2. If not, which domain has the MOST required skills/responsibilities in the JD?
-3. If truly unclear → "Software Engineering"
-
-Return ONLY one domain from this list, nothing else:
-{_pre_domain_list}
-"""
-            try:
-                _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
-                if _j in _pre_valid_domains:
-                    st.session_state[_pre_jd_cache_key] = _j
-                else:
-                    # LLM returned invalid — fall back to keyword detection
-                    _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
-                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
-            except Exception:
-                # LLM failed — fall back to keyword detection
-                try:
-                    _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
-                    st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
-                except Exception:
-                    st.session_state[_pre_jd_cache_key] = "Software Engineering"
-        _pre_job_domain = st.session_state[_pre_jd_cache_key]
-
-        # ⚡ PARALLEL: rewrite + ATS run simultaneously using threads.
-        # Both are network-bound (Groq API) so they benefit from parallelism
-        # without needing async — ThreadPoolExecutor handles it safely.
-        # Domains pre-detected above on main thread — no LLM calls fire inside threads.
-        def _task_rewrite():
-            return rewrite_and_highlight(full_text, replacement_mapping, user_location)
-
-        def _task_ats():
-            return ats_percentage_score(
-                resume_text=full_text,
-                job_description=job_description,
-                logic_profile_score=None,
-                edu_weight=edu_weight,
-                exp_weight=exp_weight,
-                skills_weight=skills_weight,
-                lang_weight=lang_weight,
-                keyword_weight=keyword_weight,
-                format_data=format_data,
-                resume_domain=_pre_resume_domain,   # FIX: pre-detected, no thread LLM call
-                job_domain=_pre_job_domain,         # FIX: pre-detected, no thread LLM call
-            )
-
-        with st.spinner("✍️ Rewriting resume & running ATS evaluation in parallel..."):
-            # ── Key-aware parallel/sequential decision ────────────────────────
-            # When only 1–2 healthy keys remain, running both tasks in parallel
-            # bursts the same key simultaneously and triggers rate limiting.
-            # Switch to sequential mode with a short gap to let the TPM window recover.
-            try:
-                from llm_manager import load_groq_api_keys, get_healthy_keys as _ghk
-                _n_healthy = len(_ghk(load_groq_api_keys()))
-            except Exception:
-                _n_healthy = 99  # assume enough keys if check fails
-
-            if _n_healthy >= 3:
-                # Enough keys: run truly in parallel (original behaviour)
-                with ThreadPoolExecutor(max_workers=2) as _executor:
-                    _future_rewrite = _executor.submit(_task_rewrite)
-                    _future_ats     = _executor.submit(_task_ats)
-
+                    # LLM failed entirely — fall back to keyword detection
                     try:
-                        highlighted_text, rewritten_text, _, _, _, _, json_str, rewrite_ok = _future_rewrite.result()
+                        _kw = db_manager.detect_domain_from_title_and_description("", full_text[:3000])
+                        st.session_state[_pre_resume_cache_key] = _kw if _kw != "Unclassified" else "Software Engineering"
+                    except Exception:
+                        st.session_state[_pre_resume_cache_key] = "Software Engineering"
+            _pre_resume_domain = st.session_state[_pre_resume_cache_key]
+
+            _pre_jd_cache_key = f"jd_domain_{hash(job_description[:500])}"
+            if _pre_jd_cache_key not in st.session_state:
+                _pre_jd_prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions across all industries and levels.
+
+    Your ONLY job: identify the PRIMARY professional domain this job description is hiring for.
+
+    ════════════════════════════════════════════════════════
+    STEP 1 — READ THE JOB TITLE FIRST (strongest signal)
+    ════════════════════════════════════════════════════════
+
+    Job Title: {job_title}
+
+    If the job title EXPLICITLY names a domain (e.g. "Backend Developer", "Data Scientist", "DevOps Engineer", "UX Designer"), use that domain directly — do not over-analyse the description.
+
+    Title override examples:
+      "Backend Developer" → "Backend Development"
+      "Data Analyst" → "Data Science"
+      "ML Engineer" / "AI Engineer" → "AI/Machine Learning"
+      "DevOps Engineer" / "Platform Engineer" → "DevOps/Infrastructure"
+      "Cloud Architect" / "Cloud Engineer" → "Cloud Engineering"
+      "QA Engineer" / "SDET" / "Test Engineer" → "Quality Assurance"
+      "Mobile Developer" / "Android" / "iOS" / "Flutter" → "Mobile Development"
+      "Full Stack Developer" → "Full Stack Development"
+      "Frontend Developer" / "Front End" → "Frontend Development"
+      "UX Designer" / "UI Designer" / "Product Designer" → "UI/UX Design"
+      "Security Engineer" / "Security Analyst" / "Penetration Tester" → "Cybersecurity"
+      "SRE" / "Site Reliability Engineer" → "Site Reliability Engineering"
+      "Blockchain Developer" / "Web3 Developer" → "Blockchain Development"
+      "Game Developer" / "Game Engineer" → "Game Development"
+      "Embedded Engineer" / "Firmware Engineer" → "Embedded Systems"
+      "IoT Engineer" → "IoT Development"
+      "Network Engineer" / "Network Admin" → "Networking"
+      "Database Administrator" / "DBA" → "Database Management"
+      "Product Manager" → "Product Management"
+      "Project Manager" / "Program Manager" → "Project Management"
+      "Business Analyst" → "Business Analysis"
+      "Scrum Master" / "Agile Coach" → "Agile Coaching"
+      "Technical Writer" → "Technical Writing"
+      "Sales Engineer" / "Pre-Sales" → "Technical Sales"
+      "Solution Architect" / "Enterprise Architect" → "System Architecture"
+
+    ════════════════════════════════════════════════════════
+    STEP 2 — IF TITLE IS AMBIGUOUS, ANALYSE THE JD BELOW
+    ════════════════════════════════════════════════════════
+
+    Job Description:
+    {job_description[:2000]}
+
+    Classification rules:
+      • Backend: Node.js/Django/Spring Boot/FastAPI + database + API work
+      • Frontend: React/Vue/Angular/HTML+CSS+JS + UI work
+      • Full Stack: Both frontend AND backend tech explicitly required
+      • Data Science: SQL/Python analytics + pandas/numpy/Tableau/Power BI + analysis work
+      • AI/ML: TensorFlow/PyTorch/scikit-learn/LLM/NLP/model training required
+      • DevOps: Docker/Kubernetes/CI-CD/Terraform/Jenkins required
+      • Cloud: AWS/Azure/GCP services explicitly required (not just "cloud" mentioned)
+      • Cybersecurity: pentesting/OWASP/SIEM/SOC/security tools required
+      • Mobile: Android/iOS/Flutter/React Native explicitly required
+      • UI/UX: Figma/wireframes/prototyping/user research required
+      • Product Management: roadmap/PRD/stakeholder management (not just Agile)
+      • Project Management: team delivery/PMP/programme management
+      • Business Analysis: requirements/BRD/process mapping as primary duty
+      • Quality Assurance: test automation/test planning as primary duty
+      • Fintech: payment/banking/trading/KYC/AML systems
+      • Healthcare Tech: EHR/EMR/HIPAA/clinical systems
+      • EdTech: LMS/e-learning/educational platform
+      • Game Development: Unity/Unreal/game mechanics explicitly required
+      • Blockchain: Solidity/Web3/smart contracts explicitly required
+      • Embedded: firmware/RTOS/microcontroller/hardware explicitly required
+
+    ════════════════════════════════════════════════════════
+    STEP 3 — FINAL CHECK
+    ════════════════════════════════════════════════════════
+
+    1. Did the job title directly name a domain? → Use that.
+    2. If not, which domain has the MOST required skills/responsibilities in the JD?
+    3. If truly unclear → "Software Engineering"
+
+    Return ONLY one domain from this list, nothing else:
+    {_pre_domain_list}
+    """
+                try:
+                    _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
+                    if _j in _pre_valid_domains:
+                        st.session_state[_pre_jd_cache_key] = _j
+                    else:
+                        # LLM returned invalid — fall back to keyword detection
+                        _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+                        st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
+                except Exception:
+                    # LLM failed — fall back to keyword detection
+                    try:
+                        _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
+                        st.session_state[_pre_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
+                    except Exception:
+                        st.session_state[_pre_jd_cache_key] = "Software Engineering"
+            _pre_job_domain = st.session_state[_pre_jd_cache_key]
+
+            # ⚡ PARALLEL: rewrite + ATS run simultaneously using threads.
+            # Both are network-bound (Groq API) so they benefit from parallelism
+            # without needing async — ThreadPoolExecutor handles it safely.
+            # Domains pre-detected above on main thread — no LLM calls fire inside threads.
+            def _task_rewrite():
+                return rewrite_and_highlight(full_text, replacement_mapping, user_location)
+
+            def _task_ats():
+                return ats_percentage_score(
+                    resume_text=full_text,
+                    job_description=job_description,
+                    logic_profile_score=None,
+                    edu_weight=edu_weight,
+                    exp_weight=exp_weight,
+                    skills_weight=skills_weight,
+                    lang_weight=lang_weight,
+                    keyword_weight=keyword_weight,
+                    format_data=format_data,
+                    resume_domain=_pre_resume_domain,   # FIX: pre-detected, no thread LLM call
+                    job_domain=_pre_job_domain,         # FIX: pre-detected, no thread LLM call
+                )
+
+            with st.spinner("✍️ Rewriting resume & running ATS evaluation in parallel..."):
+                # ── Key-aware parallel/sequential decision ────────────────────────
+                # When only 1–2 healthy keys remain, running both tasks in parallel
+                # bursts the same key simultaneously and triggers rate limiting.
+                # Switch to sequential mode with a short gap to let the TPM window recover.
+                try:
+                    from llm_manager import load_groq_api_keys, get_healthy_keys as _ghk
+                    _n_healthy = len(_ghk(load_groq_api_keys()))
+                except Exception:
+                    _n_healthy = 99  # assume enough keys if check fails
+
+                if _n_healthy >= 3:
+                    # Enough keys: run truly in parallel (original behaviour)
+                    with ThreadPoolExecutor(max_workers=2) as _executor:
+                        _future_rewrite = _executor.submit(_task_rewrite)
+                        _future_ats     = _executor.submit(_task_ats)
+
+                        try:
+                            highlighted_text, rewritten_text, _, _, _, _, json_str, rewrite_ok = _future_rewrite.result()
+                        except Exception:
+                            highlighted_text = full_text
+                            rewritten_text   = full_text
+                            json_str         = ""
+                            rewrite_ok       = False
+
+                        ats_result, ats_scores = _future_ats.result()
+                else:
+                    # Low on keys: run sequentially with a gap to protect the TPM window
+                    try:
+                        highlighted_text, rewritten_text, _, _, _, _, json_str, rewrite_ok = _task_rewrite()
                     except Exception:
                         highlighted_text = full_text
                         rewritten_text   = full_text
                         json_str         = ""
                         rewrite_ok       = False
 
-                    ats_result, ats_scores = _future_ats.result()
+                    time.sleep(4)   # let per-minute token window partially recover
+
+                    ats_result, ats_scores = _task_ats()
+
+            # ── Rewrite failure warning — shown once, immediately after processing ──
+            # rewrite_ok=False means all API keys were exhausted and the LLM never ran.
+            # The user would otherwise see their original resume silently presented as
+            # "optimized" with no explanation — this makes the failure explicit.
+            if not rewrite_ok:
+                with tab1:
+                    st.warning(
+                        "⚠️ **Resume rewrite unavailable** — API keys are currently exhausted. "
+                        "The original resume is shown below. "
+                        "Download buttons will produce a document based on the original text. "
+                        "Please try again in a few minutes.",
+                        icon=None,
+                    )
+
+            # ✅ Resume Optimization Module — reuse JSON already produced above (0 extra LLM calls)
+            try:
+                optimized_resume_data = extract_resume_json(json_str)
+            except Exception:
+                optimized_resume_data = extract_resume_json("")  # falls back to empty skeleton
+
+            # ✅ Extract structured ATS values
+            candidate_name = ats_scores.get("Candidate Name", "Not Found")
+
+            # ── Candidate name resolution (LLM-first, filename as validated fallback) ──
+            #
+            # Design: neither source is blindly trusted. Both are run through the
+            # same _looks_like_person_name() validator before use. LLM always wins
+            # when valid; filename is only used when the LLM result fails validation.
+            #
+            # Fixes:
+            #   1. Job-title filenames (e.g. "mobile_app_developer_resume.pdf") no
+            #      longer override a correct LLM name.
+            #   2. Low character-overlap no longer triggers a blind filename override.
+            #   3. Single-word extractions from either source are rejected.
+
+            # Comprehensive set of words that appear in job-title filenames but are
+            # never part of a person's name. Extend as needed.
+            _NAME_STOP_WORDS: set[str] = {
+                # document meta
+                "resume", "cv", "curriculum", "vitae", "updated", "final",
+                "new", "latest", "copy", "draft", "version", "doc",
+                "v1", "v2", "v3", "v4", "v5",
+                "2022", "2023", "2024", "2025", "2026",
+                # seniority / role qualifiers
+                "senior", "junior", "lead", "principal", "staff", "associate",
+                "intern", "entry", "mid", "level",
+                # job-title nouns
+                "developer", "engineer", "designer", "manager", "analyst",
+                "consultant", "architect", "director", "officer", "specialist",
+                "coordinator", "executive", "recruiter", "advisor", "strategist",
+                "scientist", "researcher", "administrator", "technician",
+                # tech-domain prefixes that appear in filenames
+                "mobile", "app", "web", "data", "software", "frontend", "backend",
+                "fullstack", "full", "stack", "cloud", "devops", "qa", "product",
+                "project", "platform", "site", "ui", "ux", "ml", "ai", "it",
+                "cyber", "security", "network", "systems", "database", "infra",
+            }
+
+            def _looks_like_person_name(name: str) -> bool:
+                """Return True only if *name* plausibly looks like a human full name.
+
+                Rules (all must pass):
+                  • 2–4 tokens (first + last, optionally middle / suffix)
+                  • Every token is letters-only, length 2-25
+                  • No token is a known job-title / document-meta stop word
+                  • Not a bare placeholder string
+                """
+                _placeholder_values = {
+                    "not found", "n/a", "unknown", "none", "", "name not found",
+                    "candidate name not found",
+                    "extract full name from resume header or contact section",
+                    "copy the candidate's full name exactly as it appears in the resume",
+                    "copy the candidates full name exactly as it appears in the resume",
+                }
+                if name.lower().strip() in _placeholder_values:
+                    return False
+                tokens = name.strip().split()
+                if not (2 <= len(tokens) <= 4):
+                    return False
+                for tok in tokens:
+                    tok_l = tok.lower()
+                    if tok_l in _NAME_STOP_WORDS:
+                        return False
+                    if not re.match(r"^[a-zA-Z]{2,25}$", tok):
+                        return False
+                return True
+
+            def _name_from_filename(fname: str) -> str:
+                """Extract a candidate name from the filename, or return '' if none found.
+
+                Stops at the first stop-word or digit token; requires ≥ 2 name tokens
+                so that single-word job titles (e.g. 'Engineer.pdf') are rejected.
+                """
+                base = os.path.splitext(fname)[0]
+                base = re.sub(r"[\(\)\[\]_\-\.]", " ", base)
+                base = re.sub(r"\s+", " ", base).strip()
+                parts: list[str] = []
+                for word in base.split():
+                    if word.lower() in _NAME_STOP_WORDS or word.isdigit():
+                        break
+                    if re.match(r"^[A-Za-z]{2,25}$", word):
+                        parts.append(word.title())
+                return " ".join(parts) if len(parts) >= 2 else ""
+
+            # ── Resolution logic ──────────────────────────────────────────────────
+            _llm_valid      = _looks_like_person_name(candidate_name)
+            _filename_name  = _name_from_filename(uploaded_file.name)
+            _filename_valid = _looks_like_person_name(_filename_name)
+
+            if _llm_valid:
+                pass                            # LLM passed validation — keep it
+            elif _filename_valid:
+                candidate_name = _filename_name  # LLM failed, filename looks real
             else:
-                # Low on keys: run sequentially with a gap to protect the TPM window
-                try:
-                    highlighted_text, rewritten_text, _, _, _, _, json_str, rewrite_ok = _task_rewrite()
-                except Exception:
-                    highlighted_text = full_text
-                    rewritten_text   = full_text
-                    json_str         = ""
-                    rewrite_ok       = False
+                candidate_name = "Not Found"    # both unreliable
+            # ─────────────────────────────────────────────────────────────────────
 
-                time.sleep(4)   # let per-minute token window partially recover
+            ats_score = ats_scores.get("ATS Match %", 0)
+            edu_score = ats_scores.get("Education Score", 0)
+            exp_score = ats_scores.get("Experience Score", 0)
+            skills_score = ats_scores.get("Skills Score", 0)
+            lang_score = ats_scores.get("Language Score", 0)
+            keyword_score = ats_scores.get("Keyword Score", 0)
+            fmt_score = ats_scores.get("Format Score", format_data.get("format_score", 0))
+            formatted_score = ats_scores.get("Formatted Score", "N/A")
+            fit_summary = ats_scores.get("Final Thoughts", "N/A")
+            language_analysis_full = ats_scores.get("Language Analysis", "N/A")
 
-                ats_result, ats_scores = _task_ats()
+            missing_keywords_raw = ats_scores.get("Missing Keywords", "N/A")
+            missing_skills_raw = ats_scores.get("Missing Skills", "N/A")
+            missing_keywords = [kw.strip() for kw in missing_keywords_raw.split(",") if kw.strip()] if missing_keywords_raw != "N/A" else []
+            missing_skills = [sk.strip() for sk in missing_skills_raw.split(",") if sk.strip()] if missing_skills_raw != "N/A" else []
 
-        # ── Rewrite failure warning — shown once, immediately after processing ──
-        # rewrite_ok=False means all API keys were exhausted and the LLM never ran.
-        # The user would otherwise see their original resume silently presented as
-        # "optimized" with no explanation — this makes the failure explicit.
-        if not rewrite_ok:
-            with tab1:
-                st.warning(
-                    "⚠️ **Resume rewrite unavailable** — API keys are currently exhausted. "
-                    "The original resume is shown below. "
-                    "Download buttons will produce a document based on the original text. "
-                    "Please try again in a few minutes.",
-                    icon=None,
-                )
+            bias_flag = "High Bias" if bias_score > 0.6 else "Fair"
+            ats_flag  = "Low ATS"   if ats_score < 50   else "Good ATS"
 
-        # ✅ Resume Optimization Module — reuse JSON already produced above (0 extra LLM calls)
-        try:
-            optimized_resume_data = extract_resume_json(json_str)
-        except Exception:
-            optimized_resume_data = extract_resume_json("")  # falls back to empty skeleton
+            # Reuse domain already detected inside ats_percentage_score — no extra LLM call
+            domain = ats_scores.get("Resume Domain", "Unknown")
 
-        # ✅ Extract structured ATS values
-        candidate_name = ats_scores.get("Candidate Name", "Not Found")
+            # ✅ Store everything in session state
+            st.session_state.resume_data.append({
+                "Resume Name": uploaded_file.name,
+                "Candidate Name": candidate_name,
+                "ATS Report": ats_result,
+                "ATS Match %": ats_score,
+                "Formatted Score": formatted_score,
+                "Education Score": edu_score,
+                "Experience Score": exp_score,
+                "Skills Score": skills_score,
+                "Language Score": lang_score,
+                "Keyword Score": keyword_score,
+                "Format Score": ats_scores.get("Format Score", 0),
+                "Format Grade": ats_scores.get("Format Grade", "N/A"),
+                "Format Label": ats_scores.get("Format Label", ""),
+                "Format Issues": ats_scores.get("Format Issues", []),
+                "Format Passes": ats_scores.get("Format Passes", []),
+                "Education Analysis": ats_scores.get("Education Analysis", ""),
+                "Experience Analysis": ats_scores.get("Experience Analysis", ""),
+                "Skills Analysis": ats_scores.get("Skills Analysis", ""),
+                "Language Analysis": language_analysis_full,
+                "Keyword Analysis": ats_scores.get("Keyword Analysis", ""),
+                "Format Analysis": ats_scores.get("Format Analysis", ""),
+                "Final Thoughts": fit_summary,
+                "Missing Keywords": missing_keywords,
+                "Missing Skills": missing_skills,
+                "Bias Score (0 = Fair, 1 = Biased)": bias_score,
+                "Bias Status": bias_flag,
+                "Masculine Words": masc_count,
+                "Feminine Words": fem_count,
+                "Detected Masculine Words": detected_masc,
+                "Detected Feminine Words": detected_fem,
+                "Text Preview": full_text[:300] + "...",
+                "Highlighted Text": highlighted_text,
+                "Rewritten Text": rewritten_text,
+                "Optimized Resume Data": optimized_resume_data,
+                "Domain": domain,
+                "Domain Penalty": ats_scores.get("Domain Penalty", 0),
+                "Domain Similarity Score": ats_scores.get("Domain Similarity Score", 1.0),
+                "Resume Domain": ats_scores.get("Resume Domain", domain),
+                "Job Domain": ats_scores.get("Job Domain", "Unknown"),
+            })
 
-        # ── Candidate name resolution (LLM-first, filename as validated fallback) ──
-        #
-        # Design: neither source is blindly trusted. Both are run through the
-        # same _looks_like_person_name() validator before use. LLM always wins
-        # when valid; filename is only used when the LLM result fails validation.
-        #
-        # Fixes:
-        #   1. Job-title filenames (e.g. "mobile_app_developer_resume.pdf") no
-        #      longer override a correct LLM name.
-        #   2. Low character-overlap no longer triggers a blind filename override.
-        #   3. Single-word extractions from either source are rejected.
+            insert_candidate(
+                (
+                    uploaded_file.name,
+                    candidate_name,
+                    ats_score,
+                    edu_score,
+                    exp_score,
+                    skills_score,
+                    lang_score,
+                    keyword_score,
+                    bias_score,
+                    fmt_score,   # ← format_score now saved to DB
+                ),
+                job_title=job_title,
+                job_description=job_description,
+                resume_domain=domain,   # ← pass pre-detected resume domain, never re-detected
+            )
 
-        # Comprehensive set of words that appear in job-title filenames but are
-        # never part of a person's name. Extend as needed.
-        _NAME_STOP_WORDS: set[str] = {
-            # document meta
-            "resume", "cv", "curriculum", "vitae", "updated", "final",
-            "new", "latest", "copy", "draft", "version", "doc",
-            "v1", "v2", "v3", "v4", "v5",
-            "2022", "2023", "2024", "2025", "2026",
-            # seniority / role qualifiers
-            "senior", "junior", "lead", "principal", "staff", "associate",
-            "intern", "entry", "mid", "level",
-            # job-title nouns
-            "developer", "engineer", "designer", "manager", "analyst",
-            "consultant", "architect", "director", "officer", "specialist",
-            "coordinator", "executive", "recruiter", "advisor", "strategist",
-            "scientist", "researcher", "administrator", "technician",
-            # tech-domain prefixes that appear in filenames
-            "mobile", "app", "web", "data", "software", "frontend", "backend",
-            "fullstack", "full", "stack", "cloud", "devops", "qa", "product",
-            "project", "platform", "site", "ui", "ux", "ml", "ai", "it",
-            "cyber", "security", "network", "systems", "database", "infra",
-        }
+            st.session_state.processed_files.add(uploaded_file.name)
 
-        def _looks_like_person_name(name: str) -> bool:
-            """Return True only if *name* plausibly looks like a human full name.
+            # ── Record usage after successful analysis ────────────────────────────
+            _rec_username = st.session_state.get("username")
+            if _rec_username:
+                record_feature_usage(_rec_username, "resume_analyzer")
+            # ─────────────────────────────────────────────────────────────────────
 
-            Rules (all must pass):
-              • 2–4 tokens (first + last, optionally middle / suffix)
-              • Every token is letters-only, length 2-25
-              • No token is a known job-title / document-meta stop word
-              • Not a bare placeholder string
-            """
-            _placeholder_values = {
-                "not found", "n/a", "unknown", "none", "", "name not found",
-                "candidate name not found",
-                "extract full name from resume header or contact section",
-                "copy the candidate's full name exactly as it appears in the resume",
-                "copy the candidates full name exactly as it appears in the resume",
+            # ── Silently email the report + optimised resume to the user ─────────
+            # Runs in a daemon thread so the UI is never blocked.
+            # Generates the PDF and Modern DOCX from data already in memory.
+            try:
+                _email_username  = st.session_state.get("username", "")
+                _email_to        = get_user_email_by_username(_email_username) if _email_username else ""
+                _email_candidate = candidate_name
+                _email_resume_fn = uploaded_file.name
+
+                if _email_to:
+                    # Build both attachments now (in the main thread, data is in scope)
+                    _email_html_report = generate_resume_report_html(
+                        st.session_state.resume_data[-1],
+                        user_location=user_location,
+                    )
+                    _email_pdf_bytes  = html_to_pdf_bytes(_email_html_report)
+                    _email_docx_bytes = generate_modern_docx(optimized_resume_data)
+
+                    threading.Thread(
+                        target=send_analysis_email,
+                        args=(
+                            _email_to,
+                            _email_candidate,
+                            _email_pdf_bytes,
+                            _email_docx_bytes,
+                            _email_resume_fn,
+                        ),
+                        daemon=True,
+                    ).start()
+            except Exception:
+                pass  # Silent — never surface email errors to the user
+            # ─────────────────────────────────────────────────────────────────────
+
+            # ✅ IMPROVED: Smoother success animation with better transitions
+            SUCCESS_HTML = """
+            <style>
+            .success-overlay {
+                position: fixed;
+                top: 0; left: 0;
+                width: 100vw; height: 100vh;
+                background: linear-gradient(135deg, #0b0c10 0%, #1a1c29 100%);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                z-index: 9999;
+                animation: fadeIn 0.5s ease-out;
             }
-            if name.lower().strip() in _placeholder_values:
-                return False
-            tokens = name.strip().split()
-            if not (2 <= len(tokens) <= 4):
-                return False
-            for tok in tokens:
-                tok_l = tok.lower()
-                if tok_l in _NAME_STOP_WORDS:
-                    return False
-                if not re.match(r"^[a-zA-Z]{2,25}$", tok):
-                    return False
-            return True
-
-        def _name_from_filename(fname: str) -> str:
-            """Extract a candidate name from the filename, or return '' if none found.
-
-            Stops at the first stop-word or digit token; requires ≥ 2 name tokens
-            so that single-word job titles (e.g. 'Engineer.pdf') are rejected.
-            """
-            base = os.path.splitext(fname)[0]
-            base = re.sub(r"[\(\)\[\]_\-\.]", " ", base)
-            base = re.sub(r"\s+", " ", base).strip()
-            parts: list[str] = []
-            for word in base.split():
-                if word.lower() in _NAME_STOP_WORDS or word.isdigit():
-                    break
-                if re.match(r"^[A-Za-z]{2,25}$", word):
-                    parts.append(word.title())
-            return " ".join(parts) if len(parts) >= 2 else ""
-
-        # ── Resolution logic ──────────────────────────────────────────────────
-        _llm_valid      = _looks_like_person_name(candidate_name)
-        _filename_name  = _name_from_filename(uploaded_file.name)
-        _filename_valid = _looks_like_person_name(_filename_name)
-
-        if _llm_valid:
-            pass                            # LLM passed validation — keep it
-        elif _filename_valid:
-            candidate_name = _filename_name  # LLM failed, filename looks real
-        else:
-            candidate_name = "Not Found"    # both unreliable
-        # ─────────────────────────────────────────────────────────────────────
-
-        ats_score = ats_scores.get("ATS Match %", 0)
-        edu_score = ats_scores.get("Education Score", 0)
-        exp_score = ats_scores.get("Experience Score", 0)
-        skills_score = ats_scores.get("Skills Score", 0)
-        lang_score = ats_scores.get("Language Score", 0)
-        keyword_score = ats_scores.get("Keyword Score", 0)
-        fmt_score = ats_scores.get("Format Score", format_data.get("format_score", 0))
-        formatted_score = ats_scores.get("Formatted Score", "N/A")
-        fit_summary = ats_scores.get("Final Thoughts", "N/A")
-        language_analysis_full = ats_scores.get("Language Analysis", "N/A")
-
-        missing_keywords_raw = ats_scores.get("Missing Keywords", "N/A")
-        missing_skills_raw = ats_scores.get("Missing Skills", "N/A")
-        missing_keywords = [kw.strip() for kw in missing_keywords_raw.split(",") if kw.strip()] if missing_keywords_raw != "N/A" else []
-        missing_skills = [sk.strip() for sk in missing_skills_raw.split(",") if sk.strip()] if missing_skills_raw != "N/A" else []
-
-        bias_flag = "High Bias" if bias_score > 0.6 else "Fair"
-        ats_flag  = "Low ATS"   if ats_score < 50   else "Good ATS"
-
-        # Reuse domain already detected inside ats_percentage_score — no extra LLM call
-        domain = ats_scores.get("Resume Domain", "Unknown")
-
-        # ✅ Store everything in session state
-        st.session_state.resume_data.append({
-            "Resume Name": uploaded_file.name,
-            "Candidate Name": candidate_name,
-            "ATS Report": ats_result,
-            "ATS Match %": ats_score,
-            "Formatted Score": formatted_score,
-            "Education Score": edu_score,
-            "Experience Score": exp_score,
-            "Skills Score": skills_score,
-            "Language Score": lang_score,
-            "Keyword Score": keyword_score,
-            "Format Score": ats_scores.get("Format Score", 0),
-            "Format Grade": ats_scores.get("Format Grade", "N/A"),
-            "Format Label": ats_scores.get("Format Label", ""),
-            "Format Issues": ats_scores.get("Format Issues", []),
-            "Format Passes": ats_scores.get("Format Passes", []),
-            "Education Analysis": ats_scores.get("Education Analysis", ""),
-            "Experience Analysis": ats_scores.get("Experience Analysis", ""),
-            "Skills Analysis": ats_scores.get("Skills Analysis", ""),
-            "Language Analysis": language_analysis_full,
-            "Keyword Analysis": ats_scores.get("Keyword Analysis", ""),
-            "Format Analysis": ats_scores.get("Format Analysis", ""),
-            "Final Thoughts": fit_summary,
-            "Missing Keywords": missing_keywords,
-            "Missing Skills": missing_skills,
-            "Bias Score (0 = Fair, 1 = Biased)": bias_score,
-            "Bias Status": bias_flag,
-            "Masculine Words": masc_count,
-            "Feminine Words": fem_count,
-            "Detected Masculine Words": detected_masc,
-            "Detected Feminine Words": detected_fem,
-            "Text Preview": full_text[:300] + "...",
-            "Highlighted Text": highlighted_text,
-            "Rewritten Text": rewritten_text,
-            "Optimized Resume Data": optimized_resume_data,
-            "Domain": domain,
-            "Domain Penalty": ats_scores.get("Domain Penalty", 0),
-            "Domain Similarity Score": ats_scores.get("Domain Similarity Score", 1.0),
-            "Resume Domain": ats_scores.get("Resume Domain", domain),
-            "Job Domain": ats_scores.get("Job Domain", "Unknown"),
-        })
-
-        insert_candidate(
-            (
-                uploaded_file.name,
-                candidate_name,
-                ats_score,
-                edu_score,
-                exp_score,
-                skills_score,
-                lang_score,
-                keyword_score,
-                bias_score,
-                fmt_score,   # ← format_score now saved to DB
-            ),
-            job_title=job_title,
-            job_description=job_description,
-            resume_domain=domain,   # ← pass pre-detected resume domain, never re-detected
-        )
-
-        st.session_state.processed_files.add(uploaded_file.name)
-
-        # ── Record usage after successful analysis ────────────────────────────
-        _rec_username = st.session_state.get("username")
-        if _rec_username:
-            record_feature_usage(_rec_username, "resume_analyzer")
-        # ─────────────────────────────────────────────────────────────────────
-
-        # ── Silently email the report + optimised resume to the user ─────────
-        # Runs in a daemon thread so the UI is never blocked.
-        # Generates the PDF and Modern DOCX from data already in memory.
-        try:
-            _email_username  = st.session_state.get("username", "")
-            _email_to        = get_user_email_by_username(_email_username) if _email_username else ""
-            _email_candidate = candidate_name
-            _email_resume_fn = uploaded_file.name
-
-            if _email_to:
-                # Build both attachments now (in the main thread, data is in scope)
-                _email_html_report = generate_resume_report_html(
-                    st.session_state.resume_data[-1],
-                    user_location=user_location,
-                )
-                _email_pdf_bytes  = html_to_pdf_bytes(_email_html_report)
-                _email_docx_bytes = generate_modern_docx(optimized_resume_data)
-
-                threading.Thread(
-                    target=send_analysis_email,
-                    args=(
-                        _email_to,
-                        _email_candidate,
-                        _email_pdf_bytes,
-                        _email_docx_bytes,
-                        _email_resume_fn,
-                    ),
-                    daemon=True,
-                ).start()
-        except Exception:
-            pass  # Silent — never surface email errors to the user
-        # ─────────────────────────────────────────────────────────────────────
-
-        # ✅ IMPROVED: Smoother success animation with better transitions
-        SUCCESS_HTML = """
-        <style>
-        .success-overlay {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            background: linear-gradient(135deg, #0b0c10 0%, #1a1c29 100%);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            animation: fadeIn 0.5s ease-out;
-        }
         
-        @keyframes fadeIn {
-            0% { opacity: 0; }
-            100% { opacity: 1; }
-        }
-        
-        .success-circle {
-            width: 140px;
-            height: 140px;
-            border: 3px solid #00bfff;
-            border-radius: 50%;
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: radial-gradient(circle, rgba(0,191,255,0.1) 0%, rgba(0,191,255,0.05) 50%, transparent 100%);
-            animation: successPulse 2s ease-in-out infinite;
-        }
-        
-        @keyframes successPulse {
-            0%, 100% { 
-                transform: scale(1);
-                box-shadow: 0 0 20px rgba(0,191,255,0.3);
+            @keyframes fadeIn {
+                0% { opacity: 0; }
+                100% { opacity: 1; }
             }
-            50% { 
-                transform: scale(1.05);
-                box-shadow: 0 0 30px rgba(0,191,255,0.6);
+        
+            .success-circle {
+                width: 140px;
+                height: 140px;
+                border: 3px solid #00bfff;
+                border-radius: 50%;
+                position: relative;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: radial-gradient(circle, rgba(0,191,255,0.1) 0%, rgba(0,191,255,0.05) 50%, transparent 100%);
+                animation: successPulse 2s ease-in-out infinite;
             }
-        }
         
-        .success-checkmark {
-            font-size: 48px;
-            color: #00ff7f;
-            animation: checkmarkPop 0.8s ease-out;
-        }
+            @keyframes successPulse {
+                0%, 100% { 
+                    transform: scale(1);
+                    box-shadow: 0 0 20px rgba(0,191,255,0.3);
+                }
+                50% { 
+                    transform: scale(1.05);
+                    box-shadow: 0 0 30px rgba(0,191,255,0.6);
+                }
+            }
         
-        @keyframes checkmarkPop {
-            0% { transform: scale(0) rotate(-45deg); opacity: 0; }
-            50% { transform: scale(1.2) rotate(-10deg); opacity: 0.8; }
-            100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
+            .success-checkmark {
+                font-size: 48px;
+                color: #00ff7f;
+                animation: checkmarkPop 0.8s ease-out;
+            }
         
-        .success-text {
-            margin-top: 25px;
-            font-family: 'Orbitron', 'Segoe UI', sans-serif;
-            font-size: 20px;
-            font-weight: 600;
-            color: #00bfff;
-            text-shadow: 0 0 10px rgba(0,191,255,0.5);
-            animation: textSlideUp 0.8s ease-out 0.3s both;
-        }
+            @keyframes checkmarkPop {
+                0% { transform: scale(0) rotate(-45deg); opacity: 0; }
+                50% { transform: scale(1.2) rotate(-10deg); opacity: 0.8; }
+                100% { transform: scale(1) rotate(0deg); opacity: 1; }
+            }
         
-        @keyframes textSlideUp {
-            0% { transform: translateY(20px); opacity: 0; }
-            100% { transform: translateY(0); opacity: 1; }
-        }
+            .success-text {
+                margin-top: 25px;
+                font-family: 'Orbitron', 'Segoe UI', sans-serif;
+                font-size: 20px;
+                font-weight: 600;
+                color: #00bfff;
+                text-shadow: 0 0 10px rgba(0,191,255,0.5);
+                animation: textSlideUp 0.8s ease-out 0.3s both;
+            }
         
-        .success-subtitle {
-            margin-top: 10px;
-            font-size: 14px;
-            color: #8e9aaf;
-            animation: textSlideUp 0.8s ease-out 0.5s both;
-        }
-        </style>
+            @keyframes textSlideUp {
+                0% { transform: translateY(20px); opacity: 0; }
+                100% { transform: translateY(0); opacity: 1; }
+            }
         
-        <div class="success-overlay">
-            <div class="success-circle">
-                <div class="success-checkmark">✓</div>
+            .success-subtitle {
+                margin-top: 10px;
+                font-size: 14px;
+                color: #8e9aaf;
+                animation: textSlideUp 0.8s ease-out 0.5s both;
+            }
+            </style>
+        
+            <div class="success-overlay">
+                <div class="success-circle">
+                    <div class="success-checkmark">✓</div>
+                </div>
+                <div class="success-text">Scan Complete!</div>
+                <div class="success-subtitle">Resume analysis ready</div>
             </div>
-            <div class="success-text">Scan Complete!</div>
-            <div class="success-subtitle">Resume analysis ready</div>
-        </div>
-        """
+            """
         
-        # Clear scanner and show success animation
-        scanner_placeholder.empty()
-        success_placeholder = st.empty()
-        success_placeholder.markdown(SUCCESS_HTML, unsafe_allow_html=True)
+            # Clear scanner and show success animation
+            scanner_placeholder.empty()
+            success_placeholder = st.empty()
+            success_placeholder.markdown(SUCCESS_HTML, unsafe_allow_html=True)
 
-        # ⏳ Shorter delay for better UX, then clear and rerun
-        time.sleep(3)
-        success_placeholder.empty()
-        st.rerun()
+            # ⏳ Shorter delay for better UX, then clear and rerun
+            time.sleep(3)
+            success_placeholder.empty()
+            st.rerun()
 
-    # ✅ Optional vectorstore setup
-    if all_text:
-        st.session_state.vectorstore = setup_vectorstore(all_text)
-        st.session_state.chain = create_chain(st.session_state.vectorstore)
+        # ✅ Optional vectorstore setup
+        if all_text:
+            st.session_state.vectorstore = setup_vectorstore(all_text)
+            st.session_state.chain = create_chain(st.session_state.vectorstore)
 
-# 🔄 Developer Reset Button
+    # 🔄 Developer Reset Button
 with tab1:
     if st.button("🔄 Refresh view"):
         st.session_state.processed_files.clear()
@@ -6467,6 +6469,32 @@ with tab1:
 
                     optimized_data = resume.get("Optimized Resume Data", {})
                     base_name = resume['Resume Name'].split('.')[0]
+
+                    # ── Save this analysis for Resume Builder autofill (persists across refresh/login) ──
+                    _autofill_key = f"autofill_saved_{resume['Resume Name']}"
+                    if st.session_state.get("username"):
+                        if st.session_state.get(_autofill_key):
+                            st.success("💾 Saved — this resume is available for autofill in the Resume Builder tab, even after a refresh.")
+                        else:
+                            if st.button(
+                                "💾 Save for Resume Builder autofill",
+                                key=f"save_autofill_{resume['Resume Name']}",
+                                help="Stores the structured data from this analysis so you can one-click autofill the Resume Builder later — persists across page refreshes.",
+                                use_container_width=True,
+                            ):
+                                _saved_id = save_resume_for_autofill(
+                                    st.session_state.username,
+                                    resume['Resume Name'],
+                                    resume.get('Candidate Name', ''),
+                                    optimized_data,
+                                )
+                                if _saved_id:
+                                    st.session_state[_autofill_key] = True
+                                    st.rerun()
+                                else:
+                                    st.error("Couldn't save this resume for autofill — please try again.")
+                    else:
+                        st.caption("🔒 Log in to save this resume for one-click autofill in the Resume Builder — saved resumes persist across page refreshes.")
 
                     dl_col1, dl_col2, dl_col3 = st.columns(3)
 
@@ -7227,6 +7255,147 @@ score_skills_section.__module__     = __name__
 import streamlit as st
 import time
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 🔄 TAB 1 → TAB 2 BRIDGE — Autofill Resume Builder from an analysed resume
+# ══════════════════════════════════════════════════════════════════════════════
+# `st.session_state.resume_data` is the list Tab 1 (resume analysis) appends to —
+# each entry has "Optimized Resume Data" (the structured JSON from
+# resume_engine.extract_resume_json: contact/summary/skills/experience/
+# education/projects/certifications). This maps that structure onto the
+# Resume Builder's flat session_state fields and bumps `form_key_counter` so
+# every text_input/text_area (which are keyed by fk) remounts with the new
+# values — the same trick the "Clear All" button already relies on.
+def _autofill_certifications(raw_certs):
+    entries = []
+    for c in raw_certs or []:
+        if isinstance(c, dict):
+            issuer = (c.get("issuer") or "").strip()
+            entries.append({
+                "name":        c.get("name", "") or "",
+                "link":        c.get("link", "") or c.get("url", "") or "",
+                "duration":    c.get("duration", "") or "",
+                "description": f"Issued by {issuer}" if issuer else "",
+            })
+        elif isinstance(c, str) and c.strip():
+            entries.append({"name": c.strip(), "link": "", "duration": "", "description": ""})
+    return entries
+
+
+def _autofill_experience(raw_exp):
+    entries = []
+    for exp in raw_exp or []:
+        bullets = [b for b in (exp.get("bullets") or []) if b and str(b).strip()]
+        desc = "\n".join(f"• {b}" for b in bullets) if bullets else (exp.get("description", "") or "")
+        entries.append({
+            "title":       exp.get("role", "") or "",
+            "company":     exp.get("company", "") or "",
+            "duration":    exp.get("duration", "") or "",
+            "description": desc,
+        })
+    return entries
+
+
+def _autofill_education(raw_edu):
+    entries = []
+    for edu in raw_edu or []:
+        details = edu.get("cgpa", "") or ""
+        bullets = [b for b in (edu.get("bullets") or []) if b and str(b).strip()]
+        if bullets:
+            extra = " | ".join(bullets)
+            details = f"{details} | {extra}" if details else extra
+        entries.append({
+            "degree":      edu.get("degree", "") or "",
+            "institution": edu.get("institution", "") or "",
+            "year":        edu.get("year", "") or "",
+            "details":     details,
+        })
+    return entries
+
+
+def _autofill_projects(raw_proj):
+    entries, links = [], []
+    for proj in raw_proj or []:
+        bullets = [b for b in (proj.get("bullets") or []) if b and str(b).strip()]
+        desc = "\n".join(f"• {b}" for b in bullets) if bullets else (proj.get("description", "") or "")
+        entries.append({
+            "title":       proj.get("name", "") or "",
+            "tech":        proj.get("tech_stack", "") or "",
+            "duration":    proj.get("duration", "") or "",
+            "description": desc,
+        })
+        links.append(proj.get("url", "") or "")
+    return entries, links
+
+
+def _autofill_summary_to_bullets(summary_text: str) -> str:
+    """
+    Tab-1 analysis stores the professional summary as one flowing paragraph
+    (its newlines are collapsed to spaces upstream in extract_resume_json).
+    Dumped straight into the Builder's summary box that reads as one dense
+    wall of text. Split it back into sentences and re-join as '• ' bullet
+    lines instead — the Builder's _fmt_desc() renderer already turns lines
+    starting with '• ' into a proper bullet list wherever summary is shown.
+    """
+    import re as _re
+    if not summary_text or not summary_text.strip():
+        return ""
+    text = _re.sub(r'\s+', ' ', summary_text).strip()
+    # Split on sentence-ending punctuation followed by a new sentence start
+    # (capital letter, digit, or opening quote) — avoids splitting on
+    # abbreviations/decimals like "B.Tech" or "3.5 GPA".
+    sentences = _re.split(r'(?<=[.!?])\s+(?=[A-Z0-9"\'])', text)
+    sentences = [s.strip() for s in sentences if s and s.strip()]
+    if len(sentences) <= 1:
+        return text  # only one sentence — nothing meaningful to bullet-ise
+    return "\n".join(f"• {s}" for s in sentences)
+
+
+def apply_autofill_to_builder(optimized_data: dict):
+    """Push a Tab-1 'Optimized Resume Data' dict into the builder's session_state."""
+    opt = optimized_data or {}
+    ct = opt.get("contact", {}) or {}
+
+    st.session_state["name"]      = ct.get("name", "") or ""
+    st.session_state["email"]     = ct.get("email", "") or ""
+    st.session_state["phone"]     = ct.get("phone", "") or ""
+    st.session_state["location"]  = ct.get("location", "") or ""
+    st.session_state["linkedin"]  = ct.get("linkedin", "") or ""
+    st.session_state["portfolio"] = ct.get("portfolio", "") or ct.get("github", "") or ""
+    st.session_state["job_title"] = ct.get("title", "") or st.session_state.get("job_title", "") or ""
+    st.session_state["summary"]   = _autofill_summary_to_bullets(opt.get("summary", "") or "")
+
+    st.session_state["skills"]     = ", ".join([s for s in (opt.get("skills") or []) if s])
+    st.session_state["Softskills"] = ", ".join([s for s in (opt.get("soft_skills") or []) if s])
+    st.session_state["languages"]  = ", ".join([s for s in (opt.get("languages") or []) if s])
+    st.session_state["interests"]  = ", ".join([s for s in (opt.get("interests") or []) if s])
+
+    st.session_state["experience_entries"] = _autofill_experience(opt.get("experience")) or [
+        {"title": "", "company": "", "duration": "", "description": ""}
+    ]
+    st.session_state["education_entries"] = _autofill_education(opt.get("education")) or [
+        {"degree": "", "institution": "", "year": "", "details": ""}
+    ]
+    _proj_entries, _proj_links = _autofill_projects(opt.get("projects"))
+    st.session_state["project_entries"] = _proj_entries or [
+        {"title": "", "tech": "", "duration": "", "description": ""}
+    ]
+    st.session_state["project_links"] = _proj_links
+    st.session_state["certificate_links"] = _autofill_certifications(opt.get("certifications")) or [
+        {"name": "", "link": "", "duration": "", "description": ""}
+    ]
+
+    # Force every widget to remount with the freshly-set values (same mechanism
+    # the "Clear All" button uses — widgets are keyed by this counter).
+    st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
+
+    # Any previously generated output is now stale — drop it so the download
+    # section doesn't show an out-of-date resume/cover letter.
+    for _key in ("generated_html", "pdf_resume_bytes", "ai_output",
+                 "cover_letter", "cover_letter_html", "show_template_preview"):
+        st.session_state.pop(_key, None)
+
+
 # Tab setup (assuming this is within a tab2 context)
 with tab2:
     st.session_state.active_tab = "Resume Builder"
@@ -7588,6 +7757,106 @@ with tab2:
     st.session_state.setdefault("project_links", [])
     st.session_state.setdefault("certificate_links", [{"name": "", "link": "", "duration": "", "description": ""}])
     st.session_state.setdefault("form_key_counter", 0)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 🔄 AUTOFILL FROM RESUME ANALYSIS (Tab 1 → Tab 2 bridge)
+    # ─────────────────────────────────────────────────────────────────────────
+    # Two sources, combined into one pick-list:
+    #   💾 saved profiles  — persisted in Postgres via "Save for autofill" on
+    #                        Tab 1; survive a page refresh or a fresh login.
+    #   🕓 session-only     — analysed this session but not saved; convenient,
+    #                        but gone the moment the page is refreshed.
+    _username = st.session_state.get("username")
+    _saved_profiles = load_saved_resumes_for_autofill(_username) if _username else []
+    _session_resumes = st.session_state.get("resume_data", [])
+
+    _autofill_choices = []
+    for p in _saved_profiles:
+        _autofill_choices.append({
+            "label": f"💾 {p.get('candidate_name') or 'Unknown'} — {p.get('resume_name') or 'Resume'}  (saved {p.get('time', '')})",
+            "data":  p.get("optimized_data", {}) or {},
+            "saved": True,
+            "id":    p["id"],
+        })
+    for r in _session_resumes:
+        _autofill_choices.append({
+            "label": f"🕓 {r.get('Candidate Name') or 'Unknown'} — {r.get('Resume Name', 'Resume')}  (this session only)",
+            "data":  r.get("Optimized Resume Data", {}) or {},
+            "saved": False,
+            "id":    None,
+        })
+
+    if _autofill_choices:
+        _has_existing_data = bool(
+            st.session_state.get("name") or st.session_state.get("summary")
+            or any(e.get("company") or e.get("title") for e in st.session_state.get("experience_entries", []))
+        )
+        with st.expander(
+            "🔄 Autofill from a resume you analysed in Tab 1",
+            expanded=not _has_existing_data,
+        ):
+            st.caption(
+                "Pulls contact info, summary, skills, experience, education, projects and "
+                "certifications straight from a resume you already analysed — nothing changes "
+                "until you click Autofill, and you can still edit every field afterwards. "
+                "💾 saved resumes stick around after a page refresh; 🕓 session-only resumes "
+                "don't — save them from Tab 1 if you want them to last."
+            )
+            _pick_col, _btn_col, _del_col = st.columns([3, 1, 0.6])
+            with _pick_col:
+                _chosen_idx = st.selectbox(
+                    "Which analysed resume?",
+                    options=list(range(len(_autofill_choices))),
+                    format_func=lambda i: _autofill_choices[i]["label"],
+                    index=0,
+                    key="autofill_resume_pick",
+                )
+            _chosen = _autofill_choices[_chosen_idx]
+            with _btn_col:
+                st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+                if st.button("⬇️ Autofill", key="autofill_builder_btn", use_container_width=True):
+                    if _has_existing_data:
+                        st.session_state["_autofill_pending_choice"] = _chosen_idx
+                    else:
+                        apply_autofill_to_builder(_chosen["data"])
+                        st.session_state["_autofill_done_msg"] = True
+                    st.rerun()
+            with _del_col:
+                if _chosen["saved"]:
+                    st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+                    if st.button("🗑️", key="autofill_delete_btn", help="Remove this saved resume", use_container_width=True):
+                        delete_saved_resume_for_autofill(_username, _chosen["id"])
+                        st.rerun()
+
+        # Builder already has data — confirm before overwriting it, so a stray
+        # click can't silently wipe out work someone typed in by hand.
+        _pending_idx = st.session_state.get("_autofill_pending_choice")
+        if _pending_idx is not None:
+            if _pending_idx < len(_autofill_choices):
+                st.markdown(
+                    "<div class='confirm-warn'>⚠️ <strong>This will overwrite the fields currently "
+                    "in the builder</strong> with data from the selected analysed resume. "
+                    "This cannot be undone.</div>",
+                    unsafe_allow_html=True,
+                )
+                _ac1, _ac2 = st.columns([1, 1])
+                with _ac1:
+                    if st.button("✅ Yes, autofill", key="autofill_confirm_yes", use_container_width=True):
+                        apply_autofill_to_builder(_autofill_choices[_pending_idx]["data"])
+                        st.session_state["_autofill_done_msg"] = True
+                        st.session_state.pop("_autofill_pending_choice", None)
+                        st.rerun()
+                with _ac2:
+                    if st.button("❌ Cancel", key="autofill_confirm_no", use_container_width=True):
+                        st.session_state.pop("_autofill_pending_choice", None)
+                        st.rerun()
+            else:
+                st.session_state.pop("_autofill_pending_choice", None)
+    elif not _username:
+        st.caption("🔒 Log in and analyse a resume in Tab 1 to unlock one-click autofill here.")
+
+    if st.session_state.pop("_autofill_done_msg", False):
+        st.success("✅ Builder filled in from your analysed resume — review the fields below and edit anything before generating.")
 
     # ─────────────────────────────────────────────────────────────────────────
     # GAMIFIED SIDEBAR
@@ -18076,10 +18345,3 @@ if tab5:
 			<p>Last updated: {}</p>
 		</div>
 		""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
-
-
-
-
-
-
-
