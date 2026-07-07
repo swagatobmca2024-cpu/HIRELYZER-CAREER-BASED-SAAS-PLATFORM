@@ -6234,9 +6234,21 @@ with tab1:
 
                 st.divider()
 
-                detail_tab1, detail_tab2 = st.tabs(["Bias Analysis", "Rewritten Resume"])
+                # NOTE: st.tabs() was replaced with a keyed st.radio() here.
+                # st.tabs() has no `key` param, so when it's created fresh on every
+                # loop iteration (one per uploaded resume) Streamlit can't reliably
+                # tell "tab 1 for resume A" apart from "tab 1 for resume B" across
+                # reruns -- this is what caused content to bleed between/below tabs
+                # after any interaction. st.radio() with a unique key fixes that.
+                detail_view = st.radio(
+                    "View",
+                    ["Bias Analysis", "Rewritten Resume"],
+                    horizontal=True,
+                    key=f"detail_view_{resume['Resume Name']}",
+                    label_visibility="collapsed",
+                )
 
-                with detail_tab1:
+                if detail_view == "Bias Analysis":
                     st.markdown("""
                     <div style="display:flex;align-items:center;gap:8px;margin:12px 0 6px;">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -6277,7 +6289,7 @@ with tab1:
                         else:
                             st.info("No feminine words detected.")
 
-                with detail_tab2:
+                if detail_view == "Rewritten Resume":
                     st.markdown("""
                     <div style="display:flex;align-items:center;gap:8px;margin:12px 0 6px;">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
