@@ -1,9 +1,9 @@
-streamlit
-streamlit-autorefresh
-streamlit-pdf-viewer
+streamlit==1.51.0
+streamlit-autorefresh==1.0.1
+streamlit-pdf-viewer==0.0.22
 torch
 beautifulsoup4
-streamlit-option-menu
+streamlit-option-menu==0.4.0
 numpy
 pillow
 dnspython
