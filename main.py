@@ -63,6 +63,8 @@ from user_login import (
     cleanup_expired_login_tokens, check_and_gate_feature,
     record_feature_usage, get_usage_count_last_hour, check_brute_force,
     get_user_email_by_username, send_analysis_email,
+    save_resume_for_autofill, load_saved_resumes_for_autofill,
+    delete_saved_resume_for_autofill,
 )
 
 from resume_processor import (
@@ -6468,6 +6470,32 @@ with tab1:
                     optimized_data = resume.get("Optimized Resume Data", {})
                     base_name = resume['Resume Name'].split('.')[0]
 
+                    # ── Save this analysis for Resume Builder autofill (persists across refresh/login) ──
+                    _autofill_key = f"autofill_saved_{resume['Resume Name']}"
+                    if st.session_state.get("username"):
+                        if st.session_state.get(_autofill_key):
+                            st.success("💾 Saved — this resume is available for autofill in the Resume Builder tab, even after a refresh.")
+                        else:
+                            if st.button(
+                                "💾 Save for Resume Builder autofill",
+                                key=f"save_autofill_{resume['Resume Name']}",
+                                help="Stores the structured data from this analysis so you can one-click autofill the Resume Builder later — persists across page refreshes.",
+                                use_container_width=True,
+                            ):
+                                _saved_id = save_resume_for_autofill(
+                                    st.session_state.username,
+                                    resume['Resume Name'],
+                                    resume.get('Candidate Name', ''),
+                                    optimized_data,
+                                )
+                                if _saved_id:
+                                    st.session_state[_autofill_key] = True
+                                    st.rerun()
+                                else:
+                                    st.error("Couldn't save this resume for autofill — please try again.")
+                    else:
+                        st.caption("🔒 Log in to save this resume for one-click autofill in the Resume Builder — saved resumes persist across page refreshes.")
+
                     dl_col1, dl_col2, dl_col3 = st.columns(3)
 
                     with dl_col1:
@@ -7227,6 +7255,147 @@ score_skills_section.__module__     = __name__
 import streamlit as st
 import time
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 🔄 TAB 1 → TAB 2 BRIDGE — Autofill Resume Builder from an analysed resume
+# ══════════════════════════════════════════════════════════════════════════════
+# `st.session_state.resume_data` is the list Tab 1 (resume analysis) appends to —
+# each entry has "Optimized Resume Data" (the structured JSON from
+# resume_engine.extract_resume_json: contact/summary/skills/experience/
+# education/projects/certifications). This maps that structure onto the
+# Resume Builder's flat session_state fields and bumps `form_key_counter` so
+# every text_input/text_area (which are keyed by fk) remounts with the new
+# values — the same trick the "Clear All" button already relies on.
+def _autofill_certifications(raw_certs):
+    entries = []
+    for c in raw_certs or []:
+        if isinstance(c, dict):
+            issuer = (c.get("issuer") or "").strip()
+            entries.append({
+                "name":        c.get("name", "") or "",
+                "link":        c.get("link", "") or c.get("url", "") or "",
+                "duration":    c.get("duration", "") or "",
+                "description": f"Issued by {issuer}" if issuer else "",
+            })
+        elif isinstance(c, str) and c.strip():
+            entries.append({"name": c.strip(), "link": "", "duration": "", "description": ""})
+    return entries
+
+
+def _autofill_experience(raw_exp):
+    entries = []
+    for exp in raw_exp or []:
+        bullets = [b for b in (exp.get("bullets") or []) if b and str(b).strip()]
+        desc = "\n".join(f"• {b}" for b in bullets) if bullets else (exp.get("description", "") or "")
+        entries.append({
+            "title":       exp.get("role", "") or "",
+            "company":     exp.get("company", "") or "",
+            "duration":    exp.get("duration", "") or "",
+            "description": desc,
+        })
+    return entries
+
+
+def _autofill_education(raw_edu):
+    entries = []
+    for edu in raw_edu or []:
+        details = edu.get("cgpa", "") or ""
+        bullets = [b for b in (edu.get("bullets") or []) if b and str(b).strip()]
+        if bullets:
+            extra = " | ".join(bullets)
+            details = f"{details} | {extra}" if details else extra
+        entries.append({
+            "degree":      edu.get("degree", "") or "",
+            "institution": edu.get("institution", "") or "",
+            "year":        edu.get("year", "") or "",
+            "details":     details,
+        })
+    return entries
+
+
+def _autofill_projects(raw_proj):
+    entries, links = [], []
+    for proj in raw_proj or []:
+        bullets = [b for b in (proj.get("bullets") or []) if b and str(b).strip()]
+        desc = "\n".join(f"• {b}" for b in bullets) if bullets else (proj.get("description", "") or "")
+        entries.append({
+            "title":       proj.get("name", "") or "",
+            "tech":        proj.get("tech_stack", "") or "",
+            "duration":    proj.get("duration", "") or "",
+            "description": desc,
+        })
+        links.append(proj.get("url", "") or "")
+    return entries, links
+
+
+def _autofill_summary_to_bullets(summary_text: str) -> str:
+    """
+    Tab-1 analysis stores the professional summary as one flowing paragraph
+    (its newlines are collapsed to spaces upstream in extract_resume_json).
+    Dumped straight into the Builder's summary box that reads as one dense
+    wall of text. Split it back into sentences and re-join as '• ' bullet
+    lines instead — the Builder's _fmt_desc() renderer already turns lines
+    starting with '• ' into a proper bullet list wherever summary is shown.
+    """
+    import re as _re
+    if not summary_text or not summary_text.strip():
+        return ""
+    text = _re.sub(r'\s+', ' ', summary_text).strip()
+    # Split on sentence-ending punctuation followed by a new sentence start
+    # (capital letter, digit, or opening quote) — avoids splitting on
+    # abbreviations/decimals like "B.Tech" or "3.5 GPA".
+    sentences = _re.split(r'(?<=[.!?])\s+(?=[A-Z0-9"\'])', text)
+    sentences = [s.strip() for s in sentences if s and s.strip()]
+    if len(sentences) <= 1:
+        return text  # only one sentence — nothing meaningful to bullet-ise
+    return "\n".join(f"• {s}" for s in sentences)
+
+
+def apply_autofill_to_builder(optimized_data: dict):
+    """Push a Tab-1 'Optimized Resume Data' dict into the builder's session_state."""
+    opt = optimized_data or {}
+    ct = opt.get("contact", {}) or {}
+
+    st.session_state["name"]      = ct.get("name", "") or ""
+    st.session_state["email"]     = ct.get("email", "") or ""
+    st.session_state["phone"]     = ct.get("phone", "") or ""
+    st.session_state["location"]  = ct.get("location", "") or ""
+    st.session_state["linkedin"]  = ct.get("linkedin", "") or ""
+    st.session_state["portfolio"] = ct.get("portfolio", "") or ct.get("github", "") or ""
+    st.session_state["job_title"] = ct.get("title", "") or st.session_state.get("job_title", "") or ""
+    st.session_state["summary"]   = _autofill_summary_to_bullets(opt.get("summary", "") or "")
+
+    st.session_state["skills"]     = ", ".join([s for s in (opt.get("skills") or []) if s])
+    st.session_state["Softskills"] = ", ".join([s for s in (opt.get("soft_skills") or []) if s])
+    st.session_state["languages"]  = ", ".join([s for s in (opt.get("languages") or []) if s])
+    st.session_state["interests"]  = ", ".join([s for s in (opt.get("interests") or []) if s])
+
+    st.session_state["experience_entries"] = _autofill_experience(opt.get("experience")) or [
+        {"title": "", "company": "", "duration": "", "description": ""}
+    ]
+    st.session_state["education_entries"] = _autofill_education(opt.get("education")) or [
+        {"degree": "", "institution": "", "year": "", "details": ""}
+    ]
+    _proj_entries, _proj_links = _autofill_projects(opt.get("projects"))
+    st.session_state["project_entries"] = _proj_entries or [
+        {"title": "", "tech": "", "duration": "", "description": ""}
+    ]
+    st.session_state["project_links"] = _proj_links
+    st.session_state["certificate_links"] = _autofill_certifications(opt.get("certifications")) or [
+        {"name": "", "link": "", "duration": "", "description": ""}
+    ]
+
+    # Force every widget to remount with the freshly-set values (same mechanism
+    # the "Clear All" button uses — widgets are keyed by this counter).
+    st.session_state["form_key_counter"] = st.session_state.get("form_key_counter", 0) + 1
+
+    # Any previously generated output is now stale — drop it so the download
+    # section doesn't show an out-of-date resume/cover letter.
+    for _key in ("generated_html", "pdf_resume_bytes", "ai_output",
+                 "cover_letter", "cover_letter_html", "show_template_preview"):
+        st.session_state.pop(_key, None)
+
+
 # Tab setup (assuming this is within a tab2 context)
 with tab2:
     st.session_state.active_tab = "Resume Builder"
@@ -7588,6 +7757,106 @@ with tab2:
     st.session_state.setdefault("project_links", [])
     st.session_state.setdefault("certificate_links", [{"name": "", "link": "", "duration": "", "description": ""}])
     st.session_state.setdefault("form_key_counter", 0)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 🔄 AUTOFILL FROM RESUME ANALYSIS (Tab 1 → Tab 2 bridge)
+    # ─────────────────────────────────────────────────────────────────────────
+    # Two sources, combined into one pick-list:
+    #   💾 saved profiles  — persisted in Postgres via "Save for autofill" on
+    #                        Tab 1; survive a page refresh or a fresh login.
+    #   🕓 session-only     — analysed this session but not saved; convenient,
+    #                        but gone the moment the page is refreshed.
+    _username = st.session_state.get("username")
+    _saved_profiles = load_saved_resumes_for_autofill(_username) if _username else []
+    _session_resumes = st.session_state.get("resume_data", [])
+
+    _autofill_choices = []
+    for p in _saved_profiles:
+        _autofill_choices.append({
+            "label": f"💾 {p.get('candidate_name') or 'Unknown'} — {p.get('resume_name') or 'Resume'}  (saved {p.get('time', '')})",
+            "data":  p.get("optimized_data", {}) or {},
+            "saved": True,
+            "id":    p["id"],
+        })
+    for r in _session_resumes:
+        _autofill_choices.append({
+            "label": f"🕓 {r.get('Candidate Name') or 'Unknown'} — {r.get('Resume Name', 'Resume')}  (this session only)",
+            "data":  r.get("Optimized Resume Data", {}) or {},
+            "saved": False,
+            "id":    None,
+        })
+
+    if _autofill_choices:
+        _has_existing_data = bool(
+            st.session_state.get("name") or st.session_state.get("summary")
+            or any(e.get("company") or e.get("title") for e in st.session_state.get("experience_entries", []))
+        )
+        with st.expander(
+            "🔄 Autofill from a resume you analysed in Tab 1",
+            expanded=not _has_existing_data,
+        ):
+            st.caption(
+                "Pulls contact info, summary, skills, experience, education, projects and "
+                "certifications straight from a resume you already analysed — nothing changes "
+                "until you click Autofill, and you can still edit every field afterwards. "
+                "💾 saved resumes stick around after a page refresh; 🕓 session-only resumes "
+                "don't — save them from Tab 1 if you want them to last."
+            )
+            _pick_col, _btn_col, _del_col = st.columns([3, 1, 0.6])
+            with _pick_col:
+                _chosen_idx = st.selectbox(
+                    "Which analysed resume?",
+                    options=list(range(len(_autofill_choices))),
+                    format_func=lambda i: _autofill_choices[i]["label"],
+                    index=0,
+                    key="autofill_resume_pick",
+                )
+            _chosen = _autofill_choices[_chosen_idx]
+            with _btn_col:
+                st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+                if st.button("⬇️ Autofill", key="autofill_builder_btn", use_container_width=True):
+                    if _has_existing_data:
+                        st.session_state["_autofill_pending_choice"] = _chosen_idx
+                    else:
+                        apply_autofill_to_builder(_chosen["data"])
+                        st.session_state["_autofill_done_msg"] = True
+                    st.rerun()
+            with _del_col:
+                if _chosen["saved"]:
+                    st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
+                    if st.button("🗑️", key="autofill_delete_btn", help="Remove this saved resume", use_container_width=True):
+                        delete_saved_resume_for_autofill(_username, _chosen["id"])
+                        st.rerun()
+
+        # Builder already has data — confirm before overwriting it, so a stray
+        # click can't silently wipe out work someone typed in by hand.
+        _pending_idx = st.session_state.get("_autofill_pending_choice")
+        if _pending_idx is not None:
+            if _pending_idx < len(_autofill_choices):
+                st.markdown(
+                    "<div class='confirm-warn'>⚠️ <strong>This will overwrite the fields currently "
+                    "in the builder</strong> with data from the selected analysed resume. "
+                    "This cannot be undone.</div>",
+                    unsafe_allow_html=True,
+                )
+                _ac1, _ac2 = st.columns([1, 1])
+                with _ac1:
+                    if st.button("✅ Yes, autofill", key="autofill_confirm_yes", use_container_width=True):
+                        apply_autofill_to_builder(_autofill_choices[_pending_idx]["data"])
+                        st.session_state["_autofill_done_msg"] = True
+                        st.session_state.pop("_autofill_pending_choice", None)
+                        st.rerun()
+                with _ac2:
+                    if st.button("❌ Cancel", key="autofill_confirm_no", use_container_width=True):
+                        st.session_state.pop("_autofill_pending_choice", None)
+                        st.rerun()
+            else:
+                st.session_state.pop("_autofill_pending_choice", None)
+    elif not _username:
+        st.caption("🔒 Log in and analyse a resume in Tab 1 to unlock one-click autofill here.")
+
+    if st.session_state.pop("_autofill_done_msg", False):
+        st.success("✅ Builder filled in from your analysed resume — review the fields below and edit anything before generating.")
 
     # ─────────────────────────────────────────────────────────────────────────
     # GAMIFIED SIDEBAR
