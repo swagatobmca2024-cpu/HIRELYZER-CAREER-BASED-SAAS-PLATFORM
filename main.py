@@ -4821,9 +4821,14 @@ with tab1:
                 st.subheader(f"📄 Original Resume Preview: {uploaded_file.name}")
 
                 try:
-                    # ✅ Show PDF preview safely
+                    # ✅ Show PDF preview safely — bounded height + responsive width + zoom controls
                     pdf_viewer(
                         uploaded_file.read(),
+                        width="100%",
+                        height=800,
+                        zoom_level="auto",
+                        viewer_align="center",
+                        show_page_separator=True,
                         key=f"pdf_viewer_{uploaded_file.name}"
                     )
 
