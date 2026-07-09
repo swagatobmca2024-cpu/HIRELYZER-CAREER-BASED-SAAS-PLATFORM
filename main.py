@@ -7806,7 +7806,7 @@ with tab2:
                 "💾 saved resumes stick around after a page refresh; 🕓 session-only resumes "
                 "don't — save them from Tab 1 if you want them to last."
             )
-            _pick_col, _btn_col, _del_col = st.columns([3, 1, 0.6])
+            _pick_col, _btn_col, _del_col = st.columns([3, 0.8, 0.8])
             with _pick_col:
                 _chosen_idx = st.selectbox(
                     "Which analysed resume?",
