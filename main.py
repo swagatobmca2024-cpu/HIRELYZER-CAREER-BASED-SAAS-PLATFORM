@@ -4821,14 +4821,9 @@ with tab1:
                 st.subheader(f"📄 Original Resume Preview: {uploaded_file.name}")
 
                 try:
-                    # ✅ Show PDF preview safely — bounded height + responsive width + zoom controls
+                    # ✅ Show PDF preview safely
                     pdf_viewer(
                         uploaded_file.read(),
-                        width="100%",
-                        height=800,
-                        zoom_level="auto",
-                        viewer_align="center",
-                        show_page_separator=True,
                         key=f"pdf_viewer_{uploaded_file.name}"
                     )
 
@@ -6565,7 +6560,6 @@ with tab1:
 
     elif not uploaded_files:
         st.warning("⚠️ Please upload resumes to view dashboard analytics.")
-
 def _sanitize_html_for_pdf(html_string):
     """
     Strip / replace CSS properties that xhtml2pdf (pisa) does not support.
