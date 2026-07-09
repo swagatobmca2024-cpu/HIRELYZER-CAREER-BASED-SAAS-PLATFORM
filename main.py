@@ -7823,7 +7823,7 @@ with tab2:
             _chosen = _autofill_choices[_chosen_idx]
             with _btn_col:
                 st.markdown("<div style='height:28px;'></div>", unsafe_allow_html=True)
-                if st.button("⬇️ Autofill", key="autofill_builder_btn", use_container_width=True):
+                if st.button("⬇️ Auto", key="autofill_builder_btn", use_container_width=True, help="Autofill from this resume"):
                     if _has_existing_data:
                         st.session_state["_autofill_pending_choice"] = _chosen_idx
                     else:
