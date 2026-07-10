@@ -1880,7 +1880,10 @@ if not st.session_state.get("authenticated", False):
                                                 notify("login", "success", "Login successful!")
                                                 time.sleep(1.5)
                                         if success:
-                                            st.rerun(scope="fragment")
+                                            # Full app rerun (NOT fragment-scoped): authenticated
+                                            # flipped to True, so the outer gate must re-evaluate
+                                            # to swap the login fragment out for the main app.
+                                            st.rerun()
                                         else:
                                             notify("login", "error", "Invalid credentials. Please try again.")
                                             st.rerun(scope="fragment")
