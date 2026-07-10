@@ -2392,29 +2392,52 @@ if not st.session_state.get("authenticated", False):
                             unsafe_allow_html=True
                         )
 
-                    # ── Inputs wired to on_change — NO inline DB calls ──
-                    new_email = st.text_input(
-                        "Email", key="reg_email",
-                        placeholder="your@email.com",
-                        on_change=_validate_email
-                    )
-                    _render_val_msg("_email_msg")
+                    # ── Tighter vertical rhythm for the register form ──
+                    # Scoped to this keyed container only, so nothing else on the
+                    # page is affected by the reduced gaps/margins below.
+                    st.markdown("""
+                    <style>
+                    .st-key-reg_fields [data-testid="stVerticalBlock"] {
+                        gap: 0.3rem !important;
+                    }
+                    .st-key-reg_fields [data-testid="stElementContainer"] {
+                        margin-bottom: 0 !important;
+                    }
+                    .st-key-reg_fields .val-slot {
+                        height: 16px;
+                        margin: 0 0 2px 0;
+                    }
+                    .st-key-reg_fields .stCaption {
+                        margin-top: -6px;
+                        margin-bottom: 2px;
+                    }
+                    </style>
+                    """, unsafe_allow_html=True)
 
-                    new_user = st.text_input(
-                        "Username", key="reg_user",
-                        on_change=_validate_username
-                    )
-                    _render_val_msg("_user_msg")
+                    with st.container(key="reg_fields"):
+                        # ── Inputs wired to on_change — NO inline DB calls ──
+                        new_email = st.text_input(
+                            "Email", key="reg_email",
+                            placeholder="your@email.com",
+                            on_change=_validate_email
+                        )
+                        _render_val_msg("_email_msg")
 
-                    new_pass = st.text_input(
-                        "Password", type="password", key="reg_pass",
-                        on_change=_validate_password
-                    )
-                    st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
-                    _render_val_msg("_pass_msg")
+                        new_user = st.text_input(
+                            "Username", key="reg_user",
+                            on_change=_validate_username
+                        )
+                        _render_val_msg("_user_msg")
 
-                    # Render notification area (reserves space)
-                    render_notification("register")
+                        new_pass = st.text_input(
+                            "Password", type="password", key="reg_pass",
+                            on_change=_validate_password
+                        )
+                        st.caption("Password must be at least 8 characters, include uppercase, lowercase, number, and special character.")
+                        _render_val_msg("_pass_msg")
+
+                        # Render notification area (reserves space)
+                        render_notification("register")
 
                     st.markdown("""
                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; color:#94a3b8;
