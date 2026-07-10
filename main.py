@@ -1814,7 +1814,7 @@ if not st.session_state.get("authenticated", False):
                         if st.button("Back / Try Again", key="magic_link_back_btn", use_container_width=True):
                             st.session_state.pop("_magic_link_pending", None)
                             st.session_state.pop("_magic_link_email", None)
-                            st.rerun()
+                            st.rerun(scope="fragment")
 
                     else:
                         # Normal Login UI
@@ -1845,19 +1845,19 @@ if not st.session_state.get("authenticated", False):
                                         st.session_state["_magic_link_pending"] = True
                                         st.session_state["_magic_link_email"] = "your registered email"
                                         notify("login", "success", "Login link sent to admin email! Click it to sign in.")
-                                        st.rerun()
+                                        st.rerun(scope="fragment")
                                     elif status == "bad_creds":
                                         notify("login", "error", message)
-                                        st.rerun()
+                                        st.rerun(scope="fragment")
                                     else:
                                         notify("login", "error", message)
-                                        st.rerun()
+                                        st.rerun(scope="fragment")
                                 else:
                                     # ── Regular users: direct login ──
                                     _allowed, _lock_msg = check_brute_force(_input)
                                     if not _allowed:
                                         notify("login", "error", _lock_msg)
-                                        st.rerun()
+                                        st.rerun(scope="fragment")
                                     else:
                                         st.markdown("""
                                         <div class="hly-spinner-wrap">
@@ -1880,20 +1880,20 @@ if not st.session_state.get("authenticated", False):
                                                 notify("login", "success", "Login successful!")
                                                 time.sleep(1.5)
                                         if success:
-                                            st.rerun()
+                                            st.rerun(scope="fragment")
                                         else:
                                             notify("login", "error", "Invalid credentials. Please try again.")
-                                            st.rerun()
+                                            st.rerun(scope="fragment")
                             else:
                                 notify("login", "warning", "Please enter your username/email and password.")
-                                st.rerun()
+                                st.rerun(scope="fragment")
 
                         st.markdown("<br>", unsafe_allow_html=True)
 
                         # Forgot Password Link
                         if st.button("Forgot Password?", key="forgot_pw_link"):
                             st.session_state.reset_stage = "request_email"
-                            st.rerun()
+                            st.rerun(scope="fragment")
 
                 # ============================================================
                 # FORGOT PASSWORD FLOW - Stage 1: Request Email
@@ -1933,21 +1933,21 @@ if not st.session_state.get("authenticated", False):
                                             notify("login", "success", "OTP sent successfully to your email!")
                                             time.sleep(0.5)
                                     if success:
-                                        st.rerun()
+                                        st.rerun(scope="fragment")
                                     else:
                                         notify("login", "error", "Failed to send OTP. Please try again.")
-                                        st.rerun()
+                                        st.rerun(scope="fragment")
                                 else:
                                     notify("login", "error", "Email not found. Please register first.")
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                             else:
                                 notify("login", "warning", "Please enter your email address.")
-                                st.rerun()
+                                st.rerun(scope="fragment")
 
                     with col2:
                         if st.button("Back to Login", key="back_to_login_1", use_container_width=True):
                             st.session_state.reset_stage = "none"
-                            st.rerun()
+                            st.rerun(scope="fragment")
 
                 # ============================================================
                 # FORGOT PASSWORD FLOW - Stage 2: Verify OTP
@@ -1992,15 +1992,15 @@ if not st.session_state.get("authenticated", False):
                                         notify("login", "info", "New OTP sent!")
                                         time.sleep(0.5)
                                 if success:
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                                 else:
                                     notify("login", "error", "Failed to send OTP. Please try again.")
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
 
                         with col2:
                             if st.button("Back to Login", key="back_to_login_expired", use_container_width=True):
                                 st.session_state.reset_stage = "none"
-                                st.rerun()
+                                st.rerun(scope="fragment")
                     else:
                         # OTP still valid - Show verification form
                         otp_input = st.text_input("Enter 6-Digit OTP", key="otp_input", max_chars=6)
@@ -2025,7 +2025,7 @@ if not st.session_state.get("authenticated", False):
                                     with st.spinner(""):
                                         notify("login", "error", "OTP has expired. Please request a new one.")
                                         time.sleep(0.6)
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                                 elif otp_input.strip() == st.session_state.reset_otp:
                                     st.markdown("""
                                     <div class="hly-spinner-wrap">
@@ -2039,7 +2039,7 @@ if not st.session_state.get("authenticated", False):
                                         st.session_state.reset_stage = "reset_password"
                                         notify("login", "success", "OTP verified successfully!")
                                         time.sleep(0.8)
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                                 else:
                                     st.markdown("""
                                     <div class="hly-spinner-wrap">
@@ -2053,12 +2053,12 @@ if not st.session_state.get("authenticated", False):
                                     with st.spinner(""):
                                         notify("login", "error", "Invalid OTP. Please try again.")
                                         time.sleep(0.6)
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
 
                         with col2:
                             if st.button("Back to Login", key="back_to_login_2", use_container_width=True):
                                 st.session_state.reset_stage = "none"
-                                st.rerun()
+                                st.rerun(scope="fragment")
 
                 # ============================================================
                 # FORGOT PASSWORD FLOW - Stage 3: Reset Password
@@ -2102,20 +2102,20 @@ if not st.session_state.get("authenticated", False):
                                         notify("login", "success", "Password reset successful! Please log in again.")
                                         time.sleep(1)
                                 if success:
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                                 else:
                                     notify("login", "error", "Failed to reset password. Please try again.")
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                             else:
                                 notify("login", "error", "Passwords do not match.")
-                                st.rerun()
+                                st.rerun(scope="fragment")
                         else:
                             notify("login", "warning", "Please fill in both password fields.")
-                            st.rerun()
+                            st.rerun(scope="fragment")
 
                     if st.button("Back to Login", key="back_to_login_3"):
                         st.session_state.reset_stage = "none"
-                        st.rerun()
+                        st.rerun(scope="fragment")
 
             # ---------------- REGISTER TAB ----------------
             with register_tab:
@@ -2158,14 +2158,14 @@ if not st.session_state.get("authenticated", False):
                                         notify("register", "success", "New OTP sent!")
                                         time.sleep(0.5)
                                 if success:
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                                 else:
                                     notify("register", "error", message)
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                         with col2:
                             if st.button("Start Over", key="reg_start_over_btn", use_container_width=True):
                                 del st.session_state.pending_registration
-                                st.rerun()
+                                st.rerun(scope="fragment")
                     else:
                         # OTP still valid
                         otp_input = st.text_input("Enter 6-Digit OTP", key="reg_otp_input", max_chars=6)
@@ -2191,7 +2191,7 @@ if not st.session_state.get("authenticated", False):
                                     with st.spinner(""):
                                         notify("register", "error", "OTP has expired. Please request a new one.")
                                         time.sleep(0.6)
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                                 else:
                                     st.markdown("""
                                     <div class="hly-spinner-wrap">
@@ -2210,7 +2210,7 @@ if not st.session_state.get("authenticated", False):
                                         else:
                                             notify("register", "error", message)
                                             time.sleep(0.6)
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
 
                         with col2:
                             if st.button("Resend", key="resend_reg_otp_btn", use_container_width=True):
@@ -2230,15 +2230,15 @@ if not st.session_state.get("authenticated", False):
                                         notify("register", "info", "New OTP sent successfully!")
                                         time.sleep(0.5)
                                 if success:
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                                 else:
                                     notify("register", "error", message)
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
 
                         with col3:
                             if st.button("Back", key="back_to_reg_btn", use_container_width=True):
                                 del st.session_state.pending_registration
-                                st.rerun()
+                                st.rerun(scope="fragment")
 
                 else:
                     # Normal registration form
@@ -2260,19 +2260,20 @@ if not st.session_state.get("authenticated", False):
                     # ── CSS: fixed-height validation slot — zero layout shift ──
                     st.markdown("""
                     <style>
-                    /* Outer wrapper: zero document-flow height — no spacing contribution */
+                    /* Outer wrapper: reserves real space for the badge so it can't
+                       overlap the field above it */
                     .val-slot {
-                        height: 0;
+                        height: 22px;
                         overflow: visible;
                         position: relative;
-                        margin: 0;
+                        margin: 2px 0 4px 0;
                         padding: 0;
-                        line-height: 0;
+                        line-height: normal;
                     }
-                    /* The badge floats above the next field via negative top offset */
+                    /* The badge sits inside its own reserved slot, below the field */
                     .val-badge {
                         position: absolute;
-                        top: -26px;
+                        top: 0;
                         left: 0;
                         right: 0;
                         display: flex;
@@ -2427,13 +2428,13 @@ if not st.session_state.get("authenticated", False):
                             # Validate before attempting registration
                             if not is_valid_email(new_email.strip()):
                                 notify("register", "warning", "Invalid email format.")
-                                st.rerun()
+                                st.rerun(scope="fragment")
                             elif email_exists(new_email.strip()):
                                 notify("register", "error", "Email already registered.")
-                                st.rerun()
+                                st.rerun(scope="fragment")
                             elif username_exists(new_user.strip()):
                                 notify("register", "error", "Username already exists.")
-                                st.rerun()
+                                st.rerun(scope="fragment")
                             else:
                                 st.markdown("""
                                 <div class="hly-spinner-wrap">
@@ -2453,13 +2454,13 @@ if not st.session_state.get("authenticated", False):
                                         notify("register", "success", message)
                                         time.sleep(0.8)
                                 if success:
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                                 else:
                                     notify("register", "error", message)
-                                    st.rerun()
+                                    st.rerun(scope="fragment")
                         else:
                             notify("register", "warning", "Please fill in all fields (email, username, and password).")
-                            st.rerun()
+                            st.rerun(scope="fragment")
 
             st.markdown("</div>", unsafe_allow_html=True)
 
