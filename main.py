@@ -9833,6 +9833,88 @@ with tab3:
 
     # ---------- Salary Insights ----------
     render_salary_insights()
+
+def evaluate_interview_answer(answer: str, question: str = None):
+    """
+    Uses an LLM to strictly evaluate an interview answer.
+    Returns (score out of 5, feedback string).
+    """
+    from llm_manager import call_llm
+    import re
+    import streamlit as st
+
+    # Empty check
+    if not answer.strip():
+        return 0, "⚠️ No answer provided."
+
+    # 🔹 LLM Prompt (STRICTER)
+    prompt = f"""
+    You are an expert technical interview evaluator.
+
+    ### Task:
+    Evaluate the candidate's answer to the question below.
+    Be STRICT. Only give high scores if the answer is technically correct, relevant, and detailed.
+
+    ### Question:
+    {question if question else "N/A"}
+
+    ### Candidate Answer:
+    {answer}
+
+    ### Strict Scoring Rubric:
+    - 5 = Exceptional: Fully correct, highly relevant, clear, detailed, technically accurate.
+    - 4 = Good: Mostly correct and relevant, but missing some depth/clarity.
+    - 3 = Average: Partially correct OR generic, but somewhat relevant.
+    - 2 = Weak: Mostly irrelevant, shallow, or major gaps in correctness.
+    - 1 = Poor: Completely irrelevant, incoherent, or very wrong.
+    - 0 = No answer / total nonsense.
+
+    ### Output Format:
+    Score: <number between 0 and 5>
+    Feedback: <constructive feedback in 1–2 sentences>
+    """
+
+    try:
+        # Call LLM
+        response = call_llm(prompt, session=st.session_state).strip()
+
+        # Extract Score
+        score_match = re.search(r"Score:\s*(\d+)", response)
+        score = int(score_match.group(1)) if score_match else 1  # stricter fallback
+
+        # Extract Feedback
+        feedback_match = re.search(r"Feedback:\s*(.+)", response)
+        feedback = feedback_match.group(1).strip() if feedback_match else "Answer was unclear or irrelevant."
+
+        # ✅ Keep score in 0–5 range
+        score = max(0, min(score, 5))
+
+    except Exception as e:
+        score = 1
+        feedback = f"⚠️ Evaluation fallback due to error: {e}"
+
+    return score, feedback
+
+
+def format_score(score) -> str:
+    """
+    Uniform score formatter for all UI display.
+    Always returns a 2-decimal-place string (e.g. 6.47, 6.50, 6.00).
+    Returns 'N/A' for None / NaN values.
+    Raw database values are never modified — formatting is display-layer only.
+    """
+    import math
+    if score is None:
+        return "N/A"
+    try:
+        val = float(score)
+        if math.isnan(val):
+            return "N/A"
+        return f"{val:.2f}"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
 def evaluate_interview_answer_for_scores(answer: str, question: str, difficulty: str, role: str = "", domain: str = ""):
     """
     UPGRADED: Intelligent evaluation with chain-of-thought reasoning and structured feedback.
@@ -17408,7 +17490,6 @@ Generate {num_questions} questions now:
                     """</script></body></html>"""
                 )
                 st.components.v1.html(_html_table, height=600, scrolling=False)
-
 with tab_scam:
     render_job_scam_detector_tab(call_llm)
 if tab5:
