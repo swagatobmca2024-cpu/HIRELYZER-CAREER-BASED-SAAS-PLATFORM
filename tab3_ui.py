@@ -1301,7 +1301,6 @@ def _job_search_interactive():
                         "📄 Page",
                         min_value=1,
                         max_value=max_pages,
-                        value=1,
                         key="page_slider"
                     )
                 else:
