@@ -1948,6 +1948,7 @@ def _analytics_dashboard():
 # FEATURED COMPANIES SECTION
 # ═══════════════════════════════════════════════════════════════
 
+@st.fragment
 def render_featured_companies():
     st.markdown("""### <div class='title-header'><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#g1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:8px;"><defs><linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#818cf8"/></linearGradient></defs><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg> Featured Companies</div>""", unsafe_allow_html=True)
 
