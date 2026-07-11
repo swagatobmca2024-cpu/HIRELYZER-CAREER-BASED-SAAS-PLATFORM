@@ -7427,9 +7427,9 @@ def apply_autofill_to_builder(optimized_data: dict):
 
 
 # Tab setup (assuming this is within a tab2 context)
-@st.fragment
-def _render_tab2_builder():
-    with tab2:
+with tab2:
+    @st.fragment
+    def _render_tab2_builder():
         st.session_state.active_tab = "Resume Builder"
 
         # ---------- Title with Blue Glassmorphism + Shine ----------
@@ -8960,9 +8960,8 @@ def _render_tab2_builder():
                             <div style='margin-bottom:10px; font-size:14px;'>{cert['description']}</div>
                             """, unsafe_allow_html=True)
 
-    import re
+        import re
 
-    with tab2:
         st.markdown("## ✨ <span style='color:#336699;'>Enhanced AI Resume Preview</span>", unsafe_allow_html=True)
         st.markdown("<hr style='border-top: 2px solid #bbb;'>", unsafe_allow_html=True)
 
@@ -9642,7 +9641,6 @@ def _render_tab2_builder():
                 st.session_state["show_template_preview"] = False
             st.session_state.pop("_resume_generating", None)
 
-    with tab2:
         # ==========================
         # 📥 Resume Download Header
         # ==========================
@@ -9798,7 +9796,7 @@ def _render_tab2_builder():
                 <a href="https://www.sejda.com/html-to-pdf" target="_blank" style="color:#2f4f6f; text-decoration:none;">
                 convert it to PDF using Sejda's free online tool</a>.
                 """, unsafe_allow_html=True)
-_render_tab2_builder()
+    _render_tab2_builder()
 import streamlit as st
 
 
