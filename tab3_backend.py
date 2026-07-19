@@ -383,12 +383,16 @@ def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, result
         "X-RapidAPI-Host": RAPID_API_HOST
     }
     try:
-        response = requests.get(url, headers=headers, params=querystring)
+        response = requests.get(url, headers=headers, params=querystring, timeout=15)
         if response.status_code == 200:
+            st.session_state["_rapid_debug"] = None
             return response.json().get("data", [])[:results]
         else:
+            # TEMP DEBUG — remove once the root cause is confirmed
+            st.session_state["_rapid_debug"] = f"Status {response.status_code}: {response.text[:300]}"
             return []
-    except Exception:
+    except Exception as e:
+        st.session_state["_rapid_debug"] = f"Exception: {e}"
         return []
 
 
