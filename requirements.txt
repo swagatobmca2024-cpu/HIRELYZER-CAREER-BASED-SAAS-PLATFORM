@@ -10,6 +10,7 @@ dnspython
 cloudscraper
 PyPDF2
 pdfplumber
+cloudscraper
 pytesseract
 dnstwist==20250130
 pdf2image
