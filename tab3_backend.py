@@ -383,7 +383,10 @@ def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, result
 
     headers = {
         "X-RapidAPI-Key": RAPID_API_KEY,
-        "X-RapidAPI-Host": RAPID_API_HOST
+        "X-RapidAPI-Host": RAPID_API_HOST,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/json"
     }
     try:
         response = requests.get(url, headers=headers, params=querystring, timeout=15)
