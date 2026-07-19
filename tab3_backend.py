@@ -25,6 +25,9 @@ from tab3_data import JOB_TITLES, LOCATIONS
 RAPID_API_KEY  = st.secrets["rapidapi"]["key"]
 RAPID_API_HOST = st.secrets["rapidapi"]["host"]
 
+# TEMP DEBUG — remove once confirmed clean
+st.session_state["_rapid_host_repr"] = repr(RAPID_API_HOST)
+
 
 # ═══════════════════════════════════════════════════════════════
 # DATABASE — Supabase / PostgreSQL
