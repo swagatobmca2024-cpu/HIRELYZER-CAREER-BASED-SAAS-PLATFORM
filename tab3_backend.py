@@ -366,14 +366,16 @@ def fetch_analytics_data(scope_username=None):
 # API — RapidAPI JSearch + LinkedIn Data
 # ═══════════════════════════════════════════════════════════════
 
-def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, results=10):
-    url = f"https://{RAPID_API_HOST}/search"
+def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, results=10, cursor=None):
+    url = f"https://{RAPID_API_HOST}/search-v2"
     querystring = {
         "query": f"{job_role} in {location}",
-        "page": "1",
         "num_pages": "1",
+        "date_posted": "all",
         "remote_jobs_only": str(remote_only).lower()
     }
+    if cursor:
+        querystring["cursor"] = cursor
 
     # 🔹 Map UI dropdown values to RapidAPI accepted filters
     type_map = {
@@ -402,7 +404,9 @@ def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, result
 
         if response.status_code == 200:
             st.session_state["_rapid_debug"] = None
-            return response.json().get("data", [])[:results]
+            payload = response.json()
+            jobs = payload.get("data") or payload.get("jobs") or []
+            return jobs[:results]
         else:
             # TEMP DEBUG — remove once the root cause is confirmed
             st.session_state["_rapid_debug"] = (
