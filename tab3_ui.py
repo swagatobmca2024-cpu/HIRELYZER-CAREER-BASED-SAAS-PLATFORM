@@ -1253,6 +1253,8 @@ def _job_search_interactive():
                 st.info("No jobs found. Try adjusting your search criteria.")
                 if st.session_state.get("_rapid_debug"):
                     st.caption(f"🔧 {st.session_state['_rapid_debug']}")
+                if st.session_state.get("_rapid_host_repr"):
+                    st.caption(f"🔧 host repr: {st.session_state['_rapid_host_repr']}")
         elif rapid_search_clicked:
             st.warning("Please select both a Job Domain and Location to perform the search.")
 
