@@ -405,7 +405,19 @@ def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, result
         if response.status_code == 200:
             st.session_state["_rapid_debug"] = None
             payload = response.json()
-            jobs = payload.get("data") or payload.get("jobs") or []
+            data = payload.get("data") or payload.get("jobs") or []
+
+            if isinstance(data, dict):
+                # /search-v2 nests the list one level deeper, e.g. {"jobs": [...], "cursor": "..."}
+                st.session_state["_rapid_next_cursor"] = data.get("cursor")
+                jobs = data.get("jobs") or data.get("results") or data.get("items") or []
+            else:
+                jobs = data
+
+            if not isinstance(jobs, list):
+                st.session_state["_rapid_debug"] = f"Unexpected payload shape: {type(jobs).__name__} — keys: {list(payload.keys())}"
+                return []
+
             return jobs[:results]
         else:
             # TEMP DEBUG — remove once the root cause is confirmed
