@@ -31,9 +31,6 @@ from tab3_data import JOB_TITLES, LOCATIONS
 RAPID_API_KEY  = st.secrets["rapidapi"]["key"]
 RAPID_API_HOST = st.secrets["rapidapi"]["host"]
 
-# TEMP DEBUG — remove once confirmed clean
-st.session_state["_rapid_host_repr"] = repr(RAPID_API_HOST)
-
 
 # ═══════════════════════════════════════════════════════════════
 # DATABASE — Supabase / PostgreSQL
@@ -403,7 +400,6 @@ def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, result
             response = requests.get(url, headers=headers, params=querystring, timeout=15)
 
         if response.status_code == 200:
-            st.session_state["_rapid_debug"] = None
             payload = response.json()
             data = payload.get("data") or payload.get("jobs") or []
 
@@ -415,19 +411,12 @@ def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, result
                 jobs = data
 
             if not isinstance(jobs, list):
-                st.session_state["_rapid_debug"] = f"Unexpected payload shape: {type(jobs).__name__} — keys: {list(payload.keys())}"
                 return []
 
             return jobs[:results]
         else:
-            # TEMP DEBUG — remove once the root cause is confirmed
-            st.session_state["_rapid_debug"] = (
-                f"[{'cloudscraper' if _scraper is not None else 'requests'}] "
-                f"Status {response.status_code}: {response.text[:300]}"
-            )
             return []
-    except Exception as e:
-        st.session_state["_rapid_debug"] = f"Exception: {e}"
+    except Exception:
         return []
 
 
