@@ -13,6 +13,12 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import requests
+try:
+    import cloudscraper
+    _scraper = cloudscraper.create_scraper()
+except ImportError:
+    cloudscraper = None
+    _scraper = None
 import psycopg2
 import psycopg2.extras
 import pandas as pd
@@ -389,13 +395,20 @@ def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, result
         "Accept": "application/json"
     }
     try:
-        response = requests.get(url, headers=headers, params=querystring, timeout=15)
+        if _scraper is not None:
+            response = _scraper.get(url, headers=headers, params=querystring, timeout=15)
+        else:
+            response = requests.get(url, headers=headers, params=querystring, timeout=15)
+
         if response.status_code == 200:
             st.session_state["_rapid_debug"] = None
             return response.json().get("data", [])[:results]
         else:
             # TEMP DEBUG — remove once the root cause is confirmed
-            st.session_state["_rapid_debug"] = f"Status {response.status_code}: {response.text[:300]}"
+            st.session_state["_rapid_debug"] = (
+                f"[{'cloudscraper' if _scraper is not None else 'requests'}] "
+                f"Status {response.status_code}: {response.text[:300]}"
+            )
             return []
     except Exception as e:
         st.session_state["_rapid_debug"] = f"Exception: {e}"
