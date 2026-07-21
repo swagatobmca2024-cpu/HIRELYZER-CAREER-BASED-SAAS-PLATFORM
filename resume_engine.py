@@ -44,12 +44,8 @@ from llm_manager import (
     call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure, _record_key_tokens, TPM_LIMIT,
+    _async_clear_failure,
 )
-try:
-    from langchain_core.callbacks import BaseCallbackHandler
-except ImportError:
-    from langchain.callbacks.base import BaseCallbackHandler
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
     get_database_stats, detect_domain_from_title_and_description,
@@ -4067,61 +4063,6 @@ def setup_vectorstore(documents):
     doc_chunks = text_splitter.split_text("\n".join(documents))
     return FAISS.from_texts(doc_chunks, embeddings)
 
-# ── Per-turn usage tracker for the chat chain ─────────────────────────────────
-class _ChatTurnUsageTracker(BaseCallbackHandler):
-    """
-    Attached directly to the ChatGroq instance used by create_chain(), not to
-    the chain invocation call site. LangChain fires on_llm_end/on_llm_error on
-    every underlying LLM call the chain makes -- including every follow-up
-    question in a multi-turn chat -- regardless of where or how
-    st.session_state.chain(...) is actually called elsewhere in the app.
-
-    Before this: _mem_increment_usage() only ran once, at chain creation, so
-    every real chat turn's token usage was invisible to llm_manager's TPM
-    tracker. This mirrors call_llm()'s own success/error handling so the same
-    key stays under the same cooldown/quota rules whether it's used via
-    call_llm() or via this chat chain.
-    """
-
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-
-    def on_llm_end(self, response, **kwargs):
-        try:
-            usage = None
-            llm_output = getattr(response, "llm_output", None) or {}
-            usage = llm_output.get("token_usage")
-            if not usage and getattr(response, "generations", None):
-                gen_info = getattr(response.generations[0][0], "generation_info", None) or {}
-                usage = gen_info.get("token_usage")
-            total = None
-            if usage:
-                total = usage.get("total_tokens") or (
-                    usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)
-                )
-            _record_key_tokens(self.api_key, total or 0, time.time())
-            _mem_increment_usage(self.api_key)
-            _async_increment_usage(self.api_key)
-            _mem_clear_failure(self.api_key)
-            _async_clear_failure(self.api_key)
-        except Exception:
-            pass
-
-    def on_llm_error(self, error, **kwargs):
-        try:
-            err_str = str(error).lower()
-            if any(w in err_str for w in ["quota", "rate limit", "429", "too many requests"]):
-                _mem_record_failure(self.api_key, "quota")
-                _record_key_tokens(self.api_key, TPM_LIMIT, time.time())
-                _async_mark_failure(self.api_key, "quota")
-            elif any(w in err_str for w in ["invalid api key", "unauthorized", "401", "403", "authentication"]):
-                _mem_record_failure(self.api_key, "error")
-                _async_mark_failure(self.api_key, "error")
-            # transient errors: leave the key's health alone, same as call_llm()
-        except Exception:
-            pass
-
-
 # Create Conversational Chain
 def create_chain(vectorstore):
     # ✅ Use get_healthy_keys() so dead/quota keys are skipped (reads key_failures
@@ -4132,16 +4073,10 @@ def create_chain(vectorstore):
         raise ValueError("❌ No healthy Groq API keys available for chat chain.")
     # healthy list is already shuffled by get_healthy_keys — just take the first
     groq_api_key = healthy[0]
+    # ✅ FIX: do NOT increment usage before the call — only after success
 
-    # ✅ Create the ChatGroq object — callbacks fire on EVERY turn the chain
-    # makes (see _ChatTurnUsageTracker), so usage/TPM tracking now happens per
-    # real chat message instead of once at chain-creation time.
-    llm = ChatGroq(
-        model="openai/gpt-oss-120b",
-        temperature=0,
-        groq_api_key=groq_api_key,
-        callbacks=[_ChatTurnUsageTracker(groq_api_key)],
-    )
+    # ✅ Create the ChatGroq object
+    llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0, groq_api_key=groq_api_key)
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
     try:
@@ -4150,6 +4085,11 @@ def create_chain(vectorstore):
             retriever=vectorstore.as_retriever(),
             return_source_documents=True
         )
+        # Update in-memory usage instantly; flush to Supabase in background thread
+        _mem_increment_usage(groq_api_key)
+        _async_increment_usage(groq_api_key)
+        _mem_clear_failure(groq_api_key)
+        _async_clear_failure(groq_api_key)
         return chain
     except Exception as e:
         err_str = str(e).lower()
