@@ -39,14 +39,23 @@ from langchain_groq import ChatGroq
 CACHE_EXPIRY_HOURS       = 24
 FAILURE_COOLDOWN_MINUTES = 5
 QUOTA_COOLDOWN_MINUTES   = 60
-DAILY_KEY_LIMIT          = 800
+DAILY_KEY_LIMIT          = 900      # Groq free tier RPD for openai/gpt-oss-120b is 1000/key
 DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
-# ── Per-minute token rate limiter (Groq free tier: ~6000 TPM per key) ────────
-TPM_LIMIT          = 5500          # stay slightly under the 6000 hard limit
+# ── Per-minute token rate limiter (Groq free tier for openai/gpt-oss-120b: 8000 TPM per key) ─
+TPM_LIMIT          = 7200          # stay slightly under the 8000 hard limit
 TPM_WINDOW_SECONDS = 60
 CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
+
+# Hard cap on a SINGLE request's prompt tokens — this is a genuine last-resort
+# safety net, NOT a routine limiter. openai/gpt-oss-120b has a real 131,072
+# token context window (input + output combined), so this only kicks in for
+# truly oversized pastes (e.g. someone dumps a 40-page PDF). It must stay far
+# above normal prompt sizes or it silently mangles legitimate long prompts
+# (this cut a previous version down to 4500 tokens and broke resume/job-title
+# output — do not lower this without a real reason).
+MAX_PROMPT_TOKENS  = 100000
 
 # ── Retry / back-off config ───────────────────────────────────────────────────
 MAX_RETRIES_PER_KEY = 1            # attempts per key before moving on
@@ -59,6 +68,13 @@ _QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests",
 _DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
                      "api key", "authentication", "permission denied",
                      "invalid_api_key"]
+# Groq's "Request too large ... on tokens per minute (TPM)" message LOOKS like
+# a size problem but is actually that KEY's per-minute quota being used up
+# right now — a rate-limit issue, solved by trying a different key, not by
+# cutting prompt content. Only messages naming the model's actual context
+# window are a genuine size problem.
+_TOO_LARGE_SIGNALS = ["context_length_exceeded", "maximum context length",
+                      "context window", "reduce the length of the messages"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IN-MEMORY STATE  (module-level, shared across all threads in one worker)
@@ -232,6 +248,31 @@ def cleanup_cache():
 # ── Per-minute token rate limiter helpers ─────────────────────────────────────
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // CHARS_PER_TOKEN)
+
+
+def _truncate_prompt_if_needed(prompt: str, max_tokens: int = MAX_PROMPT_TOKENS) -> str:
+    """
+    Guarantees a prompt never exceeds max_tokens (estimated). This is what
+    actually stops 'payload too large' errors — done ONCE, before any key
+    is even chosen, so the website never hangs looping through dead-on-arrival
+    requests.
+
+    Keeps the START (system/instructions are usually here) and the END
+    (format spec / final question are usually here), trims the MIDDLE
+    (usually the bulk pasted resume/job text — the safest place to cut).
+    """
+    max_chars = max_tokens * CHARS_PER_TOKEN
+    if len(prompt) <= max_chars:
+        return prompt
+
+    marker = "\n\n...[content truncated to fit model limits]...\n\n"
+    # Reserve room for the marker itself
+    budget = max_chars - len(marker)
+    head_chars = int(budget * 0.65)   # keep more of the front (instructions + early context)
+    tail_chars = budget - head_chars
+
+    truncated = prompt[:head_chars] + marker + prompt[-tail_chars:]
+    return truncated
 
 
 def _get_key_tpm(api_key: str, now: float) -> int:
@@ -467,6 +508,7 @@ def clear_key_failure(api_key: str):
 def _classify_error(error: Exception) -> str:
     """
     Returns:
+        'too_large' — request exceeds model's token/context limit → don't retry, shrink instead
         'quota'     — rate limited → 60-min cooldown
         'dead'      — bad/invalid key → 5-min cooldown
         'transient' — network blip / server 500 / timeout → do NOT touch the key
@@ -487,7 +529,15 @@ def _classify_error(error: Exception) -> str:
         except Exception:
             pass
 
-    if status_code == 429 or any(s in msg for s in _QUOTA_SIGNALS):
+    # Groq sometimes returns 413 even for a per-minute TPM quota message (not a
+    # genuine oversized prompt) — trust the message wording over the status
+    # code when it explicitly says "per minute" / "tpm", since that's a
+    # rate-limit issue solved by trying another key, not shrinking content.
+    is_rate_limit_flavored = "per minute" in msg or " tpm" in msg or "tpm)" in msg
+
+    if not is_rate_limit_flavored and (status_code == 413 or any(s in msg for s in _TOO_LARGE_SIGNALS)):
+        return "too_large"
+    if status_code == 429 or is_rate_limit_flavored or any(s in msg for s in _QUOTA_SIGNALS):
         return "quota"
     if status_code in (401, 403) or any(s in msg for s in _DEAD_KEY_SIGNALS):
         return "dead"
@@ -610,16 +660,27 @@ def _pick_start_index(n: int) -> int:
 
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
+# gpt-oss models do internal chain-of-thought reasoning by default, which adds
+# latency Llama 3.3 never had. reasoning_effort="low" trims that down — good
+# fit for structured tasks like resume rewriting / scoring / job-title
+# suggestions that don't need deep multi-step reasoning. Only gpt-oss models
+# support this param, so it's applied conditionally.
+REASONING_EFFORT_FOR_GPT_OSS = "low"   # "low" | "medium" | "high"
+
+
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
-    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key)
+    kwargs = dict(model=model, temperature=temperature, groq_api_key=api_key)
+    if model.startswith("openai/gpt-oss"):
+        kwargs["reasoning_effort"] = REASONING_EFFORT_FOR_GPT_OSS
+    llm = ChatGroq(**kwargs)
     return llm.invoke(prompt).content
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
-def call_llm(
+def _call_llm_inner(
     prompt: str,
     session,
-    model: str = "llama-3.3-70b-versatile",
+    model: str = "openai/gpt-oss-120b",
     temperature: float = 0,
 ) -> str:
     """
@@ -652,6 +713,11 @@ def call_llm(
         except Exception:
             pass
 
+    # ── Guarantee the prompt itself can never be "too large" ──────────────────
+    # Done ONCE here, before any key is picked, so an oversized prompt can
+    # never cause a doomed loop through every single API key.
+    prompt = _truncate_prompt_if_needed(prompt)
+
     # ── Cache hit ─────────────────────────────────────────────────────────────
     cached = get_cached_response(prompt, model)
     if cached:
@@ -675,14 +741,30 @@ def call_llm(
             return response
         except Exception as e:
             err_type = _classify_error(e)
-            if err_type == "quota":
+            if err_type == "too_large":
+                # Estimate was off — shrink hard and retry once on the same key.
+                # No point touching failure/cooldown state: the KEY is fine,
+                # only the payload was the problem.
+                shrunk = _truncate_prompt_if_needed(prompt, max_tokens=MAX_PROMPT_TOKENS // 2)
+                try:
+                    response = try_call_llm(shrunk, user_key, model, temperature)
+                    _record_key_tokens(user_key, _estimate_tokens(shrunk), time.time())
+                    set_cached_response(shrunk, model, response)
+                    _async_increment_usage(user_key)
+                    return response
+                except Exception as e2:
+                    last_error = e2
+            elif err_type == "quota":
                 _mem_record_failure(user_key, "quota")
                 _record_key_tokens(user_key, TPM_LIMIT, time.time())
                 _async_mark_failure(user_key, "quota")
+                last_error = e
             elif err_type == "dead":
                 _mem_record_failure(user_key, "error")
                 _async_mark_failure(user_key, "error")
-            last_error = e
+                last_error = e
+            else:
+                last_error = e
 
     # ── Admin key rotation ────────────────────────────────────────────────────
     try:
@@ -738,7 +820,21 @@ def call_llm(
 
         except Exception as e:
             err_type = _classify_error(e)
-            if err_type == "quota":
+            if err_type == "too_large":
+                # Every remaining key will fail on this SAME payload — looping
+                # through them all just burns quota and hangs the request.
+                # Shrink hard, retry once on this same key, then stop either way.
+                shrunk = _truncate_prompt_if_needed(prompt, max_tokens=MAX_PROMPT_TOKENS // 2)
+                try:
+                    response = try_call_llm(shrunk, key, model, temperature)
+                    _record_key_tokens(key, _estimate_tokens(shrunk), time.time())
+                    set_cached_response(shrunk, model, response)
+                    _mem_increment_usage(key)
+                    _async_increment_usage(key)
+                    return response
+                except Exception as e2:
+                    return f"❌ LLM unavailable: prompt too large even after shrinking ({e2})"
+            elif err_type == "quota":
                 _mem_record_failure(key, "quota")
                 _record_key_tokens(key, TPM_LIMIT, time.time())
                 _async_mark_failure(key, "quota")
@@ -750,3 +846,22 @@ def call_llm(
             attempt   += 1
 
     return f"❌ LLM unavailable: {last_error or 'All API keys exhausted'}"
+
+
+# ── Public entry point — GUARANTEED never to raise ────────────────────────────
+def call_llm(
+    prompt: str,
+    session,
+    model: str = "openai/gpt-oss-120b",
+    temperature: float = 0,
+) -> str:
+    """
+    Drop-in replacement, same signature as before. Wraps _call_llm_inner so
+    that no matter what goes wrong internally (bad prompt, network blip,
+    unexpected exception type, bug we haven't hit yet), the website never
+    crashes — it always gets a string back to display.
+    """
+    try:
+        return _call_llm_inner(prompt, session, model, temperature)
+    except Exception as e:
+        return f"❌ LLM temporarily unavailable, please try again. ({e})"
