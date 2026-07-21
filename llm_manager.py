@@ -44,9 +44,24 @@ DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
 # ── Per-minute token rate limiter (Groq free tier for openai/gpt-oss-120b: 8000 TPM per key) ─
-TPM_LIMIT          = 7200          # stay slightly under the 8000 hard limit
+# NOTE: 5500 (not the theoretical 7200) was reached empirically under real traffic.
+# _estimate_tokens() only measures PROMPT tokens — it never accounts for the
+# completion tokens Groq actually bills against the same per-minute window.
+# 7200 leaves ~0 margin for that blind spot, so heavy-output calls (e.g. the
+# combined resume-rewrite + JSON call) trip real 429s that this tracker never
+# saw coming. Do not raise this back toward 7200 without also fixing the
+# completion-token blind spot (see COMPLETION_TOKEN_BUFFER below).
+TPM_LIMIT          = 5500
 TPM_WINDOW_SECONDS = 60
 CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
+
+# Flat buffer added on top of the prompt-token estimate to account for
+# completion tokens, which _estimate_tokens() cannot see (it only measures
+# the outgoing prompt). Groq's TPM window bills prompt + completion together,
+# so without this buffer the tracker under-counts real usage on any call with
+# a large output — most notably the resume-rewrite call, which returns a full
+# rewritten resume AND a full JSON object in one completion.
+COMPLETION_TOKEN_BUFFER = 2000
 
 # Hard cap on a SINGLE request's prompt tokens — this is a genuine last-resort
 # safety net, NOT a routine limiter. openai/gpt-oss-120b has a real 131,072
@@ -723,7 +738,12 @@ def _call_llm_inner(
     if cached:
         return cached
 
-    estimated_tokens = _estimate_tokens(prompt)
+    # Prompt-side estimate + a flat completion buffer, since Groq's TPM window
+    # bills prompt + completion together but we can only see the prompt ahead
+    # of time. Without this, calls with large expected output (e.g. the
+    # resume-rewrite + JSON call) look like they have TPM headroom right up
+    # until Groq returns a real 429.
+    estimated_tokens = _estimate_tokens(prompt) + COMPLETION_TOKEN_BUFFER
     last_error = None
 
     # ── User-supplied key ─────────────────────────────────────────────────────
@@ -748,7 +768,7 @@ def _call_llm_inner(
                 shrunk = _truncate_prompt_if_needed(prompt, max_tokens=MAX_PROMPT_TOKENS // 2)
                 try:
                     response = try_call_llm(shrunk, user_key, model, temperature)
-                    _record_key_tokens(user_key, _estimate_tokens(shrunk), time.time())
+                    _record_key_tokens(user_key, _estimate_tokens(shrunk) + COMPLETION_TOKEN_BUFFER, time.time())
                     set_cached_response(shrunk, model, response)
                     _async_increment_usage(user_key)
                     return response
@@ -827,7 +847,7 @@ def _call_llm_inner(
                 shrunk = _truncate_prompt_if_needed(prompt, max_tokens=MAX_PROMPT_TOKENS // 2)
                 try:
                     response = try_call_llm(shrunk, key, model, temperature)
-                    _record_key_tokens(key, _estimate_tokens(shrunk), time.time())
+                    _record_key_tokens(key, _estimate_tokens(shrunk) + COMPLETION_TOKEN_BUFFER, time.time())
                     set_cached_response(shrunk, model, response)
                     _mem_increment_usage(key)
                     _async_increment_usage(key)
