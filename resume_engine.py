@@ -676,6 +676,8 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
 
 ── SKILLS ──
 - "skills" = flat array of individual skill strings. Minimum 8. No duplicates. Only extract skills actually present in resume.
+  ✓ Correct: ["Python", "React", "Docker"]
+  ✗ Wrong: [{"name": "Python"}, {"skill": "React", "level": "Advanced"}] — NEVER wrap skills in objects, plain strings only.
 - "soft_skills" = professional competency phrases. Must NOT duplicate items in "skills".
 
 ── EXPERIENCE ──
@@ -1377,6 +1379,43 @@ def _val(v) -> str:
     return s
 
 
+def _normalize_str_list(raw) -> list:
+    """
+    Coerce a list field (skills, soft_skills, languages, interests, etc.) into
+    a flat list of clean strings.
+
+    The LLM is instructed to return flat strings, but models occasionally
+    emit objects instead — e.g. {"name": "Python"} or {"skill": "Python",
+    "level": "Advanced"} instead of just "Python". Without this guard, a
+    single such item crashes every downstream '.join()' call with
+    "sequence item 0: expected str instance, dict found" — and since all
+    three resume templates (Modern/Minimal/Executive) read the same parsed
+    data, one malformed item breaks all three downloads at once.
+    """
+    out = []
+    for item in (raw or []):
+        if item is None:
+            continue
+        if isinstance(item, str):
+            s = item.strip()
+        elif isinstance(item, dict):
+            s = None
+            for key in ("name", "skill", "title", "value", "text", "label"):
+                v = item.get(key)
+                if isinstance(v, str) and v.strip():
+                    s = v.strip()
+                    break
+            if s is None:
+                vals = [str(v).strip() for v in item.values()
+                        if isinstance(v, (str, int, float)) and str(v).strip()]
+                s = ", ".join(vals) if vals else ""
+        else:
+            s = str(item).strip()
+        if s and s != "[Not Provided]":
+            out.append(s)
+    return out
+
+
 def _build_contact_header(doc, data: dict, name_size: int, name_color_rgb: tuple,
                            name_font: str, contact_font: str, contact_color_hex: str,
                            contact_size: int = 9, title_font: str = None,
@@ -1920,8 +1959,8 @@ def generate_modern_docx(data: dict) -> BytesIO:
     # Categorized format (Technical / Professional) with pipe-separated values
     # is the industry standard used by Jobscan, Enhancv, and Greenhouse parsers.
     # ══════════════════════════════════════════════════════════════════════
-    tech_skills = [s for s in data.get("skills", []) if s and s != "[Not Provided]"]
-    soft_skills = [s for s in data.get("soft_skills", []) if s and s != "[Not Provided]"]
+    tech_skills = _normalize_str_list(data.get("skills", []))
+    soft_skills = _normalize_str_list(data.get("soft_skills", []))
     if tech_skills or soft_skills:
         _heading("Core Skills")
         if tech_skills:
@@ -2162,7 +2201,7 @@ def generate_modern_docx(data: dict) -> BytesIO:
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 7: LANGUAGES
     # ══════════════════════════════════════════════════════════════════════
-    valid_lang = [l for l in data.get("languages", []) if l and l != "[Not Provided]"]
+    valid_lang = _normalize_str_list(data.get("languages", []))
     if valid_lang:
         _heading("Languages")
         _body_para("  |  ".join(valid_lang))
@@ -2170,7 +2209,7 @@ def generate_modern_docx(data: dict) -> BytesIO:
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 8: INTERESTS
     # ══════════════════════════════════════════════════════════════════════
-    valid_int = [i for i in data.get("interests", []) if i and i != "[Not Provided]"]
+    valid_int = _normalize_str_list(data.get("interests", []))
     if valid_int:
         _heading("Interests")
         _body_para("  |  ".join(valid_int))
@@ -2257,8 +2296,8 @@ def generate_minimal_docx(data: dict) -> BytesIO:
     # Taleo, SmartRecruiters, and legacy HRIS systems parse comma lists best.
     # Labeled "Technical" and "Professional" — matches Greenhouse/Lever field names.
     # ══════════════════════════════════════════════════════════════════════
-    tech_skills = [s for s in data.get("skills", []) if s and s != "[Not Provided]"]
-    soft_skills = [s for s in data.get("soft_skills", []) if s and s != "[Not Provided]"]
+    tech_skills = _normalize_str_list(data.get("skills", []))
+    soft_skills = _normalize_str_list(data.get("soft_skills", []))
     if tech_skills or soft_skills:
         _heading("Core Skills")
         if tech_skills:
@@ -2482,7 +2521,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 7: LANGUAGES
     # ══════════════════════════════════════════════════════════════════════
-    valid_lang = [l for l in data.get("languages", []) if l and l != "[Not Provided]"]
+    valid_lang = _normalize_str_list(data.get("languages", []))
     if valid_lang:
         _heading("Languages")
         _body_para(", ".join(valid_lang))
@@ -2490,7 +2529,7 @@ def generate_minimal_docx(data: dict) -> BytesIO:
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 8: INTERESTS
     # ══════════════════════════════════════════════════════════════════════
-    valid_int = [i for i in data.get("interests", []) if i and i != "[Not Provided]"]
+    valid_int = _normalize_str_list(data.get("interests", []))
     if valid_int:
         _heading("Interests")
         _body_para(", ".join(valid_int))
@@ -2587,8 +2626,8 @@ def generate_creative_docx(data: dict) -> BytesIO:
     # Teal labels + pipe-separated values — visually distinctive, ATS-safe.
     # Georgia used ONLY for name; Calibri throughout body for ATS compatibility.
     # ══════════════════════════════════════════════════════════════════════
-    tech_skills = [s for s in data.get("skills", []) if s and s != "[Not Provided]"]
-    soft_skills = [s for s in data.get("soft_skills", []) if s and s != "[Not Provided]"]
+    tech_skills = _normalize_str_list(data.get("skills", []))
+    soft_skills = _normalize_str_list(data.get("soft_skills", []))
     if tech_skills or soft_skills:
         _heading("Core Skills")
         if tech_skills:
@@ -2816,7 +2855,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 7: LANGUAGES
     # ══════════════════════════════════════════════════════════════════════
-    valid_lang = [l for l in data.get("languages", []) if l and l != "[Not Provided]"]
+    valid_lang = _normalize_str_list(data.get("languages", []))
     if valid_lang:
         _heading("Languages")
         _body_para("  |  ".join(valid_lang))
@@ -2824,7 +2863,7 @@ def generate_creative_docx(data: dict) -> BytesIO:
     # ══════════════════════════════════════════════════════════════════════
     # SECTION 8: INTERESTS
     # ══════════════════════════════════════════════════════════════════════
-    valid_int = [i for i in data.get("interests", []) if i and i != "[Not Provided]"]
+    valid_int = _normalize_str_list(data.get("interests", []))
     if valid_int:
         _heading("Interests")
         _body_para("  |  ".join(valid_int))
@@ -4076,7 +4115,8 @@ def create_chain(vectorstore):
     # ✅ FIX: do NOT increment usage before the call — only after success
 
     # ✅ Create the ChatGroq object
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=groq_api_key)
+    llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0, groq_api_key=groq_api_key,
+                   reasoning_effort="low")
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
     try:
