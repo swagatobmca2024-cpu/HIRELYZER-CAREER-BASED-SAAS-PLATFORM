@@ -18,6 +18,13 @@ CHANGES vs v11:
   8. call_llm() tries all healthy keys before giving up (no early exit on transient).
   9. All existing safety mechanisms (cooldown, quota, TPM, caching) are preserved.
  10. TAB_1_RESUME.py call signature unchanged — drop-in replacement.
+
+CHANGES vs v42:
+ 11. Real token accounting: try_call_llm() now returns actual usage tokens from
+     the Groq response (usage_metadata) when available, and call_llm() records
+     that real figure against the TPM tracker instead of a pre-call, input-only
+     estimate. Fixes TPM drift on long-prompt/long-response calls (e.g. resume
+     analysis) where output tokens were previously invisible to the tracker.
 """
 
 import hashlib
@@ -27,7 +34,7 @@ import random
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import psycopg2
 import psycopg2.extras
@@ -43,10 +50,17 @@ DAILY_KEY_LIMIT          = 800
 DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
-# ── Per-minute token rate limiter (Groq free tier: ~6000 TPM per key) ────────
-TPM_LIMIT          = 5500          # stay slightly under the 6000 hard limit
+# ── Per-minute token rate limiter (Groq free tier: ~6000-12000 TPM per key,
+#    varies by model — see model-specific notes in call_llm docstring) ───────
+TPM_LIMIT          = 5500          # stay slightly under the tightest hard limit
 TPM_WINDOW_SECONDS = 60
 CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
+
+# Fallback padding multiplier applied to the PRE-CALL input-only estimate,
+# used only when the real response has no usage metadata to fall back on.
+# Covers the output tokens the model will still generate (resume feedback,
+# scoring, suggestions, etc. can add 500-1500+ tokens beyond the prompt).
+OUTPUT_TOKEN_PADDING_FACTOR = 1.6
 
 # ── Retry / back-off config ───────────────────────────────────────────────────
 MAX_RETRIES_PER_KEY = 1            # attempts per key before moving on
@@ -610,9 +624,41 @@ def _pick_start_index(n: int) -> int:
 
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
-def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
+def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> Tuple[str, Optional[int]]:
+    """
+    Invokes the model and returns (content, actual_total_tokens).
+
+    actual_total_tokens is the REAL input+output token count reported by
+    Groq's response metadata when available (checks the LangChain-standard
+    `usage_metadata` first, then falls back to the raw `response_metadata`
+    `token_usage` dict some Groq/OpenAI-compatible responses use instead).
+    Returns None if neither is present, so the caller can fall back to a
+    padded pre-call estimate.
+    """
     llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key)
-    return llm.invoke(prompt).content
+    result = llm.invoke(prompt)
+    content = result.content
+
+    actual_tokens = None
+    try:
+        usage = getattr(result, "usage_metadata", None)
+        if usage:
+            total = usage.get("total_tokens") if isinstance(usage, dict) else getattr(usage, "total_tokens", None)
+            if total is None and isinstance(usage, dict):
+                total = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+            actual_tokens = total
+
+        if actual_tokens is None:
+            meta = getattr(result, "response_metadata", {}) or {}
+            token_usage = meta.get("token_usage") or {}
+            if token_usage:
+                actual_tokens = token_usage.get("total_tokens") or (
+                    token_usage.get("prompt_tokens", 0) + token_usage.get("completion_tokens", 0)
+                )
+    except Exception:
+        actual_tokens = None
+
+    return content, actual_tokens
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -633,6 +679,17 @@ def call_llm(
          - Exponential back-off with full jitter between key attempts.
          - Background threads flush usage/failure updates to Supabase.
       4. Over-budget keys tried last as graceful fallback.
+
+    Token accounting (FIX 11):
+      Pre-call headroom checks still use an INPUT-only estimate (the real
+      count isn't known until the response comes back), but that estimate is
+      padded by OUTPUT_TOKEN_PADDING_FACTOR to leave room for the response.
+      After a successful call, the REAL total (input+output) token count from
+      Groq's usage metadata is recorded against the TPM tracker instead of the
+      pre-call estimate — this is what actually protects long-prompt /
+      long-response calls (e.g. full resume analysis) from silently drifting
+      past the tracker's view of real usage. If usage metadata isn't present
+      on a given response, the padded estimate is recorded as a safe fallback.
 
     Thread/multi-user safety:
       - _pick_start_index() uses a module-level atomic counter so concurrent
@@ -657,7 +714,9 @@ def call_llm(
     if cached:
         return cached
 
-    estimated_tokens = _estimate_tokens(prompt)
+    # Pre-call estimate, padded to account for the response the model will
+    # still generate (real figure is recorded post-call — see FIX 11).
+    estimated_tokens = int(_estimate_tokens(prompt) * OUTPUT_TOKEN_PADDING_FACTOR)
     last_error = None
 
     # ── User-supplied key ─────────────────────────────────────────────────────
@@ -668,8 +727,9 @@ def call_llm(
 
     if user_key and _key_has_tpm_headroom(user_key, estimated_tokens):
         try:
-            response = try_call_llm(prompt, user_key, model, temperature)
-            _record_key_tokens(user_key, estimated_tokens, time.time())
+            response, actual_tokens = try_call_llm(prompt, user_key, model, temperature)
+            tokens_to_record = actual_tokens if actual_tokens is not None else estimated_tokens
+            _record_key_tokens(user_key, tokens_to_record, time.time())
             set_cached_response(prompt, model, response)
             _async_increment_usage(user_key)
             return response
@@ -726,9 +786,10 @@ def call_llm(
             time.sleep(random.uniform(0.5, 1.5))
 
         try:
-            response = try_call_llm(prompt, key, model, temperature)
+            response, actual_tokens = try_call_llm(prompt, key, model, temperature)
+            tokens_to_record = actual_tokens if actual_tokens is not None else estimated_tokens
             # Success ──────────────────────────────────────────────────────────
-            _record_key_tokens(key, estimated_tokens, time.time())
+            _record_key_tokens(key, tokens_to_record, time.time())
             set_cached_response(prompt, model, response)
             _mem_increment_usage(key)
             _async_increment_usage(key)
