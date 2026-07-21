@@ -52,7 +52,7 @@ CLEANUP_INTERVAL_SECONDS = 1800
 
 # ── Per-minute token rate limiter (Groq free tier: ~6000-12000 TPM per key,
 #    varies by model — see model-specific notes in call_llm docstring) ───────
-TPM_LIMIT          = 5500          # stay slightly under the tightest hard limit
+TPM_LIMIT          = 4000          # gpt-oss-120b free tier: 8,000 TPM/key — stay well under
 TPM_WINDOW_SECONDS = 60
 CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
 
@@ -665,7 +665,7 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> T
 def call_llm(
     prompt: str,
     session,
-    model: str = "llama-3.3-70b-versatile",
+    model: str = "openai/gpt-oss-120b",
     temperature: float = 0,
 ) -> str:
     """
