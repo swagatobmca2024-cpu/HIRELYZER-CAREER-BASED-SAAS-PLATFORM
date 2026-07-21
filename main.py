@@ -5512,6 +5512,25 @@ Return ONLY one domain from this list, nothing else:
                     icon=None,
                 )
 
+        # ── TEMP DEBUG — remove once TPM-exhaustion diagnosis is confirmed ────
+        # Shows exactly what came back from the merged rewrite+JSON call so
+        # you can see live whether rewrite_ok is False (keys exhausted) or
+        # True-but-empty-json_str (a parsing/marker mismatch instead).
+        with tab1:
+            with st.expander("🔧 Debug: rewrite call result", expanded=False):
+                st.write(f"rewrite_ok = {rewrite_ok}")
+                st.write(f"json_str length = {len(json_str) if json_str else 0}")
+                st.write(f"rewritten_text length = {len(rewritten_text) if rewritten_text else 0}")
+                if json_str:
+                    st.code(json_str[:500], language="json")
+                if not rewrite_ok:
+                    try:
+                        from llm_manager import load_groq_api_keys, get_healthy_keys as _dbg_ghk
+                        _dbg_healthy = _dbg_ghk(load_groq_api_keys())
+                        st.write(f"healthy keys remaining = {len(_dbg_healthy)}")
+                    except Exception as _dbg_e:
+                        st.write(f"key-health check failed: {_dbg_e}")
+
         # ✅ Resume Optimization Module — reuse JSON already produced above (0 extra LLM calls)
         try:
             optimized_resume_data = extract_resume_json(json_str)
