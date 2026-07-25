@@ -43,10 +43,55 @@ DAILY_KEY_LIMIT          = 800
 DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
-# ── Per-minute token rate limiter (Groq free tier: ~6000 TPM per key) ────────
-TPM_LIMIT          = 5500          # stay slightly under the 6000 hard limit
+# ── Per-minute token rate limiter (Groq free tier — model-specific) ──────────
+# Groq's real per-key TPM ceiling differs by model:
+#   openai/gpt-oss-120b     : ~8,000 TPM   (lower ceiling + hidden reasoning
+#                              tokens count against it) — empirically safe ~3500
+# Since keys are shared across ALL concurrent users, headroom matters more for
+# the model with the smaller budget, not less.
+TPM_LIMIT_DEFAULT  = 6000
+TPM_LIMIT_BY_MODEL = {
+    "openai/gpt-oss-120b":     6000,   # real ceiling ~8000; ~2000 token buffer for output + multi-user drift
+    "openai/gpt-oss-20b":      6000,
+}
 TPM_WINDOW_SECONDS = 60
-CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
+
+# ── Token estimation (model-specific) ────────────────────────────────────────
+# CHARS_PER_TOKEN is a rough heuristic, not a real tokenizer call — but the
+# ratio isn't the same across model families, and it matters for how tight
+# the fail-fast/TPM guard actually is:
+#   openai/gpt-oss-*        : uses an o200k-based tokenizer wrapped in the
+#                              Harmony chat format (system/developer/user
+#                              "channels" with special role/marker tokens).
+#                              Use a slightly LOWER chars/token ratio here
+#                              (i.e. assume MORE tokens per char) so the
+#                              estimate stays conservative rather than
+#                              under-counting and risking another 413.
+CHARS_PER_TOKEN_DEFAULT  = 3.6
+CHARS_PER_TOKEN_BY_MODEL = {
+    "openai/gpt-oss-120b":     3.6,
+    "openai/gpt-oss-20b":      3.6,
+}
+# Fixed per-call overhead for Harmony-format structural tokens (channel tags,
+# role markers, etc.) that a raw text-length estimate doesn't see at all.
+HARMONY_OVERHEAD_TOKENS_BY_MODEL = {
+    "openai/gpt-oss-120b": 120,
+    "openai/gpt-oss-20b":  120,
+}
+
+# ── Reasoning-model config ────────────────────────────────────────────────────
+# GPT-OSS models default to reasoning_effort="medium" on Groq, which burns
+# hidden chain-of-thought tokens on every call (counted against TPM) even for
+# tasks like structured JSON extraction that don't need deep reasoning.
+# Force "low" unless a call site explicitly opts into more.
+REASONING_EFFORT_BY_MODEL = {
+    "openai/gpt-oss-120b": "low",
+    "openai/gpt-oss-20b":  "low",
+}
+
+
+def _tpm_limit_for(model: str) -> int:
+    return TPM_LIMIT_BY_MODEL.get(model, TPM_LIMIT_DEFAULT)
 
 # ── Retry / back-off config ───────────────────────────────────────────────────
 MAX_RETRIES_PER_KEY = 1            # attempts per key before moving on
@@ -59,6 +104,10 @@ _QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests",
 _DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
                      "api key", "authentication", "permission denied",
                      "invalid_api_key"]
+# 413s are about the request itself (too many tokens for this model's TPM/
+# context ceiling) — no key will ever succeed, so don't burn through the pool.
+_OVERSIZED_SIGNALS = ["413", "payload too large", "request too large",
+                      "request entity too large", "content too large"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IN-MEMORY STATE  (module-level, shared across all threads in one worker)
@@ -230,8 +279,10 @@ def cleanup_cache():
 
 
 # ── Per-minute token rate limiter helpers ─────────────────────────────────────
-def _estimate_tokens(text: str) -> int:
-    return max(1, len(text) // CHARS_PER_TOKEN)
+def _estimate_tokens(text: str, model: str = "") -> int:
+    ratio = CHARS_PER_TOKEN_BY_MODEL.get(model, CHARS_PER_TOKEN_DEFAULT)
+    overhead = HARMONY_OVERHEAD_TOKENS_BY_MODEL.get(model, 0)
+    return max(1, int(len(text) / ratio)) + overhead
 
 
 def _get_key_tpm(api_key: str, now: float) -> int:
@@ -249,18 +300,19 @@ def _record_key_tokens(api_key: str, token_count: int, now: float):
         _tpm_tracker[api_key] = entries
 
 
-def _key_has_tpm_headroom(api_key: str, estimated_tokens: int) -> bool:
+def _key_has_tpm_headroom(api_key: str, estimated_tokens: int, model: str = "") -> bool:
     now = time.time()
     with _tpm_lock:
         current_tpm = _get_key_tpm(api_key, now)
-    return (current_tpm + estimated_tokens) <= TPM_LIMIT
+    return (current_tpm + estimated_tokens) <= _tpm_limit_for(model)
 
 
-def get_keys_with_tpm_headroom(api_keys: list, estimated_tokens: int) -> list:
+def get_keys_with_tpm_headroom(api_keys: list, estimated_tokens: int, model: str = "") -> list:
     now = time.time()
+    limit = _tpm_limit_for(model)
     with _tpm_lock:
         headroom = [k for k in api_keys
-                    if (_get_key_tpm(k, now) + estimated_tokens) <= TPM_LIMIT]
+                    if (_get_key_tpm(k, now) + estimated_tokens) <= limit]
     return headroom if headroom else api_keys
 
 
@@ -487,6 +539,8 @@ def _classify_error(error: Exception) -> str:
         except Exception:
             pass
 
+    if status_code == 413 or any(s in msg for s in _OVERSIZED_SIGNALS):
+        return "oversized"
     if status_code == 429 or any(s in msg for s in _QUOTA_SIGNALS):
         return "quota"
     if status_code in (401, 403) or any(s in msg for s in _DEAD_KEY_SIGNALS):
@@ -611,7 +665,14 @@ def _pick_start_index(n: int) -> int:
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
-    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key)
+    kwargs = {}
+    effort = REASONING_EFFORT_BY_MODEL.get(model)
+    if effort:
+        # GPT-OSS models default to reasoning_effort="medium" on Groq, which
+        # burns hidden chain-of-thought tokens (counted against TPM) even for
+        # plain extraction tasks. Force "low" unless overridden above.
+        kwargs["model_kwargs"] = {"reasoning_effort": effort}
+    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key, **kwargs)
     return llm.invoke(prompt).content
 
 
@@ -619,7 +680,7 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
 def call_llm(
     prompt: str,
     session,
-    model: str = "llama-3.3-70b-versatile",
+    model: str = "openai/gpt-oss-120b",
     temperature: float = 0,
 ) -> str:
     """
@@ -657,8 +718,20 @@ def call_llm(
     if cached:
         return cached
 
-    estimated_tokens = _estimate_tokens(prompt)
+    estimated_tokens = _estimate_tokens(prompt, model)
     last_error = None
+
+    # ── Fail-fast: prompt is too big for this model on ANY key ────────────────
+    # A 413 from Groq means the request itself exceeds the model's per-request
+    # token ceiling — no amount of key rotation fixes that. Catching it here
+    # avoids burning through the whole 100-key pool on a guaranteed failure.
+    model_limit_check = _tpm_limit_for(model)
+    if estimated_tokens > model_limit_check:
+        return (
+            f"❌ Prompt too large for {model}: ~{estimated_tokens} estimated "
+            f"tokens exceeds its ~{model_limit_check} TPM ceiling. "
+            f"Truncate the input before calling call_llm()."
+        )
 
     # ── User-supplied key ─────────────────────────────────────────────────────
     user_key = ""
@@ -666,7 +739,7 @@ def call_llm(
     if isinstance(raw_user_key, str):
         user_key = raw_user_key.strip()
 
-    if user_key and _key_has_tpm_headroom(user_key, estimated_tokens):
+    if user_key and _key_has_tpm_headroom(user_key, estimated_tokens, model):
         try:
             response = try_call_llm(prompt, user_key, model, temperature)
             _record_key_tokens(user_key, estimated_tokens, time.time())
@@ -677,11 +750,14 @@ def call_llm(
             err_type = _classify_error(e)
             if err_type == "quota":
                 _mem_record_failure(user_key, "quota")
-                _record_key_tokens(user_key, TPM_LIMIT, time.time())
+                _record_key_tokens(user_key, _tpm_limit_for(model), time.time())
                 _async_mark_failure(user_key, "quota")
             elif err_type == "dead":
                 _mem_record_failure(user_key, "error")
                 _async_mark_failure(user_key, "error")
+            # "oversized" falls through here too — user-key attempt simply
+            # fails and admin-key rotation below will hit the same fail-fast
+            # check via model_limit_check, so no special-case needed.
             last_error = e
 
     # ── Admin key rotation ────────────────────────────────────────────────────
@@ -696,10 +772,11 @@ def call_llm(
 
     # Partition: TPM-headroom keys first, over-budget keys as fallback
     now_ts = time.time()
+    model_tpm_limit = _tpm_limit_for(model)
     with _tpm_lock:
         keys_with_headroom = [
             k for k in healthy_keys
-            if (_get_key_tpm(k, now_ts) + estimated_tokens) <= TPM_LIMIT
+            if (_get_key_tpm(k, now_ts) + estimated_tokens) <= model_tpm_limit
         ]
         keys_over_budget = [k for k in healthy_keys if k not in set(keys_with_headroom)]
 
@@ -738,9 +815,13 @@ def call_llm(
 
         except Exception as e:
             err_type = _classify_error(e)
+            if err_type == "oversized":
+                # Every key will 413 on this same prompt — stop immediately.
+                last_error = e
+                break
             if err_type == "quota":
                 _mem_record_failure(key, "quota")
-                _record_key_tokens(key, TPM_LIMIT, time.time())
+                _record_key_tokens(key, model_tpm_limit, time.time())
                 _async_mark_failure(key, "quota")
             elif err_type == "dead":
                 _mem_record_failure(key, "error")
