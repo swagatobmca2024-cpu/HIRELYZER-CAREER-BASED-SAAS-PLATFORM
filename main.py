@@ -5102,7 +5102,8 @@ if uploaded_files and job_description and weights_valid:
         all_text.append(full_text)
 
         # ── Long resume warning — styled card, non-blocking ──────────────────
-        # Content beyond 8000 chars is silently truncated in the LLM prompt.
+        # Content beyond _LONG_RESUME_THRESHOLD (4000 chars, lowered from 8000
+        # for GPT-OSS's smaller TPM budget) is silently truncated in the LLM prompt.
         # _render_long_resume_warning is imported from resume_processor and
         # matches the app's glassmorphism dark theme exactly.
         if len(full_text) > _LONG_RESUME_THRESHOLD:
