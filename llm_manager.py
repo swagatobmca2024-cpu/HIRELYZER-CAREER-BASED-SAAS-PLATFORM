@@ -689,7 +689,17 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
         # burns hidden chain-of-thought tokens (counted against TPM) even for
         # plain extraction tasks. Force "low" unless overridden above.
         kwargs["model_kwargs"] = {"reasoning_effort": effort}
-    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key, **kwargs)
+    # CRITICAL: without an explicit timeout, a stalled/degraded key can block
+    # this call indefinitely — no exception is raised, so the retry loop never
+    # advances to the next key and the caller never gets an error OR a result.
+    # From the user's side this looks exactly like "stuck scanning forever."
+    llm = ChatGroq(
+        model=model,
+        temperature=temperature,
+        groq_api_key=api_key,
+        timeout=20,
+        **kwargs,
+    )
     return llm.invoke(prompt).content
 
 
