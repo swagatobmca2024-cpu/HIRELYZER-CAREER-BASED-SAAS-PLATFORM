@@ -646,7 +646,9 @@ def _render_non_english_card(filename: str, detection: dict, container=None):
 # ============================================================
 
 # Character threshold — beyond this, bottom sections may be silently cut
-_LONG_RESUME_THRESHOLD = 8000
+# (lowered from 8000 → 4000 to match resume_engine.py's prompt truncation,
+#  which was reduced for GPT-OSS's smaller TPM budget vs llama-3.3)
+_LONG_RESUME_THRESHOLD = 4000
 
 def _render_long_resume_warning(filename: str, char_count: int, container=None):
     """
@@ -1294,4 +1296,4 @@ RESUME TEXT:
     }
 
 # Detect bias in resume
-# Predefined gender-coded word lists
+# Predefined gender-coded word listss
