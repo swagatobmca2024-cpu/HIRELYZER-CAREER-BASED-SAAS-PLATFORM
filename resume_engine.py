@@ -544,7 +544,7 @@ FORMAT (STRICT — follow exactly, no extra lines, no URLs, no links):
 
 IMPORTANT: Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
 RESUME TEXT:
-\"\"\"{text[:6000]}\"\"\"
+\"\"\"{text[:4000]}\"\"\"
 """
 
     # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
@@ -2999,65 +2999,6 @@ Suggestions:
     return score, feedback, suggestions
 
 # ✅ Main ATS Evaluation Function
-_ATS_STOPWORDS = {
-    "the", "and", "for", "with", "you", "your", "our", "are", "will", "have",
-    "has", "this", "that", "from", "into", "who", "what", "job", "role",
-    "team", "work", "years", "year", "experience", "ability", "skills",
-    "knowledge", "strong", "good", "excellent", "including", "etc", "must",
-    "should", "can", "able", "using", "use", "used", "any", "all", "each",
-    "such", "than", "then", "them", "they", "their", "about", "across",
-    "within", "per", "via", "not", "but", "also", "may", "one", "two",
-}
-
-def _extract_keyword_candidates(job_description, max_terms=40):
-    """
-    Cheap, deterministic extraction of likely critical terms (tools,
-    frameworks, tech nouns) from a job description — no LLM call.
-    Used only to drive full-resume keyword coverage checking below.
-    """
-    if not job_description:
-        return []
-    # Grab both single tokens and simple 2-word phrases (e.g. "machine learning")
-    raw_tokens = re.findall(r"[A-Za-z][A-Za-z0-9+.#/\-]{2,}", job_description)
-    seen, terms = set(), []
-    for i, tok in enumerate(raw_tokens):
-        low = tok.lower()
-        if low in _ATS_STOPWORDS or len(low) < 3:
-            continue
-        if low not in seen:
-            seen.add(low)
-            terms.append(tok)
-        if i + 1 < len(raw_tokens):
-            nxt = raw_tokens[i + 1].lower()
-            if nxt not in _ATS_STOPWORDS and len(nxt) >= 3:
-                phrase = f"{tok} {raw_tokens[i + 1]}"
-                if phrase.lower() not in seen:
-                    seen.add(phrase.lower())
-                    terms.append(phrase)
-    return terms[:max_terms]
-
-
-def _full_resume_keyword_coverage(resume_text, job_description, max_terms=40):
-    """
-    Checks keyword coverage against the ENTIRE resume_text (uncapped),
-    not just the truncated excerpt sent to the LLM. Pure string matching —
-    zero extra LLM/TPM cost — so long resumes don't silently lose keyword
-    credit for content that lives past the prompt's truncation point.
-    Returns (found, missing) lists of terms.
-    """
-    terms = _extract_keyword_candidates(job_description, max_terms=max_terms)
-    if not terms or not resume_text:
-        return [], []
-    haystack = resume_text.lower()
-    found, missing = [], []
-    for term in terms:
-        if term.lower() in haystack:
-            found.append(term)
-        else:
-            missing.append(term)
-    return found, missing
-
-
 def ats_percentage_score(
     resume_text,
     job_description,
@@ -3490,23 +3431,6 @@ Return ONLY one domain from this list, nothing else:
 
     current_month = datetime.datetime.now().month
 
-    # ✅ Full-resume keyword coverage (computed across the ENTIRE resume_text,
-    #    not the truncated excerpt below) — deterministic string matching,
-    #    zero extra LLM/TPM cost. Fixes silent keyword loss on long resumes.
-    _kw_found, _kw_missing = _full_resume_keyword_coverage(resume_text, job_description)
-    _full_resume_kw_block = ""
-    if _kw_found or _kw_missing:
-        _full_resume_kw_block = f"""
-📊 **FULL-RESUME KEYWORD COVERAGE** (verified programmatically across the
-ENTIRE resume — not just the excerpt below — so terms appearing after the
-excerpt cutoff are still credited):
-- Confirmed present somewhere in the resume: {", ".join(_kw_found) if _kw_found else "none"}
-- Not found anywhere in the resume: {", ".join(_kw_missing) if _kw_missing else "none"}
-Use this list as the ground truth for keyword presence/absence — it is more
-reliable than scanning the excerpt below yourself, since it covers content
-that may fall outside the excerpt.
-"""
-
     # ✅ UPDATED: Stable education scoring with priority degrees minimum
     prompt = f"""
 You are a senior ATS (Applicant Tracking System) Evaluator and Technical Recruiter with 15+ years of experience at top-tier tech firms.
@@ -3742,9 +3666,9 @@ SCORING SCALE for language ({lang_weight} pts max):
 
 📄 **JOB DESCRIPTION:**
 {job_description[:4000]}
-{_full_resume_kw_block}
-📄 **RESUME TEXT (excerpt):**
-{resume_text[:6000]}
+
+📄 **RESUME TEXT:**
+{resume_text[:5000]}
 
 {logic_score_note}
 """
@@ -4146,15 +4070,11 @@ def create_chain(vectorstore):
     # ✅ FIX: do NOT increment usage before the call — only after success
 
     # ✅ Create the ChatGroq object
-    # Force reasoning_effort="low" to match llm_manager.call_llm()'s handling
-    # of gpt-oss models — Groq defaults gpt-oss to "medium", which burns hidden
-    # chain-of-thought tokens against the shared TPM budget for no benefit here.
     llm = ChatGroq(
         model="openai/gpt-oss-120b",
         temperature=0,
         groq_api_key=groq_api_key,
         model_kwargs={"reasoning_effort": "low"},
-        timeout=20,
     )
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
