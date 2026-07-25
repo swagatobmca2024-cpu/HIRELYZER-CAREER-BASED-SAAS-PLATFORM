@@ -45,38 +45,24 @@ CLEANUP_INTERVAL_SECONDS = 1800
 
 # ── Per-minute token rate limiter (Groq free tier — model-specific) ──────────
 # Groq's real per-key TPM ceiling differs by model:
+#   llama-3.3-70b-versatile : ~12,000 TPM  (empirically safe at 5500)
 #   openai/gpt-oss-120b     : ~8,000 TPM   (lower ceiling + hidden reasoning
 #                              tokens count against it) — empirically safe ~3500
 # Since keys are shared across ALL concurrent users, headroom matters more for
 # the model with the smaller budget, not less.
-TPM_LIMIT_DEFAULT  = 6000
+TPM_LIMIT_DEFAULT  = 5500
 TPM_LIMIT_BY_MODEL = {
+    "llama-3.3-70b-versatile": 5500,
     "openai/gpt-oss-120b":     6000,   # real ceiling ~8000; ~2000 token buffer for output + multi-user drift
     "openai/gpt-oss-20b":      6000,
 }
 TPM_WINDOW_SECONDS = 60
 
-# ── Real per-request ceiling (separate from the shared TPM budget above) ─────
-# TPM_LIMIT_BY_MODEL is deliberately conservative — it reserves headroom so ONE
-# user's call doesn't starve every other concurrent user sharing the same key
-# in the same 60s window. It is NOT the point at which Groq actually rejects a
-# single request as too large. Using the conservative shared figure for the
-# fail-fast "is this prompt physically too big" check below was wrong — it was
-# rejecting valid single requests that easily fit in the model's real context
-# window just because they exceeded the smaller shared-budget target.
-REQUEST_CEILING_DEFAULT  = 8000
-REQUEST_CEILING_BY_MODEL = {
-    "openai/gpt-oss-120b":     8000,
-    "openai/gpt-oss-20b":      8000,
-}
-
-def _request_ceiling_for(model: str) -> int:
-    return REQUEST_CEILING_BY_MODEL.get(model, REQUEST_CEILING_DEFAULT)
-
 # ── Token estimation (model-specific) ────────────────────────────────────────
 # CHARS_PER_TOKEN is a rough heuristic, not a real tokenizer call — but the
 # ratio isn't the same across model families, and it matters for how tight
 # the fail-fast/TPM guard actually is:
+#   llama-3.3-70b-versatile : ~4.0 chars/token (measured empirically before)
 #   openai/gpt-oss-*        : uses an o200k-based tokenizer wrapped in the
 #                              Harmony chat format (system/developer/user
 #                              "channels" with special role/marker tokens).
@@ -84,13 +70,15 @@ def _request_ceiling_for(model: str) -> int:
 #                              (i.e. assume MORE tokens per char) so the
 #                              estimate stays conservative rather than
 #                              under-counting and risking another 413.
-CHARS_PER_TOKEN_DEFAULT  = 3.6
+CHARS_PER_TOKEN_DEFAULT  = 4.0
 CHARS_PER_TOKEN_BY_MODEL = {
+    "llama-3.3-70b-versatile": 4.0,
     "openai/gpt-oss-120b":     3.6,
     "openai/gpt-oss-20b":      3.6,
 }
 # Fixed per-call overhead for Harmony-format structural tokens (channel tags,
 # role markers, etc.) that a raw text-length estimate doesn't see at all.
+# Llama's plain chat template has near-zero equivalent overhead by comparison.
 HARMONY_OVERHEAD_TOKENS_BY_MODEL = {
     "openai/gpt-oss-120b": 120,
     "openai/gpt-oss-20b":  120,
@@ -689,17 +677,7 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
         # burns hidden chain-of-thought tokens (counted against TPM) even for
         # plain extraction tasks. Force "low" unless overridden above.
         kwargs["model_kwargs"] = {"reasoning_effort": effort}
-    # CRITICAL: without an explicit timeout, a stalled/degraded key can block
-    # this call indefinitely — no exception is raised, so the retry loop never
-    # advances to the next key and the caller never gets an error OR a result.
-    # From the user's side this looks exactly like "stuck scanning forever."
-    llm = ChatGroq(
-        model=model,
-        temperature=temperature,
-        groq_api_key=api_key,
-        timeout=20,
-        **kwargs,
-    )
+    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key, **kwargs)
     return llm.invoke(prompt).content
 
 
@@ -752,15 +730,11 @@ def call_llm(
     # A 413 from Groq means the request itself exceeds the model's per-request
     # token ceiling — no amount of key rotation fixes that. Catching it here
     # avoids burning through the whole 100-key pool on a guaranteed failure.
-    # NOTE: this must check against the REAL per-request ceiling, not the
-    # conservative shared TPM_LIMIT_BY_MODEL figure — that figure is a
-    # per-minute multi-user budget target, not a hard per-request limit, and
-    # using it here was rejecting valid requests that fit fine in one call.
-    model_limit_check = _request_ceiling_for(model)
+    model_limit_check = _tpm_limit_for(model)
     if estimated_tokens > model_limit_check:
         return (
             f"❌ Prompt too large for {model}: ~{estimated_tokens} estimated "
-            f"tokens exceeds its ~{model_limit_check} per-request ceiling. "
+            f"tokens exceeds its ~{model_limit_check} TPM ceiling. "
             f"Truncate the input before calling call_llm()."
         )
 
