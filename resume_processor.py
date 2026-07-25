@@ -645,14 +645,12 @@ def _render_non_english_card(filename: str, detection: dict, container=None):
 # 📏 Long Resume Warning Card
 # ============================================================
 
-# Character threshold — beyond this, bottom sections may be partially cut
-# (matches resume_engine.py's prompt truncation cap of 6000 chars, sized to
-#  fit within gpt-oss-120b's per-key TPM budget with headroom to spare)
-_LONG_RESUME_THRESHOLD = 6000
+# Character threshold — beyond this, bottom sections may be silently cut
+_LONG_RESUME_THRESHOLD = 8000
 
 def _render_long_resume_warning(filename: str, char_count: int, container=None):
     """
-    Renders a non-blocking warning card for resumes that exceed 6000 characters.
+    Renders a non-blocking warning card for resumes that exceed 8000 characters.
     Does NOT block processing — just informs the user.
     Matches the app's existing glassmorphism dark theme exactly.
     """
@@ -667,7 +665,7 @@ def _render_long_resume_warning(filename: str, char_count: int, container=None):
     fix_items = [
         (_svg_fix1, "Keep your resume to <strong>1–2 pages</strong> — ATS systems and recruiters prefer concise resumes"),
         (_svg_fix2, "Remove outdated roles, redundant bullets, or overly detailed project descriptions"),
-        (_svg_fix3, "Processing will continue — but sections beyond ~6,000 characters may be partially analysed"),
+        (_svg_fix3, "Processing will continue — but sections beyond ~8,000 characters may be partially analysed"),
     ]
     fix_html = "".join(
         f"<li style='display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;list-style:none;'>"
@@ -688,7 +686,7 @@ def _render_long_resume_warning(filename: str, char_count: int, container=None):
         f'</div></div>'
         f'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">'
         f'<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#94a3b8;">{_svg_chars} {char_count:,} characters detected</div>'
-        f'<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#94a3b8;">{_svg_chars} Recommended limit: 6,000 characters</div>'
+        f'<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;padding:6px 12px;font-size:0.78rem;color:#94a3b8;">{_svg_chars} Recommended limit: 8,000 characters</div>'
         f'</div>'
         f'<div style="background:rgba(56,189,248,0.07);border:1px solid rgba(56,189,248,0.18);border-radius:10px;padding:12px 16px;">'
         f'<div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#38bdf8;margin-bottom:10px;">{_svg_label_fix} What This Means</div>'
