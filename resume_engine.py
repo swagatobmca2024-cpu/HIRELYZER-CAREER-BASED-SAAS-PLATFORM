@@ -362,17 +362,25 @@ def rewrite_and_optimize_resume(text, replacement_mapping, user_location):
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
-    # ── Part 1: plain-text ATS rewrite + job title suggestions ─────────────────
-    # Split from the old merged prompt (was ~8500 tokens combined) because that
-    # exceeded GPT-OSS's TPM ceiling on Groq. Each half now runs comfortably
-    # under budget on its own — this trades 1 extra API call per resume for
-    # reliability (5 calls → 6 calls total for a full analysis).
-    prompt_part1 = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
+    prompt = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
 
-Your task is to process the resume below and return the rewritten resume as plain text. Return ONLY the rewritten resume text — no preamble, no explanation, no markdown fences, nothing before or after it.
+Your task is to process the resume below and return TWO outputs in a single response, separated by the exact delimiter shown.
 
 ════════════════════════════════════════════════════════
-PLAIN TEXT REWRITE
+OUTPUT STRUCTURE (return EXACTLY this — no deviation):
+════════════════════════════════════════════════════════
+
+===REWRITTEN_RESUME_START===
+<full plain-text ATS-optimised resume here>
+<followed by job title suggestions block>
+===REWRITTEN_RESUME_END===
+
+===JSON_START===
+<strict JSON object here — no markdown fences, no explanation>
+===JSON_END===
+
+════════════════════════════════════════════════════════
+PART 1 — PLAIN TEXT REWRITE (inside REWRITTEN_RESUME tags)
 ════════════════════════════════════════════════════════
 
 ABSOLUTE RULES — NEVER VIOLATE:
@@ -543,49 +551,14 @@ FORMAT (STRICT — follow exactly, no extra lines, no URLs, no links):
 5. **[Job Title]** — [Specific reason tied to resume evidence]
 
 IMPORTANT: Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
-RESUME TEXT:
-\"\"\"{text[:4000]}\"\"\"
-"""
-
-    # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
-    try:
-        from llm_manager import load_groq_api_keys, get_healthy_keys
-        _all_keys = load_groq_api_keys()
-        _healthy  = get_healthy_keys(_all_keys)
-        if len(_healthy) <= 1:
-            time.sleep(3)   # 3-second pause to let the per-minute window recover
-    except Exception:
-        pass
-
-    try:
-        raw_response_1 = call_llm(prompt_part1, session=st.session_state)
-    except Exception:
-        raw_response_1 = ""
-
-    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
-    if not raw_response_1 or any(raw_response_1.strip().startswith(p) for p in _ERROR_PREFIXES):
-        # Callers MUST check the 3rd value to know the rewrite did not happen
-        return text, "", False
-
-    rewritten_text = raw_response_1.strip()
-
-    # ── Part 2: structure the ALREADY-REWRITTEN text into JSON ───────────────────────
-    # Runs on rewritten_text (not the raw resume) rather than a fresh copy of
-    # the original — it's already normalized to the pipe-delimited section
-    # format Part 1 produces, which makes JSON extraction more reliable, not
-    # less, despite the smaller/separate prompt.
-    prompt_part2 = f"""You are an enterprise-grade ATS resume data-structuring engine.
-
-Your task is to structure the resume text below into a strict JSON object.
 
 ════════════════════════════════════════════════════════
-JSON OBJECT
+PART 2 — JSON OBJECT (inside JSON tags)
 ════════════════════════════════════════════════════════
 
 Return ONLY valid JSON. No preamble, no explanation, no markdown fences.
 
-CONTENT REWRITING — same ATS rules apply to all bullet fields (the resume
-text below is already ATS-optimised — preserve its wording, don't rewrite it).
+CONTENT REWRITING — same ATS rules as Part 1 apply to all bullet fields.
 Strong verbs only. Quantified impact. No pronouns. No repetition across sections.
 
 RETURN ONLY THIS EXACT JSON STRUCTURE:
@@ -687,10 +660,10 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
 - "contact.*" = extract exactly as written. Use "" not null for missing fields. Never invent email, phone, or URLs.
 
 ── SUMMARY ──
-- "summary" = COPY THE PROFESSIONAL SUMMARY SECTION FROM THE RESUME TEXT BELOW VERBATIM — every word, every sentence, nothing omitted.
-  ⚠️ DO NOT rewrite, shorten, paraphrase, or summarize. The 2–3 sentence / 80-word guidance already applied when that text was written.
-  ⚠️ DO NOT stop after the first sentence — copy ALL sentences from the Professional Summary section.
-  ⚠️ If the Professional Summary section below has 3 sentences, this field MUST contain all 3 sentences.
+- "summary" = COPY THE PROFESSIONAL SUMMARY FROM PART 1 VERBATIM — every word, every sentence, nothing omitted.
+  ⚠️ DO NOT rewrite, shorten, paraphrase, or summarize. The 2–3 sentence / 80-word guidance was for Part 1 ONLY.
+  ⚠️ DO NOT stop after the first sentence — copy ALL sentences from Part 1's Professional Summary.
+  ⚠️ If Part 1 has 3 sentences, this field MUST contain all 3 sentences.
   ⚠️ STRICT LIMIT: "summary" must contain ONLY the Professional Summary — maximum 3 sentences.
      NEVER include skills, projects, education, certifications, job titles, or any other section content here.
      If the resume is messy or unstructured, extract ONLY the summary sentences — do NOT dump the entire resume here.
@@ -829,25 +802,58 @@ LAYOUT RECOGNITION RULES (apply before extracting any field):
 ── ADDITIONAL ──
 - "additional" items MUST use object format: {{"name":"","description":"","duration":""}}.
 - "additional[].duration" = Apply 3-TIER DATE INFERENCE RULE. Use "" if no context exists.
+
 RESUME TEXT:
-\"\"\"{rewritten_text[:5000]}\"\"\"
+\"\"\"{text[:8000]}\"\"\"
 """
 
+    # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
     try:
-        raw_response_2 = call_llm(prompt_part2, session=st.session_state)
+        from llm_manager import load_groq_api_keys, get_healthy_keys
+        _all_keys = load_groq_api_keys()
+        _healthy  = get_healthy_keys(_all_keys)
+        if len(_healthy) <= 1:
+            time.sleep(3)   # 3-second pause to let the per-minute window recover
     except Exception:
-        raw_response_2 = ""
+        pass
 
+    try:
+        raw_response = call_llm(prompt, session=st.session_state)
+    except Exception as _e:
+        raw_response = ""
+
+    # ── Guard: if LLM returned an error string or empty, return safe fallback ──
+    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+    if not raw_response or any(raw_response.strip().startswith(p) for p in _ERROR_PREFIXES):
+        # Return original text as-is + empty JSON + failure flag
+        # Callers MUST check the 3rd value to know the rewrite did not happen
+        return text, "", False
+
+    # ── Parse the two sections out of the combined response ──────────────
+    rewritten_text = ""
     json_str = ""
-    if raw_response_2 and not any(raw_response_2.strip().startswith(p) for p in _ERROR_PREFIXES):
-        _json_clean = raw_response_2.strip()
-        _json_clean = re.sub(r'^```(?:json)?\s*', '', _json_clean)
-        _json_clean = re.sub(r'```\s*$', '', _json_clean).strip()
-        _json_fallback = re.search(r'\{[\s\S]*\}', _json_clean)
-        json_str = _json_fallback.group(0).strip() if _json_fallback else _json_clean
-    # If Part 2 failed outright, json_str stays "" — downstream code (report
-    # generation, JSON parsing) already handles an empty json_str gracefully,
-    # same as it did when the old merged call's JSON block failed to parse.
+
+    rewrite_match = re.search(
+        r"===REWRITTEN_RESUME_START===(.*?)===REWRITTEN_RESUME_END===",
+        raw_response, re.DOTALL
+    )
+    json_match = re.search(
+        r"===JSON_START===(.*?)===JSON_END===",
+        raw_response, re.DOTALL
+    )
+
+    if rewrite_match:
+        rewritten_text = rewrite_match.group(1).strip()
+    else:
+        # fallback: use everything before JSON block
+        rewritten_text = raw_response.split("===JSON_START===")[0].strip()
+
+    if json_match:
+        json_str = json_match.group(1).strip()
+    else:
+        # fallback: try to extract JSON object from anywhere in the response
+        json_fallback = re.search(r'\{[\s\S]*\}', raw_response)
+        json_str = json_fallback.group(0).strip() if json_fallback else ""
 
     # ── Summary rescue: patch JSON summary from Part 1 if LLM truncated it ──
     # If the JSON summary is shorter than Part 1's summary, replace it with
@@ -4070,12 +4076,7 @@ def create_chain(vectorstore):
     # ✅ FIX: do NOT increment usage before the call — only after success
 
     # ✅ Create the ChatGroq object
-    llm = ChatGroq(
-        model="openai/gpt-oss-120b",
-        temperature=0,
-        groq_api_key=groq_api_key,
-        model_kwargs={"reasoning_effort": "low"},
-    )
+    llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0, groq_api_key=groq_api_key)
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
     try:
