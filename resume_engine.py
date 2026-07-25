@@ -4154,6 +4154,7 @@ def create_chain(vectorstore):
         temperature=0,
         groq_api_key=groq_api_key,
         model_kwargs={"reasoning_effort": "low"},
+        timeout=20,
     )
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
