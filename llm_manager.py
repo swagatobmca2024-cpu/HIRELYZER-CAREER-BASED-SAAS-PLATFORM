@@ -46,17 +46,13 @@ CLEANUP_INTERVAL_SECONDS = 1800
 # ── Per-minute token rate limiter ─────────────────────────────────────────────
 # gpt-oss-120b only. Groq free tier for openai/gpt-oss-120b is ~8000 TPM per key
 # (lower than llama-3.3-70b's ~12000 TPM — it's a bigger, heavier model).
-TPM_LIMIT          = 6500          # stay under the ~8000 hard limit with buffer
+TPM_LIMIT          = 7500          # stay under the ~8000 hard limit — dynamic
+                                    # max_tokens (see try_call_llm) now does the
+                                    # precise input+output budgeting per call,
+                                    # so this only needs a thin safety margin
 TPM_WINDOW_SECONDS = 60
 CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
 MODEL_NAME         = "openai/gpt-oss-120b"   # single model in use — no llama fallback
-
-# ── Prompt-size ceiling ────────────────────────────────────────────────────────
-# Single source of truth for "how big can a prompt be" — every call site should
-# rely on safe_truncate_for_prompt() below instead of hardcoding its own
-# text[:N] cap. Also enforced centrally inside call_llm() so no future prompt
-# site can slip through uncapped and trigger a 413 Payload Too Large.
-MAX_PROMPT_TOKENS  = 6000          # headroom below Groq's per-request/TPM ceiling
 
 # ── Retry / back-off config ───────────────────────────────────────────────────
 MAX_RETRIES_PER_KEY = 1            # attempts per key before moving on
@@ -69,8 +65,6 @@ _QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests",
 _DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
                      "api key", "authentication", "permission denied",
                      "invalid_api_key"]
-_PAYLOAD_SIGNALS  = ["413", "payload too large", "request too large",
-                     "request entity too large", "content too large"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IN-MEMORY STATE  (module-level, shared across all threads in one worker)
@@ -244,27 +238,6 @@ def cleanup_cache():
 # ── Per-minute token rate limiter helpers ─────────────────────────────────────
 def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // CHARS_PER_TOKEN)
-
-
-def safe_truncate_for_prompt(text: str, max_tokens: int = MAX_PROMPT_TOKENS) -> str:
-    """
-    Token-aware truncation — the single source of truth for "how much text is
-    safe to send in one prompt". Use this at every prompt-building call site
-    instead of hardcoding a text[:N] character slice.
-
-    Char-based slices (text[:4000], text[:8000], etc.) are a guess — token
-    density varies with formatting, whitespace from PDF extraction, and
-    non-English text. This measures against the same _estimate_tokens() the
-    TPM limiter already trusts, so one constant (MAX_PROMPT_TOKENS) governs
-    every prompt in the app.
-    """
-    if not text:
-        return text
-    if _estimate_tokens(text) <= max_tokens:
-        return text
-    ratio = max_tokens / _estimate_tokens(text)
-    cut = max(0, int(len(text) * ratio * 0.95))  # small safety margin
-    return text[:cut]
 
 
 def _get_key_tpm(api_key: str, now: float) -> int:
@@ -502,10 +475,6 @@ def _classify_error(error: Exception) -> str:
     Returns:
         'quota'     — rate limited → 60-min cooldown
         'dead'      — bad/invalid key → 5-min cooldown
-        'payload'   — request body too large (413) → NOT a key problem;
-                      every key will fail the same request, so the caller
-                      should shrink the prompt and retry once instead of
-                      cycling through the whole key rotation.
         'transient' — network blip / server 500 / timeout → do NOT touch the key
     """
     msg = str(error).lower()
@@ -528,8 +497,6 @@ def _classify_error(error: Exception) -> str:
         return "quota"
     if status_code in (401, 403) or any(s in msg for s in _DEAD_KEY_SIGNALS):
         return "dead"
-    if status_code == 413 or any(s in msg for s in _PAYLOAD_SIGNALS):
-        return "payload"
     return "transient"
 
 
@@ -650,73 +617,28 @@ def _pick_start_index(n: int) -> int:
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
+    # Dynamic output cap: Groq's "413 Request Entity Too Large" fires when
+    # (input tokens + max_tokens) exceeds the per-key TPM ceiling — a FIXED
+    # max_tokens breaks as soon as any prompt's input size varies (which is
+    # exactly what happened: a 4096 flat cap worked for short prompts but
+    # overflowed the ~5000-token prompts). Compute it fresh from the real
+    # input size every call instead.
+    estimated_input = _estimate_tokens(prompt)
+    safety_buffer    = 300   # margin for tokenizer estimation error
+    available_output = TPM_LIMIT - estimated_input - safety_buffer
+    max_tokens = max(512, min(4096, available_output))
+
     llm = ChatGroq(
         model=model,
         temperature=temperature,
         groq_api_key=api_key,
-        max_tokens=4096,          # generous enough for full Part1+Part2 JSON output —
-                                   # NOT a truncation cap, just prevents Groq falling back
-                                   # to an even larger implicit default
+        max_tokens=max_tokens,
         reasoning_effort="low",   # gpt-oss-120b only: this is a well-specified
                                    # extraction/rewrite task, not open-ended reasoning —
                                    # skipping deep chain-of-thought reclaims TPM budget
                                    # for the actual output without hurting output quality
     )
     return llm.invoke(prompt).content
-
-
-def _try_key_and_record(prompt: str, key: str, model: str, temperature: float,
-                         estimated_tokens: int) -> str:
-    """
-    One attempt against a single key, with the success bookkeeping that every
-    call site (user key, admin rotation, shrink-and-retry) needs to repeat.
-    Raises on failure — caller classifies the error and decides what's next.
-    """
-    response = try_call_llm(prompt, key, model, temperature)
-    _record_key_tokens(key, estimated_tokens, time.time())
-    set_cached_response(prompt, model, response)
-    _mem_increment_usage(key)
-    _async_increment_usage(key)
-    _mem_clear_failure(key)
-    _async_clear_failure(key)
-    return response
-
-
-# ── Payload-size retry ────────────────────────────────────────────────────────
-MAX_PAYLOAD_SHRINK_ATTEMPTS = 3     # halvings before giving up on this request
-MIN_PROMPT_TOKENS           = 300   # floor — don't shrink into a useless prompt
-
-
-def _call_with_payload_shrink(prompt: str, key: str, model: str, temperature: float,
-                               estimated_tokens: int):
-    """
-    Try ONE key. A 413 means the payload — not the key — is the problem, so
-    every other key would fail identically. Rather than burning through the
-    whole rotation, keep shrinking the SAME prompt and retrying the SAME key
-    up to MAX_PAYLOAD_SHRINK_ATTEMPTS times (one shrink often isn't enough,
-    since Groq's real request-size ceiling doesn't map exactly onto our
-    token estimate).
-
-    Returns (response, final_prompt, final_estimated_tokens) on success.
-
-    Raises on failure. If it's still a 413 after every shrink attempt (or
-    hits MIN_PROMPT_TOKENS first), the raised exception gets a
-    `.unrecoverable_payload = True` attribute so the caller can stop the
-    outer key rotation entirely instead of repeating the same doomed
-    request against every remaining key.
-    """
-    for shrink_attempt in range(MAX_PAYLOAD_SHRINK_ATTEMPTS + 1):
-        try:
-            response = _try_key_and_record(prompt, key, model, temperature, estimated_tokens)
-            return response, prompt, estimated_tokens
-        except Exception as e:
-            if _classify_error(e) != "payload":
-                raise
-            if shrink_attempt == MAX_PAYLOAD_SHRINK_ATTEMPTS or estimated_tokens <= MIN_PROMPT_TOKENS:
-                e.unrecoverable_payload = True
-                raise
-            estimated_tokens = max(MIN_PROMPT_TOKENS, estimated_tokens // 2)
-            prompt = safe_truncate_for_prompt(prompt, estimated_tokens)
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -756,14 +678,6 @@ def call_llm(
         except Exception:
             pass
 
-    # ── Central prompt-size guard ─────────────────────────────────────────────
-    # Every prompt passes through here before ever reaching the cache or the
-    # API — this is the one place that enforces "how big can a prompt be",
-    # so a call site that forgot its own text[:N] cap (or picked a bad one)
-    # can no longer trigger a 413 Payload Too Large on its own.
-    if _estimate_tokens(prompt) > MAX_PROMPT_TOKENS:
-        prompt = safe_truncate_for_prompt(prompt, MAX_PROMPT_TOKENS)
-
     # ── Cache hit ─────────────────────────────────────────────────────────────
     cached = get_cached_response(prompt, model)
     if cached:
@@ -780,9 +694,9 @@ def call_llm(
 
     if user_key and _key_has_tpm_headroom(user_key, estimated_tokens):
         try:
-            response, prompt, estimated_tokens = _call_with_payload_shrink(
-                prompt, user_key, model, temperature, estimated_tokens
-            )
+            response = try_call_llm(prompt, user_key, model, temperature)
+            _record_key_tokens(user_key, estimated_tokens, time.time())
+            set_cached_response(prompt, model, response)
             _async_increment_usage(user_key)
             return response
         except Exception as e:
@@ -794,11 +708,6 @@ def call_llm(
             elif err_type == "dead":
                 _mem_record_failure(user_key, "error")
                 _async_mark_failure(user_key, "error")
-            elif err_type == "payload" and getattr(e, "unrecoverable_payload", False):
-                # Shrinking couldn't get it under Groq's limit even at the
-                # floor size — every admin key would fail the same way, so
-                # don't waste the whole rotation on it. Report it now.
-                return f"❌ LLM unavailable: request too large even after shrinking ({e})"
             last_error = e
 
     # ── Admin key rotation ────────────────────────────────────────────────────
@@ -843,9 +752,14 @@ def call_llm(
             time.sleep(random.uniform(0.5, 1.5))
 
         try:
-            response, prompt, estimated_tokens = _call_with_payload_shrink(
-                prompt, key, model, temperature, estimated_tokens
-            )
+            response = try_call_llm(prompt, key, model, temperature)
+            # Success ──────────────────────────────────────────────────────────
+            _record_key_tokens(key, estimated_tokens, time.time())
+            set_cached_response(prompt, model, response)
+            _mem_increment_usage(key)
+            _async_increment_usage(key)
+            _mem_clear_failure(key)
+            _async_clear_failure(key)
             return response
 
         except Exception as e:
@@ -857,16 +771,8 @@ def call_llm(
             elif err_type == "dead":
                 _mem_record_failure(key, "error")
                 _async_mark_failure(key, "error")
-            elif err_type == "payload" and getattr(e, "unrecoverable_payload", False):
-                # Shrinking couldn't get this request under Groq's limit even
-                # at the floor size — every remaining key would fail it the
-                # exact same way. Stop the rotation now instead of burning
-                # through the rest of the keys (and their backoff delays) on
-                # a request that can never succeed as-is.
-                return f"❌ LLM unavailable: request too large even after shrinking ({e})"
-            # transient (or a payload error that WAS fixed by shrinking, just
-            # not on this particular key): try the next key
+            # transient: key stays healthy, try next
             last_error = e
             attempt   += 1
 
-    return f"❌ LLM unavailable: {last_error or 'All API keys exhausted'}"
+    return f"❌ LLM unavailable: {last_error or 'All API keys exhausted'}"s
