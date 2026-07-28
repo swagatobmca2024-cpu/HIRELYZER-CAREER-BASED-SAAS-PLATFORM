@@ -43,10 +43,13 @@ DAILY_KEY_LIMIT          = 800
 DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
-# ── Per-minute token rate limiter (Groq free tier: ~6000 TPM per key) ────────
-TPM_LIMIT          = 5500          # stay slightly under the 6000 hard limit
+# ── Per-minute token rate limiter ─────────────────────────────────────────────
+# gpt-oss-120b only. Groq free tier for openai/gpt-oss-120b is ~8000 TPM per key
+# (lower than llama-3.3-70b's ~12000 TPM — it's a bigger, heavier model).
+TPM_LIMIT          = 6500          # stay under the ~8000 hard limit with buffer
 TPM_WINDOW_SECONDS = 60
 CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
+MODEL_NAME         = "openai/gpt-oss-120b"   # single model in use — no llama fallback
 
 # ── Retry / back-off config ───────────────────────────────────────────────────
 MAX_RETRIES_PER_KEY = 1            # attempts per key before moving on
@@ -611,7 +614,18 @@ def _pick_start_index(n: int) -> int:
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
-    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key)
+    llm = ChatGroq(
+        model=model,
+        temperature=temperature,
+        groq_api_key=api_key,
+        max_tokens=4096,          # generous enough for full Part1+Part2 JSON output —
+                                   # NOT a truncation cap, just prevents Groq falling back
+                                   # to an even larger implicit default
+        reasoning_effort="low",   # gpt-oss-120b only: this is a well-specified
+                                   # extraction/rewrite task, not open-ended reasoning —
+                                   # skipping deep chain-of-thought reclaims TPM budget
+                                   # for the actual output without hurting output quality
+    )
     return llm.invoke(prompt).content
 
 
@@ -619,7 +633,7 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
 def call_llm(
     prompt: str,
     session,
-    model: str = "llama-3.3-70b-versatile",
+    model: str = MODEL_NAME,
     temperature: float = 0,
 ) -> str:
     """
