@@ -24,7 +24,6 @@ import hashlib
 import itertools
 import os
 import random
-import re
 import threading
 import time
 from datetime import datetime, timedelta
@@ -44,16 +43,10 @@ DAILY_KEY_LIMIT          = 800
 DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
-# ── Per-minute token rate limiter ─────────────────────────────────────────────
-# gpt-oss-120b only. Groq free tier for openai/gpt-oss-120b is ~8000 TPM per key
-# (lower than llama-3.3-70b's ~12000 TPM — it's a bigger, heavier model).
-TPM_LIMIT          = 7500          # stay under the ~8000 hard limit — dynamic
-                                    # max_tokens (see try_call_llm) now does the
-                                    # precise input+output budgeting per call,
-                                    # so this only needs a thin safety margin
+# ── Per-minute token rate limiter (Groq free tier: ~6000 TPM per key) ────────
+TPM_LIMIT          = 5500          # stay slightly under the 6000 hard limit
 TPM_WINDOW_SECONDS = 60
 CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
-MODEL_NAME         = "openai/gpt-oss-120b"   # single model in use — no llama fallback
 
 # ── Retry / back-off config ───────────────────────────────────────────────────
 MAX_RETRIES_PER_KEY = 1            # attempts per key before moving on
@@ -272,36 +265,9 @@ def get_keys_with_tpm_headroom(api_keys: list, estimated_tokens: int) -> list:
 
 
 # ── In-memory failure helpers ─────────────────────────────────────────────────
-def _extract_retry_after_seconds(error_msg: str):
-    """
-    Groq's rate-limit errors tell you exactly how long to wait, e.g.
-    'Please try again in 21.5s' or 'try again in 1m4.2s'. Parsing this gives
-    the REAL cooldown instead of assuming every quota-classified error needs
-    the full hour-long penalty — a per-minute RPM/TPM bump only needs seconds,
-    not an hour, and treating them the same silently benches most of the key
-    pool after just a few scans.
-    """
-    if not error_msg:
-        return None
-    msg = error_msg.lower()
-    m = re.search(r'try again in\s+(?:(\d+)m)?(\d+(?:\.\d+)?)s', msg)
-    if m:
-        minutes = float(m.group(1)) if m.group(1) else 0.0
-        seconds = float(m.group(2))
-        return minutes * 60 + seconds
-    m = re.search(r'try again in\s+(\d+(?:\.\d+)?)\s*ms', msg)
-    if m:
-        return float(m.group(1)) / 1000
-    return None
-
-
-def _mem_record_failure(api_key: str, reason: str, cooldown_override_secs: float = None):
+def _mem_record_failure(api_key: str, reason: str):
     with _mem_failures_lock:
-        _mem_failures[api_key] = {
-            "time": time.time(),
-            "reason": reason,
-            "cooldown_override": cooldown_override_secs,
-        }
+        _mem_failures[api_key] = {"time": time.time(), "reason": reason}
 
 
 def _mem_clear_failure(api_key: str):
@@ -314,16 +280,11 @@ def _mem_is_in_cooldown(api_key: str) -> bool:
         entry = _mem_failures.get(api_key)
     if not entry:
         return False
-    override = entry.get("cooldown_override")
-    if override is not None:
-        # Real wait time Groq told us about — add a small safety buffer.
-        cooldown_secs = override + 3
-    else:
-        cooldown_secs = (
-            QUOTA_COOLDOWN_MINUTES * 60
-            if entry["reason"] == "quota"
-            else FAILURE_COOLDOWN_MINUTES * 60
-        )
+    cooldown_secs = (
+        QUOTA_COOLDOWN_MINUTES * 60
+        if entry["reason"] == "quota"
+        else FAILURE_COOLDOWN_MINUTES * 60
+    )
     return (time.time() - entry["time"]) < cooldown_secs
 
 
@@ -365,8 +326,6 @@ def _async_increment_usage(api_key: str):
         except Exception:
             pass
     threading.Thread(target=_write, daemon=True).start()
-
-
 
 
 def _async_clear_failure(api_key: str):
@@ -652,35 +611,7 @@ def _pick_start_index(n: int) -> int:
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
-    # Dynamic output cap: Groq's "413 Request Entity Too Large" fires when
-    # (input tokens + max_tokens) exceeds the per-key TPM ceiling — a FIXED
-    # max_tokens breaks as soon as any prompt's input size varies (which is
-    # exactly what happened: a 4096 flat cap worked for short prompts but
-    # overflowed the ~5000-token prompts). Compute it fresh from the real
-    # input size every call instead.
-    estimated_input = _estimate_tokens(prompt)
-    safety_buffer    = 300   # margin for tokenizer estimation error
-    available_output = TPM_LIMIT - estimated_input - safety_buffer
-    max_tokens = max(512, min(4096, available_output))
-
-    llm = ChatGroq(
-        model=model,
-        temperature=temperature,
-        groq_api_key=api_key,
-        max_tokens=max_tokens,
-        max_retries=0,            # CRITICAL: the Groq SDK's default internal retry
-                                   # behavior catches 429s itself and sleeps for the
-                                   # server's full stated wait time (we saw 36s, 51s,
-                                   # 54s in the logs) BEFORE raising back to us — on
-                                   # the SAME key, bypassing our 99 other keys entirely.
-                                   # Disabling this lets our own rotation logic see
-                                   # the failure immediately and jump keys in milliseconds
-                                   # instead of waiting tens of seconds on one dead key.
-        reasoning_effort="low",   # gpt-oss-120b only: this is a well-specified
-                                   # extraction/rewrite task, not open-ended reasoning —
-                                   # skipping deep chain-of-thought reclaims TPM budget
-                                   # for the actual output without hurting output quality
-    )
+    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key)
     return llm.invoke(prompt).content
 
 
@@ -688,7 +619,7 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
 def call_llm(
     prompt: str,
     session,
-    model: str = MODEL_NAME,
+    model: str = "llama-3.3-70b-versatile",
     temperature: float = 0,
 ) -> str:
     """
@@ -745,8 +676,7 @@ def call_llm(
         except Exception as e:
             err_type = _classify_error(e)
             if err_type == "quota":
-                retry_after = _extract_retry_after_seconds(str(e))
-                _mem_record_failure(user_key, "quota", cooldown_override_secs=retry_after)
+                _mem_record_failure(user_key, "quota")
                 _record_key_tokens(user_key, TPM_LIMIT, time.time())
                 _async_mark_failure(user_key, "quota")
             elif err_type == "dead":
@@ -809,8 +739,7 @@ def call_llm(
         except Exception as e:
             err_type = _classify_error(e)
             if err_type == "quota":
-                retry_after = _extract_retry_after_seconds(str(e))
-                _mem_record_failure(key, "quota", cooldown_override_secs=retry_after)
+                _mem_record_failure(key, "quota")
                 _record_key_tokens(key, TPM_LIMIT, time.time())
                 _async_mark_failure(key, "quota")
             elif err_type == "dead":
