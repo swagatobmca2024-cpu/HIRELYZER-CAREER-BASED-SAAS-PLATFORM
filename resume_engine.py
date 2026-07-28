@@ -1021,6 +1021,24 @@ RESUME TEXT:
         except Exception:
             pass  # never break main flow
 
+    # ── Enforce "no URLs in job title suggestions" — don't just hope the LLM
+    # obeys the instruction. gpt-oss-120b follows it inconsistently (sometimes
+    # adds a LinkedIn search link, sometimes doesn't), so strip it in code.
+    try:
+        for _marker in ["### 🎯 Suggested Job Titles", "### Suggested Job Titles"]:
+            if _marker in rewritten_text:
+                _head, _sep, _tail = rewritten_text.partition(_marker)
+                # Remove any URL and the 🔗 emoji from the suggestions block only
+                _tail = re.sub(r'https?://\S+', '', _tail)
+                _tail = _tail.replace('🔗', '')
+                # Collapse resulting double spaces / trailing dashes left behind
+                _tail = re.sub(r'[ \t]{2,}', ' ', _tail)
+                _tail = re.sub(r'—\s*$', '', _tail, flags=re.MULTILINE)
+                rewritten_text = _head + _sep + _tail
+                break
+    except Exception:
+        pass  # never break main flow
+
     return rewritten_text, json_str, True
 
 
@@ -1255,11 +1273,12 @@ def extract_resume_json(llm_response: str) -> dict:
 
         # 3. LLM used alternate key names inside contact block
         ALT_KEYS = {
-            "linkedin": ["linkedin_url", "linkedin_profile", "linkedin_profile_url",
-                         "linkedIn", "linked_in", "profile_url", "profile"],
-            "github":   ["github_url", "github_profile", "github_link",
-                         "portfolio_url", "portfolio", "website", "repo"],
-            "location": ["city", "address", "city_country", "current_location"],
+            "linkedin":  ["linkedin_url", "linkedin_profile", "linkedin_profile_url",
+                          "linkedIn", "linked_in", "profile_url", "profile"],
+            "github":    ["github_url", "github_profile", "github_link", "repo", "repository"],
+            "portfolio": ["portfolio_url", "portfolio_link", "portfolio_website",
+                          "personal_website", "personal_site", "website", "site"],
+            "location":  ["city", "address", "city_country", "current_location"],
         }
         for canonical, alts in ALT_KEYS.items():
             if not ct.get(canonical):
