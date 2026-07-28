@@ -5461,16 +5461,18 @@ Return ONLY one domain from this list, nothing else:
 
         with st.spinner("✍️ Rewriting resume & running ATS evaluation in parallel..."):
             # ── Key-aware parallel/sequential decision ────────────────────────
-            # When only 1–2 healthy keys remain, running both tasks in parallel
-            # bursts the same key simultaneously and triggers rate limiting.
-            # Switch to sequential mode with a short gap to let the TPM window recover.
+            # 2 concurrent tasks only need 2 healthy keys to avoid bursting the
+            # same key simultaneously — was set to 3 as an extra-conservative
+            # margin from when TPM/cooldown tracking was less accurate. Now that
+            # cooldowns reflect Groq's real retry-after time (not a flat 60 min)
+            # and max_tokens is sized per-call, 2 is the correct threshold.
             try:
                 from llm_manager import load_groq_api_keys, get_healthy_keys as _ghk
                 _n_healthy = len(_ghk(load_groq_api_keys()))
             except Exception:
                 _n_healthy = 99  # assume enough keys if check fails
 
-            if _n_healthy >= 3:
+            if _n_healthy >= 2:
                 # Enough keys: run truly in parallel (original behaviour)
                 with ThreadPoolExecutor(max_workers=2) as _executor:
                     _future_rewrite = _executor.submit(_task_rewrite)
@@ -5486,7 +5488,11 @@ Return ONLY one domain from this list, nothing else:
 
                     ats_result, ats_scores = _future_ats.result()
             else:
-                # Low on keys: run sequentially with a gap to protect the TPM window
+                # Only 1 healthy key: run sequentially with a short gap.
+                # Shortened from 4s to 2s — the dynamic max_tokens sizing means
+                # each call already stays within the TPM ceiling on its own, so
+                # this gap only needs to cover normal per-minute window drift,
+                # not compensate for an oversized request like before.
                 try:
                     highlighted_text, rewritten_text, _, _, _, _, json_str, rewrite_ok = _task_rewrite()
                 except Exception:
@@ -5495,7 +5501,7 @@ Return ONLY one domain from this list, nothing else:
                     json_str         = ""
                     rewrite_ok       = False
 
-                time.sleep(4)   # let per-minute token window partially recover
+                time.sleep(2)   # let per-minute token window partially recover
 
                 ats_result, ats_scores = _task_ats()
 
