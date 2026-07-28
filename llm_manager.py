@@ -682,6 +682,43 @@ def _try_key_and_record(prompt: str, key: str, model: str, temperature: float,
     return response
 
 
+# ── Payload-size retry ────────────────────────────────────────────────────────
+MAX_PAYLOAD_SHRINK_ATTEMPTS = 3     # halvings before giving up on this request
+MIN_PROMPT_TOKENS           = 300   # floor — don't shrink into a useless prompt
+
+
+def _call_with_payload_shrink(prompt: str, key: str, model: str, temperature: float,
+                               estimated_tokens: int):
+    """
+    Try ONE key. A 413 means the payload — not the key — is the problem, so
+    every other key would fail identically. Rather than burning through the
+    whole rotation, keep shrinking the SAME prompt and retrying the SAME key
+    up to MAX_PAYLOAD_SHRINK_ATTEMPTS times (one shrink often isn't enough,
+    since Groq's real request-size ceiling doesn't map exactly onto our
+    token estimate).
+
+    Returns (response, final_prompt, final_estimated_tokens) on success.
+
+    Raises on failure. If it's still a 413 after every shrink attempt (or
+    hits MIN_PROMPT_TOKENS first), the raised exception gets a
+    `.unrecoverable_payload = True` attribute so the caller can stop the
+    outer key rotation entirely instead of repeating the same doomed
+    request against every remaining key.
+    """
+    for shrink_attempt in range(MAX_PAYLOAD_SHRINK_ATTEMPTS + 1):
+        try:
+            response = _try_key_and_record(prompt, key, model, temperature, estimated_tokens)
+            return response, prompt, estimated_tokens
+        except Exception as e:
+            if _classify_error(e) != "payload":
+                raise
+            if shrink_attempt == MAX_PAYLOAD_SHRINK_ATTEMPTS or estimated_tokens <= MIN_PROMPT_TOKENS:
+                e.unrecoverable_payload = True
+                raise
+            estimated_tokens = max(MIN_PROMPT_TOKENS, estimated_tokens // 2)
+            prompt = safe_truncate_for_prompt(prompt, estimated_tokens)
+
+
 # ── Main entry point ──────────────────────────────────────────────────────────
 def call_llm(
     prompt: str,
@@ -734,7 +771,6 @@ def call_llm(
 
     estimated_tokens = _estimate_tokens(prompt)
     last_error = None
-    payload_shrunk = False  # shrink-and-retry at most once per call_llm() call
 
     # ── User-supplied key ─────────────────────────────────────────────────────
     user_key = ""
@@ -744,7 +780,9 @@ def call_llm(
 
     if user_key and _key_has_tpm_headroom(user_key, estimated_tokens):
         try:
-            response = _try_key_and_record(prompt, user_key, model, temperature, estimated_tokens)
+            response, prompt, estimated_tokens = _call_with_payload_shrink(
+                prompt, user_key, model, temperature, estimated_tokens
+            )
             _async_increment_usage(user_key)
             return response
         except Exception as e:
@@ -756,21 +794,11 @@ def call_llm(
             elif err_type == "dead":
                 _mem_record_failure(user_key, "error")
                 _async_mark_failure(user_key, "error")
-            elif err_type == "payload" and not payload_shrunk:
-                # Not a key problem — the request itself is oversized, so
-                # every key would fail it identically. Shrink once and retry
-                # the same key immediately rather than falling through to
-                # burn the entire admin rotation on an unwinnable request.
-                prompt = safe_truncate_for_prompt(prompt, max(estimated_tokens // 2, 500))
-                estimated_tokens = _estimate_tokens(prompt)
-                payload_shrunk = True
-                try:
-                    response = _try_key_and_record(prompt, user_key, model, temperature, estimated_tokens)
-                    _async_increment_usage(user_key)
-                    return response
-                except Exception as e2:
-                    last_error = e2
-                    e = e2  # fall through to admin rotation with the shrunk prompt
+            elif err_type == "payload" and getattr(e, "unrecoverable_payload", False):
+                # Shrinking couldn't get it under Groq's limit even at the
+                # floor size — every admin key would fail the same way, so
+                # don't waste the whole rotation on it. Report it now.
+                return f"❌ LLM unavailable: request too large even after shrinking ({e})"
             last_error = e
 
     # ── Admin key rotation ────────────────────────────────────────────────────
@@ -815,7 +843,10 @@ def call_llm(
             time.sleep(random.uniform(0.5, 1.5))
 
         try:
-            return _try_key_and_record(prompt, key, model, temperature, estimated_tokens)
+            response, prompt, estimated_tokens = _call_with_payload_shrink(
+                prompt, key, model, temperature, estimated_tokens
+            )
+            return response
 
         except Exception as e:
             err_type = _classify_error(e)
@@ -826,31 +857,15 @@ def call_llm(
             elif err_type == "dead":
                 _mem_record_failure(key, "error")
                 _async_mark_failure(key, "error")
-            elif err_type == "payload" and not payload_shrunk:
-                # Every key would fail this exact request identically — it's
-                # the payload, not the key. Shrink once and retry the SAME
-                # key right away instead of cycling through the rest of the
-                # rotation (which would just waste 100 keys' worth of
-                # backoff on a request that can never succeed as-is).
-                prompt = safe_truncate_for_prompt(prompt, max(estimated_tokens // 2, 500))
-                estimated_tokens = _estimate_tokens(prompt)
-                payload_shrunk = True
-                try:
-                    return _try_key_and_record(prompt, key, model, temperature, estimated_tokens)
-                except Exception as e2:
-                    err_type2 = _classify_error(e2)
-                    if err_type2 == "quota":
-                        _mem_record_failure(key, "quota")
-                        _record_key_tokens(key, TPM_LIMIT, time.time())
-                        _async_mark_failure(key, "quota")
-                    elif err_type2 == "dead":
-                        _mem_record_failure(key, "error")
-                        _async_mark_failure(key, "error")
-                    last_error = e2
-                    attempt += 1
-                    continue
-            # transient (or payload already shrunk once): key not necessarily
-            # bad, try next
+            elif err_type == "payload" and getattr(e, "unrecoverable_payload", False):
+                # Shrinking couldn't get this request under Groq's limit even
+                # at the floor size — every remaining key would fail it the
+                # exact same way. Stop the rotation now instead of burning
+                # through the rest of the keys (and their backoff delays) on
+                # a request that can never succeed as-is.
+                return f"❌ LLM unavailable: request too large even after shrinking ({e})"
+            # transient (or a payload error that WAS fixed by shrinking, just
+            # not on this particular key): try the next key
             last_error = e
             attempt   += 1
 
