@@ -44,7 +44,7 @@ from llm_manager import (
     call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure, safe_truncate_for_prompt,
+    _async_clear_failure,
 )
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
@@ -547,7 +547,7 @@ FORMAT (STRICT — follow exactly, no extra lines, no URLs, no links):
 IMPORTANT: Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
 
 RESUME TEXT:
-\"\"\"{safe_truncate_for_prompt(text)}\"\"\"
+\"\"\"{text[:8000]}\"\"\"
 """
 
     prompt_part2 = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
@@ -798,7 +798,7 @@ LAYOUT RECOGNITION RULES (apply before extracting any field):
 - "additional[].duration" = Apply 3-TIER DATE INFERENCE RULE. Use "" if no context exists.
 
 RESUME TEXT:
-\"\"\"{safe_truncate_for_prompt(text)}\"\"\"
+\"\"\"{text[:8000]}\"\"\"
 """
 
     # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
@@ -3010,7 +3010,7 @@ Suggestions:
 - <Actionable suggestion 5 with example if helpful>
 
 ---
-{safe_truncate_for_prompt(text)}
+{text}
 ---
 """
 
