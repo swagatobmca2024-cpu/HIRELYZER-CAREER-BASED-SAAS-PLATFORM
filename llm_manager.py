@@ -775,4 +775,4 @@ def call_llm(
             last_error = e
             attempt   += 1
 
-    return f"❌ LLM unavailable: {last_error or 'All API keys exhausted'}"s
+    return f"❌ LLM unavailable: {last_error or 'All API keys exhausted'}"
