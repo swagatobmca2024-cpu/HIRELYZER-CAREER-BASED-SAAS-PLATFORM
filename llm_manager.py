@@ -24,6 +24,7 @@ import hashlib
 import itertools
 import os
 import random
+import re
 import threading
 import time
 from datetime import datetime, timedelta
@@ -271,9 +272,36 @@ def get_keys_with_tpm_headroom(api_keys: list, estimated_tokens: int) -> list:
 
 
 # ── In-memory failure helpers ─────────────────────────────────────────────────
-def _mem_record_failure(api_key: str, reason: str):
+def _extract_retry_after_seconds(error_msg: str):
+    """
+    Groq's rate-limit errors tell you exactly how long to wait, e.g.
+    'Please try again in 21.5s' or 'try again in 1m4.2s'. Parsing this gives
+    the REAL cooldown instead of assuming every quota-classified error needs
+    the full hour-long penalty — a per-minute RPM/TPM bump only needs seconds,
+    not an hour, and treating them the same silently benches most of the key
+    pool after just a few scans.
+    """
+    if not error_msg:
+        return None
+    msg = error_msg.lower()
+    m = re.search(r'try again in\s+(?:(\d+)m)?(\d+(?:\.\d+)?)s', msg)
+    if m:
+        minutes = float(m.group(1)) if m.group(1) else 0.0
+        seconds = float(m.group(2))
+        return minutes * 60 + seconds
+    m = re.search(r'try again in\s+(\d+(?:\.\d+)?)\s*ms', msg)
+    if m:
+        return float(m.group(1)) / 1000
+    return None
+
+
+def _mem_record_failure(api_key: str, reason: str, cooldown_override_secs: float = None):
     with _mem_failures_lock:
-        _mem_failures[api_key] = {"time": time.time(), "reason": reason}
+        _mem_failures[api_key] = {
+            "time": time.time(),
+            "reason": reason,
+            "cooldown_override": cooldown_override_secs,
+        }
 
 
 def _mem_clear_failure(api_key: str):
@@ -286,11 +314,16 @@ def _mem_is_in_cooldown(api_key: str) -> bool:
         entry = _mem_failures.get(api_key)
     if not entry:
         return False
-    cooldown_secs = (
-        QUOTA_COOLDOWN_MINUTES * 60
-        if entry["reason"] == "quota"
-        else FAILURE_COOLDOWN_MINUTES * 60
-    )
+    override = entry.get("cooldown_override")
+    if override is not None:
+        # Real wait time Groq told us about — add a small safety buffer.
+        cooldown_secs = override + 3
+    else:
+        cooldown_secs = (
+            QUOTA_COOLDOWN_MINUTES * 60
+            if entry["reason"] == "quota"
+            else FAILURE_COOLDOWN_MINUTES * 60
+        )
     return (time.time() - entry["time"]) < cooldown_secs
 
 
@@ -332,6 +365,8 @@ def _async_increment_usage(api_key: str):
         except Exception:
             pass
     threading.Thread(target=_write, daemon=True).start()
+
+
 
 
 def _async_clear_failure(api_key: str):
@@ -702,7 +737,8 @@ def call_llm(
         except Exception as e:
             err_type = _classify_error(e)
             if err_type == "quota":
-                _mem_record_failure(user_key, "quota")
+                retry_after = _extract_retry_after_seconds(str(e))
+                _mem_record_failure(user_key, "quota", cooldown_override_secs=retry_after)
                 _record_key_tokens(user_key, TPM_LIMIT, time.time())
                 _async_mark_failure(user_key, "quota")
             elif err_type == "dead":
@@ -765,7 +801,8 @@ def call_llm(
         except Exception as e:
             err_type = _classify_error(e)
             if err_type == "quota":
-                _mem_record_failure(key, "quota")
+                retry_after = _extract_retry_after_seconds(str(e))
+                _mem_record_failure(key, "quota", cooldown_override_secs=retry_after)
                 _record_key_tokens(key, TPM_LIMIT, time.time())
                 _async_mark_failure(key, "quota")
             elif err_type == "dead":
