@@ -532,20 +532,6 @@ GRADE/GPA FORMATTING RULES (CRITICAL — applies to Education section):
 BIAS REPLACEMENT RULES — APPLY EXACTLY:
 {formatted_mapping}
 
-MANDATORY JOB TITLE SUGGESTIONS (append after the resume text):
-
-### 🎯 Suggested Job Titles (Based on Resume)
-
-Provide EXACTLY 5 job titles suited for a candidate in {user_location}.
-FORMAT (STRICT — follow exactly, no extra lines, no URLs, no links):
-1. **[Job Title]** — [Specific reason tied to resume evidence]
-2. **[Job Title]** — [Specific reason tied to resume evidence]
-3. **[Job Title]** — [Specific reason tied to resume evidence]
-4. **[Job Title]** — [Specific reason tied to resume evidence]
-5. **[Job Title]** — [Specific reason tied to resume evidence]
-
-IMPORTANT: Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
-
 RESUME TEXT:
 \"\"\"{text[:8000]}\"\"\"
 """
@@ -826,6 +812,46 @@ RESUME TEXT:
         part2_response = call_llm(prompt_part2, session=st.session_state).strip()
     except Exception:
         part2_response = ""
+
+    # ── Job title suggestions: separate, dedicated, lightweight call ─────────
+    # Previously appended to the END of Part 1's own prompt — but Part 1's
+    # output budget (~2,200 tokens) is tight enough that a full resume rewrite
+    # alone can consume it entirely, silently truncating the output BEFORE the
+    # job-titles section ever gets generated. The resume renders fine; the
+    # titles just vanish. Splitting this into its own tiny call means it can
+    # never get starved by the main rewrite's length — it uses the (much
+    # shorter) already-rewritten resume as input, so input+output here is a
+    # small fraction of the TPM ceiling regardless of how long the resume is.
+    # Non-fatal on failure: the main rewrite still succeeds without titles.
+    job_titles_block = ""
+    if part1_response and not any(part1_response.startswith(p) for p in
+                                   ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")):
+        try:
+            prompt_job_titles = f"""You are a senior technical recruiter.
+
+Based on the resume below, suggest EXACTLY 5 job titles suited for a candidate in {user_location}.
+
+FORMAT (STRICT — follow exactly, no extra lines, no URLs, no links, no preamble):
+1. **[Job Title]** — [Specific reason tied to resume evidence]
+2. **[Job Title]** — [Specific reason tied to resume evidence]
+3. **[Job Title]** — [Specific reason tied to resume evidence]
+4. **[Job Title]** — [Specific reason tied to resume evidence]
+5. **[Job Title]** — [Specific reason tied to resume evidence]
+
+IMPORTANT: Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
+
+RESUME:
+\"\"\"{part1_response[:4000]}\"\"\"
+"""
+            _job_titles_raw = call_llm(prompt_job_titles, session=st.session_state).strip()
+            if _job_titles_raw and not any(_job_titles_raw.startswith(p) for p in
+                                            ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")):
+                job_titles_block = "\n\n### 🎯 Suggested Job Titles (Based on Resume)\n\n" + _job_titles_raw
+        except Exception:
+            pass  # job titles are a bonus feature — never break the main rewrite over this
+
+    if job_titles_block:
+        part1_response = part1_response + job_titles_block
 
     # ── Check EACH part individually for failure BEFORE wrapping in tags ──────
     # call_llm() returns an error string (e.g. "❌ LLM unavailable: ...") rather
