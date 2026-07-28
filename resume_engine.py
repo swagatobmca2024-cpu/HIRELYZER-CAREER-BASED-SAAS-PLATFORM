@@ -362,19 +362,25 @@ def rewrite_and_optimize_resume(text, replacement_mapping, user_location):
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
-    prompt_part1 = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
+    prompt = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
 
-Rewrite the resume below into a full ATS-optimized plain-text resume, followed by job title suggestions.
+Your task is to process the resume below and return TWO outputs in a single response, separated by the exact delimiter shown.
 
-Return ONLY this exact structure, no preamble, no explanation, no markdown fences:
+════════════════════════════════════════════════════════
+OUTPUT STRUCTURE (return EXACTLY this — no deviation):
+════════════════════════════════════════════════════════
 
 ===REWRITTEN_RESUME_START===
 <full plain-text ATS-optimised resume here>
 <followed by job title suggestions block>
 ===REWRITTEN_RESUME_END===
 
+===JSON_START===
+<strict JSON object here — no markdown fences, no explanation>
+===JSON_END===
+
 ════════════════════════════════════════════════════════
-RULES FOR THE REWRITE
+PART 1 — PLAIN TEXT REWRITE (inside REWRITTEN_RESUME tags)
 ════════════════════════════════════════════════════════
 
 ABSOLUTE RULES — NEVER VIOLATE:
@@ -532,26 +538,32 @@ GRADE/GPA FORMATTING RULES (CRITICAL — applies to Education section):
 BIAS REPLACEMENT RULES — APPLY EXACTLY:
 {formatted_mapping}
 
-RESUME TEXT:
-\"\"\"{text[:8000]}\"\"\"
-"""
+MANDATORY JOB TITLE SUGGESTIONS (append after the resume text):
 
-    prompt_part2 = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
+### 🎯 Suggested Job Titles (Based on Resume)
 
-Return ONLY this exact structure, no preamble, no explanation, no markdown fences:
+Provide EXACTLY 5 job titles suited for a candidate in {user_location}.
+FORMAT (STRICT — follow exactly, no extra lines, no URLs, no links):
+1. **[Job Title]** — [Specific reason tied to resume evidence]
+2. **[Job Title]** — [Specific reason tied to resume evidence]
+3. **[Job Title]** — [Specific reason tied to resume evidence]
+4. **[Job Title]** — [Specific reason tied to resume evidence]
+5. **[Job Title]** — [Specific reason tied to resume evidence]
 
-===JSON_START===
-<strict JSON object here — no markdown fences, no explanation>
-===JSON_END===
+IMPORTANT: Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
 
-Return ONLY valid JSON inside the tags above.
+════════════════════════════════════════════════════════
+PART 2 — JSON OBJECT (inside JSON tags)
+════════════════════════════════════════════════════════
 
-CONTENT REWRITING — same ATS rules apply to all bullet fields:
+Return ONLY valid JSON. No preamble, no explanation, no markdown fences.
+
+CONTENT REWRITING — same ATS rules as Part 1 apply to all bullet fields.
 Strong verbs only. Quantified impact. No pronouns. No repetition across sections.
 
 RETURN ONLY THIS EXACT JSON STRUCTURE:
-{{{{
-  "contact": {{{{
+{{
+  "contact": {{
     "name": "",
     "title": "",
     "email": "",
@@ -560,55 +572,55 @@ RETURN ONLY THIS EXACT JSON STRUCTURE:
     "linkedin": "",
     "github": "",
     "portfolio": ""
-  }}}},
+  }},
   "summary": "",
   "skills": [],
   "soft_skills": [],
   "languages": [],
   "interests": [],
   "experience": [
-    {{{{
+    {{
       "role": "",
       "company": "",
       "duration": "",
       "description": "",
       "bullets": []
-    }}}}
+    }}
   ],
   "projects": [
-    {{{{
+    {{
       "name": "",
       "duration": "",
       "tech_stack": "",
       "url": "",
       "description": "",
       "bullets": []
-    }}}}
+    }}
   ],
   "education": [
-    {{{{
+    {{
       "degree": "",
       "institution": "",
       "year": "",
       "cgpa": "",
       "bullets": []
-    }}}}
+    }}
   ],
   "certifications": [
-    {{{{
+    {{
       "name": "",
       "issuer": "",
       "duration": ""
-    }}}}
+    }}
   ],
   "additional": [
-    {{{{
+    {{
       "name": "",
       "description": "",
       "duration": ""
-    }}}}
+    }}
   ]
-}}}}
+}}
 
 FIELD RULES:
 
@@ -648,11 +660,19 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
 - "contact.*" = extract exactly as written. Use "" not null for missing fields. Never invent email, phone, or URLs.
 
 ── SUMMARY ──
-- "summary" = write a 2–3 sentence professional summary, independent of any other output.
-  Assess experience level from the resume (fresher/entry-level/mid-level/senior) and write honestly —
-  never upgrade a fresher to a professional or imply years of experience that do not exist.
+- "summary" = COPY THE PROFESSIONAL SUMMARY FROM PART 1 VERBATIM — every word, every sentence, nothing omitted.
+  ⚠️ DO NOT rewrite, shorten, paraphrase, or summarize. The 2–3 sentence / 80-word guidance was for Part 1 ONLY.
+  ⚠️ DO NOT stop after the first sentence — copy ALL sentences from Part 1's Professional Summary.
+  ⚠️ If Part 1 has 3 sentences, this field MUST contain all 3 sentences.
+  ⚠️ STRICT LIMIT: "summary" must contain ONLY the Professional Summary — maximum 3 sentences.
+     NEVER include skills, projects, education, certifications, job titles, or any other section content here.
+     If the resume is messy or unstructured, extract ONLY the summary sentences — do NOT dump the entire resume here.
+     If no clear summary exists in the resume → write a clean 2–3 sentence summary from the candidate's experience.
+  ⚠️ NEVER include "### 🎯 Suggested Job Titles" or any job title suggestions in this field.
   NO pronouns anywhere. No "I", "My", "As a", "I am", "I have".
   MUST be a single unbroken string — no newlines inside the JSON value.
+  ✓ Correct: 2–3 sentences about the candidate's role, skills, and value proposition.
+  ✗ Wrong: dumping the entire resume content, skills list, or job titles into this field.
 
 ── SKILLS ──
 - "skills" = flat array of individual skill strings. Minimum 8. No duplicates. Only extract skills actually present in resume.
@@ -780,7 +800,7 @@ LAYOUT RECOGNITION RULES (apply before extracting any field):
     Tier 3: no date, no context → store "".
 
 ── ADDITIONAL ──
-- "additional" items MUST use object format: {{{{"name":"","description":"","duration":""}}}}.
+- "additional" items MUST use object format: {{"name":"","description":"","duration":""}}.
 - "additional[].duration" = Apply 3-TIER DATE INFERENCE RULE. Use "" if no context exists.
 
 RESUME TEXT:
@@ -797,84 +817,10 @@ RESUME TEXT:
     except Exception:
         pass
 
-    # ── TWO SMALLER CALLS instead of one oversized one ────────────────────────
-    # Splitting Part 1 (plain-text rewrite) and Part 2 (JSON extraction) keeps
-    # each request's (input + output) tokens comfortably under gpt-oss-120b's
-    # free-tier per-key TPM ceiling. The combined single-call version regularly
-    # exceeded it (~9k input tokens alone), causing "request too large" errors
-    # on every key, since the limit is per-model, not something rotation fixes.
     try:
-        part1_response = call_llm(prompt_part1, session=st.session_state).strip()
-    except Exception:
-        part1_response = ""
-
-    try:
-        part2_response = call_llm(prompt_part2, session=st.session_state).strip()
-    except Exception:
-        part2_response = ""
-
-    # ── Job title suggestions: separate, dedicated, lightweight call ─────────
-    # Previously appended to the END of Part 1's own prompt — but Part 1's
-    # output budget (~2,200 tokens) is tight enough that a full resume rewrite
-    # alone can consume it entirely, silently truncating the output BEFORE the
-    # job-titles section ever gets generated. The resume renders fine; the
-    # titles just vanish. Splitting this into its own tiny call means it can
-    # never get starved by the main rewrite's length — it uses the (much
-    # shorter) already-rewritten resume as input, so input+output here is a
-    # small fraction of the TPM ceiling regardless of how long the resume is.
-    # Non-fatal on failure: the main rewrite still succeeds without titles.
-    job_titles_block = ""
-    if part1_response and not any(part1_response.startswith(p) for p in
-                                   ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")):
-        try:
-            prompt_job_titles = f"""You are a senior technical recruiter.
-
-Based on the resume below, suggest EXACTLY 5 job titles suited for a candidate in {user_location}.
-
-FORMAT (STRICT — follow exactly, no extra lines, no URLs, no links, no preamble):
-1. **[Job Title]** — [Specific reason tied to resume evidence]
-2. **[Job Title]** — [Specific reason tied to resume evidence]
-3. **[Job Title]** — [Specific reason tied to resume evidence]
-4. **[Job Title]** — [Specific reason tied to resume evidence]
-5. **[Job Title]** — [Specific reason tied to resume evidence]
-
-IMPORTANT: Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
-
-RESUME:
-\"\"\"{part1_response[:4000]}\"\"\"
-"""
-            _job_titles_raw = call_llm(prompt_job_titles, session=st.session_state).strip()
-            if _job_titles_raw and not any(_job_titles_raw.startswith(p) for p in
-                                            ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")):
-                job_titles_block = "\n\n### 🎯 Suggested Job Titles (Based on Resume)\n\n" + _job_titles_raw
-        except Exception:
-            pass  # job titles are a bonus feature — never break the main rewrite over this
-
-    if job_titles_block:
-        part1_response = part1_response + job_titles_block
-
-    # ── Check EACH part individually for failure BEFORE wrapping in tags ──────
-    # call_llm() returns an error string (e.g. "❌ LLM unavailable: ...") rather
-    # than raising on exhaustion, so this must be checked here — otherwise a
-    # failed part gets silently wrapped inside the tags and the guard below
-    # (which only sees the combined, always-non-empty raw_response) never fires.
-    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
-    _part1_failed = (not part1_response) or any(part1_response.startswith(p) for p in _ERROR_PREFIXES)
-    _part2_failed = (not part2_response) or any(part2_response.startswith(p) for p in _ERROR_PREFIXES)
-
-    if _part1_failed or _part2_failed:
-        raw_response = ""   # forces the existing fallback guard below to trigger
-    else:
-        # Reconstruct the same combined tagged format the rest of this function
-        # (and resume_processor.py) already expects — zero downstream changes needed.
-        raw_response = (
-            "===REWRITTEN_RESUME_START===\n"
-            f"{part1_response}\n"
-            "===REWRITTEN_RESUME_END===\n"
-            "===JSON_START===\n"
-            f"{part2_response}\n"
-            "===JSON_END==="
-        )
+        raw_response = call_llm(prompt, session=st.session_state)
+    except Exception as _e:
+        raw_response = ""
 
     # ── Guard: if LLM returned an error string or empty, return safe fallback ──
     _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
@@ -1046,24 +992,6 @@ RESUME:
                     rewritten_text = _header + rewritten_text[_header_end:]
         except Exception:
             pass  # never break main flow
-
-    # ── Enforce "no URLs in job title suggestions" — don't just hope the LLM
-    # obeys the instruction. gpt-oss-120b follows it inconsistently (sometimes
-    # adds a LinkedIn search link, sometimes doesn't), so strip it in code.
-    try:
-        for _marker in ["### 🎯 Suggested Job Titles", "### Suggested Job Titles"]:
-            if _marker in rewritten_text:
-                _head, _sep, _tail = rewritten_text.partition(_marker)
-                # Remove any URL and the 🔗 emoji from the suggestions block only
-                _tail = re.sub(r'https?://\S+', '', _tail)
-                _tail = _tail.replace('🔗', '')
-                # Collapse resulting double spaces / trailing dashes left behind
-                _tail = re.sub(r'[ \t]{2,}', ' ', _tail)
-                _tail = re.sub(r'—\s*$', '', _tail, flags=re.MULTILINE)
-                rewritten_text = _head + _sep + _tail
-                break
-    except Exception:
-        pass  # never break main flow
 
     return rewritten_text, json_str, True
 
@@ -1299,12 +1227,11 @@ def extract_resume_json(llm_response: str) -> dict:
 
         # 3. LLM used alternate key names inside contact block
         ALT_KEYS = {
-            "linkedin":  ["linkedin_url", "linkedin_profile", "linkedin_profile_url",
-                          "linkedIn", "linked_in", "profile_url", "profile"],
-            "github":    ["github_url", "github_profile", "github_link", "repo", "repository"],
-            "portfolio": ["portfolio_url", "portfolio_link", "portfolio_website",
-                          "personal_website", "personal_site", "website", "site"],
-            "location":  ["city", "address", "city_country", "current_location"],
+            "linkedin": ["linkedin_url", "linkedin_profile", "linkedin_profile_url",
+                         "linkedIn", "linked_in", "profile_url", "profile"],
+            "github":   ["github_url", "github_profile", "github_link",
+                         "portfolio_url", "portfolio", "website", "repo"],
+            "location": ["city", "address", "city_country", "current_location"],
         }
         for canonical, alts in ALT_KEYS.items():
             if not ct.get(canonical):
@@ -4149,7 +4076,7 @@ def create_chain(vectorstore):
     # ✅ FIX: do NOT increment usage before the call — only after success
 
     # ✅ Create the ChatGroq object
-    llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0, groq_api_key=groq_api_key)
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=groq_api_key)
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
     try:
