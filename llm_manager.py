@@ -668,6 +668,14 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
         temperature=temperature,
         groq_api_key=api_key,
         max_tokens=max_tokens,
+        max_retries=0,            # CRITICAL: the Groq SDK's default internal retry
+                                   # behavior catches 429s itself and sleeps for the
+                                   # server's full stated wait time (we saw 36s, 51s,
+                                   # 54s in the logs) BEFORE raising back to us — on
+                                   # the SAME key, bypassing our 99 other keys entirely.
+                                   # Disabling this lets our own rotation logic see
+                                   # the failure immediately and jump keys in milliseconds
+                                   # instead of waiting tens of seconds on one dead key.
         reasoning_effort="low",   # gpt-oss-120b only: this is a well-specified
                                    # extraction/rewrite task, not open-ended reasoning —
                                    # skipping deep chain-of-thought reclaims TPM budget
