@@ -102,7 +102,7 @@ if st.sidebar.button("🔧 Test Gemini Key"):
             st.sidebar.success(f"✅ Works: {_dbg_result}")
         except Exception as _dbg_e:
             st.sidebar.error("❌ Gemini test failed")
-            st.code(repr(_dbg_e))
+            st.sidebar.text_area("Full error (copy this):", value=repr(_dbg_e), height=200)
 # ──────────────────────────────────────────────────────────────────────
 
 # ── TAB_1_RESUME.py — Main UI Entrypoint ─────────────────────────────────────
