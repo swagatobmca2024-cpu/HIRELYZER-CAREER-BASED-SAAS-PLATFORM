@@ -41,9 +41,8 @@ import torch
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
 from llm_manager import (
-    call_llm, load_gemini_api_keys, get_healthy_keys, increment_key_usage,
+    call_llm, load_sambanova_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
     _async_clear_failure,
@@ -89,21 +88,6 @@ from report_generator import (
     generate_modern_docx, generate_minimal_docx, generate_creative_docx,
     generate_resume_report_html,
 )
-
-# ─── TEMP DEBUG — remove after testing ───────────────────────────────
-if st.sidebar.button("🔧 Test Gemini Key"):
-    test_key = st.secrets.get("GEMINI_API_KEYS", "").split(",")[0].strip()
-    if not test_key:
-        st.sidebar.error("❌ No key found in GEMINI_API_KEYS secret")
-    else:
-        try:
-            _dbg_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=test_key)
-            _dbg_result = _dbg_llm.invoke("hello").content
-            st.sidebar.success(f"✅ Works: {_dbg_result}")
-        except Exception as _dbg_e:
-            st.sidebar.error("❌ Gemini test failed")
-            st.sidebar.text_area("Full error (copy this):", value=repr(_dbg_e), height=200)
-# ──────────────────────────────────────────────────────────────────────
 
 # ── TAB_1_RESUME.py — Main UI Entrypoint ─────────────────────────────────────
 @st.cache_data(ttl=60)
@@ -5452,7 +5436,7 @@ Return ONLY one domain from this list, nothing else:
         _pre_job_domain = st.session_state[_pre_jd_cache_key]
 
         # ⚡ PARALLEL: rewrite + ATS run simultaneously using threads.
-        # Both are network-bound (Gemini API) so they benefit from parallelism
+        # Both are network-bound (SambaNova API) so they benefit from parallelism
         # without needing async — ThreadPoolExecutor handles it safely.
         # Domains pre-detected above on main thread — no LLM calls fire inside threads.
         def _task_rewrite():
@@ -5479,8 +5463,8 @@ Return ONLY one domain from this list, nothing else:
             # bursts the same key simultaneously and triggers rate limiting.
             # Switch to sequential mode with a short gap to let the TPM window recover.
             try:
-                from llm_manager import load_gemini_api_keys, get_healthy_keys as _ghk
-                _n_healthy = len(_ghk(load_gemini_api_keys()))
+                from llm_manager import load_sambanova_api_keys, get_healthy_keys as _ghk
+                _n_healthy = len(_ghk(load_sambanova_api_keys()))
             except Exception:
                 _n_healthy = 99  # assume enough keys if check fails
 
