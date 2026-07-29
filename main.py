@@ -90,6 +90,21 @@ from report_generator import (
     generate_resume_report_html,
 )
 
+# ─── TEMP DEBUG — remove after testing ───────────────────────────────
+if st.sidebar.button("🔧 Test Gemini Key"):
+    test_key = st.secrets.get("GEMINI_API_KEYS", "").split(",")[0].strip()
+    if not test_key:
+        st.sidebar.error("❌ No key found in GEMINI_API_KEYS secret")
+    else:
+        try:
+            _dbg_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=test_key)
+            _dbg_result = _dbg_llm.invoke("hello").content
+            st.sidebar.success(f"✅ Works: {_dbg_result}")
+        except Exception as _dbg_e:
+            st.sidebar.error("❌ Gemini test failed")
+            st.code(repr(_dbg_e))
+# ──────────────────────────────────────────────────────────────────────
+
 # ── TAB_1_RESUME.py — Main UI Entrypoint ─────────────────────────────────────
 @st.cache_data(ttl=60)
 def _cached_hero_stats():
