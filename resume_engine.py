@@ -39,12 +39,12 @@ import torch
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from llm_manager import (
-    call_llm, load_sambanova_api_keys, get_healthy_keys, increment_key_usage,
+    call_llm, load_gemini_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure, SAMBANOVA_BASE_URL,
+    _async_clear_failure,
 )
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
@@ -809,8 +809,8 @@ RESUME TEXT:
 
     # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
     try:
-        from llm_manager import load_sambanova_api_keys, get_healthy_keys
-        _all_keys = load_sambanova_api_keys()
+        from llm_manager import load_gemini_api_keys, get_healthy_keys
+        _all_keys = load_gemini_api_keys()
         _healthy  = get_healthy_keys(_all_keys)
         if len(_healthy) <= 1:
             time.sleep(3)   # 3-second pause to let the per-minute window recover
@@ -4067,21 +4067,16 @@ def setup_vectorstore(documents):
 def create_chain(vectorstore):
     # ✅ Use get_healthy_keys() so dead/quota keys are skipped (reads key_failures
     #    and key_usage from Supabase — same tables that call_llm() maintains).
-    all_keys    = load_sambanova_api_keys()
+    all_keys    = load_gemini_api_keys()
     healthy     = get_healthy_keys(all_keys)
     if not healthy:
-        raise ValueError("❌ No healthy SambaNova API keys available for chat chain.")
+        raise ValueError("❌ No healthy Gemini API keys available for chat chain.")
     # healthy list is already shuffled by get_healthy_keys — just take the first
-    sambanova_api_key = healthy[0]
+    gemini_api_key = healthy[0]
     # ✅ FIX: do NOT increment usage before the call — only after success
 
-    # ✅ Create the LLM client via SambaNova's OpenAI-compatible endpoint
-    llm = ChatOpenAI(
-        model="Meta-Llama-3.3-70B-Instruct",
-        temperature=0,
-        openai_api_key=sambanova_api_key,
-        openai_api_base=SAMBANOVA_BASE_URL,
-    )
+    # ✅ Create the Gemini chat object
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0, google_api_key=gemini_api_key)
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
     try:
@@ -4091,19 +4086,19 @@ def create_chain(vectorstore):
             return_source_documents=True
         )
         # Update in-memory usage instantly; flush to Supabase in background thread
-        _mem_increment_usage(sambanova_api_key)
-        _async_increment_usage(sambanova_api_key)
-        _mem_clear_failure(sambanova_api_key)
-        _async_clear_failure(sambanova_api_key)
+        _mem_increment_usage(gemini_api_key)
+        _async_increment_usage(gemini_api_key)
+        _mem_clear_failure(gemini_api_key)
+        _async_clear_failure(gemini_api_key)
         return chain
     except Exception as e:
         err_str = str(e).lower()
-        if any(w in err_str for w in ["quota", "rate limit", "429", "too many requests"]):
-            _mem_record_failure(sambanova_api_key, "quota")
-            _async_mark_failure(sambanova_api_key, "quota")
-        elif any(w in err_str for w in ["invalid api key", "unauthorized", "401", "403", "authentication"]):
-            _mem_record_failure(sambanova_api_key, "error")
-            _async_mark_failure(sambanova_api_key, "error")
+        if any(w in err_str for w in ["quota", "rate limit", "429", "too many requests", "resource_exhausted", "resource exhausted"]):
+            _mem_record_failure(gemini_api_key, "quota")
+            _async_mark_failure(gemini_api_key, "quota")
+        elif any(w in err_str for w in ["invalid api key", "unauthorized", "401", "403", "authentication", "permission_denied", "unauthenticated"]):
+            _mem_record_failure(gemini_api_key, "error")
+            _async_mark_failure(gemini_api_key, "error")
         # transient errors (network blip, 500) — don't mark the key failed at all
         raise
 
