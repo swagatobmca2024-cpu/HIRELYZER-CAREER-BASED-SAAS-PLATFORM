@@ -37,7 +37,7 @@ langchain
 langchain-core
 langchain-community
 langchain-huggingface
-langchain-groq
+langchain-openai
 sentence-transformers
 faiss-cpu
 xhtml2pdf>=0.2.16
