@@ -1240,7 +1240,7 @@ JSON:"""
         response = call_llm_fn(
             prompt,
             st.session_state,
-            model="llama-3.3-70b-versatile",
+            model="Meta-Llama-3.3-70B-Instruct",
             temperature=0,
         )
         clean = re.sub(r"```(?:json)?|```", "", response).strip()
@@ -5254,7 +5254,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                             llm_raw = call_llm_fn(
                                 prompt,
                                 st.session_state,
-                                model="llama-3.3-70b-versatile",
+                                model="Meta-Llama-3.3-70B-Instruct",
                                 temperature=0,
                             )
                             # Parse: strip markdown fences, extract first JSON object
