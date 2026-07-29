@@ -80,7 +80,7 @@ Detection layers (unchanged):
   A. 6 live network probes  (parallel threads)
      domain age · site reachability · typosquatting · free-email · MX mail server · MCA registry
   B. 15-signal rule engine  (weighted, 0-100)
-  C. LLM deep analysis      (gemini-2.5-flash via Google Gemini)
+  C. LLM deep analysis      (Meta-Llama-3.3-70B-Instruct via SambaNova)
   D. Blended score          (60% AI + 25% rules + 15% probe penalty)
 """
 
@@ -135,8 +135,8 @@ _PROD_GUIDE = """
 ║              JOB SCAM DETECTOR — PRODUCTION CHECKLIST                      ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║  SECRETS                                                                    ║
-║  • Store GEMINI_API_KEYS in .streamlit/secrets.toml or env var — never in  ║
-║    source code. Access via st.secrets["GEMINI_API_KEYS"].                   ║
+║  • Store SAMBANOVA_API_KEYS in .streamlit/secrets.toml or env var — never   ║
+║    in source code. Access via st.secrets["SAMBANOVA_API_KEYS"].            ║
 ║                                                                             ║
 ║  CACHING                                                                    ║
 ║  • Wrap run_live_probes() with @st.cache_data(ttl=3600, show_spinner=False) ║
@@ -145,8 +145,8 @@ _PROD_GUIDE = """
 ║                                                                             ║
 ║  RATE-LIMITING                                                              ║
 ║  • Add a per-user token bucket (Redis / Upstash) before call_llm_fn().     ║
-║  • Gemini Flash free tier is RPM/RPD limited (varies by tier) — enforce   ║
-║    on server side; check current limits in Google AI Studio.              ║
+║  • SambaNova free tier: 20 req/min, 20 req/day per account — enforce on   ║
+║    server side (see llm_manager.py RPM_LIMIT / DAILY_KEY_LIMIT).          ║
 ║                                                                             ║
 ║  SECURITY                                                                   ║
 ║  • All st.markdown(unsafe_allow_html=True) calls use server-generated HTML.║
@@ -154,7 +154,7 @@ _PROD_GUIDE = """
 ║  • Add Content-Security-Policy header via a reverse proxy (nginx/Caddy).   ║
 ║                                                                             ║
 ║  PERFORMANCE                                                                ║
-║  • Move run_live_probes to a background asyncio task — don't block Gemini.║
+║  • Move run_live_probes to a background asyncio task — don't block SambaNova.║
 ║  • Set STREAMLIT_SERVER_MAX_UPLOAD_SIZE=5 (no file uploads needed here).   ║
 ║                                                                             ║
 ║  DEPLOYMENT                                                                 ║
@@ -1156,7 +1156,7 @@ def _llm_extract_fields(raw: str, call_llm_fn) -> dict:
     """
     LLM-FIRST extraction layer (v6).
 
-    Calls Gemini 2.5 Flash to extract ALL structured fields from the raw posting in
+    Calls LLaMA 3.3-70B to extract ALL structured fields from the raw posting in
     one shot.  Returns a dict with keys: title, company, location, salary, website,
     contact.  Any field the LLM is not confident about is returned as "" so the
     regex fallback layer can fill it.
@@ -1240,7 +1240,7 @@ JSON:"""
         response = call_llm_fn(
             prompt,
             st.session_state,
-            model="gemini-2.5-flash",
+            model="llama-3.3-70b-versatile",
             temperature=0,
         )
         clean = re.sub(r"```(?:json)?|```", "", response).strip()
@@ -1277,7 +1277,7 @@ def auto_extract(raw: str, call_llm_fn=None) -> dict:
     LLM-FIRST extraction pipeline (v6).
 
     Layer 1 — LLM  (primary, when call_llm_fn supplied):
-        _llm_extract_fields() calls Gemini 2.5 Flash to extract all fields at once.
+        _llm_extract_fields() calls LLaMA 3.3-70B to extract all fields at once.
         Results are hash-cached in session_state — re-renders on every keystroke
         do NOT re-call the LLM; only genuinely changed text triggers a new call.
 
@@ -5226,7 +5226,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     # ── LLM call with retry + structured output enforcement ────────
                     # Retry logic: attempt 1 = normal, attempt 2 = stricter prompt
-                    # if JSON parse fails on attempt 1. Covers transient Gemini errors
+                    # if JSON parse fails on attempt 1. Covers transient SambaNova errors
                     # and occasional LLM refusals to return JSON.
                     _LLM_SCHEMA = {
                         "ai_risk_score":      "int 0-100",
@@ -5254,7 +5254,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                             llm_raw = call_llm_fn(
                                 prompt,
                                 st.session_state,
-                                model="gemini-2.5-flash",
+                                model="llama-3.3-70b-versatile",
                                 temperature=0,
                             )
                             # Parse: strip markdown fences, extract first JSON object
@@ -5830,7 +5830,7 @@ def render_job_scam_detector_tab(call_llm_fn):
             f'<div style="font-size:0.88rem;font-weight:600;color:{col};">{val}</div>'
             f'</div>'
             for ic, label, val, col in [
-                (I.CPU,      "AI Engine",     "Gemini 2.5 Flash", "#a78bfa"),
+                (I.CPU,      "AI Engine",     "LLaMA 3.3-70B",   "#a78bfa"),
                 (I.GLOBE,    "Live Probes",   "8 checks",        "#38bdf8"),
                 (I.LIST,     "Rule Signals",  "15 patterns",     "#f59e0b"),
                 (I.SHIELD,   "Hourly Limit",  f"{_SCAM_LIMIT} analyses", "#22c55e"),
