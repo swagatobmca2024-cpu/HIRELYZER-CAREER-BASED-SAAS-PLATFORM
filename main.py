@@ -10236,6 +10236,276 @@ Provide ONLY the JSON output, no additional text."""
     }
 
 
+def _batch_fallback_score(difficulty: str) -> dict:
+    """Fallback score for a single answer when batch scoring fails for it specifically."""
+    fallback_scores = {"Easy": 3, "Medium": 2, "Hard": 1}
+    fallback_score = fallback_scores.get(difficulty, 2)
+    return {
+        "knowledge": fallback_score,
+        "communication": fallback_score,
+        "relevance": fallback_score,
+        "feedback": "Unable to evaluate this answer properly due to a scoring error. This may not reflect your actual performance.",
+        "followup": ""
+    }
+
+
+def evaluate_interview_answers_batch(qa_pairs: list, difficulty: str, role: str = "", domain: str = ""):
+    """
+    BATCH SCORING — scores multiple Q&A pairs in a SINGLE LLM call instead of one
+    call per answer. Used for Easy/Medium difficulty, where — unlike Hard mode —
+    no follow-up question ever depends on a prior score, so nothing requires
+    scoring to happen live during the interview.
+
+    qa_pairs: list of (question, answer) tuples, in interview order.
+    Returns: list of dicts, same schema as evaluate_interview_answer_for_scores,
+             one per qa_pair, in the same order. followup is always "" (batch
+             mode is only used for Easy/Medium, which never generate follow-ups).
+
+    Cost: 1 API call total for the whole interview's scoring, vs N calls
+    (one per answer) in the live per-question path.
+    """
+    from llm_manager import call_llm
+    import json
+    import streamlit as st
+
+    n = len(qa_pairs)
+    if n == 0:
+        return []
+
+    # ── Local pre-filter for junk/empty answers — identical thresholds to the
+    #    live scorer — so we don't waste prompt space asking the LLM to score
+    #    answers that are trivially empty, too short, or symbol-only. ──────────
+    local_results = [None] * n
+    to_score_idx = []
+    for i, (q, a) in enumerate(qa_pairs):
+        a_stripped = (a or "").strip()
+        if not a_stripped or a_stripped == "⚠️ No Answer" or len(a_stripped) < 3:
+            local_results[i] = {
+                "knowledge": 0, "communication": 0, "relevance": 0,
+                "feedback": "No answer provided. Try using the STAR method: Situation, Task, Action, Result. Provide specific examples from your experience.",
+                "followup": ""
+            }
+            continue
+        if len(a_stripped) == 1 or not any(c.isalnum() for c in a_stripped):
+            local_results[i] = {
+                "knowledge": 0, "communication": 0, "relevance": 0,
+                "feedback": "Answer appears incomplete or invalid. Please provide a meaningful response with technical details and structure.",
+                "followup": ""
+            }
+            continue
+        words = a_stripped.split()
+        meaningful_words = [w for w in words if len(w) > 2 and any(c.isalpha() for c in w)]
+        if len(words) < 5 or len(meaningful_words) < 2:
+            local_results[i] = {
+                "knowledge": 0, "communication": 0, "relevance": 0,
+                "feedback": "Answer too short or lacks substance. Provide a detailed response with at least 3-4 sentences.",
+                "followup": ""
+            }
+            continue
+        to_score_idx.append(i)
+
+    if not to_score_idx:
+        # Every answer was junk/empty — no LLM call needed at all
+        return local_results
+
+    difficulty_guidance = {
+        "Easy": "Concept clarity and accurate definitions. 5-10 for clear correct answers, 3-4 for partial, 0-2 for wrong/missing.",
+        "Medium": "Scenario reasoning with one practical decision, justified. 7-10 for clear decision+justification, 4-6 for conceptual only, 0-3 for off-topic/Easy-level.",
+    }
+    guidance = difficulty_guidance.get(difficulty, difficulty_guidance["Medium"])
+    context_info = f" for {role} in {domain}" if role and domain else ""
+
+    items_block = ""
+    for pos, i in enumerate(to_score_idx):
+        q, a = qa_pairs[i]
+        items_block += f"\n--- ANSWER (id={i}) ---\nQUESTION: {q}\nCANDIDATE'S ANSWER: {a}\n"
+
+    prompt = f"""You are an expert technical interviewer evaluating {len(to_score_idx)} answers from the same candidate{context_info}, all at {difficulty.upper()} difficulty.
+
+EVALUATION APPROACH — {difficulty.upper()} MODE:
+{guidance}
+
+For EACH answer below, score Knowledge, Communication, and Relevance (1-10 each), and write 1-2 concise, specific feedback paragraphs referencing the candidate's actual content. Be constructive and personalized — not generic.
+{items_block}
+OUTPUT FORMAT (strict JSON array, one object per answer, using the same "id" value given above):
+[
+  {{
+    "id": <id number from above>,
+    "knowledge": <1-10>,
+    "communication": <1-10>,
+    "relevance": <1-10>,
+    "feedback": "1-2 concise, specific, actionable paragraphs referencing the candidate's actual answer."
+  }}
+]
+
+RULES:
+- If an answer is off-topic or from the wrong domain, set relevance to 0-2.
+- Return EXACTLY {len(to_score_idx)} objects, one per answer, matching the given ids.
+- Provide ONLY the JSON array, no additional text."""
+
+    try:
+        response = call_llm(prompt, session=st.session_state).strip()
+        if response.startswith("```"):
+            response = response.split("```")[1]
+            if response.startswith("json"):
+                response = response[4:]
+            response = response.strip()
+
+        parsed = json.loads(response)
+        if not isinstance(parsed, list):
+            raise ValueError("Expected a JSON array")
+
+        by_id = {}
+        for item in parsed:
+            try:
+                by_id[int(item.get("id"))] = item
+            except (TypeError, ValueError, AttributeError):
+                continue
+
+        for i in to_score_idx:
+            item = by_id.get(i)
+            if not item:
+                # This specific answer's score is missing from the response —
+                # fall back for JUST this one; the rest of the batch is unaffected.
+                local_results[i] = _batch_fallback_score(difficulty)
+                continue
+
+            q, a = qa_pairs[i]
+            try:
+                knowledge = max(0, min(10, int(item.get("knowledge", 1))))
+                communication = max(0, min(10, int(item.get("communication", 1))))
+                relevance = max(0, min(10, int(item.get("relevance", 1))))
+            except (TypeError, ValueError):
+                local_results[i] = _batch_fallback_score(difficulty)
+                continue
+
+            feedback = item.get("feedback", "")
+            if isinstance(feedback, list):
+                feedback = "\n\n".join(feedback)
+            if not feedback or len(str(feedback).strip()) < 20:
+                feedback = "Your answer shows some understanding, but could benefit from more depth and specific examples."
+
+            # Same calibration safeguards as the live scorer
+            key_terms = [kw.lower() for kw in q.split() if len(kw) > 3]
+            match_count = sum(1 for t in key_terms if t in a.lower())
+            if key_terms and match_count < max(2, len(key_terms) // 10):
+                knowledge = min(knowledge, 3)
+                relevance = min(relevance, 3)
+            if "off-topic" in feedback.lower() or relevance < 4:
+                knowledge = min(knowledge, 4)
+                relevance = min(relevance, 4)
+            raw_avg = (knowledge + communication + relevance) / 3
+            if relevance <= 2 and raw_avg > 4.0:
+                knowledge = min(knowledge, 2)
+                communication = min(communication, 2)
+                relevance = min(relevance, 2)
+            elif relevance < 4 and raw_avg > 5.0:
+                excess = raw_avg - 5.0
+                knowledge = max(0, min(knowledge, knowledge - int(excess * 1.5 + 0.5)))
+                relevance = max(0, min(relevance, relevance - 1))
+
+            local_results[i] = {
+                "knowledge": knowledge,
+                "communication": communication,
+                "relevance": relevance,
+                "feedback": feedback,
+                "followup": ""
+            }
+
+        # Safety net: fill any still-missing slots (shouldn't happen, but never
+        # let a None slip through into downstream score math)
+        for i in to_score_idx:
+            if local_results[i] is None:
+                local_results[i] = _batch_fallback_score(difficulty)
+
+        return local_results
+
+    except Exception:
+        # Whole-batch failure (network error, totally malformed JSON, etc.) —
+        # fall back for every answer that still needs scoring rather than
+        # crashing the interview completion flow.
+        for i in to_score_idx:
+            if local_results[i] is None:
+                local_results[i] = _batch_fallback_score(difficulty)
+        return local_results
+
+
+def _finalize_batch_scoring_if_needed(role: str = "", domain: str = ""):
+    """
+    Runs once, at interview completion, for Easy/Medium mode. Scores every
+    pending answer in ONE LLM call, replaces the placeholder entries in
+    dynamic_interview_scores/feedbacks with real values, then does the
+    deferred DB save for every question (which was skipped per-answer
+    during the interview itself).
+
+    Idempotent via _batch_scoring_finalized — safe to call on every rerun
+    while viewing the results screen; only does real work once.
+
+    Hard mode: no-op (already scored live, per-answer, during the interview).
+
+    Module-level (not nested) deliberately: the interview-in-progress UI and
+    the interview-completed UI are sibling `elif` branches of the same state
+    machine, so a function nested inside the in-progress branch would never
+    be defined by the time the completed branch runs.
+    """
+    import streamlit as st
+
+    if st.session_state.get('_batch_scoring_finalized', False):
+        return  # already done — Streamlit reruns this block on every interaction
+
+    diff = st.session_state.interview_difficulty
+    if diff == "Hard":
+        st.session_state._batch_scoring_finalized = True
+        return
+
+    n = len(st.session_state.dynamic_interview_answers)
+    if n == 0:
+        st.session_state._batch_scoring_finalized = True
+        return
+
+    pending_indices = [
+        i for i in range(n)
+        if st.session_state.dynamic_interview_scores[i].get("_pending")
+    ]
+    if not pending_indices:
+        st.session_state._batch_scoring_finalized = True
+        return
+
+    with st.spinner("📊 Scoring your interview..."):
+        qa_pairs = [
+            (st.session_state.dynamic_interview_questions[i],
+             st.session_state.dynamic_interview_answers[i])
+            for i in range(n)
+        ]
+        batch_results = evaluate_interview_answers_batch(
+            qa_pairs, diff, role=role, domain=domain
+        )
+
+        interview_id = st.session_state.get('current_interview_id')
+        for i in range(n):
+            real_score = batch_results[i]
+            st.session_state.dynamic_interview_scores[i] = real_score
+            st.session_state.dynamic_interview_feedbacks[i] = real_score["feedback"]
+
+            # Deferred DB save — Easy/Medium never have follow-ups, so
+            # every question here is a main question (is_follow_up=False).
+            if interview_id:
+                db_row_id = save_interview_question(
+                    interview_id=interview_id,
+                    question_text=st.session_state.dynamic_interview_questions[i],
+                    answer_text=st.session_state.dynamic_interview_answers[i],
+                    difficulty=diff,
+                    is_follow_up=False,
+                    parent_question_id=None,
+                    score_breakdown=dict(real_score),
+                    question_order=i,
+                )
+                if db_row_id != -1:
+                    st.session_state.question_db_ids.append(db_row_id)
+
+    st.session_state._batch_scoring_finalized = True
+
+
 def get_ist_time():
     """Get current time in IST timezone"""
     try:
@@ -15121,6 +15391,7 @@ Generate {num_questions} questions now:
                 st.session_state.dynamic_interview_answers = []
             if 'dynamic_interview_scores' not in st.session_state:
                 st.session_state.dynamic_interview_scores = []
+                st.session_state._batch_scoring_finalized = False
             if 'dynamic_interview_feedbacks' not in st.session_state:
                 st.session_state.dynamic_interview_feedbacks = []
             if 'dynamic_interview_completed' not in st.session_state:
@@ -15465,6 +15736,7 @@ Generate {num_questions} questions now:
                             st.session_state.current_dynamic_interview_question = 0
                             st.session_state.dynamic_interview_answers = []
                             st.session_state.dynamic_interview_scores = []
+                            st.session_state._batch_scoring_finalized = False
                             st.session_state.dynamic_interview_feedbacks = []
                             st.session_state.dynamic_interview_completed = False
                             st.session_state.dynamic_interview_started = True
@@ -15653,6 +15925,7 @@ Generate {num_questions} questions now:
                         st.session_state.current_dynamic_interview_question = 0
                         st.session_state.dynamic_interview_answers = []
                         st.session_state.dynamic_interview_scores = []
+                        st.session_state._batch_scoring_finalized = False
                         st.session_state.dynamic_interview_feedbacks = []
                         st.session_state.dynamic_interview_completed = False
                         st.session_state.dynamic_interview_started = False
@@ -15691,13 +15964,20 @@ Generate {num_questions} questions now:
                     # ── SINGLE helper: evaluate + inject follow-up (called from both submit paths) ──
                     def _process_submission(ans_text, q_text, q_idx, n_answered):
                         """
-                        Evaluate the answer, store results, and inject the follow-up question
-                        into the question list.  The exact same follow-up text is stored in
-                        session_state.pending_followup_display so the preview shown to the user
-                        is always identical to the question that will appear next.
+                        HARD MODE: unchanged — evaluate immediately (1 LLM call per answer)
+                        because the adaptive follow-up question depends on this answer's score.
+
+                        EASY/MEDIUM: store the answer only — no LLM call here at all. Since
+                        these difficulties never generate follow-ups, nothing about the rest
+                        of the interview depends on scoring happening now. All answers get
+                        scored together in ONE call when the interview completes
+                        (see _finalize_batch_scoring_if_needed), cutting per-interview API
+                        calls from ~1-per-question down to 1 total for scoring.
 
                         ARCHITECTURE FIX: Every answered question is immediately saved to the
-                        interview_questions DB table so the PDF can use it as single source of truth.
+                        interview_questions DB table so the PDF can use it as single source of truth — for Hard mode.
+                        For Easy/Medium, DB save is deferred to the same finalize step, since
+                        real scores don't exist until then.
                         FIX 8: Idempotency guard — bail out immediately if this question index
                         has already been processed (prevents double-submission on rapid reruns).
                         """
@@ -15716,6 +15996,25 @@ Generate {num_questions} questions now:
                         # ─────────────────────────────────────────────────────────
 
                         diff = st.session_state.interview_difficulty
+                        st.session_state.pending_followup_display = ""   # reset
+                        st.session_state.pending_followup_strategy = ""
+
+                        if diff != "Hard":
+                            # ── BATCHED PATH (Easy/Medium): no LLM call here at all ──
+                            pending_res = {
+                                "knowledge": None, "communication": None, "relevance": None,
+                                "feedback": None, "followup": "", "_pending": True,
+                            }
+                            st.session_state.dynamic_interview_answers.append(ans_text)
+                            st.session_state.dynamic_interview_scores.append(pending_res)
+                            st.session_state.dynamic_interview_feedbacks.append(None)
+                            st.session_state.dynamic_answer_submitted = True
+                            # No DB save yet — happens once, in bulk, at completion time,
+                            # once real scores exist (see _finalize_batch_scoring_if_needed).
+                            # No follow-up logic — Easy/Medium never generate one.
+                            return pending_res
+
+                        # ── LIVE PATH (Hard): unchanged from before ──────────────────
                         eval_res = evaluate_interview_answer_for_scores(
                             ans_text, q_text, diff,
                             role=selected_role, domain=selected_domain
@@ -15725,8 +16024,6 @@ Generate {num_questions} questions now:
                         st.session_state.dynamic_interview_scores.append(eval_res)
                         st.session_state.dynamic_interview_feedbacks.append(eval_res["feedback"])
                         st.session_state.dynamic_answer_submitted = True
-                        st.session_state.pending_followup_display = ""   # reset
-                        st.session_state.pending_followup_strategy = ""
 
                         # ── IMMEDIATELY save to DB (single source of truth for PDF) ──
                         interview_id = st.session_state.get('current_interview_id')
@@ -15760,7 +16057,7 @@ Generate {num_questions} questions now:
 
                         can_add_followup = n_answered < st.session_state.original_num_questions - 1
 
-                        if diff == "Hard" and can_add_followup:
+                        if can_add_followup:
                             # ── Hard mode: use adaptive engine (single source of truth) ──
                             weakness_data = analyze_answer_weaknesses(ans_text, eval_res)
                             strategy = weakness_data["strategy"]
@@ -15779,13 +16076,6 @@ Generate {num_questions} questions now:
                                 # ★ Store SAME text for preview ★
                                 st.session_state.pending_followup_display = followup_q
                                 st.session_state.pending_followup_strategy = strategy
-
-                        elif diff in ("Easy", "Medium") and can_add_followup:
-                            # ── Easy/Medium: only inject if LLM returned a valid followup ──
-                            # The evaluation prompt does NOT ask for a follow-up for Easy/Medium,
-                            # so eval_res["followup"] is always "".  We deliberately do NOT inject
-                            # anything — this prevents mismatched questions.
-                            pass   # No follow-up for Easy/Medium
 
                         return eval_res
 
@@ -15832,23 +16122,35 @@ Generate {num_questions} questions now:
                     # Show feedback after answer submitted
                     if st.session_state.dynamic_answer_submitted:
                         current_score_dict = st.session_state.dynamic_interview_scores[-1]
-                        avg_q_score = (current_score_dict["knowledge"] + current_score_dict["communication"] + current_score_dict["relevance"]) / 3
 
-                        # Format feedback for display
-                        feedback_text = current_score_dict["feedback"] if isinstance(current_score_dict["feedback"], str) else chr(10).join(current_score_dict["feedback"])
-                        formatted_feedback = format_feedback_text(feedback_text)
-
-                        st.markdown(f"""
-                        <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.1) 0%, rgba(0, 195, 255, 0.05) 100%);
-                                    border: 1px solid rgba(0, 195, 255, 0.3); border-radius: 10px; padding: 15px; margin: 15px 0;">
-                            <h4 style="color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-weight:600;letter-spacing:-0.02em;">Immediate Feedback:</h4>
-                            <p style="color: #ffffff;">📊 Knowledge: {current_score_dict["knowledge"]}/10 | Communication: {current_score_dict["communication"]}/10 | Relevance: {current_score_dict["relevance"]}/10</p>
-                            <p style="color: #ffffff;">⭐ Question Score: {avg_q_score:.2f}/10</p>
-                            <div style="color: #ffffff; margin-top: 10px;">
-                                {formatted_feedback}
+                        if current_score_dict.get("_pending"):
+                            # ── BATCHED MODE: no score yet — answer recorded, scoring
+                            #    happens once at the end (see _finalize_batch_scoring_if_needed) ──
+                            st.markdown("""
+                            <div style="background: linear-gradient(135deg, rgba(105, 240, 174, 0.10) 0%, rgba(105, 240, 174, 0.04) 100%);
+                                        border: 1px solid rgba(105, 240, 174, 0.3); border-radius: 10px; padding: 15px; margin: 15px 0;">
+                                <p style="color: #ffffff; margin: 0;">✅ Answer recorded. Full scoring and feedback for every question will appear together once you complete the interview.</p>
                             </div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                            """, unsafe_allow_html=True)
+                        else:
+                            avg_q_score = (current_score_dict["knowledge"] + current_score_dict["communication"] + current_score_dict["relevance"]) / 3
+
+                            # Format feedback for display
+                            feedback_text = current_score_dict["feedback"] if isinstance(current_score_dict["feedback"], str) else chr(10).join(current_score_dict["feedback"])
+                            formatted_feedback = format_feedback_text(feedback_text)
+
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(135deg, rgba(0, 195, 255, 0.1) 0%, rgba(0, 195, 255, 0.05) 100%);
+                                        border: 1px solid rgba(0, 195, 255, 0.3); border-radius: 10px; padding: 15px; margin: 15px 0;">
+                                <h4 style="color:#38bdf8;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;font-weight:600;letter-spacing:-0.02em;">Immediate Feedback:</h4>
+                                <p style="color: #ffffff;">📊 Knowledge: {current_score_dict["knowledge"]}/10 | Communication: {current_score_dict["communication"]}/10 | Relevance: {current_score_dict["relevance"]}/10</p>
+                                <p style="color: #ffffff;">⭐ Question Score: {avg_q_score:.2f}/10</p>
+                                <div style="color: #ffffff; margin-top: 10px;">
+                                    {formatted_feedback}
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+
 
                         # ★ Show follow-up preview using SAME text that was injected ★
                         _preview_fq = st.session_state.get('pending_followup_display', '')
@@ -15932,7 +16234,6 @@ Generate {num_questions} questions now:
                                     prev_question = st.session_state.dynamic_interview_questions[i]
                                     prev_answer = st.session_state.dynamic_interview_answers[i]
                                     prev_scores = st.session_state.dynamic_interview_scores[i]
-                                    prev_avg = (prev_scores["knowledge"] + prev_scores["communication"] + prev_scores["relevance"]) / 3
 
                                     # Show full answer (up to 500 chars in review, full in final)
                                     answer_preview = prev_answer[:500]
@@ -15941,9 +16242,14 @@ Generate {num_questions} questions now:
 
                                     st.markdown(f"**Question {i+1}:** {prev_question}")
                                     st.markdown(f"**Your Answer:** {answer_preview}")
-                                    st.markdown(f"**Score:** {prev_avg:.2f}/10")
+                                    if prev_scores.get("_pending"):
+                                        st.markdown("**Score:** ⏳ Pending — appears when you complete the interview")
+                                    else:
+                                        prev_avg = (prev_scores["knowledge"] + prev_scores["communication"] + prev_scores["relevance"]) / 3
+                                        st.markdown(f"**Score:** {prev_avg:.2f}/10")
                                     if i < num_to_show - 1:  # Don't add separator after last item
                                         st.markdown("---")
+
 
                     # NOTE: No more time.sleep(1) + st.rerun() here.
                     # The JS timer inside the components.html block above handles
@@ -15962,6 +16268,11 @@ Generate {num_questions} questions now:
             
             # UNIFIED: Interview completed + Course Recommendations + DB + PDF
             elif st.session_state.dynamic_interview_completed:
+                # ── Finalize batch scoring (Easy/Medium only; no-op for Hard) ──
+                # Must run BEFORE score aggregation below, since Easy/Medium scores
+                # are still placeholders until this runs.
+                _finalize_batch_scoring_if_needed(role=selected_role, domain=selected_domain)
+
                 # Calculate average scores for each dimension
                 knowledge_scores = [s["knowledge"] for s in st.session_state.dynamic_interview_scores]
                 communication_scores = [s["communication"] for s in st.session_state.dynamic_interview_scores]
@@ -16269,6 +16580,7 @@ Generate {num_questions} questions now:
                     st.session_state.current_dynamic_interview_question = 0
                     st.session_state.dynamic_interview_answers = []
                     st.session_state.dynamic_interview_scores = []
+                    st.session_state._batch_scoring_finalized = False
                     st.session_state.dynamic_interview_feedbacks = []
                     st.session_state.dynamic_answer_submitted = False
                     st.session_state.current_interview_question_text = ""
