@@ -16012,6 +16012,12 @@ Generate {num_questions} questions now:
                             # No DB save yet — happens once, in bulk, at completion time,
                             # once real scores exist (see _finalize_batch_scoring_if_needed).
                             # No follow-up logic — Easy/Medium never generate one.
+                            # UX FIX: this path has no LLM call, so it finishes in
+                            # microseconds — too fast for st.spinner() to ever paint
+                            # before st.rerun() tears down the DOM. Add a small
+                            # artificial delay purely so the "Recording your answer..."
+                            # spinner is actually visible to the user.
+                            time.sleep(0.6)
                             return pending_res
 
                         # ── LIVE PATH (Hard): unchanged from before ──────────────────
