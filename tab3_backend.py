@@ -526,7 +526,13 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
         linkedin_location = location.strip()
     linkedin_loc_encoded = urllib.parse.quote_plus(linkedin_location)
 
-    linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={role_encoded}&location={linkedin_loc_encoded}"
+    # LinkedIn only reliably applies `keywords` for logged-out clicks — location
+    # and filter params get silently dropped without a session/geoId. Match
+    # what LinkedIn's own client does: fold location into keywords as
+    # "role,location" (confirmed from a real LinkedIn-generated URL).
+    linkedin_keywords_encoded = urllib.parse.quote_plus(f"{job_role.strip()},{linkedin_location}")
+
+    linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={linkedin_keywords_encoded}&location={linkedin_loc_encoded}"
     if experience_level in linkedin_exp_map:
         linkedin_url += f"&f_E={linkedin_exp_map[experience_level]}"
     if job_type in job_type_map:
