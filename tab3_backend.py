@@ -502,11 +502,11 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
     # Experience mappings
     experience_range_map = {
         "Internship": "0~0", "Entry Level": "1~1", "Associate": "2~3",
-        "Mid-Senior Level": "4~7", "Director": "8~15", "Executive": "16~20"
+        "Mid-Senior Level": "4~7", "Manager": "6~10", "Director": "8~15", "Executive": "16~20"
     }
     experience_exact_map = {
         "Internship": "0", "Entry Level": "1", "Associate": "2",
-        "Mid-Senior Level": "4", "Director": "8", "Executive": "16"
+        "Mid-Senior Level": "4", "Manager": "6", "Director": "8", "Executive": "16"
     }
     linkedin_exp_map = {
         "Internship": "1", "Entry Level": "2", "Associate": "3",
@@ -535,16 +535,17 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
     # f_E/f_JT alone.
     # NOTE: LinkedIn's Experience Level checkboxes are now a 5-tier list —
     # Entry-level, Senior, Manager, Director, Executive (confirmed from a
-    # live screenshot) — replacing the older 6-tier taxonomy this app's
-    # dropdown still uses. "Mid-Senior Level" maps cleanly to their "Senior".
-    # "Associate" and "Internship" have no exact current-tier match — left
-    # as plain text (still aids keyword relevance) rather than force-mapped
-    # to a tier that would misrepresent the candidate's actual level.
+    # live screenshot). "Mid-Senior Level" and "Manager" both map cleanly
+    # to real LinkedIn tiers now that "Manager" is its own dropdown option.
+    # "Associate" and "Internship" still have no exact current-tier match —
+    # left as plain text (still aids keyword relevance) rather than
+    # force-mapped to a tier that would misrepresent the candidate's level.
     linkedin_exp_phrase_map = {
         "Internship": "internship",
         "Entry Level": "entry-level",
         "Associate": "associate",
         "Mid-Senior Level": "senior",
+        "Manager": "manager",
         "Director": "director",
         "Executive": "executive",
     }
