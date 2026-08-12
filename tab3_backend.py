@@ -420,7 +420,7 @@ def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, result
         return []
 
 
-LINKEDIN_HOST = "linkedin-job-search-api.p.rapidapi.com"
+LINKEDIN_HOST = st.secrets["rapidapi"]["linkedin_host"]
 
 
 def fetch_linkedin_jobs(job_role, location, time_frame="24h", results=10):
