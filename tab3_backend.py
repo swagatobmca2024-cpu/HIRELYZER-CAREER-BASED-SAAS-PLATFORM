@@ -526,13 +526,38 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
         linkedin_location = location.strip()
     linkedin_loc_encoded = urllib.parse.quote_plus(linkedin_location)
 
-    # LinkedIn only reliably applies `keywords` for logged-out clicks — location
-    # and filter params get silently dropped without a session/geoId. Match
-    # what LinkedIn's own client does: fold location into keywords as
-    # "role,location" (confirmed from a real LinkedIn-generated URL).
-    linkedin_keywords_encoded = urllib.parse.quote_plus(f"{job_role.strip()},{linkedin_location}")
+    # LinkedIn's job search now runs on semantic/NLP search (confirmed via a
+    # live logged-in test: origin=SEMANTIC_SEARCH_LANDING_PAGE). It no longer
+    # reliably applies the classic f_E/f_JT facet query params — but it DOES
+    # auto-detect and apply filter pills (Entry-level, Full-time, etc.) from
+    # plain-language phrases typed into `keywords`. So we phrase experience
+    # and job type in natural language inside keywords instead of relying on
+    # f_E/f_JT alone.
+    linkedin_exp_phrase_map = {
+        "Internship": "internship",
+        "Entry Level": "entry-level",
+        "Associate": "associate",
+        "Mid-Senior Level": "mid-senior level",
+        "Director": "director",
+        "Executive": "executive",
+    }
+    linkedin_type_phrase_map = {
+        "Full-time": "full-time",
+        "Part-time": "part-time",
+        "Contract": "contract",
+        "Temporary": "temporary",
+        "Volunteer": "volunteer",
+        "Internship": "internship",
+    }
+    _exp_phrase  = linkedin_exp_phrase_map.get(experience_level, "")
+    _type_phrase = linkedin_type_phrase_map.get(job_type, "")
+    _keyword_parts = [p for p in [_exp_phrase, job_role.strip(), _type_phrase] if p]
+
+    linkedin_keywords_encoded = urllib.parse.quote_plus(f"{' '.join(_keyword_parts)},{linkedin_location}")
 
     linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={linkedin_keywords_encoded}&location={linkedin_loc_encoded}"
+    # Kept as a harmless fallback in case some sessions still honor these —
+    # the natural-language phrasing above is now the primary mechanism.
     if experience_level in linkedin_exp_map:
         linkedin_url += f"&f_E={linkedin_exp_map[experience_level]}"
     if job_type in job_type_map:
