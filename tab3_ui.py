@@ -831,7 +831,7 @@ def _job_search_interactive():
         # Compute index from shadow values
         _ext_role_idx  = JOB_TITLES.index(st.session_state.ext_role_val) if st.session_state.ext_role_val in JOB_TITLES else None
         _ext_loc_idx   = LOCATIONS.index(st.session_state.ext_loc_val)   if st.session_state.ext_loc_val  in LOCATIONS  else None
-        _ext_exp_list  = ["", "Internship", "Entry Level", "Associate", "Mid-Senior Level", "Director", "Executive"]
+        _ext_exp_list  = ["", "Internship", "Entry Level", "Associate", "Mid-Senior Level", "Manager", "Director", "Executive"]
         _ext_type_list = ["", "Full-time", "Part-time", "Contract", "Temporary", "Volunteer", "Internship"]
         _ext_exp_idx   = _ext_exp_list.index(st.session_state.ext_exp_val)   if st.session_state.ext_exp_val   in _ext_exp_list   else 0
         _ext_type_idx  = _ext_type_list.index(st.session_state.ext_type_val) if st.session_state.ext_type_val  in _ext_type_list  else 0
