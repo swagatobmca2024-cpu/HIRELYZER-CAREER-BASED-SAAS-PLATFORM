@@ -19,7 +19,7 @@ from tab3_data import (
 )
 from tab3_backend import (
     fetch_live_jobs,
-    search_jobs,
+    fetch_linkedin_jobs,
     save_job_search,
     delete_saved_job_search,
     get_saved_job_searches,
@@ -693,13 +693,13 @@ def _job_search_interactive():
 
     # Initialize session state for search mode
     if 'search_mode' not in st.session_state:
-        st.session_state.search_mode = "External Platforms"
+        st.session_state.search_mode = "LinkedIn Scraper"
 
-    is_external = st.session_state.search_mode == "External Platforms"
+    is_external = st.session_state.search_mode == "LinkedIn Scraper"
 
     badge_color  = "linear-gradient(135deg,#2196F3,#1565C0)" if is_external else "linear-gradient(135deg,#00E676,#00A550)"
     badge_tcolor = "#ffffff" if is_external else "#002a18"
-    badge_text_ext  = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>  External Platforms Mode Active'
+    badge_text_ext  = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>  LinkedIn Scraper Mode Active'
     badge_text_rap  = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style="display:inline;vertical-align:middle;"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>  RapidAPI Jobs Mode Active'
     badge_text = badge_text_ext if is_external else badge_text_rap
 
@@ -760,7 +760,7 @@ def _job_search_interactive():
 <body>
   <div class="toggle">
     <div class="btn btn-left {'active' if is_external else ''}" id="btn-ext">
-      <span class="dot"></span><span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg> External Platforms</span>
+      <span class="dot"></span><span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg> LinkedIn Scraper</span>
     </div>
     <div class="btn btn-right {'active' if not is_external else ''}" id="btn-rapid">
       <span class="dot"></span><span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:4px;"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> RapidAPI Jobs</span>
@@ -779,7 +779,7 @@ def _job_search_interactive():
       }}
     }}
     document.getElementById('btn-ext').addEventListener('click', function() {{
-      clickParentButton('External Platforms Mode');
+      clickParentButton('LinkedIn Scraper Mode');
     }});
     document.getElementById('btn-rapid').addEventListener('click', function() {{
       clickParentButton('RapidAPI Jobs Mode');
@@ -792,11 +792,11 @@ def _job_search_interactive():
     # components.html JS clicks these; user can also click them directly as fallback.
     col_l, col_r = st.columns(2)
     with col_l:
-        if st.button("External Platforms Mode", key="btn_mode_external", use_container_width=True):
-            if st.session_state.search_mode != "External Platforms":
+        if st.button("LinkedIn Scraper Mode", key="btn_mode_external", use_container_width=True):
+            if st.session_state.search_mode != "LinkedIn Scraper":
                 st.session_state.rapid_role_val = None
                 st.session_state.rapid_loc_val  = None
-            st.session_state.search_mode = "External Platforms"
+            st.session_state.search_mode = "LinkedIn Scraper"
             st.rerun(scope="fragment")
     with col_r:
         if st.button("RapidAPI Jobs Mode", key="btn_mode_rapid", use_container_width=True):
@@ -813,31 +813,21 @@ def _job_search_interactive():
     st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
     search_mode = st.session_state.search_mode
 
-    if search_mode == "External Platforms":
+    if search_mode == "LinkedIn Scraper":
         # Shadow keys for clear — never set widget keys directly
         if "ext_role_val" not in st.session_state:
             st.session_state.ext_role_val = None
         if "ext_loc_val" not in st.session_state:
             st.session_state.ext_loc_val = None
-        if "ext_exp_val" not in st.session_state:
-            st.session_state.ext_exp_val = ""
-        if "ext_type_val" not in st.session_state:
-            st.session_state.ext_type_val = ""
-        if "ext_foundit_val" not in st.session_state:
-            st.session_state.ext_foundit_val = ""
         if "_ext_clear_count" not in st.session_state:
             st.session_state["_ext_clear_count"] = 0
 
         # Compute index from shadow values
         _ext_role_idx  = JOB_TITLES.index(st.session_state.ext_role_val) if st.session_state.ext_role_val in JOB_TITLES else None
         _ext_loc_idx   = LOCATIONS.index(st.session_state.ext_loc_val)   if st.session_state.ext_loc_val  in LOCATIONS  else None
-        _ext_exp_list  = ["", "Internship", "Entry Level", "Associate", "Mid-Senior Level", "Director", "Executive"]
-        _ext_type_list = ["", "Full-time", "Part-time", "Contract", "Temporary", "Volunteer", "Internship"]
-        _ext_exp_idx   = _ext_exp_list.index(st.session_state.ext_exp_val)   if st.session_state.ext_exp_val   in _ext_exp_list   else 0
-        _ext_type_idx  = _ext_type_list.index(st.session_state.ext_type_val) if st.session_state.ext_type_val  in _ext_type_list  else 0
         _ext_c = st.session_state["_ext_clear_count"]
 
-        with st.expander("External Job Search — LinkedIn, Naukri, FoundIt", expanded=True):
+        with st.expander("LinkedIn Scraper — Live Job Listings", expanded=True):
             with st.form(f"external_search_form_{_ext_c}", clear_on_submit=False):
                 st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg> JOB DOMAIN</label>""", unsafe_allow_html=True)
                 job_role = st.selectbox(
@@ -861,32 +851,21 @@ def _job_search_interactive():
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg> EXPERIENCE LEVEL</label>""", unsafe_allow_html=True)
-                    experience_level = st.selectbox(
-                        "Experience Level",
-                        _ext_exp_list,
-                        index=_ext_exp_idx,
-                        key=f"external_exp_{_ext_c}",
+                    st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> DATE POSTED</label>""", unsafe_allow_html=True)
+                    time_frame = st.selectbox(
+                        "Date Posted",
+                        ["24h", "7d", "30d"],
+                        key=f"external_timeframe_{_ext_c}",
                         label_visibility="collapsed"
                     )
                 with col2:
-                    st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> JOB TYPE</label>""", unsafe_allow_html=True)
-                    job_type = st.selectbox(
-                        "Job Type",
-                        _ext_type_list,
-                        index=_ext_type_idx,
-                        key=f"external_type_{_ext_c}",
+                    st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;">NUMBER OF JOBS</label>""", unsafe_allow_html=True)
+                    num_results = st.slider(
+                        "Number of Jobs",
+                        min_value=1, max_value=5, value=3, step=1,
+                        key=f"external_numresults_{_ext_c}",
                         label_visibility="collapsed"
                     )
-
-                st.markdown("""<label style="font-size:0.82rem;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;margin-bottom:2px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> NAUKRI & FOUNDIT EXPERIENCE (YEARS)</label>""", unsafe_allow_html=True)
-                foundit_experience = st.text_input(
-                    "Naukri & FoundIt Experience (Years)",
-                    value=st.session_state.ext_foundit_val,
-                    placeholder="e.g., 1",
-                    key=f"external_foundit_{_ext_c}",
-                    label_visibility="collapsed"
-                )
 
                 col_btn1, col_spacer, col_btn2 = st.columns([3, 0.4, 3])
                 with col_btn1:
@@ -896,21 +875,15 @@ def _job_search_interactive():
 
         # Handle clear — reset shadow keys + bump clear counter to re-render widgets fresh
         if clear_clicked:
-            st.session_state.ext_role_val    = None
-            st.session_state.ext_loc_val     = None
-            st.session_state.ext_exp_val     = ""
-            st.session_state.ext_type_val    = ""
-            st.session_state.ext_foundit_val = ""
+            st.session_state.ext_role_val = None
+            st.session_state.ext_loc_val  = None
             st.session_state["_ext_clear_count"] = st.session_state.get("_ext_clear_count", 0) + 1
             st.rerun(scope="fragment")
 
         # Sync shadow keys from widget values on search
         if search_clicked:
-            st.session_state.ext_role_val    = job_role
-            st.session_state.ext_loc_val     = location
-            st.session_state.ext_exp_val     = experience_level
-            st.session_state.ext_type_val    = job_type
-            st.session_state.ext_foundit_val = foundit_experience
+            st.session_state.ext_role_val = job_role
+            st.session_state.ext_loc_val  = location
 
         if search_clicked and not job_role:
             st.warning("Please select a Job Domain to search.")
@@ -918,74 +891,134 @@ def _job_search_interactive():
             st.warning("Please select a Location to search.")
 
         if search_clicked and job_role and location:
-                # Call search_jobs function for external platforms
-                results = search_jobs(job_role, location, experience_level, job_type, foundit_experience)
+            with st.spinner("Fetching live jobs from LinkedIn..."):
+                results = fetch_linkedin_jobs(
+                    job_role,
+                    location,
+                    time_frame=time_frame,
+                    results=num_results
+                )
 
-                # Save search results if user is logged in
-                if hasattr(st.session_state, 'username') and st.session_state.username:
-                    # Use explicit platform name mapping — never rely on split(":")[0]
-                    # because "FoundIt (Monster)" has no colon but other future platforms might.
-                    _platform_name_map = {
-                        "linkedin": "LinkedIn",
-                        "naukri":   "Naukri",
-                        "foundit":  "FoundIt (Monster)",
-                    }
-                    formatted_results = []
-                    for result in results:
-                        _title_lower = result["title"].lower()
-                        _pname = next(
-                            (v for k, v in _platform_name_map.items() if k in _title_lower),
-                            result["title"].split(":")[0]   # safe fallback
-                        )
-                        formatted_results.append({
-                            "platform": _pname,
-                            "apply_link": result["link"]
-                        })
-                    _session_id = str(uuid.uuid4())  # one UUID per search click
-                    save_job_search(st.session_state.username, job_role, location, formatted_results, _session_id)
-                    # NOTE: prune_old_searches intentionally NOT called here.
-                    # Pruning was hard-capping row count at 50 — every new insert
-                    # was immediately deleted back to the limit, freezing the count.
-                    # Signal pagination to reset to page 1 so stale offset never
-                    # causes a row to be skipped or duplicated in Saved Searches.
-                    st.session_state["_search_just_saved"] = True
-
-                st.markdown("""<div style="display:flex; align-items:center; gap:10px; margin:18px 0 14px;"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#gext)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gext" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#818cf8"/></linearGradient></defs><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span style="font-size:1.35rem; font-weight:800; letter-spacing:-0.025em; background:linear-gradient(135deg,#38bdf8,#818cf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; font-family:var(--t3-font);">External Job Search Results</span></div>""", unsafe_allow_html=True)
-
+            # Save search results if user is logged in
+            if hasattr(st.session_state, 'username') and st.session_state.username:
+                formatted_results = []
                 for job in results:
-                    platform = job["title"].split(":")[0].lower()
+                    formatted_results.append({
+                        "platform": "LinkedIn (Live)",
+                        "apply_link": job.get("job_apply_link", "#"),
+                        "company":    clean_html(job.get("employer_name", "")),
+                    })
+                # If LinkedIn returned 0 jobs (quota/network/no matches), still
+                # insert 1 placeholder row so the search count always increases —
+                # same pattern as RapidAPI mode.
+                if not formatted_results:
+                    formatted_results = [{
+                        "platform": "LinkedIn (Live)",
+                        "apply_link": "#",
+                        "company": "",
+                    }]
+                _session_id = str(uuid.uuid4())  # one UUID per search click
+                save_job_search(
+                    st.session_state.username,
+                    job_role,
+                    location,
+                    formatted_results,
+                    _session_id
+                )
+                st.session_state["_search_just_saved"] = True
 
-                    # Platform styling
-                    if "linkedin" in platform:
-                        platform_name = "LinkedIn"
-                        btn_color = "#0e76a8"
-                        platform_gradient = "linear-gradient(135deg, #0e76a8 0%, #1a8cc8 100%)"
-                    elif "naukri" in platform:
-                        platform_name = "Naukri"
-                        btn_color = "#ff5722"
-                        platform_gradient = "linear-gradient(135deg, #ff5722 0%, #ff7043 100%)"
-                    elif "foundit" in platform:
-                        platform_name = "FoundIt (Monster)"
-                        btn_color = "#7c4dff"
-                        platform_gradient = "linear-gradient(135deg, #7c4dff 0%, #9c64ff 100%)"
-                    else:
-                        platform_name = platform.title()
-                        btn_color = "#00c4cc"
-                        platform_gradient = "linear-gradient(135deg, #00c4cc 0%, #26d0ce 100%)"
+            st.markdown("""<div style="display:flex; align-items:center; gap:10px; margin:18px 0 14px;"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#gext)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><defs><linearGradient id="gext" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#818cf8"/></linearGradient></defs><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span style="font-size:1.35rem; font-weight:800; letter-spacing:-0.025em; background:linear-gradient(135deg,#38bdf8,#818cf8); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; font-family:var(--t3-font);">LinkedIn Job Results</span></div>""", unsafe_allow_html=True)
 
-                    # Render card using reusable function
-                    job_card_html, card_height = render_job_card(
-                        title=job_role,
-                        link=job['link'],
-                        platform_name=platform_name,
-                        brand_color=btn_color,
-                        platform_gradient=platform_gradient,
-                        location=location,
-                        description="Open this platform to view full details."
-                    )
-                    components.html(job_card_html, height=card_height, scrolling=False)
-        elif search_clicked:
-            st.warning("Please select both a Job Domain and Location to perform the search.")
+            if results:
+                for job in results:
+                    job_title = clean_html(job.get("job_title", "N/A"))
+                    job_company = clean_html(job.get("employer_name", "Unknown"))
+                    job_location = f"{job.get('job_city','')}, {job.get('job_country','')}"
+                    job_type_disp = job.get("job_employment_type", "N/A")
+                    job_mode = "Remote" if job.get("job_is_remote") else "On-site"
+                    job_publisher = clean_html(job.get("job_publisher", "LinkedIn"))
+                    _raw_desc = job.get("job_description") or ""
+                    job_description = clean_html(_raw_desc).strip()
+                    _desc_missing = len(job_description) < 10
+                    if not _desc_missing and len(job_description) > 350:
+                        job_description = job_description[:350].rsplit(' ', 1)[0] + "..."
+
+                    raw_date = job.get("job_posted_at_datetime_utc", "")
+                    formatted_date = "N/A"
+                    if raw_date and str(raw_date).strip() not in ("N/A", "None", "null", ""):
+                        try:
+                            date_obj = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+                            formatted_date = date_obj.strftime("%b %d, %Y")
+                        except (ValueError, AttributeError):
+                            formatted_date = str(raw_date)[:10]
+
+                    btn_color = "#0e76a8"
+                    platform_gradient = "linear-gradient(135deg, #0e76a8 0%, #1a8cc8 100%)"
+
+                    job_card_html = f"""
+<div class="job-result-card" style="
+    background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
+    padding: 25px;
+    border-radius: 20px;
+    margin-bottom: 25px;
+    border-left: 6px solid {btn_color};
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3), 0 0 20px {btn_color}40;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+">
+    <div class="shimmer-overlay"></div>
+
+    <div style="display:flex; align-items:center; gap:8px; font-size: 15px; margin-bottom: 15px; color: {btn_color}; font-weight: bold;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="{btn_color}"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> LinkedIn (Live)
+    </div>
+
+    <div style="color: #ffffff; font-size: 22px; margin-bottom: 10px; font-weight: 600; line-height: 1.4;">
+        {job_title}
+    </div>
+
+    <div style="color: #aaaaaa; font-size: 16px; margin-bottom: 15px; display:flex; align-items:center; gap:6px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <b>{job_company}</b>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px;">
+        <div style="color: #cccccc; font-size: 14px; display:flex; align-items:center; gap:5px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 018 8c0 5.25-8 14-8 14S4 15.25 4 10a8 8 0 018-8z"/></svg> <b>Location:</b> {job_location}</div>
+        <div style="color: #cccccc; font-size: 14px; display:flex; align-items:center; gap:5px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg> <b>Type:</b> {job_type_disp}</div>
+        <div style="color: #cccccc; font-size: 14px; display:flex; align-items:center; gap:5px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg> <b>Mode:</b> {job_mode}</div>
+        <div style="color: #cccccc; font-size: 14px; display:flex; align-items:center; gap:5px;"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> <b>Posted:</b> {formatted_date}</div>
+    </div>
+
+    {(
+        f'''<div style="color:#999;font-size:14px;margin-bottom:20px;line-height:1.6;">{job_description}</div>'''
+        if not _desc_missing else
+        f'''<a href="{job.get("job_apply_link","#")}" target="_blank" style="text-decoration:none;display:inline-flex;align-items:center;gap:10px;
+            background:linear-gradient(135deg,rgba(14,118,168,0.08),rgba(14,118,168,0.03));
+            border:1px dashed rgba(14,118,168,0.35);border-radius:12px;
+            padding:12px 18px;margin-bottom:20px;cursor:pointer;
+            transition:all 0.25s ease;width:fit-content;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{btn_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span style="color:#aaa;font-size:13px;">Description not available in preview —</span>
+            <span style="color:{btn_color};font-size:13px;font-weight:600;display:flex;align-items:center;gap:5px;">
+                View full details on LinkedIn
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="{btn_color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </span>
+        </a>'''
+    )}
+
+    <a href="{job.get('job_apply_link', '#')}" target="_blank" style="text-decoration: none;">
+        <button class="job-button" style="
+            background: {platform_gradient};
+            color: white; border: none; padding: 12px 24px;
+            border-radius: 10px; font-weight: 600; font-size: 14px;
+            cursor: pointer; width: 100%;
+        ">Apply on LinkedIn</button>
+    </a>
+</div>
+"""
+                    st.markdown(job_card_html, unsafe_allow_html=True)
+            else:
+                st.info("No live LinkedIn listings found for this search. Try a different role, location, or date range.")
 
     else:
         # Shadow keys for RapidAPI clear
@@ -1528,8 +1561,8 @@ def _analytics_dashboard():
         else:
             # ── Compute KPIs ───────────────────────────────────────
             # Raw row count — every inserted record counts:
-            #   External Platforms: 1 click → 3 rows (LinkedIn + Naukri + FoundIt) → +3
-            #   RapidAPI slider=N:  1 click → N rows                                → +N
+            #   LinkedIn Scraper slider=N: 1 click → N rows → +N
+            #   RapidAPI slider=N:         1 click → N rows → +N
             # No session grouping, no deduplication, no cap.
             total_searches      = len(df_analytics)
             unique_roles        = df_analytics['role'].nunique()
