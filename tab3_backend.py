@@ -673,4 +673,4 @@ def add_hyperlink(paragraph, url, text, color="0000FF", underline=True):
 
     hyperlink.append(new_run)
     paragraph._p.append(hyperlink)
-    return hyperlink
+    return hyperlinks
