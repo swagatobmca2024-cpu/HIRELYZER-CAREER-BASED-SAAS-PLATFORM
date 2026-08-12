@@ -1710,6 +1710,7 @@ def generate_resume_report_html(resume, user_location=""):
     rewritten_text = _resume_part.replace("\n", "<br/>")
     _job_titles_html = ""
     _location_param = urllib.parse.quote(user_location) if user_location else "India"
+    _location_raw   = user_location.strip() if user_location and user_location.strip() else "India"
     if _jobs_part:
         _job_titles_html = "<div class='section-title'>Suggested Job Titles</div><div class='box'><ul>"
         for _line in _jobs_part.split('\n'):
@@ -1717,7 +1718,9 @@ def generate_resume_report_html(resume, user_location=""):
             if _m:
                 _title = _m.group(1).strip()
                 _desc = re.sub(r'https?://\S+', '', _m.group(2)).strip().rstrip('.')
-                _encoded = urllib.parse.quote(_title)
+                # LinkedIn only reliably applies `keywords` for logged-out clicks —
+                # `location` alone gets silently dropped, so fold it into keywords too.
+                _encoded = urllib.parse.quote(f"{_title},{_location_raw}")
                 _url = f"https://www.linkedin.com/jobs/search/?keywords={_encoded}&location={_location_param}"
                 _job_titles_html += f'<li><b><a href="{_url}">{_title}</a></b>{(" — " + _desc) if _desc else ""}</li>'
         _job_titles_html += "</ul></div>"
