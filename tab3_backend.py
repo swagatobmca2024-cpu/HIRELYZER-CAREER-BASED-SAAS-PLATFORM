@@ -533,11 +533,18 @@ def search_jobs(job_role, location, experience_level=None, job_type=None, foundi
     # plain-language phrases typed into `keywords`. So we phrase experience
     # and job type in natural language inside keywords instead of relying on
     # f_E/f_JT alone.
+    # NOTE: LinkedIn's Experience Level checkboxes are now a 5-tier list —
+    # Entry-level, Senior, Manager, Director, Executive (confirmed from a
+    # live screenshot) — replacing the older 6-tier taxonomy this app's
+    # dropdown still uses. "Mid-Senior Level" maps cleanly to their "Senior".
+    # "Associate" and "Internship" have no exact current-tier match — left
+    # as plain text (still aids keyword relevance) rather than force-mapped
+    # to a tier that would misrepresent the candidate's actual level.
     linkedin_exp_phrase_map = {
         "Internship": "internship",
         "Entry Level": "entry-level",
         "Associate": "associate",
-        "Mid-Senior Level": "mid-senior level",
+        "Mid-Senior Level": "senior",
         "Director": "director",
         "Executive": "executive",
     }
