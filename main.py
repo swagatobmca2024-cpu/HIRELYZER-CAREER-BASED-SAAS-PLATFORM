@@ -6354,7 +6354,6 @@ with tab1:
 
                         # Build LinkedIn search location param — fallback to "India" if blank
                         _loc_param = urllib.parse.quote(user_location.strip()) if user_location and user_location.strip() else "India"
-                        _loc_raw   = user_location.strip() if user_location and user_location.strip() else "India"
 
                         def _strip_urls(s):
                             """Remove ALL URLs and link emoji from a string."""
@@ -6436,9 +6435,7 @@ with tab1:
 
                             desc = desc.rstrip('.')
 
-                            # LinkedIn only reliably applies `keywords` for logged-out clicks —
-                            # `location` alone gets silently dropped, so fold it into keywords too.
-                            encoded      = urllib.parse.quote(f"{title},{_loc_raw}")
+                            encoded      = urllib.parse.quote(title)
                             linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={_loc_param}"
                             link_icon = (
                                 '<a href="' + linkedin_url + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
@@ -6476,7 +6473,7 @@ with tab1:
                                 _ft = _ft.strip()
                                 if not _ft:
                                     continue
-                                _fe = urllib.parse.quote(f"{_ft[:60]},{_loc_raw}")
+                                _fe = urllib.parse.quote(_ft[:60])
                                 _furl = f"https://www.linkedin.com/jobs/search/?keywords={_fe}&location={_loc_param}"
                                 _ficon = (
                                     '<a href="' + _furl + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
