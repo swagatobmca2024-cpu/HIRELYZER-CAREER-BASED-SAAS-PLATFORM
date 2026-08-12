@@ -420,123 +420,6 @@ def fetch_live_jobs(job_role, location, job_type=None, remote_only=False, result
         return []
 
 
-LINKEDIN_HOST = st.secrets["rapidapi"]["linkedin_host"]
-
-
-def fetch_linkedin_jobs(job_role, location, time_frame="24h", results=10):
-    """
-    Fetch live LinkedIn postings via RapidAPI's linkedin-job-search-api
-    /active-jb endpoint. Exact response schema isn't publicly documented,
-    so _normalize_linkedin_job() tries several common key-name variants
-    rather than assuming one — same defensive pattern as fetch_live_jobs()
-    trying data/jobs/results/items.
-    """
-    url = f"https://{LINKEDIN_HOST}/active-jb"
-    querystring = {
-        "title": job_role,
-        "location": location,
-        "time_frame": time_frame,
-        "limit": str(results),
-        "offset": "0",
-        "description_format": "text",
-    }
-    headers = {
-        "x-rapidapi-key": RAPID_API_KEY,
-        "x-rapidapi-host": LINKEDIN_HOST,
-        "Content-Type": "application/json",
-    }
-    try:
-        if _scraper is not None:
-            response = _scraper.get(url, headers=headers, params=querystring, timeout=15)
-        else:
-            response = requests.get(url, headers=headers, params=querystring, timeout=15)
-
-        if response.status_code != 200:
-            return []
-
-        payload = response.json()
-        if isinstance(payload, list):
-            raw_jobs = payload
-        elif isinstance(payload, dict):
-            raw_jobs = (
-                payload.get("data") or payload.get("jobs")
-                or payload.get("results") or payload.get("items") or []
-            )
-        else:
-            raw_jobs = []
-
-        if not isinstance(raw_jobs, list):
-            return []
-
-        normalized = [_normalize_linkedin_job(j) for j in raw_jobs[:results]]
-        return [j for j in normalized if j]
-    except Exception:
-        return []
-
-
-def _normalize_linkedin_job(job):
-    """
-    Map a raw LinkedIn job dict (exact upstream schema unconfirmed) onto
-    the SAME field names the RapidAPI/JSearch results already use
-    (job_title, employer_name, job_city, job_apply_link, ...).
-    This lets tab3_ui.py reuse the existing RapidAPI-mode card renderer
-    and save_job_search() formatting for LinkedIn mode with zero changes
-    there — just point it at fetch_linkedin_jobs() instead.
-    Returns None for rows with no usable title (skip rather than render
-    a blank card).
-    """
-    if not isinstance(job, dict):
-        return None
-
-    title = job.get("title") or job.get("job_title") or job.get("position")
-    if not title:
-        return None
-
-    company = (
-        job.get("organization") or job.get("company")
-        or job.get("company_name") or job.get("employer_name") or "Unknown"
-    )
-    if isinstance(company, dict):
-        company = company.get("name", "Unknown")
-
-    loc = job.get("location") or job.get("locations_raw") or job.get("location_raw") or ""
-    if isinstance(loc, list):
-        loc = ", ".join(
-            (l.get("name") if isinstance(l, dict) else str(l)) for l in loc if l
-        )
-    elif isinstance(loc, dict):
-        loc = loc.get("name", "")
-    loc = str(loc) if loc else ""
-    # Best-effort city/country split so it slots into job_city/job_country
-    # the same way the card renderer already expects.
-    _loc_parts = [p.strip() for p in loc.split(",")] if loc else []
-    job_city = _loc_parts[0] if _loc_parts else ""
-    job_country = _loc_parts[-1] if len(_loc_parts) > 1 else ""
-
-    apply_link = (
-        job.get("url") or job.get("job_url") or job.get("apply_link")
-        or job.get("application_url") or job.get("linkedin_url") or "#"
-    )
-
-    raw_desc = job.get("description") or job.get("description_text") or ""
-
-    return {
-        "job_title": clean_html(str(title)),
-        "employer_name": clean_html(str(company)),
-        "job_city": job_city,
-        "job_country": job_country,
-        "job_min_salary": None,
-        "job_max_salary": None,
-        "job_salary_currency": "",
-        "job_employment_type": job.get("employment_type") or job.get("type") or "N/A",
-        "job_is_remote": "remote" in loc.lower(),
-        "job_publisher": "LinkedIn",
-        "job_posted_at_datetime_utc": job.get("date_posted") or job.get("listed_at") or job.get("list_date") or "",
-        "job_description": clean_html(str(raw_desc)),
-        "job_apply_link": apply_link,
-    }
-
-
 def fetch_company_by_domain(domain: str):
     """Fetch company information by domain using LinkedIn Data API"""
     url = f"https://linkedin-data-api.p.rapidapi.com/get-company-by-domain?domain={domain}"
@@ -574,21 +457,23 @@ def unified_search(job_role, location, experience_level=None, job_type=None, fou
             "apply_link": job.get("job_apply_link", "#")
         })
 
-    # 2️⃣ Add real LinkedIn listings (was: redirect links via search_jobs())
-    linkedin_jobs = fetch_linkedin_jobs(job_role, location, results=5)
-    for job in linkedin_jobs:
+    # 2️⃣ Add LinkedIn, Naukri, FoundIt links (existing function)
+    external_links = search_jobs(job_role, location, experience_level, job_type, foundit_experience)
+    for job in external_links:
+        # Use maxsplit=1 to safely handle job titles that contain colons
+        parts = job["title"].split(":", 1)
         results.append({
-            "platform": "LinkedIn (Live)",
-            "title": job.get("job_title", "N/A"),
-            "company": job.get("employer_name", "Unknown"),
-            "location": f"{job.get('job_city','')}, {job.get('job_country','')}",
-            "salary": "Check listing",
-            "date": job.get("job_posted_at_datetime_utc", "N/A"),
-            "type": job.get("job_employment_type", "N/A"),
-            "remote": "Remote" if job.get("job_is_remote") else "On-site",
-            "publisher": job.get("job_publisher", "LinkedIn"),
-            "description": job.get("job_description", ""),
-            "apply_link": job.get("job_apply_link", "#"),
+            "platform": parts[0].strip(),
+            "title": parts[1].strip() if len(parts) > 1 else job["title"],
+            "company": "",   # no company data for external redirect links
+            "location": location,
+            "salary": "Check site",
+            "date": "N/A",
+            "type": "N/A",
+            "remote": "N/A",
+            "publisher": parts[0].strip(),
+            "description": "Open this platform to view full details.",
+            "apply_link": job["link"]
         })
 
     return results
