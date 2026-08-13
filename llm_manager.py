@@ -717,11 +717,17 @@ def _pick_start_index(n: int) -> int:
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
+    # max_retries=0: the OpenAI SDK's default silently retries a 429 up to
+    # 2 extra times on the SAME key before raising — burning 3x quota per
+    # "attempt" and delaying our own multi-key rotation. Fail fast instead
+    # so call_llm()'s rotation/backoff can move to a different, healthier
+    # key immediately rather than hammering an already-exhausted one.
     llm = ChatOpenAI(
         model=model,
         temperature=temperature,
         openai_api_key=api_key,
         openai_api_base=SAMBANOVA_BASE_URL,
+        max_retries=0,
     )
     return llm.invoke(prompt).content
 
