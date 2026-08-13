@@ -70,6 +70,30 @@ if st.query_params.get("debug_keys") == "1":
                     "failure_reason": _failure["reason"] if _failure else "-",
                 })
             st.table(_rows)
+
+            st.divider()
+            st.caption("Raw single-key test — bypasses rotation/retry entirely, fires ONE direct request.")
+            _test_idx = st.selectbox("Pick a key index to test", list(range(len(_all_keys))), key="_debug_test_idx")
+            if st.button("Fire raw test request", key="_debug_fire_raw"):
+                import requests as _req
+                _test_key = _all_keys[_test_idx]
+                try:
+                    _resp = _req.post(
+                        "https://api.sambanova.ai/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {_test_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": "Meta-Llama-3.3-70B-Instruct",
+                            "messages": [{"role": "user", "content": "hi"}],
+                        },
+                        timeout=30,
+                    )
+                    st.write(f"**Status code:** {_resp.status_code}")
+                    st.code(_resp.text[:1000])
+                except Exception as _e:
+                    st.error(f"Request error: {_e}")
         except Exception as _e:
             st.error(f"Diagnostic error: {_e}")
 # ── END TEMPORARY DEBUG BLOCK ──────────────────────────────────────────────────
