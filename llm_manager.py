@@ -98,13 +98,6 @@ _QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests",
 _DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
                      "api key", "authentication", "permission denied",
                      "invalid_api_key"]
-# SambaNova sends these as HTTP 429 too, but they're a transient SERVER-side
-# capacity blip (shared model overload, unrelated to any single key's quota)
-# — NOT the same as "this key is out of daily requests." Confirmed via a
-# live raw test: "Meta-Llama-3.3-70B-Instruct-8k is currently experiencing
-# high demand." Must be checked BEFORE the blanket 429→quota rule below.
-_CAPACITY_SIGNALS = ["high demand", "experiencing high demand", "overloaded"]
-CAPACITY_COOLDOWN_MINUTES = 1
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IN-MEMORY STATE  (module-level, shared across all threads in one worker)
@@ -353,12 +346,11 @@ def _mem_is_in_cooldown(api_key: str) -> bool:
         entry = _mem_failures.get(api_key)
     if not entry:
         return False
-    if entry["reason"] == "quota":
-        cooldown_secs = QUOTA_COOLDOWN_MINUTES * 60
-    elif entry["reason"] == "capacity":
-        cooldown_secs = CAPACITY_COOLDOWN_MINUTES * 60
-    else:
-        cooldown_secs = FAILURE_COOLDOWN_MINUTES * 60
+    cooldown_secs = (
+        QUOTA_COOLDOWN_MINUTES * 60
+        if entry["reason"] == "quota"
+        else FAILURE_COOLDOWN_MINUTES * 60
+    )
     return (time.time() - entry["time"]) < cooldown_secs
 
 
@@ -582,9 +574,6 @@ def _classify_error(error: Exception) -> str:
     """
     Returns:
         'quota'     — rate limited → 60-min cooldown
-        'capacity'  — server-side model overload (still HTTP 429, but not
-                      this key's fault) → short 1-min cooldown, key comes
-                      right back instead of sitting out for an hour
         'dead'      — bad/invalid key → 5-min cooldown
         'transient' — network blip / server 500 / timeout → do NOT touch the key
     """
@@ -604,10 +593,6 @@ def _classify_error(error: Exception) -> str:
         except Exception:
             pass
 
-    # Check capacity signals FIRST — SambaNova returns these as HTTP 429 too,
-    # so without this check they'd be wrongly bucketed as full quota exhaustion.
-    if any(s in msg for s in _CAPACITY_SIGNALS):
-        return "capacity"
     if status_code == 429 or any(s in msg for s in _QUOTA_SIGNALS):
         return "quota"
     if status_code in (401, 403) or any(s in msg for s in _DEAD_KEY_SIGNALS):
@@ -691,12 +676,8 @@ def _seed_mem_from_db(api_keys: list, today: str):
                 fail_dt = pytz.utc.localize(fail_dt)
             fail_ts = fail_dt.timestamp()
             reason  = row.get("reason", "error")
-            if reason == "quota":
-                cooldown = QUOTA_COOLDOWN_MINUTES * 60
-            elif reason == "capacity":
-                cooldown = CAPACITY_COOLDOWN_MINUTES * 60
-            else:
-                cooldown = FAILURE_COOLDOWN_MINUTES * 60
+            cooldown = (QUOTA_COOLDOWN_MINUTES if reason == "quota"
+                        else FAILURE_COOLDOWN_MINUTES) * 60
             # Only seed if the cooldown is still active
             if (now_ts - fail_ts) < cooldown:
                 _mem_failures[raw_key] = {
@@ -736,17 +717,11 @@ def _pick_start_index(n: int) -> int:
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
-    # max_retries=0: the OpenAI SDK's default silently retries a 429 up to
-    # 2 extra times on the SAME key before raising — burning 3x quota per
-    # "attempt" and delaying our own multi-key rotation. Fail fast instead
-    # so call_llm()'s rotation/backoff can move to a different, healthier
-    # key immediately rather than hammering an already-exhausted one.
     llm = ChatOpenAI(
         model=model,
         temperature=temperature,
         openai_api_key=api_key,
         openai_api_base=SAMBANOVA_BASE_URL,
-        max_retries=0,
     )
     return llm.invoke(prompt).content
 
@@ -817,10 +792,6 @@ def call_llm(
                 _record_key_tokens(user_key, TPM_LIMIT, time.time())
                 _record_key_request(user_key, time.time())
                 _async_mark_failure(user_key, "quota")
-            elif err_type == "capacity":
-                # Server-side overload, not this key's fault — short cooldown,
-                # don't burn its TPM/RPM budget for something it didn't cause.
-                _mem_record_failure(user_key, "capacity")
             elif err_type == "dead":
                 _mem_record_failure(user_key, "error")
                 _async_mark_failure(user_key, "error")
@@ -887,10 +858,6 @@ def call_llm(
                 _record_key_tokens(key, TPM_LIMIT, time.time())
                 _record_key_request(key, time.time())
                 _async_mark_failure(key, "quota")
-            elif err_type == "capacity":
-                # Server-side overload, not this key's fault — short cooldown,
-                # don't burn its TPM/RPM budget for something it didn't cause.
-                _mem_record_failure(key, "capacity")
             elif err_type == "dead":
                 _mem_record_failure(key, "error")
                 _async_mark_failure(key, "error")
