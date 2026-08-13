@@ -45,58 +45,8 @@ from llm_manager import (
     call_llm, load_sambanova_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure, _mem_usage, _mem_failures,
+    _async_clear_failure,
 )
-
-# ── TEMPORARY DEBUG BLOCK — remove after checking SambaNova key health ────────
-# Visit your app URL with ?debug_keys=1 appended to see this in the sidebar.
-# Not visible to regular users since it requires that exact query param.
-if st.query_params.get("debug_keys") == "1":
-    with st.sidebar.expander("🔍 SambaNova Key Diagnostic", expanded=True):
-        try:
-            _all_keys = load_sambanova_api_keys()
-            _healthy = get_healthy_keys(_all_keys)
-            st.write(f"Total keys: {len(_all_keys)}")
-            st.write(f"Healthy now: {len(_healthy)}")
-            st.write(f"In cooldown/failed: {len(_all_keys) - len(_healthy)}")
-            _rows = []
-            for _k in _all_keys:
-                _usage = _mem_usage.get(_k, {"count": 0, "date": "never"})
-                _failure = _mem_failures.get(_k)
-                _rows.append({
-                    "key_prefix": _k[:12] + "...",
-                    "used_today": _usage["count"],
-                    "usage_date": _usage["date"],
-                    "failure_reason": _failure["reason"] if _failure else "-",
-                })
-            st.table(_rows)
-
-            st.divider()
-            st.caption("Raw single-key test — bypasses rotation/retry entirely, fires ONE direct request.")
-            _test_idx = st.selectbox("Pick a key index to test", list(range(len(_all_keys))), key="_debug_test_idx")
-            if st.button("Fire raw test request", key="_debug_fire_raw"):
-                import requests as _req
-                _test_key = _all_keys[_test_idx]
-                try:
-                    _resp = _req.post(
-                        "https://api.sambanova.ai/v1/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {_test_key}",
-                            "Content-Type": "application/json",
-                        },
-                        json={
-                            "model": "Meta-Llama-3.3-70B-Instruct",
-                            "messages": [{"role": "user", "content": "hi"}],
-                        },
-                        timeout=30,
-                    )
-                    st.write(f"**Status code:** {_resp.status_code}")
-                    st.code(_resp.text[:1000])
-                except Exception as _e:
-                    st.error(f"Request error: {_e}")
-        except Exception as _e:
-            st.error(f"Diagnostic error: {_e}")
-# ── END TEMPORARY DEBUG BLOCK ──────────────────────────────────────────────────
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
     get_database_stats, detect_domain_from_title_and_description,
