@@ -45,8 +45,34 @@ from llm_manager import (
     call_llm, load_sambanova_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure,
+    _async_clear_failure, _mem_usage, _mem_failures,
 )
+
+# ── TEMPORARY DEBUG BLOCK — remove after checking SambaNova key health ────────
+# Visit your app URL with ?debug_keys=1 appended to see this in the sidebar.
+# Not visible to regular users since it requires that exact query param.
+if st.query_params.get("debug_keys") == "1":
+    with st.sidebar.expander("🔍 SambaNova Key Diagnostic", expanded=True):
+        try:
+            _all_keys = load_sambanova_api_keys()
+            _healthy = get_healthy_keys(_all_keys)
+            st.write(f"Total keys: {len(_all_keys)}")
+            st.write(f"Healthy now: {len(_healthy)}")
+            st.write(f"In cooldown/failed: {len(_all_keys) - len(_healthy)}")
+            _rows = []
+            for _k in _all_keys:
+                _usage = _mem_usage.get(_k, {"count": 0, "date": "never"})
+                _failure = _mem_failures.get(_k)
+                _rows.append({
+                    "key_prefix": _k[:12] + "...",
+                    "used_today": _usage["count"],
+                    "usage_date": _usage["date"],
+                    "failure_reason": _failure["reason"] if _failure else "-",
+                })
+            st.table(_rows)
+        except Exception as _e:
+            st.error(f"Diagnostic error: {_e}")
+# ── END TEMPORARY DEBUG BLOCK ──────────────────────────────────────────────────
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
     get_database_stats, detect_domain_from_title_and_description,
@@ -6354,6 +6380,7 @@ with tab1:
 
                         # Build LinkedIn search location param — fallback to "India" if blank
                         _loc_param = urllib.parse.quote(user_location.strip()) if user_location and user_location.strip() else "India"
+                        _loc_raw   = user_location.strip() if user_location and user_location.strip() else "India"
 
                         def _strip_urls(s):
                             """Remove ALL URLs and link emoji from a string."""
@@ -6435,7 +6462,9 @@ with tab1:
 
                             desc = desc.rstrip('.')
 
-                            encoded      = urllib.parse.quote(title)
+                            # LinkedIn only reliably applies `keywords` for logged-out clicks —
+                            # `location` alone gets silently dropped, so fold it into keywords too.
+                            encoded      = urllib.parse.quote(f"{title},{_loc_raw}")
                             linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={_loc_param}"
                             link_icon = (
                                 '<a href="' + linkedin_url + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
@@ -6473,7 +6502,7 @@ with tab1:
                                 _ft = _ft.strip()
                                 if not _ft:
                                     continue
-                                _fe = urllib.parse.quote(_ft[:60])
+                                _fe = urllib.parse.quote(f"{_ft[:60]},{_loc_raw}")
                                 _furl = f"https://www.linkedin.com/jobs/search/?keywords={_fe}&location={_loc_param}"
                                 _ficon = (
                                     '<a href="' + _furl + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
