@@ -718,7 +718,8 @@ def _strip_think_blocks(text: str) -> str:
 
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
-def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
+def try_call_llm(prompt: str, api_key: str, model: str, temperature: float,
+                  max_output_tokens: int = None) -> str:
     # max_retries=0: disable the OpenAI SDK's own internal retry-on-429/5xx.
     # We already have our own multi-key rotation + backoff one layer up in
     # call_llm(); letting the SDK retry the SAME key silently just burns
@@ -731,7 +732,7 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
         openai_api_key=api_key,
         openai_api_base=GROQ_BASE_URL,
         max_retries=0,
-        max_tokens=MAX_OUTPUT_TOKENS,
+        max_tokens=max_output_tokens or MAX_OUTPUT_TOKENS,
         extra_body={
             "reasoning_format": "hidden",
             "reasoning_effort": "none",   # non-thinking mode — these are
@@ -751,9 +752,18 @@ def call_llm(
     session,
     model: str = "qwen/qwen3.6-27b",
     temperature: float = 0,
+    max_output_tokens: int = None,
 ) -> str:
     """
     Distribute LLM calls evenly across all healthy Groq keys.
+
+    max_output_tokens: override the default MAX_OUTPUT_TOKENS reservation for
+      this specific call. Use this for calls that genuinely need a bigger
+      response (e.g. structured JSON extraction, multi-section evaluations)
+      — leave it unset for short scoring/classification calls so they don't
+      eat unnecessary TPM budget. Whatever you pass here is counted against
+      the TPM ceiling the same way the default is, so raising it shrinks how
+      much room is left for the prompt itself.
 
     Strategy:
       1. Supabase cache hit → return immediately (zero LLM cost).
@@ -788,8 +798,9 @@ def call_llm(
         return cached
 
     estimated_tokens = _estimate_tokens(prompt)
+    _out_budget = max_output_tokens or MAX_OUTPUT_TOKENS
     # Groq counts prompt + reserved output against TPM — budget for both.
-    estimated_request_tokens = estimated_tokens + MAX_OUTPUT_TOKENS
+    estimated_request_tokens = estimated_tokens + _out_budget
     last_error = None
 
     # Preflight: a request bigger than the TPM ceiling will 413 on EVERY key
@@ -797,7 +808,7 @@ def call_llm(
     # fast instead of burning the whole rotation + backoff sleeps on it.
     if estimated_request_tokens > TPM_LIMIT:
         return (f"❌ Prompt too large (~{estimated_tokens} prompt tokens + "
-                f"~{MAX_OUTPUT_TOKENS} reserved output = "
+                f"~{_out_budget} reserved output = "
                 f"~{estimated_request_tokens} total, limit is ~{TPM_LIMIT}) "
                 f"for {model} on the {GROQ_TIER} tier. Shorten the input or "
                 f"split it into smaller calls.")
@@ -810,7 +821,7 @@ def call_llm(
 
     if user_key and _key_has_tpm_headroom(user_key, estimated_request_tokens) and _key_has_rpm_headroom(user_key):
         try:
-            response = try_call_llm(prompt, user_key, model, temperature)
+            response = try_call_llm(prompt, user_key, model, temperature, _out_budget)
             if not response or not response.strip():
                 raise RuntimeError(
                     "empty content — reasoning likely exhausted max_tokens"
@@ -880,7 +891,7 @@ def call_llm(
             time.sleep(random.uniform(0.5, 1.5))
 
         try:
-            response = try_call_llm(prompt, key, model, temperature)
+            response = try_call_llm(prompt, key, model, temperature, _out_budget)
             if not response or not response.strip():
                 # 200 OK but empty content — thinking mode ate the whole
                 # token budget before writing an answer. Not a real success:
