@@ -91,10 +91,15 @@ DAILY_TOKEN_LIMIT = _tier_cfg["tpd"]                 # informational; not yet en
 # Unlike SambaNova, Groq publishes and enforces TPM directly — it's a real,
 # binding limit here, not just a soft guard. Margin kept below the documented
 # 8,000 TPM to leave headroom for token-count estimation error.
-TPM_LIMIT          = max(1, _tier_cfg["tpm"] - 200)
+TPM_LIMIT          = max(1, _tier_cfg["tpm"] - 500)
 TPM_WINDOW_SECONDS = 60
 RPM_WINDOW_SECONDS = 60
-CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
+CHARS_PER_TOKEN    = 3             # 1 token ≈ 3 chars — deliberately
+                                    # conservative. Resume/JD text (bullets,
+                                    # numbers, technical terms, punctuation)
+                                    # tokenizes less efficiently than plain
+                                    # prose; 4 chars/token under-counted a
+                                    # real request by ~700 tokens in testing.
 
 # Groq's TPM limiter counts input tokens PLUS the max_tokens you request as
 # reserved output capacity — not just the prompt alone. Every headroom/
