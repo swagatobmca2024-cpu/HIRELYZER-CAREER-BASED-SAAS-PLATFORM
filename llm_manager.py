@@ -711,7 +711,7 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
         openai_api_key=api_key,
         openai_api_base=GROQ_BASE_URL,
         max_retries=0,
-        model_kwargs={"reasoning_format": "hidden"},
+        extra_body={"reasoning_format": "hidden"},
     )
     return _strip_think_blocks(llm.invoke(prompt).content)
 
