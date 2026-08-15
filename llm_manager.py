@@ -35,10 +35,11 @@ import pytz
 import streamlit as st
 from langchain_openai import ChatOpenAI
 
-# SambaNova exposes an OpenAI-compatible endpoint; Llama 3.3 70B is still
-# actively served there (unlike Groq, which is dropping it, and Cerebras,
-# which already deprecated it in Feb 2026).
-SAMBANOVA_BASE_URL = "https://api.sambanova.ai/v1"
+# Groq's OpenAI-compatible endpoint. Moved back from SambaNova now that
+# Groq's llama-3.3-70b-versatile deprecation (2026-08-16) forced a model
+# swap anyway — qwen/qwen3.6-27b is Groq's recommended replacement and is
+# already what LLM Evaluator Suite / Docstract / SYNAPSE were migrated to.
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 CACHE_EXPIRY_HOURS       = 24
@@ -47,42 +48,50 @@ QUOTA_COOLDOWN_MINUTES   = 60
 DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
-# ── SambaNova rate-limit tier ─────────────────────────────────────────────────
-# Per SambaNova's official docs (docs.sambanova.ai/docs/en/models/rate-limits)
-# for Meta-Llama-3.3-70B-Instruct, confirmed 2026-07-29:
+# ── Groq rate-limit tier ───────────────────────────────────────────────────────
+# Per Groq's official docs (console.groq.com/docs/rate-limits), confirmed
+# 2026-08-15, for qwen/qwen3.6-27b:
 #
-#   Free Tier      (no card linked):  20 RPM,  20 RPD,  200,000 TPD
-#   Developer Tier (card linked):    240 RPM, 48,000 RPD (no per-model TPD;
-#                                     capped at 20M tokens/day across ALL models)
+#   Free Plan:  30 RPM,  1,000 RPD,  8,000 TPM,  200,000 TPD
 #
-# Flip this to "developer" once billing is linked — the free tier's 20
-# requests/DAY cap (not TPM) is the real bottleneck for production use.
-SAMBANOVA_TIER = "free"   # "free" | "developer"
+# Developer plan numbers aren't filled in below — pull the exact values
+# from console.groq.com/settings/limits after upgrading billing, don't
+# guess them. The assertion below will remind you if you flip the tier
+# without filling them in.
+GROQ_TIER = "free"   # "free" | "developer"
 
 _TIER_LIMITS = {
     "free": {
-        "rpm": 20,
-        "rpd": 20,
+        "rpm": 30,
+        "rpd": 1_000,
+        "tpm": 8_000,
         "tpd": 200_000,
     },
     "developer": {
-        "rpm": 240,
-        "rpd": 48_000,
-        "tpd": None,   # no per-model cap; 20M/day shared across all models
+        "rpm": None,   # TODO: fill in from console.groq.com/settings/limits
+        "rpd": None,
+        "tpm": None,
+        "tpd": None,
     },
 }
 
-_tier_cfg   = _TIER_LIMITS[SAMBANOVA_TIER]
-RPM_LIMIT   = max(1, _tier_cfg["rpm"] - 1)          # 1-request safety margin
-DAILY_KEY_LIMIT = max(1, _tier_cfg["rpd"] - 1)      # 1-request safety margin per key
-DAILY_TOKEN_LIMIT = _tier_cfg["tpd"]                # None on developer tier = unused
+_tier_cfg = _TIER_LIMITS[GROQ_TIER]
+if any(v is None for v in _tier_cfg.values()):
+    raise ValueError(
+        f"❌ GROQ_TIER = '{GROQ_TIER}' has unfilled limits in _TIER_LIMITS. "
+        "Check console.groq.com/settings/limits and fill in real numbers "
+        "before switching tiers."
+    )
+
+RPM_LIMIT         = max(1, _tier_cfg["rpm"] - 1)     # 1-request safety margin
+DAILY_KEY_LIMIT   = max(1, _tier_cfg["rpd"] - 1)     # 1-request safety margin per key
+DAILY_TOKEN_LIMIT = _tier_cfg["tpd"]                 # informational; not yet enforced per-key
 
 # ── Per-minute request/token rate limiters ────────────────────────────────────
-# RPM is the actual documented, binding limit for SambaNova. TPM isn't
-# published by SambaNova at all — TPM_LIMIT below is kept only as a soft
-# extra guard (carried over from the old Groq-tuned value) and is secondary
-# to the RPM check now.
-TPM_LIMIT          = 5500
+# Unlike SambaNova, Groq publishes and enforces TPM directly — it's a real,
+# binding limit here, not just a soft guard. Margin kept below the documented
+# 8,000 TPM to leave headroom for token-count estimation error.
+TPM_LIMIT          = max(1, _tier_cfg["tpm"] - 200)
 TPM_WINDOW_SECONDS = 60
 RPM_WINDOW_SECONDS = 60
 CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
@@ -307,8 +316,7 @@ def get_keys_with_tpm_headroom(api_keys: list, estimated_tokens: int) -> list:
     return headroom if headroom else api_keys
 
 
-# ── Per-minute request rate limiter helpers (SambaNova's real, documented
-#    limit — RPM, not TPM) ──────────────────────────────────────────────────
+# ── Per-minute request rate limiter helpers (Groq's documented RPM limit) ────
 def _get_key_rpm(api_key: str, now: float) -> int:
     window_start = now - RPM_WINDOW_SECONDS
     entries = _rpm_tracker.get(api_key, [])
@@ -404,47 +412,7 @@ def _async_clear_failure(api_key: str):
     threading.Thread(target=_write, daemon=True).start()
 
 
-# ── API key loader (SambaNova) ─────────────────────────────────────────────────
-_sambanova_cached_keys: List[str] = []
-_sambanova_keys_loaded_at: float = 0.0
-_sambanova_cached_keys_lock = threading.Lock()
-
-def load_sambanova_api_keys() -> List[str]:
-    """
-    Load SambaNova keys from Streamlit secrets (preferred) or environment.
-    Mirrors load_groq_api_keys() but reads SAMBANOVA_API_KEYS and uses its
-    own cache, since SambaNova accounts typically issue far fewer keys
-    than the 100-key Groq pool (a single key already carries a much
-    higher per-key ceiling).
-    """
-    global _sambanova_cached_keys, _sambanova_keys_loaded_at
-
-    now = time.time()
-    with _sambanova_cached_keys_lock:
-        if _sambanova_cached_keys and (now - _sambanova_keys_loaded_at) < KEY_CACHE_TTL:
-            return list(_sambanova_cached_keys)
-
-        raw = ""
-        try:
-            raw = st.secrets.get("SAMBANOVA_API_KEYS", "") or ""
-        except Exception:
-            pass
-
-        if not raw:
-            raw = os.getenv("SAMBANOVA_API_KEYS", "") or ""
-
-        keys = [k.strip() for k in raw.split(",") if k.strip()]
-
-        if not keys:
-            raise ValueError("❌ No SambaNova API keys found in secrets or environment.")
-
-        random.shuffle(keys)
-        _sambanova_cached_keys    = keys
-        _sambanova_keys_loaded_at = now
-        return list(_sambanova_cached_keys)
-
-
-# ── API key loader ────────────────────────────────────────────────────────────
+# ── API key loader (Groq) ────────────────────────────────────────────────────
 def load_groq_api_keys() -> List[str]:
     """
     Load Groq keys from Streamlit secrets (preferred) or environment.
@@ -715,6 +683,20 @@ def _pick_start_index(n: int) -> int:
     return idx
 
 
+import re as _re
+
+# qwen/qwen3.6-27b is a reasoning model — reasoning_format="hidden" asks
+# Groq to strip the <think>...</think> block server-side, but keep this
+# regex as a safety net in case a raw block still leaks through.
+_THINK_BLOCK_RE = _re.compile(r"<think>.*?</think>", _re.DOTALL | _re.IGNORECASE)
+
+
+def _strip_think_blocks(text: str) -> str:
+    if not text or "<think" not in text.lower():
+        return text
+    return _THINK_BLOCK_RE.sub("", text).strip()
+
+
 # ── Single LLM call ───────────────────────────────────────────────────────────
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
     # max_retries=0: disable the OpenAI SDK's own internal retry-on-429/5xx.
@@ -727,21 +709,22 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
         model=model,
         temperature=temperature,
         openai_api_key=api_key,
-        openai_api_base=SAMBANOVA_BASE_URL,
+        openai_api_base=GROQ_BASE_URL,
         max_retries=0,
+        model_kwargs={"reasoning_format": "hidden"},
     )
-    return llm.invoke(prompt).content
+    return _strip_think_blocks(llm.invoke(prompt).content)
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 def call_llm(
     prompt: str,
     session,
-    model: str = "Meta-Llama-3.3-70B-Instruct",
+    model: str = "qwen/qwen3.6-27b",
     temperature: float = 0,
 ) -> str:
     """
-    Distribute LLM calls evenly across all healthy SambaNova keys.
+    Distribute LLM calls evenly across all healthy Groq keys.
 
     Strategy:
       1. Supabase cache hit → return immediately (zero LLM cost).
@@ -780,7 +763,7 @@ def call_llm(
 
     # ── User-supplied key ─────────────────────────────────────────────────────
     user_key = ""
-    raw_user_key = session.get("user_sambanova_key", "")
+    raw_user_key = session.get("user_groq_key", "")
     if isinstance(raw_user_key, str):
         user_key = raw_user_key.strip()
 
@@ -806,7 +789,7 @@ def call_llm(
 
     # ── Admin key rotation ────────────────────────────────────────────────────
     try:
-        all_admin_keys = load_sambanova_api_keys()
+        all_admin_keys = load_groq_api_keys()
     except ValueError as e:
         return f"❌ LLM unavailable: {e}"
 
