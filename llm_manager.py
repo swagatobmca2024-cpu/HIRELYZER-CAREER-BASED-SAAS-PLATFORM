@@ -96,6 +96,12 @@ TPM_WINDOW_SECONDS = 60
 RPM_WINDOW_SECONDS = 60
 CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
 
+# Groq's TPM limiter counts input tokens PLUS the max_tokens you request as
+# reserved output capacity — not just the prompt alone. Every headroom/
+# preflight check below must account for both, or it'll pass estimates that
+# still 413 once the reserved output is added on Groq's side.
+MAX_OUTPUT_TOKENS = 2048
+
 # ── Retry / back-off config ───────────────────────────────────────────────────
 MAX_RETRIES_PER_KEY = 1            # attempts per key before moving on
 BACKOFF_BASE        = 0.4          # seconds — full-jitter base
@@ -720,7 +726,7 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
         openai_api_key=api_key,
         openai_api_base=GROQ_BASE_URL,
         max_retries=0,
-        max_tokens=4096,
+        max_tokens=MAX_OUTPUT_TOKENS,
         extra_body={
             "reasoning_format": "hidden",
             "reasoning_effort": "none",   # non-thinking mode — these are
@@ -777,15 +783,19 @@ def call_llm(
         return cached
 
     estimated_tokens = _estimate_tokens(prompt)
+    # Groq counts prompt + reserved output against TPM — budget for both.
+    estimated_request_tokens = estimated_tokens + MAX_OUTPUT_TOKENS
     last_error = None
 
-    # Preflight: a prompt bigger than the TPM ceiling will 413 on EVERY key
+    # Preflight: a request bigger than the TPM ceiling will 413 on EVERY key
     # (free tier caps a single request at roughly this size on Groq) — fail
     # fast instead of burning the whole rotation + backoff sleeps on it.
-    if estimated_tokens > TPM_LIMIT:
-        return (f"❌ Prompt too large (~{estimated_tokens} tokens, limit is "
-                f"~{TPM_LIMIT}) for {model} on the {GROQ_TIER} tier. "
-                f"Shorten the input or split it into smaller calls.")
+    if estimated_request_tokens > TPM_LIMIT:
+        return (f"❌ Prompt too large (~{estimated_tokens} prompt tokens + "
+                f"~{MAX_OUTPUT_TOKENS} reserved output = "
+                f"~{estimated_request_tokens} total, limit is ~{TPM_LIMIT}) "
+                f"for {model} on the {GROQ_TIER} tier. Shorten the input or "
+                f"split it into smaller calls.")
 
     # ── User-supplied key ─────────────────────────────────────────────────────
     user_key = ""
@@ -793,14 +803,14 @@ def call_llm(
     if isinstance(raw_user_key, str):
         user_key = raw_user_key.strip()
 
-    if user_key and _key_has_tpm_headroom(user_key, estimated_tokens) and _key_has_rpm_headroom(user_key):
+    if user_key and _key_has_tpm_headroom(user_key, estimated_request_tokens) and _key_has_rpm_headroom(user_key):
         try:
             response = try_call_llm(prompt, user_key, model, temperature)
             if not response or not response.strip():
                 raise RuntimeError(
                     "empty content — reasoning likely exhausted max_tokens"
                 )
-            _record_key_tokens(user_key, estimated_tokens, time.time())
+            _record_key_tokens(user_key, estimated_request_tokens, time.time())
             _record_key_request(user_key, time.time())
             set_cached_response(prompt, model, response)
             _async_increment_usage(user_key)
@@ -818,8 +828,8 @@ def call_llm(
             elif err_type == "oversized":
                 # Same prompt will 413 on every other key too — don't burn
                 # the whole rotation on a request that can't succeed.
-                return (f"❌ Prompt too large (~{estimated_tokens} tokens) "
-                        f"for {model}. Please shorten the input.")
+                return (f"❌ Prompt too large (~{estimated_request_tokens} "
+                        f"total tokens) for {model}. Please shorten the input.")
             last_error = e
 
     # ── Admin key rotation ────────────────────────────────────────────────────
@@ -837,7 +847,7 @@ def call_llm(
     with _tpm_lock, _rpm_lock:
         keys_with_headroom = [
             k for k in healthy_keys
-            if (_get_key_tpm(k, now_ts) + estimated_tokens) <= TPM_LIMIT
+            if (_get_key_tpm(k, now_ts) + estimated_request_tokens) <= TPM_LIMIT
             and _get_key_rpm(k, now_ts) < RPM_LIMIT
         ]
         keys_over_budget = [k for k in healthy_keys if k not in set(keys_with_headroom)]
@@ -876,7 +886,7 @@ def call_llm(
                 attempt += 1
                 continue
             # Success ──────────────────────────────────────────────────────────
-            _record_key_tokens(key, estimated_tokens, time.time())
+            _record_key_tokens(key, estimated_request_tokens, time.time())
             _record_key_request(key, time.time())
             set_cached_response(prompt, model, response)
             _mem_increment_usage(key)
@@ -898,8 +908,8 @@ def call_llm(
             elif err_type == "oversized":
                 # Same prompt will 413 on every other key too — don't burn
                 # the whole rotation on a request that can't succeed.
-                return (f"❌ Prompt too large (~{estimated_tokens} tokens) "
-                        f"for {model}. Please shorten the input.")
+                return (f"❌ Prompt too large (~{estimated_request_tokens} "
+                        f"total tokens) for {model}. Please shorten the input.")
             # transient: key stays healthy, try next
             last_error = e
             attempt   += 1
