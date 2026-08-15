@@ -107,6 +107,11 @@ _QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests",
 _DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
                      "api key", "authentication", "permission denied",
                      "invalid_api_key"]
+# 413 is a property of the PROMPT, not the key — retrying other keys with the
+# same oversized prompt will just 413 again on every single one of them.
+_PAYLOAD_SIGNALS  = ["413", "payload too large", "request too large",
+                     "request entity too large", "context length",
+                     "context_length_exceeded", "maximum context length"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IN-MEMORY STATE  (module-level, shared across all threads in one worker)
@@ -543,6 +548,8 @@ def _classify_error(error: Exception) -> str:
     Returns:
         'quota'     — rate limited → 60-min cooldown
         'dead'      — bad/invalid key → 5-min cooldown
+        'oversized' — prompt too big for the model/tier → do NOT retry other
+                      keys, it'll 413 on every one of them; fail fast instead
         'transient' — network blip / server 500 / timeout → do NOT touch the key
     """
     msg = str(error).lower()
@@ -565,6 +572,8 @@ def _classify_error(error: Exception) -> str:
         return "quota"
     if status_code in (401, 403) or any(s in msg for s in _DEAD_KEY_SIGNALS):
         return "dead"
+    if status_code == 413 or any(s in msg for s in _PAYLOAD_SIGNALS):
+        return "oversized"
     return "transient"
 
 
@@ -761,6 +770,14 @@ def call_llm(
     estimated_tokens = _estimate_tokens(prompt)
     last_error = None
 
+    # Preflight: a prompt bigger than the TPM ceiling will 413 on EVERY key
+    # (free tier caps a single request at roughly this size on Groq) — fail
+    # fast instead of burning the whole rotation + backoff sleeps on it.
+    if estimated_tokens > TPM_LIMIT:
+        return (f"❌ Prompt too large (~{estimated_tokens} tokens, limit is "
+                f"~{TPM_LIMIT}) for {model} on the {GROQ_TIER} tier. "
+                f"Shorten the input or split it into smaller calls.")
+
     # ── User-supplied key ─────────────────────────────────────────────────────
     user_key = ""
     raw_user_key = session.get("user_groq_key", "")
@@ -785,6 +802,11 @@ def call_llm(
             elif err_type == "dead":
                 _mem_record_failure(user_key, "error")
                 _async_mark_failure(user_key, "error")
+            elif err_type == "oversized":
+                # Same prompt will 413 on every other key too — don't burn
+                # the whole rotation on a request that can't succeed.
+                return (f"❌ Prompt too large (~{estimated_tokens} tokens) "
+                        f"for {model}. Please shorten the input.")
             last_error = e
 
     # ── Admin key rotation ────────────────────────────────────────────────────
@@ -851,6 +873,11 @@ def call_llm(
             elif err_type == "dead":
                 _mem_record_failure(key, "error")
                 _async_mark_failure(key, "error")
+            elif err_type == "oversized":
+                # Same prompt will 413 on every other key too — don't burn
+                # the whole rotation on a request that can't succeed.
+                return (f"❌ Prompt too large (~{estimated_tokens} tokens) "
+                        f"for {model}. Please shorten the input.")
             # transient: key stays healthy, try next
             last_error = e
             attempt   += 1
