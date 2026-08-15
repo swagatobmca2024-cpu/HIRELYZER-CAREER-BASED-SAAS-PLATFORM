@@ -720,7 +720,16 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
         openai_api_key=api_key,
         openai_api_base=GROQ_BASE_URL,
         max_retries=0,
-        extra_body={"reasoning_format": "hidden"},
+        max_tokens=4096,
+        extra_body={
+            "reasoning_format": "hidden",
+            "reasoning_effort": "none",   # non-thinking mode — these are
+                                           # scoring/extraction prompts, not
+                                           # multi-step reasoning tasks; skip
+                                           # the thinking pass entirely so it
+                                           # can't eat the whole token budget
+                                           # before writing the real answer
+        },
     )
     return _strip_think_blocks(llm.invoke(prompt).content)
 
@@ -787,6 +796,10 @@ def call_llm(
     if user_key and _key_has_tpm_headroom(user_key, estimated_tokens) and _key_has_rpm_headroom(user_key):
         try:
             response = try_call_llm(prompt, user_key, model, temperature)
+            if not response or not response.strip():
+                raise RuntimeError(
+                    "empty content — reasoning likely exhausted max_tokens"
+                )
             _record_key_tokens(user_key, estimated_tokens, time.time())
             _record_key_request(user_key, time.time())
             set_cached_response(prompt, model, response)
@@ -853,6 +866,15 @@ def call_llm(
 
         try:
             response = try_call_llm(prompt, key, model, temperature)
+            if not response or not response.strip():
+                # 200 OK but empty content — thinking mode ate the whole
+                # token budget before writing an answer. Not a real success:
+                # don't cache it, don't trust the key, just try the next one.
+                last_error = RuntimeError(
+                    "empty content — reasoning likely exhausted max_tokens"
+                )
+                attempt += 1
+                continue
             # Success ──────────────────────────────────────────────────────────
             _record_key_tokens(key, estimated_tokens, time.time())
             _record_key_request(key, time.time())
