@@ -364,9 +364,9 @@ def rewrite_and_optimize_resume(text, replacement_mapping, user_location):
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
-    prompt = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
+    prompt_part1 = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
 
-Your task is to process the resume below and return TWO outputs in a single response, separated by the exact delimiter shown.
+Your task is to process the resume below and return the fully rewritten, ATS-optimised, bias-free version as plain text.
 
 ════════════════════════════════════════════════════════
 OUTPUT STRUCTURE (return EXACTLY this — no deviation):
@@ -553,10 +553,49 @@ FORMAT (STRICT — follow exactly, no extra lines, no URLs, no links):
 5. **[Job Title]** — [Specific reason tied to resume evidence]
 
 IMPORTANT: Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
+RESUME TEXT:
+\"\"\"{text[:8000]}\"\"\"
+"""
 
-════════════════════════════════════════════════════════
-PART 2 — JSON OBJECT (inside JSON tags)
-════════════════════════════════════════════════════════
+    # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
+    try:
+        from llm_manager import load_groq_api_keys, get_healthy_keys
+        _all_keys = load_groq_api_keys()
+        _healthy  = get_healthy_keys(_all_keys)
+        if len(_healthy) <= 1:
+            time.sleep(3)   # 3-second pause to let the per-minute window recover
+    except Exception:
+        pass
+
+    # ── CALL 1 — plain-text rewrite + job title suggestions ────────────────────
+    # Split out of the old combined mega-prompt (same fix pattern used earlier
+    # for gpt-oss-120b): this task's combined text+JSON output no longer fits
+    # a single free-tier request's TPM budget on qwen3.6-27b without truncating.
+    try:
+        raw_response_1 = call_llm(prompt_part1, session=st.session_state,
+                                   max_output_tokens=3072)
+    except Exception as _e:
+        raw_response_1 = ""
+
+    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+    if not raw_response_1 or any(raw_response_1.strip().startswith(p) for p in _ERROR_PREFIXES):
+        # Return original text as-is + empty JSON + failure flag
+        # Callers MUST check the 3rd value to know the rewrite did not happen
+        return text, "", False
+
+    rewritten_text = raw_response_1.strip()
+    # Defensive: strip legacy delimiter markers in case the model still emits
+    # them out of habit even though this call no longer asks for them.
+    rewritten_text = (rewritten_text
+                       .replace("===REWRITTEN_RESUME_START===", "")
+                       .replace("===REWRITTEN_RESUME_END===", "")
+                       .strip())
+
+    # ── CALL 2 — structured JSON, extracted FROM call 1's rewritten output ─────
+    # Feeding call 1's output back in (rather than the raw original resume)
+    # matches the original prompt's intent: JSON fields like "summary" were
+    # always meant to copy Part 1's rewritten content verbatim.
+    prompt_part2 = f"""You are completing PART 2 of a resume optimization task: convert the ALREADY-REWRITTEN resume below into a strict JSON object. The rewriting (bias removal, ATS optimization) is already done — your only job here is structured extraction.
 
 Return ONLY valid JSON. No preamble, no explanation, no markdown fences.
 
@@ -805,59 +844,29 @@ LAYOUT RECOGNITION RULES (apply before extracting any field):
 - "additional" items MUST use object format: {{"name":"","description":"","duration":""}}.
 - "additional[].duration" = Apply 3-TIER DATE INFERENCE RULE. Use "" if no context exists.
 
-RESUME TEXT:
-\"\"\"{text[:8000]}\"\"\"
+REWRITTEN RESUME (extract the structured JSON from this exact text — copy content verbatim per the rules above, do not rewrite it again):
+\"\"\"{rewritten_text}\"\"\"
 """
 
-    # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
     try:
-        from llm_manager import load_groq_api_keys, get_healthy_keys
-        _all_keys = load_groq_api_keys()
-        _healthy  = get_healthy_keys(_all_keys)
-        if len(_healthy) <= 1:
-            time.sleep(3)   # 3-second pause to let the per-minute window recover
-    except Exception:
-        pass
-
-    try:
-        raw_response = call_llm(prompt, session=st.session_state)
+        raw_response_2 = call_llm(prompt_part2, session=st.session_state,
+                                   max_output_tokens=3072)
     except Exception as _e:
-        raw_response = ""
+        raw_response_2 = ""
 
-    st.write(f"DEBUG raw_response: {raw_response[:300]}")   # ← TEMP: remove after diagnosing
-
-    # ── Guard: if LLM returned an error string or empty, return safe fallback ──
-    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
-    if not raw_response or any(raw_response.strip().startswith(p) for p in _ERROR_PREFIXES):
-        # Return original text as-is + empty JSON + failure flag
-        # Callers MUST check the 3rd value to know the rewrite did not happen
-        return text, "", False
-
-    # ── Parse the two sections out of the combined response ──────────────
-    rewritten_text = ""
     json_str = ""
-
-    rewrite_match = re.search(
-        r"===REWRITTEN_RESUME_START===(.*?)===REWRITTEN_RESUME_END===",
-        raw_response, re.DOTALL
-    )
-    json_match = re.search(
-        r"===JSON_START===(.*?)===JSON_END===",
-        raw_response, re.DOTALL
-    )
-
-    if rewrite_match:
-        rewritten_text = rewrite_match.group(1).strip()
-    else:
-        # fallback: use everything before JSON block
-        rewritten_text = raw_response.split("===JSON_START===")[0].strip()
-
-    if json_match:
-        json_str = json_match.group(1).strip()
-    else:
-        # fallback: try to extract JSON object from anywhere in the response
-        json_fallback = re.search(r'\{[\s\S]*\}', raw_response)
-        json_str = json_fallback.group(0).strip() if json_fallback else ""
+    if raw_response_2 and not any(raw_response_2.strip().startswith(p) for p in _ERROR_PREFIXES):
+        _json_clean = raw_response_2.strip()
+        _json_clean = (_json_clean
+                       .replace("===JSON_START===", "")
+                       .replace("===JSON_END===", "")
+                       .strip())
+        _json_clean = re.sub(r'^```(?:json)?\s*', '', _json_clean)
+        _json_clean = re.sub(r'\s*```$', '', _json_clean)
+        _json_fallback = re.search(r'\{[\s\S]*\}', _json_clean)
+        json_str = _json_fallback.group(0).strip() if _json_fallback else _json_clean.strip()
+    # If call 2 failed/empty: json_str stays "" — caller still gets the
+    # rewritten text + job titles from call 1 instead of nothing at all.
 
     # ── Summary rescue: patch JSON summary from Part 1 if LLM truncated it ──
     # If the JSON summary is shorter than Part 1's summary, replace it with
@@ -996,7 +1005,6 @@ RESUME TEXT:
                     rewritten_text = _header + rewritten_text[_header_end:]
         except Exception:
             pass  # never break main flow
-
     return rewritten_text, json_str, True
 
 
@@ -3685,7 +3693,8 @@ SCORING SCALE for language ({lang_weight} pts max):
    
    
     try:
-        ats_result = call_llm(prompt, session=st.session_state).strip()
+        ats_result = call_llm(prompt, session=st.session_state,
+                               max_output_tokens=3072).strip()
     except Exception as e:
         logger.error("call_llm raised in ats_percentage_score: %r", e)
         ats_result = ""
