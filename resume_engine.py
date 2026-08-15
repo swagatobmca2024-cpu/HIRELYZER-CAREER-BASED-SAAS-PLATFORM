@@ -1,4 +1,6 @@
 import os
+import logging
+logger = logging.getLogger(__name__)
 os.environ["STREAMLIT_WATCHDOG"] = "false"
 import json
 import random
@@ -821,6 +823,8 @@ RESUME TEXT:
         raw_response = call_llm(prompt, session=st.session_state)
     except Exception as _e:
         raw_response = ""
+
+    st.write(f"DEBUG raw_response: {raw_response[:300]}")   # ← TEMP: remove after diagnosing
 
     # ── Guard: if LLM returned an error string or empty, return safe fallback ──
     _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
@@ -3682,12 +3686,14 @@ SCORING SCALE for language ({lang_weight} pts max):
    
     try:
         ats_result = call_llm(prompt, session=st.session_state).strip()
-    except Exception:
+    except Exception as e:
+        logger.error("call_llm raised in ats_percentage_score: %r", e)
         ats_result = ""
 
     # Guard: LLM error string or empty → return a safe fallback ATS result
     _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
     if not ats_result or any(ats_result.startswith(p) for p in _ERROR_PREFIXES):
+        logger.error("call_llm returned an error string: %r", ats_result)
         ats_result = (
             "**ATS Evaluation temporarily unavailable.**\n"
             "All API keys are currently exhausted or unavailable. "
