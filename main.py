@@ -1,4 +1,3 @@
-
 import os
 os.environ["STREAMLIT_WATCHDOG"] = "false"
 import json
@@ -42,18 +41,8 @@ import torch
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
-if st.button("Debug LLM call"):
-    from llm_manager import try_call_llm, load_groq_api_keys
-    try:
-        keys = load_groq_api_keys()
-        st.write(f"Loaded {len(keys)} keys")
-        resp = try_call_llm("say hi", keys[0], "qwen/qwen3.6-27b", 0)
-        st.success(f"SUCCESS: {resp}")
-    except Exception as e:
-        st.error(f"FAILED: {e}")
-        st.exception(e)
 from llm_manager import (
-    call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
+    call_llm, load_sambanova_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
     _async_clear_failure,
@@ -5447,7 +5436,7 @@ Return ONLY one domain from this list, nothing else:
         _pre_job_domain = st.session_state[_pre_jd_cache_key]
 
         # ⚡ PARALLEL: rewrite + ATS run simultaneously using threads.
-        # Both are network-bound (Groq API) so they benefit from parallelism
+        # Both are network-bound (SambaNova API) so they benefit from parallelism
         # without needing async — ThreadPoolExecutor handles it safely.
         # Domains pre-detected above on main thread — no LLM calls fire inside threads.
         def _task_rewrite():
@@ -5474,8 +5463,8 @@ Return ONLY one domain from this list, nothing else:
             # bursts the same key simultaneously and triggers rate limiting.
             # Switch to sequential mode with a short gap to let the TPM window recover.
             try:
-                from llm_manager import load_groq_api_keys, get_healthy_keys as _ghk
-                _n_healthy = len(_ghk(load_groq_api_keys()))
+                from llm_manager import load_sambanova_api_keys, get_healthy_keys as _ghk
+                _n_healthy = len(_ghk(load_sambanova_api_keys()))
             except Exception:
                 _n_healthy = 99  # assume enough keys if check fails
 
