@@ -1,6 +1,4 @@
 import os
-import logging
-logger = logging.getLogger(__name__)
 os.environ["STREAMLIT_WATCHDOG"] = "false"
 import json
 import random
@@ -43,10 +41,10 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
 from llm_manager import (
-    call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
+    call_llm, load_sambanova_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure, GROQ_BASE_URL,
+    _async_clear_failure, SAMBANOVA_BASE_URL,
 )
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
@@ -364,9 +362,9 @@ def rewrite_and_optimize_resume(text, replacement_mapping, user_location):
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
-    prompt_part1 = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
+    prompt = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
 
-Your task is to process the resume below and return the fully rewritten, ATS-optimised, bias-free version as plain text.
+Your task is to process the resume below and return TWO outputs in a single response, separated by the exact delimiter shown.
 
 ════════════════════════════════════════════════════════
 OUTPUT STRUCTURE (return EXACTLY this — no deviation):
@@ -553,49 +551,10 @@ FORMAT (STRICT — follow exactly, no extra lines, no URLs, no links):
 5. **[Job Title]** — [Specific reason tied to resume evidence]
 
 IMPORTANT: Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
-RESUME TEXT:
-\"\"\"{text[:8000]}\"\"\"
-"""
 
-    # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
-    try:
-        from llm_manager import load_groq_api_keys, get_healthy_keys
-        _all_keys = load_groq_api_keys()
-        _healthy  = get_healthy_keys(_all_keys)
-        if len(_healthy) <= 1:
-            time.sleep(3)   # 3-second pause to let the per-minute window recover
-    except Exception:
-        pass
-
-    # ── CALL 1 — plain-text rewrite + job title suggestions ────────────────────
-    # Split out of the old combined mega-prompt (same fix pattern used earlier
-    # for gpt-oss-120b): this task's combined text+JSON output no longer fits
-    # a single free-tier request's TPM budget on qwen3.6-27b without truncating.
-    try:
-        raw_response_1 = call_llm(prompt_part1, session=st.session_state,
-                                   max_output_tokens=3072)
-    except Exception as _e:
-        raw_response_1 = ""
-
-    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
-    if not raw_response_1 or any(raw_response_1.strip().startswith(p) for p in _ERROR_PREFIXES):
-        # Return original text as-is + empty JSON + failure flag
-        # Callers MUST check the 3rd value to know the rewrite did not happen
-        return text, "", False
-
-    rewritten_text = raw_response_1.strip()
-    # Defensive: strip legacy delimiter markers in case the model still emits
-    # them out of habit even though this call no longer asks for them.
-    rewritten_text = (rewritten_text
-                       .replace("===REWRITTEN_RESUME_START===", "")
-                       .replace("===REWRITTEN_RESUME_END===", "")
-                       .strip())
-
-    # ── CALL 2 — structured JSON, extracted FROM call 1's rewritten output ─────
-    # Feeding call 1's output back in (rather than the raw original resume)
-    # matches the original prompt's intent: JSON fields like "summary" were
-    # always meant to copy Part 1's rewritten content verbatim.
-    prompt_part2 = f"""You are completing PART 2 of a resume optimization task: convert the ALREADY-REWRITTEN resume below into a strict JSON object. The rewriting (bias removal, ATS optimization) is already done — your only job here is structured extraction.
+════════════════════════════════════════════════════════
+PART 2 — JSON OBJECT (inside JSON tags)
+════════════════════════════════════════════════════════
 
 Return ONLY valid JSON. No preamble, no explanation, no markdown fences.
 
@@ -844,29 +803,57 @@ LAYOUT RECOGNITION RULES (apply before extracting any field):
 - "additional" items MUST use object format: {{"name":"","description":"","duration":""}}.
 - "additional[].duration" = Apply 3-TIER DATE INFERENCE RULE. Use "" if no context exists.
 
-REWRITTEN RESUME (extract the structured JSON from this exact text — copy content verbatim per the rules above, do not rewrite it again):
-\"\"\"{rewritten_text}\"\"\"
+RESUME TEXT:
+\"\"\"{text[:8000]}\"\"\"
 """
 
+    # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
     try:
-        raw_response_2 = call_llm(prompt_part2, session=st.session_state,
-                                   max_output_tokens=3072)
-    except Exception as _e:
-        raw_response_2 = ""
+        from llm_manager import load_sambanova_api_keys, get_healthy_keys
+        _all_keys = load_sambanova_api_keys()
+        _healthy  = get_healthy_keys(_all_keys)
+        if len(_healthy) <= 1:
+            time.sleep(3)   # 3-second pause to let the per-minute window recover
+    except Exception:
+        pass
 
+    try:
+        raw_response = call_llm(prompt, session=st.session_state)
+    except Exception as _e:
+        raw_response = ""
+
+    # ── Guard: if LLM returned an error string or empty, return safe fallback ──
+    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+    if not raw_response or any(raw_response.strip().startswith(p) for p in _ERROR_PREFIXES):
+        # Return original text as-is + empty JSON + failure flag
+        # Callers MUST check the 3rd value to know the rewrite did not happen
+        return text, "", False
+
+    # ── Parse the two sections out of the combined response ──────────────
+    rewritten_text = ""
     json_str = ""
-    if raw_response_2 and not any(raw_response_2.strip().startswith(p) for p in _ERROR_PREFIXES):
-        _json_clean = raw_response_2.strip()
-        _json_clean = (_json_clean
-                       .replace("===JSON_START===", "")
-                       .replace("===JSON_END===", "")
-                       .strip())
-        _json_clean = re.sub(r'^```(?:json)?\s*', '', _json_clean)
-        _json_clean = re.sub(r'\s*```$', '', _json_clean)
-        _json_fallback = re.search(r'\{[\s\S]*\}', _json_clean)
-        json_str = _json_fallback.group(0).strip() if _json_fallback else _json_clean.strip()
-    # If call 2 failed/empty: json_str stays "" — caller still gets the
-    # rewritten text + job titles from call 1 instead of nothing at all.
+
+    rewrite_match = re.search(
+        r"===REWRITTEN_RESUME_START===(.*?)===REWRITTEN_RESUME_END===",
+        raw_response, re.DOTALL
+    )
+    json_match = re.search(
+        r"===JSON_START===(.*?)===JSON_END===",
+        raw_response, re.DOTALL
+    )
+
+    if rewrite_match:
+        rewritten_text = rewrite_match.group(1).strip()
+    else:
+        # fallback: use everything before JSON block
+        rewritten_text = raw_response.split("===JSON_START===")[0].strip()
+
+    if json_match:
+        json_str = json_match.group(1).strip()
+    else:
+        # fallback: try to extract JSON object from anywhere in the response
+        json_fallback = re.search(r'\{[\s\S]*\}', raw_response)
+        json_str = json_fallback.group(0).strip() if json_fallback else ""
 
     # ── Summary rescue: patch JSON summary from Part 1 if LLM truncated it ──
     # If the JSON summary is shorter than Part 1's summary, replace it with
@@ -1005,6 +992,7 @@ REWRITTEN RESUME (extract the structured JSON from this exact text — copy cont
                     rewritten_text = _header + rewritten_text[_header_end:]
         except Exception:
             pass  # never break main flow
+
     return rewritten_text, json_str, True
 
 
@@ -3693,16 +3681,13 @@ SCORING SCALE for language ({lang_weight} pts max):
    
    
     try:
-        ats_result = call_llm(prompt, session=st.session_state,
-                               max_output_tokens=3072).strip()
-    except Exception as e:
-        logger.error("call_llm raised in ats_percentage_score: %r", e)
+        ats_result = call_llm(prompt, session=st.session_state).strip()
+    except Exception:
         ats_result = ""
 
     # Guard: LLM error string or empty → return a safe fallback ATS result
     _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
     if not ats_result or any(ats_result.startswith(p) for p in _ERROR_PREFIXES):
-        logger.error("call_llm returned an error string: %r", ats_result)
         ats_result = (
             "**ATS Evaluation temporarily unavailable.**\n"
             "All API keys are currently exhausted or unavailable. "
@@ -4082,25 +4067,20 @@ def setup_vectorstore(documents):
 def create_chain(vectorstore):
     # ✅ Use get_healthy_keys() so dead/quota keys are skipped (reads key_failures
     #    and key_usage from Supabase — same tables that call_llm() maintains).
-    all_keys    = load_groq_api_keys()
+    all_keys    = load_sambanova_api_keys()
     healthy     = get_healthy_keys(all_keys)
     if not healthy:
-        raise ValueError("❌ No healthy Groq API keys available for chat chain.")
+        raise ValueError("❌ No healthy SambaNova API keys available for chat chain.")
     # healthy list is already shuffled by get_healthy_keys — just take the first
-    groq_api_key = healthy[0]
+    sambanova_api_key = healthy[0]
     # ✅ FIX: do NOT increment usage before the call — only after success
 
-    # ✅ Create the LLM client via Groq's OpenAI-compatible endpoint.
-    # qwen/qwen3.6-27b is a reasoning model — reasoning_format="hidden" keeps
-    # its <think> block out of the chain's answer text (same fix applied in
-    # llm_manager.try_call_llm; this chain bypasses that helper, so it's
-    # applied here too rather than relying on downstream stripping).
+    # ✅ Create the LLM client via SambaNova's OpenAI-compatible endpoint
     llm = ChatOpenAI(
-        model="qwen/qwen3.6-27b",
+        model="Meta-Llama-3.3-70B-Instruct",
         temperature=0,
-        openai_api_key=groq_api_key,
-        openai_api_base=GROQ_BASE_URL,
-        model_kwargs={"reasoning_format": "hidden"},
+        openai_api_key=sambanova_api_key,
+        openai_api_base=SAMBANOVA_BASE_URL,
     )
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
@@ -4111,19 +4091,19 @@ def create_chain(vectorstore):
             return_source_documents=True
         )
         # Update in-memory usage instantly; flush to Supabase in background thread
-        _mem_increment_usage(groq_api_key)
-        _async_increment_usage(groq_api_key)
-        _mem_clear_failure(groq_api_key)
-        _async_clear_failure(groq_api_key)
+        _mem_increment_usage(sambanova_api_key)
+        _async_increment_usage(sambanova_api_key)
+        _mem_clear_failure(sambanova_api_key)
+        _async_clear_failure(sambanova_api_key)
         return chain
     except Exception as e:
         err_str = str(e).lower()
         if any(w in err_str for w in ["quota", "rate limit", "429", "too many requests"]):
-            _mem_record_failure(groq_api_key, "quota")
-            _async_mark_failure(groq_api_key, "quota")
+            _mem_record_failure(sambanova_api_key, "quota")
+            _async_mark_failure(sambanova_api_key, "quota")
         elif any(w in err_str for w in ["invalid api key", "unauthorized", "401", "403", "authentication"]):
-            _mem_record_failure(groq_api_key, "error")
-            _async_mark_failure(groq_api_key, "error")
+            _mem_record_failure(sambanova_api_key, "error")
+            _async_mark_failure(sambanova_api_key, "error")
         # transient errors (network blip, 500) — don't mark the key failed at all
         raise
 
