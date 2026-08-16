@@ -80,7 +80,7 @@ Detection layers (unchanged):
   A. 6 live network probes  (parallel threads)
      domain age · site reachability · typosquatting · free-email · MX mail server · MCA registry
   B. 15-signal rule engine  (weighted, 0-100)
-  C. LLM deep analysis      (Meta-Llama-3.3-70B-Instruct via SambaNova)
+  C. LLM deep analysis      (llama-3.3-70b-versatile via Groq)
   D. Blended score          (60% AI + 25% rules + 15% probe penalty)
 """
 
@@ -135,8 +135,8 @@ _PROD_GUIDE = """
 ║              JOB SCAM DETECTOR — PRODUCTION CHECKLIST                      ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║  SECRETS                                                                    ║
-║  • Store SAMBANOVA_API_KEYS in .streamlit/secrets.toml or env var — never   ║
-║    in source code. Access via st.secrets["SAMBANOVA_API_KEYS"].            ║
+║  • Store GROQ_API_KEY in .streamlit/secrets.toml or env var — never in     ║
+║    source code. Access via st.secrets["GROQ_API_KEY"].                      ║
 ║                                                                             ║
 ║  CACHING                                                                    ║
 ║  • Wrap run_live_probes() with @st.cache_data(ttl=3600, show_spinner=False) ║
@@ -145,8 +145,7 @@ _PROD_GUIDE = """
 ║                                                                             ║
 ║  RATE-LIMITING                                                              ║
 ║  • Add a per-user token bucket (Redis / Upstash) before call_llm_fn().     ║
-║  • SambaNova free tier: 20 req/min, 20 req/day per account — enforce on   ║
-║    server side (see llm_manager.py RPM_LIMIT / DAILY_KEY_LIMIT).          ║
+║  • Groq free tier: 30 req/min, 6000 tokens/min — enforce on server side.   ║
 ║                                                                             ║
 ║  SECURITY                                                                   ║
 ║  • All st.markdown(unsafe_allow_html=True) calls use server-generated HTML.║
@@ -154,7 +153,7 @@ _PROD_GUIDE = """
 ║  • Add Content-Security-Policy header via a reverse proxy (nginx/Caddy).   ║
 ║                                                                             ║
 ║  PERFORMANCE                                                                ║
-║  • Move run_live_probes to a background asyncio task — don't block SambaNova.║
+║  • Move run_live_probes to a background asyncio task — don't block Groq.   ║
 ║  • Set STREAMLIT_SERVER_MAX_UPLOAD_SIZE=5 (no file uploads needed here).   ║
 ║                                                                             ║
 ║  DEPLOYMENT                                                                 ║
@@ -1240,7 +1239,7 @@ JSON:"""
         response = call_llm_fn(
             prompt,
             st.session_state,
-            model="Meta-Llama-3.3-70B-Instruct",
+            model="llama-3.3-70b-versatile",
             temperature=0,
         )
         clean = re.sub(r"```(?:json)?|```", "", response).strip()
@@ -5226,7 +5225,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
 
                     # ── LLM call with retry + structured output enforcement ────────
                     # Retry logic: attempt 1 = normal, attempt 2 = stricter prompt
-                    # if JSON parse fails on attempt 1. Covers transient SambaNova errors
+                    # if JSON parse fails on attempt 1. Covers transient Groq errors
                     # and occasional LLM refusals to return JSON.
                     _LLM_SCHEMA = {
                         "ai_risk_score":      "int 0-100",
@@ -5254,7 +5253,7 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                             llm_raw = call_llm_fn(
                                 prompt,
                                 st.session_state,
-                                model="Meta-Llama-3.3-70B-Instruct",
+                                model="llama-3.3-70b-versatile",
                                 temperature=0,
                             )
                             # Parse: strip markdown fences, extract first JSON object
