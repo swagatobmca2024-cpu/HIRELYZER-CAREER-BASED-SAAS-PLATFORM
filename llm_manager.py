@@ -33,58 +33,19 @@ import psycopg2
 import psycopg2.extras
 import pytz
 import streamlit as st
-from langchain_openai import ChatOpenAI
-
-# SambaNova exposes an OpenAI-compatible endpoint; Llama 3.3 70B is still
-# actively served there (unlike Groq, which is dropping it, and Cerebras,
-# which already deprecated it in Feb 2026).
-SAMBANOVA_BASE_URL = "https://api.sambanova.ai/v1"
+from langchain_groq import ChatGroq
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 CACHE_EXPIRY_HOURS       = 24
 FAILURE_COOLDOWN_MINUTES = 5
 QUOTA_COOLDOWN_MINUTES   = 60
+DAILY_KEY_LIMIT          = 800
 DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
-# ── SambaNova rate-limit tier ─────────────────────────────────────────────────
-# Per SambaNova's official docs (docs.sambanova.ai/docs/en/models/rate-limits)
-# for Meta-Llama-3.3-70B-Instruct, confirmed 2026-07-29:
-#
-#   Free Tier      (no card linked):  20 RPM,  20 RPD,  200,000 TPD
-#   Developer Tier (card linked):    240 RPM, 48,000 RPD (no per-model TPD;
-#                                     capped at 20M tokens/day across ALL models)
-#
-# Flip this to "developer" once billing is linked — the free tier's 20
-# requests/DAY cap (not TPM) is the real bottleneck for production use.
-SAMBANOVA_TIER = "free"   # "free" | "developer"
-
-_TIER_LIMITS = {
-    "free": {
-        "rpm": 20,
-        "rpd": 20,
-        "tpd": 200_000,
-    },
-    "developer": {
-        "rpm": 240,
-        "rpd": 48_000,
-        "tpd": None,   # no per-model cap; 20M/day shared across all models
-    },
-}
-
-_tier_cfg   = _TIER_LIMITS[SAMBANOVA_TIER]
-RPM_LIMIT   = max(1, _tier_cfg["rpm"] - 1)          # 1-request safety margin
-DAILY_KEY_LIMIT = max(1, _tier_cfg["rpd"] - 1)      # 1-request safety margin per key
-DAILY_TOKEN_LIMIT = _tier_cfg["tpd"]                # None on developer tier = unused
-
-# ── Per-minute request/token rate limiters ────────────────────────────────────
-# RPM is the actual documented, binding limit for SambaNova. TPM isn't
-# published by SambaNova at all — TPM_LIMIT below is kept only as a soft
-# extra guard (carried over from the old Groq-tuned value) and is secondary
-# to the RPM check now.
-TPM_LIMIT          = 5500
+# ── Per-minute token rate limiter (Groq free tier: ~6000 TPM per key) ────────
+TPM_LIMIT          = 5500          # stay slightly under the 6000 hard limit
 TPM_WINDOW_SECONDS = 60
-RPM_WINDOW_SECONDS = 60
 CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
 
 # ── Retry / back-off config ───────────────────────────────────────────────────
@@ -92,7 +53,7 @@ MAX_RETRIES_PER_KEY = 1            # attempts per key before moving on
 BACKOFF_BASE        = 0.4          # seconds — full-jitter base
 BACKOFF_MAX         = 8.0          # seconds — cap for a single inter-key sleep
 
-# ── Provider error signals ────────────────────────────────────────────────────
+# ── Groq error signals ────────────────────────────────────────────────────────
 _QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests",
                      "rateLimitError", "rate_limit_exceeded"]
 _DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
@@ -106,10 +67,6 @@ _DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
 # TPM tracker: { api_key: [(timestamp_float, token_count), ...] }
 _tpm_tracker: dict = {}
 _tpm_lock = threading.Lock()
-
-# RPM tracker: { api_key: [timestamp_float, ...] }  — one entry per request
-_rpm_tracker: dict = {}
-_rpm_lock = threading.Lock()
 
 # Global atomic round-robin counter — incremented on every successful key pick.
 # Using itertools.count() which is C-level and GIL-safe for simple increments.
@@ -307,29 +264,6 @@ def get_keys_with_tpm_headroom(api_keys: list, estimated_tokens: int) -> list:
     return headroom if headroom else api_keys
 
 
-# ── Per-minute request rate limiter helpers (SambaNova's real, documented
-#    limit — RPM, not TPM) ──────────────────────────────────────────────────
-def _get_key_rpm(api_key: str, now: float) -> int:
-    window_start = now - RPM_WINDOW_SECONDS
-    entries = _rpm_tracker.get(api_key, [])
-    return sum(1 for ts in entries if ts >= window_start)
-
-
-def _record_key_request(api_key: str, now: float):
-    window_start = now - RPM_WINDOW_SECONDS
-    with _rpm_lock:
-        entries = _rpm_tracker.get(api_key, [])
-        entries = [ts for ts in entries if ts >= window_start]
-        entries.append(now)
-        _rpm_tracker[api_key] = entries
-
-
-def _key_has_rpm_headroom(api_key: str) -> bool:
-    now = time.time()
-    with _rpm_lock:
-        return _get_key_rpm(api_key, now) < RPM_LIMIT
-
-
 # ── In-memory failure helpers ─────────────────────────────────────────────────
 def _mem_record_failure(api_key: str, reason: str):
     with _mem_failures_lock:
@@ -402,46 +336,6 @@ def _async_clear_failure(api_key: str):
         except Exception:
             pass
     threading.Thread(target=_write, daemon=True).start()
-
-
-# ── API key loader (SambaNova) ─────────────────────────────────────────────────
-_sambanova_cached_keys: List[str] = []
-_sambanova_keys_loaded_at: float = 0.0
-_sambanova_cached_keys_lock = threading.Lock()
-
-def load_sambanova_api_keys() -> List[str]:
-    """
-    Load SambaNova keys from Streamlit secrets (preferred) or environment.
-    Mirrors load_groq_api_keys() but reads SAMBANOVA_API_KEYS and uses its
-    own cache, since SambaNova accounts typically issue far fewer keys
-    than the 100-key Groq pool (a single key already carries a much
-    higher per-key ceiling).
-    """
-    global _sambanova_cached_keys, _sambanova_keys_loaded_at
-
-    now = time.time()
-    with _sambanova_cached_keys_lock:
-        if _sambanova_cached_keys and (now - _sambanova_keys_loaded_at) < KEY_CACHE_TTL:
-            return list(_sambanova_cached_keys)
-
-        raw = ""
-        try:
-            raw = st.secrets.get("SAMBANOVA_API_KEYS", "") or ""
-        except Exception:
-            pass
-
-        if not raw:
-            raw = os.getenv("SAMBANOVA_API_KEYS", "") or ""
-
-        keys = [k.strip() for k in raw.split(",") if k.strip()]
-
-        if not keys:
-            raise ValueError("❌ No SambaNova API keys found in secrets or environment.")
-
-        random.shuffle(keys)
-        _sambanova_cached_keys    = keys
-        _sambanova_keys_loaded_at = now
-        return list(_sambanova_cached_keys)
 
 
 # ── API key loader ────────────────────────────────────────────────────────────
@@ -717,12 +611,7 @@ def _pick_start_index(n: int) -> int:
 
 # ── Single LLM call ───────────────────────────────────────────────────────────
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
-    llm = ChatOpenAI(
-        model=model,
-        temperature=temperature,
-        openai_api_key=api_key,
-        openai_api_base=SAMBANOVA_BASE_URL,
-    )
+    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key)
     return llm.invoke(prompt).content
 
 
@@ -730,11 +619,11 @@ def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> s
 def call_llm(
     prompt: str,
     session,
-    model: str = "Meta-Llama-3.3-70B-Instruct",
+    model: str = "llama-3.3-70b-versatile",
     temperature: float = 0,
 ) -> str:
     """
-    Distribute LLM calls evenly across all healthy SambaNova keys.
+    Distribute LLM calls evenly across all 100 Groq keys.
 
     Strategy:
       1. Supabase cache hit → return immediately (zero LLM cost).
@@ -773,15 +662,14 @@ def call_llm(
 
     # ── User-supplied key ─────────────────────────────────────────────────────
     user_key = ""
-    raw_user_key = session.get("user_sambanova_key", "")
+    raw_user_key = session.get("user_groq_key", "")
     if isinstance(raw_user_key, str):
         user_key = raw_user_key.strip()
 
-    if user_key and _key_has_tpm_headroom(user_key, estimated_tokens) and _key_has_rpm_headroom(user_key):
+    if user_key and _key_has_tpm_headroom(user_key, estimated_tokens):
         try:
             response = try_call_llm(prompt, user_key, model, temperature)
             _record_key_tokens(user_key, estimated_tokens, time.time())
-            _record_key_request(user_key, time.time())
             set_cached_response(prompt, model, response)
             _async_increment_usage(user_key)
             return response
@@ -790,7 +678,6 @@ def call_llm(
             if err_type == "quota":
                 _mem_record_failure(user_key, "quota")
                 _record_key_tokens(user_key, TPM_LIMIT, time.time())
-                _record_key_request(user_key, time.time())
                 _async_mark_failure(user_key, "quota")
             elif err_type == "dead":
                 _mem_record_failure(user_key, "error")
@@ -799,7 +686,7 @@ def call_llm(
 
     # ── Admin key rotation ────────────────────────────────────────────────────
     try:
-        all_admin_keys = load_sambanova_api_keys()
+        all_admin_keys = load_groq_api_keys()
     except ValueError as e:
         return f"❌ LLM unavailable: {e}"
 
@@ -807,13 +694,12 @@ def call_llm(
     if not healthy_keys:
         return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
 
-    # Partition: keys with both TPM AND RPM headroom go first; the rest fall back
+    # Partition: TPM-headroom keys first, over-budget keys as fallback
     now_ts = time.time()
-    with _tpm_lock, _rpm_lock:
+    with _tpm_lock:
         keys_with_headroom = [
             k for k in healthy_keys
             if (_get_key_tpm(k, now_ts) + estimated_tokens) <= TPM_LIMIT
-            and _get_key_rpm(k, now_ts) < RPM_LIMIT
         ]
         keys_over_budget = [k for k in healthy_keys if k not in set(keys_with_headroom)]
 
@@ -843,7 +729,6 @@ def call_llm(
             response = try_call_llm(prompt, key, model, temperature)
             # Success ──────────────────────────────────────────────────────────
             _record_key_tokens(key, estimated_tokens, time.time())
-            _record_key_request(key, time.time())
             set_cached_response(prompt, model, response)
             _mem_increment_usage(key)
             _async_increment_usage(key)
@@ -856,7 +741,6 @@ def call_llm(
             if err_type == "quota":
                 _mem_record_failure(key, "quota")
                 _record_key_tokens(key, TPM_LIMIT, time.time())
-                _record_key_request(key, time.time())
                 _async_mark_failure(key, "quota")
             elif err_type == "dead":
                 _mem_record_failure(key, "error")
