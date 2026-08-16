@@ -35,11 +35,10 @@ import pytz
 import streamlit as st
 from langchain_openai import ChatOpenAI
 
-# Groq's OpenAI-compatible endpoint. Moved back from SambaNova now that
-# Groq's llama-3.3-70b-versatile deprecation (2026-08-16) forced a model
-# swap anyway — qwen/qwen3.6-27b is Groq's recommended replacement and is
-# already what LLM Evaluator Suite / Docstract / SYNAPSE were migrated to.
-GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+# SambaNova exposes an OpenAI-compatible endpoint; Llama 3.3 70B is still
+# actively served there (unlike Groq, which is dropping it, and Cerebras,
+# which already deprecated it in Feb 2026).
+SAMBANOVA_BASE_URL = "https://api.sambanova.ai/v1"
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 CACHE_EXPIRY_HOURS       = 24
@@ -48,64 +47,45 @@ QUOTA_COOLDOWN_MINUTES   = 60
 DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
-# ── Groq rate-limit tier ───────────────────────────────────────────────────────
-# Per Groq's official docs (console.groq.com/docs/rate-limits), confirmed
-# 2026-08-15, for qwen/qwen3.6-27b:
+# ── SambaNova rate-limit tier ─────────────────────────────────────────────────
+# Per SambaNova's official docs (docs.sambanova.ai/docs/en/models/rate-limits)
+# for Meta-Llama-3.3-70B-Instruct, confirmed 2026-07-29:
 #
-#   Free Plan:  30 RPM,  1,000 RPD,  8,000 TPM,  200,000 TPD
+#   Free Tier      (no card linked):  20 RPM,  20 RPD,  200,000 TPD
+#   Developer Tier (card linked):    240 RPM, 48,000 RPD (no per-model TPD;
+#                                     capped at 20M tokens/day across ALL models)
 #
-# Developer plan numbers aren't filled in below — pull the exact values
-# from console.groq.com/settings/limits after upgrading billing, don't
-# guess them. The assertion below will remind you if you flip the tier
-# without filling them in.
-GROQ_TIER = "free"   # "free" | "developer"
+# Flip this to "developer" once billing is linked — the free tier's 20
+# requests/DAY cap (not TPM) is the real bottleneck for production use.
+SAMBANOVA_TIER = "free"   # "free" | "developer"
 
 _TIER_LIMITS = {
     "free": {
-        "rpm": 30,
-        "rpd": 1_000,
-        "tpm": 8_000,
+        "rpm": 20,
+        "rpd": 20,
         "tpd": 200_000,
     },
     "developer": {
-        "rpm": None,   # TODO: fill in from console.groq.com/settings/limits
-        "rpd": None,
-        "tpm": None,
-        "tpd": None,
+        "rpm": 240,
+        "rpd": 48_000,
+        "tpd": None,   # no per-model cap; 20M/day shared across all models
     },
 }
 
-_tier_cfg = _TIER_LIMITS[GROQ_TIER]
-if any(v is None for v in _tier_cfg.values()):
-    raise ValueError(
-        f"❌ GROQ_TIER = '{GROQ_TIER}' has unfilled limits in _TIER_LIMITS. "
-        "Check console.groq.com/settings/limits and fill in real numbers "
-        "before switching tiers."
-    )
-
-RPM_LIMIT         = max(1, _tier_cfg["rpm"] - 1)     # 1-request safety margin
-DAILY_KEY_LIMIT   = max(1, _tier_cfg["rpd"] - 1)     # 1-request safety margin per key
-DAILY_TOKEN_LIMIT = _tier_cfg["tpd"]                 # informational; not yet enforced per-key
+_tier_cfg   = _TIER_LIMITS[SAMBANOVA_TIER]
+RPM_LIMIT   = max(1, _tier_cfg["rpm"] - 1)          # 1-request safety margin
+DAILY_KEY_LIMIT = max(1, _tier_cfg["rpd"] - 1)      # 1-request safety margin per key
+DAILY_TOKEN_LIMIT = _tier_cfg["tpd"]                # None on developer tier = unused
 
 # ── Per-minute request/token rate limiters ────────────────────────────────────
-# Unlike SambaNova, Groq publishes and enforces TPM directly — it's a real,
-# binding limit here, not just a soft guard. Margin kept below the documented
-# 8,000 TPM to leave headroom for token-count estimation error.
-TPM_LIMIT          = max(1, _tier_cfg["tpm"] - 500)
+# RPM is the actual documented, binding limit for SambaNova. TPM isn't
+# published by SambaNova at all — TPM_LIMIT below is kept only as a soft
+# extra guard (carried over from the old Groq-tuned value) and is secondary
+# to the RPM check now.
+TPM_LIMIT          = 5500
 TPM_WINDOW_SECONDS = 60
 RPM_WINDOW_SECONDS = 60
-CHARS_PER_TOKEN    = 3             # 1 token ≈ 3 chars — deliberately
-                                    # conservative. Resume/JD text (bullets,
-                                    # numbers, technical terms, punctuation)
-                                    # tokenizes less efficiently than plain
-                                    # prose; 4 chars/token under-counted a
-                                    # real request by ~700 tokens in testing.
-
-# Groq's TPM limiter counts input tokens PLUS the max_tokens you request as
-# reserved output capacity — not just the prompt alone. Every headroom/
-# preflight check below must account for both, or it'll pass estimates that
-# still 413 once the reserved output is added on Groq's side.
-MAX_OUTPUT_TOKENS = 2048
+CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
 
 # ── Retry / back-off config ───────────────────────────────────────────────────
 MAX_RETRIES_PER_KEY = 1            # attempts per key before moving on
@@ -118,11 +98,6 @@ _QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests",
 _DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
                      "api key", "authentication", "permission denied",
                      "invalid_api_key"]
-# 413 is a property of the PROMPT, not the key — retrying other keys with the
-# same oversized prompt will just 413 again on every single one of them.
-_PAYLOAD_SIGNALS  = ["413", "payload too large", "request too large",
-                     "request entity too large", "context length",
-                     "context_length_exceeded", "maximum context length"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IN-MEMORY STATE  (module-level, shared across all threads in one worker)
@@ -332,7 +307,8 @@ def get_keys_with_tpm_headroom(api_keys: list, estimated_tokens: int) -> list:
     return headroom if headroom else api_keys
 
 
-# ── Per-minute request rate limiter helpers (Groq's documented RPM limit) ────
+# ── Per-minute request rate limiter helpers (SambaNova's real, documented
+#    limit — RPM, not TPM) ──────────────────────────────────────────────────
 def _get_key_rpm(api_key: str, now: float) -> int:
     window_start = now - RPM_WINDOW_SECONDS
     entries = _rpm_tracker.get(api_key, [])
@@ -428,7 +404,47 @@ def _async_clear_failure(api_key: str):
     threading.Thread(target=_write, daemon=True).start()
 
 
-# ── API key loader (Groq) ────────────────────────────────────────────────────
+# ── API key loader (SambaNova) ─────────────────────────────────────────────────
+_sambanova_cached_keys: List[str] = []
+_sambanova_keys_loaded_at: float = 0.0
+_sambanova_cached_keys_lock = threading.Lock()
+
+def load_sambanova_api_keys() -> List[str]:
+    """
+    Load SambaNova keys from Streamlit secrets (preferred) or environment.
+    Mirrors load_groq_api_keys() but reads SAMBANOVA_API_KEYS and uses its
+    own cache, since SambaNova accounts typically issue far fewer keys
+    than the 100-key Groq pool (a single key already carries a much
+    higher per-key ceiling).
+    """
+    global _sambanova_cached_keys, _sambanova_keys_loaded_at
+
+    now = time.time()
+    with _sambanova_cached_keys_lock:
+        if _sambanova_cached_keys and (now - _sambanova_keys_loaded_at) < KEY_CACHE_TTL:
+            return list(_sambanova_cached_keys)
+
+        raw = ""
+        try:
+            raw = st.secrets.get("SAMBANOVA_API_KEYS", "") or ""
+        except Exception:
+            pass
+
+        if not raw:
+            raw = os.getenv("SAMBANOVA_API_KEYS", "") or ""
+
+        keys = [k.strip() for k in raw.split(",") if k.strip()]
+
+        if not keys:
+            raise ValueError("❌ No SambaNova API keys found in secrets or environment.")
+
+        random.shuffle(keys)
+        _sambanova_cached_keys    = keys
+        _sambanova_keys_loaded_at = now
+        return list(_sambanova_cached_keys)
+
+
+# ── API key loader ────────────────────────────────────────────────────────────
 def load_groq_api_keys() -> List[str]:
     """
     Load Groq keys from Streamlit secrets (preferred) or environment.
@@ -559,8 +575,6 @@ def _classify_error(error: Exception) -> str:
     Returns:
         'quota'     — rate limited → 60-min cooldown
         'dead'      — bad/invalid key → 5-min cooldown
-        'oversized' — prompt too big for the model/tier → do NOT retry other
-                      keys, it'll 413 on every one of them; fail fast instead
         'transient' — network blip / server 500 / timeout → do NOT touch the key
     """
     msg = str(error).lower()
@@ -583,8 +597,6 @@ def _classify_error(error: Exception) -> str:
         return "quota"
     if status_code in (401, 403) or any(s in msg for s in _DEAD_KEY_SIGNALS):
         return "dead"
-    if status_code == 413 or any(s in msg for s in _PAYLOAD_SIGNALS):
-        return "oversized"
     return "transient"
 
 
@@ -703,67 +715,26 @@ def _pick_start_index(n: int) -> int:
     return idx
 
 
-import re as _re
-
-# qwen/qwen3.6-27b is a reasoning model — reasoning_format="hidden" asks
-# Groq to strip the <think>...</think> block server-side, but keep this
-# regex as a safety net in case a raw block still leaks through.
-_THINK_BLOCK_RE = _re.compile(r"<think>.*?</think>", _re.DOTALL | _re.IGNORECASE)
-
-
-def _strip_think_blocks(text: str) -> str:
-    if not text or "<think" not in text.lower():
-        return text
-    return _THINK_BLOCK_RE.sub("", text).strip()
-
-
 # ── Single LLM call ───────────────────────────────────────────────────────────
-def try_call_llm(prompt: str, api_key: str, model: str, temperature: float,
-                  max_output_tokens: int = None) -> str:
-    # max_retries=0: disable the OpenAI SDK's own internal retry-on-429/5xx.
-    # We already have our own multi-key rotation + backoff one layer up in
-    # call_llm(); letting the SDK retry the SAME key silently just burns
-    # 2-3x the actual HTTP requests against a key that's already rate
-    # limited or dead, before our rotation logic ever gets a chance to
-    # move to the next key.
+def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
     llm = ChatOpenAI(
         model=model,
         temperature=temperature,
         openai_api_key=api_key,
-        openai_api_base=GROQ_BASE_URL,
-        max_retries=0,
-        max_tokens=max_output_tokens or MAX_OUTPUT_TOKENS,
-        extra_body={
-            "reasoning_format": "hidden",
-            "reasoning_effort": "none",   # non-thinking mode — these are
-                                           # scoring/extraction prompts, not
-                                           # multi-step reasoning tasks; skip
-                                           # the thinking pass entirely so it
-                                           # can't eat the whole token budget
-                                           # before writing the real answer
-        },
+        openai_api_base=SAMBANOVA_BASE_URL,
     )
-    return _strip_think_blocks(llm.invoke(prompt).content)
+    return llm.invoke(prompt).content
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 def call_llm(
     prompt: str,
     session,
-    model: str = "qwen/qwen3.6-27b",
+    model: str = "Meta-Llama-3.3-70B-Instruct",
     temperature: float = 0,
-    max_output_tokens: int = None,
 ) -> str:
     """
-    Distribute LLM calls evenly across all healthy Groq keys.
-
-    max_output_tokens: override the default MAX_OUTPUT_TOKENS reservation for
-      this specific call. Use this for calls that genuinely need a bigger
-      response (e.g. structured JSON extraction, multi-section evaluations)
-      — leave it unset for short scoring/classification calls so they don't
-      eat unnecessary TPM budget. Whatever you pass here is counted against
-      the TPM ceiling the same way the default is, so raising it shrinks how
-      much room is left for the prompt itself.
+    Distribute LLM calls evenly across all healthy SambaNova keys.
 
     Strategy:
       1. Supabase cache hit → return immediately (zero LLM cost).
@@ -798,35 +769,18 @@ def call_llm(
         return cached
 
     estimated_tokens = _estimate_tokens(prompt)
-    _out_budget = max_output_tokens or MAX_OUTPUT_TOKENS
-    # Groq counts prompt + reserved output against TPM — budget for both.
-    estimated_request_tokens = estimated_tokens + _out_budget
     last_error = None
-
-    # Preflight: a request bigger than the TPM ceiling will 413 on EVERY key
-    # (free tier caps a single request at roughly this size on Groq) — fail
-    # fast instead of burning the whole rotation + backoff sleeps on it.
-    if estimated_request_tokens > TPM_LIMIT:
-        return (f"❌ Prompt too large (~{estimated_tokens} prompt tokens + "
-                f"~{_out_budget} reserved output = "
-                f"~{estimated_request_tokens} total, limit is ~{TPM_LIMIT}) "
-                f"for {model} on the {GROQ_TIER} tier. Shorten the input or "
-                f"split it into smaller calls.")
 
     # ── User-supplied key ─────────────────────────────────────────────────────
     user_key = ""
-    raw_user_key = session.get("user_groq_key", "")
+    raw_user_key = session.get("user_sambanova_key", "")
     if isinstance(raw_user_key, str):
         user_key = raw_user_key.strip()
 
-    if user_key and _key_has_tpm_headroom(user_key, estimated_request_tokens) and _key_has_rpm_headroom(user_key):
+    if user_key and _key_has_tpm_headroom(user_key, estimated_tokens) and _key_has_rpm_headroom(user_key):
         try:
-            response = try_call_llm(prompt, user_key, model, temperature, _out_budget)
-            if not response or not response.strip():
-                raise RuntimeError(
-                    "empty content — reasoning likely exhausted max_tokens"
-                )
-            _record_key_tokens(user_key, estimated_request_tokens, time.time())
+            response = try_call_llm(prompt, user_key, model, temperature)
+            _record_key_tokens(user_key, estimated_tokens, time.time())
             _record_key_request(user_key, time.time())
             set_cached_response(prompt, model, response)
             _async_increment_usage(user_key)
@@ -841,16 +795,11 @@ def call_llm(
             elif err_type == "dead":
                 _mem_record_failure(user_key, "error")
                 _async_mark_failure(user_key, "error")
-            elif err_type == "oversized":
-                # Same prompt will 413 on every other key too — don't burn
-                # the whole rotation on a request that can't succeed.
-                return (f"❌ Prompt too large (~{estimated_request_tokens} "
-                        f"total tokens) for {model}. Please shorten the input.")
             last_error = e
 
     # ── Admin key rotation ────────────────────────────────────────────────────
     try:
-        all_admin_keys = load_groq_api_keys()
+        all_admin_keys = load_sambanova_api_keys()
     except ValueError as e:
         return f"❌ LLM unavailable: {e}"
 
@@ -863,7 +812,7 @@ def call_llm(
     with _tpm_lock, _rpm_lock:
         keys_with_headroom = [
             k for k in healthy_keys
-            if (_get_key_tpm(k, now_ts) + estimated_request_tokens) <= TPM_LIMIT
+            if (_get_key_tpm(k, now_ts) + estimated_tokens) <= TPM_LIMIT
             and _get_key_rpm(k, now_ts) < RPM_LIMIT
         ]
         keys_over_budget = [k for k in healthy_keys if k not in set(keys_with_headroom)]
@@ -891,18 +840,9 @@ def call_llm(
             time.sleep(random.uniform(0.5, 1.5))
 
         try:
-            response = try_call_llm(prompt, key, model, temperature, _out_budget)
-            if not response or not response.strip():
-                # 200 OK but empty content — thinking mode ate the whole
-                # token budget before writing an answer. Not a real success:
-                # don't cache it, don't trust the key, just try the next one.
-                last_error = RuntimeError(
-                    "empty content — reasoning likely exhausted max_tokens"
-                )
-                attempt += 1
-                continue
+            response = try_call_llm(prompt, key, model, temperature)
             # Success ──────────────────────────────────────────────────────────
-            _record_key_tokens(key, estimated_request_tokens, time.time())
+            _record_key_tokens(key, estimated_tokens, time.time())
             _record_key_request(key, time.time())
             set_cached_response(prompt, model, response)
             _mem_increment_usage(key)
@@ -921,11 +861,6 @@ def call_llm(
             elif err_type == "dead":
                 _mem_record_failure(key, "error")
                 _async_mark_failure(key, "error")
-            elif err_type == "oversized":
-                # Same prompt will 413 on every other key too — don't burn
-                # the whole rotation on a request that can't succeed.
-                return (f"❌ Prompt too large (~{estimated_request_tokens} "
-                        f"total tokens) for {model}. Please shorten the input.")
             # transient: key stays healthy, try next
             last_error = e
             attempt   += 1
