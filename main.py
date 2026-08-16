@@ -41,8 +41,9 @@ import torch
 from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_groq import ChatGroq
 from llm_manager import (
-    call_llm, load_sambanova_api_keys, get_healthy_keys, increment_key_usage,
+    call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
     _async_clear_failure,
@@ -5436,7 +5437,7 @@ Return ONLY one domain from this list, nothing else:
         _pre_job_domain = st.session_state[_pre_jd_cache_key]
 
         # ⚡ PARALLEL: rewrite + ATS run simultaneously using threads.
-        # Both are network-bound (SambaNova API) so they benefit from parallelism
+        # Both are network-bound (Groq API) so they benefit from parallelism
         # without needing async — ThreadPoolExecutor handles it safely.
         # Domains pre-detected above on main thread — no LLM calls fire inside threads.
         def _task_rewrite():
@@ -5463,8 +5464,8 @@ Return ONLY one domain from this list, nothing else:
             # bursts the same key simultaneously and triggers rate limiting.
             # Switch to sequential mode with a short gap to let the TPM window recover.
             try:
-                from llm_manager import load_sambanova_api_keys, get_healthy_keys as _ghk
-                _n_healthy = len(_ghk(load_sambanova_api_keys()))
+                from llm_manager import load_groq_api_keys, get_healthy_keys as _ghk
+                _n_healthy = len(_ghk(load_groq_api_keys()))
             except Exception:
                 _n_healthy = 99  # assume enough keys if check fails
 
@@ -6354,7 +6355,6 @@ with tab1:
 
                         # Build LinkedIn search location param — fallback to "India" if blank
                         _loc_param = urllib.parse.quote(user_location.strip()) if user_location and user_location.strip() else "India"
-                        _loc_raw   = user_location.strip() if user_location and user_location.strip() else "India"
 
                         def _strip_urls(s):
                             """Remove ALL URLs and link emoji from a string."""
@@ -6436,9 +6436,7 @@ with tab1:
 
                             desc = desc.rstrip('.')
 
-                            # LinkedIn only reliably applies `keywords` for logged-out clicks —
-                            # `location` alone gets silently dropped, so fold it into keywords too.
-                            encoded      = urllib.parse.quote(f"{title},{_loc_raw}")
+                            encoded      = urllib.parse.quote(title)
                             linkedin_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded}&location={_loc_param}"
                             link_icon = (
                                 '<a href="' + linkedin_url + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
@@ -6476,7 +6474,7 @@ with tab1:
                                 _ft = _ft.strip()
                                 if not _ft:
                                     continue
-                                _fe = urllib.parse.quote(f"{_ft[:60]},{_loc_raw}")
+                                _fe = urllib.parse.quote(_ft[:60])
                                 _furl = f"https://www.linkedin.com/jobs/search/?keywords={_fe}&location={_loc_param}"
                                 _ficon = (
                                     '<a href="' + _furl + '" target="_blank" style="text-decoration:none;margin-left:6px;">'
