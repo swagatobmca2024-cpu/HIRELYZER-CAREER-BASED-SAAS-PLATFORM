@@ -612,36 +612,14 @@ def _pick_start_index(n: int) -> int:
 # ── Single LLM call ───────────────────────────────────────────────────────────
 def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
     llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key)
-    try:
-        return llm.invoke(prompt).content
-    except Exception as e:
-        # ── DEBUG: surface Groq's real error body (has the true Limit/Requested
-        # numbers for THIS org, which can differ from published defaults) ──────
-        est_tokens = _estimate_tokens(prompt)
-        body = None
-        for attr_path in ("response.text", "body", "response.json"):
-            try:
-                obj = e
-                for part in attr_path.split("."):
-                    obj = getattr(obj, part)
-                body = obj() if callable(obj) else obj
-                if body:
-                    break
-            except Exception:
-                continue
-        print(
-            f"[GROQ DEBUG] model={model} prompt_est_tokens={est_tokens} "
-            f"key_suffix=...{api_key[-4:]} error_type={type(e).__name__} "
-            f"str(e)={e} body={body}"
-        )
-        raise
+    return llm.invoke(prompt).content
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 def call_llm(
     prompt: str,
     session,
-    model: str = "groq/compound",
+    model: str = "llama-3.3-70b-versatile",
     temperature: float = 0,
 ) -> str:
     """
