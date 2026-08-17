@@ -4076,7 +4076,7 @@ def create_chain(vectorstore):
     # ✅ FIX: do NOT increment usage before the call — only after success
 
     # ✅ Create the ChatGroq object
-    llm = ChatGroq(model="groq/compound", temperature=0, groq_api_key=groq_api_key)
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=groq_api_key)
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
     try:
