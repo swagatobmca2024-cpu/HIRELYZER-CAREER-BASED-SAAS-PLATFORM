@@ -44,7 +44,7 @@ from llm_manager import (
     call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure,
+    _async_clear_failure, DEFAULT_MODEL,
 )
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
@@ -324,64 +324,214 @@ replacement_mapping = {
     }
 }
 
-def rewrite_and_optimize_resume(text, replacement_mapping, user_location):
+def _normalize_allcaps_lines(text: str) -> str:
     """
-    ⚡ MERGED FUNCTION — replaces rewrite_text_with_llm() + optimize_resume_to_json()
-    Single LLM call that returns BOTH:
-      - rewritten_text : plain-text ATS-optimised resume + job title suggestions (for UI display)
-      - json_str       : strict JSON object (for DOCX generation)
-      - rewrite_ok     : bool — False when LLM was unavailable and original text was returned
-    Saves 1 API key call per resume analysis (6 → 5 calls total).
+    Resumes written entirely in uppercase confuse the LLM's section detection
+    and bias replacement. Normalize body lines that are fully uppercase.
+    Section headers (short ALL-CAPS labels like "EXPERIENCE") are intentionally
+    preserved — only longer uppercase body lines (sentences, bullet content) are
+    title-cased so the LLM receives readable prose.
     """
-
-    # ── ALL CAPS normalization ────────────────────────────────────────────────
-    # Resumes written entirely in uppercase confuse the LLM's section detection
-    # and bias replacement. Normalize body lines that are fully uppercase.
-    # Section headers (short ALL-CAPS labels like "EXPERIENCE") are intentionally
-    # preserved — only longer uppercase body lines (sentences, bullet content) are
-    # title-cased so the LLM receives readable prose.
     _normalized_lines = []
     for _line in text.split('\n'):
         _stripped = _line.strip()
-        # Normalize only if: fully uppercase, more than 15 chars, no leading emoji/symbol
         if (
             _stripped
             and _stripped.isupper()
             and len(_stripped) > 15
             and _stripped[0].isalpha()
         ):
-            # Title-case the content, preserving original leading whitespace
             _leading = _line[: len(_line) - len(_line.lstrip())]
             _normalized_lines.append(_leading + _stripped.title())
         else:
             _normalized_lines.append(_line)
-    text = '\n'.join(_normalized_lines)
-    # ─────────────────────────────────────────────────────────────────────────
+    return '\n'.join(_normalized_lines)
 
+
+# ── Section-aware resume reduction (replaces blind text[:8000]) ──────────────
+# A resume can have important information ANYWHERE, including near the end
+# (certifications, achievements). Blindly slicing at N characters can cut a
+# section in half or drop it entirely. Instead: if the resume is short enough,
+# pass it through unchanged. If it's too long, split into recognizable
+# sections and keep the important ones whole, trimming low-priority /
+# unrecognized content first rather than truncating mid-section.
+_SECTION_HEADER_PATTERNS = [
+    ("contact",        r'^\s*(contact|personal\s+info)'),
+    ("summary",        r'^\s*(summary|profile|objective|about)'),
+    ("skills",         r'^\s*(skills|technical\s+skills|core\s+skills|competenc)'),
+    ("experience",     r'^\s*(experience|work\s+experience|employment|internship)'),
+    ("projects",       r'^\s*(projects?)'),
+    ("education",      r'^\s*(education|academic)'),
+    ("certifications", r'^\s*(certifications?|licenses?)'),
+    ("achievements",   r'^\s*(achievements?|awards?|honou?rs)'),
+]
+_HIGH_PRIORITY_SECTIONS = {
+    "contact", "summary", "skills", "experience", "projects",
+    "education", "internships", "certifications", "achievements",
+}
+
+
+def reduce_resume_for_prompt(text: str, max_chars: int = 8000) -> str:
+    """
+    Intelligent section-aware reduction for prompt input.
+
+    - If text already fits within max_chars, return unchanged (no data loss).
+    - Otherwise, split into sections by recognizable headers and rebuild the
+      text keeping every high-priority section whole (contact, summary,
+      skills, experience, internships, projects, education, certifications,
+      achievements, dates) and only trimming low-priority / unrecognized
+      trailing content to fit the budget.
+    - If sections still don't fit after trimming unknown content, trim the
+      LARGEST section proportionally rather than cutting the resume off at
+      an arbitrary character count — this keeps every section represented
+      instead of silently dropping whatever happened to be at the end.
+    """
+    if len(text) <= max_chars:
+        return text
+
+    lines = text.split('\n')
+    sections = []  # list of {"name": str, "lines": [str]}
+    current = {"name": "preamble", "lines": []}
+    sections.append(current)
+
+    for line in lines:
+        stripped = line.strip().lower()
+        matched_name = None
+        if stripped and len(stripped) < 60:
+            for name, pattern in _SECTION_HEADER_PATTERNS:
+                if re.match(pattern, stripped, re.IGNORECASE):
+                    matched_name = name
+                    break
+        if matched_name:
+            current = {"name": matched_name, "lines": [line]}
+            sections.append(current)
+        else:
+            current["lines"].append(line)
+
+    def _section_text(sec):
+        return '\n'.join(sec["lines"])
+
+    high_priority = [s for s in sections if s["name"] in _HIGH_PRIORITY_SECTIONS or s["name"] == "preamble"]
+    low_priority  = [s for s in sections if s not in high_priority]
+
+    kept_text = '\n'.join(_section_text(s) for s in high_priority)
+
+    if len(kept_text) <= max_chars:
+        # Room to spare — add back low-priority sections until budget runs out
+        for s in low_priority:
+            candidate = kept_text + '\n' + _section_text(s)
+            if len(candidate) <= max_chars:
+                kept_text = candidate
+            else:
+                break
+        return kept_text
+
+    # Still too long even after dropping low-priority sections — trim the
+    # single largest high-priority section proportionally rather than
+    # truncating the whole document at a fixed character offset, so every
+    # section stays represented.
+    overflow = len(kept_text) - max_chars
+    high_priority_sorted = sorted(high_priority, key=lambda s: len(_section_text(s)), reverse=True)
+    if high_priority_sorted:
+        biggest = high_priority_sorted[0]
+        biggest_text = _section_text(biggest)
+        trim_to = max(200, len(biggest_text) - overflow)
+        biggest["lines"] = [biggest_text[:trim_to]]
+
+    return '\n'.join(_section_text(s) for s in high_priority)
+
+
+# ── Structural validation (Part 10 — truncation detection) ───────────────────
+_EXPECTED_RESUME_MARKERS = (
+    "SUMMARY", "SKILL", "EXPERIENCE", "PROJECT", "EDUCATION",
+)
+
+
+def _looks_like_complete_resume(text: str) -> bool:
+    """Cheap structural sanity check — not a delimiter check. Verifies the
+    rewritten resume actually contains recognizable section content and
+    isn't suspiciously short (a strong signal of budget-exhausted
+    truncation rather than a genuine parse failure)."""
+    if not text or len(text.strip()) < 150:
+        return False
+    upper = text.upper()
+    hits = sum(1 for marker in _EXPECTED_RESUME_MARKERS if marker in upper)
+    return hits >= 2
+
+
+def _try_parse_json(json_str: str):
+    """Attempt json.loads(); return (data_or_None, was_valid)."""
+    try:
+        return json.loads(json_str), True
+    except Exception:
+        return None, False
+
+
+def _attempt_json_repair(json_str: str):
+    """
+    Controlled, conservative repair for JSON that was cut off mid-generation
+    (truncated output), NOT a general-purpose fixer for malformed JSON.
+    Strategy: walk the string tracking bracket/brace/string state, and if it
+    ends mid-structure, close every open string/array/object in the correct
+    order. Returns (repaired_str_or_None, was_repaired).
+    """
+    s = json_str.strip()
+    if not s:
+        return None, False
+
+    # Quick path: already valid.
+    _, ok = _try_parse_json(s)
+    if ok:
+        return s, False
+
+    stack = []
+    in_string = False
+    escape = False
+    for ch in s:
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == '\\':
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in '{[':
+            stack.append(ch)
+        elif ch in '}]':
+            if stack:
+                stack.pop()
+
+    repaired = s
+    if in_string:
+        repaired += '"'
+    # Drop a dangling trailing comma before we close structures
+    repaired = re.sub(r',\s*$', '', repaired)
+    for opener in reversed(stack):
+        repaired += '}' if opener == '{' else ']'
+
+    data, ok = _try_parse_json(repaired)
+    if ok:
+        return repaired, True
+    return None, False
+
+
+# ── CALL A — optimized plain-text resume ONLY ─────────────────────────────────
+def _call_a_rewrite_resume(text: str, replacement_mapping: dict, user_location: str) -> str:
+    """
+    Returns the ATS-optimised plain-text resume ONLY. No JSON, no job
+    titles, no explanations — smallest possible task for the model so the
+    GPT-OSS completion budget is spent entirely on this one output.
+    """
     formatted_mapping = "\n".join(
         [f'- "{key}" → "{value}"' for key, value in replacement_mapping.items()]
     )
 
     prompt = f"""You are an enterprise-grade ATS resume optimization engine and bias-removal specialist.
 
-Your task is to process the resume below and return TWO outputs in a single response, separated by the exact delimiter shown.
-
-════════════════════════════════════════════════════════
-OUTPUT STRUCTURE (return EXACTLY this — no deviation):
-════════════════════════════════════════════════════════
-
-===REWRITTEN_RESUME_START===
-<full plain-text ATS-optimised resume here>
-<followed by job title suggestions block>
-===REWRITTEN_RESUME_END===
-
-===JSON_START===
-<strict JSON object here — no markdown fences, no explanation>
-===JSON_END===
-
-════════════════════════════════════════════════════════
-PART 1 — PLAIN TEXT REWRITE (inside REWRITTEN_RESUME tags)
-════════════════════════════════════════════════════════
+Return ONLY the complete rewritten resume as plain text. Do NOT return JSON. Do NOT return job title suggestions. Do NOT add any preamble, explanation, or markdown fences — plain text only.
 
 ABSOLUTE RULES — NEVER VIOLATE:
 • DO NOT fabricate companies, job titles, degrees, institutions, or dates.
@@ -434,19 +584,9 @@ PROFESSIONAL SUMMARY (2–3 sentences):
               ⚠️ FRESHER RULE — if candidate has 0 or no work experience:
                 NEVER write "with 0 years of experience" — this is BANNED.
                 Use "specializing in" OR "with hands-on project experience in" instead.
-                ✓ "Aspiring Software Developer specializing in Python, Django, and problem-solving."
-                ✓ "Entry-level Java Developer with hands-on project experience in backend development."
-              NEVER start with "As a", "I am", "I have", or any pronoun.
-              ✓ "Mid-level Full Stack Developer with 3 years of experience building scalable web applications."
-              ✓ "Entry-level Python Developer specializing in backend development and RESTful API design."
-              ✓ "Aspiring Data Scientist with hands-on project experience in ML pipelines and NLP."
   Sentence 2: [Top 2–3 specific technical strengths from resume — tools, frameworks, proven skills]
               Start with a strong action noun or skill cluster. Never start with "I" or "As a".
-              ✓ "Proficient in React.js, Node.js, and MongoDB with demonstrated experience in full-stack deployment."
-              ✓ "Skilled in LangChain, FAISS, and LLaMA with hands-on RAG pipeline development."
   Sentence 3: [Career value proposition — what they bring or are seeking]
-              ✓ "Committed to building efficient, scalable solutions that drive measurable business impact."
-              ✓ "Seeking to contribute strong backend expertise to a growth-focused engineering team."
 
 CORE SKILLS: labeled lines — Technical Skills: [...] and Professional Skills: [...]
 
@@ -465,113 +605,78 @@ WORK EXPERIENCE (reverse chronological):
   • DO NOT write a "Work Experience" section at all — omit it entirely.
   • DO NOT write "0 years of experience", "No experience", "N/A", or any placeholder.
   • Instead, elevate the PROJECTS section — give it prominence immediately after Core Skills.
-  • In the Professional Summary, use honest framing: "Aspiring [Role]" or "Recent graduate
-    with hands-on project experience in [domain]" — never imply professional tenure.
   If the candidate has only internship(s) but NO full-time roles:
   • Label the section "Internship Experience" instead of "Work Experience".
   • Present internships with the same bullet format (3–5 achievement bullets each).
-  • DO NOT write "0 years of full-time experience" anywhere.
 
 PROJECTS: Name | Tech Stack | Duration
   [1-sentence purpose — starts with a noun/verb, NO pronouns, NO "As a", NO "I built"]
   • [Achievement bullet — starts with strong action verb, NO pronouns]
   (3–5 bullets)
-  ✓ "Built a real-time chat application using Socket.io and React.js."
-  ✗ "I built a real-time chat application..."
-  ✗ "As a developer, I created..."
 
 EDUCATION: Degree, Major | Institution | Graduation Year | CGPA/Percentage
-
-  ⚠️ EDUCATION FORMAT HANDLING — resumes use wildly different layouts. Handle ALL of these:
-
-  LAYOUT VARIANTS (extract correctly from every format):
-  • Standard inline:       "B.Tech (CSE) | Techno India University | 2021-2024 | CGPA: 7.94"
-  • Degree first:          "B.Tech Computer Science\n  XYZ University\n  2020-2024"
-  • Institution first:     "XYZ University\n  Bachelor of Technology in CSE\n  2020-2024"
-  • Institution as heading + degree as bullet:
-                           "Behala Aryya Vidyamandir(H.S) 2019-2021\n  ● WBCHSE (Class XII)"
-                           → degree = "WBCHSE (Class XII)", institution = "Behala Aryya Vidyamandir(H.S)"
-  • Board style (Class X/XII):
-                           "XYZ School | CBSE | Class X | 2018 | 95%"
-                           "CBSE - Class X (2019) — 91%"
-                           → degree = "CBSE Class X", institution = school name if present
-  • All on one line:       "B.Tech CSE, ABC University, 2024, CGPA 8.5"
-  • Pursuing/Expected:     "B.Tech (CSE) — Expected 2025" / "Currently pursuing MBA from XYZ"
-  • Multiple degrees same institution:
-                           "ABC University\n  M.Tech 2022-2024 CGPA 8.2\n  B.Tech 2018-2022 CGPA 7.8"
-                           → treat as TWO separate education entries
-  • Short forms: B.E, B.Sc, M.Sc, MCA, BCA, MBA, Ph.D, Diploma — all valid degrees
-  • Honours/Distinction:   "B.Tech (Hons) CSE" — preserve exactly including (Hons)
-
-  YEAR EXTRACTION (CRITICAL — scan the ENTIRE education block):
-    - Year can appear ANYWHERE: above, below, beside, or after the degree/institution
-    - Accept ANY of these formats: "Oct 2021 – Jul 2024", "2021-2024", "October 2021 - July 2024",
-      "Batch: 2024", "Passout: 2024", "Expected: 2025", "graduating 2025", "2024", "May 2023",
-      right-aligned dates, dates below GPA line, dates on a separate line entirely
-    - If only one year found → use it as graduation year
-    - If a range found → preserve the full range as written (e.g. "October 2021 - July 2024")
-    - NEVER leave year blank if ANY date pattern exists anywhere near the education block
-
+  ⚠️ EDUCATION FORMAT HANDLING — resumes use wildly different layouts. Recognize:
+  standard inline, degree-first, institution-first, institution-as-heading + degree-as-bullet,
+  board style (Class X/XII), all-on-one-line, pursuing/expected, multiple degrees at one
+  institution (treat as separate entries), short forms (B.E, B.Sc, M.Sc, MCA, BCA, MBA, Ph.D,
+  Diploma), Honours/Distinction (preserve exactly).
+  YEAR EXTRACTION: scan the entire education block — year can appear anywhere. Accept any
+  date format, "Batch"/"Passout"/"Expected" labels, standalone years. Never leave year blank
+  if any date pattern exists anywhere near the education block.
   CGPA/SGPA/Percentage: preserve exactly as written, character for character.
-  Also accept: "Marks: 456/500", "First Class", "Distinction", "Pass" as valid score formats.
-  ⚠️ BULLET DETAILS RULE: Include ALL bullet points or sub-items written under each education entry —
-  not just CGPA. This includes honors, distinctions, coursework, achievements, extracurriculars,
-  awards, scholarships, club activities, or any other detail the candidate wrote beneath the degree.
-  Render each as a bullet point (•) indented below the degree line.
+  ⚠️ BULLET DETAILS RULE: Include ALL bullet points or sub-items written under each education
+  entry — honors, distinctions, coursework, achievements, extracurriculars, awards, scholarships.
+
 CERTIFICATIONS: • Name | Issuing Body | MMM YYYY
 
 ATS FORMATTING:
 • Single-column structure — no tables, columns, text boxes.
 • Bullet points: "•" only.
 • Section headings: ALL CAPS (e.g. PROFESSIONAL SUMMARY, CORE SKILLS, WORK EXPERIENCE).
-• ⚠️ ALL CAPS applies to SECTION HEADINGS ONLY — NEVER apply ALL CAPS to body text,
-  summary sentences, bullet points, skill names, or any other content.
+• ⚠️ ALL CAPS applies to SECTION HEADINGS ONLY — never body text, summary, bullets, or skills.
 • No emojis, no personal pronouns.
 
 GRADE/GPA FORMATTING RULES (CRITICAL — applies to Education section):
 • Preserve EXACTLY as written in the original resume — do NOT relabel or convert.
 • If resume says "SGPA" → write SGPA. If resume says "CGPA" → write CGPA. NEVER swap them.
-• If resume says "SGPA - 7.4" → write exactly "SGPA - 7.4". Do NOT write "CGPA - 7.4 SGPA" or "CGPA - 7.0 GPA".
 • NEVER add a second label — if value already has SGPA/CGPA/GPA/Percentage prefix, do NOT add another.
 • Bare numbers (e.g. "8.44") → write "CGPA: 8.44". Numbers with % → write "Percentage: 78.3%".
 
 BIAS REPLACEMENT RULES — APPLY EXACTLY:
 {formatted_mapping}
 
-MANDATORY JOB TITLE SUGGESTIONS (append after the resume text):
+RESUME TEXT:
+\"\"\"{reduce_resume_for_prompt(text, 8000)}\"\"\"
+"""
 
-### 🎯 Suggested Job Titles (Based on Resume)
+    try:
+        resume_out = call_llm(prompt, session=st.session_state, model=DEFAULT_MODEL,
+                               task_type="resume_rewrite")
+    except Exception:
+        resume_out = ""
 
-Provide EXACTLY 5 job titles suited for a candidate in {user_location}.
-FORMAT (STRICT — follow exactly, no extra lines, no URLs, no links):
-1. **[Job Title]** — [Specific reason tied to resume evidence]
-2. **[Job Title]** — [Specific reason tied to resume evidence]
-3. **[Job Title]** — [Specific reason tied to resume evidence]
-4. **[Job Title]** — [Specific reason tied to resume evidence]
-5. **[Job Title]** — [Specific reason tied to resume evidence]
+    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+    if not resume_out or any(resume_out.strip().startswith(p) for p in _ERROR_PREFIXES):
+        return ""
 
-IMPORTANT: Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
+    return resume_out.strip()
 
-════════════════════════════════════════════════════════
-PART 2 — JSON OBJECT (inside JSON tags)
-════════════════════════════════════════════════════════
 
-Return ONLY valid JSON. No preamble, no explanation, no markdown fences.
-
-CONTENT REWRITING — same ATS rules as Part 1 apply to all bullet fields.
-Strong verbs only. Quantified impact. No pronouns. No repetition across sections.
+# ── CALL B — strict JSON ONLY, built from the ALREADY-OPTIMIZED resume ───────
+def _call_b_extract_json(optimized_resume: str, user_location: str) -> str:
+    """
+    Returns strict JSON built from the already-rewritten resume. No bias
+    mapping needed here (bias replacement already happened in Call A). No
+    resume rewriting happens in this call — pure extraction/formatting, so
+    reasoning_effort is set to "none" (see GPT_OSS_CONFIG['json_extraction']).
+    """
+    prompt = f"""Extract the resume below into a strict JSON object. Do NOT rewrite content — reuse the wording as given. Return ONLY valid JSON. No markdown fences, no explanation, no commentary, no headings, no extra text before or after the JSON.
 
 RETURN ONLY THIS EXACT JSON STRUCTURE:
 {{
   "contact": {{
-    "name": "",
-    "title": "",
-    "email": "",
-    "phone": "",
-    "location": "",
-    "linkedin": "",
-    "github": "",
-    "portfolio": ""
+    "name": "", "title": "", "email": "", "phone": "",
+    "location": "", "linkedin": "", "github": "", "portfolio": ""
   }},
   "summary": "",
   "skills": [],
@@ -579,335 +684,122 @@ RETURN ONLY THIS EXACT JSON STRUCTURE:
   "languages": [],
   "interests": [],
   "experience": [
-    {{
-      "role": "",
-      "company": "",
-      "duration": "",
-      "description": "",
-      "bullets": []
-    }}
+    {{"role": "", "company": "", "duration": "", "description": "", "bullets": []}}
   ],
   "projects": [
-    {{
-      "name": "",
-      "duration": "",
-      "tech_stack": "",
-      "url": "",
-      "description": "",
-      "bullets": []
-    }}
+    {{"name": "", "duration": "", "tech_stack": "", "url": "", "description": "", "bullets": []}}
   ],
   "education": [
-    {{
-      "degree": "",
-      "institution": "",
-      "year": "",
-      "cgpa": "",
-      "bullets": []
-    }}
+    {{"degree": "", "institution": "", "year": "", "cgpa": "", "bullets": []}}
   ],
   "certifications": [
-    {{
-      "name": "",
-      "issuer": "",
-      "duration": ""
-    }}
+    {{"name": "", "issuer": "", "duration": ""}}
   ],
   "additional": [
-    {{
-      "name": "",
-      "description": "",
-      "duration": ""
-    }}
+    {{"name": "", "description": "", "duration": ""}}
   ]
 }}
 
 FIELD RULES:
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
   • NEVER fabricate names, companies, degrees, institutions, skills, URLs, or metrics.
   • NEVER write "[Not Provided]", "N/A", "Unknown" anywhere — use "" for missing text, [] for missing arrays.
   • NEVER invent a date with zero context — if no clue exists anywhere → store "".
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 3-TIER DATE INFERENCE RULE — APPLIES TO ALL duration/year FIELDS:
+  TIER 1 — EXPLICIT: date is clearly written near this entry → extract exactly as written.
+  TIER 2 — INFERRED: date not written for this entry but confidently derivable from strong
+    surrounding context (e.g. project explicitly tied to a dated internship/job) → store with
+    "~" prefix, e.g. "~Aug 2022 – Dec 2023". Never infer just because two entries are near
+    each other on the page.
+  TIER 3 — UNKNOWN: no date, no context → store "" (empty string). Never guess.
 
-  TIER 1 — EXPLICIT (highest priority):
-    Date is clearly written in the resume near this entry.
-    → Extract and store EXACTLY as written. Never reformat.
-    → Examples: "Aug 2021 – Dec 2024", "October 2021 - July 2024", "Jul 2025", "2023", "45 days"
+- "contact.*" = extract exactly as written. Use "" not null for missing fields.
+- "summary" = copy the Professional Summary from the resume below VERBATIM — every sentence,
+  nothing omitted, nothing added. Maximum 3 sentences. Must be a single unbroken string (no
+  newlines inside the JSON value). Do NOT include skills, projects, education, or job titles here.
+- "skills" = flat array of individual skill strings, minimum 8, no duplicates, only skills
+  actually present in the resume.
+- "soft_skills" = professional competency phrases, must NOT duplicate items in "skills".
+- "experience" = [] if no work experience/internships exist. "experience[].role"/"company" exact
+  as written. "experience[].duration" — apply 3-tier rule. "experience[].description" = 1-sentence
+  role scope, no pronouns. "experience[].bullets" = 3–5 bullets, strong past-tense verb + task +
+  tech + quantified impact, no pronouns.
+- "projects[].name" exact as written. "projects[].duration" — apply 3-tier rule.
+  "projects[].tech_stack" = comma-separated technologies. "projects[].url" = "" if absent.
+  "projects[].description" = 1-sentence purpose, no pronouns, unique from bullets.
+  "projects[].bullets" = 3–5 bullets, must not restate experience bullets.
+- EDUCATION — handle every layout: institution-as-heading + degree-as-bullet, degree-first,
+  institution-first, all-inline, multiple degrees at one institution (separate entries),
+  Class X/XII board entries, pursuing/expected, short degree forms (B.E, B.Sc, M.Sc, MCA, BCA,
+  MBA, Ph.D, Diploma). "education[].degree" = full degree name including major. Never treat a
+  school/university name as the degree. "education[].institution" = full name as written.
+  "education[].year" — apply 3-tier rule, scanning the entire education block (year can appear
+  anywhere). "education[].cgpa" — apply 3-tier rule (Tier 1 only — never infer grades). Normalize:
+  "7.0 GPA"→"GPA: 7.0", "SGPA - 7.4 (1st Sem)"→"SGPA: 7.4 (1st Sem)" (preserve semester suffix),
+  "CGPA: 7.0 GPA"→"CGPA: 7.0" (strip duplicate label), "8.5/10"→"CGPA: 8.5/10", "78.3%"→
+  "Percentage: 78.3%", "8.44" (no label)→"CGPA: 8.44". Never convert between SGPA/CGPA/GPA/
+  Percentage. Never duplicate labels. Use "" if no score present.
+  "education[].bullets" = ALL sub-items under this entry (honors, coursework, achievements,
+  awards, scholarships, club memberships) — use [] only if genuinely none exist.
+- "certifications[].name" exact as written. "issuer" = "" if not present. "duration" — 3-tier rule.
+- "additional" items use object format: {{"name":"","description":"","duration":""}}. "duration" —
+  3-tier rule, "" if no context.
 
-  TIER 2 — INFERRED FROM CONTEXT (use ONLY when strong evidence exists):
-    Date is NOT written for this entry BUT can be confidently derived from surrounding resume context.
-    Strong context signals (ALL must be true to infer):
-      ✓ Project is explicitly described as part of an internship/job role that HAS dates → use those dates
-      ✓ Project description mentions the company/internship period → use that period
-      ✓ Certification is clearly tied to a dated training program mentioned elsewhere
-      ✓ Education year can be derived from a "Batch of YYYY" or "Passout YYYY" written elsewhere
-    → Store with "~" prefix to signal inference: e.g. "~Aug 2022 – Dec 2023"
-    → NEVER infer just because two entries are near each other on the page.
-    → NEVER infer from education dates for a project unless project explicitly says "college project" + education has clear dates.
-
-  TIER 3 — UNKNOWN (no context at all):
-    No date written, no strong context to infer from.
-    → Store "" (empty string). The DOCX template will silently skip it.
-    → NEVER guess. NEVER copy a random date from elsewhere.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-── CONTACT ──
-- "contact.*" = extract exactly as written. Use "" not null for missing fields. Never invent email, phone, or URLs.
-
-── SUMMARY ──
-- "summary" = COPY THE PROFESSIONAL SUMMARY FROM PART 1 VERBATIM — every word, every sentence, nothing omitted.
-  ⚠️ DO NOT rewrite, shorten, paraphrase, or summarize. The 2–3 sentence / 80-word guidance was for Part 1 ONLY.
-  ⚠️ DO NOT stop after the first sentence — copy ALL sentences from Part 1's Professional Summary.
-  ⚠️ If Part 1 has 3 sentences, this field MUST contain all 3 sentences.
-  ⚠️ STRICT LIMIT: "summary" must contain ONLY the Professional Summary — maximum 3 sentences.
-     NEVER include skills, projects, education, certifications, job titles, or any other section content here.
-     If the resume is messy or unstructured, extract ONLY the summary sentences — do NOT dump the entire resume here.
-     If no clear summary exists in the resume → write a clean 2–3 sentence summary from the candidate's experience.
-  ⚠️ NEVER include "### 🎯 Suggested Job Titles" or any job title suggestions in this field.
-  NO pronouns anywhere. No "I", "My", "As a", "I am", "I have".
-  MUST be a single unbroken string — no newlines inside the JSON value.
-  ✓ Correct: 2–3 sentences about the candidate's role, skills, and value proposition.
-  ✗ Wrong: dumping the entire resume content, skills list, or job titles into this field.
-
-── SKILLS ──
-- "skills" = flat array of individual skill strings. Minimum 8. No duplicates. Only extract skills actually present in resume.
-- "soft_skills" = professional competency phrases. Must NOT duplicate items in "skills".
-
-── EXPERIENCE ──
-- "experience" = if NO work experience AND no internships → set to [] (empty array). Never populate with placeholder roles.
-  If only internships exist → include them with role/company/duration/bullets. Label role accurately (e.g. "Intern").
-- "experience[].role" = exact job title as written. Never upgrade title (e.g. do NOT change "Intern" to "Developer").
-- "experience[].company" = exact company name as written.
-- "experience[].duration" = Apply 3-TIER DATE INFERENCE RULE.
-    SCAN THE ENTIRE EXPERIENCE BLOCK for date patterns near this role (dates can appear above, below, or beside).
-    Accepted formats: "Aug 2021 – Dec 2024", "August 2021 - December 2024", "Jan 2023 – Present",
-    "2022–2023", "Feb 2024 - Nov 2025", month+year ranges, standalone years.
-    If end date says "Present" / "present" / "current" / "Ongoing" → store as written (e.g. "Dec 2024 – Present").
-    Tier 1: date found → store exactly. Tier 2: infer with "~" prefix. Tier 3: store "".
-- "experience[].description" = 1-sentence role scope, unique from bullets. NO pronouns. NO "As a". NO "I".
-    ✓ "Full-stack role focused on building responsive web applications using React.js and Node.js."
-    ✗ "As a developer, I was responsible for building web applications."
-- "experience[].bullets" = 3–5 bullets each. Strong past-tense verb + task + tech + quantified impact. NO pronouns. NO "I". NO "As a".
-
-── PROJECTS ──
-- "projects[].name" = exact project name as written.
-- "projects[].duration" = Apply 3-TIER DATE INFERENCE RULE.
-    SCAN THE ENTIRE PROJECT BLOCK for any date/time pattern near this project.
-    Accepted formats: "Mar 2025 – Aug 2025", "October 2021 – December 2021", "3 months", "45 days",
-    "Jan 2024", standalone year "2023", any time range written near the project.
-    Tier 1: date found → store exactly as written (e.g. "October 2021 – December 2021").
-    Tier 2: project is explicitly described as part of a dated internship/job → infer with "~" prefix
-            e.g. project says "built during internship at XYZ (Aug 2022–Dec 2023)" → "~Aug 2022 – Dec 2023"
-    Tier 3: no date, no context → store "".
-- "projects[].tech_stack" = comma-separated technologies mentioned for this project.
-- "projects[].url" = project URL/GitHub link if present. Use "" if not present.
-- "projects[].description" = 1-sentence project purpose. NO pronouns. NO "I built". NO "As a". Unique, not repeated in bullets.
-    ✓ "Real-time food delivery platform built with React.js, Node.js, and MongoDB."
-    ✗ "I built a food delivery platform..."
-- "projects[].bullets" = 3–5 bullets. Must NOT restate experience bullets. Strong past-tense verb + task + tech + impact. NO pronouns.
-
-── EDUCATION ──
-⚠️ EDUCATION IS THE MOST FORMAT-VARIABLE SECTION. Handle every layout — never skip an entry.
-
-LAYOUT RECOGNITION RULES (apply before extracting any field):
-
-  A) Institution-as-heading + degree-as-bullet (VERY COMMON in Indian resumes):
-     "Behala Aryya Vidyamandir(H.S)  2019-2021"   ← this is the INSTITUTION
-     "● WBCHSE (Class XII)"                         ← this is the DEGREE
-     → degree = "WBCHSE (Class XII)", institution = "Behala Aryya Vidyamandir(H.S)", year = "2019-2021"
-     NEVER skip this entry. NEVER treat the institution line as the degree.
-
-  B) Degree-first + institution on next line:
-     "B.Tech Computer Science"  → degree
-     "XYZ University"           → institution
-
-  C) Institution-first + degree on next line:
-     "XYZ University"                          → institution
-     "Bachelor of Technology in CSE"           → degree
-
-  D) All inline (comma or pipe separated):
-     "B.Tech CSE, ABC University, 2024, CGPA 8.5" → parse all fields from single line
-
-  E) Multiple degrees at same institution → create SEPARATE education entries for each
-
-  F) Class X / Class XII board entries:
-     "XYZ School | CBSE | Class X | 2018 | 95%"
-     → degree = "CBSE Class X", institution = "XYZ School", year = "2018", cgpa = "Percentage: 95%"
-     "CBSE - Class X (2019) — 91%" (no school name)
-     → degree = "CBSE Class X", institution = "", year = "2019", cgpa = "Percentage: 91%"
-
-  G) Pursuing / Expected:
-     "Currently pursuing B.Tech (CSE) from XYZ University, Expected 2026"
-     → degree = "B.Tech (CSE)", institution = "XYZ University", year = "Expected 2026"
-
-  H) Short degree forms — ALL valid, extract as-is:
-     B.E, B.Sc, M.Sc, MCA, BCA, MBA, Ph.D, Diploma, Polytechnic, ITI
-
-- "education[].degree" = extract the FULL degree name including type AND major/subject.
-    If degree type and subject are on separate lines → combine them (e.g. "B.SC" + "Computer Science" → "B.SC Computer Science").
-    If degree is in a bullet under the institution → extract from the bullet (Layout A above).
-    NEVER leave blank if any degree-related text exists in the education block.
-    NEVER treat a school/university name as the degree.
-- "education[].institution" = university/college/school name exactly as written. Full name, not abbreviation.
-    If institution appears as a heading above the degree bullet → still extract it correctly (Layout A).
-- "education[].year" = Apply 3-TIER DATE INFERENCE RULE.
-    SCAN THE ENTIRE EDUCATION BLOCK — year can appear ANYWHERE (above, below, beside, far from degree line).
-    Accepted formats: "October 2021 - July 2024", "2021–2024", "Oct 2021 – Jul 2024",
-    "Batch: 2024", "Passout: 2024", "Expected: 2025", "graduating 2025", standalone "2024", "May 2023",
-    dates below CGPA line, dates to the right of institution, dates on completely separate lines.
-    Tier 1: date found → store FULL range exactly as written (e.g. "October 2021 - July 2024").
-    Tier 2: "Batch YYYY" or "Passout YYYY" found elsewhere in resume clearly tied to this degree → infer with "~" prefix.
-    Tier 3: absolutely zero date/year exists anywhere → store "".
-- "education[].cgpa" = Apply 3-TIER DATE INFERENCE RULE for grade (Tier 1 only — NEVER infer grades).
-    SCAN THE ENTIRE EDUCATION BLOCK for any grade/score pattern.
-    Normalize using THESE EXACT RULES — one label only, no duplicates:
-      "7.0 GPA"              → store as "GPA: 7.0"
-      "8.2 SGPA"             → store as "SGPA: 8.2"
-      "SGPA 7.4"             → store as "SGPA: 7.4"
-      "SGPA - 7.4"           → store as "SGPA: 7.4"
-      "SGPA - 7.4 (1st Sem)" → store as "SGPA: 7.4 (1st Sem)"   ← preserve semester suffix
-      "SGPA - 7.4 (Sem 2)"   → store as "SGPA: 7.4 (Sem 2)"     ← preserve semester suffix
-      "CGPA 8.5"             → store as "CGPA: 8.5"
-      "CGPA - 8.44"          → store as "CGPA: 8.44"
-      "CGPA: 7.0 GPA"        → store as "CGPA: 7.0"   ← strip the trailing duplicate label
-      "8.5/10"               → store as "CGPA: 8.5/10"
-      "GPA: 3.9/4.0"         → store as "GPA: 3.9/4.0"
-      "Percentage - 78.3%"   → store as "Percentage: 78.3%"
-      "Percentage - 87.4%"   → store as "Percentage: 87.4%"
-      "78.3%"                → store as "Percentage: 78.3%"
-      "87%"                  → store as "Percentage: 87%"
-      "87.4 percent"         → store as "Percentage: 87.4%"
-      "8.44" (no label)      → store as "CGPA: 8.44"
-    ⚠️ DASH FORMAT RULE: "LABEL - value" and "LABEL: value" are the same — both are valid.
-       "SGPA - 7.4 (1st Sem)" is a valid SGPA score — NEVER drop it, NEVER treat dash as a separator meaning absence of score.
-    NEVER convert SGPA to CGPA. NEVER convert GPA to CGPA. NEVER convert percentage to CGPA.
-    NEVER produce duplicate labels like "CGPA: 7.0 GPA". Use "" if no score present.
-- "education[].bullets" = ALL bullet points, sub-items, or indented details written under this education entry in the original resume. This includes (but is NOT limited to): honors, distinctions, relevant coursework, industrial training, achievements, extracurriculars, notable projects, awards, scholarships, club memberships, or any other detail the candidate listed as a bullet/sub-point beneath this degree. Do NOT limit to just cgpa — capture everything written there. Rewrite each bullet with a strong action-oriented phrase if it is vague; preserve factual content exactly. Use [] ONLY if there are genuinely zero bullet points/sub-items under this education entry in the original resume.
-
-── CERTIFICATIONS ──
-- "certifications[].name" = exact certification name as written.
-- "certifications[].issuer" = issuing organization as written. Use "" if not present.
-- "certifications[].duration" = Apply 3-TIER DATE INFERENCE RULE.
-    SCAN THE ENTIRE CERTIFICATION BLOCK for any date near this certification.
-    Accepted formats: "July 2025 – October 2025", "Oct 2024", "2023", month+year, date ranges.
-    Tier 1: date found → store exactly as written (full range if present).
-    Tier 2: certification is explicitly tied to a dated training/internship program → infer with "~" prefix.
-    Tier 3: no date, no context → store "".
-
-── ADDITIONAL ──
-- "additional" items MUST use object format: {{"name":"","description":"","duration":""}}.
-- "additional[].duration" = Apply 3-TIER DATE INFERENCE RULE. Use "" if no context exists.
-
-RESUME TEXT:
-\"\"\"{text[:8000]}\"\"\"
+RESUME TEXT TO EXTRACT:
+\"\"\"{optimized_resume[:8000]}\"\"\"
 """
 
-    # ── Smart throttle: if only 1 admin key is healthy, give it breathing room ──
     try:
-        from llm_manager import load_groq_api_keys, get_healthy_keys
-        _all_keys = load_groq_api_keys()
-        _healthy  = get_healthy_keys(_all_keys)
-        if len(_healthy) <= 1:
-            time.sleep(3)   # 3-second pause to let the per-minute window recover
+        json_out = call_llm(prompt, session=st.session_state, model=DEFAULT_MODEL,
+                             task_type="json_extraction")
     except Exception:
-        pass
+        json_out = ""
 
-    try:
-        raw_response = call_llm(prompt, session=st.session_state)
-    except Exception as _e:
-        raw_response = ""
-
-    # ── Guard: if LLM returned an error string or empty, return safe fallback ──
     _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
-    if not raw_response or any(raw_response.strip().startswith(p) for p in _ERROR_PREFIXES):
-        # Return original text as-is + empty JSON + failure flag
-        # Callers MUST check the 3rd value to know the rewrite did not happen
-        return text, "", False
+    if not json_out or any(json_out.strip().startswith(p) for p in _ERROR_PREFIXES):
+        return ""
 
-    # ── Parse the two sections out of the combined response ──────────────
-    rewritten_text = ""
-    json_str = ""
+    text = json_out.strip()
+    text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s*```$', '', text).strip()
+    start, end = text.find('{'), text.rfind('}')
+    if start != -1 and end != -1:
+        text = text[start:end + 1]
 
-    rewrite_match = re.search(
-        r"===REWRITTEN_RESUME_START===(.*?)===REWRITTEN_RESUME_END===",
-        raw_response, re.DOTALL
-    )
-    json_match = re.search(
-        r"===JSON_START===(.*?)===JSON_END===",
-        raw_response, re.DOTALL
-    )
+    # ── Truncation detection + controlled repair (Part 9 / Part 10) ─────────
+    data, was_valid = _try_parse_json(text)
+    if not was_valid:
+        repaired, did_repair = _attempt_json_repair(text)
+        if did_repair:
+            text = repaired
+        else:
+            # One bounded retry only — never loop forever, never rotate keys
+            # for what is a generation/formatting problem.
+            try:
+                retry_out = call_llm(prompt, session=st.session_state, model=DEFAULT_MODEL,
+                                      task_type="json_extraction")
+            except Exception:
+                retry_out = ""
+            if retry_out and not any(retry_out.strip().startswith(p) for p in _ERROR_PREFIXES):
+                retry_text = retry_out.strip()
+                retry_text = re.sub(r'^```(?:json)?\s*', '', retry_text, flags=re.IGNORECASE)
+                retry_text = re.sub(r'\s*```$', '', retry_text).strip()
+                r_start, r_end = retry_text.find('{'), retry_text.rfind('}')
+                if r_start != -1 and r_end != -1:
+                    retry_text = retry_text[r_start:r_end + 1]
+                _, retry_valid = _try_parse_json(retry_text)
+                if retry_valid:
+                    text = retry_text
+                else:
+                    repaired2, did_repair2 = _attempt_json_repair(retry_text)
+                    if did_repair2:
+                        text = repaired2
 
-    if rewrite_match:
-        rewritten_text = rewrite_match.group(1).strip()
-    else:
-        # fallback: use everything before JSON block
-        rewritten_text = raw_response.split("===JSON_START===")[0].strip()
-
-    if json_match:
-        json_str = json_match.group(1).strip()
-    else:
-        # fallback: try to extract JSON object from anywhere in the response
-        json_fallback = re.search(r'\{[\s\S]*\}', raw_response)
-        json_str = json_fallback.group(0).strip() if json_fallback else ""
-
-    # ── Summary rescue: patch JSON summary from Part 1 if LLM truncated it ──
-    # If the JSON summary is shorter than Part 1's summary, replace it with
-    # the full Part 1 version. Wrapped in try/except — never breaks main flow.
-    try:
-        # Strip job title suggestions block from rewritten_text before rescue
-        # so it never leaks into the JSON summary field
-        _rewritten_clean = rewritten_text
-        for _marker in ["### 🎯 Suggested Job Titles", "### Suggested Job Titles"]:
-            if _marker in _rewritten_clean:
-                _rewritten_clean = _rewritten_clean.split(_marker)[0].strip()
-                break
-
-        _summary_match = re.search(
-            r'PROFESSIONAL SUMMARY\s*\n?(.*?)(?=\n[A-Z][A-Z\s&/]{3,}\n|\Z)',
-            _rewritten_clean, re.DOTALL | re.IGNORECASE
-        )
-        if _summary_match:
-            _part1_summary = _summary_match.group(1).strip()
-            # Collapse internal newlines to single space (safe for JSON string)
-            _part1_summary = re.sub(r'\s*\n\s*', ' ', _part1_summary).strip()
-            # Strip leading punctuation artifacts (": ", "- " etc.) from Part 1 summary
-            _part1_summary = re.sub(r'^[:\-–—|•·]+\s*', '', _part1_summary).strip()
-
-            if _part1_summary and json_str:
-                _json_summary_match = re.search(
-                    r'"summary"\s*:\s*"(.*?)"(?=\s*,|\s*\})',
-                    json_str, re.DOTALL
-                )
-                if _json_summary_match:
-                    _json_summary = _json_summary_match.group(1).strip()
-                    _json_words   = len(_json_summary.split())
-                    _part1_words  = len(_part1_summary.split())
-                    # Only patch if Part 1 has meaningfully more words → truncation happened
-                    if _part1_words > _json_words + 5:
-                        _escaped = _part1_summary.replace('\\', '\\\\').replace('"', '\\"')
-                        json_str = re.sub(
-                            r'("summary"\s*:\s*)".*?"',
-                            lambda m: m.group(1) + '"' + _escaped + '"',
-                            json_str, count=1, flags=re.DOTALL
-                        )
-    except Exception:
-        pass  # Best-effort only — never break the main flow
-
-    # ── Location fallback: inject sidebar user_location into JSON when resume has none ──
-    # The LLM stores "" in contact.location when the resume has no location.
-    # report_generator._clean() then renders it as "Not Provided" in the DOCX header.
-    # If the user gave a preferred job location in the sidebar, patch it directly
-    # into the raw JSON string here so extract_resume_json picks it up correctly.
-    # This is done on the raw string (not parsed dict) to keep a single source of truth
-    # before the dict is built — avoids double-patching in two places.
-    if user_location and user_location.strip() and json_str:
+    if user_location and user_location.strip():
         try:
-            _loc_match = re.search(r'"location"\s*:\s*"([^"]*)"', json_str)
+            _loc_match = re.search(r'"location"\s*:\s*"([^"]*)"', text)
             if _loc_match:
                 _existing_loc = _loc_match.group(1).strip()
                 _is_empty = not _existing_loc or _existing_loc.lower() in (
@@ -915,20 +807,116 @@ RESUME TEXT:
                 )
                 if _is_empty:
                     _escaped_loc = user_location.strip().replace('\\', '\\\\').replace('"', '\\"')
-                    json_str = re.sub(
+                    text = re.sub(
                         r'("location"\s*:\s*)"[^"]*"',
                         lambda _m: _m.group(1) + '"' + _escaped_loc + '"',
-                        json_str, count=1
+                        text, count=1
                     )
         except Exception:
-            pass  # never break main flow
+            pass
+
+    return text
+
+
+# ── CALL C — exactly 5 job titles, nothing else ───────────────────────────────
+def _call_c_job_titles(optimized_resume: str, user_location: str) -> str:
+    """
+    Returns the formatted job-title suggestions block. Kept in the EXACT
+    output format existing callers (report_generator.py, tab1_check.py)
+    already parse via the "### 🎯 Suggested Job Titles" marker and the
+    "N. **Title** — reason" line pattern — do not change this format.
+    """
+    prompt = f"""Based ONLY on the resume below, suggest EXACTLY 5 job titles suited for a candidate in {user_location or "the candidate's region"}.
+
+Do NOT regenerate or rewrite the resume. Do NOT generate JSON. Do NOT provide explanations beyond the reason column. Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
+
+FORMAT (STRICT — follow exactly, no extra lines):
+1. **[Job Title]** — [Specific reason tied to resume evidence]
+2. **[Job Title]** — [Specific reason tied to resume evidence]
+3. **[Job Title]** — [Specific reason tied to resume evidence]
+4. **[Job Title]** — [Specific reason tied to resume evidence]
+5. **[Job Title]** — [Specific reason tied to resume evidence]
+
+RESUME:
+\"\"\"{optimized_resume[:6000]}\"\"\"
+"""
+
+    try:
+        titles_out = call_llm(prompt, session=st.session_state, model=DEFAULT_MODEL,
+                               task_type="job_titles")
+    except Exception:
+        titles_out = ""
+
+    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+    if not titles_out or any(titles_out.strip().startswith(p) for p in _ERROR_PREFIXES):
+        return ""
+
+    return titles_out.strip()
+
+
+def rewrite_and_optimize_resume(text, replacement_mapping, user_location):
+    """
+    Orchestrates THREE small, focused LLM calls instead of one giant call —
+    see Part 3 of the migration spec:
+
+      CALL A: original resume + bias mapping  -> optimized plain-text resume
+      CALL B: optimized resume (no mapping)    -> strict JSON
+      CALL C: optimized resume (no mapping)    -> exactly 5 job titles
+
+    Each call requests ONE output only, using the task-specific reasoning
+    effort / token budget in llm_manager.GPT_OSS_CONFIG. This keeps GPT-OSS's
+    completion budget (reasoning + visible tokens) small and focused per
+    call instead of forcing one response to cover a rewrite + JSON + job
+    titles simultaneously, which is what caused truncated/incomplete output
+    under Llama-era prompt sizing.
+
+    Returns the same 3-tuple shape as before so existing callers
+    (rewrite_text_with_llm, optimize_resume_to_json, rewrite_and_highlight,
+    tab1_check.py, report_generator.py) do not need to change:
+      - rewritten_text : plain-text resume + appended job-title block (for UI)
+      - json_str       : strict JSON object (for DOCX generation)
+      - rewrite_ok     : bool — False when the LLM was unavailable/failed and
+                          the original text was returned unchanged
+    """
+    text = _normalize_allcaps_lines(text)
+
+    # ── CALL A ────────────────────────────────────────────────────────────
+    optimized_resume = _call_a_rewrite_resume(text, replacement_mapping, user_location)
+    if not optimized_resume or not _looks_like_complete_resume(optimized_resume):
+        # LLM unavailable, or the output was too short/malformed to be a real
+        # rewrite (likely a truncated/exhausted-budget response) — return the
+        # original text untouched rather than a corrupted partial rewrite.
+        return text, "", False
+
+    # ── CALL B + CALL C ───────────────────────────────────────────────────
+    # Independent of each other (both only need the Call A output), so they
+    # can run concurrently to keep latency comparable to the old single-call
+    # design despite now being 3 API calls instead of 1.
+    json_str = ""
+    job_titles_block = ""
+    with ThreadPoolExecutor(max_workers=2) as _pool:
+        _fut_json = _pool.submit(_call_b_extract_json, optimized_resume, user_location)
+        _fut_titles = _pool.submit(_call_c_job_titles, optimized_resume, user_location)
+        try:
+            json_str = _fut_json.result()
+        except Exception:
+            json_str = ""
+        try:
+            job_titles_block = _fut_titles.result()
+        except Exception:
+            job_titles_block = ""
+
+    # ── Recombine into the exact format existing callers expect ─────────────
+    rewritten_text = optimized_resume
+    if job_titles_block:
+        rewritten_text = (
+            optimized_resume.rstrip()
+            + "\n\n### 🎯 Suggested Job Titles (Based on Resume)\n\n"
+            + job_titles_block
+        )
 
     # ── Plain-text rewrite location patch ────────────────────────────────────
     # Only inject sidebar location when the resume genuinely has NO location.
-    # Two sub-cases:
-    #   1. Pipe slot exists but is empty/Not Provided  → replace with sidebar value
-    #   2. Location field entirely absent from header  → insert before first URL
-    # IMPORTANT: never fire if the header already contains a real location value.
     if user_location and user_location.strip() and rewritten_text:
         try:
             _header_break = rewritten_text.find('\n\n')
@@ -936,7 +924,6 @@ RESUME TEXT:
             _header       = rewritten_text[:_header_end]
             _loc_val      = user_location.strip()
 
-            # Sub-case 1: slot exists but is explicitly empty or "Not Provided"
             _LOC_EMPTY = re.compile(r'\|\s*(Not Provided|N/A|n/a|)\s*(\|)', re.IGNORECASE)
             if _LOC_EMPTY.search(_header):
                 _header = _LOC_EMPTY.sub(
@@ -944,30 +931,19 @@ RESUME TEXT:
                     _header, count=1
                 )
                 rewritten_text = _header + rewritten_text[_header_end:]
-
-            # Sub-case 2: location entirely absent from header.
-            # Uses smart detection — checks all fields for non-URL/email/phone text,
-            # checks field[0] for embedded location (e.g. "Kiran Rao, Bangalore"),
-            # and skips injection if the header isn't pipe-structured at all.
             else:
                 def _has_location_in_header(hdr):
-                    # If fewer than 3 original pipe chars → not a real pipe header → skip
                     if hdr.count('|') < 3:
-                        return True  # treat as "has location" to prevent unsafe injection
-                    # Normalize newlines within header so multi-line headers split correctly
+                        return True
                     hdr_norm    = re.sub(r'\n', ' | ', hdr)
                     pipe_fields = [f.strip() for f in hdr_norm.split('|')]
-                    # Too few fields after normalization → skip
                     if len(pipe_fields) < 4:
                         return True
-                    # Check field[0] for embedded location: "Kiran Rao, Bangalore"
-                    # Heuristic: comma present AND text after comma is 2+ alpha chars
                     f0 = pipe_fields[0]
                     if ',' in f0:
                         _after = f0.split(',', 1)[1].strip()
                         if len(_after) >= 2 and re.search(r'[a-zA-Z]', _after):
                             return True
-                    # Check fields from index 2 onward for any non-URL/email/phone text
                     for f in pipe_fields[2:]:
                         if not f:
                             continue
@@ -977,7 +953,7 @@ RESUME TEXT:
                             continue
                         if re.match(r'^[\d\s\+\-\(\)\.]{7,}$', f):
                             continue
-                        return True  # found a real text field → location present
+                        return True
                     return False
 
                 if not _has_location_in_header(_header):
@@ -1191,6 +1167,21 @@ def extract_resume_json(llm_response: str) -> dict:
     text = text[start:end + 1]
     try:
         data = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        # ── Truncation-aware repair before giving up ─────────────────────
+        # extract_resume_json() is also called with JSON that already went
+        # through _call_b_extract_json()'s own repair pass, but is called
+        # standalone from other sites too (e.g. cached/legacy responses) —
+        # so repair defensively here as well rather than only in one place.
+        repaired, did_repair = _attempt_json_repair(text)
+        if did_repair:
+            try:
+                data = json.loads(repaired)
+            except (json.JSONDecodeError, ValueError):
+                return EMPTY
+        else:
+            return EMPTY
+    try:
         # Ensure all top-level keys exist
         for key in EMPTY:
             if key not in data:
@@ -2982,12 +2973,13 @@ Suggestions:
 - <Actionable suggestion 5 with example if helpful>
 
 ---
-{text}
+{reduce_resume_for_prompt(text, 6000)}
 ---
 """
 
     try:
-        response = call_llm(grammar_prompt, session=st.session_state).strip()
+        response = call_llm(grammar_prompt, session=st.session_state,
+                             model=DEFAULT_MODEL, task_type="quick_extraction").strip()
     except Exception:
         response = ""
 
@@ -3280,7 +3272,8 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _r = call_llm(_resume_domain_prompt, session=st.session_state).strip()
+            _r = call_llm(_resume_domain_prompt, session=st.session_state,
+                          model=DEFAULT_MODEL, task_type="quick_extraction").strip()
             if _r in _valid_domains:
                 st.session_state[_resume_cache_key] = _r
             else:
@@ -3395,7 +3388,8 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _j = call_llm(_jd_domain_prompt, session=st.session_state).strip()
+            _j = call_llm(_jd_domain_prompt, session=st.session_state,
+                          model=DEFAULT_MODEL, task_type="quick_extraction").strip()
             if _j in _valid_domains:
                 st.session_state[_jd_cache_key] = _j
             else:
@@ -3681,7 +3675,8 @@ SCORING SCALE for language ({lang_weight} pts max):
    
    
     try:
-        ats_result = call_llm(prompt, session=st.session_state).strip()
+        ats_result = call_llm(prompt, session=st.session_state,
+                               model=DEFAULT_MODEL, task_type="ats_analysis").strip()
     except Exception:
         ats_result = ""
 
@@ -4075,8 +4070,10 @@ def create_chain(vectorstore):
     groq_api_key = healthy[0]
     # ✅ FIX: do NOT increment usage before the call — only after success
 
-    # ✅ Create the ChatGroq object
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, groq_api_key=groq_api_key)
+    # ✅ Create the ChatGroq object — model comes from the ONE centralized
+    #    config in llm_manager.py (DEFAULT_MODEL) instead of being
+    #    hardcoded here, so switching models later is a one-line change.
+    llm = ChatGroq(model=DEFAULT_MODEL, temperature=0, groq_api_key=groq_api_key)
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
     try:
