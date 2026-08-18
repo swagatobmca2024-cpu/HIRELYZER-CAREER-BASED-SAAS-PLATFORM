@@ -59,6 +59,77 @@ _QUOTA_SIGNALS    = ["quota", "rate limit", "429", "too many requests",
 _DEAD_KEY_SIGNALS = ["invalid api key", "unauthorized", "401", "403",
                      "api key", "authentication", "permission denied",
                      "invalid_api_key"]
+# 413 → payload too large. This is an INPUT problem, not a key problem.
+# Never rotate keys, never mark quota/dead, never retry the same prompt as-is.
+_PAYLOAD_TOO_LARGE_SIGNALS = [
+    "413", "payload too large", "request too large", "too large",
+    "content too large", "request entity too large",
+]
+# Output got cut off because the completion budget (reasoning + visible
+# tokens for GPT-OSS) ran out. A new key will NOT fix this — it is a
+# generation/output problem, never a key-health problem.
+_LENGTH_SIGNALS = ["length", "max_tokens", "max_completion_tokens",
+                    "context_length_exceeded", "finish_reason=length"]
+
+# ── Centralized model configuration ───────────────────────────────────────────
+# ONE place to change the active model. Nothing else in the codebase should
+# hardcode a model string — everything reads DEFAULT_MODEL or GPT_OSS_CONFIG.
+DEFAULT_MODEL = "openai/gpt-oss-120b"
+
+# GPT-OSS is a REASONING model: reasoning tokens + visible output tokens share
+# ONE completion budget. Do not set one giant global max_tokens — pick a small,
+# task-appropriate reasoning effort + output budget for each kind of call.
+#
+#   reasoning_effort : "none" | "low" | "medium" | "high"
+#                       ("none" disables reasoning entirely — use for
+#                        deterministic extraction/formatting tasks so 100% of
+#                        the completion budget goes to visible output.)
+#   max_tokens        : ceiling passed to ChatGroq — covers reasoning + output.
+GPT_OSS_CONFIG = {
+    # Call A — rewrite the resume into ATS-optimised plain text ONLY.
+    "resume_rewrite": {
+        "reasoning_effort": "low",
+        "max_tokens": 2200,
+    },
+    # Call B — turn the already-rewritten resume into strict JSON ONLY.
+    # Deterministic extraction/formatting task → no reasoning needed at all,
+    # so the full budget goes to visible JSON output.
+    "json_extraction": {
+        "reasoning_effort": "none",
+        "max_tokens": 2200,
+    },
+    # Call C — exactly 5 job titles. Tiny, deterministic.
+    "job_titles": {
+        "reasoning_effort": "none",
+        "max_tokens": 400,
+    },
+    # ATS scoring narrative — benefits from reasoning, larger structured output.
+    "ats_analysis": {
+        "reasoning_effort": "medium",
+        "max_tokens": 2400,
+    },
+    # AI Interview Coach evaluation.
+    "interview_evaluation": {
+        "reasoning_effort": "medium",
+        "max_tokens": 1500,
+    },
+    # Small deterministic classification/formatting helpers (domain
+    # detection, format-check JSON, grammar score, cover letters, etc).
+    "quick_extraction": {
+        "reasoning_effort": "none",
+        "max_tokens": 900,
+    },
+    # Fallback for any call site that doesn't specify a task_type.
+    "default": {
+        "reasoning_effort": "low",
+        "max_tokens": 1500,
+    },
+}
+
+
+def get_task_config(task_type: str) -> dict:
+    """Look up the GPT-OSS config for a task, falling back to 'default'."""
+    return GPT_OSS_CONFIG.get(task_type, GPT_OSS_CONFIG["default"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IN-MEMORY STATE  (module-level, shared across all threads in one worker)
@@ -375,13 +446,21 @@ def load_groq_api_keys() -> List[str]:
 
 
 # ── Prompt hashing ────────────────────────────────────────────────────────────
-def hash_prompt(prompt: str, model: str) -> str:
-    return hashlib.sha256(f"{model}|{prompt}".encode("utf-8")).hexdigest()
+def hash_prompt(prompt: str, model: str, task_type: str = "default") -> str:
+    """
+    Cache key includes prompt + model + the generation config that governs
+    output shape (reasoning effort / token budget). This guarantees a cached
+    Llama response is never returned for a GPT-OSS request, and that two
+    task types sharing similar prompt text never collide either.
+    """
+    cfg = get_task_config(task_type)
+    sig = f"{model}|{task_type}|{cfg.get('reasoning_effort')}|{cfg.get('max_tokens')}"
+    return hashlib.sha256(f"{sig}|{prompt}".encode("utf-8")).hexdigest()
 
 
 # ── Cache R/W ─────────────────────────────────────────────────────────────────
-def get_cached_response(prompt: str, model: str) -> Optional[str]:
-    key    = hash_prompt(prompt, model)
+def get_cached_response(prompt: str, model: str, task_type: str = "default") -> Optional[str]:
+    key    = hash_prompt(prompt, model, task_type)
     cutoff = get_utc_now() - timedelta(hours=CACHE_EXPIRY_HOURS)
     try:
         row = _execute(
@@ -402,8 +481,8 @@ def get_cached_response(prompt: str, model: str) -> Optional[str]:
     return None
 
 
-def set_cached_response(prompt: str, model: str, response: str):
-    key = hash_prompt(prompt, model)
+def set_cached_response(prompt: str, model: str, response: str, task_type: str = "default"):
+    key = hash_prompt(prompt, model, task_type)
     try:
         _execute(
             """
@@ -467,9 +546,16 @@ def clear_key_failure(api_key: str):
 def _classify_error(error: Exception) -> str:
     """
     Returns:
-        'quota'     — rate limited → 60-min cooldown
-        'dead'      — bad/invalid key → 5-min cooldown
-        'transient' — network blip / server 500 / timeout → do NOT touch the key
+        'quota'              — rate limited → 60-min cooldown, rotate key
+        'dead'                — bad/invalid key → 5-min cooldown, rotate key
+        'payload_too_large'   — 413: the REQUEST is too big. Never a key
+                                 problem — do NOT rotate, do NOT cooldown the
+                                 key, do NOT retry the same prompt as-is.
+        'length'               — completion budget (reasoning + output) ran
+                                 out before finishing. A new key will not
+                                 produce more output — never rotate for this.
+        'transient'            — network blip / server 500 / timeout → do NOT
+                                 touch the key, just try the next one.
     """
     msg = str(error).lower()
 
@@ -487,10 +573,14 @@ def _classify_error(error: Exception) -> str:
         except Exception:
             pass
 
+    if status_code == 413 or any(s in msg for s in _PAYLOAD_TOO_LARGE_SIGNALS):
+        return "payload_too_large"
     if status_code == 429 or any(s in msg for s in _QUOTA_SIGNALS):
         return "quota"
     if status_code in (401, 403) or any(s in msg for s in _DEAD_KEY_SIGNALS):
         return "dead"
+    if any(s in msg for s in _LENGTH_SIGNALS):
+        return "length"
     return "transient"
 
 
@@ -609,18 +699,90 @@ def _pick_start_index(n: int) -> int:
     return idx
 
 
+class LengthFinishError(Exception):
+    """Raised when the model stopped because its completion budget
+    (reasoning + visible output for GPT-OSS) ran out, not because of an
+    API/key error. Classified as 'length' — never rotates keys."""
+    pass
+
+
+def _build_chat_groq(model: str, api_key: str, temperature: float, task_type: str):
+    """
+    Construct a ChatGroq client with the task-appropriate reasoning effort
+    and output-token budget from GPT_OSS_CONFIG.
+
+    reasoning_effort support varies by installed langchain-groq version:
+      - Newer versions accept it as a first-class constructor kwarg.
+      - Some versions only forward it if passed as part of model_kwargs.
+    We try the documented first-class kwarg first and fall back gracefully
+    so this never hard-crashes on an older pinned version. Non-GPT-OSS
+    models (which don't support reasoning_effort) simply skip the field.
+    """
+    cfg = get_task_config(task_type)
+    max_tokens = cfg.get("max_tokens")
+    reasoning_effort = cfg.get("reasoning_effort")
+    is_gpt_oss = "gpt-oss" in (model or "").lower()
+
+    base_kwargs = dict(model=model, temperature=temperature, groq_api_key=api_key)
+    if max_tokens:
+        base_kwargs["max_tokens"] = max_tokens
+
+    if is_gpt_oss and reasoning_effort:
+        try:
+            return ChatGroq(**base_kwargs, reasoning_effort=reasoning_effort)
+        except TypeError:
+            pass
+        try:
+            return ChatGroq(**base_kwargs, model_kwargs={"reasoning_effort": reasoning_effort})
+        except TypeError:
+            pass
+        # Installed langchain-groq version supports neither path — proceed
+        # without reasoning_effort rather than crashing the whole request.
+        return ChatGroq(**base_kwargs)
+
+    return ChatGroq(**base_kwargs)
+
+
 # ── Single LLM call ───────────────────────────────────────────────────────────
-def try_call_llm(prompt: str, api_key: str, model: str, temperature: float) -> str:
-    llm = ChatGroq(model=model, temperature=temperature, groq_api_key=api_key)
-    return llm.invoke(prompt).content
+def try_call_llm(
+    prompt: str,
+    api_key: str,
+    model: str,
+    temperature: float,
+    task_type: str = "default",
+) -> str:
+    llm = _build_chat_groq(model, api_key, temperature, task_type)
+    ai_message = llm.invoke(prompt)
+    content = ai_message.content or ""
+
+    # ── Detect completion-budget truncation (separate from API errors) ──────
+    finish_reason = None
+    try:
+        meta = getattr(ai_message, "response_metadata", None) or {}
+        finish_reason = meta.get("finish_reason") or meta.get("stop_reason")
+        if not finish_reason:
+            gen_info = getattr(ai_message, "generation_info", None) or {}
+            finish_reason = gen_info.get("finish_reason")
+    except Exception:
+        pass
+
+    if finish_reason == "length" and not content.strip():
+        # Budget exhausted with literally nothing visible returned.
+        raise LengthFinishError(
+            f"finish_reason=length — completion budget exhausted for task "
+            f"'{task_type}' before any visible output was produced."
+        )
+
+    return content
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 def call_llm(
     prompt: str,
     session,
-    model: str = "llama-3.3-70b-versatile",
+    model: str = DEFAULT_MODEL,
     temperature: float = 0,
+    task_type: str = "default",
 ) -> str:
     """
     Distribute LLM calls evenly across all 100 Groq keys.
@@ -633,6 +795,20 @@ def call_llm(
          - Exponential back-off with full jitter between key attempts.
          - Background threads flush usage/failure updates to Supabase.
       4. Over-budget keys tried last as graceful fallback.
+
+    413 / length handling (IMPORTANT — different from key-health errors):
+      - 413 (payload_too_large): the INPUT is too big for this request. No
+        key can fix that. We do NOT rotate, do NOT cooldown the key, and do
+        NOT retry the same oversized prompt against another key. We fail
+        fast with a controlled error so the caller can shrink the prompt.
+      - length: the completion budget (reasoning + visible tokens) ran out.
+        A different key will not produce more output. We do NOT rotate for
+        this either — we fail fast so the caller can use a smaller task or
+        adjust its GPT_OSS_CONFIG budget.
+
+    task_type selects the GPT-OSS reasoning effort + output-token budget
+    from GPT_OSS_CONFIG (see top of file) and is folded into the cache key
+    so a cached response from one task/model can never leak into another.
 
     Thread/multi-user safety:
       - _pick_start_index() uses a module-level atomic counter so concurrent
@@ -653,7 +829,7 @@ def call_llm(
             pass
 
     # ── Cache hit ─────────────────────────────────────────────────────────────
-    cached = get_cached_response(prompt, model)
+    cached = get_cached_response(prompt, model, task_type)
     if cached:
         return cached
 
@@ -668,13 +844,20 @@ def call_llm(
 
     if user_key and _key_has_tpm_headroom(user_key, estimated_tokens):
         try:
-            response = try_call_llm(prompt, user_key, model, temperature)
+            response = try_call_llm(prompt, user_key, model, temperature, task_type)
             _record_key_tokens(user_key, estimated_tokens, time.time())
-            set_cached_response(prompt, model, response)
+            set_cached_response(prompt, model, response, task_type)
             _async_increment_usage(user_key)
             return response
         except Exception as e:
             err_type = _classify_error(e)
+            if err_type == "payload_too_large":
+                # Never a key problem — fail fast, do not touch key health,
+                # do not fall through to admin key rotation with the same
+                # oversized prompt.
+                return "❌ payload_too_large: request input is too large for this call. Reduce the prompt/resume size and retry."
+            if err_type == "length":
+                return "❌ length: completion budget exhausted before producing output. Retrying with another key will not help."
             if err_type == "quota":
                 _mem_record_failure(user_key, "quota")
                 _record_key_tokens(user_key, TPM_LIMIT, time.time())
@@ -726,10 +909,10 @@ def call_llm(
             time.sleep(random.uniform(0.5, 1.5))
 
         try:
-            response = try_call_llm(prompt, key, model, temperature)
+            response = try_call_llm(prompt, key, model, temperature, task_type)
             # Success ──────────────────────────────────────────────────────────
             _record_key_tokens(key, estimated_tokens, time.time())
-            set_cached_response(prompt, model, response)
+            set_cached_response(prompt, model, response, task_type)
             _mem_increment_usage(key)
             _async_increment_usage(key)
             _mem_clear_failure(key)
@@ -738,6 +921,25 @@ def call_llm(
 
         except Exception as e:
             err_type = _classify_error(e)
+
+            # ── 413: input problem, not a key problem. Stop immediately — ──
+            # retrying across 99 more keys with the same oversized prompt
+            # just produces 99 more 413s. Fail fast with a controlled error
+            # so the caller can shrink/chunk the input and retry once.
+            if err_type == "payload_too_large":
+                return ("❌ payload_too_large: request input is too large for "
+                        "this call. Reduce the prompt/resume size and retry — "
+                        "rotating keys will not help.")
+
+            # ── length: completion budget exhausted, not a key problem. ──
+            # A different key has the same model with the same budget and
+            # will exhaust the same way. Fail fast instead of burning
+            # through every key for a guaranteed-identical outcome.
+            if err_type == "length":
+                return ("❌ length: completion budget exhausted before "
+                        "producing output for this task. Rotating keys will "
+                        "not help — use a smaller task or larger budget.")
+
             if err_type == "quota":
                 _mem_record_failure(key, "quota")
                 _record_key_tokens(key, TPM_LIMIT, time.time())
