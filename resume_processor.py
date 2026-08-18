@@ -44,7 +44,7 @@ from llm_manager import (
     call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure,
+    _async_clear_failure, DEFAULT_MODEL,
 )
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
@@ -1063,7 +1063,8 @@ RESUME TEXT:
 
     llm_ok = False
     try:
-        _raw = call_llm(llm_prompt, session=_session)
+        _raw = call_llm(llm_prompt, session=_session, model=DEFAULT_MODEL,
+                         task_type="quick_extraction")
         _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
         if _raw and not any(_raw.strip().startswith(p) for p in _ERROR_PREFIXES):
             # Strip markdown fences if LLM added them
