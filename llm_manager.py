@@ -118,7 +118,13 @@ GPT_OSS_CONFIG = {
     # ATS scoring narrative — benefits from reasoning, larger structured output.
     "ats_analysis": {
         "reasoning_effort": "medium",
-        "max_completion_tokens": 2400,
+        # Raised from 2400 → 4000: the prompt asks for 7 sections
+        # ([SEC:CANDIDATE_NAME] ... [SEC:FINAL]) and reasoning + all visible
+        # output share this one budget. [SEC:FINAL] is both the last and the
+        # largest section requested, so it was the first casualty whenever
+        # the model ran out of budget — silently truncating the response
+        # right before writing it, which _extract() then defaulted to "N/A".
+        "max_completion_tokens": 4000,
     },
     # AI Interview Coach evaluation.
     "interview_evaluation": {
@@ -814,11 +820,29 @@ def try_call_llm(
     except Exception:
         pass
 
-    if finish_reason == "length" and not content.strip():
-        # Budget exhausted with literally nothing visible returned.
-        raise LengthFinishError(
-            f"finish_reason=length — completion budget exhausted for task "
-            f"'{task_type}' before any visible output was produced."
+    if finish_reason == "length":
+        if not content.strip():
+            # Budget exhausted with literally nothing visible returned.
+            raise LengthFinishError(
+                f"finish_reason=length — completion budget exhausted for task "
+                f"'{task_type}' before any visible output was produced."
+            )
+        # ── Partial truncation ────────────────────────────────────────────
+        # The model produced *some* visible output before running out of
+        # budget — most often the case when a prompt asks for several
+        # ordered sections and the model gets cut off partway through a
+        # later one. Previously this returned silently, so callers (and
+        # regex/JSON extractors downstream) had no way to tell a truncated
+        # response from a complete one — a missing trailing section just
+        # looked like the model chose not to answer it. Content is still
+        # returned here (a partial response is more useful than none), but
+        # this must be visible so it doesn't get mistaken for a normal
+        # empty/"N/A" field further down the pipeline.
+        print(
+            f"⚠️ length: task '{task_type}' hit its completion budget after "
+            f"producing {len(content)} chars — response is likely missing "
+            f"one or more trailing sections. Consider raising "
+            f"max_completion_tokens for this task_type in GPT_OSS_CONFIG."
         )
 
     return content
