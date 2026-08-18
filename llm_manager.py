@@ -65,6 +65,14 @@ _PAYLOAD_TOO_LARGE_SIGNALS = [
     "413", "payload too large", "request too large", "too large",
     "content too large", "request entity too large",
 ]
+# 400 → bad request. Invalid/malformed request parameters (e.g. an
+# unsupported reasoning_effort value, a bad JSON body, an invalid model
+# param). This is NEVER a key-health problem — every key would hit the
+# exact same 400, so we must NOT rotate through all API keys, mark the
+# key dead, or mark quota. Fail fast with a controlled error instead.
+_BAD_REQUEST_SIGNALS = [
+    "400", "bad request", "invalid_request_error", "invalid request",
+]
 # Output got cut off because the completion budget (reasoning + visible
 # tokens for GPT-OSS) ran out. A new key will NOT fix this — it is a
 # generation/output problem, never a key-health problem.
@@ -80,49 +88,53 @@ DEFAULT_MODEL = "openai/gpt-oss-120b"
 # ONE completion budget. Do not set one giant global max_tokens — pick a small,
 # task-appropriate reasoning effort + output budget for each kind of call.
 #
-#   reasoning_effort : "none" | "low" | "medium" | "high"
-#                       ("none" disables reasoning entirely — use for
-#                        deterministic extraction/formatting tasks so 100% of
-#                        the completion budget goes to visible output.)
-#   max_tokens        : ceiling passed to ChatGroq — covers reasoning + output.
+#   reasoning_effort      : "low" | "medium" | "high"
+#                            (Groq's GPT-OSS 20B/120B API only supports these
+#                             three values — "none" is not accepted, so
+#                             deterministic extraction/formatting tasks use
+#                             "low" instead.)
+#   max_completion_tokens : ceiling passed to ChatGroq — covers reasoning +
+#                            output. (Groq's chat.completions API rejects the
+#                            legacy "max_tokens" param for these models; the
+#                            correct param name is "max_completion_tokens".)
 GPT_OSS_CONFIG = {
     # Call A — rewrite the resume into ATS-optimised plain text ONLY.
     "resume_rewrite": {
         "reasoning_effort": "low",
-        "max_tokens": 2200,
+        "max_completion_tokens": 2200,
     },
     # Call B — turn the already-rewritten resume into strict JSON ONLY.
-    # Deterministic extraction/formatting task → no reasoning needed at all,
-    # so the full budget goes to visible JSON output.
+    # Deterministic extraction/formatting task → lowest reasoning effort,
+    # so most of the budget goes to visible JSON output.
     "json_extraction": {
-        "reasoning_effort": "none",
-        "max_tokens": 2200,
+        "reasoning_effort": "low",
+        "max_completion_tokens": 2200,
     },
     # Call C — exactly 5 job titles. Tiny, deterministic.
     "job_titles": {
-        "reasoning_effort": "none",
-        "max_tokens": 400,
+        "reasoning_effort": "low",
+        "max_completion_tokens": 400,
     },
     # ATS scoring narrative — benefits from reasoning, larger structured output.
     "ats_analysis": {
         "reasoning_effort": "medium",
-        "max_tokens": 2400,
+        "max_completion_tokens": 2400,
     },
     # AI Interview Coach evaluation.
     "interview_evaluation": {
         "reasoning_effort": "medium",
-        "max_tokens": 1500,
+        "max_completion_tokens": 1500,
     },
     # Small deterministic classification/formatting helpers (domain
     # detection, format-check JSON, grammar score, cover letters, etc).
     "quick_extraction": {
-        "reasoning_effort": "none",
-        "max_tokens": 900,
+        "reasoning_effort": "low",
+        "max_completion_tokens": 900,
     },
     # Fallback for any call site that doesn't specify a task_type.
     "default": {
         "reasoning_effort": "low",
-        "max_tokens": 1500,
+        "max_completion_tokens": 1500,
     },
 }
 
@@ -454,7 +466,7 @@ def hash_prompt(prompt: str, model: str, task_type: str = "default") -> str:
     task types sharing similar prompt text never collide either.
     """
     cfg = get_task_config(task_type)
-    sig = f"{model}|{task_type}|{cfg.get('reasoning_effort')}|{cfg.get('max_tokens')}"
+    sig = f"{model}|{task_type}|{cfg.get('reasoning_effort')}|{cfg.get('max_completion_tokens')}"
     return hashlib.sha256(f"{sig}|{prompt}".encode("utf-8")).hexdigest()
 
 
@@ -551,6 +563,13 @@ def _classify_error(error: Exception) -> str:
         'payload_too_large'   — 413: the REQUEST is too big. Never a key
                                  problem — do NOT rotate, do NOT cooldown the
                                  key, do NOT retry the same prompt as-is.
+        'bad_request'          — 400: malformed/invalid request parameters
+                                 (bad reasoning_effort, bad JSON body, bad
+                                 model param, etc). Never a key problem —
+                                 every key hits the identical 400. Do NOT
+                                 rotate through other keys, do NOT mark the
+                                 key dead, do NOT mark quota. Log the actual
+                                 Groq response body and fail fast.
         'length'               — completion budget (reasoning + output) ran
                                  out before finishing. A new key will not
                                  produce more output — never rotate for this.
@@ -579,9 +598,36 @@ def _classify_error(error: Exception) -> str:
         return "quota"
     if status_code in (401, 403) or any(s in msg for s in _DEAD_KEY_SIGNALS):
         return "dead"
+    # 400 must be checked before the generic dead/length fallbacks below —
+    # an invalid request parameter is not an API-key or output-budget issue.
+    if status_code == 400 or any(s in msg for s in _BAD_REQUEST_SIGNALS):
+        return "bad_request"
     if any(s in msg for s in _LENGTH_SIGNALS):
         return "length"
     return "transient"
+
+
+def _extract_error_body(error: Exception) -> str:
+    """Best-effort extraction of the raw Groq response body for logging a
+    400 bad_request. Groq/httpx exceptions may expose this under different
+    attributes depending on SDK version, so we try the common ones."""
+    for attr in ("body", "response", "message"):
+        try:
+            val = getattr(error, attr, None)
+            if val is None:
+                continue
+            if isinstance(val, (str, bytes)):
+                return val if isinstance(val, str) else val.decode("utf-8", "replace")
+            # httpx.Response-like object
+            text = getattr(val, "text", None)
+            if text:
+                return text
+            body_attr = getattr(val, "body", None)
+            if body_attr:
+                return str(body_attr)
+        except Exception:
+            pass
+    return str(error)
 
 
 # ── Healthy key filter (in-memory first, Supabase fallback) ──────────────────
@@ -719,13 +765,15 @@ def _build_chat_groq(model: str, api_key: str, temperature: float, task_type: st
     models (which don't support reasoning_effort) simply skip the field.
     """
     cfg = get_task_config(task_type)
-    max_tokens = cfg.get("max_tokens")
+    max_completion_tokens = cfg.get("max_completion_tokens")
     reasoning_effort = cfg.get("reasoning_effort")
     is_gpt_oss = "gpt-oss" in (model or "").lower()
 
     base_kwargs = dict(model=model, temperature=temperature, groq_api_key=api_key)
-    if max_tokens:
-        base_kwargs["max_tokens"] = max_tokens
+    if max_completion_tokens:
+        # Groq's chat.completions API rejects "max_tokens" for these models —
+        # pass max_completion_tokens directly (never via model_kwargs).
+        base_kwargs["max_completion_tokens"] = max_completion_tokens
 
     if is_gpt_oss and reasoning_effort:
         try:
@@ -858,6 +906,13 @@ def call_llm(
                 return "❌ payload_too_large: request input is too large for this call. Reduce the prompt/resume size and retry."
             if err_type == "length":
                 return "❌ length: completion budget exhausted before producing output. Retrying with another key will not help."
+            if err_type == "bad_request":
+                # 400: invalid request parameters. Every key would hit the
+                # identical error — do NOT fall through to admin key
+                # rotation, do NOT mark this key dead/quota. Log the actual
+                # Groq response body and fail fast with a controlled error.
+                print(f"❌ bad_request (400) from Groq — user key: {_extract_error_body(e)}")
+                return "❌ bad_request: the request was rejected as invalid (400). Rotating keys will not help — check the request parameters."
             if err_type == "quota":
                 _mem_record_failure(user_key, "quota")
                 _record_key_tokens(user_key, TPM_LIMIT, time.time())
@@ -939,6 +994,18 @@ def call_llm(
                 return ("❌ length: completion budget exhausted before "
                         "producing output for this task. Rotating keys will "
                         "not help — use a smaller task or larger budget.")
+
+            # ── 400: invalid request parameters, not a key problem. ──
+            # Every remaining key would receive the identical 400, so we
+            # stop immediately instead of burning through the whole key
+            # pool. Log the actual Groq response body, do NOT mark the
+            # key dead, do NOT mark quota, and return a controlled error.
+            if err_type == "bad_request":
+                print(f"❌ bad_request (400) from Groq — key rotation halted: {_extract_error_body(e)}")
+                return ("❌ bad_request: the request was rejected as invalid "
+                        "(400). Rotating keys will not help — check the "
+                        "request parameters (e.g. reasoning_effort, "
+                        "max_completion_tokens, model).")
 
             if err_type == "quota":
                 _mem_record_failure(key, "quota")
