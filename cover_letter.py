@@ -521,7 +521,7 @@ def generate_cover_letter_from_resume_builder():
     from datetime import datetime
     import re
     import time
-    from llm_manager import call_llm  # Ensure you import this
+    from llm_manager import call_llm, DEFAULT_MODEL, sanitize_llm_text  # Ensure you import this
 
     name = st.session_state.get("name", "")
     job_title = st.session_state.get("job_title", "")
@@ -594,7 +594,9 @@ Each paragraph should be 2-4 sentences.
 
         # ✅ Call LLM
         with st.spinner("✉️ Crafting your cover letter... please wait"):
-            cover_letter_raw = call_llm(prompt, session=st.session_state).strip()
+            cover_letter_raw = call_llm(prompt, session=st.session_state,
+                                         model=DEFAULT_MODEL, task_type="quick_extraction").strip()
+            cover_letter_raw = sanitize_llm_text(cover_letter_raw)
 
         # ✅ Strip any header/salutation/closing lines the LLM may have added despite instructions
         import re as _cl_re
