@@ -3747,16 +3747,82 @@ SCORING SCALE for language ({lang_weight} pts max):
 """
    
    
-    try:
-        ats_result = sanitize_llm_text(
-            call_llm(prompt, session=st.session_state,
-                     model=DEFAULT_MODEL, task_type="ats_analysis").strip()
-        )
-    except Exception:
-        ats_result = ""
+    # Sections that must genuinely appear in the response for the report to
+    # be usable. CANDIDATE_NAME is deliberately excluded — it's short and
+    # rarely the thing that gets cut. These are checked in the SAME order
+    # the prompt requests them, so a cutoff partway through generation shows
+    # up as "the tail of this list is missing" rather than a random scatter.
+    _ATS_REQUIRED_TAGS = ["EDUCATION", "EXPERIENCE", "SKILLS", "LANGUAGE",
+                          "KEYWORD", "FORMAT", "FINAL"]
+
+    # ── Proactive budget scaling (not just reactive retry) ──────────────────
+    # A fixed 4000-token budget for every resume means LONG resumes are
+    # structurally the most likely to need the retry below — more input to
+    # reason about eats into the same fixed completion budget before the
+    # model even starts writing the later sections. Size the FIRST attempt's
+    # budget to the actual input instead of waiting for it to fail. Capped
+    # at 6500 — well beyond that, the honest fix is trimming input (already
+    # bounded to 4000/5000 chars above), not an ever-larger completion
+    # budget, since a bigger ask also means more TPM reserved per call.
+    _ats_input_chars = len(job_description[:4000]) + len(resume_text[:5000])
+    _ats_first_budget = 4000
+    if _ats_input_chars > 4500:
+        _ats_first_budget = min(6500, 4000 + int((_ats_input_chars - 4500) * 0.6))
+
+    def _call_ats_llm(budget_override=None):
+        try:
+            raw = call_llm(prompt, session=st.session_state,
+                            model=DEFAULT_MODEL, task_type="ats_analysis",
+                            max_completion_tokens_override=budget_override).strip()
+            return sanitize_llm_text(raw)
+        except Exception:
+            return ""
+
+    def _missing_tags(text: str) -> list:
+        """Which required [SEC:TAG] markers are absent from the raw response
+        (checked before any leak-stripping/extraction, so this reflects what
+        the model actually generated, not a downstream parsing artifact)."""
+        if not text:
+            return list(_ATS_REQUIRED_TAGS)
+        return [tag for tag in _ATS_REQUIRED_TAGS if f"[SEC:{tag}]" not in text.upper()]
+
+    ats_result = _call_ats_llm(budget_override=_ats_first_budget)
+    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+    _is_hard_failure = not ats_result or any(ats_result.startswith(p) for p in _ERROR_PREFIXES)
+
+    # ── Truncation detection + one bounded, budget-increased retry ──────────
+    # A 200 OK response that's simply missing its LATER sections (KEYWORD,
+    # FORMAT, FINAL almost always; EDUCATION/EXPERIENCE/SKILLS on worse
+    # cases) is GPT-OSS's reasoning budget running out before finishing —
+    # this is invisible to error handling entirely, since the call itself
+    # succeeded. Long resumes make this more likely: more input to reason
+    # about eats into the same fixed completion budget, leaving less room
+    # for the tail of the response. Unlike the malformed-JSON retry
+    # elsewhere in this file (which just tries again with the same budget),
+    # this retry actually RAISES the budget, since we know the mechanism —
+    # a second roll of the dice at the same size doesn't fix a budget that
+    # was genuinely too small for this resume's length.
+    if not _is_hard_failure:
+        missing = _missing_tags(ats_result)
+        if missing:
+            _ats_retry_budget = min(8000, _ats_first_budget + 2000)
+            print(f"⚠️ ATS analysis missing sections {missing} — likely truncated "
+                  f"(response length: {len(ats_result)} chars, first attempt used "
+                  f"{_ats_first_budget} tok budget for {_ats_input_chars} input chars). "
+                  f"Retrying once with {_ats_retry_budget} tok.")
+            retry_result = _call_ats_llm(budget_override=_ats_retry_budget)
+            retry_is_failure = not retry_result or any(
+                retry_result.startswith(p) for p in _ERROR_PREFIXES
+            )
+            if not retry_is_failure:
+                retry_missing = _missing_tags(retry_result)
+                if len(retry_missing) < len(missing):
+                    print(f"✅ ATS retry recovered {len(missing) - len(retry_missing)} "
+                          f"section(s) that were missing on the first attempt.")
+                    ats_result = retry_result
+                    missing = retry_missing
 
     # Guard: LLM error string or empty → return a safe fallback ATS result
-    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
     if not ats_result or any(ats_result.startswith(p) for p in _ERROR_PREFIXES):
         ats_result = (
             "**ATS Evaluation temporarily unavailable.**\n"
