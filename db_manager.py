@@ -26,7 +26,7 @@ from typing import Optional, List, Tuple, Dict, Any
 import logging
 import streamlit as st
 from threading import Lock
-from llm_manager import call_llm
+from llm_manager import call_llm, DEFAULT_MODEL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -282,7 +282,8 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            result = call_llm(prompt, session=session).strip()
+            result = call_llm(prompt, session=session, model=DEFAULT_MODEL,
+                               task_type="quick_extraction").strip()
             if result in self.VALID_DOMAINS:
                 return result
             logger.warning(f"LLM returned invalid domain '{result}' — falling back to keyword detection")
@@ -381,7 +382,8 @@ STEP 3 — RETURN ANSWER
 Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
-            raw = call_llm(prompt, session=session).strip()
+            raw = call_llm(prompt, session=session, model=DEFAULT_MODEL,
+                            task_type="quick_extraction").strip()
             llm_domain = raw if raw in self.VALID_DOMAINS else None
             if llm_domain is None:
                 logger.warning(f"LLM returned invalid domain '{raw}' in two-stage detection")
