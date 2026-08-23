@@ -80,7 +80,7 @@ Detection layers (unchanged):
   A. 6 live network probes  (parallel threads)
      domain age · site reachability · typosquatting · free-email · MX mail server · MCA registry
   B. 15-signal rule engine  (weighted, 0-100)
-  C. LLM deep analysis      (llama-3.3-70b-versatile via Groq)
+  C. LLM deep analysis      (openai/gpt-oss-120b via Groq — see llm_manager.DEFAULT_MODEL)
   D. Blended score          (60% AI + 25% rules + 15% probe penalty)
 """
 
@@ -98,6 +98,15 @@ import urllib.parse
 from datetime import datetime
 from typing import Optional
 import pytz
+
+# Centralized model config — DO NOT hardcode a model string in this file.
+# Switching models (e.g. back to Llama) is a one-line change in
+# llm_manager.py's DEFAULT_MODEL, not a find-and-replace across every tab
+# module. sanitize_llm_text() cleans up Unicode punctuation (non-breaking
+# hyphens, minus signs, etc.) that GPT-OSS sometimes emits and that this
+# module's HTML rendering can't display correctly (renders as a missing-
+# glyph box) — same fix already applied to the resume/ATS report path.
+from llm_manager import DEFAULT_MODEL, sanitize_llm_text
 
 _IST = pytz.timezone("Asia/Kolkata")
 
@@ -1155,7 +1164,8 @@ def _llm_extract_fields(raw: str, call_llm_fn) -> dict:
     """
     LLM-FIRST extraction layer (v6).
 
-    Calls LLaMA 3.3-70B to extract ALL structured fields from the raw posting in
+    Calls the configured LLM (see llm_manager.DEFAULT_MODEL — currently
+    GPT-OSS 120B) to extract ALL structured fields from the raw posting in
     one shot.  Returns a dict with keys: title, company, location, salary, website,
     contact.  Any field the LLM is not confident about is returned as "" so the
     regex fallback layer can fill it.
@@ -1239,9 +1249,11 @@ JSON:"""
         response = call_llm_fn(
             prompt,
             st.session_state,
-            model="llama-3.3-70b-versatile",
+            model=DEFAULT_MODEL,
             temperature=0,
+            task_type="job_scam_extraction",
         )
+        response = sanitize_llm_text(response)
         clean = re.sub(r"```(?:json)?|```", "", response).strip()
         m = re.search(r"\{.*\}", clean, re.DOTALL)
         if not m:
@@ -1276,7 +1288,8 @@ def auto_extract(raw: str, call_llm_fn=None) -> dict:
     LLM-FIRST extraction pipeline (v6).
 
     Layer 1 — LLM  (primary, when call_llm_fn supplied):
-        _llm_extract_fields() calls LLaMA 3.3-70B to extract all fields at once.
+        _llm_extract_fields() calls the configured LLM (see llm_manager.DEFAULT_MODEL)
+        to extract all fields at once.
         Results are hash-cached in session_state — re-renders on every keystroke
         do NOT re-call the LLM; only genuinely changed text triggers a new call.
 
@@ -5253,9 +5266,11 @@ def _render_input_fragment(call_llm_fn, username: str = "", allowed: bool = True
                             llm_raw = call_llm_fn(
                                 prompt,
                                 st.session_state,
-                                model="llama-3.3-70b-versatile",
+                                model=DEFAULT_MODEL,
                                 temperature=0,
+                                task_type="job_scam_analysis",
                             )
+                            llm_raw = sanitize_llm_text(llm_raw)
                             # Parse: strip markdown fences, extract first JSON object
                             clean = re.sub(r"```(?:json)?|```", "", llm_raw or "").strip()
                             m     = re.search(r"\{.*\}", clean, re.DOTALL)
@@ -5829,7 +5844,7 @@ def render_job_scam_detector_tab(call_llm_fn):
             f'<div style="font-size:0.88rem;font-weight:600;color:{col};">{val}</div>'
             f'</div>'
             for ic, label, val, col in [
-                (I.CPU,      "AI Engine",     "LLaMA 3.3-70B",   "#a78bfa"),
+                (I.CPU,      "AI Engine",     "GPT-OSS 120B",   "#a78bfa"),
                 (I.GLOBE,    "Live Probes",   "8 checks",        "#38bdf8"),
                 (I.LIST,     "Rule Signals",  "15 patterns",     "#f59e0b"),
                 (I.SHIELD,   "Hourly Limit",  f"{_SCAM_LIMIT} analyses", "#22c55e"),
