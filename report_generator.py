@@ -44,7 +44,7 @@ from llm_manager import (
     call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure,
+    _async_clear_failure, sanitize_llm_text,
 )
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
@@ -220,10 +220,15 @@ def html_to_pdf_bytes(html_string):
 
 
 def _val(v) -> str:
-    """Return value or 'Not Provided' placeholder — never empty, never None, never '[Not Provided]'."""
+    """Return value or 'Not Provided' placeholder — never empty, never None, never '[Not Provided]'.
+    Also sanitizes stray Unicode punctuation (non-breaking hyphens, minus
+    signs, etc.) that GPT-OSS sometimes emits and that DOCX's default fonts
+    can't render — this is the single choke point almost every field in
+    every DOCX template passes through, including data cached in Supabase
+    from before this fix, so sanitizing here covers old and new data alike."""
     if v is None:
         return "Not Provided"
-    s = str(v).strip()
+    s = sanitize_llm_text(str(v).strip())
     if not s or s in ("[Not Provided]", "null", "None", "undefined"):
         return "Not Provided"
     return s
@@ -1701,9 +1706,14 @@ def generate_creative_docx(data: dict) -> BytesIO:
 
 
 def generate_resume_report_html(resume, user_location=""):
-    candidate_name = resume.get('Candidate Name', 'Not Found')
+    # Sanitize Unicode punctuation (non-breaking hyphens, minus signs, etc.)
+    # that GPT-OSS sometimes emits and that xhtml2pdf's default Helvetica
+    # font can't render — shows up as a black "tofu" box otherwise. Applied
+    # here at render time (not just at the LLM call site in resume_engine.py)
+    # so data already cached in Supabase from before this fix is covered too.
+    candidate_name = sanitize_llm_text(resume.get('Candidate Name', 'Not Found'))
     resume_name = resume.get('Resume Name', 'Unknown')
-    _raw_rewritten = resume.get('Rewritten Text', '')
+    _raw_rewritten = sanitize_llm_text(resume.get('Rewritten Text', ''))
     if "### 🎯 Suggested Job Titles" in _raw_rewritten:
         _resume_part, _jobs_part = _raw_rewritten.split("### 🎯 Suggested Job Titles", 1)
     else:
@@ -1725,17 +1735,17 @@ def generate_resume_report_html(resume, user_location=""):
 
     masculine_words_list = resume.get("Detected Masculine Words", [])
     masculine_words = "".join(
-        f"<b>{item.get('word','')}</b>: {item.get('sentence','')}<br/>"
+        f"<b>{sanitize_llm_text(item.get('word',''))}</b>: {sanitize_llm_text(item.get('sentence',''))}<br/>"
         for item in masculine_words_list
     ) if masculine_words_list else "<i>None detected.</i>"
 
     feminine_words_list = resume.get("Detected Feminine Words", [])
     feminine_words = "".join(
-        f"<b>{item.get('word','')}</b>: {item.get('sentence','')}<br/>"
+        f"<b>{sanitize_llm_text(item.get('word',''))}</b>: {sanitize_llm_text(item.get('sentence',''))}<br/>"
         for item in feminine_words_list
     ) if feminine_words_list else "<i>None detected.</i>"
 
-    ats_report_html = resume.get("ATS Report", "").replace("\n", "<br/>")
+    ats_report_html = sanitize_llm_text(resume.get("ATS Report", "")).replace("\n", "<br/>")
 
     def style_analysis(analysis, fallback="N/A"):
         if not analysis or analysis == "N/A":
@@ -1750,13 +1760,13 @@ def generate_resume_report_html(resume, user_location=""):
         else:
             return f"<p>{analysis}</p>"
 
-    edu_analysis = style_analysis(resume.get("Education Analysis", "").replace("\n", "<br/>"))
-    exp_analysis = style_analysis(resume.get("Experience Analysis", "").replace("\n", "<br/>"))
-    skills_analysis = style_analysis(resume.get("Skills Analysis", "").replace("\n", "<br/>"))
-    keyword_analysis = style_analysis(resume.get("Keyword Analysis", "").replace("\n", "<br/>"))
-    final_thoughts = resume.get("Final Thoughts", "N/A").replace("\n", "<br/>")
+    edu_analysis = style_analysis(sanitize_llm_text(resume.get("Education Analysis", "")).replace("\n", "<br/>"))
+    exp_analysis = style_analysis(sanitize_llm_text(resume.get("Experience Analysis", "")).replace("\n", "<br/>"))
+    skills_analysis = style_analysis(sanitize_llm_text(resume.get("Skills Analysis", "")).replace("\n", "<br/>"))
+    keyword_analysis = style_analysis(sanitize_llm_text(resume.get("Keyword Analysis", "")).replace("\n", "<br/>"))
+    final_thoughts = sanitize_llm_text(resume.get("Final Thoughts", "N/A")).replace("\n", "<br/>")
 
-    lang_analysis_raw = resume.get("Language Analysis", "").replace("\n", "<br/>")
+    lang_analysis_raw = sanitize_llm_text(resume.get("Language Analysis", "")).replace("\n", "<br/>")
     lang_analysis = f"<div>{lang_analysis_raw}</div>" if lang_analysis_raw else "<p><i>No language analysis available.</i></p>"
 
     ats_match = resume.get('ATS Match %', 'N/A')
