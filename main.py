@@ -46,7 +46,7 @@ from llm_manager import (
     call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure,
+    _async_clear_failure, DEFAULT_MODEL, sanitize_llm_text,
 )
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
@@ -169,7 +169,9 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
         # ✅ Call LLM
         with st.spinner("✉️ Generating cover letter..."):
             try:
-                cover_letter = call_llm(prompt, session=st.session_state).strip()
+                cover_letter = call_llm(prompt, session=st.session_state,
+                                         model=DEFAULT_MODEL, task_type="cover_letter").strip()
+                cover_letter = sanitize_llm_text(cover_letter)
             except Exception as e:
                 st.error(f"❌ Failed to generate cover letter: {e}")
                 return
@@ -5322,7 +5324,8 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
+                _r = call_llm(_pre_resume_prompt, session=st.session_state,
+                              model=DEFAULT_MODEL, task_type="quick_extraction").strip()
                 if _r in _pre_valid_domains:
                     st.session_state[_pre_resume_cache_key] = _r
                 else:
@@ -5420,7 +5423,8 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
+                _j = call_llm(_pre_jd_prompt, session=st.session_state,
+                              model=DEFAULT_MODEL, task_type="quick_extraction").strip()
                 if _j in _pre_valid_domains:
                     st.session_state[_pre_jd_cache_key] = _j
                 else:
@@ -6811,6 +6815,12 @@ from cover_letter import (
 )
 
 from collections import Counter as _Counter
+
+# Centralized model config — the "AI Enhance" call below must never hardcode
+# a model string. sanitize_llm_text() cleans up Unicode punctuation
+# (non-breaking hyphens, minus signs) that GPT-OSS sometimes emits and that
+# the DOCX/PDF renderers downstream can't display correctly.
+from llm_manager import call_llm, DEFAULT_MODEL, sanitize_llm_text
 
 # ── Filler phrase / word constants ────────────────────────────────────────────
 _FILLER_PHRASES = {
@@ -9433,7 +9443,9 @@ with tab2:
             enhance_prompt += f"\n[Generation ID: {_unique_seed}-{_timestamp} — produce content unique to this exact run]"
 
             with st.spinner("🧠 Thinking..."):
-                ai_output = call_llm(enhance_prompt, session=st.session_state)
+                ai_output = call_llm(enhance_prompt, session=st.session_state,
+                                      model=DEFAULT_MODEL, task_type="resume_builder_enhance")
+                ai_output = sanitize_llm_text(ai_output)
                 st.session_state["ai_output"] = ai_output
 
     # ------------------------- PARSE + RENDER -------------------------
@@ -9839,7 +9851,7 @@ def evaluate_interview_answer(answer: str, question: str = None):
     Uses an LLM to strictly evaluate an interview answer.
     Returns (score out of 5, feedback string).
     """
-    from llm_manager import call_llm
+    from llm_manager import call_llm, DEFAULT_MODEL, sanitize_llm_text
     import re
     import streamlit as st
 
@@ -9876,7 +9888,8 @@ def evaluate_interview_answer(answer: str, question: str = None):
 
     try:
         # Call LLM
-        response = call_llm(prompt, session=st.session_state).strip()
+        response = sanitize_llm_text(call_llm(prompt, session=st.session_state,
+                                              model=DEFAULT_MODEL, task_type="interview_answer_score").strip())
 
         # Extract Score
         score_match = re.search(r"Score:\s*(\d+)", response)
@@ -9928,7 +9941,7 @@ def evaluate_interview_answer_for_scores(answer: str, question: str, difficulty:
     - Difficulty calibration: Easy (encouraging), Medium (balanced), Hard (strict)
     - JSON-based parsing for reliability
     """
-    from llm_manager import call_llm
+    from llm_manager import call_llm, DEFAULT_MODEL, sanitize_llm_text
     import json
     import streamlit as st
 
@@ -10094,7 +10107,8 @@ IMPORTANT RULES:
 Provide ONLY the JSON output, no additional text."""
 
     try:
-        response = call_llm(prompt, session=st.session_state).strip()
+        response = sanitize_llm_text(call_llm(prompt, session=st.session_state,
+                                              model=DEFAULT_MODEL, task_type="interview_evaluation").strip())
 
         # Clean response - remove markdown code blocks if present
         if response.startswith("```"):
@@ -10265,7 +10279,7 @@ def evaluate_interview_answers_batch(qa_pairs: list, difficulty: str, role: str 
     Cost: 1 API call total for the whole interview's scoring, vs N calls
     (one per answer) in the live per-question path.
     """
-    from llm_manager import call_llm
+    from llm_manager import call_llm, DEFAULT_MODEL, sanitize_llm_text
     import json
     import streamlit as st
 
@@ -10345,7 +10359,12 @@ RULES:
 - Provide ONLY the JSON array, no additional text."""
 
     try:
-        response = call_llm(prompt, session=st.session_state).strip()
+        _base_budget = 800
+        _per_q_budget = 280
+        _override = _base_budget + _per_q_budget * len(to_score_idx)
+        response = sanitize_llm_text(call_llm(prompt, session=st.session_state,
+                                              model=DEFAULT_MODEL, task_type="interview_batch_scoring",
+                                              max_completion_tokens_override=_override).strip())
         if response.startswith("```"):
             response = response.split("```")[1]
             if response.startswith("json"):
@@ -10936,7 +10955,7 @@ def generate_interview_pdf_report(username, role, domain, completed_on, question
 import streamlit as st
 import plotly.graph_objects as go
 from courses import COURSES_BY_CATEGORY, RESUME_VIDEOS, INTERVIEW_VIDEOS, get_courses_for_role
-from llm_manager import call_llm
+from llm_manager import call_llm, DEFAULT_MODEL, sanitize_llm_text
 import time
 import threading
 import json
@@ -12838,7 +12857,7 @@ def generate_adaptive_followup_v2(
     - Adds cognitive pressure signal matching the difficulty
     - Hard mode adds explicit pressure framing ("In a live production system...")
     """
-    from llm_manager import call_llm
+    from llm_manager import call_llm, DEFAULT_MODEL, sanitize_llm_text
 
     layer_info = ESCALATION_LAYER_MAP.get(escalation_layer, ESCALATION_LAYER_MAP[3])
     domain_block = build_domain_authority_block(domain, role)
@@ -12947,7 +12966,8 @@ Output ONLY the follow-up question. No numbering, labels, or explanations.
 Follow-up question:"""
 
     try:
-        return call_llm(prompt, session=st.session_state).strip()
+        return sanitize_llm_text(call_llm(prompt, session=st.session_state,
+                                          model=DEFAULT_MODEL, task_type="interview_followup").strip())
     except Exception:
         first_words = " ".join(answer.split()[:6]) if answer and answer.split() else "your described approach"
         return f'You mentioned "{first_words}..." — what is the ONE failure mode in that approach you would be most concerned about, and how would you detect it before it caused user impact?'
@@ -12968,7 +12988,7 @@ def generate_resume_based_questions_domain_aware(
     Supports interview_type ("technical" or "behavioral") for distinct question styles.
     """
     import random
-    from llm_manager import call_llm
+    from llm_manager import call_llm, DEFAULT_MODEL, sanitize_llm_text
 
     # FIX 1: Apply domain filter to resume context
     filtered_context = filter_resume_for_domain(resume_context, domain)
@@ -13039,7 +13059,8 @@ Output ONLY the questions, one per line, no numbering or prefixes.
 Questions:"""
 
     try:
-        response = call_llm(prompt, session=st.session_state)
+        response = sanitize_llm_text(call_llm(prompt, session=st.session_state,
+                                              model=DEFAULT_MODEL, task_type="interview_question_generation"))
         raw = [q.strip() for q in response.split("\n") if q.strip()]
         cleaned = []
         for q in raw:
@@ -13076,7 +13097,7 @@ def generate_domain_questions_with_llm(
     Domain-authority-enforced replacement for generate_interview_questions_with_llm.
     Ensures generic questions also respect the selected domain and difficulty contract.
     """
-    from llm_manager import call_llm
+    from llm_manager import call_llm, DEFAULT_MODEL, sanitize_llm_text
 
     domain_block = build_domain_authority_block(domain, role)
     difficulty_block = get_difficulty_instruction_block(difficulty)
@@ -13100,7 +13121,8 @@ RULES:
 Generate {num_questions} questions now:"""
 
     try:
-        response = call_llm(prompt, session=st.session_state)
+        response = sanitize_llm_text(call_llm(prompt, session=st.session_state,
+                                              model=DEFAULT_MODEL, task_type="interview_question_generation"))
         raw = [q.strip() for q in response.split('\n') if q.strip()]
         cleaned = []
         for q in raw:
@@ -13212,7 +13234,7 @@ Focus on technical depth, real-world work, and ownership.
 IGNORE generic soft skills unless strongly implied by technical work.
 
 RESUME TEXT:
-{resume_text}
+{resume_text[:6000]}
 
 Return ONLY a valid JSON object with this exact structure:
 
@@ -13250,7 +13272,8 @@ JSON:
 """
 
     try:
-        response = call_llm(prompt, session=st.session_state).strip()
+        response = sanitize_llm_text(call_llm(prompt, session=st.session_state,
+                                              model=DEFAULT_MODEL, task_type="interview_resume_analysis").strip())
 
         # Clean markdown if present
         if response.startswith("```"):
@@ -13308,7 +13331,7 @@ def analyze_resume_and_generate_questions(
       resume_questions : list  (num_resume_qs items)
       generic_questions: list  (num_generic_qs items)
     """
-    from llm_manager import call_llm
+    from llm_manager import call_llm, DEFAULT_MODEL, sanitize_llm_text
     import json, re, random
     import streamlit as st
 
@@ -13436,7 +13459,8 @@ OUTPUT FORMAT — return ONLY this JSON, no markdown, no extra text:
     ][:num_generic_qs]
 
     try:
-        raw = call_llm(prompt, session=st.session_state).strip()
+        raw = sanitize_llm_text(call_llm(prompt, session=st.session_state,
+                                         model=DEFAULT_MODEL, task_type="interview_startup_combined").strip())
 
         # Strip markdown fences if present
         if raw.startswith("```"):
@@ -13531,7 +13555,8 @@ Generate now:
 """
 
     try:
-        response = call_llm(prompt, session=st.session_state)
+        response = sanitize_llm_text(call_llm(prompt, session=st.session_state,
+                                              model=DEFAULT_MODEL, task_type="interview_question_generation"))
         raw_questions = [q.strip() for q in response.split("\n") if q.strip()]
 
         cleaned_questions = []
@@ -13714,7 +13739,7 @@ def generate_resume_based_questions_enhanced(resume_context: dict, role: str, do
     """
     PART 7: Enhanced resume intelligence — asks architecture, decisions, tradeoffs, outcomes, and scale.
     """
-    from llm_manager import call_llm
+    from llm_manager import call_llm, DEFAULT_MODEL, sanitize_llm_text
 
     skills = resume_context.get("skills", [])
     projects = resume_context.get("projects", [])
@@ -13777,7 +13802,8 @@ QUESTION FOCUS RULES:
 Generate {num_questions} questions:"""
 
     try:
-        response = call_llm(prompt, session=st.session_state)
+        response = sanitize_llm_text(call_llm(prompt, session=st.session_state,
+                                              model=DEFAULT_MODEL, task_type="interview_question_generation"))
         raw = [q.strip() for q in response.split("\n") if q.strip()]
         cleaned = []
         for q in raw:
@@ -14814,7 +14840,8 @@ Generate {num_questions} questions now:
 """
 
         try:
-            response = call_llm(prompt, session=st.session_state)
+            response = sanitize_llm_text(call_llm(prompt, session=st.session_state,
+                                                  model=DEFAULT_MODEL, task_type="interview_question_generation"))
 
             # Split by newlines and clean up
             raw_questions = [q.strip() for q in response.split('\n') if q.strip()]
