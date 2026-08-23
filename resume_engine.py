@@ -44,7 +44,7 @@ from llm_manager import (
     call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure, DEFAULT_MODEL,
+    _async_clear_failure, DEFAULT_MODEL, sanitize_llm_text,
 )
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
@@ -659,17 +659,68 @@ RESUME TEXT:
     if not resume_out or any(resume_out.strip().startswith(p) for p in _ERROR_PREFIXES):
         return ""
 
-    return resume_out.strip()
+    return sanitize_llm_text(resume_out.strip())
 
 
 # ── CALL B — strict JSON ONLY, built from the ALREADY-OPTIMIZED resume ───────
-def _call_b_extract_json(optimized_resume: str, user_location: str) -> str:
+_EXPECTED_SECTION_TO_JSON_KEY = {
+    "education": "education",
+    "certifications": "certifications",
+}
+
+
+def _expected_sections_missing(optimized_resume: str, parsed_data) -> list:
+    """
+    Cross-checks the already-rewritten resume text (Call A's output, which
+    has its own dedicated token budget and is the more reliable source) for
+    section headers that the JSON extraction (Call B) should have captured.
+    If the resume text clearly HAS an "EDUCATION" heading but the parsed
+    JSON's "education" array came back empty, that's a strong signal Call B
+    got cut off before reaching that key — not that the resume genuinely
+    has no education section. Returns a list of missing JSON keys (empty
+    list if everything expected is present).
+    """
+    if not isinstance(parsed_data, dict):
+        return []
+    missing = []
+    resume_upper = optimized_resume.upper()
+    for header, json_key in _EXPECTED_SECTION_TO_JSON_KEY.items():
+        if header.upper() in resume_upper:
+            value = parsed_data.get(json_key)
+            if not value:  # missing key, None, empty string, or empty list
+                missing.append(json_key)
+    return missing
+
+
+def _clean_json_text(raw_out: str) -> str:
+    """Strip markdown fences and trim to the outermost { ... } block."""
+    text = raw_out.strip()
+    text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s*```$', '', text).strip()
+    start, end = text.find('{'), text.rfind('}')
+    if start != -1 and end != -1:
+        text = text[start:end + 1]
+    return text
+
+
+def _call_b_extract_json(optimized_resume: str, user_location: str, session=None) -> str:
     """
     Returns strict JSON built from the already-rewritten resume. No bias
     mapping needed here (bias replacement already happened in Call A). No
     resume rewriting happens in this call — pure extraction/formatting, so
-    reasoning_effort is set to "none" (see GPT_OSS_CONFIG['json_extraction']).
+    reasoning_effort is set to "low" (see GPT_OSS_CONFIG['json_extraction']).
+
+    `session` MUST be passed in explicitly by the caller (captured on the
+    main thread) when this runs inside a ThreadPoolExecutor worker — calling
+    st.session_state directly from a worker thread triggers Streamlit's
+    "missing ScriptRunContext" warning and can silently resolve to an empty
+    session (losing e.g. the user's own Groq key preference for that call).
+    Falls back to st.session_state for callers that invoke this directly
+    on the main thread without passing one.
     """
+    if session is None:
+        session = st.session_state
+    
     prompt = f"""Extract the resume below into a strict JSON object. Do NOT rewrite content — reuse the wording as given. Return ONLY valid JSON. No markdown fences, no explanation, no commentary, no headings, no extra text before or after the JSON.
 
 RETURN ONLY THIS EXACT JSON STRUCTURE:
@@ -747,55 +798,57 @@ GOLDEN RULE — APPLIES TO EVERY FIELD IN EVERY SECTION:
 - "additional" items use object format: {{"name":"","description":"","duration":""}}. "duration" —
   3-tier rule, "" if no context.
 
+IMPORTANT — DO NOT STOP EARLY: education, certifications, and additional are
+REQUIRED keys in the output even though they appear near the end of the
+schema. If the resume has an EDUCATION section, you MUST include it — do not
+truncate the response before writing every top-level key.
+
 RESUME TEXT TO EXTRACT:
 \"\"\"{optimized_resume[:8000]}\"\"\"
 """
 
-    try:
-        json_out = call_llm(prompt, session=st.session_state, model=DEFAULT_MODEL,
-                             task_type="json_extraction")
-    except Exception:
-        json_out = ""
+    def _attempt(prompt_text: str):
+        """One call_llm round-trip → (parsed_data_or_None, cleaned_json_text_or_empty)."""
+        try:
+            raw_out = call_llm(prompt_text, session=session, model=DEFAULT_MODEL,
+                                task_type="json_extraction")
+        except Exception:
+            return None, ""
+        _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+        if not raw_out or any(raw_out.strip().startswith(p) for p in _ERROR_PREFIXES):
+            return None, ""
+        cleaned = _clean_json_text(sanitize_llm_text(raw_out))
+        parsed, was_valid = _try_parse_json(cleaned)
+        if not was_valid:
+            repaired, did_repair = _attempt_json_repair(cleaned)
+            if did_repair:
+                cleaned = repaired
+                parsed, was_valid = _try_parse_json(cleaned)
+        return (parsed if was_valid else None), (cleaned if was_valid else "")
 
-    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
-    if not json_out or any(json_out.strip().startswith(p) for p in _ERROR_PREFIXES):
-        return ""
+    # ── First attempt ─────────────────────────────────────────────────────
+    data, text = _attempt(prompt)
 
-    text = json_out.strip()
-    text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\s*```$', '', text).strip()
-    start, end = text.find('{'), text.rfind('}')
-    if start != -1 and end != -1:
-        text = text[start:end + 1]
+    # ── Retry once if the JSON never became valid (Part 9 requirement) ──────
+    if data is None:
+        data, text = _attempt(prompt)
+        if data is None:
+            return ""  # both attempts failed — caller treats this as failure
 
-    # ── Truncation detection + controlled repair (Part 9 / Part 10) ─────────
-    data, was_valid = _try_parse_json(text)
-    if not was_valid:
-        repaired, did_repair = _attempt_json_repair(text)
-        if did_repair:
-            text = repaired
-        else:
-            # One bounded retry only — never loop forever, never rotate keys
-            # for what is a generation/formatting problem.
-            try:
-                retry_out = call_llm(prompt, session=st.session_state, model=DEFAULT_MODEL,
-                                      task_type="json_extraction")
-            except Exception:
-                retry_out = ""
-            if retry_out and not any(retry_out.strip().startswith(p) for p in _ERROR_PREFIXES):
-                retry_text = retry_out.strip()
-                retry_text = re.sub(r'^```(?:json)?\s*', '', retry_text, flags=re.IGNORECASE)
-                retry_text = re.sub(r'\s*```$', '', retry_text).strip()
-                r_start, r_end = retry_text.find('{'), retry_text.rfind('}')
-                if r_start != -1 and r_end != -1:
-                    retry_text = retry_text[r_start:r_end + 1]
-                _, retry_valid = _try_parse_json(retry_text)
-                if retry_valid:
-                    text = retry_text
-                else:
-                    repaired2, did_repair2 = _attempt_json_repair(retry_text)
-                    if did_repair2:
-                        text = repaired2
+    # ── Retry once more if valid-but-INCOMPLETE (the education-goes-missing
+    # bug): repair() can produce syntactically valid JSON that is missing
+    # entire trailing keys because generation was cut off before reaching
+    # them. A second attempt, independent of the first, is very unlikely to
+    # get cut off at exactly the same point. ─────────────────────────────
+    missing = _expected_sections_missing(optimized_resume, data)
+    if missing:
+        retry_data, retry_text = _attempt(prompt)
+        if retry_data is not None:
+            still_missing = _expected_sections_missing(optimized_resume, retry_data)
+            # Prefer the retry if it recovered strictly more of the expected
+            # sections than the first attempt did.
+            if len(still_missing) < len(missing):
+                data, text = retry_data, retry_text
 
     if user_location and user_location.strip():
         try:
@@ -819,13 +872,20 @@ RESUME TEXT TO EXTRACT:
 
 
 # ── CALL C — exactly 5 job titles, nothing else ───────────────────────────────
-def _call_c_job_titles(optimized_resume: str, user_location: str) -> str:
+def _call_c_job_titles(optimized_resume: str, user_location: str, session=None) -> str:
     """
     Returns the formatted job-title suggestions block. Kept in the EXACT
     output format existing callers (report_generator.py, tab1_check.py)
     already parse via the "### 🎯 Suggested Job Titles" marker and the
     "N. **Title** — reason" line pattern — do not change this format.
+
+    `session` MUST be passed in explicitly by the caller (captured on the
+    main thread) when this runs inside a ThreadPoolExecutor worker — see
+    the note in _call_b_extract_json for why.
     """
+    if session is None:
+        session = st.session_state
+
     prompt = f"""Based ONLY on the resume below, suggest EXACTLY 5 job titles suited for a candidate in {user_location or "the candidate's region"}.
 
 Do NOT regenerate or rewrite the resume. Do NOT generate JSON. Do NOT provide explanations beyond the reason column. Do NOT include any URLs, hyperlinks, or 🔗 emoji. Do NOT add anything after the 5 entries.
@@ -842,7 +902,7 @@ RESUME:
 """
 
     try:
-        titles_out = call_llm(prompt, session=st.session_state, model=DEFAULT_MODEL,
+        titles_out = call_llm(prompt, session=session, model=DEFAULT_MODEL,
                                task_type="job_titles")
     except Exception:
         titles_out = ""
@@ -851,7 +911,7 @@ RESUME:
     if not titles_out or any(titles_out.strip().startswith(p) for p in _ERROR_PREFIXES):
         return ""
 
-    return titles_out.strip()
+    return sanitize_llm_text(titles_out.strip())
 
 
 def rewrite_and_optimize_resume(text, replacement_mapping, user_location):
@@ -892,11 +952,22 @@ def rewrite_and_optimize_resume(text, replacement_mapping, user_location):
     # Independent of each other (both only need the Call A output), so they
     # can run concurrently to keep latency comparable to the old single-call
     # design despite now being 3 API calls instead of 1.
+    #
+    # Capture session state HERE, on the main thread, and pass it into each
+    # worker explicitly. Letting the worker functions read st.session_state
+    # themselves (as they did before) throws Streamlit's "missing
+    # ScriptRunContext" warning, because that context only exists on the
+    # main script thread — a ThreadPoolExecutor worker doesn't have it. Worse,
+    # it can silently resolve to an empty/default session instead of raising,
+    # which would lose things like the user's own configured Groq key for
+    # just these two calls. Passing the already-resolved reference sidesteps
+    # the problem entirely.
+    _session_ref = st.session_state
     json_str = ""
     job_titles_block = ""
     with ThreadPoolExecutor(max_workers=2) as _pool:
-        _fut_json = _pool.submit(_call_b_extract_json, optimized_resume, user_location)
-        _fut_titles = _pool.submit(_call_c_job_titles, optimized_resume, user_location)
+        _fut_json = _pool.submit(_call_b_extract_json, optimized_resume, user_location, _session_ref)
+        _fut_titles = _pool.submit(_call_c_job_titles, optimized_resume, user_location, _session_ref)
         try:
             json_str = _fut_json.result()
         except Exception:
@@ -2978,8 +3049,10 @@ Suggestions:
 """
 
     try:
-        response = call_llm(grammar_prompt, session=st.session_state,
-                             model=DEFAULT_MODEL, task_type="quick_extraction").strip()
+        response = sanitize_llm_text(
+            call_llm(grammar_prompt, session=st.session_state,
+                     model=DEFAULT_MODEL, task_type="quick_extraction").strip()
+        )
     except Exception:
         response = ""
 
@@ -3675,8 +3748,10 @@ SCORING SCALE for language ({lang_weight} pts max):
    
    
     try:
-        ats_result = call_llm(prompt, session=st.session_state,
-                               model=DEFAULT_MODEL, task_type="ats_analysis").strip()
+        ats_result = sanitize_llm_text(
+            call_llm(prompt, session=st.session_state,
+                     model=DEFAULT_MODEL, task_type="ats_analysis").strip()
+        )
     except Exception:
         ats_result = ""
 
@@ -4073,7 +4148,7 @@ def create_chain(vectorstore):
     # ✅ Create the ChatGroq object — model comes from the ONE centralized
     #    config in llm_manager.py (DEFAULT_MODEL) instead of being
     #    hardcoded here, so switching models later is a one-line change.
-    llm = ChatGroq(model=DEFAULT_MODEL, temperature=0, groq_api_key=groq_api_key)
+    llm = ChatGroq(model=DEFAULT_MODEL, temperature=0, groq_api_key=groq_api_key, max_retries=0)
 
     # ✅ Build the chain — report failures back so llm_manager skips this key next time
     try:
