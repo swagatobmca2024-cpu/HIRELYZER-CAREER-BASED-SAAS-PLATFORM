@@ -1121,6 +1121,10 @@ def call_llm(
                 # Never a key problem — fail fast, do not touch key health,
                 # do not fall through to admin key rotation with the same
                 # oversized prompt.
+                print(f"❌ payload_too_large (413) for task '{task_type}' — "
+                      f"prompt length: {len(prompt)} chars (~{_estimate_tokens(prompt)} tok), "
+                      f"model: {model}. This is the failure mode that shows up as an "
+                      f"empty/missing analysis section in the UI.")
                 return "❌ payload_too_large: request input is too large for this call. Reduce the prompt/resume size and retry."
             if err_type == "length":
                 return "❌ length: completion budget exhausted before producing output. Retrying with another key will not help."
@@ -1202,6 +1206,10 @@ def call_llm(
                 err_type = _classify_error(e)
 
                 if err_type == "payload_too_large":
+                    print(f"❌ payload_too_large (413) for task '{task_type}' — "
+                          f"prompt length: {len(prompt)} chars (~{_estimate_tokens(prompt)} tok), "
+                          f"model: {model}. This is the failure mode that shows up as an "
+                          f"empty/missing analysis section in the UI.")
                     return ("❌ payload_too_large: request input is too large for "
                             "this call. Reduce the prompt/resume size and retry — "
                             "rotating keys will not help."), None, quota_hits, attempts
