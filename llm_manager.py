@@ -1162,83 +1162,117 @@ def call_llm(
     admin_keys = keys_with_headroom + keys_over_budget
     n          = len(admin_keys)
 
-    # Global round-robin start index (thread-safe, no per-session state needed)
-    start = _pick_start_index(n)
+    def _run_rotation_pass(keys_list, over_budget_set):
+        """
+        One full pass through the given key list. Returns (response, last_err,
+        quota_hits, attempts_made) — response is None on total failure so the
+        caller can decide whether a second pass is worth trying.
+        """
+        pass_n = len(keys_list)
+        start_idx = _pick_start_index(pass_n)
+        quota_hits = 0
+        attempts = 0
+        pass_last_error = None
 
-    attempt = 0
-    for offset in range(n):
-        idx = (start + offset) % n
-        key = admin_keys[idx]
+        for offset in range(pass_n):
+            idx = (start_idx + offset) % pass_n
+            key = keys_list[idx]
 
-        # Exponential back-off with full jitter (no fixed sleep for headroom keys)
-        if attempt > 0:
-            cap   = min(BACKOFF_BASE * (2 ** (attempt - 1)), BACKOFF_MAX)
-            sleep = random.uniform(0, cap)
-            if sleep > 0.05:
-                time.sleep(sleep)
+            if attempts > 0:
+                cap   = min(BACKOFF_BASE * (2 ** (attempts - 1)), BACKOFF_MAX)
+                sleep = random.uniform(0, cap)
+                if sleep > 0.05:
+                    time.sleep(sleep)
 
-        # Extra small pause before over-budget keys to reduce burst collisions
-        if key in keys_over_budget and attempt == 0:
-            time.sleep(random.uniform(0.5, 1.5))
+            if key in over_budget_set and attempts == 0:
+                time.sleep(random.uniform(0.5, 1.5))
 
-        try:
-            response = try_call_llm(prompt, key, model, temperature, task_type,
-                                     max_completion_tokens_override)
-            # Success ──────────────────────────────────────────────────────────
-            _record_key_tokens(key, estimated_tokens, time.time())
-            set_cached_response(prompt, model, response, task_type, max_completion_tokens_override)
-            _mem_increment_usage(key)
-            _async_increment_usage(key)
-            _mem_clear_failure(key)
-            _async_clear_failure(key)
-            return response
+            try:
+                response = try_call_llm(prompt, key, model, temperature, task_type,
+                                         max_completion_tokens_override)
+                _record_key_tokens(key, estimated_tokens, time.time())
+                set_cached_response(prompt, model, response, task_type, max_completion_tokens_override)
+                _mem_increment_usage(key)
+                _async_increment_usage(key)
+                _mem_clear_failure(key)
+                _async_clear_failure(key)
+                return response, None, quota_hits, attempts
 
-        except Exception as e:
-            err_type = _classify_error(e)
+            except Exception as e:
+                err_type = _classify_error(e)
 
-            # ── 413: input problem, not a key problem. Stop immediately — ──
-            # retrying across 99 more keys with the same oversized prompt
-            # just produces 99 more 413s. Fail fast with a controlled error
-            # so the caller can shrink/chunk the input and retry once.
-            if err_type == "payload_too_large":
-                return ("❌ payload_too_large: request input is too large for "
-                        "this call. Reduce the prompt/resume size and retry — "
-                        "rotating keys will not help.")
+                if err_type == "payload_too_large":
+                    return ("❌ payload_too_large: request input is too large for "
+                            "this call. Reduce the prompt/resume size and retry — "
+                            "rotating keys will not help."), None, quota_hits, attempts
 
-            # ── length: completion budget exhausted, not a key problem. ──
-            # A different key has the same model with the same budget and
-            # will exhaust the same way. Fail fast instead of burning
-            # through every key for a guaranteed-identical outcome.
-            if err_type == "length":
-                return ("❌ length: completion budget exhausted before "
-                        "producing output for this task. Rotating keys will "
-                        "not help — use a smaller task or larger budget.")
+                if err_type == "length":
+                    return ("❌ length: completion budget exhausted before "
+                            "producing output for this task. Rotating keys will "
+                            "not help — use a smaller task or larger budget."), None, quota_hits, attempts
 
-            # ── 400: invalid request parameters, not a key problem. ──
-            # Every remaining key would receive the identical 400, so we
-            # stop immediately instead of burning through the whole key
-            # pool. Log the actual Groq response body, do NOT mark the
-            # key dead, do NOT mark quota, and return a controlled error.
-            if err_type == "bad_request":
-                print(f"❌ bad_request (400) from Groq — key rotation halted: {_extract_error_body(e)}")
-                return ("❌ bad_request: the request was rejected as invalid "
-                        "(400). Rotating keys will not help — check the "
-                        "request parameters (e.g. reasoning_effort, "
-                        "max_completion_tokens, model).")
+                if err_type == "bad_request":
+                    print(f"❌ bad_request (400) from Groq — key rotation halted: {_extract_error_body(e)}")
+                    return ("❌ bad_request: the request was rejected as invalid "
+                            "(400). Rotating keys will not help — check the "
+                            "request parameters (e.g. reasoning_effort, "
+                            "max_completion_tokens, model)."), None, quota_hits, attempts
 
-            if err_type == "quota":
-                _mem_record_failure(key, "quota")
-                _record_key_tokens(key, TPM_LIMIT, time.time())
-                _async_mark_failure(key, "quota")
-                print(f"⚠️ quota (429) — key cooling down for task '{task_type}' "
-                      f"(prompt+budget estimate: {estimated_tokens} tok). "
-                      f"Rotating to next key.")
-            elif err_type == "dead":
-                _mem_record_failure(key, "error")
-                _async_mark_failure(key, "error")
-            # transient: key stays healthy, try next
-            last_error = e
-            attempt   += 1
+                if err_type == "quota":
+                    _mem_record_failure(key, "quota")
+                    _record_key_tokens(key, TPM_LIMIT, time.time())
+                    _async_mark_failure(key, "quota")
+                    quota_hits += 1
+                elif err_type == "dead":
+                    _mem_record_failure(key, "error")
+                    _async_mark_failure(key, "error")
+                pass_last_error = e
+                attempts += 1
+
+        return None, pass_last_error, quota_hits, attempts
+
+    result, err, quota_hits, attempts_made = _run_rotation_pass(admin_keys, set(keys_over_budget))
+    if isinstance(result, str) and result.startswith("❌"):
+        return result  # payload_too_large / length / bad_request — fail fast, no retry
+    if result is not None:
+        return result
+    last_error = err
+
+    # ── One bounded, controlled retry when the pool failed mostly on quota ──
+    # A quota (429) failure is often just "this 60-second window is full" —
+    # it commonly clears within a few seconds as older usage ages out. This
+    # is DIFFERENT from the SDK's own silent internal retry (disabled via
+    # max_retries=0 elsewhere in this file): it's one explicit, logged,
+    # capped attempt at the call_llm level, only triggered when the failure
+    # pattern looks like systemic TPM pressure (most attempts were quota,
+    # not dead/bad keys) rather than a genuinely broken key pool. This is
+    # the exact failure mode that shows up as an empty ATS/grammar section
+    # for long resumes — those calls fire last in a multi-call analysis
+    # pipeline, after earlier calls in the same analysis already ate into
+    # the shared per-key TPM budget.
+    if attempts_made > 0 and quota_hits >= max(1, attempts_made // 2):
+        cooldown = random.uniform(3.0, 6.0)
+        print(f"⚠️ {quota_hits}/{attempts_made} attempts hit quota for task "
+              f"'{task_type}' — waiting {cooldown:.1f}s for TPM windows to "
+              f"partially clear, then retrying the full key pool once more.")
+        time.sleep(cooldown)
+
+        now_ts2 = time.time()
+        with _tpm_lock:
+            retry_headroom = [
+                k for k in healthy_keys
+                if (_get_key_tpm(k, now_ts2) + estimated_tokens) <= TPM_LIMIT
+            ]
+            retry_over_budget = [k for k in healthy_keys if k not in set(retry_headroom)]
+        retry_keys = retry_headroom + retry_over_budget
+
+        result2, err2, quota_hits2, attempts2 = _run_rotation_pass(retry_keys, set(retry_over_budget))
+        if isinstance(result2, str) and result2.startswith("❌"):
+            return result2
+        if result2 is not None:
+            print(f"✅ Recovered on retry pass for task '{task_type}' after cooldown.")
+            return result2
+        last_error = err2 or last_error
 
     print(f"❌ All keys exhausted for task '{task_type}' — every key hit quota/dead/transient "
           f"within this rotation pass. This is the failure mode that shows up as an empty/"
