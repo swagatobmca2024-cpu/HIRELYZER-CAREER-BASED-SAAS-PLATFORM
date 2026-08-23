@@ -24,6 +24,7 @@ import hashlib
 import itertools
 import os
 import random
+import re
 import threading
 import time
 from datetime import datetime, timedelta
@@ -108,7 +109,18 @@ GPT_OSS_CONFIG = {
     # so most of the budget goes to visible JSON output.
     "json_extraction": {
         "reasoning_effort": "low",
-        "max_completion_tokens": 2200,
+        # Raised from 2200 → 3600: education/certifications/additional sit
+        # at the END of the JSON schema (after skills, experience, and
+        # projects). On verbose resumes with several experience/project
+        # entries × 3-5 bullets each, the 2200 budget could be exhausted
+        # before the model ever wrote the "education" key — the plain-text
+        # rewrite (Call A, separate budget) still showed education fine,
+        # which is exactly the "shows in UI, missing in template" symptom.
+        # _attempt_json_repair() closes whatever structure was open at the
+        # cutoff, producing technically-valid JSON that is silently missing
+        # trailing keys — see the completeness check in
+        # resume_engine._call_b_extract_json() for the other half of this fix.
+        "max_completion_tokens": 3600,
     },
     # Call C — exactly 5 job titles. Tiny, deterministic.
     "job_titles": {
@@ -137,8 +149,102 @@ GPT_OSS_CONFIG = {
         "reasoning_effort": "low",
         "max_completion_tokens": 900,
     },
+    # Job Scam Detector — Layer A: extract title/company/location/salary/
+    # website/contact from raw posting text into JSON. Deterministic
+    # extraction, small schema — same shape as quick_extraction's job.
+    "job_scam_extraction": {
+        "reasoning_effort": "low",
+        "max_completion_tokens": 900,
+    },
+    # Job Scam Detector — Layer C: AI deep-analysis verdict. Output includes
+    # a red_flags array plus three free-text fields (explanation,
+    # recommended_action, salary_assessment paragraph) — comparable verbosity
+    # to ats_analysis, and genuinely benefits from reasoning since it's
+    # weighing fraud signals, not just formatting.
+    "job_scam_analysis": {
+        "reasoning_effort": "medium",
+        "max_completion_tokens": 2400,
+    },
+    # Cover letter generation — 5-part structured letter, up to ~350 words.
+    # Bigger than the quick single-paragraph cover letter in cover_letter.py,
+    # so it gets its own slightly larger budget rather than risking a cut-off
+    # closing paragraph under quick_extraction's 900-token ceiling.
+    "cover_letter": {
+        "reasoning_effort": "low",
+        "max_completion_tokens": 1200,
+    },
+    # Resume Builder — "AI Enhance" one-shot generator: summary + multiple
+    # experience entries with bullets + multiple project entries with
+    # bullets + skills + soft skills + languages + interests + certificates,
+    # all in a single completion. This is architecturally the same
+    # "several sections in one call" shape that caused the education/
+    # certifications truncation bug in the resume analyzer's JSON
+    # extraction — certificates sits LAST in this prompt's requested
+    # section order too, so it's the most exposed to the same failure mode.
+    # Generous budget + medium reasoning (this is creative generation, not
+    # pure formatting) to give it room to actually finish.
+    "resume_builder_enhance": {
+        "reasoning_effort": "medium",
+        "max_completion_tokens": 4000,
+    },
+    # AI Interview Coach — live per-answer scoring (Hard mode, or the
+    # simpler pass/fail style single-answer scorer). Small fixed output:
+    # one score + 1-2 sentence feedback.
+    "interview_answer_score": {
+        "reasoning_effort": "low",
+        "max_completion_tokens": 500,
+    },
+    # AI Interview Coach — chain-of-thought single-answer evaluation.
+    # Structured JSON: key_concepts/strengths/gaps arrays + 3 scores + a
+    # 2-4 paragraph feedback field, optionally a follow-up question for
+    # Hard mode. Genuinely benefits from reasoning (it's doing multi-step
+    # analysis before scoring, not just formatting).
+    "interview_evaluation": {
+        "reasoning_effort": "medium",
+        "max_completion_tokens": 1800,
+    },
+    # AI Interview Coach — BATCH scoring for Easy/Medium mode: scores every
+    # answer in the interview in ONE call, output size scales with question
+    # count. This is a FLOOR/default only — the call site computes a
+    # per-interview override (base + per-question allowance) via
+    # max_completion_tokens_override, since a fixed budget can't fit both a
+    # 3-question and a 10-question interview. On total parse failure this
+    # currently falls back to generic feedback for the WHOLE interview, so
+    # under-budgeting here is a real quality risk, not just truncation.
+    "interview_batch_scoring": {
+        "reasoning_effort": "low",
+        "max_completion_tokens": 3000,
+    },
+    # AI Interview Coach — adaptive follow-up question generation (Hard
+    # mode only, one question at a time). Small output.
+    "interview_followup": {
+        "reasoning_effort": "low",
+        "max_completion_tokens": 400,
+    },
+    # AI Interview Coach — question-set generation (resume-based or
+    # domain-based, several questions per call, sometimes with rationale/
+    # metadata per question).
+    "interview_question_generation": {
+        "reasoning_effort": "low",
+        "max_completion_tokens": 2000,
+    },
+    # AI Interview Coach — resume analysis feeding into interview question
+    # generation (extracts skills/experience context, not a full rewrite).
+    "interview_resume_analysis": {
+        "reasoning_effort": "low",
+        "max_completion_tokens": 1500,
+    },
+    # AI Interview Coach — combined startup call: resume context extraction
+    # + resume-based questions + generic domain questions, all in one JSON
+    # response (replaces 3 separate calls). Bigger than a single
+    # question-generation call since it's carrying all three outputs.
+    "interview_startup_combined": {
+        "reasoning_effort": "low",
+        "max_completion_tokens": 2600,
+    },
     # Fallback for any call site that doesn't specify a task_type.
     "default": {
+
         "reasoning_effort": "low",
         "max_completion_tokens": 1500,
     },
@@ -148,6 +254,52 @@ GPT_OSS_CONFIG = {
 def get_task_config(task_type: str) -> dict:
     """Look up the GPT-OSS config for a task, falling back to 'default'."""
     return GPT_OSS_CONFIG.get(task_type, GPT_OSS_CONFIG["default"])
+
+
+# ── Unicode punctuation sanitizer ─────────────────────────────────────────────
+# GPT-OSS (unlike Llama 3.3) frequently writes "typographically polished"
+# punctuation — non-breaking hyphens, minus signs, figure dashes — instead of
+# plain ASCII "-". These specific characters fall OUTSIDE the WinAnsiEncoding
+# (cp1252) charset that both python-docx's default fonts and xhtml2pdf/
+# ReportLab's base14 Helvetica rely on, so they render as a black "tofu"
+# missing-glyph box in the generated DOCX/PDF (and inconsistently in some UI
+# contexts) instead of a hyphen. En dash (–) and em dash (—) ARE in cp1252 and
+# render fine — this is specifically about the codepoints that are NOT.
+#
+# Call this on every piece of LLM-generated text before it is displayed,
+# cached, or handed to a document generator, so the fix holds regardless of
+# which renderer touches the text.
+_UNICODE_PUNCT_MAP = {
+    "\u2010": "-",   # HYPHEN
+    "\u2011": "-",   # NON-BREAKING HYPHEN  ← the usual culprit
+    "\u2012": "-",   # FIGURE DASH
+    "\u2015": "-",   # HORIZONTAL BAR
+    "\u2043": "-",   # HYPHEN BULLET
+    "\u2212": "-",   # MINUS SIGN
+    "\u2018": "'",   # LEFT SINGLE QUOTATION MARK
+    "\u2019": "'",   # RIGHT SINGLE QUOTATION MARK
+    "\u201a": "'",   # SINGLE LOW-9 QUOTATION MARK
+    "\u201c": '"',   # LEFT DOUBLE QUOTATION MARK
+    "\u201d": '"',   # RIGHT DOUBLE QUOTATION MARK
+    "\u201e": '"',   # DOUBLE LOW-9 QUOTATION MARK
+    "\u2026": "...", # HORIZONTAL ELLIPSIS
+    "\ufeff": "",    # BYTE ORDER MARK / zero-width no-break space
+    "\u200b": "",    # ZERO WIDTH SPACE
+}
+_UNICODE_PUNCT_RE = re.compile("|".join(re.escape(k) for k in _UNICODE_PUNCT_MAP))
+
+
+def sanitize_llm_text(text) -> str:
+    """
+    Normalize LLM output text so it renders safely in every downstream
+    surface (Streamlit UI, python-docx, xhtml2pdf/ReportLab). Safe to call
+    on already-clean ASCII text (no-op), safe to call on full JSON strings
+    (only touches punctuation characters, never touches the ASCII double
+    quotes JSON syntax depends on), and safe to call on None/non-str input.
+    """
+    if not text or not isinstance(text, str):
+        return text or ""
+    return _UNICODE_PUNCT_RE.sub(lambda m: _UNICODE_PUNCT_MAP[m.group(0)], text)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IN-MEMORY STATE  (module-level, shared across all threads in one worker)
@@ -464,21 +616,28 @@ def load_groq_api_keys() -> List[str]:
 
 
 # ── Prompt hashing ────────────────────────────────────────────────────────────
-def hash_prompt(prompt: str, model: str, task_type: str = "default") -> str:
+def hash_prompt(prompt: str, model: str, task_type: str = "default",
+                 max_completion_tokens_override: Optional[int] = None) -> str:
     """
     Cache key includes prompt + model + the generation config that governs
     output shape (reasoning effort / token budget). This guarantees a cached
     Llama response is never returned for a GPT-OSS request, and that two
-    task types sharing similar prompt text never collide either.
+    task types sharing similar prompt text never collide either. When a
+    caller overrides the token budget (e.g. batch scoring scaling its
+    budget by question count), that override is folded into the key too —
+    otherwise a cached response generated with a smaller budget could get
+    served back for a request that actually needed more room.
     """
     cfg = get_task_config(task_type)
-    sig = f"{model}|{task_type}|{cfg.get('reasoning_effort')}|{cfg.get('max_completion_tokens')}"
+    budget = max_completion_tokens_override or cfg.get('max_completion_tokens')
+    sig = f"{model}|{task_type}|{cfg.get('reasoning_effort')}|{budget}"
     return hashlib.sha256(f"{sig}|{prompt}".encode("utf-8")).hexdigest()
 
 
 # ── Cache R/W ─────────────────────────────────────────────────────────────────
-def get_cached_response(prompt: str, model: str, task_type: str = "default") -> Optional[str]:
-    key    = hash_prompt(prompt, model, task_type)
+def get_cached_response(prompt: str, model: str, task_type: str = "default",
+                         max_completion_tokens_override: Optional[int] = None) -> Optional[str]:
+    key    = hash_prompt(prompt, model, task_type, max_completion_tokens_override)
     cutoff = get_utc_now() - timedelta(hours=CACHE_EXPIRY_HOURS)
     try:
         row = _execute(
@@ -499,8 +658,9 @@ def get_cached_response(prompt: str, model: str, task_type: str = "default") -> 
     return None
 
 
-def set_cached_response(prompt: str, model: str, response: str, task_type: str = "default"):
-    key = hash_prompt(prompt, model, task_type)
+def set_cached_response(prompt: str, model: str, response: str, task_type: str = "default",
+                         max_completion_tokens_override: Optional[int] = None):
+    key = hash_prompt(prompt, model, task_type, max_completion_tokens_override)
     try:
         _execute(
             """
@@ -758,7 +918,8 @@ class LengthFinishError(Exception):
     pass
 
 
-def _build_chat_groq(model: str, api_key: str, temperature: float, task_type: str):
+def _build_chat_groq(model: str, api_key: str, temperature: float, task_type: str,
+                      max_completion_tokens_override: Optional[int] = None):
     """
     Construct a ChatGroq client with the task-appropriate reasoning effort
     and output-token budget from GPT_OSS_CONFIG.
@@ -771,11 +932,24 @@ def _build_chat_groq(model: str, api_key: str, temperature: float, task_type: st
     models (which don't support reasoning_effort) simply skip the field.
     """
     cfg = get_task_config(task_type)
-    max_completion_tokens = cfg.get("max_completion_tokens")
+    max_completion_tokens = max_completion_tokens_override or cfg.get("max_completion_tokens")
     reasoning_effort = cfg.get("reasoning_effort")
     is_gpt_oss = "gpt-oss" in (model or "").lower()
 
-    base_kwargs = dict(model=model, temperature=temperature, groq_api_key=api_key)
+    base_kwargs = dict(
+        model=model, temperature=temperature, groq_api_key=api_key,
+        # Disable the Groq SDK's own internal retry-on-429. Without this,
+        # the SDK silently retries with its own backoff (observed: a 45s
+        # blocking wait) BEFORE our exception ever reaches _classify_error().
+        # That means our quota cooldown, key rotation, and TPM tracking
+        # never even see the 429 happened — the whole custom multi-key
+        # architecture gets bypassed for that call, and the calling thread
+        # just hangs for the SDK's retry window instead. Setting this to 0
+        # makes every 429 surface immediately as an exception so call_llm()
+        # can classify it and rotate to the next key right away, which is
+        # the entire point of having 100 keys instead of 1.
+        max_retries=0,
+    )
     if max_completion_tokens:
         # Groq's chat.completions API rejects "max_tokens" for these models —
         # pass max_completion_tokens directly (never via model_kwargs).
@@ -804,8 +978,9 @@ def try_call_llm(
     model: str,
     temperature: float,
     task_type: str = "default",
+    max_completion_tokens_override: Optional[int] = None,
 ) -> str:
-    llm = _build_chat_groq(model, api_key, temperature, task_type)
+    llm = _build_chat_groq(model, api_key, temperature, task_type, max_completion_tokens_override)
     ai_message = llm.invoke(prompt)
     content = ai_message.content or ""
 
@@ -855,6 +1030,7 @@ def call_llm(
     model: str = DEFAULT_MODEL,
     temperature: float = 0,
     task_type: str = "default",
+    max_completion_tokens_override: Optional[int] = None,
 ) -> str:
     """
     Distribute LLM calls evenly across all 100 Groq keys.
@@ -882,6 +1058,13 @@ def call_llm(
     from GPT_OSS_CONFIG (see top of file) and is folded into the cache key
     so a cached response from one task/model can never leak into another.
 
+    max_completion_tokens_override lets a caller scale the completion
+    budget beyond the task_type's fixed default for a specific call — e.g.
+    interview batch-scoring, where output size scales with the number of
+    questions being scored in one call and a single fixed budget can't fit
+    both a 3-question and a 10-question interview. Folded into the cache
+    key too, same reasoning as task_type.
+
     Thread/multi-user safety:
       - _pick_start_index() uses a module-level atomic counter so concurrent
         users always pick different starting keys even in the same worker.
@@ -901,11 +1084,21 @@ def call_llm(
             pass
 
     # ── Cache hit ─────────────────────────────────────────────────────────────
-    cached = get_cached_response(prompt, model, task_type)
+    cached = get_cached_response(prompt, model, task_type, max_completion_tokens_override)
     if cached:
         return cached
 
-    estimated_tokens = _estimate_tokens(prompt)
+    # Reserve BOTH prompt and expected completion tokens against a key's
+    # TPM budget — a headroom check that only counted the prompt was letting
+    # calls get routed to keys that looked fine on paper but didn't actually
+    # have room for the completion, causing real Groq 429s that then surface
+    # as an empty/failed section (e.g. ATS analysis or JSON extraction
+    # returning nothing) once the shared, process-wide TPM budget got eaten
+    # into by earlier calls in the same analysis or a prior upload within
+    # the same 60-second window.
+    estimated_tokens = _estimate_tokens(prompt) + (
+        max_completion_tokens_override or get_task_config(task_type).get("max_completion_tokens", 0)
+    )
     last_error = None
 
     # ── User-supplied key ─────────────────────────────────────────────────────
@@ -916,9 +1109,10 @@ def call_llm(
 
     if user_key and _key_has_tpm_headroom(user_key, estimated_tokens):
         try:
-            response = try_call_llm(prompt, user_key, model, temperature, task_type)
+            response = try_call_llm(prompt, user_key, model, temperature, task_type,
+                                     max_completion_tokens_override)
             _record_key_tokens(user_key, estimated_tokens, time.time())
-            set_cached_response(prompt, model, response, task_type)
+            set_cached_response(prompt, model, response, task_type, max_completion_tokens_override)
             _async_increment_usage(user_key)
             return response
         except Exception as e:
@@ -988,10 +1182,11 @@ def call_llm(
             time.sleep(random.uniform(0.5, 1.5))
 
         try:
-            response = try_call_llm(prompt, key, model, temperature, task_type)
+            response = try_call_llm(prompt, key, model, temperature, task_type,
+                                     max_completion_tokens_override)
             # Success ──────────────────────────────────────────────────────────
             _record_key_tokens(key, estimated_tokens, time.time())
-            set_cached_response(prompt, model, response, task_type)
+            set_cached_response(prompt, model, response, task_type, max_completion_tokens_override)
             _mem_increment_usage(key)
             _async_increment_usage(key)
             _mem_clear_failure(key)
@@ -1035,6 +1230,9 @@ def call_llm(
                 _mem_record_failure(key, "quota")
                 _record_key_tokens(key, TPM_LIMIT, time.time())
                 _async_mark_failure(key, "quota")
+                print(f"⚠️ quota (429) — key cooling down for task '{task_type}' "
+                      f"(prompt+budget estimate: {estimated_tokens} tok). "
+                      f"Rotating to next key.")
             elif err_type == "dead":
                 _mem_record_failure(key, "error")
                 _async_mark_failure(key, "error")
@@ -1042,4 +1240,7 @@ def call_llm(
             last_error = e
             attempt   += 1
 
+    print(f"❌ All keys exhausted for task '{task_type}' — every key hit quota/dead/transient "
+          f"within this rotation pass. This is the failure mode that shows up as an empty/"
+          f"missing analysis section in the UI.")
     return f"❌ LLM unavailable: {last_error or 'All API keys exhausted'}"
