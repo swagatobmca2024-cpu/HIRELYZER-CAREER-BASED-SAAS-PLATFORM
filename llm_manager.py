@@ -6,7 +6,13 @@ All timestamps are stored and compared in UTC (TIMESTAMPTZ columns).
 
 CHANGES vs v11:
   1. Global atomic key counter (_global_key_counter) replaces per-session key_index
-     so all concurrent users/threads rotate across ALL 100 keys evenly.
+     so all concurrent users/threads rotate across ALL configured keys evenly.
+     IMPORTANT — per-key TPM/RPM tracking below only reflects reality when
+     each key belongs to a SEPARATE Groq account. Groq enforces rate limits
+     at the account level, not per key — multiple keys under the SAME
+     account share ONE budget, so tracking them as independent keys would
+     silently overestimate real capacity. Configure GROQ_API_KEYS with
+     exactly one key per account.
   2. In-memory failure/cooldown cache (_mem_failures, _mem_usage) eliminates DB
      round-trips on the hot request path; Supabase writes are async/deferred.
   3. Exponential back-off with full jitter on per-key retries (no fixed sleep).
@@ -44,10 +50,26 @@ DAILY_KEY_LIMIT          = 800
 DEAD_KEY_REMOVE_DAYS     = 3
 CLEANUP_INTERVAL_SECONDS = 1800
 
-# ── Per-minute token rate limiter (Groq free tier: ~6000 TPM per key) ────────
-TPM_LIMIT          = 5500          # stay slightly under the 6000 hard limit
-TPM_WINDOW_SECONDS = 60
-CHARS_PER_TOKEN    = 4             # 1 token ≈ 4 chars (conservative)
+# ── Per-minute rate limiters (Groq free tier for openai/gpt-oss-120b) ────────
+# Published figures vary slightly by source between 6,000–8,000 TPM per
+# account; 30 RPM is consistent everywhere. These limits apply PER ACCOUNT,
+# not per key — this only works correctly when GROQ_API_KEYS holds one key
+# per SEPARATE Groq account (10 accounts here). Keys sharing one account
+# share one real budget regardless of how many are configured.
+#
+# TPM_LIMIT is set safely under the LOWER end of the published range rather
+# than the higher one — with only 10 accounts (not 100), each 429 costs
+# proportionally more redundancy, so it's worth being conservative here
+# rather than optimistic. RPM tracking is request-count based, independent
+# of token volume entirely — a key well within its TPM budget can still
+# 429 purely on request count if too many calls land on it within the same
+# 60-second window (e.g. several calls in one resume analysis, or
+# overlapping analyses repeatedly cycling back to the same key).
+TPM_LIMIT           = 5500         # safely under the 6,000-8,000 TPM range
+TPM_WINDOW_SECONDS  = 60
+RPM_LIMIT            = 26           # safely under the 30 RPM ceiling
+RPM_WINDOW_SECONDS   = 60
+CHARS_PER_TOKEN     = 4            # 1 token ≈ 4 chars (conservative)
 
 # ── Retry / back-off config ───────────────────────────────────────────────────
 MAX_RETRIES_PER_KEY = 1            # attempts per key before moving on
@@ -309,6 +331,12 @@ def sanitize_llm_text(text) -> str:
 _tpm_tracker: dict = {}
 _tpm_lock = threading.Lock()
 
+# RPM tracker: { api_key: [timestamp_float, ...] }  — one entry per request
+# actually SENT to a key, success or failure alike (Groq counts a request
+# against RPM regardless of whether it succeeds).
+_rpm_tracker: dict = {}
+_rpm_lock = threading.Lock()
+
 # Global atomic round-robin counter — incremented on every successful key pick.
 # Using itertools.count() which is C-level and GIL-safe for simple increments.
 _global_key_counter = itertools.count(0)
@@ -495,6 +523,53 @@ def _key_has_tpm_headroom(api_key: str, estimated_tokens: int) -> bool:
     with _tpm_lock:
         current_tpm = _get_key_tpm(api_key, now)
     return (current_tpm + estimated_tokens) <= TPM_LIMIT
+
+
+# ── Per-minute REQUEST rate limiter helpers ───────────────────────────────────
+# Independent of token volume entirely — Groq enforces RPM as a hard request
+# COUNT ceiling regardless of how small each individual request is. A key
+# that's well within its TPM budget can still 429 purely on request count if
+# too many calls land on it within the same 60-second window.
+def _get_key_rpm(api_key: str, now: float) -> int:
+    window_start = now - RPM_WINDOW_SECONDS
+    entries = _rpm_tracker.get(api_key, [])
+    return sum(1 for ts in entries if ts >= window_start)
+
+
+def _record_key_request(api_key: str, now: float):
+    """Call this once per ACTUAL request sent to a key — success or failure,
+    since Groq's RPM counter increments on every attempt regardless of
+    outcome. Distinct from _record_key_tokens, which only fires on success."""
+    window_start = now - RPM_WINDOW_SECONDS
+    with _rpm_lock:
+        entries = _rpm_tracker.get(api_key, [])
+        entries = [ts for ts in entries if ts >= window_start]
+        entries.append(now)
+        _rpm_tracker[api_key] = entries
+
+
+def _key_has_rpm_headroom(api_key: str) -> bool:
+    now = time.time()
+    with _rpm_lock:
+        current_rpm = _get_key_rpm(api_key, now)
+    return current_rpm < RPM_LIMIT
+
+
+def _saturate_key_rpm(api_key: str, now: float):
+    """
+    Mark a key as RPM-exhausted immediately, mirroring the existing
+    _record_key_tokens(key, TPM_LIMIT, ...) pattern for TPM. Used when a
+    429 fires — Groq's error doesn't tell us whether TPM or RPM triggered
+    it, so treating the key as saturated on BOTH dimensions is the safe
+    assumption: it prevents immediately re-selecting a key that may still
+    look TPM-healthy but is actually the one that just got rate limited.
+    """
+    window_start = now - RPM_WINDOW_SECONDS
+    with _rpm_lock:
+        entries = _rpm_tracker.get(api_key, [])
+        entries = [ts for ts in entries if ts >= window_start]
+        entries.extend([now] * RPM_LIMIT)
+        _rpm_tracker[api_key] = entries
 
 
 def get_keys_with_tpm_headroom(api_keys: list, estimated_tokens: int) -> list:
@@ -947,7 +1022,8 @@ def _build_chat_groq(model: str, api_key: str, temperature: float, task_type: st
         # just hangs for the SDK's retry window instead. Setting this to 0
         # makes every 429 surface immediately as an exception so call_llm()
         # can classify it and rotate to the next key right away, which is
-        # the entire point of having 100 keys instead of 1.
+        # the entire point of having multiple independent-account keys
+        # instead of 1.
         max_retries=0,
     )
     if max_completion_tokens:
@@ -1033,7 +1109,10 @@ def call_llm(
     max_completion_tokens_override: Optional[int] = None,
 ) -> str:
     """
-    Distribute LLM calls evenly across all 100 Groq keys.
+    Distribute LLM calls evenly across all configured Groq keys — one key
+    per SEPARATE Groq account. TPM/RPM tracking below assumes this; keys
+    sharing one account would share one real budget regardless of how many
+    of them are configured (Groq rate-limits at the account level).
 
     Strategy:
       1. Supabase cache hit → return immediately (zero LLM cost).
@@ -1107,8 +1186,9 @@ def call_llm(
     if isinstance(raw_user_key, str):
         user_key = raw_user_key.strip()
 
-    if user_key and _key_has_tpm_headroom(user_key, estimated_tokens):
+    if user_key and _key_has_tpm_headroom(user_key, estimated_tokens) and _key_has_rpm_headroom(user_key):
         try:
+            _record_key_request(user_key, time.time())
             response = try_call_llm(prompt, user_key, model, temperature, task_type,
                                      max_completion_tokens_override)
             _record_key_tokens(user_key, estimated_tokens, time.time())
@@ -1138,6 +1218,7 @@ def call_llm(
             if err_type == "quota":
                 _mem_record_failure(user_key, "quota")
                 _record_key_tokens(user_key, TPM_LIMIT, time.time())
+                _saturate_key_rpm(user_key, time.time())
                 _async_mark_failure(user_key, "quota")
             elif err_type == "dead":
                 _mem_record_failure(user_key, "error")
@@ -1154,12 +1235,13 @@ def call_llm(
     if not healthy_keys:
         return f"❌ LLM unavailable: {last_error or 'No healthy API keys available'}"
 
-    # Partition: TPM-headroom keys first, over-budget keys as fallback
+    # Partition: TPM+RPM-headroom keys first, over-budget keys as fallback
     now_ts = time.time()
-    with _tpm_lock:
+    with _tpm_lock, _rpm_lock:
         keys_with_headroom = [
             k for k in healthy_keys
             if (_get_key_tpm(k, now_ts) + estimated_tokens) <= TPM_LIMIT
+            and _get_key_rpm(k, now_ts) < RPM_LIMIT
         ]
         keys_over_budget = [k for k in healthy_keys if k not in set(keys_with_headroom)]
 
@@ -1192,6 +1274,7 @@ def call_llm(
                 time.sleep(random.uniform(0.5, 1.5))
 
             try:
+                _record_key_request(key, time.time())
                 response = try_call_llm(prompt, key, model, temperature, task_type,
                                          max_completion_tokens_override)
                 _record_key_tokens(key, estimated_tokens, time.time())
@@ -1229,6 +1312,7 @@ def call_llm(
                 if err_type == "quota":
                     _mem_record_failure(key, "quota")
                     _record_key_tokens(key, TPM_LIMIT, time.time())
+                    _saturate_key_rpm(key, time.time())
                     _async_mark_failure(key, "quota")
                     quota_hits += 1
                 elif err_type == "dead":
@@ -1266,10 +1350,11 @@ def call_llm(
         time.sleep(cooldown)
 
         now_ts2 = time.time()
-        with _tpm_lock:
+        with _tpm_lock, _rpm_lock:
             retry_headroom = [
                 k for k in healthy_keys
                 if (_get_key_tpm(k, now_ts2) + estimated_tokens) <= TPM_LIMIT
+                and _get_key_rpm(k, now_ts2) < RPM_LIMIT
             ]
             retry_over_budget = [k for k in healthy_keys if k not in set(retry_headroom)]
         retry_keys = retry_headroom + retry_over_budget
