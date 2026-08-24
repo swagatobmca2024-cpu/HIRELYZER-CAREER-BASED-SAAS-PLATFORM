@@ -127,32 +127,16 @@ GPT_OSS_CONFIG = {
         "reasoning_effort": "low",
         "max_completion_tokens": 400,
     },
-    # ── ATS scoring — SPLIT into two independent calls ──────────────────────
-    # Previously one call asked for all 7 sections ([SEC:CANDIDATE_NAME] ...
-    # [SEC:FINAL]) sharing ONE reasoning+output budget. For long resumes the
-    # model spends more hidden reasoning tokens on the harder sections
-    # (EDUCATION/EXPERIENCE/SKILLS genuinely require reading+synthesizing the
-    # resume), which starved budget for whatever came after — and on the
-    # longest resumes, starved the visible output for those very sections
-    # too. Splitting gives each half its own dedicated budget so one half
-    # can never cannibalize the other's tokens.
-    #
-    # Call A — CANDIDATE_NAME + EDUCATION + EXPERIENCE + SKILLS. The
-    # genuinely reasoning-heavy half: matching resume evidence against a job
-    # description across 3 scored dimensions. Keeps "medium" effort.
-    "ats_analysis_content": {
+    # ATS scoring narrative — benefits from reasoning, larger structured output.
+    "ats_analysis": {
         "reasoning_effort": "medium",
+        # Raised from 2400 → 4000: the prompt asks for 7 sections
+        # ([SEC:CANDIDATE_NAME] ... [SEC:FINAL]) and reasoning + all visible
+        # output share this one budget. [SEC:FINAL] is both the last and the
+        # largest section requested, so it was the first casualty whenever
+        # the model ran out of budget — silently truncating the response
+        # right before writing it, which _extract() then defaulted to "N/A".
         "max_completion_tokens": 4000,
-    },
-    # Call B — LANGUAGE + KEYWORD + FORMAT + FINAL. Keyword/Format lean on
-    # already-computed inputs (format_data is injected pre-scored and
-    # LOCKED; keyword matching is closer to term-matching than judgment),
-    # so this half needs less reasoning per token of output than Call A.
-    # Dropped to "low" to leave more of the shared budget for the 4 visible
-    # sections instead of hidden reasoning.
-    "ats_analysis_meta": {
-        "reasoning_effort": "low",
-        "max_completion_tokens": 3500,
     },
     # AI Interview Coach evaluation.
     "interview_evaluation": {
