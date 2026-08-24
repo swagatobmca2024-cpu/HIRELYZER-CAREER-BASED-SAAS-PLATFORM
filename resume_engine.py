@@ -1,6 +1,7 @@
 import os
 os.environ["STREAMLIT_WATCHDOG"] = "false"
 import json
+import logging
 import random
 import string
 import re
@@ -61,6 +62,8 @@ from user_login import (
     cleanup_expired_login_tokens, check_and_gate_feature,
     record_feature_usage, get_usage_count_last_hour, check_brute_force,
 )
+
+logger = logging.getLogger(__name__)
 
 # ── resume_engine.py ────────────────────────────────────────────────────────
 gender_words = {
@@ -3813,10 +3816,12 @@ SCORING SCALE for language ({lang_weight} pts max):
             # realistic account can satisfy that, so escalating further
             # than this doesn't help and risks its own 413/429.
             _ats_retry_budget = min(6500, _ats_first_budget + 2000)
-            print(f"⚠️ ATS analysis missing sections {missing} — likely truncated "
-                  f"(response length: {len(ats_result)} chars, first attempt used "
-                  f"{_ats_first_budget} tok budget for {_ats_input_chars} input chars). "
-                  f"Retrying once with {_ats_retry_budget} tok.")
+            logger.warning(
+                f"ATS analysis missing sections {missing} — likely truncated "
+                f"(response length: {len(ats_result)} chars, first attempt used "
+                f"{_ats_first_budget} tok budget for {_ats_input_chars} input chars). "
+                f"Retrying once with {_ats_retry_budget} tok."
+            )
             retry_result = _call_ats_llm(budget_override=_ats_retry_budget)
             retry_is_failure = not retry_result or any(
                 retry_result.startswith(p) for p in _ERROR_PREFIXES
@@ -3824,8 +3829,10 @@ SCORING SCALE for language ({lang_weight} pts max):
             if not retry_is_failure:
                 retry_missing = _missing_tags(retry_result)
                 if len(retry_missing) < len(missing):
-                    print(f"✅ ATS retry recovered {len(missing) - len(retry_missing)} "
-                          f"section(s) that were missing on the first attempt.")
+                    logger.info(
+                        f"ATS retry recovered {len(missing) - len(retry_missing)} "
+                        f"section(s) that were missing on the first attempt."
+                    )
                     ats_result = retry_result
                     missing = retry_missing
 
