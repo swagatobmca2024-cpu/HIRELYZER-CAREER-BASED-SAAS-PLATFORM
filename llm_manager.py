@@ -28,6 +28,7 @@ CHANGES vs v11:
 
 import hashlib
 import itertools
+import logging
 import os
 import random
 import re
@@ -41,6 +42,9 @@ import psycopg2.extras
 import pytz
 import streamlit as st
 from langchain_groq import ChatGroq
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 CACHE_EXPIRY_HOURS       = 24
@@ -1089,8 +1093,8 @@ def try_call_llm(
         # returned here (a partial response is more useful than none), but
         # this must be visible so it doesn't get mistaken for a normal
         # empty/"N/A" field further down the pipeline.
-        print(
-            f"⚠️ length: task '{task_type}' hit its completion budget after "
+        logger.warning(
+            f"length: task '{task_type}' hit its completion budget after "
             f"producing {len(content)} chars — response is likely missing "
             f"one or more trailing sections. Consider raising "
             f"max_completion_tokens for this task_type in GPT_OSS_CONFIG."
@@ -1201,10 +1205,12 @@ def call_llm(
                 # Never a key problem — fail fast, do not touch key health,
                 # do not fall through to admin key rotation with the same
                 # oversized prompt.
-                print(f"❌ payload_too_large (413) for task '{task_type}' — "
-                      f"prompt length: {len(prompt)} chars (~{_estimate_tokens(prompt)} tok), "
-                      f"model: {model}. This is the failure mode that shows up as an "
-                      f"empty/missing analysis section in the UI.")
+                logger.error(
+                    f"payload_too_large (413) for task '{task_type}' — "
+                    f"prompt length: {len(prompt)} chars (~{_estimate_tokens(prompt)} tok), "
+                    f"model: {model}. This is the failure mode that shows up as an "
+                    f"empty/missing analysis section in the UI."
+                )
                 return "❌ payload_too_large: request input is too large for this call. Reduce the prompt/resume size and retry."
             if err_type == "length":
                 return "❌ length: completion budget exhausted before producing output. Retrying with another key will not help."
@@ -1213,7 +1219,7 @@ def call_llm(
                 # identical error — do NOT fall through to admin key
                 # rotation, do NOT mark this key dead/quota. Log the actual
                 # Groq response body and fail fast with a controlled error.
-                print(f"❌ bad_request (400) from Groq — user key: {_extract_error_body(e)}")
+                logger.error(f"bad_request (400) from Groq — user key: {_extract_error_body(e)}")
                 return "❌ bad_request: the request was rejected as invalid (400). Rotating keys will not help — check the request parameters."
             if err_type == "quota":
                 _mem_record_failure(user_key, "quota")
@@ -1289,10 +1295,12 @@ def call_llm(
                 err_type = _classify_error(e)
 
                 if err_type == "payload_too_large":
-                    print(f"❌ payload_too_large (413) for task '{task_type}' — "
-                          f"prompt length: {len(prompt)} chars (~{_estimate_tokens(prompt)} tok), "
-                          f"model: {model}. This is the failure mode that shows up as an "
-                          f"empty/missing analysis section in the UI.")
+                    logger.error(
+                        f"payload_too_large (413) for task '{task_type}' — "
+                        f"prompt length: {len(prompt)} chars (~{_estimate_tokens(prompt)} tok), "
+                        f"model: {model}. This is the failure mode that shows up as an "
+                        f"empty/missing analysis section in the UI."
+                    )
                     return ("❌ payload_too_large: request input is too large for "
                             "this call. Reduce the prompt/resume size and retry — "
                             "rotating keys will not help."), None, quota_hits, attempts
@@ -1303,7 +1311,7 @@ def call_llm(
                             "not help — use a smaller task or larger budget."), None, quota_hits, attempts
 
                 if err_type == "bad_request":
-                    print(f"❌ bad_request (400) from Groq — key rotation halted: {_extract_error_body(e)}")
+                    logger.error(f"bad_request (400) from Groq — key rotation halted: {_extract_error_body(e)}")
                     return ("❌ bad_request: the request was rejected as invalid "
                             "(400). Rotating keys will not help — check the "
                             "request parameters (e.g. reasoning_effort, "
@@ -1344,9 +1352,11 @@ def call_llm(
     # the shared per-key TPM budget.
     if attempts_made > 0 and quota_hits >= max(1, attempts_made // 2):
         cooldown = random.uniform(3.0, 6.0)
-        print(f"⚠️ {quota_hits}/{attempts_made} attempts hit quota for task "
-              f"'{task_type}' — waiting {cooldown:.1f}s for TPM windows to "
-              f"partially clear, then retrying the full key pool once more.")
+        logger.warning(
+            f"{quota_hits}/{attempts_made} attempts hit quota for task "
+            f"'{task_type}' — waiting {cooldown:.1f}s for TPM windows to "
+            f"partially clear, then retrying the full key pool once more."
+        )
         time.sleep(cooldown)
 
         now_ts2 = time.time()
@@ -1363,11 +1373,13 @@ def call_llm(
         if isinstance(result2, str) and result2.startswith("❌"):
             return result2
         if result2 is not None:
-            print(f"✅ Recovered on retry pass for task '{task_type}' after cooldown.")
+            logger.info(f"Recovered on retry pass for task '{task_type}' after cooldown.")
             return result2
         last_error = err2 or last_error
 
-    print(f"❌ All keys exhausted for task '{task_type}' — every key hit quota/dead/transient "
-          f"within this rotation pass. This is the failure mode that shows up as an empty/"
-          f"missing analysis section in the UI.")
+    logger.error(
+        f"All keys exhausted for task '{task_type}' — every key hit quota/dead/transient "
+        f"within this rotation pass. This is the failure mode that shows up as an empty/"
+        f"missing analysis section in the UI."
+    )
     return f"❌ LLM unavailable: {last_error or 'All API keys exhausted'}"
