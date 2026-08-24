@@ -3505,18 +3505,7 @@ Return ONLY one domain from this list, nothing else:
     current_month = datetime.datetime.now().month
 
     # ✅ UPDATED: Stable education scoring with priority degrees minimum
-    #
-    # ── SPLIT PROMPT (was one ~7-section mega-prompt) ───────────────────────
-    # Two independent prompts, each with its own reasoning+output budget
-    # (see GPT_OSS_CONFIG["ats_analysis_content"] / ["ats_analysis_meta"] in
-    # llm_manager.py). Long resumes used to make the model spend most of a
-    # SHARED budget reasoning about Education/Experience/Skills, leaving
-    # little or nothing for whatever came after — on the worst cases, that
-    # starved even those same reasoning-heavy sections' own visible output.
-    # Both halves repeat the philosophy preamble and the JD/resume text
-    # (cheap input tokens) so each is a fully self-contained request that
-    # can be fired in parallel — see _run_ats_half() below.
-    _ats_shared_intro = f"""
+    prompt = f"""
 You are a senior ATS (Applicant Tracking System) Evaluator and Technical Recruiter with 15+ years of experience at top-tier tech firms.
 Your evaluation must be rigorous, consistent, evidence-based, and match industry-standard hiring benchmarks.
 
@@ -3532,30 +3521,7 @@ You specialize in: AI/ML, Blockchain, Cloud Computing, Data Engineering, Softwar
 - Recognize career stage: entry-level vs senior vs lead
 - Prioritize recency: skills/experience from the last 3 years matter most
 - Be encouraging but calibrated: do not inflate scores without evidence
-"""
 
-    _ats_tail = f"""
----
-
-**EVALUATION CONTEXT:**
-- Current Date: {datetime.datetime.now().strftime('%B %Y')} (Year: {current_year}, Month: {current_month})
-- Resume Domain Detected: {resume_domain}
-- Target Job Domain: {job_domain}
-- Domain Similarity Score: {similarity_score:.2f}/1.0
-- Domain Mismatch Penalty Applied: {domain_penalty}/{MAX_DOMAIN_PENALTY} pts
-
----
-
-📄 **JOB DESCRIPTION:**
-{job_description[:4000]}
-
-📄 **RESUME TEXT:**
-{resume_text[:5000]}
-
-{logic_score_note}
-"""
-
-    prompt_content = _ats_shared_intro + f"""
 ═══════════════════════════════════════════════════
 📐 SCORING FRAMEWORK
 ═══════════════════════════════════════════════════
@@ -3616,11 +3582,24 @@ Match each listed skill against job description requirements. Reward:
   • {int(skills_weight * 0.13)}–{int(skills_weight * 0.23)}: Limited — 30%+ skills; self-learning evident
   • 0–{int(skills_weight * 0.10)}: Insufficient — fewer than 30% required skills
 
+**🔑 Keyword Score ({keyword_weight} points max):**
+
+Systematically extract ALL critical terms from the job description:
+technical tools, frameworks, methodologies, role titles, industry terms, certification names.
+Compare against resume. Credit synonyms and equivalent terms.
+
+  • {int(keyword_weight * 0.90)}–{keyword_weight}: Excellent — 85%+ critical terms; strong industry vocabulary
+  • {int(keyword_weight * 0.80)}: Very Good — 75%+ critical terms
+  • {int(keyword_weight * 0.60)}–{int(keyword_weight * 0.70)}: Good — 65%+ critical terms
+  • {int(keyword_weight * 0.40)}–{int(keyword_weight * 0.50)}: Fair — 50%+ critical terms
+  • {int(keyword_weight * 0.20)}–{int(keyword_weight * 0.30)}: Basic — 35%+ critical terms
+  • {int(keyword_weight * 0.10)}: Limited — 20%+ critical terms
+  • 0: Poor — fewer than 20% critical terms
+
 ═══════════════════════════════════════════════════
 📋 REQUIRED OUTPUT FORMAT
 ═══════════════════════════════════════════════════
 
-Produce ONLY these four sections — nothing else, no other commentary before or after them.
 Follow this EXACT structure. Do not skip any section. Use the EXACT section markers shown (they are used by the parser — do not alter them):
 
 [SEC:CANDIDATE_NAME]
@@ -3665,34 +3644,6 @@ Follow this EXACT structure. Do not skip any section. Use the EXACT section mark
 - <Gap 5 — specific missing skill>
 
 **Score Justification:** <Explain with matched vs. required skills ratio>
-"""
-    prompt_content += _ats_tail
-
-    prompt_meta = _ats_shared_intro + f"""
-═══════════════════════════════════════════════════
-📐 SCORING FRAMEWORK
-═══════════════════════════════════════════════════
-
-**🔑 Keyword Score ({keyword_weight} points max):**
-
-Systematically extract ALL critical terms from the job description:
-technical tools, frameworks, methodologies, role titles, industry terms, certification names.
-Compare against resume. Credit synonyms and equivalent terms.
-
-  • {int(keyword_weight * 0.90)}–{keyword_weight}: Excellent — 85%+ critical terms; strong industry vocabulary
-  • {int(keyword_weight * 0.80)}: Very Good — 75%+ critical terms
-  • {int(keyword_weight * 0.60)}–{int(keyword_weight * 0.70)}: Good — 65%+ critical terms
-  • {int(keyword_weight * 0.40)}–{int(keyword_weight * 0.50)}: Fair — 50%+ critical terms
-  • {int(keyword_weight * 0.20)}–{int(keyword_weight * 0.30)}: Basic — 35%+ critical terms
-  • {int(keyword_weight * 0.10)}: Limited — 20%+ critical terms
-  • 0: Poor — fewer than 20% critical terms
-
-═══════════════════════════════════════════════════
-📋 REQUIRED OUTPUT FORMAT
-═══════════════════════════════════════════════════
-
-Produce ONLY these four sections — nothing else, no other commentary before or after them.
-Follow this EXACT structure. Do not skip any section. Use the EXACT section markers shown (they are used by the parser — do not alter them):
 
 [SEC:LANGUAGE]
 **Score:** <evaluate and provide a score 0–{lang_weight}> / {lang_weight}
@@ -3774,154 +3725,105 @@ SCORING SCALE for language ({lang_weight} pts max):
 3. <Gap 3 framed as a growth opportunity>
 
 **Hiring Recommendation:** <Strongly Recommend / Recommend / Recommend with Reservations / Do Not Recommend> — <2-sentence reasoning>
-"""
-    prompt_meta += _ats_tail
 
+---
+
+**EVALUATION CONTEXT:**
+- Current Date: {datetime.datetime.now().strftime('%B %Y')} (Year: {current_year}, Month: {current_month})
+- Resume Domain Detected: {resume_domain}
+- Target Job Domain: {job_domain}
+- Domain Similarity Score: {similarity_score:.2f}/1.0
+- Domain Mismatch Penalty Applied: {domain_penalty}/{MAX_DOMAIN_PENALTY} pts
+
+---
+
+📄 **JOB DESCRIPTION:**
+{job_description[:4000]}
+
+📄 **RESUME TEXT:**
+{resume_text[:5000]}
+
+{logic_score_note}
+"""
+   
+   
     # Sections that must genuinely appear in the response for the report to
     # be usable. CANDIDATE_NAME is deliberately excluded — it's short and
     # rarely the thing that gets cut. These are checked in the SAME order
     # the prompt requests them, so a cutoff partway through generation shows
     # up as "the tail of this list is missing" rather than a random scatter.
-    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+    _ATS_REQUIRED_TAGS = ["EDUCATION", "EXPERIENCE", "SKILLS", "LANGUAGE",
+                          "KEYWORD", "FORMAT", "FINAL"]
 
-    # Leak markers checked per-half (see _run_ats_half) — badly formatted
-    # resumes can cause either half to echo back its own prompt tail
-    # (EVALUATION CONTEXT / JOB DESCRIPTION / RESUME TEXT).
-    _ATS_LEAK_MARKERS = [
-        "**EVALUATION CONTEXT:**",
-        "EVALUATION CONTEXT:",
-        "📄 **JOB DESCRIPTION:**",
-        "📄 **RESUME TEXT:**",
-        "**JOB DESCRIPTION:**",
-        "**RESUME TEXT:**",
-        "JOB DESCRIPTION:",
-        "RESUME TEXT:",
-    ]
+    # ── Proactive budget scaling (not just reactive retry) ──────────────────
+    # A fixed 4000-token budget for every resume means LONG resumes are
+    # structurally the most likely to need the retry below — more input to
+    # reason about eats into the same fixed completion budget before the
+    # model even starts writing the later sections. Size the FIRST attempt's
+    # budget to the actual input instead of waiting for it to fail. Capped
+    # at 6500 — well beyond that, the honest fix is trimming input (already
+    # bounded to 4000/5000 chars above), not an ever-larger completion
+    # budget, since a bigger ask also means more TPM reserved per call.
+    _ats_input_chars = len(job_description[:4000]) + len(resume_text[:5000])
+    _ats_first_budget = 4000
+    if _ats_input_chars > 4500:
+        _ats_first_budget = min(6500, 4000 + int((_ats_input_chars - 4500) * 0.6))
 
-    # ── Two independent halves, each with its own dedicated budget ─────────
-    # CONTENT = the reasoning-heavy half (needs to actually read and weigh
-    # resume evidence). META = the more mechanical half (keyword matching,
-    # already-computed format data, holistic wrap-up). Splitting means a
-    # long resume that eats CONTENT's whole budget on reasoning can no
-    # longer starve META's sections too, and vice versa — each half fails
-    # (or truncates) independently instead of one shared failure mode
-    # taking out all 7 sections at once.
-    _ats_halves = {
-        "content": {
-            "prompt": prompt_content,
-            "task_type": "ats_analysis_content",
-            "tags": ["EDUCATION", "EXPERIENCE", "SKILLS"],
-            "base_budget": 4000,
-            "retry_cap": 7000,
-            "fallback": (
-                "[SEC:CANDIDATE_NAME]\nNot Found\n"
-                "[SEC:EDUCATION]\nN/A\n"
-                "[SEC:EXPERIENCE]\nN/A\n"
-                "[SEC:SKILLS]\nN/A\n"
-            ),
-        },
-        "meta": {
-            "prompt": prompt_meta,
-            "task_type": "ats_analysis_meta",
-            "tags": ["LANGUAGE", "KEYWORD", "FORMAT", "FINAL"],
-            "base_budget": 3500,
-            "retry_cap": 6000,
-            "fallback": (
-                "[SEC:LANGUAGE]\nN/A\n"
-                "[SEC:KEYWORD]\nN/A\n"
-                "[SEC:FORMAT]\nN/A\n"
-                "[SEC:FINAL]\nN/A\n"
-            ),
-        },
-    }
+    def _call_ats_llm(budget_override=None):
+        try:
+            raw = call_llm(prompt, session=st.session_state,
+                            model=DEFAULT_MODEL, task_type="ats_analysis",
+                            max_completion_tokens_override=budget_override).strip()
+            return sanitize_llm_text(raw)
+        except Exception:
+            return ""
 
-    # Proactive budget scaling per half, sized off that half's own prompt
-    # length — not a shared/guessed input-char count. Each half already
-    # carries the full JD+resume text (duplicated input is cheap; reasoning
-    # + output tokens are what's scarce), so this reflects the real ask.
-    def _scale_budget(prompt_text: str, base: int, cap: int) -> int:
-        chars = len(prompt_text)
-        if chars <= 4500:
-            return base
-        return min(cap, base + int((chars - 4500) * 0.6))
-
-    def _missing_tags(text: str, tags: list) -> list:
+    def _missing_tags(text: str) -> list:
+        """Which required [SEC:TAG] markers are absent from the raw response
+        (checked before any leak-stripping/extraction, so this reflects what
+        the model actually generated, not a downstream parsing artifact)."""
         if not text:
-            return list(tags)
-        return [tag for tag in tags if f"[SEC:{tag}]" not in text.upper()]
+            return list(_ATS_REQUIRED_TAGS)
+        return [tag for tag in _ATS_REQUIRED_TAGS if f"[SEC:{tag}]" not in text.upper()]
 
-    def _run_ats_half(cfg: dict) -> str:
-        """Run one half end-to-end: sized first attempt, one bounded
-        budget-increased retry on truncation, safe per-half fallback."""
-        prompt_text = cfg["prompt"]
-        first_budget = _scale_budget(prompt_text, cfg["base_budget"], cfg["retry_cap"])
+    ats_result = _call_ats_llm(budget_override=_ats_first_budget)
+    _ERROR_PREFIXES = ("❌", "⚠️", "Error", "LLM unavailable", "No healthy", "rate limit", "quota")
+    _is_hard_failure = not ats_result or any(ats_result.startswith(p) for p in _ERROR_PREFIXES)
 
-        def _call(budget_override):
-            try:
-                raw = call_llm(prompt_text, session=st.session_state,
-                                model=DEFAULT_MODEL, task_type=cfg["task_type"],
-                                max_completion_tokens_override=budget_override).strip()
-                return sanitize_llm_text(raw)
-            except Exception:
-                return ""
+    # ── Truncation detection + one bounded, budget-increased retry ──────────
+    # A 200 OK response that's simply missing its LATER sections (KEYWORD,
+    # FORMAT, FINAL almost always; EDUCATION/EXPERIENCE/SKILLS on worse
+    # cases) is GPT-OSS's reasoning budget running out before finishing —
+    # this is invisible to error handling entirely, since the call itself
+    # succeeded. Long resumes make this more likely: more input to reason
+    # about eats into the same fixed completion budget, leaving less room
+    # for the tail of the response. Unlike the malformed-JSON retry
+    # elsewhere in this file (which just tries again with the same budget),
+    # this retry actually RAISES the budget, since we know the mechanism —
+    # a second roll of the dice at the same size doesn't fix a budget that
+    # was genuinely too small for this resume's length.
+    if not _is_hard_failure:
+        missing = _missing_tags(ats_result)
+        if missing:
+            _ats_retry_budget = min(8000, _ats_first_budget + 2000)
+            print(f"⚠️ ATS analysis missing sections {missing} — likely truncated "
+                  f"(response length: {len(ats_result)} chars, first attempt used "
+                  f"{_ats_first_budget} tok budget for {_ats_input_chars} input chars). "
+                  f"Retrying once with {_ats_retry_budget} tok.")
+            retry_result = _call_ats_llm(budget_override=_ats_retry_budget)
+            retry_is_failure = not retry_result or any(
+                retry_result.startswith(p) for p in _ERROR_PREFIXES
+            )
+            if not retry_is_failure:
+                retry_missing = _missing_tags(retry_result)
+                if len(retry_missing) < len(missing):
+                    print(f"✅ ATS retry recovered {len(missing) - len(retry_missing)} "
+                          f"section(s) that were missing on the first attempt.")
+                    ats_result = retry_result
+                    missing = retry_missing
 
-        result = _call(first_budget)
-        is_hard_failure = not result or any(result.startswith(p) for p in _ERROR_PREFIXES)
-
-        if not is_hard_failure:
-            missing = _missing_tags(result, cfg["tags"])
-            if missing:
-                retry_budget = min(cfg["retry_cap"], first_budget + 2000)
-                print(f"⚠️ ATS [{cfg['task_type']}] missing {missing} — likely truncated "
-                      f"(response length: {len(result)} chars, first attempt used "
-                      f"{first_budget} tok for a {len(prompt_text)}-char prompt). "
-                      f"Retrying once with {retry_budget} tok.")
-                retry_result = _call(retry_budget)
-                retry_is_failure = not retry_result or any(
-                    retry_result.startswith(p) for p in _ERROR_PREFIXES
-                )
-                if not retry_is_failure:
-                    retry_missing = _missing_tags(retry_result, cfg["tags"])
-                    if len(retry_missing) < len(missing):
-                        print(f"✅ ATS [{cfg['task_type']}] retry recovered "
-                              f"{len(missing) - len(retry_missing)} section(s).")
-                        result = retry_result
-
-        if not result or any(result.startswith(p) for p in _ERROR_PREFIXES):
-            print(f"❌ ATS [{cfg['task_type']}] failed both attempts — using per-section fallback.")
-            return cfg["fallback"]
-
-        # ── Per-half leak guard ──────────────────────────────────────────
-        # Each half's own prompt ends with the EVALUATION CONTEXT/JOB
-        # DESCRIPTION/RESUME TEXT tail (_ats_tail), so either half can echo
-        # it back independently. MUST run this per-half, before
-        # concatenation — running it once on the combined string would let
-        # a leak in one half truncate-away the other half's real content.
-        _earliest_leak = len(result)
-        for _marker in _ATS_LEAK_MARKERS:
-            _idx = result.find(_marker)
-            if _idx != -1 and _idx < _earliest_leak:
-                _earliest_leak = _idx
-        if _earliest_leak < len(result):
-            result = result[:_earliest_leak].strip()
-
-        return result
-
-    # ── Fire both halves in parallel — independent calls, no shared state,
-    # so concurrent execution costs nothing extra in wall-clock time versus
-    # the old single call, while each gets its own full budget. ───────────
-    with ThreadPoolExecutor(max_workers=2) as _ats_executor:
-        _ats_futures = {name: _ats_executor.submit(_run_ats_half, cfg)
-                         for name, cfg in _ats_halves.items()}
-        _ats_results = {name: fut.result() for name, fut in _ats_futures.items()}
-
-    ats_result = _ats_results["content"] + "\n\n" + _ats_results["meta"]
-
-    # Guard: only if BOTH halves failed outright do we show the old
-    # whole-report fallback — a single failed half now degrades gracefully
-    # via its own [SEC:*] fallback tags instead of blanking everything.
-    if (_ats_results["content"] == _ats_halves["content"]["fallback"]
-            and _ats_results["meta"] == _ats_halves["meta"]["fallback"]):
+    # Guard: LLM error string or empty → return a safe fallback ATS result
+    if not ats_result or any(ats_result.startswith(p) for p in _ERROR_PREFIXES):
         ats_result = (
             "**ATS Evaluation temporarily unavailable.**\n"
             "All API keys are currently exhausted or unavailable. "
@@ -3945,6 +3847,30 @@ SCORING SCALE for language ({lang_weight} pts max):
         f'**Format Grade:** {_true_fmt_grade} — {_true_fmt_label}',
         ats_result
     )
+    # ─────────────────────────────────────────────────────────────────────
+
+    # ── GLOBAL LEAK GUARD: strip echoed prompt content from ats_result ───
+    # Badly formatted resumes can cause the LLM to echo back the prompt
+    # tail (EVALUATION CONTEXT / JOB DESCRIPTION / RESUME TEXT) anywhere
+    # inside ats_result — which then renders visibly in the UI before the
+    # ATS Score Breakdown chart. Strip at the first leaked marker found.
+    _ATS_LEAK_MARKERS = [
+        "**EVALUATION CONTEXT:**",
+        "EVALUATION CONTEXT:",
+        "📄 **JOB DESCRIPTION:**",
+        "📄 **RESUME TEXT:**",
+        "**JOB DESCRIPTION:**",
+        "**RESUME TEXT:**",
+        "JOB DESCRIPTION:",
+        "RESUME TEXT:",
+    ]
+    _earliest_leak = len(ats_result)
+    for _marker in _ATS_LEAK_MARKERS:
+        _idx = ats_result.find(_marker)
+        if _idx != -1 and _idx < _earliest_leak:
+            _earliest_leak = _idx
+    if _earliest_leak < len(ats_result):
+        ats_result = ats_result[:_earliest_leak].strip()
     # ─────────────────────────────────────────────────────────────────────
 
     def extract_section(pattern, text, default="N/A"):
