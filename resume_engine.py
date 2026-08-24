@@ -3805,7 +3805,14 @@ SCORING SCALE for language ({lang_weight} pts max):
     if not _is_hard_failure:
         missing = _missing_tags(ats_result)
         if missing:
-            _ats_retry_budget = min(8000, _ats_first_budget + 2000)
+            # Capped at 6500, not 8000: with real per-account limits around
+            # 6,000-8,000 TPM total (prompt + completion combined, shared
+            # across every call using that account in the same 60s window),
+            # requesting 8000 completion tokens for ONE call already meets
+            # or exceeds a single account's entire window by itself — no
+            # realistic account can satisfy that, so escalating further
+            # than this doesn't help and risks its own 413/429.
+            _ats_retry_budget = min(6500, _ats_first_budget + 2000)
             print(f"⚠️ ATS analysis missing sections {missing} — likely truncated "
                   f"(response length: {len(ats_result)} chars, first attempt used "
                   f"{_ats_first_budget} tok budget for {_ats_input_chars} input chars). "
