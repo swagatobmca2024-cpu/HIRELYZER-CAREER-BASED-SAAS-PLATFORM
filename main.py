@@ -46,7 +46,7 @@ from llm_manager import (
     call_llm, load_groq_api_keys, get_healthy_keys, increment_key_usage,
     mark_key_failure, _mem_record_failure, _mem_clear_failure,
     _mem_increment_usage, _async_mark_failure, _async_increment_usage,
-    _async_clear_failure, DEFAULT_MODEL, sanitize_llm_text,
+    _async_clear_failure,
 )
 from db_manager import (
     db_manager, insert_candidate, get_top_domains_by_score,
@@ -169,9 +169,7 @@ LENGTH: 3 short-to-medium paragraphs. Maximum 350 words.
         # ✅ Call LLM
         with st.spinner("✉️ Generating cover letter..."):
             try:
-                cover_letter = call_llm(prompt, session=st.session_state,
-                                         model=DEFAULT_MODEL, task_type="cover_letter").strip()
-                cover_letter = sanitize_llm_text(cover_letter)
+                cover_letter = call_llm(prompt, session=st.session_state).strip()
             except Exception as e:
                 st.error(f"❌ Failed to generate cover letter: {e}")
                 return
@@ -5324,8 +5322,7 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _r = call_llm(_pre_resume_prompt, session=st.session_state,
-                              model=DEFAULT_MODEL, task_type="quick_extraction").strip()
+                _r = call_llm(_pre_resume_prompt, session=st.session_state).strip()
                 if _r in _pre_valid_domains:
                     st.session_state[_pre_resume_cache_key] = _r
                 else:
@@ -5423,8 +5420,7 @@ Return ONLY one domain from this list, nothing else:
 {_pre_domain_list}
 """
             try:
-                _j = call_llm(_pre_jd_prompt, session=st.session_state,
-                              model=DEFAULT_MODEL, task_type="quick_extraction").strip()
+                _j = call_llm(_pre_jd_prompt, session=st.session_state).strip()
                 if _j in _pre_valid_domains:
                     st.session_state[_pre_jd_cache_key] = _j
                 else:
@@ -5444,6 +5440,17 @@ Return ONLY one domain from this list, nothing else:
         # Both are network-bound (Groq API) so they benefit from parallelism
         # without needing async — ThreadPoolExecutor handles it safely.
         # Domains pre-detected above on main thread — no LLM calls fire inside threads.
+        #
+        # Capture session HERE, on the main thread, and pass it into the
+        # worker explicitly — st.session_state has no meaning inside a
+        # ThreadPoolExecutor worker (no ScriptRunContext). Without this,
+        # ats_percentage_score()'s internal call_llm() would resolve
+        # st.session_state from inside _task_ats()'s worker thread, which
+        # is exactly the bug that made ATS evaluation silently come back
+        # empty while the rewrite (already fixed the same way, separately,
+        # inside resume_engine.py's own internal thread pool) worked fine.
+        _session_ref = st.session_state
+
         def _task_rewrite():
             return rewrite_and_highlight(full_text, replacement_mapping, user_location)
 
@@ -5460,6 +5467,7 @@ Return ONLY one domain from this list, nothing else:
                 format_data=format_data,
                 resume_domain=_pre_resume_domain,   # FIX: pre-detected, no thread LLM call
                 job_domain=_pre_job_domain,         # FIX: pre-detected, no thread LLM call
+                session=_session_ref,               # FIX: pre-captured, thread-safe session
             )
 
         with st.spinner("✍️ Rewriting resume & running ATS evaluation in parallel..."):
