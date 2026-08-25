@@ -3086,8 +3086,19 @@ def ats_percentage_score(
     format_data=None,       # pass pre-computed format check result
     resume_domain=None,     # FIX: accept pre-detected domain from main thread
     job_domain=None,        # FIX: accept pre-detected domain from main thread
+    session=None,           # FIX: accept pre-captured session when called from
+                            # a ThreadPoolExecutor worker (e.g. tab1_check.py's
+                            # _task_ats()) — st.session_state has no meaning
+                            # inside a worker thread (no ScriptRunContext), so
+                            # the caller MUST capture it on the main thread and
+                            # pass it in explicitly. Falls back to
+                            # st.session_state for callers running on the main
+                            # thread that don't pass one.
 ):
     import datetime
+
+    if session is None:
+        session = st.session_state
 
     _valid_domains = [
         "Data Science", "AI/Machine Learning", "UI/UX Design", "Mobile Development",
@@ -3105,7 +3116,7 @@ def ats_percentage_score(
     # When called from the parallel thread, resume_domain is set by the main thread
     # so no LLM call fires inside the thread (thread-safe).
     _resume_cache_key = f"resume_domain_{hash(resume_text[:500])}"
-    if resume_domain is None and _resume_cache_key not in st.session_state:
+    if resume_domain is None and _resume_cache_key not in session:
         _resume_domain_prompt = f"""You are a senior technical recruiter with 15+ years of experience classifying candidate profiles across ALL levels and ALL industries — freshers, students, mid-level, senior professionals, non-tech roles, design, management, marketing, finance, healthcare, and more.
 
 Your ONLY job: identify the candidate's PRIMARY professional domain from their resume text below.
@@ -3348,25 +3359,25 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _r = call_llm(_resume_domain_prompt, session=st.session_state,
+            _r = call_llm(_resume_domain_prompt, session=session,
                           model=DEFAULT_MODEL, task_type="quick_extraction").strip()
             if _r in _valid_domains:
-                st.session_state[_resume_cache_key] = _r
+                session[_resume_cache_key] = _r
             else:
                 # LLM returned invalid domain — fall back to keyword detection
                 _kw_fallback = db_manager.detect_domain_from_title_and_description("", resume_text[:3000])
-                st.session_state[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
+                session[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
         except Exception:
             # LLM failed entirely — fall back to keyword detection
             try:
                 _kw_fallback = db_manager.detect_domain_from_title_and_description("", resume_text[:3000])
-                st.session_state[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
+                session[_resume_cache_key] = _kw_fallback if _kw_fallback != "Unclassified" else "Software Engineering"
             except Exception:
-                st.session_state[_resume_cache_key] = "Software Engineering"
+                session[_resume_cache_key] = "Software Engineering"
 
     # Use passed-in value if provided, otherwise use session state value
     if resume_domain is None:
-        resume_domain = st.session_state.get(_resume_cache_key, "Software Engineering")
+        resume_domain = session.get(_resume_cache_key, "Software Engineering")
 
     # ── JOB DOMAIN: use pre-detected value if passed in, else detect here ──
     # If JD is non-English → skip LLM domain detection, use keyword fallback directly
@@ -3380,10 +3391,10 @@ Return ONLY one domain from this list, nothing else:
     if _jd_non_english and job_domain is None:
         try:
             _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
-            st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
+            session[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
         except Exception:
-            st.session_state[_jd_cache_key] = "Software Engineering"
-    if job_domain is None and _jd_cache_key not in st.session_state:
+            session[_jd_cache_key] = "Software Engineering"
+    if job_domain is None and _jd_cache_key not in session:
         _jd_domain_prompt = f"""You are an expert technical recruiter with 15+ years of experience classifying job descriptions across all industries and levels.
 
 Your ONLY job: identify the PRIMARY professional domain this job description is hiring for.
@@ -3464,25 +3475,25 @@ Return ONLY one domain from this list, nothing else:
 {_domain_list}
 """
         try:
-            _j = call_llm(_jd_domain_prompt, session=st.session_state,
+            _j = call_llm(_jd_domain_prompt, session=session,
                           model=DEFAULT_MODEL, task_type="quick_extraction").strip()
             if _j in _valid_domains:
-                st.session_state[_jd_cache_key] = _j
+                session[_jd_cache_key] = _j
             else:
                 # LLM returned invalid — fall back to keyword detection
                 _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
-                st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
+                session[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
         except Exception:
             # LLM failed — fall back to keyword detection
             try:
                 _jd_kw = db_manager.detect_domain_from_title_and_description(job_title, job_description[:3000])
-                st.session_state[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
+                session[_jd_cache_key] = _jd_kw if _jd_kw != "Unclassified" else "Software Engineering"
             except Exception:
-                st.session_state[_jd_cache_key] = "Software Engineering"
+                session[_jd_cache_key] = "Software Engineering"
 
     # Use passed-in value if provided, otherwise use session state value
     if job_domain is None:
-        job_domain = st.session_state.get(_jd_cache_key, "Software Engineering")
+        job_domain = session.get(_jd_cache_key, "Software Engineering")
 
     similarity_score = get_domain_similarity(resume_domain, job_domain)
 
@@ -3774,7 +3785,7 @@ SCORING SCALE for language ({lang_weight} pts max):
 
     def _call_ats_llm(budget_override=None):
         try:
-            raw = call_llm(prompt, session=st.session_state,
+            raw = call_llm(prompt, session=session,
                             model=DEFAULT_MODEL, task_type="ats_analysis",
                             max_completion_tokens_override=budget_override).strip()
             return sanitize_llm_text(raw)
